@@ -170,7 +170,16 @@ const restoreTab = (tab: StoredTab): Conversation => {
         // become — switching one tab's account is not an instruction about the others. Only a tab that carries no
         // pin of its own (one persisted before this was stored) falls back to the provider's remembered one.
         conversation.account.value = tab.account ?? rememberedAccountFor(tab.provider);
-        conversation.model.value = rememberedModelFor(tab.provider);
+        conversation.model.value = tab.model ?? rememberedModelFor(tab.provider);
+    }
+    // ...and the rest of the tab's turn settings by the same rule: the composer's pills describe THIS chat, so a
+    // reload restores what it was showing rather than re-seeding it from picks made in some other tab since.
+    // Thinking first — the effort clamp reads it (a 'max' tier is invalid with thinking off).
+    if (tab.thinking !== undefined) {
+        conversation.thinking.value = tab.thinking;
+    }
+    if (tab.effort !== undefined) {
+        conversation.effort.value = clampEffort(tab.effort, conversation.provider.value, conversation.thinking.value);
     }
     if (tab.session !== undefined) {
         // A session resumes only on the account that minted it, so it keeps its OWN pin rather than adopting the
@@ -220,6 +229,9 @@ watch(
                 registered: conversation.registered.value,
                 provider: conversation.provider.value,
                 account: conversation.account.value,
+                model: conversation.model.value,
+                effort: conversation.effort.value,
+                thinking: conversation.thinking.value,
                 harness: conversation.harness.value,
                 session: conversation.session.value && {
                     id: conversation.session.value.id,
@@ -1188,6 +1200,12 @@ export const openAgentConversation = (agent: {
     provider: AgentProvider;
     harness: AgentHarness;
     account?: string;
+    // What the agent's turns actually ran with, as the registry recorded them. Absent only for an agent that
+    // has never run one (the board's draft card) — a real agent's settings are facts about it, and seeding the
+    // tab from the remembered picks instead is what made the composer claim a model the session never used.
+    model?: string;
+    effort?: string;
+    thinking?: boolean;
     // Whether the fleet actually knows this agent — true unless the caller knows better. The board's
     // client-only DRAFT card is the one that does: its conversation must stay a draft (carded, and taken by
     // the focus-leave sweep when abandoned) until a first turn registers it.
@@ -1216,7 +1234,14 @@ export const openAgentConversation = (agent: {
     conversation.provider.value = agent.provider;
     conversation.harness.value = agent.harness;
     conversation.account.value = agent.account ?? rememberedAccountFor(agent.provider);
-    conversation.model.value = rememberedModelFor(agent.provider);
+    conversation.model.value = agent.model ?? rememberedModelFor(agent.provider);
+    // Thinking before the effort clamp, as in restoreTab.
+    if (agent.thinking !== undefined) {
+        conversation.thinking.value = agent.thinking;
+    }
+    if (agent.effort !== undefined) {
+        conversation.effort.value = clampEffort(agent.effort, agent.provider, conversation.thinking.value);
+    }
     conversation.title.value = agent.title ?? null;
     if (agent.sessionId !== undefined) {
         conversation.session.value = {

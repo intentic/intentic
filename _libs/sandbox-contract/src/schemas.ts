@@ -192,7 +192,13 @@ export const AgentSummarySchema = z.object({
     status: AgentStatusSchema,
     provider: AgentProviderSchema,
     harness: AgentHarnessSchema,
+    // What the agent's last turn ran with — the model, its reasoning effort, and whether extended thinking was
+    // on. Recorded per agent because they are facts about THIS conversation: a client opening it seeds its
+    // composer from them, rather than from whatever that browser last picked in some other tab. Absent for an
+    // agent whose turns predate the record (model has always been kept; the other two are newer).
     model: z.string().optional(),
+    effort: z.string().optional(),
+    thinking: z.boolean().optional(),
     account: z.string().optional(),
     // The worktree branch (agent/<id>); absent for a non-isolated (main-tree) conversation.
     branch: z.string().optional(),

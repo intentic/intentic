@@ -46,6 +46,21 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.origin).toEqual(origin);
     });
 
+    // What the agent RUNS ON is a fact about the agent, and the only record of it: a client opening the card
+    // tomorrow has nowhere else to learn it, and seeding its composer from the browser's own last pick instead
+    // is what made an open agent claim a model its session never used.
+    it("records the settings a turn ran under and keeps them for a turn that states none", async () => {
+        const registry = createAgentsRegistry(memoryStore());
+        await registry.init();
+        await registry.begin(turn({ model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false }), 1_000);
+        expect(registry.get("c1")).toMatchObject({ model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false });
+        await registry.finish("c1", 2_000);
+        // A wake with no settings of its own (an automation, a Discord mention) leaves the record standing
+        // rather than blanking the card back to "unknown".
+        await registry.begin(turn({ prompt: "keep going" }), 3_000);
+        expect(registry.get("c1")).toMatchObject({ model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false });
+    });
+
     it("holds the autoLand override across turns, clears it on null, and settles a held turn as ready", async () => {
         const registry = createAgentsRegistry(memoryStore());
         await registry.init();

@@ -33,7 +33,11 @@ export const PersistedAgentSchema = z.object({
     titleSource: AgentTitleSourceSchema.optional(),
     provider: AgentProviderSchema,
     harness: AgentHarnessSchema,
+    // The turn settings this conversation last ran under — see AgentSummarySchema. Persisted because a client
+    // that opens the agent tomorrow, on another device, has nowhere else to learn them from.
     model: z.string().optional(),
+    effort: z.string().optional(),
+    thinking: z.boolean().optional(),
     account: z.string().optional(),
     sessionId: z.string().optional(),
     // Set when an automation opened this conversation for an outside message (a Discord mention, a web-chat

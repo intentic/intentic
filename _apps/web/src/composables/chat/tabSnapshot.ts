@@ -41,6 +41,13 @@ export interface StoredTab {
     // remembered pick seeds NEW conversations, and applying it to the open ones would quietly move a chat off
     // the account it has been running on because another tab was switched. Absent ⇒ the remembered pick.
     readonly account?: string;
+    // The tab's model / reasoning effort / extended-thinking picks, persisted for the SAME reason `account` is:
+    // the remembered picks (turnDefaults) seed a NEW conversation, and re-seeding the open ones from them on a
+    // reload is how a chat that ran on Sonnet came back claiming whatever model another tab was last switched
+    // to. Absent ⇒ the remembered pick, which is what a tab persisted before this was stored was showing.
+    readonly model?: string;
+    readonly effort?: string;
+    readonly thinking?: boolean;
     // `account` is the one the SESSION was minted on, which is not always the tab's current pick — a mid-chat
     // switch takes effect at the next send, and until then the two differ on purpose (that difference is what
     // retires the session then). Restoring both keeps a reload from either forging the match or faking the
@@ -95,9 +102,11 @@ const readAttachments = (raw: unknown): { name: string; path: string }[] =>
         .filter((entry) => typeof entry[`name`] === `string` && typeof entry[`path`] === `string`)
         .map((entry) => ({ name: entry[`name`] as string, path: entry[`path`] as string }));
 
-// An account pin, as the optional key both the tab and its session carry it under — spreadable, so a blob with
-// nothing (or nonsense) where an id should be reads back as the absence the restore already falls back from.
-const readAccount = (raw: unknown): { account?: string } => (typeof raw === `string` && raw !== `` ? { account: raw } : {});
+// One optional text field — an account pin, a model id, an effort tier — under the key its owner carries it in.
+// Spreadable, so a blob with nothing (or nonsense) where a value should be reads back as the absence the
+// restore already falls back from.
+const readText = <K extends string>(key: K, raw: unknown): { [P in K]?: string } =>
+    typeof raw === `string` && raw !== `` ? ({ [key]: raw } as { [P in K]?: string }) : {};
 
 // One entry, or undefined when it carries no usable identity or draft. Skipped rather than fatal: a single
 // unreadable tab must not cost the user every other chat they had open.
@@ -108,7 +117,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
     const session = raw[`session`] as Record<string, unknown> | null | undefined;
     const validSession =
         typeof session === `object` && session !== null && typeof session[`id`] === `string` && validProvider(session[`provider`])
-            ? { id: session[`id`] as string, provider: session[`provider`], ...readAccount(session[`account`]) }
+            ? { id: session[`id`] as string, provider: session[`provider`], ...readText(`account`, session[`account`]) }
             : undefined;
     return {
         conversationId: raw[`conversationId`],
@@ -122,7 +131,10 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
             .filter((entry) => typeof entry[`text`] === `string`)
             .map((entry) => ({ text: entry[`text`] as string, attachments: readAttachments(entry[`attachments`]) })),
         ...(validProvider(raw[`provider`]) ? { provider: raw[`provider`] } : {}),
-        ...readAccount(raw[`account`]),
+        ...readText(`account`, raw[`account`]),
+        ...readText(`model`, raw[`model`]),
+        ...readText(`effort`, raw[`effort`]),
+        ...(typeof raw[`thinking`] === `boolean` ? { thinking: raw[`thinking`] } : {}),
         ...(raw[`harness`] === `claude-code` || raw[`harness`] === `native` ? { harness: raw[`harness`] as AgentHarness } : {}),
         ...(validSession !== undefined ? { session: validSession } : {}),
         ...(typeof raw[`title`] === `string` ? { title: raw[`title`] } : {}),
