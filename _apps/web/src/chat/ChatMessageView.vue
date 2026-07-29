@@ -2,10 +2,10 @@
 import { useDevice } from "@intentic-app/ui";
 import { copyCodeFromEvent } from "@intentic-app/ui/markdown";
 import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
-import { computed, nextTick, ref, watch } from "vue";
+import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
-import { clearQuestionDraft, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
+import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
 import { effectiveAutoLand } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
 import { type ChatMessage, isAcknowledgment, type PlanRequest } from "../composables/chat/transcript";
@@ -158,8 +158,19 @@ watch(
 // Selection state for a pending question card, keyed by question index. Held here because it is UI state of
 // this card, but mirrored to localStorage per requestId (see questionDraft) so a reload — which reattaches to
 // the same still-parked card — doesn't make the user pick everything again.
+//
+// One list of picks per question, with OTHER_LABEL standing in for the free-text row, is the whole reason this
+// card has no state to reconcile: "Other" is an option, so choosing it is the same act as choosing any other
+// option and single-select falls out of the list arithmetic below. `otherTexts` is not a parallel selection —
+// it is the words that belong to that one row, kept whether or not the row is currently picked, so clicking
+// away to re-read the options and clicking back doesn't cost the user what they typed.
 const selections = ref<Record<number, string[]>>({});
 const otherTexts = ref<Record<number, string>>({});
+// One free-text field per question row, kept by index so picking the row can put the caret straight into it.
+const otherInputs = ref<Record<number, HTMLInputElement | undefined>>({});
+const setOtherInput = (index: number, el: Element | ComponentPublicInstance | null): void => {
+    otherInputs.value[index] = el instanceof HTMLInputElement ? el : undefined;
+};
 
 // Load the draft when a pending card appears (mount, or the frame arriving mid-turn), and drop it the moment
 // the card settles — answered, dismissed, or frozen `cancelled` by a stop. One watcher for both because they
@@ -174,7 +185,9 @@ watch(
             clearQuestionDraft(requestId);
             return;
         }
-        const draft = readQuestionDraft(requestId);
+        // Read back against the live card: a draft written by a build with different rules is normalized to
+        // picks this card would accept rather than replayed as stored (see questionDraft.normalize).
+        const draft = readQuestionDraft(requestId, props.message.question?.questions ?? []);
         selections.value = draft.selections;
         otherTexts.value = draft.otherTexts;
     },
@@ -192,40 +205,49 @@ watch([selections, otherTexts], ([picks, texts]) => {
 
 const isSelected = (index: number, label: string): boolean => (selections.value[index] ?? []).includes(label);
 
+// Picking, for every row including Other. Single-select replaces, multi-select accumulates, and clicking the
+// row you are on takes it back — nothing here reaches across to clear a different piece of state, because
+// there is no longer a different piece of state to clear.
 const toggleOption = (question: AskQuestion, index: number, label: string): void => {
     const current = selections.value[index] ?? [];
-    let next: string[];
-    if (question.multiSelect) {
-        next = current.includes(label) ? current.filter((l) => l !== label) : [...current, label];
-    } else {
-        // Single-select: clicking the active option clears it, otherwise it replaces the choice. And,
-        // matching Claude Code, a listed option and the free-text "Other" are mutually exclusive — so
-        // picking one clears whatever was typed.
-        next = current.includes(label) ? [] : [label];
-        if (next.length > 0) {
-            otherTexts.value = { ...otherTexts.value, [index]: `` };
-        }
-    }
+    const next = question.multiSelect
+        ? current.includes(label)
+            ? current.filter((l) => l !== label)
+            : [...current, label]
+        : current.includes(label)
+          ? []
+          : [label];
     selections.value = { ...selections.value, [index]: next };
+    // Picking Other is a request to write, so the caret goes where the writing happens; the field is rendered
+    // by that same pick, hence the tick.
+    if (label === OTHER_LABEL && next.includes(OTHER_LABEL)) {
+        void nextTick(() => otherInputs.value[index]?.focus());
+    }
 };
 
 const otherValue = (index: number): string => otherTexts.value[index] ?? ``;
-const setOther = (question: AskQuestion, index: number, value: string): void => {
+const setOther = (index: number, value: string): void => {
     otherTexts.value = { ...otherTexts.value, [index]: value };
-    // The other half of the single-select exclusivity above: typing a custom answer drops the picked option.
-    if (!question.multiSelect && value.length > 0) {
-        selections.value = { ...selections.value, [index]: [] };
-    }
 };
 
-// Combined picks for one question: selected option label(s) plus any non-empty "Other" text.
-const picksFor = (index: number): string[] => {
-    const labels = selections.value[index] ?? [];
-    const other = otherValue(index).trim();
-    return other.length > 0 ? [...labels, other] : labels;
-};
+// A picked Other row with nothing written in it is an unfinished answer, not an empty one — it holds Submit
+// rather than being quietly dropped, which would send the agent something other than what the card shows.
+const otherPending = (index: number): boolean => isSelected(index, OTHER_LABEL) && otherValue(index).trim().length === 0;
 
-const canSubmit = computed(() => props.message.question?.questions.every((_, index) => picksFor(index).length > 0) ?? false);
+// What this question answers with: the picked labels, with the Other row swapped for what was typed into it.
+// The sentinel never leaves this function — the agent is answered in the user's own words.
+const picksFor = (index: number): string[] =>
+    (selections.value[index] ?? []).flatMap((label) => {
+        if (label !== OTHER_LABEL) {
+            return [label];
+        }
+        const typed = otherValue(index).trim();
+        return typed.length > 0 ? [typed] : [];
+    });
+
+const canSubmit = computed(
+    () => props.message.question?.questions.every((_, index) => picksFor(index).length > 0 && !otherPending(index)) ?? false,
+);
 
 const submitAnswers = (): void => {
     const question = props.message.question;
@@ -755,14 +777,47 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                     <span class="text-2xs leading-snug text-muted">{{ option.description }}</span>
                                 </span>
                             </button>
-                            <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
-                            <input
-                                type="text"
-                                :value="otherValue(index)"
-                                @input="setOther(question, index, ($event.target as HTMLInputElement).value)"
-                                placeholder="Other…"
-                                class="rounded-lg border border-line bg-card px-2.5 py-1.5 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none md:text-xs"
-                            />
+                            <!-- "Other" is the LAST OPTION, not a text box parked beside the list: same row,
+                                 same mark, same click, and MARKUP IDENTICAL to the rows above — no wrapper of
+                                 its own, or its border, hover and selected tint drift from the siblings it
+                                 must read as one of. That sameness is what keeps this card's state a single
+                                 list of picks — writing your own answer cannot contradict the options, because
+                                 it is one of them — and it is why nothing here has to erase anything. The
+                                 field appears BELOW the row on picking it, and keeps its text when the row is
+                                 unpicked, so clicking away to re-read an option and clicking back costs
+                                 nothing. -->
+                            <button
+                                type="button"
+                                class="qopt flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
+                                :class="{ 'qopt-on': isSelected(index, OTHER_LABEL) }"
+                                @click="toggleOption(question, index, OTHER_LABEL)"
+                            >
+                                <Icon
+                                    class="mt-0.5 text-2xs"
+                                    :name="isSelected(index, OTHER_LABEL) ? 'check-circle' : 'circle'"
+                                    :class="isSelected(index, OTHER_LABEL) ? 'text-primary-500' : 'text-subtle'"
+                                />
+                                <span class="flex min-w-0 flex-col gap-0.5">
+                                    <span class="text-xs font-medium text-content">Other</span>
+                                    <span class="text-2xs leading-snug text-muted">Answer in your own words.</span>
+                                </span>
+                            </button>
+                            <div v-if="isSelected(index, OTHER_LABEL)" class="flex flex-col gap-1">
+                                <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
+                                <input
+                                    :ref="(el) => setOtherInput(index, el)"
+                                    type="text"
+                                    :value="otherValue(index)"
+                                    @input="setOther(index, ($event.target as HTMLInputElement).value)"
+                                    @keydown.enter="submitAnswers"
+                                    placeholder="Type your answer…"
+                                    class="rounded-lg border border-line bg-card px-2.5 py-1.5 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none md:text-xs"
+                                />
+                                <!-- Reads as the instruction it is, not as an error: it is on screen from
+                                     the moment the row is picked, which is before there is anything to get
+                                     wrong. It is also the only thing that explains the disabled Submit. -->
+                                <span v-if="otherPending(index)" class="text-2xs text-subtle">Write your answer to submit.</span>
+                            </div>
                         </div>
                         <!-- Decided (answered or dismissed): the same options, frozen. Nothing here may read as
                              a control — no button, no hover, no focus stop, and no empty radio, which is the

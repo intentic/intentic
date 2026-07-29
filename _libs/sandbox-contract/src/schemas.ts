@@ -166,7 +166,14 @@ export type AttachTurn = z.infer<typeof AttachTurnSchema>;
 // landed / conflict are outcomes of the land flow — `ready` is a clean completion whose delta stayed on the
 // agent's branch because auto-land is off (the user lands it deliberately, from the review panel or the card);
 // error is a terminal turn failure surfaced on the card.
-export const AgentStatusSchema = z.enum(["idle", "running", "awaiting", "ready", "landed", "conflict", "error"]);
+//
+// `interrupted` is the turn that never got to report ANY of those: the daemon died under it (a container
+// rebuild, a crash, an OOM kill), taking the provider process and the whole runtime half of the fleet — status,
+// attention flags, the park a question raised — with it. It exists because the alternative is worse than
+// unlabelled: without it such a turn rehydrates as `idle`, which is the resting status of a turn that finished
+// CLEANLY, so the board files a killed agent under Finished and the question it was holding disappears with the
+// process that asked it. See agents-store.ts — this is the status a live turn leaves on disk.
+export const AgentStatusSchema = z.enum(["idle", "running", "awaiting", "ready", "landed", "conflict", "error", "interrupted"]);
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 // The card's live activity snippet: the last tool the agent used (with its target) and the in-progress todo.
 export const AgentActivitySchema = z.object({
@@ -192,7 +199,13 @@ export const AgentSummarySchema = z.object({
     status: AgentStatusSchema,
     provider: AgentProviderSchema,
     harness: AgentHarnessSchema,
+    // What the agent's last turn ran with — the model, its reasoning effort, and whether extended thinking was
+    // on. Recorded per agent because they are facts about THIS conversation: a client opening it seeds its
+    // composer from them, rather than from whatever that browser last picked in some other tab. Absent for an
+    // agent whose turns predate the record (model has always been kept; the other two are newer).
     model: z.string().optional(),
+    effort: z.string().optional(),
+    thinking: z.boolean().optional(),
     account: z.string().optional(),
     // The worktree branch (agent/<id>); absent for a non-isolated (main-tree) conversation.
     branch: z.string().optional(),

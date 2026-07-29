@@ -16,11 +16,25 @@ const PREFIX = `intentic.questionDraft.`;
 // don't accumulate in a storage bucket nothing else prunes.
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
+/* The free-text row's stand-in inside `selections`. "Other" is one of the card's OPTIONS rather than a second
+ * widget standing beside them, which is what lets the card hold a single list of picks instead of two
+ * half-states that have to be kept agreeing with each other. The sentinel carries a NUL so it can never
+ * collide with a label the agent wrote, and it is persisted, so it has to stay stable across builds. */
+export const OTHER_LABEL = `\u0000other`;
+
 export interface QuestionDraft {
-    // Selected option label(s) per question index, matching the card's own indexing.
+    // Selected option label(s) per question index, matching the card's own indexing. OTHER_LABEL stands for
+    // the free-text row.
     readonly selections: Record<number, string[]>;
-    // The free-text "Other" answer per question index.
+    // What was typed into the free-text row, per question index. Payload, not a pick: text alone answers
+    // nothing until OTHER_LABEL is among that question's selections.
     readonly otherTexts: Record<number, string>;
+}
+
+// As much of a live question as replaying a draft into it needs: which picks that card would still accept.
+export interface DraftQuestionShape {
+    readonly multiSelect: boolean;
+    readonly options: readonly { readonly label: string }[];
 }
 
 interface StoredDraft extends QuestionDraft {
@@ -31,14 +45,35 @@ const EMPTY: QuestionDraft = { selections: {}, otherTexts: {} };
 
 const key = (requestId: string): string => `${PREFIX}${requestId}`;
 
-export const readQuestionDraft = (requestId: string): QuestionDraft => {
+/* A draft is replayed into a LIVE card, so it may only carry picks that card would still accept. Two things put
+ * stored picks out of step with the question they came from: a build whose card had different rules (before
+ * "Other" was an option, a listed pick and a typed answer could be held at the same time), and a single-select
+ * question holding more than the one pick it allows. Both resolve the same way — keep the first pick that is
+ * still legal, drop the rest — so a reopened card can never show a combination the user could not have reached
+ * by clicking. Typed text always survives: it is the Other row's payload rather than a pick of its own, and
+ * nothing is won by throwing away words the user wrote. */
+const normalize = (draft: QuestionDraft, questions: readonly DraftQuestionShape[]): QuestionDraft => {
+    const selections: Record<number, string[]> = {};
+    questions.forEach((question, index) => {
+        const legal = (draft.selections[index] ?? []).filter(
+            (label) => label === OTHER_LABEL || question.options.some((option) => option.label === label),
+        );
+        const picks = question.multiSelect ? legal : legal.slice(0, 1);
+        if (picks.length > 0) {
+            selections[index] = picks;
+        }
+    });
+    return { selections, otherTexts: draft.otherTexts };
+};
+
+export const readQuestionDraft = (requestId: string, questions: readonly DraftQuestionShape[]): QuestionDraft => {
     try {
         const raw = localStorage.getItem(key(requestId));
         if (raw === null) {
             return EMPTY;
         }
         const stored = JSON.parse(raw) as StoredDraft;
-        return { selections: stored.selections, otherTexts: stored.otherTexts };
+        return normalize({ selections: stored.selections ?? {}, otherTexts: stored.otherTexts ?? {} }, questions);
     } catch {
         // Storage unavailable (private mode) or a draft this build can't read: the card just starts empty,
         // which is where it started before any of this existed.

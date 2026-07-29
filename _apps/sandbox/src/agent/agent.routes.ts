@@ -102,6 +102,8 @@ async function* runConversationTurn(
             harness: input.harness ?? "native",
             ...(input.title !== undefined ? { title: input.title } : {}),
             ...(input.model !== undefined ? { model: input.model } : {}),
+            ...(input.effort !== undefined ? { effort: input.effort } : {}),
+            ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
             ...(input.account !== undefined ? { account: input.account } : {}),
             ...(input.origin !== undefined ? { origin: input.origin } : {}),
         },

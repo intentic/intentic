@@ -69,7 +69,7 @@ const freshRuntime = (): RuntimeState => ({
 });
 
 // The registry input of an isolated turn — the fields begin() records onto the entry.
-export type AgentTurnIdentity = Pick<AgentTurn, "prompt" | "title" | "model" | "account" | "origin"> & {
+export type AgentTurnIdentity = Pick<AgentTurn, "prompt" | "title" | "model" | "effort" | "thinking" | "account" | "origin"> & {
     readonly conversationId: string;
     readonly provider: NonNullable<AgentTurn["agent"]>;
     readonly harness: NonNullable<AgentTurn["harness"]>;
@@ -191,6 +191,8 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),
             ...(entry.model !== undefined ? { model: entry.model } : {}),
+            ...(entry.effort !== undefined ? { effort: entry.effort } : {}),
+            ...(entry.thinking !== undefined ? { thinking: entry.thinking } : {}),
             ...(entry.account !== undefined ? { account: entry.account } : {}),
             ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
             ...(base !== undefined ? { base } : {}),
@@ -316,7 +318,11 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             // entered; sanitizeTitle then does what it does for any title, including turning empty into none.
             const title =
                 existing?.title ?? (turn.title !== undefined ? sanitizeTitle(turn.title) : undefined) ?? sanitizeTitle(deriveTitle(turn.prompt));
+            // The turn's settings, each falling back to the last turn's: a caller that states none (an
+            // automation, a Discord mention) keeps describing the agent by what it has actually been running.
             const model = turn.model ?? existing?.model;
+            const effort = turn.effort ?? existing?.effort;
+            const thinking = turn.thinking ?? existing?.thinking;
             const account = turn.account ?? existing?.account;
             // Provenance belongs to the turn that CREATED the conversation and is never re-derived: the user's
             // own follow-up turns in a surfaced agent's tab carry no origin, and must not strip the Discord
@@ -328,7 +334,11 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 provider: turn.provider,
                 harness: turn.harness,
                 repos: existing?.repos ?? [],
-                status: "idle",
+                // The state this turn should be found in if it never reports back — see the store's note on
+                // PersistedAgentStatusSchema. finish() overwrites it moments later in the ordinary case (it
+                // runs in a `finally`, so an abort and a failure both reach it); what it cannot overwrite is
+                // the daemon being killed under the turn, and THAT is what this value is for.
+                status: "interrupted",
                 costUsd: existing?.costUsd ?? 0,
                 inputTokens: existing?.inputTokens ?? 0,
                 outputTokens: existing?.outputTokens ?? 0,
@@ -339,6 +349,8 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 // so the turn's first plan can name it properly.
                 ...(title !== undefined ? { title, titleSource: existing?.titleSource ?? "derived" } : {}),
                 ...(model !== undefined ? { model } : {}),
+                ...(effort !== undefined ? { effort } : {}),
+                ...(thinking !== undefined ? { thinking } : {}),
                 ...(account !== undefined ? { account } : {}),
                 ...(origin !== undefined ? { origin } : {}),
                 ...(existing?.sessionId !== undefined ? { sessionId: existing.sessionId } : {}),

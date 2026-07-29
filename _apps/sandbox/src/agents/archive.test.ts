@@ -57,6 +57,9 @@ describe("archivable", () => {
         // Both sit in the Attention lane asking for something; archiving would hide the question, not answer it.
         expect(archivable(entry({ status: "conflict" }), false)).toBe(false);
         expect(archivable(entry({ status: "error" }), false)).toBe(false);
+        // A turn the daemon died under. Nobody has seen that it stopped — and it is NOT running, so the guard
+        // above cannot be the one that saves it. Sweeping it away unread is the failure this status prevents.
+        expect(archivable(entry({ status: "interrupted" }), false)).toBe(false);
         // Already off the board.
         expect(archivable(entry({ archivedAt: 1 }), false)).toBe(false);
     });

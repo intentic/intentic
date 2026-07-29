@@ -17,6 +17,14 @@ describe("laneOf", () => {
         expect(laneOf({ status: `error`, attention: none })).toBe(`attention`);
     });
 
+    /* The lane a turn lands in when the DAEMON dies under it — a container rebuild, a crash. Its attention
+     * flags were runtime state and died with it, so the only thing left saying "this one stopped mid-task" is
+     * the status the registry wrote when the turn began. Reading that as finished is what put an agent parked
+     * on an unanswered question into the Finished lane. */
+    it("routes an interrupted turn to attention, not finished", () => {
+        expect(laneOf({ status: `interrupted`, attention: none })).toBe(`attention`);
+    });
+
     it("routes running turns and fresh drafts to active", () => {
         expect(laneOf({ status: `running`, attention: none })).toBe(`active`);
         expect(laneOf({ status: `draft`, attention: none })).toBe(`active`);
@@ -39,7 +47,17 @@ describe("laneOf", () => {
  * is the user watching two surfaces contradict each other, which is exactly what a second status list here
  * produced before this became a reading of laneOf. */
 describe("unfinishedMark", () => {
-    const STATUSES: readonly (AgentStatus | "draft")[] = [`idle`, `running`, `awaiting`, `ready`, `landed`, `conflict`, `error`, `draft`];
+    const STATUSES: readonly (AgentStatus | "draft")[] = [
+        `idle`,
+        `running`,
+        `awaiting`,
+        `ready`,
+        `landed`,
+        `conflict`,
+        `error`,
+        `interrupted`,
+        `draft`,
+    ];
     const FLAGS: readonly AgentStanding[`attention`][] = [
         none,
         { ...none, plan: true },
@@ -66,6 +84,7 @@ describe("unfinishedMark", () => {
         expect(unfinishedMark({ status: `running`, attention: { ...none, question: true } })?.label).toBe(`Question for you`);
         expect(unfinishedMark({ status: `conflict`, attention: none })?.label).toBe(`Land conflict`);
         expect(unfinishedMark({ status: `error`, attention: none })?.label).toBe(`Error`);
+        expect(unfinishedMark({ status: `interrupted`, attention: none })?.label).toBe(`Interrupted`);
         // A turn parked before any flag went up has nothing more specific to say than that it stopped.
         expect(unfinishedMark({ status: `awaiting`, attention: none })?.label).toBe(`Waiting on you`);
     });

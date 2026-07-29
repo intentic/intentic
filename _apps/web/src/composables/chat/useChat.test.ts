@@ -327,6 +327,64 @@ describe(`per-tab drafts`, () => {
     });
 });
 
+/* The composer's pills — model, reasoning effort, extended thinking — describe the CHAT they sit under, so they
+ * are stored with it. The remembered picks (turnDefaults) seed a NEW conversation and nothing else: re-seeding
+ * the open ones from them is how every tab came back from a reload wearing the model last chosen in whichever
+ * tab happened to be focused, stated over sessions that had demonstrably run on something else. */
+describe(`per-tab turn settings`, () => {
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+    });
+
+    it(`gives each tab back the settings it was showing, not the last pick made anywhere`, async () => {
+        const chat = useChat();
+        chat.draft.value = `keep me`; // content — the focus-leave sweep takes an untouched draft
+        chat.selectModel({ provider: `claude`, value: `claude-sonnet-4-5-20250929` });
+        chat.effort.value = `medium`;
+        chat.thinking.value = false;
+
+        chat.newChat();
+        chat.draft.value = `and me`;
+        chat.selectModel({ provider: `claude`, value: `claude-opus-4-1-20250805` });
+        await nextTick(); // flush the persistence watch
+
+        resetChat(); // the same restore path as a page refresh
+        const tabs = chat.conversations.value;
+        expect(tabs[0]!.model.value).toBe(`claude-sonnet-4-5-20250929`);
+        expect(tabs[0]!.effort.value).toBe(`medium`);
+        expect(tabs[0]!.thinking.value).toBe(false);
+        expect(tabs[1]!.model.value).toBe(`claude-opus-4-1-20250805`);
+    });
+
+    // A stored pair can be one the API refuses ('max' is Claude-with-thinking only), so the restore clamps it
+    // for the same reason the constructor does — an invalid pair fails every turn until something touches it.
+    it(`clamps a restored effort the tab's provider can no longer run`, () => {
+        storage.set(
+            `intentic.chatTabs.sb1`,
+            JSON.stringify({
+                active: `t1`,
+                tabs: [
+                    {
+                        conversationId: `t1`,
+                        isolated: true,
+                        draft: `x`,
+                        provider: `claude`,
+                        effort: `max`,
+                        thinking: false,
+                        attachments: [],
+                        queued: [],
+                    },
+                ],
+            }),
+        );
+
+        resetChat();
+
+        expect(useChat().effort.value).toBe(`xhigh`);
+    });
+});
+
 /* A tab set belongs to the WINDOW it is open in, and the app is used in several at once — the daemon
  * multiplexes attach streams and the presence roster counts viewers per connection precisely so it can be.
  * While every window rewrote one shared key on every keystroke and streamed title, the last writer won: after
@@ -659,6 +717,38 @@ describe(`opening a fleet agent`, () => {
         await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
         expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a2/transcript`);
         expect(conversation.session.value?.id).toBe(`current-sdk-session`);
+    });
+
+    // The registry records what each turn ran under, and that is what the tab opens on. Seeding it from the
+    // browser's remembered picks instead is the reported bug: every agent you opened claimed the model you had
+    // last chosen somewhere else, however long ago its own session had run on another one.
+    it(`opens on the settings the agent ran with, leaving the tab that made the picks alone`, () => {
+        const chat = useChat();
+        chat.draft.value = `mine`; // content, so this tab survives losing the focus to the agent
+        chat.selectModel({ provider: `claude`, value: `claude-fable-5` });
+        chat.thinking.value = true;
+
+        const conversation = openAgentConversation({
+            id: `a4`,
+            sessionId: `sess-s`,
+            provider: `claude`,
+            harness: `native`,
+            model: `claude-sonnet-4-5-20250929`,
+            effort: `medium`,
+            thinking: false,
+        });
+
+        expect(conversation.model.value).toBe(`claude-sonnet-4-5-20250929`);
+        expect(conversation.effort.value).toBe(`medium`);
+        expect(conversation.thinking.value).toBe(false);
+        expect(chat.conversations.value[0]!.model.value).toBe(`claude-fable-5`);
+    });
+
+    it(`falls back to the remembered picks for an agent that has run nothing to describe`, () => {
+        const chat = useChat();
+        chat.selectModel({ provider: `claude`, value: `claude-fable-5` });
+
+        expect(openAgentConversation({ id: `a5`, provider: `claude`, harness: `native`, registered: false }).model.value).toBe(`claude-fable-5`);
     });
 
     it(`leaves a NATIVE Codex agent alone — its thread lives in Codex's own rollout store, not the SDK's`, async () => {

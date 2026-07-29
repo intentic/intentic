@@ -24,10 +24,21 @@ export type CliLauncher = readonly [string, ...string[]];
 // before the user finishes alt-tabbing to the browser; slow enough to be free.
 const POLL_MS = 5000;
 
-// Every Nth port poll also runs the git bridge (git-bridge.ts): no .git file-syncs anymore, so this is how the
-// sandbox's commits reach the local clones. Each pass shells ssh + git over the tunnel per repo, so it earns a
-// once-a-minute cadence where the ports poll is a single cheap HTTP read.
-const BRIDGE_EVERY_TICKS = 12;
+// How long to wait on the ports read before abandoning it. Undici's defaults let a hung tunnel — as opposed to
+// a tunnel that fails fast — sit on this await for minutes, and the loop is sequential, so everything after it
+// waits exactly that long, the git bridge included. A tiny JSON over an ssh-grade link either answers well
+// inside this or isn't coming.
+const PORTS_TIMEOUT_MS = 10_000;
+
+// The git bridge (git-bridge.ts) runs on EVERY tick: no .git file-syncs anymore, so it is the only way the
+// sandbox's commits reach the local clones, and file sync delivers a commit's FILES within seconds. Every
+// second the bridge lags is therefore a second `git status` here reports the whole landed change as
+// uncommitted. A quiet pass now costs one `ls-remote` per repo, cheap enough that the once-a-minute cadence
+// this replaces was buying nothing but that lag.
+//
+// The sandbox's repo SET, though, changes only when a repo is added or removed — so it is cached between passes
+// and re-listed only this often, sparing a round trip on every tick in between.
+const REPO_LIST_EVERY_TICKS = 12;
 
 // Consecutive definitive token rejections before the watcher treats the enrollment as revoked ("Disable sync"
 // in the browser, or a recreated sandbox that lost the enrollment) and tears itself down. Revocation never
@@ -43,7 +54,10 @@ export class SyncAuthError extends Error {}
 // to exactly this read. System ports (the sandbox's own machinery) are filtered out and never mirrored, and so
 // are non-forwardable binds (a loopback alias Mutagen would dial at 127.0.0.1 and never reach).
 export const fetchWorkspacePorts = async (sandboxUrl: string, syncToken: string): Promise<PortSummary[]> => {
-    const response = await fetch(`${sandboxUrl.replace(/\/$/, "")}/ports`, { headers: { "x-intentic-sync": syncToken } });
+    const response = await fetch(`${sandboxUrl.replace(/\/$/, "")}/ports`, {
+        headers: { "x-intentic-sync": syncToken },
+        signal: AbortSignal.timeout(PORTS_TIMEOUT_MS),
+    });
     if (response.status === 401 || response.status === 403) {
         throw new SyncAuthError(
             "the sandbox rejected the sync token — click “Enable desktop sync” in your browser and re-run setup to mint a fresh one.",
@@ -183,32 +197,47 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     log(`mirror watcher started (pid ${process.pid}); polling ${first.sandboxUrl}/ports every ${POLL_MS / 1000}s`);
 
     let rejectedPolls = 0;
+    let repos: readonly string[] | undefined;
     for (let tick = 0; ; tick += 1) {
-        try {
-            const config = await readConfig();
-            const ports = config.syncToken === undefined ? [] : await fetchWorkspacePorts(config.sandboxUrl, config.syncToken);
-            rejectedPolls = 0;
-            const next = await reconcileForwards(mutagenExecutor(mutagen, config), config.mirroredPorts ?? [], ports, log);
-            if (!sameMirrorSet(config.mirroredPorts ?? [], next)) {
-                await writeConfig({ ...config, mirroredPorts: next });
+        // Read once and share it: the two halves below each get their own catch, but a config that won't parse
+        // (a concurrent `setup` rewriting it) leaves neither of them anything to do.
+        const config = await readConfig().catch((error: unknown) => {
+            log(`  tick skipped: the sync config didn't read (${error instanceof Error ? error.message : String(error)})`);
+            return undefined;
+        });
+        if (config !== undefined) {
+            try {
+                const ports = config.syncToken === undefined ? [] : await fetchWorkspacePorts(config.sandboxUrl, config.syncToken);
+                rejectedPolls = 0;
+                const next = await reconcileForwards(mutagenExecutor(mutagen, config), config.mirroredPorts ?? [], ports, log);
+                if (!sameMirrorSet(config.mirroredPorts ?? [], next)) {
+                    await writeConfig({ ...config, mirroredPorts: next });
+                }
+            } catch (error) {
+                // Revocation is definitive: after REVOKED_POLLS consecutive rejections, stop for good — drop the
+                // login autostart, tear down the forwards, and exit — instead of polling a dead enrollment forever
+                // (and resurrecting at every login).
+                if (error instanceof SyncAuthError && ++rejectedPolls >= REVOKED_POLLS) {
+                    log(`the sandbox rejected the sync token ${REVOKED_POLLS} polls in a row — this machine's enrollment was revoked.`);
+                    await unregisterAutostart(log);
+                    await teardownForwards(log);
+                    await rm(mirrorPidPath, { force: true });
+                    log("re-enable from the Desktop sync card, or run `intentic-sync uninstall` to remove the agent entirely.");
+                    return;
+                }
+                // A transient tunnel blip must not kill the loop — log and try again next tick.
+                log(`  reconcile skipped: ${error instanceof Error ? error.message : String(error)}`);
             }
-            if (tick % BRIDGE_EVERY_TICKS === 0) {
-                runGitBridge(realBridgeExec, config, log);
+            // The bridge gets its OWN catch. It rides ssh; the ports read above rides https, through Cloudflare,
+            // which 502s the sandbox's /ports often enough to matter while the tunnel underneath is perfectly
+            // healthy. Sharing one catch meant every such 502 silently cost a whole bridge pass — and because
+            // the cadence counted ticks rather than retrying, the next attempt came a full period later, not a
+            // tick later, which is what turned a sub-minute lag into the occasional two-minute one.
+            try {
+                repos = runGitBridge(realBridgeExec, config, log, tick % REPO_LIST_EVERY_TICKS === 0 ? undefined : repos);
+            } catch (error) {
+                log(`  git bridge skipped: ${error instanceof Error ? error.message : String(error)}`);
             }
-        } catch (error) {
-            // Revocation is definitive: after REVOKED_POLLS consecutive rejections, stop for good — drop the
-            // login autostart, tear down the forwards, and exit — instead of polling a dead enrollment forever
-            // (and resurrecting at every login).
-            if (error instanceof SyncAuthError && ++rejectedPolls >= REVOKED_POLLS) {
-                log(`the sandbox rejected the sync token ${REVOKED_POLLS} polls in a row — this machine's enrollment was revoked.`);
-                await unregisterAutostart(log);
-                await teardownForwards(log);
-                await rm(mirrorPidPath, { force: true });
-                log("re-enable from the Desktop sync card, or run `intentic-sync uninstall` to remove the agent entirely.");
-                return;
-            }
-            // A transient tunnel blip must not kill the loop — log and try again next tick.
-            log(`  reconcile skipped: ${error instanceof Error ? error.message : String(error)}`);
         }
         await sleep(POLL_MS);
     }

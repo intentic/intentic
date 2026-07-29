@@ -32,6 +32,12 @@ describe("dropActionFor", () => {
         expect(dropActionFor(agent({ status: `error` }), `finished`)).toBe(`land`);
     });
 
+    // Same shape, different cause: the daemon died under this one, so its auto-land never ran either and its
+    // worktree still holds however far it got.
+    it("lands work whose turn was cut off by the daemon dying", () => {
+        expect(dropActionFor(agent({ status: `interrupted` }), `finished`)).toBe(`land`);
+    });
+
     it("hands a conflict back to the agent instead of re-running the land that just refused", () => {
         expect(dropActionFor(agent({ status: `conflict` }), `finished`)).toBe(`resolve`);
         expect(dropActionFor(agent({ status: `idle`, attention: { ...none, conflict: true } }), `finished`)).toBe(`resolve`);
@@ -76,6 +82,7 @@ describe("dropActionFor", () => {
             agent({ status: `awaiting` }),
             agent({ status: `conflict` }),
             agent({ status: `error` }),
+            agent({ status: `interrupted` }),
             agent({ status: `landed` }),
             agent({ status: `idle` }),
             agent({ status: `idle`, attention: { ...none, plan: true } }),

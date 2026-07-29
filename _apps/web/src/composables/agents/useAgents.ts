@@ -673,7 +673,9 @@ const setAutoLand = async (id: string, autoLand: boolean | null): Promise<void> 
 
 // Open (or focus) an agent's conversation tab and mark it seen. Takes just the identity fields so registry
 // cards and client-only draft cards both route through it.
-const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId" | "title" | "account" | "status">): void => {
+const open = (
+    agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId" | "title" | "account" | "model" | "effort" | "thinking" | "status">,
+): void => {
     openAgentConversation({
         id: agent.id,
         provider: agent.provider,
@@ -684,6 +686,11 @@ const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId
         ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
         ...(agent.title !== undefined ? { title: agent.title } : {}),
         ...(agent.account !== undefined ? { account: agent.account } : {}),
+        // The settings this agent's turns ran under, so the composer opens describing THIS agent rather than
+        // the last pick made in some other tab. Absent on a draft — it has run nothing to describe.
+        ...(agent.model !== undefined ? { model: agent.model } : {}),
+        ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
+        ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
     });
     markSeen(agent.id);
 };

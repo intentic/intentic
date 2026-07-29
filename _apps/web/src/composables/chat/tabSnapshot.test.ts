@@ -150,6 +150,46 @@ describe(`reading a tab snapshot`, () => {
         expect(restored?.session?.account).toBe(`acct-personal`);
     });
 
+    // The composer's pills describe the tab they sit under. The remembered picks seed a NEW chat; storing them
+    // with the tab is what keeps a reload from rewriting every open chat's model to whatever was picked last.
+    it(`restores the tab's own model, effort and thinking picks`, () => {
+        session.set(
+            KEY,
+            JSON.stringify({
+                active: `a`,
+                tabs: [
+                    {
+                        conversationId: `a`,
+                        draft: ``,
+                        provider: `claude`,
+                        model: `claude-sonnet-4-5-20250929`,
+                        effort: `medium`,
+                        thinking: false,
+                        attachments: [],
+                        queued: [],
+                    },
+                ],
+            }),
+        );
+
+        expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ model: `claude-sonnet-4-5-20250929`, effort: `medium`, thinking: false });
+    });
+
+    it(`drops turn settings that aren't usable values, leaving the restore to fall back`, () => {
+        session.set(
+            KEY,
+            JSON.stringify({
+                active: `a`,
+                tabs: [{ conversationId: `a`, draft: ``, model: ``, effort: 3, thinking: `yes`, attachments: [], queued: [] }],
+            }),
+        );
+
+        const restored = readTabSnapshot(`sb1`)?.tabs[0];
+        expect(restored).not.toHaveProperty(`model`);
+        expect(restored).not.toHaveProperty(`effort`);
+        expect(restored).not.toHaveProperty(`thinking`);
+    });
+
     it(`drops an account that isn't a usable id, leaving the restore to fall back`, () => {
         session.set(
             KEY,
