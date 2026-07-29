@@ -194,6 +194,8 @@ export const landAgent = async (
     git: GitRunner = defaultGit,
 ): Promise<LandOutcome> => {
     const conflicts: LandConflict[] = [];
+    // Only a `measure` land sets this: an outstanding delta it deliberately left on the branch (see LandModeSchema).
+    let held = false;
     // Only a `merge` land fills this: the paths now sitting in the workspace with conflict markers on them.
     const resolving: { repo: string; paths: string[] }[] = [];
     const repos: PersistedAgent["repos"] = [];
@@ -292,6 +294,23 @@ export const landAgent = async (
                 }
                 const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
                 await writeFile(patchPath, patch);
+                /* `measure`: auto-land is off, so an outstanding delta STAYS on the branch — everything above
+                 * this line already ran (the provenance commit, the diffstat, the tip===from and net-zero
+                 * bookkeeping), and everything below is exactly what "don't touch the main tree" forbids. The
+                 * one question still worth asking is the reverse probe: a delta that un-applies cleanly is
+                 * already sitting in the main tree by another road (the agent committed onto the main line
+                 * itself, a user applied the branch by hand), and holding THAT "ready to land" would offer a
+                 * land that can never do anything — so it advances like any other already-in-main outcome.
+                 * Anything else is genuinely outstanding: held, tips untouched, and the eventual deliberate
+                 * land runs the full conflict gate on the cumulative delta. */
+                if (mode === "measure") {
+                    if (await applies(main, patchPath, "reverse", git)) {
+                        next = await advanced();
+                        return;
+                    }
+                    held = true;
+                    return;
+                }
                 if (!(await applies(main, patchPath, "forward", git))) {
                     const report = await classifyDelta(main, from, tip, patchDir, repo, git);
                     /* NOTHING here is in conflict — the atomic check failed only because part of this delta is
@@ -352,11 +371,14 @@ export const landAgent = async (
         await rm(patchDir, { recursive: true, force: true });
     }
     return {
-        landed: conflicts.length === 0,
+        // A held delta is not landed — but a conflict is the louder fact, so `held` reports only when it is
+        // the outcome (the wire contract: held ⇒ nothing was applied and nothing failed).
+        landed: conflicts.length === 0 && !held,
         changed,
         repos,
         diff,
         ...(conflicts.length > 0 ? { conflicts } : {}),
         ...(resolving.length > 0 ? { resolving } : {}),
+        ...(held && conflicts.length === 0 ? { held: true } : {}),
     };
 };

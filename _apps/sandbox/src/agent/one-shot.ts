@@ -1,5 +1,6 @@
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import { type HarnessCredentials, harnessEnv } from "./harness-credentials.js";
+import { isUsageLimitText } from "./usage-limit-text.js";
 
 /* ONE PROMPT IN, ONE STRING OUT — no tools, no session, no transcript, no events. The shape a helper needs
  * (draft me a commit message) as opposed to the shape a chat needs, and the two have almost nothing in common:
@@ -73,6 +74,14 @@ export const runOneShot = async (params: {
             }
             if (message.subtype !== `success`) {
                 throw new Error(`the model did not answer (${message.subtype})`);
+            }
+            // A spent allowance comes back as a SUCCESSFUL result whose text is the refusal sentence
+            // ("You've hit your session limit · resets …"). Every caller here asked for a one-liner it will
+            // use AS DATA — a commit subject, a session title — so returning the sentence poisons whatever
+            // field it lands in. It is a failure wearing a result's clothes; throw it as the failure it is,
+            // with the sentence as the message since it names the reset the caller's UI can show.
+            if (isUsageLimitText(message.result)) {
+                throw new Error(message.result);
             }
             return message.result;
         }

@@ -184,6 +184,12 @@
     background: transparent;
     padding: 0;
 }
+/* A fenced block is the wrapper, its language bar, and the <pre> — one object. The wrapper owns the rhythm
+   around it (.md-code below), so the <pre> must not take the block gap a second time: that put a full line
+   between every code block and its own label, making the bar read as belonging to the paragraph above it. */
+.md-prose .md-code pre {
+    margin: 0;
+}
 .md-prose .ui-code .shiki {
     font-size: var(--prose-code);
     line-height: 1.65;

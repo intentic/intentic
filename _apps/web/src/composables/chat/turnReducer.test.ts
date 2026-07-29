@@ -330,6 +330,24 @@ describe(`effects`, () => {
         const { state } = run(started(), { kind: `landed`, landed: false, conflicts });
         expect(state.messages.at(-1)!.text).toContain(`app`);
     });
+
+    it(`offers "keep future work on the branch" on the landed notice, and only there`, () => {
+        // The moment the auto-land just fired is when "stop doing that" is worth one press — the
+        // autoResumeOnLimit pattern. A held or conflicted outcome has nothing to regret, so no offer.
+        const landed = run(started(), { kind: `landed`, landed: true });
+        expect(landed.state.messages.at(-1)).toMatchObject({ role: `notice`, noticeAction: `landHold` });
+        const conflicted = run(started(), { kind: `landed`, landed: false, conflicts: [] });
+        expect(conflicted.state.messages.at(-1)!.noticeAction).toBeUndefined();
+    });
+
+    it(`says held work stayed on the branch, without calling it landed or conflicted`, () => {
+        const { state } = run(started(), { kind: `landed`, landed: false, held: true });
+        const notice = state.messages.at(-1)!;
+        expect(notice.role).toBe(`notice`);
+        expect(notice.text).toContain(`branch`);
+        expect(notice.text).not.toContain(`couldn't land`);
+        expect(notice.noticeAction).toBeUndefined();
+    });
 });
 
 describe(`unfamiliar frames`, () => {

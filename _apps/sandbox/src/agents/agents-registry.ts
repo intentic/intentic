@@ -110,6 +110,10 @@ export interface AgentsRegistry {
     // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
     // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
+    // Set/clear the per-agent autoLand override (null ⇒ back to "inherit the sandbox setting"). Like setTitle
+    // it leaves updatedAt alone (configuring is not activity) and needs no running guard — the value is read
+    // at turn COMPLETION, so flipping it mid-turn is exactly "hold THIS turn's work". Undefined ⇒ unknown id.
+    readonly setAutoLand: (id: string, autoLand: boolean | null) => Promise<AgentSummary | undefined>;
     // "Mark all read" — one stamp across the whole fleet, so a board full of badges has a single escape hatch.
     readonly markAllSeen: (now: number) => Promise<void>;
     // Persist a land's outcome: the advanced per-repo landedTips (partial lands included — conflicted repos
@@ -120,9 +124,10 @@ export interface AgentsRegistry {
     // Fold one turn frame into runtime state; broadcasts only on card-visible changes.
     readonly observe: (id: string, event: AgentEvent) => void;
     // End of turn (aborted included): flush pending usage/session into the entry, release the mutex.
-    // `outcome` carries the auto-land verdict of a clean turn — it wins over the default idle status
-    // (an observed error frame still wins over everything).
-    readonly finish: (id: string, now: number, outcome?: "landed" | "conflict") => Promise<void>;
+    // `outcome` carries the land verdict of a clean turn — landed/conflict from a real land, `ready` from a
+    // measure that held the delta on the branch — and wins over the default idle status (an observed error
+    // frame still wins over everything).
+    readonly finish: (id: string, now: number, outcome?: "landed" | "conflict" | "ready") => Promise<void>;
     // Stamp/clear the archive marker. Both take the ids that ALREADY had their checkout retired (or restored)
     // — the registry owns the marker, agents/archive.ts owns the git side and the order between them.
     readonly setArchived: (ids: readonly string[], now: number) => Promise<void>;
@@ -187,6 +192,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             ...(entry.title !== undefined ? { title: entry.title } : {}),
             ...(entry.model !== undefined ? { model: entry.model } : {}),
             ...(entry.account !== undefined ? { account: entry.account } : {}),
+            ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
             ...(base !== undefined ? { base } : {}),
             ...(costUsd > 0 ? { costUsd } : {}),
             ...(inputTokens > 0 ? { inputTokens } : {}),
@@ -342,6 +348,9 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 // `archivedAt` is deliberately NOT carried across: sending an archived agent a message is how
                 // you un-archive it, so the entry rebuilt here is a live one again. The checkout follows
                 // immediately — the ensure() right after this re-attaches it from the surviving branch.
+                // The land posture survives the rebuild too: "hold this agent's work" is a standing choice
+                // about the conversation, and the next turn is exactly when it matters.
+                ...(existing?.autoLand !== undefined ? { autoLand: existing.autoLand } : {}),
                 // Lifetime counters + diffstat survive the per-turn entry rebuild.
                 ...(existing?.turns !== undefined ? { turns: existing.turns } : {}),
                 ...(existing?.toolUses !== undefined ? { toolUses: existing.toolUses } : {}),
@@ -403,6 +412,20 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             entries = entries.map((entry) => ({ ...entry, seenAt: now }));
             await persist();
             broadcast();
+        },
+        setAutoLand: async (id, autoLand) => {
+            const entry = entryOf(id);
+            if (entry === undefined) {
+                return undefined;
+            }
+            // null strips the key entirely rather than storing it: absent IS the "inherit" state, and it is
+            // what keeps the agent following the sandbox-wide toggle wherever it is pointed next.
+            const { autoLand: _cleared, ...carried } = entry;
+            const next = { ...carried, ...(autoLand !== null ? { autoLand } : {}) };
+            replace(next);
+            await persist();
+            broadcast();
+            return summaryOf(next);
         },
         observe: (id, event) => {
             const state = runtimeOf(id);

@@ -89,8 +89,9 @@ const perform = async (id: string, chosen: DropAction): Promise<void> => {
             const result = await landAgent(id);
             await invalidateAgentAction(id);
             if (!result.landed) {
-                // Only reachable from an ERRORED card now (a conflicted one resolves instead), so this is a
-                // first refusal with a report to read, not the repeat of one the user has already seen.
+                // Reachable from an ERRORED card's drop or a READY card's button (a conflicted one resolves
+                // instead) — either way a first refusal with a report to read, not the repeat of one the user
+                // has already seen.
                 notice.value = `Landing hit a conflict — open the agent to see what blocked it.`;
             }
         } else if (chosen === `resolve`) {
@@ -155,6 +156,11 @@ const cancelResolve = (): void => {
  * the same reasoning the review panel's own button already rests on. Asking twice for the same intent teaches
  * people to click through dialogs. */
 const resolveNow = (id: string): Promise<void> => perform(id, `resolve`);
+
+// The ready card's "Land now" — the same runner for the same reasons resolveNow shares it (one busy flag, one
+// notice strip, one refresh). No dialog: landing is reversible in the git sense (the branch keeps everything)
+// and the button states its own mechanics, exactly like the review panel's copy of it.
+const landNow = (id: string): Promise<void> => perform(id, `land`);
 
 const onMove = (event: PointerEvent): void => {
     pointer.value = { x: event.clientX, y: event.clientY };
@@ -237,5 +243,6 @@ export function useAgentDrag() {
         confirmResolve,
         cancelResolve,
         resolveNow,
+        landNow,
     };
 }

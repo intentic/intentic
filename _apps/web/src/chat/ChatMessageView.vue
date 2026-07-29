@@ -6,11 +6,14 @@ import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { clearQuestionDraft, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
+import { effectiveAutoLand } from "../composables/agents/agentStatus";
+import { useAgents } from "../composables/agents/useAgents";
 import { type ChatMessage, isAcknowledgment, type PlanRequest } from "../composables/chat/transcript";
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
+import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolCard from "./ChatToolCard.vue";
@@ -29,6 +32,7 @@ const props = defineProps<{
 }>();
 
 const {
+    active,
     decidePlan,
     planApprovals,
     answerQuestion,
@@ -40,6 +44,23 @@ const {
     awaitingDecision,
 } = useChat();
 const { mobile } = useDevice();
+
+/* The landed notice's one-press offer (ChatMessage.noticeAction): flip THIS agent to holding its future work
+ * on the branch — the moment the auto-land just fired is when "I'd rather have reviewed that first" is worth
+ * exactly one press (the same reasoning as ChatPanel's "Enable auto-resume" on a limit banner). Per-agent,
+ * not the sandbox default: the click happens inside one agent's conversation, so its honest blast radius is
+ * that agent — Sandbox ▸ Agent owns the global. Gated on the CURRENT effective posture rather than on the
+ * message, so pressing it once retires the offer from every landed notice at once, and a transcript replayed
+ * into an already-holding agent never shows a stale one. */
+const { agentById, setAutoLand } = useAgents();
+const { settings: sandboxSettings } = useSandboxSettings();
+const holdOffer = computed(
+    () => props.message.noticeAction === `landHold` && effectiveAutoLand(agentById(active.value.conversationId), sandboxSettings.value?.autoLand),
+);
+// Best-effort like markSeen: a failed write leaves the offer standing to press again.
+const holdFutureLands = (): void => {
+    void setAutoLand(active.value.conversationId, false).catch(() => undefined);
+};
 
 // Whimsical status words cycled while a turn is streaming (Claude Code style).
 const LOADER_WORDS = [
@@ -476,9 +497,9 @@ const onEditKeydown = (event: KeyboardEvent): void => {
     >
         <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
             <!-- Stacked: a row of attachments above the prompt. The arrangement for a narrow panel, for edit
-                 mode (a column beside the textarea would come out of the width of the narrowest thing in the
-                 panel), and for any attachment set the column can't hold — see attachmentsAside. It hands
-                 over to the column below only where that one is actually shown. -->
+                 mode (a thumbnail beside the textarea would come out of the width of the narrowest thing in
+                 the panel), and for every attachment set that can't go beside the bubble — see
+                 attachmentsAside. It steps aside only where the copy below is actually shown. -->
             <ChatAttachmentStrip
                 v-if="attachmentThumbs.length"
                 :attachments="attachmentThumbs"
@@ -603,6 +624,17 @@ const onEditKeydown = (event: KeyboardEvent): void => {
         <div v-else-if="message.role === 'notice'" class="flex items-center gap-2 self-center py-0.5 text-2xs text-subtle">
             <Icon name="info-circle" class="text-2xs" />
             <span>{{ message.text }}</span>
+            <!-- The quiet follow-up some notices carry — see holdOffer. A link, not a button: the notice line
+                 is the most muted thing in the transcript, and the offer must not outshout the turn it trails. -->
+            <button
+                v-if="holdOffer"
+                type="button"
+                class="shrink-0 font-medium text-link hover:underline"
+                v-tooltip.top="'Turns auto-land off for this agent: from now on its finished work waits on its branch as “Ready to land”, and you land it from the board or its review.'"
+                @click="holdFutureLands"
+            >
+                Keep future work on the branch
+            </button>
         </div>
         <template v-else>
             <div v-if="message.thinking" class="w-full overflow-hidden rounded-lg border-l-2 border-line-strong bg-overlay/60">

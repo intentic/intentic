@@ -31,6 +31,9 @@ const DEFAULTS: SandboxSettings = {
     // read, so there is no id for a fresh sandbox to store.
     quickModel: "",
     agentRetentionDays: 3,
+    // The other exception: auto-land defaults ON because it is the historical behaviour — defaulting off
+    // would silently hold every existing sandbox's finished work on branches nobody is watching.
+    autoLand: true,
     autoResumeOnLimit: false,
 };
 

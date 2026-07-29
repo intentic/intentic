@@ -3,7 +3,7 @@ import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NATIVE_PROVIDERS, type NativeProvider, providerLabel } from "@intentic/sandbox-contract";
+import { NATIVE_PROVIDERS, type NativeProvider, type OauthAccount, providerLabel } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
@@ -133,9 +133,11 @@ const activeAccountReauth = computed(() => {
     return accounts.value.find((entry) => entry.id === id && entry.needsReauth === true);
 });
 
-// The usage-limit auto-resume offer (Conversation.limitResume): the daemon remembered the turn the limit
-// killed, and one press here flips the STANDING autoResumeOnLimit setting (Sandbox ▸ Agent) — the save alone
-// arms that resume daemon-side; armLimitResume then reflects it in this chat (notice + re-attach probe).
+// The usage-limit banner (Conversation.limitResume): the daemon remembered the turn the limit killed, and the
+// banner offers every way forward it can vouch for. "Enable auto-resume" flips the STANDING autoResumeOnLimit
+// setting (Sandbox ▸ Agent) — the save alone arms that resume daemon-side; armLimitResume then reflects it in
+// this chat (notice + re-attach probe). "Resume with <account>" skips the wait entirely: the allowance is per
+// account, so any OTHER connected account of this provider can carry the interrupted turn right now.
 const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
 const limitResume = computed(() => active.value.limitResume.value);
 const enableAutoResume = async (): Promise<void> => {
@@ -146,6 +148,18 @@ const enableAutoResume = async (): Promise<void> => {
     await saveSandboxSettings.mutateAsync({ ...current, autoResumeOnLimit: true });
     active.value.armLimitResume();
 };
+// The provider's other accounts — each its own allowance. The spent one is the DAEMON-resolved account off the
+// failure frame (the local selection can be empty, meaning "the provider's first"), and a credential that
+// can't refresh can't serve a resume, so it isn't offered.
+const limitSwitchAccounts = computed<OauthAccount[]>(() => {
+    const pending = limitResume.value;
+    if (pending === undefined) {
+        return [];
+    }
+    const spent = pending.account ?? account.value ?? accounts.value[0]?.id;
+    return accounts.value.filter((entry) => entry.id !== spent && entry.needsReauth !== true);
+});
+const resumeWith = (target: OauthAccount): Promise<void> => active.value.resumeOnAccount(target.id, target.label);
 
 /* Archiving an agent closes its chat tab (see the archive note in useAgents), but an archived agent can still be
  * READ in a tab — opened from the archive view, or filed away by the daemon's retention sweep while it sat open.
@@ -976,19 +990,33 @@ watch(
                                     <span class="font-semibold underline">Reconnect</span></span
                                 >
                             </button>
-                            <!-- Usage-limit auto-resume offer: surfaced at the moment it would have helped — the daemon
-                         remembered the turn the limit killed, and enabling the standing toggle here arms that very
-                         resume (~1 min after the limit resets), plus every future one. -->
+                            <!-- Usage-limit banner: surfaced at the moment it would have helped. The daemon remembered
+                         the turn the limit killed; enabling the standing toggle arms that very resume (~1 min after
+                         the limit resets, plus every future one), and each OTHER account of this provider is a
+                         "resume with" that fires the same turn right now on its own allowance. -->
                             <div
                                 v-if="limitResume"
-                                class="flex items-start gap-2 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
+                                class="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
                             >
                                 <Icon name="clock" class="mt-0.5 shrink-0" />
                                 <span class="min-w-0 flex-1"
-                                    >Usage limit reached — resets {{ formatReset(limitResume.resetsAt) }}. Auto-resume can continue this chat by
-                                    itself about a minute after.</span
+                                    >Usage limit reached — resets {{ formatReset(limitResume.resetsAt) }}.
+                                    <template v-if="limitResume.scheduled">Auto-resume is on — this chat continues by itself about a minute after.</template>
+                                    <template v-else>Auto-resume can continue this chat by itself about a minute after.</template></span
                                 >
                                 <button
+                                    v-for="other in limitSwitchAccounts"
+                                    :key="other.id"
+                                    type="button"
+                                    class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
+                                    :disabled="streaming"
+                                    v-tooltip.top="'Re-runs the interrupted turn now on this account\'s own allowance; the chat continues on it'"
+                                    @click="resumeWith(other)"
+                                >
+                                    Resume with {{ other.label }}
+                                </button>
+                                <button
+                                    v-if="!limitResume.scheduled"
                                     type="button"
                                     class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
                                     :disabled="sandboxSettings === undefined || saveSandboxSettings.isPending.value"

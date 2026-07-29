@@ -47,7 +47,7 @@ const props = defineProps<{
     match?: string;
     query?: string;
 }>();
-const emit = defineEmits<{ open: []; review: []; resolve: []; archive: []; restore: []; grab: [event: PointerEvent, card: HTMLElement] }>();
+const emit = defineEmits<{ open: []; review: []; resolve: []; land: []; archive: []; restore: []; grab: [event: PointerEvent, card: HTMLElement] }>();
 
 const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
@@ -80,6 +80,12 @@ const review = computed(() => (mobile.value ? undefined : reviewAction(props.age
  * button pressed in the archive would quietly put the card back on the board — a side effect nobody browsing a
  * filing cabinet asked for. Restore first; the conflict will still be there. */
 const resolvable = computed(() => props.agent.archivedAt === undefined && dropActionFor(props.agent, `finished`) === `resolve`);
+/* THE READY CARD'S PRESS. `ready` exists because the user turned auto-land off, so the one thing this card is
+ * waiting for is the deliberate land — offered where the state is announced, as a real button for the same
+ * reasons the conflict card's resolve is one (touch, keyboard, a scanning eye). Same wording and mechanics as
+ * the review panel's own button: one vocabulary for one action. Excluded in the archive like `resolvable`,
+ * and by the same logic — act on filed-away work by restoring it first. */
+const landable = computed(() => props.agent.archivedAt === undefined && props.agent.status === `ready`);
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
 const model = computed(() => (props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined));
 const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
@@ -322,6 +328,20 @@ const grab = (event: PointerEvent): void => {
                     @click.stop="emit('resolve')"
                 >
                     <Icon name="sparkles" class="mr-1 text-2xs" />Have the agent resolve it
+                </button>
+            </div>
+
+            <!-- The READY card's press — the deliberate land the user opted into by turning auto-land off (see
+                 `landable`). Success-styled with the check glyph exactly like the review panel's "Land now":
+                 the two are the same action on the same work, and must read as such. -->
+            <div v-if="landable" class="flex min-w-0">
+                <button
+                    type="button"
+                    :class="cmp.buttonSuccess('gap-0 whitespace-nowrap px-2 py-0.5 text-2xs')"
+                    v-tooltip.top="'Applies this agent\'s finished work to your workspace as uncommitted changes — your own commit stays the review step.'"
+                    @click.stop="emit('land')"
+                >
+                    <Icon name="check" class="mr-1 text-2xs" />Land now
                 </button>
             </div>
 

@@ -2,9 +2,9 @@
 import ChatImageThumb from "./ChatImageThumb.vue";
 
 /* What a sent prompt's attachments look like: a hover-previewable thumbnail per image, a name chip for
- * anything else. Only the arrangement belongs to the caller — ChatMessageView renders this as a row above the
- * bubble or a column beside it depending on how much width the panel has, and a second, always-stacked copy
- * while the prompt is being edited. Extracted so those call sites can't drift apart. */
+ * anything else. Only the arrangement belongs to the caller — ChatMessageView mounts one copy as the row above
+ * the bubble and a second beside it, and lets a container query pick which of the two is shown. Extracted so
+ * the two can't drift apart. */
 
 defineProps<{ attachments: readonly { name: string; path: string; previewUrl?: string }[] }>();
 </script>

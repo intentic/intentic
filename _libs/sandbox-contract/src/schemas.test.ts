@@ -25,6 +25,7 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
         systemPrompt: "",
         quickModel: "",
         agentRetentionDays: 3,
+        autoLand: true,
         autoResumeOnLimit: false,
     });
 });
@@ -49,6 +50,9 @@ test("an empty object is the full default settings object", () => {
         // The one default that isn't "off": the fleet board's Finished lane has no exit of its own, and each
         // card it holds is a worktree checkout. Opting INTO cleanup would mean shipping a leak by default.
         agentRetentionDays: 3,
+        // On because it is the historical behaviour — defaulting off would silently hold every existing
+        // sandbox's finished work on branches nobody is watching.
+        autoLand: true,
         autoResumeOnLimit: false,
     });
 });

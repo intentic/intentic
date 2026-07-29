@@ -40,6 +40,12 @@ export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName
     if (status === `landed`) {
         return { icon: `check-circle`, label: `Landed`, class: `text-success` };
     }
+    // Finished with auto-land off: the delta is safe on the branch, waiting for a deliberate Land. Link-blue,
+    // not the attention hues — the user CHOSE to hold work for review, so a card in this state is an offer to
+    // act, never a warning (see blocked()'s note on teaching people to ignore the word "needs you").
+    if (status === `ready`) {
+        return { icon: `download`, label: `Ready to land`, class: `text-link` };
+    }
     if (status === `conflict`) {
         return { icon: `exclamation-triangle`, label: `Conflict`, class: `text-warning` };
     }
@@ -95,7 +101,10 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     if (agent.status === `running` || agent.status === `draft`) {
         return `active`;
     }
-    return `finished`; // landed | idle — the work is in the workspace (or there was none).
+    // landed | idle — the work is in the workspace (or there was none) — and `ready`, work HELD on the branch
+    // because auto-land is off. Ready is finished, not attention: the turn is over and nothing is failing —
+    // the user opted into a deliberate land, and the card carries that press itself.
+    return `finished`;
 };
 
 /* ONE BIT — "this session isn't done with your tree yet" — for surfaces that name an agent while showing its
@@ -161,11 +170,24 @@ export const reviewAction = (agent: AgentStanding & { readonly diff?: { files: n
     if (agent.status === `error`) {
         return `View error`;
     }
+    // Ready names both halves of what its destination offers: the review panel is where the held work is read
+    // AND where "Land now" sits. The card's own primary button lands without the trip (AgentCard).
+    if (agent.status === `ready`) {
+        return `Review & land`;
+    }
     if (agent.diff !== undefined && agent.diff.files > 0) {
         return `Review changes`;
     }
     return `Review`;
 };
+
+/* Does a clean turn's work land into the workspace by itself, for THIS agent? The one place the two-level
+ * setting is folded into an answer, so every surface that states or flips the posture (the review panel's hold
+ * toggle, the landed notice's offer) agrees on what it currently is: the agent's own override when it has one,
+ * else the sandbox-wide setting, else the schema default (on). Takes the pieces rather than reaching for the
+ * stores — this module is a leaf (see the header). */
+export const effectiveAutoLand = (agent: { readonly autoLand?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
+    agent?.autoLand ?? sandboxDefault ?? true;
 
 // The sources an agent can be OPENED BY, when it wasn't opened by the user: the label and glyph the card's
 // provenance line wears. Keyed by AgentOrigin.provider, which is an open string (listener sources are

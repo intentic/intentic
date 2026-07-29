@@ -490,11 +490,13 @@ export class Conversation {
     // above the composer so nothing the user wrote is ever invisible, and persisted with the draft.
     readonly queued = ref<QueuedMessage[]>([]);
 
-    // A usage-limit failure the daemon remembered but will only resume once the autoResumeOnLimit setting
-    // comes on — what the composer's offer banner renders (enable → armLimitResume). Cleared by the next
+    // A usage-limit failure the daemon remembered — what the composer's offer banner renders. `scheduled`
+    // says whether the daemon will re-run it by itself (auto-resume on) or is only holding it until the
+    // setting comes on (enable → armLimitResume); either way `account` names the spent allowance, so the
+    // banner can offer the provider's OTHER accounts as a resume-now (resumeOnAccount). Cleared by the next
     // send, which supersedes the pending resume daemon-side the same way. Not persisted: after a reload the
     // standing toggle on the settings page is the offer.
-    readonly limitResume = ref<{ resetsAt: number } | undefined>();
+    readonly limitResume = ref<{ resetsAt: number; scheduled: boolean; account?: string } | undefined>();
 
     // Whether the running turn can absorb a message mid-flight: the Claude Code loop only (see runsClaudeCode,
     // the same predicate the daemon's streamAgent gates its SteeringQueue on). Used for WORDING alone (the
@@ -896,17 +898,53 @@ export class Conversation {
 
     // The user enabled auto-resume while this conversation's limit failure was still pending. The daemon's
     // scheduler owns the resume from here (it remembered the failed turn regardless of the toggle), so this
-    // only reflects that: retire the offer, say when the chat continues, and arm the re-attach probe that
-    // renders the resumed run in this window.
+    // only reflects that: flip the banner to its scheduled posture (the enable button retires; a resume-now on
+    // another account stays on offer — the wait it skips is the very one just scheduled), say when the chat
+    // continues, and arm the re-attach probe that renders the resumed run in this window.
     armLimitResume(): void {
         const pending = this.limitResume.value;
         if (pending === undefined) {
             return;
         }
-        this.limitResume.value = undefined;
+        this.limitResume.value = { ...pending, scheduled: true };
         this.appendNotice(`Auto-resume enabled — this chat continues by itself around ${formatReset(pending.resetsAt + RESUME_DELAY_S)}.`);
         this.scheduleLimitReattach(pending.resetsAt);
         this.persist();
+    }
+
+    /* Fire the daemon's remembered usage-limit resume NOW, on one of the provider's other accounts — the
+     * allowance is per account, so a second one has its own headroom and there is nothing to wait for. The
+     * daemon re-runs the interrupted turn as an ordinary detached run (same session, new credential); this
+     * window renders it by attaching, exactly as a reload would.
+     *
+     * The conversation MOVES onto the picked account (session ref included, like rebindAccount): the resumed
+     * session now lives under that credential daemon-side, and a next send still pointed at the spent account
+     * would retire the session AND walk straight back into the closed window. The one press means "carry on
+     * over there", not "borrow it for a turn".
+     *
+     * A refusal means nothing is pending daemon-side (a fresh turn superseded the failure, or the daemon
+     * restarted and forgot) — retire the offer honestly rather than leave a button that can never work. */
+    async resumeOnAccount(accountId: string, label: string): Promise<void> {
+        if (this.limitResume.value === undefined || this.streaming.value) {
+            return;
+        }
+        this.limitResume.value = undefined;
+        clearTimeout(this.limitReattachTimer);
+        const ok = await this.postTurnControl(`/agent/resume-limit`, { conversationId: this.conversationId, account: accountId });
+        if (!ok) {
+            // Refused as CONFLICT when a turn is already running — the scheduled resume (whose probe timer was
+            // just cleared) or another window beat this press — so attach to whatever is live and let it render
+            // itself; only when nothing is does the entry count as gone.
+            const attached = await this.reattach();
+            if (!attached) {
+                this.appendNotice(`The interrupted turn is no longer held for resuming — send your message again to continue.`);
+            }
+            return;
+        }
+        this.rebindAccount(accountId);
+        this.appendNotice(`Resuming now on ${label} — this chat continues on that account.`);
+        this.persist();
+        void this.reattach();
     }
 
     // Timer for the pending probe (armed by a scheduled resume, re-armed between attempts); one per
@@ -1112,6 +1150,10 @@ export class Conversation {
             // This window is now watching a live turn — its clean end may flush the queue (see send).
             this.interrupted = false;
             this.error.value = null;
+            // A live turn supersedes a pending usage-limit resume (the daemon cleared its side at this turn's
+            // start) — the offer banner must not outlive the failure, whether the scheduler fired the resume,
+            // another window did, or the user simply sent something over there.
+            this.limitResume.value = undefined;
             this.turnStartedAt.value = head.startedAt;
             // The restored copy of THIS run, when the transcript already carries one, is adopted rather than
             // appended alongside — see adoptRunningTurn.
@@ -1503,11 +1545,15 @@ export class Conversation {
             const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.account.value))?.resetsAt;
             if (error.autoResume === `scheduled` && resetsAt !== undefined) {
                 this.appendNotice(`${message} Auto-resume is on — this chat continues by itself around ${formatReset(resetsAt + RESUME_DELAY_S)}.`);
+                // The banner rides alongside the schedule, not instead of it: waiting is the default outcome,
+                // but another account of this provider can carry the turn NOW, and that offer belongs in the
+                // room while the timer runs.
+                this.limitResume.value = { resetsAt, scheduled: true, account: error.account };
                 this.scheduleLimitReattach(resetsAt);
                 return;
             }
             if (error.autoResume === `available` && resetsAt !== undefined) {
-                this.limitResume.value = { resetsAt };
+                this.limitResume.value = { resetsAt, scheduled: false, account: error.account };
             }
             this.appendNotice(resetsAt !== undefined ? `${message} Resets ${formatReset(resetsAt)}.` : message);
             return;

@@ -144,7 +144,7 @@ test("defects plants every anchor it grades against, and padding the answer is p
         // Scoped to one subsystem on purpose. Unscoped, a run read all 235 files of the tree and still had no
         // answer when the clock ran out — a haystack nobody finishes searching yields timeouts, not a result.
         expect(prepared.prompt).toContain(`daemon/src/agent/`);
-        expect(prepared.prompt).toMatch(/1[5-9] source files|2[0-9] source files/);
+        expect(prepared.prompt).toMatch(/(?:1[5-9]|[23][0-9]) source files/);
         // The mutations really are in the copy the agent reads.
         expect(await readFile(join(dir, `daemon`, `src`, `agent`, `agent-terminals.ts`), `utf8`)).toContain(`slice(0, 6)`);
 

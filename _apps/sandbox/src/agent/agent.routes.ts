@@ -33,7 +33,7 @@ import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
-import { accountLimitReset, clearLimitHit, recordLimitHit } from "./limit-resume.js";
+import { accountLimitReset, clearLimitHit, pendingLimitHit, recordLimitHit, resumeTurnOf } from "./limit-resume.js";
 import { withRuntimeHistory } from "./runtime-history.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
 import { summarizeAgentTitle } from "./title-summary.js";
@@ -121,7 +121,7 @@ async function* runConversationTurn(
         yield { kind: "done" };
         return;
     }
-    let outcome: "landed" | "conflict" | undefined;
+    let outcome: "landed" | "conflict" | "ready" | undefined;
     // Hoisted out of the try because the chore emit in the finally reads them: the span this turn's workspace
     // event names, the branch it ran on, and whether it ended on an error frame.
     let span: WorkspaceEvent["repos"] = [];
@@ -167,20 +167,30 @@ async function* runConversationTurn(
         }
         // Auto-land at clean turn completion — the Claude Code review model: the delta arrives in the main
         // tree as UNCOMMITTED changes and the user's ordinary Changes-panel commit is the review. Aborted or
-        // errored turns accumulate in the worktree; the next clean turn lands the cumulative delta.
+        // errored turns accumulate in the worktree; the next clean turn lands the cumulative delta. With
+        // auto-land OFF (the sandbox setting, or this agent's own override) the same pass runs in `measure`
+        // mode instead: provenance and diffstat happen, the main tree is not touched, and the held delta
+        // waits on the branch as a "Ready to land" card until the user lands it deliberately.
         const finished = services.agents.entry(conversationId);
         if (!failed && signal?.aborted !== true && finished !== undefined) {
-            const landed = await landAgent(services.agentWorktrees, finished);
+            const { autoLand } = await services.sandboxSettings.get();
+            const landed = await landAgent(services.agentWorktrees, finished, (finished.autoLand ?? autoLand) ? "check" : "measure");
             if (!landed.changed && landed.diff.files > 0) {
                 // Nothing NEW to land, but the agent's cumulative output exists and is all accounted for in
                 // the main tree — a follow-up turn that only answered a question must not downgrade the card
-                // from Landed to Idle. No frame and no chore: nothing moved.
+                // from Landed to Idle. No frame and no chore: nothing moved. (Reachable under measure too —
+                // held work the user already landed by hand — and means the same thing there.)
                 outcome = "landed";
             }
             if (landed.changed) {
                 await services.agents.recordLanded(conversationId, landed);
-                outcome = landed.landed ? "landed" : "conflict";
-                yield { kind: "landed", landed: landed.landed, ...(landed.conflicts !== undefined ? { conflicts: landed.conflicts } : {}) };
+                outcome = landed.held === true ? "ready" : landed.landed ? "landed" : "conflict";
+                yield {
+                    kind: "landed",
+                    landed: landed.landed,
+                    ...(landed.conflicts !== undefined ? { conflicts: landed.conflicts } : {}),
+                    ...(landed.held === true ? { held: true } : {}),
+                };
                 if (landed.landed) {
                     // The main tree just changed — give the History timeline its turn checkpoint, labeled with
                     // the prompt, exactly like a non-isolated turn's snapshot.
@@ -694,7 +704,15 @@ async function* runTurn(
                     limitHitAt = limitReset ?? (await accountLimitReset(services, resolvedAccount));
                     if (limitHitAt !== undefined) {
                         const { autoResumeOnLimit } = await services.sandboxSettings.get();
-                        yield { ...event, resetsAt: limitHitAt, autoResume: autoResumeOnLimit ? "scheduled" : "available" };
+                        // The account is the daemon-resolved one, not the client's selection (which can be
+                        // empty): it names whose allowance is spent, so the client can offer the provider's
+                        // OTHER accounts as a resume-now (/agent/resume-limit) instead of only the wait.
+                        yield {
+                            ...event,
+                            resetsAt: limitHitAt,
+                            autoResume: autoResumeOnLimit ? "scheduled" : "available",
+                            ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
+                        };
                         continue;
                     }
                 }
@@ -845,6 +863,31 @@ export const createAgentRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "no running turn for that conversation" });
             }
             return { ok: true } as const;
+        }),
+        // Fire the conversation's remembered usage-limit resume NOW, on `account` when the user picked one of
+        // the provider's other accounts — a spent allowance on one account is no reason to wait when a second
+        // has headroom. The same detached-run shape as `run`/the scheduler's own fire, so every window can
+        // attach to the resumed turn. NOT_FOUND = nothing pending (a fresh turn superseded the failure, or the
+        // daemon restarted and the in-memory entry died with it) — the client retires its offer on it.
+        resumeLimit: i.resumeLimit.handler(({ input }) => {
+            const hit = pendingLimitHit(input.conversationId);
+            if (hit === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no usage-limit resume is pending for that conversation" });
+            }
+            const conversationId = input.conversationId;
+            // Cleared before firing, like the scheduler's own fire — the turn this starts supersedes the
+            // entry (and clears it again at its own start; a resume that re-hits the limit records afresh).
+            clearLimitHit(conversationId);
+            const turn = resumeTurnOf(hit, input.account);
+            const run = startTurnRun((resumed, signal) => streamAgent(services, resumed, signal), turn, {
+                awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),
+                settled: (outcome) => void services.pushSender.notifyIfAway(turnFinished(conversationId, turn.prompt, outcome)),
+            });
+            if (run === undefined) {
+                throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
+            }
+            services.logger.info({ conversationId, account: input.account }, "usage-limit resume fired by hand");
+            return { run: run.id };
         }),
         // The provider's slash commands from its most recent turn. Empty (not an error) when it has never run
         // one here — the popover simply stays closed until the first turn publishes the list.

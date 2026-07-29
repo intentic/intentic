@@ -138,6 +138,13 @@ export function useAgentChanges(agentId: Ref<string>) {
             await invalidateAgentAction(agentId.value);
         }, `Land failed.`);
 
+    // The panel's hold toggle — this agent's auto-land override (null ⇒ back to inheriting the sandbox
+    // setting). Through `run` like every other mutation here, so a refusal reports in the panel's own error
+    // line instead of a silently-unflipped icon; the optimistic registry write inside setAutoLand is what
+    // repaints the toggle on the click itself.
+    const setAutoLand = (autoLand: boolean | null): Promise<void> =>
+        run(() => useAgents().setAutoLand(agentId.value, autoLand), `Couldn't change when this agent lands.`);
+
     // Hand the conflict to the agent (agentActions.askAgentToResolve). The flag is set only once the turn is
     // away, so a send that fails leaves the buttons where they were rather than parking the panel on a
     // "resolving" state nothing is working on. A REFUSED ask is such a failure: this panel hides the button
@@ -180,6 +187,7 @@ export function useAgentChanges(agentId: Ref<string>) {
         viewedCount,
         setViewed,
         land,
+        setAutoLand,
         askResolve,
         discard,
         archive,

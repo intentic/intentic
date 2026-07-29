@@ -1,5 +1,6 @@
 import type { Services } from "../composition.js";
 import { askQuickModel } from "./quick-model.js";
+import { isUsageLimitText } from "./usage-limit-text.js";
 
 /* THE NAME A CONVERSATION EARNS AFTER ITS FIRST ANSWER — the late half of the naming rule that starts in the
  * contract's title.ts. The derived title is a guess made before the first frame came back, and it inherits
@@ -65,16 +66,31 @@ export const summarizeAgentTitle = async (
     turn: { readonly prompt: string; readonly closing: string },
 ): Promise<void> => {
     const entry = services.agents.entry(conversationId);
-    if (entry === undefined || (entry.titleSource ?? "derived") !== "derived" || turn.closing.trim() === "") {
+    if (entry === undefined) {
+        return;
+    }
+    // A stored title that is itself the provider's refusal sentence was stolen by an earlier pass whose
+    // quick-model call hit the limit — it counts as no name at all, so this pass runs again over it (the
+    // registry's ranking forfeits its rank the same way; see promoteTitle) and the entry heals.
+    const poisoned = entry.title !== undefined && isUsageLimitText(entry.title);
+    if (((entry.titleSource ?? "derived") !== "derived" && !poisoned) || turn.closing.trim() === "") {
+        return;
+    }
+    // A closing that IS the refusal sentence says nothing about the work — there is no answer to read yet,
+    // and feeding it to the namer invites "You've hit your session limit" back as the name. Next turn retries.
+    if (isUsageLimitText(turn.closing.trim())) {
         return;
     }
     const { text } = await askQuickModel(
         services,
-        titlePrompt({ derived: entry.title, prompt: turn.prompt, closing: turn.closing }),
+        titlePrompt({ derived: poisoned ? undefined : entry.title, prompt: turn.prompt, closing: turn.closing }),
         new AbortController().signal,
     );
     const title = cleanSessionTitle(text);
-    if (title === "") {
+    // The refusal check repeats here because the quick model may run on a DIFFERENT provider than the failed
+    // turn — its own limit hit arrives as this reply's text, not as a thrown error, on providers whose
+    // refusals stream as prose.
+    if (title === "" || isUsageLimitText(title)) {
         return;
     }
     await services.agents.setTitle(conversationId, title, "summary");

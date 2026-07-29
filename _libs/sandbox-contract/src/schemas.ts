@@ -162,9 +162,11 @@ export type AttachTurn = z.infer<typeof AttachTurnSchema>;
 // conversationId. Isolated ones own a git worktree (branch agent/<id> in every workspace repo); the fleet
 // surface shows all of them with live status/activity/cost so the user can drive N agents in parallel.
 
-// idle/running/awaiting are the turn lifecycle (awaiting = paused on a plan approval or question); landed /
-// conflict are outcomes of the land flow; error is a terminal turn failure surfaced on the card.
-export const AgentStatusSchema = z.enum(["idle", "running", "awaiting", "landed", "conflict", "error"]);
+// idle/running/awaiting are the turn lifecycle (awaiting = paused on a plan approval or question); ready /
+// landed / conflict are outcomes of the land flow — `ready` is a clean completion whose delta stayed on the
+// agent's branch because auto-land is off (the user lands it deliberately, from the review panel or the card);
+// error is a terminal turn failure surfaced on the card.
+export const AgentStatusSchema = z.enum(["idle", "running", "awaiting", "ready", "landed", "conflict", "error"]);
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 // The card's live activity snippet: the last tool the agent used (with its target) and the in-progress todo.
 export const AgentActivitySchema = z.object({
@@ -194,6 +196,11 @@ export const AgentSummarySchema = z.object({
     account: z.string().optional(),
     // The worktree branch (agent/<id>); absent for a non-isolated (main-tree) conversation.
     branch: z.string().optional(),
+    // This agent's own answer to "land automatically at turn completion?" — an explicit per-agent override of
+    // the sandbox-wide `autoLand` setting. ABSENT ⇒ inherit, which is the common case and the one that keeps
+    // the global toggle meaningful: an agent that never expressed an opinion follows the sandbox wherever it
+    // is pointed next. Written by `agents.autoLand`; the UI shows the EFFECTIVE value (this ?? the setting).
+    autoLand: z.boolean().optional(),
     // Present when the conversation was opened by an outside message rather than by the user (see
     // AgentOriginSchema) — the card's provenance line. Absent ⇒ the user started it.
     origin: AgentOriginSchema.optional(),
@@ -276,6 +283,10 @@ export const AgentSearchResultSchema = z.object({ matches: z.array(AgentMatchSch
 export type AgentSearchResult = z.infer<typeof AgentSearchResultSchema>;
 // rename's input: the user-chosen display title (bounded like sanitizeTitle's cap).
 export const AgentRenameSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(80) });
+// autoLand's input: this agent's own land-at-completion posture. `null` CLEARS the override back to "inherit
+// the sandbox setting" — the browser sends it whenever the user toggles back to what the global already says,
+// so agents don't accumulate frozen overrides that quietly stop following the global toggle.
+export const AgentAutoLandSchema = z.object({ id: z.string().min(1), autoLand: z.boolean().nullable() });
 export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: z.string().min(1), path: z.string().min(1) });
 /* WHY a path would not land. The distinction is the whole difference between an actionable report and a dead
  * end, because the three have nothing in common but their symptom:
@@ -308,6 +319,9 @@ export const LandResultSchema = z.object({
     landed: z.boolean(),
     conflicts: z.array(LandConflictSchema).optional(),
     resolving: z.array(z.object({ repo: z.string(), paths: z.array(z.string()) })).optional(),
+    // A `measure` outcome with an outstanding delta: nothing was applied and nothing failed — the work is
+    // waiting on the branch for a deliberate Land. `landed: false` alone can't say that (it means refusal).
+    held: z.boolean().optional(),
 });
 export type LandResult = z.infer<typeof LandResultSchema>;
 
@@ -315,8 +329,11 @@ export type LandResult = z.infer<typeof LandResultSchema>;
  * it applies, so a refusal leaves the workspace byte-identical. `merge` is the escape hatch the conflict
  * report offers — a three-way apply that lands every clean path and leaves the rest with conflict markers to
  * resolve in place. It is opt-in because it WRITES on failure, which is the one thing `check` promises not
- * to do. */
-export const LandModeSchema = z.enum(["check", "merge"]);
+ * to do. `measure` is the auto-land-off mode: everything a land does EXCEPT touching the main tree — the
+ * provenance commit onto agent/<id>, the cumulative diffstat, and the bookkeeping for work that reached the
+ * main line by another road — so a held agent's card stays as current as a landed one's while its delta waits
+ * on the branch for a deliberate Land. */
+export const LandModeSchema = z.enum(["check", "merge", "measure"]);
 export type LandMode = z.infer<typeof LandModeSchema>;
 export const AgentLandSchema = z.object({ id: z.string().min(1), mode: LandModeSchema.optional() });
 
@@ -399,6 +416,12 @@ export const SteerSchema = z
 // True cancel for the conversation's in-flight turn — aborts the agent daemon-side, unlike closing the
 // /agent fetch (which sends no cancel frame).
 export const StopTurnSchema = z.object({ conversationId: z.string().min(1) });
+// Fire the conversation's remembered usage-limit resume NOW instead of waiting out the reset. `account`
+// points the re-run at a different connected account of the same provider — the "resume on another account"
+// action a spent allowance offers when the sandbox holds more than one; omitted, the turn re-runs on
+// whatever served it (a plain "try again now"). NOT_FOUND when nothing is pending (the failure was already
+// superseded by a fresh turn, or the daemon restarted).
+export const ResumeLimitSchema = z.object({ conversationId: z.string().min(1), account: z.string().min(1).optional() });
 
 // ---- claude subscription usage ----
 // The GATE signal: whether the provider is letting turns through right now, and — when it is refusing — which
@@ -648,6 +671,13 @@ export const SandboxSettingsSchema = z.object({
     // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
     // holds is a live worktree checkout, not just a row.
     agentRetentionDays: z.number().min(0).max(365).default(3),
+    /* Land a clean turn's delta into the main tree automatically at completion — the Claude Code review model,
+     * and the historical behaviour, so it defaults ON (flipping the default would silently change every
+     * existing sandbox). OFF holds finished work on the agent's branch instead: the card reads "Ready to
+     * land" and the user lands it deliberately, from the review panel or the card. Sandbox-wide because
+     * automation-opened agents (Discord, webhooks, email) finish turns with no browser in the room — a
+     * browser-held preference could not govern them. Per-agent override: AgentSummarySchema.autoLand. */
+    autoLand: z.boolean().default(true),
     // When a turn dies on the Claude subscription's usage limit, re-run it automatically once the limit
     // window resets (a minute after, so a skewed clock can't retry into the same closed window). Off by
     // default: an unattended retry spends the fresh window without the user in the room, so the daemon
@@ -1800,7 +1830,9 @@ export const WorkspaceEventSchema = z.object({
     agentId: z.string(),
     title: z.string().optional(),
     branch: z.string(),
-    outcome: z.enum(["landed", "conflict", "idle", "error"]),
+    // `ready` is a clean turn whose delta was HELD on the branch (auto-land off) — for a chore, the moment
+    // before the user's deliberate Land, which is exactly when a pre-land review wants to run.
+    outcome: z.enum(["landed", "conflict", "ready", "idle", "error"]),
     repos: z.array(z.object({ repo: z.string(), from: z.string(), dir: z.string() })),
 });
 export type WorkspaceEvent = z.infer<typeof WorkspaceEventSchema>;

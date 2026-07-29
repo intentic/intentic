@@ -66,14 +66,16 @@ export type TurnEffect =
     | { readonly kind: "surfaceTerminal"; readonly session: string }
     // A turn-level failure. Wording and severity are the caller's: several codes need state this module has no
     // business reading (the account's usage windows, the provider's account list) to phrase themselves.
-    // rate_limit failures also carry the daemon's resume verdict: when the spent window reopens, and whether
-    // an auto-resume is scheduled ("scheduled") or merely on offer behind the setting ("available").
+    // rate_limit failures also carry the daemon's resume verdict: when the spent window reopens, whether an
+    // auto-resume is scheduled ("scheduled") or merely on offer behind the setting ("available"), and which
+    // account's allowance is the spent one (so the offer can name the provider's OTHER accounts).
     | {
           readonly kind: "error";
           readonly message: string;
           readonly code: Extract<AgentEvent, { kind: "error" }>["code"];
           readonly resetsAt: number | undefined;
           readonly autoResume: Extract<AgentEvent, { kind: "error" }>["autoResume"];
+          readonly account: string | undefined;
       };
 
 export interface TurnStep {
@@ -99,8 +101,10 @@ export const appendMessage = (state: TurnState, message: Omit<ChatMessage, "id">
     nextId: state.nextId + 1,
 });
 
-/** A small muted system line marking a control action (dismissed / kept planning / approved / stopped). */
-export const appendNotice = (state: TurnState, text: string): TurnState => appendMessage(state, { role: `notice`, text });
+/** A small muted system line marking a control action (dismissed / kept planning / approved / stopped).
+ * `action` is the one-press follow-up some notices offer — see ChatMessage.noticeAction. */
+export const appendNotice = (state: TurnState, text: string, action?: ChatMessage["noticeAction"]): TurnState =>
+    appendMessage(state, { role: `notice`, text, ...(action !== undefined ? { noticeAction: action } : {}) });
 
 const mapMessage = (state: TurnState, id: number, fn: (message: ChatMessage) => ChatMessage): TurnState => ({
     ...state,
@@ -377,7 +381,11 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             return step(appendNotice(state, `Context compacted to free up space.`));
         case `landed`:
             // End of a clean isolated turn: the delta auto-landed into the main tree as uncommitted changes
-            // (review = the Changes panel), or conflicted and stayed safely in the worktree.
+            // (review = the Changes panel), was HELD on the branch because auto-land is off, or conflicted and
+            // stayed safely in the worktree.
+            if (event.held === true) {
+                return step(appendNotice(state, `Finished — the work is on this agent's branch, ready to land from its review.`));
+            }
             return step(
                 appendNotice(
                     state,
@@ -392,6 +400,10 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                           )
                               .map((conflict) => conflict.repo)
                               .join(`, `)}. Open the agent's review to see what blocked them and land from there.`,
+                    // The moment-of-regret offer, on the LANDED notice only (the autoResumeOnLimit pattern —
+                    // ChatPanel's limit banner): the automatic behaviour just fired, and "stop doing that" is
+                    // worth one press exactly now. The renderer hides it once the agent already holds.
+                    event.landed ? `landHold` : undefined,
                 ),
             );
         case `commands`:
@@ -412,7 +424,14 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         case `terminal`:
             return step(state, { kind: `surfaceTerminal`, session: event.session });
         case `error`:
-            return step(state, { kind: `error`, message: event.message, code: event.code, resetsAt: event.resetsAt, autoResume: event.autoResume });
+            return step(state, {
+                kind: `error`,
+                message: event.message,
+                code: event.code,
+                resetsAt: event.resetsAt,
+                autoResume: event.autoResume,
+                account: event.account,
+            });
         case `rate_limit_info`:
         // The live gate, not a headroom reading: it names whichever single window the provider considered
         // binding for that request. `account_usage` carries every pool, and is what the readouts use.

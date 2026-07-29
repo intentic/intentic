@@ -46,6 +46,24 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.origin).toEqual(origin);
     });
 
+    it("holds the autoLand override across turns, clears it on null, and settles a held turn as ready", async () => {
+        const registry = createAgentsRegistry(memoryStore());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        // Set mid-turn on purpose — the value is read at turn COMPLETION, so this is "hold THIS turn's work".
+        expect((await registry.setAutoLand("c1", false))?.autoLand).toBe(false);
+        await registry.finish("c1", 2_000, "ready");
+        expect(registry.get("c1")?.status).toBe("ready");
+        // The override is a standing choice about the conversation: the next turn's entry rebuild keeps it.
+        await registry.begin(turn({ prompt: "keep going" }), 3_000);
+        expect(registry.get("c1")?.autoLand).toBe(false);
+        await registry.finish("c1", 4_000, "ready");
+        // null strips the key back to "inherit the sandbox setting" — absent, not stored-false.
+        expect((await registry.setAutoLand("c1", null))?.autoLand).toBeUndefined();
+        expect(registry.entry("c1")?.autoLand).toBeUndefined();
+        expect(await registry.setAutoLand("nope", true)).toBeUndefined();
+    });
+
     it("begin is a mutex: a second concurrent turn is refused until finish", async () => {
         const registry = createAgentsRegistry(memoryStore());
         await registry.init();

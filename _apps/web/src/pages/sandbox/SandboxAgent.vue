@@ -176,6 +176,17 @@ const toggleAutoResume = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, autoResumeOnLimit: value });
 };
 
+// Auto-land: whether a clean turn's work applies to the workspace the moment it finishes, or waits on the
+// agent's branch as a "Ready to land" card. The sandbox-wide default — each agent can override it from its
+// review panel's hold toggle, and agents without an override follow this wherever it points next.
+const toggleAutoLand = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, autoLand: value });
+};
+
 /* --- Quick model ---------------------------------------------------------------------------------------------
  * The cheap, fast model behind the one-click helpers that are not a conversation (today: the commit box's AI
  * autofill). It belongs on THIS tab and not in personal Settings for one decisive reason — the provider
@@ -660,6 +671,24 @@ const importMemory = async (): Promise<void> => {
                      own reads as a broken control rather than a missing account. -->
                 <template v-if="quickModel.choice.value === undefined && sandboxSettings !== undefined" #below>
                     <p class="text-2xs text-muted">Connect an AI account above to enable the one-click helpers.</p>
+                </template>
+            </Row>
+
+            <!-- Auto-land — the sandbox's standing answer to "does finished work reach my workspace by itself".
+                 Daemon-side rather than a browser preference, because automation-opened agents (Discord,
+                 webhooks, email) finish turns with no browser in the room. Off turns every clean completion
+                 into a "Ready to land" card; per-agent exceptions live on the review panel's hold toggle. -->
+            <Row
+                icon="download"
+                title="Land finished work automatically"
+                description="When an agent finishes cleanly, apply its work to your workspace as uncommitted changes right away. Off, finished work waits on each agent's branch — the card reads “Ready to land” and you land it from the board or the review."
+            >
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="sandboxSettings?.autoLand ?? true"
+                        :disabled="sandboxSettings === undefined"
+                        @update:model-value="toggleAutoLand"
+                    />
                 </template>
             </Row>
 

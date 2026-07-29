@@ -38,9 +38,9 @@ const show = (event: MouseEvent): void => {
     const rect = el.getBoundingClientRect();
     // Hang the preview off the CHAT PANEL's edge whenever the window has room beside it. That space is workspace by
     // definition, so the preview covers nothing belonging to the thing it previews — and, being measured from the
-    // panel, it opens in the same place whether the thumb is a composer chip on the right or an attachment column
-    // on the left of a message row. Keying off the thumb's own rect made placement move with the thumb, which is
-    // how a left-hand column ends up throwing its preview rightwards over the very prompt it illustrates.
+    // panel, it opens in the same place whether the thumb is a composer chip on the right or a sent attachment on
+    // the left of its prompt. Keying off the thumb's own rect made placement move with the thumb, which is how a
+    // left-hand thumbnail ends up throwing its preview rightwards over the very prompt it illustrates.
     // Popped out (or docked near full-bleed) the panel IS the window and there is no gutter to hang off; the thumb
     // is then the only reference left, and the same preference below opens the preview away from the bubble.
     const panel = el.closest(`.chat-panel`)?.getBoundingClientRect();
