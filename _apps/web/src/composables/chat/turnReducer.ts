@@ -50,7 +50,7 @@ export interface TurnContext {
 export type TurnEffect =
     // The session the next matching turn resumes. The caller stamps it with the turn's provider/account/harness.
     | { readonly kind: "session"; readonly sessionId: string }
-    | { readonly kind: "worktree"; readonly branch: string; readonly base: string }
+    | { readonly kind: "worktree"; readonly branch: string; readonly base: string; readonly unenforced?: boolean }
     // The posture the RUNNING turn is in — the agent's own EnterPlanMode, or where a plan approval landed.
     | { readonly kind: "liveMode"; readonly mode: PermissionMode }
     | { readonly kind: "commands"; readonly items: readonly AgentCommand[] }
@@ -411,7 +411,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         case `session`:
             return step(state, { kind: `session`, sessionId: event.sessionId });
         case `worktree`:
-            return step(state, { kind: `worktree`, branch: event.branch, base: event.base });
+            return step(state, { kind: `worktree`, branch: event.branch, base: event.base, ...(event.unenforced === true ? { unenforced: true } : {}) });
         case `mode`:
             return step(state, { kind: `liveMode`, mode: event.mode });
         case `init`:

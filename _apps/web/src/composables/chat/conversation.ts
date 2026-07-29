@@ -526,6 +526,10 @@ export class Conversation {
     // root repo's short base sha. Undefined until the first isolated turn runs (or on main-tree conversations).
     readonly worktree = ref<{ branch: string; base: string } | undefined>();
 
+    // Whether this tab has already said that the sandbox cannot enforce worktrees with mounts. Latches for the
+    // conversation's life: the condition is a property of the container, not of any one turn.
+    private warnedUnenforced = false;
+
     // Lifetime accounting across the conversation's turns (finally surfaced — the fleet card and the usage
     // popover read these). The daemon's registry is the authoritative cross-device total; these accumulate the
     // turns THIS tab streamed, which matches it whenever the tab saw every turn.
@@ -1494,6 +1498,16 @@ export class Conversation {
             case `worktree`:
                 // First frame of an isolated turn: which branch/base this conversation works on.
                 this.worktree.value = { branch: effect.branch, base: effect.base };
+                /* The container cannot enforce the worktree with mounts, so the harness is redirecting tool
+                 * paths into it instead — which covers tool input but not a path a subprocess computes for
+                 * itself. Said ONCE per conversation rather than per turn: it is a property of the sandbox, it
+                 * does not change while it runs, and repeating it every turn would train the reader to skip it. */
+                if (effect.unenforced === true && !this.warnedUnenforced) {
+                    this.warnedUnenforced = true;
+                    this.appendNotice(
+                        `This sandbox can't isolate agent turns at the filesystem level (it was created without CAP_SYS_ADMIN). Work is redirected into ${effect.branch}, but a command that builds its own paths can still reach the shared workspace — recreate the sandbox to restore full isolation.`,
+                    );
+                }
                 return;
             case `liveMode`:
                 // The turn's live posture — the user's pick echoed back at init, or a move the AGENT made
@@ -1589,6 +1603,15 @@ export class Conversation {
                 // replay here, so nothing else would tell the user the turn didn't happen.
                 this.markAccountReauth(message);
                 this.error.value = message;
+                return;
+            case `claude-token-refused`:
+                /* The API refused the token mid-turn — nearly always one a rotation had just superseded. The
+                 * daemon re-mints and re-runs this turn on its own (turn-resume.ts), and the resumed turn
+                 * arrives on this same conversation moments later carrying its own note, so the red line would
+                 * be reporting a failure the user never has to act on. Muted, and phrased as what it is: an
+                 * interruption that is already being undone. The case where it is NOT — a credential too dead
+                 * to re-mint — surfaces separately as claude-reauth on the resumed turn's own refusal. */
+                this.appendNotice(`${message} The credential is being renewed and this turn continues automatically.`);
                 return;
             case `session-not-found`:
                 // The sandbox no longer has this chat's transcript — drop the dead session so the next send starts

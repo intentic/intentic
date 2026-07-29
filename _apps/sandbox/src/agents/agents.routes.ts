@@ -32,10 +32,18 @@ export const createAgentsRoutes = (services: Services) => {
         runsClaudeCode(agent.provider, agent.harness)
             ? services.sessions.sessionIdForConversation(services.agentWorktrees.conversationDir(agent.id))
             : Promise.resolve(undefined);
-    return {
+    // i.router(), not a bare object literal: it is what makes the contract EXHAUSTIVE at compile time. A plain
+    // literal is structurally fine while missing a route, so a handler deleted in passing (which is how
+    // `archived` was lost — the router kept compiling and the archive door quietly stopped rendering) fails no
+    // build and no test. The router builder types the shape against agentsContract, so the next one is a
+    // typecheck error instead of a 404 the browser swallows.
+    return i.router({
         // Every roster read carries the revision it was taken at, so the browser can tell this answer apart from
         // the /events snapshots racing it — see AgentsListSchema.
         list: i.list.handler(() => ({ agents: services.agents.list(), rev: services.agents.revision() })),
+        // The archive's own roster — the other half of the fleet, off `list` by construction and pulled on
+        // demand (the /events stream never carries it). Newest-archived first; see registry.listArchived.
+        archived: i.archived.handler(() => ({ agents: services.agents.listArchived(), rev: services.agents.revision() })),
         /* The board's filter, and the popped-out rail's. Answers over BOTH halves of the fleet in one pass —
          * the live roster and the archive — because the board hides by design (its Finished lane windows to a
          * handful, archived agents are off the roster entirely), and a filter that reports "no matches" while
@@ -280,5 +288,5 @@ export const createAgentsRoutes = (services: Services) => {
         // included. Answers with the ids that actually went — a teardown that fails on one agent leaves that one
         // in the archive rather than failing the press (see purgeArchived).
         purge: i.purge.handler(async () => ({ removed: await purgeArchived(services) })),
-    };
+    });
 };

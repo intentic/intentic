@@ -8,14 +8,15 @@ import type { Services } from "../composition.js";
 import { fileSandboxSettingsStore } from "../settings/settings-store.js";
 import {
     accountLimitReset,
-    clearLimitHit,
-    createLimitResumeScheduler,
+    clearPendingResume,
+    createTurnResumeScheduler,
     type LimitHit,
     pendingLimitHit,
+    recordAuthFailure,
     recordLimitHit,
     RESUME_DELAY_MS,
     resumeTurnOf,
-} from "./limit-resume.js";
+} from "./turn-resume.js";
 
 // The scheduler touches settings/push/logger (and accountLimitReset reads claudeUsage); the fake stays that small.
 const fakeServices = (root: string, usage: Record<string, AccountUsage> = {}): Services =>
@@ -76,10 +77,10 @@ test("with no session anywhere, the history seed rides the resume unchanged", ()
 });
 
 test("a due resume fires only once the toggle is on, and firing consumes the pending entry", async () => {
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-resume-")));
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     recordLimitHit(hit("lr-fire"), DUE_AT - 1);
     const prompts: string[] = [];
-    const scheduler = createLimitResumeScheduler(services, fakeWake(prompts));
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
 
     // Toggle off: the reset has passed, but nothing may run — the entry WAITS for the toggle (that is what
     // lets the chat's offer banner arm the very resume that just bounced).
@@ -96,29 +97,29 @@ test("a due resume fires only once the toggle is on, and firing consumes the pen
 });
 
 test("a resume whose window has not reopened yet stays put even with the toggle on", async () => {
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-resume-")));
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, autoResumeOnLimit: true });
     recordLimitHit(hit("lr-early"), DUE_AT - RESUME_DELAY_MS);
     const prompts: string[] = [];
-    const scheduler = createLimitResumeScheduler(services, fakeWake(prompts));
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
     await scheduler.tick(DUE_AT - 1);
     expect(prompts).toEqual([]);
     expect(pendingLimitHit("lr-early")).toBeDefined();
-    clearLimitHit("lr-early");
+    clearPendingResume("lr-early");
 });
 
-test("clearLimitHit supersedes a pending resume — the next turn on the conversation owns it now", () => {
+test("clearPendingResume supersedes a pending resume — the next turn on the conversation owns it now", () => {
     recordLimitHit(hit("lr-clear"));
-    clearLimitHit("lr-clear");
+    clearPendingResume("lr-clear");
     expect(pendingLimitHit("lr-clear")).toBeUndefined();
 });
 
 test("an offer nobody enabled goes stale after a day and is dropped", async () => {
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-resume-")));
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     recordLimitHit(hit("lr-stale"), DUE_AT - 25 * 60 * 60_000);
     const prompts: string[] = [];
-    const scheduler = createLimitResumeScheduler(services, fakeWake(prompts));
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
     await scheduler.tick(DUE_AT);
     expect(prompts).toEqual([]);
     expect(pendingLimitHit("lr-stale")).toBeUndefined();
@@ -134,8 +135,74 @@ test("accountLimitReset answers with the fullest pool's reset — the one that r
             ],
         },
     };
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-resume-")), usage);
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")), usage);
     expect(await accountLimitReset(services, "acct-1")).toBe(9_000);
     expect(await accountLimitReset(services, "acct-unknown")).toBeUndefined();
     expect(await accountLimitReset(services, undefined)).toBeUndefined();
+});
+
+/* THE AUTH RESUME — the failure a rotation causes and the recovery the user should never have to perform.
+ * A rotation retires the token every in-flight turn snapshotted at spawn, so they all die at once with
+ * "401 OAuth access token has been revoked"; the fix is to re-mint and re-run, not to wait for a human. */
+
+/* The store as it stands AFTER the rotation that refused the turn: it already holds the successor token, so
+ * the resume adopts it without a second refresh. That is the shape of the real failure — the proactive timer
+ * rotates, the store moves on, and the in-flight turns are left holding the retired token. */
+const fakeStore = (stored: { accessToken: string; revokedAt?: number }) =>
+    ({
+        read: async () => ({ id: "acct", label: "Claude", connectedAt: 0, refreshToken: "rt", ...stored }),
+        write: async () => {},
+        clear: async () => {},
+        list: async () => [],
+        withRefreshLock: async <T>(_id: string, act: () => Promise<T>) => act(),
+        logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    }) as unknown as Services["claudeStore"];
+
+const authServices = (root: string, claudeStore: Services["claudeStore"]): Services =>
+    ({ ...fakeServices(root), claudeStore }) as unknown as Services;
+
+test("a turn the API refused mid-flight is re-minted and re-run on the next pass", async () => {
+    const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
+    const prompts: string[] = [];
+    recordAuthFailure({ input: { prompt: "finish the report", conversationId: "auth-1", isolated: true }, account: "acct", refusedToken: "tok-1" });
+    await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
+    expect(prompts).toHaveLength(1);
+    // The original request rides again in full, behind a note saying why — a bare "continue" would lose it.
+    expect(prompts[0]).toContain("finish the report");
+    expect(prompts[0]).toContain("has been renewed");
+});
+
+test("no resume when the credential is genuinely dead — the error frame's reconnect prompt is the real fix", async () => {
+    // An account already marked revoked (its refresh token was rejected): rotate answers undefined.
+    const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-1", revokedAt: 1 }));
+    const prompts: string[] = [];
+    recordAuthFailure({ input: { prompt: "finish the report", conversationId: "auth-2", isolated: true }, account: "acct", refusedToken: "tok-1" });
+    await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
+    expect(prompts).toHaveLength(0);
+});
+
+test("a resume that is itself refused is not resumed again — a dead credential must not respawn forever", async () => {
+    const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
+    const prompts: string[] = [];
+    // The prompt a fired resume carries. Recording it again is the loop this refuses to start.
+    recordAuthFailure({
+        input: {
+            prompt: "The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically. …",
+            conversationId: "auth-3",
+            isolated: true,
+        },
+        account: "acct",
+        refusedToken: "tok-1",
+    });
+    await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
+    expect(prompts).toHaveLength(0);
+});
+
+test("the next turn on the conversation supersedes a pending auth resume", async () => {
+    const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
+    const prompts: string[] = [];
+    recordAuthFailure({ input: { prompt: "finish the report", conversationId: "auth-4", isolated: true }, account: "acct", refusedToken: "tok-1" });
+    clearPendingResume("auth-4");
+    await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
+    expect(prompts).toHaveLength(0);
 });

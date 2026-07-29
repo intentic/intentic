@@ -778,39 +778,45 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                 </span>
                             </button>
                             <!-- "Other" is the LAST OPTION, not a text box parked beside the list: same row,
-                                 same mark, same click. That is what keeps this card's state a single list of
-                                 picks — writing your own answer cannot contradict the options, because it is
-                                 one of them — and it is why nothing here has to erase anything. The field
-                                 appears on picking the row and keeps its text when the row is unpicked, so
-                                 clicking away to re-read an option and clicking back costs nothing. -->
-                            <div class="flex flex-col overflow-hidden rounded-lg border transition-colors" :class="{ 'qopt-on': isSelected(index, OTHER_LABEL) }">
-                                <button type="button" class="qopt flex items-start gap-2 rounded-lg px-2.5 py-2 text-left" @click="toggleOption(question, index, OTHER_LABEL)">
-                                    <Icon
-                                        class="mt-0.5 text-2xs"
-                                        :name="isSelected(index, OTHER_LABEL) ? 'check-circle' : 'circle'"
-                                        :class="isSelected(index, OTHER_LABEL) ? 'text-primary-500' : 'text-subtle'"
-                                    />
-                                    <span class="flex min-w-0 flex-col gap-0.5">
-                                        <span class="text-xs font-medium text-content">Other</span>
-                                        <span class="text-2xs leading-snug text-muted">Answer in your own words.</span>
-                                    </span>
-                                </button>
-                                <div v-if="isSelected(index, OTHER_LABEL)" class="flex flex-col gap-1 px-2.5 pb-2">
-                                    <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
-                                    <input
-                                        :ref="(el) => setOtherInput(index, el)"
-                                        type="text"
-                                        :value="otherValue(index)"
-                                        @input="setOther(index, ($event.target as HTMLInputElement).value)"
-                                        @keydown.enter="submitAnswers"
-                                        placeholder="Type your answer…"
-                                        class="rounded-lg border border-line bg-card px-2.5 py-1.5 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none md:text-xs"
-                                    />
-                                    <!-- Reads as the instruction it is, not as an error: it is on screen from
-                                         the moment the row is picked, which is before there is anything to get
-                                         wrong. It is also the only thing that explains the disabled Submit. -->
-                                    <span v-if="otherPending(index)" class="text-2xs text-subtle">Write your answer to submit.</span>
-                                </div>
+                                 same mark, same click, and MARKUP IDENTICAL to the rows above — no wrapper of
+                                 its own, or its border, hover and selected tint drift from the siblings it
+                                 must read as one of. That sameness is what keeps this card's state a single
+                                 list of picks — writing your own answer cannot contradict the options, because
+                                 it is one of them — and it is why nothing here has to erase anything. The
+                                 field appears BELOW the row on picking it, and keeps its text when the row is
+                                 unpicked, so clicking away to re-read an option and clicking back costs
+                                 nothing. -->
+                            <button
+                                type="button"
+                                class="qopt flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
+                                :class="{ 'qopt-on': isSelected(index, OTHER_LABEL) }"
+                                @click="toggleOption(question, index, OTHER_LABEL)"
+                            >
+                                <Icon
+                                    class="mt-0.5 text-2xs"
+                                    :name="isSelected(index, OTHER_LABEL) ? 'check-circle' : 'circle'"
+                                    :class="isSelected(index, OTHER_LABEL) ? 'text-primary-500' : 'text-subtle'"
+                                />
+                                <span class="flex min-w-0 flex-col gap-0.5">
+                                    <span class="text-xs font-medium text-content">Other</span>
+                                    <span class="text-2xs leading-snug text-muted">Answer in your own words.</span>
+                                </span>
+                            </button>
+                            <div v-if="isSelected(index, OTHER_LABEL)" class="flex flex-col gap-1">
+                                <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
+                                <input
+                                    :ref="(el) => setOtherInput(index, el)"
+                                    type="text"
+                                    :value="otherValue(index)"
+                                    @input="setOther(index, ($event.target as HTMLInputElement).value)"
+                                    @keydown.enter="submitAnswers"
+                                    placeholder="Type your answer…"
+                                    class="rounded-lg border border-line bg-card px-2.5 py-1.5 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none md:text-xs"
+                                />
+                                <!-- Reads as the instruction it is, not as an error: it is on screen from
+                                     the moment the row is picked, which is before there is anything to get
+                                     wrong. It is also the only thing that explains the disabled Submit. -->
+                                <span v-if="otherPending(index)" class="text-2xs text-subtle">Write your answer to submit.</span>
                             </div>
                         </div>
                         <!-- Decided (answered or dismissed): the same options, frozen. Nothing here may read as

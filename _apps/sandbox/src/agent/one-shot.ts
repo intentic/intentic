@@ -12,6 +12,14 @@ import { isUsageLimitText } from "./usage-limit-text.js";
  * So the settings are deliberately the empty ones:
  *   settingSources: []  — no CLAUDE.md, no skills, no subagents, no project hooks. The SDK's own default,
  *                         restated here because streamAgent overrides it and this is the exception.
+ *   persistSession: false — no transcript on disk. NOT a default; it has to be said, and this file said "no
+ *                         session, no transcript" for a while before it was true. The SDK writes every query
+ *                         to ~/.claude/projects/<cwd>/, and the cwd here is the WORKSPACE ROOT — the exact
+ *                         project key the chat-history list reads (sessions.ts listWorkspaceSessions) and the
+ *                         recall index scans. So every sparkle click filed a one-turn "session" whose title is
+ *                         its own prompt, and the history menu filled up with "Name this coding-agent
+ *                         session…" rows: 123 of 204 stored transcripts at the time this was found. Nothing
+ *                         here is ever resumed, so the write bought nothing and cost the feature it polluted.
  *   allowedTools: []    — nothing to call. The model answers from the prompt or not at all.
  *   maxTurns: 1         — with no tools there is nothing to iterate on; this is the backstop that says so.
  *   no systemPrompt     — the SDK then sends an EMPTY one, which for a text task is right: the claude_code
@@ -52,6 +60,9 @@ export const runOneShot = async (params: {
         settingSources: [],
         allowedTools: [],
         maxTurns: 1,
+        // See the header: the workspace root is the history list's own project key, and a helper's prompt is
+        // not a conversation the user had.
+        persistSession: false,
         // The header's headline setting: the SDK thinks by default, and on a one-line rewrite that costs ~10x
         // the latency for the same answer.
         thinking: { type: `disabled` },

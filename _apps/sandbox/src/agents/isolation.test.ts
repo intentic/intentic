@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { ANCHOR_READY, fromNamespace, type IsolationPlan, isolationScript, MAIN_MOUNT, modulesDirs, nsenterArgv, nsenterPrefix } from "./isolation.js";
+import { ANCHOR_READY, inWorktree, type IsolationPlan, isolationScript, MAIN_MOUNT, modulesDirs, nsenterArgv, nsenterPrefix } from "./isolation.js";
 
 /* The namespace itself needs CAP_SYS_ADMIN, which no test runner is guaranteed to have — so what is asserted
  * here is the PLAN: the ordering that makes the mounts correct, and the path translation the daemon depends
@@ -68,19 +68,19 @@ test("the shell-string form quotes its working dir so a path with a space cannot
 });
 
 test("a path the agent reports is translated back to the worktree for the daemon", () => {
-    expect(fromNamespace("/work/intentic/src/x.ts", plan)).toBe("/history/worktrees/abc/intentic/src/x.ts");
+    expect(inWorktree("/work/intentic/src/x.ts", plan)).toBe("/history/worktrees/abc/intentic/src/x.ts");
     // Outside the root: the same file in both namespaces.
-    expect(fromNamespace("/root/.claude/memory/x.md", plan)).toBe("/root/.claude/memory/x.md");
+    expect(inWorktree("/root/.claude/memory/x.md", plan)).toBe("/root/.claude/memory/x.md");
     // Not isolated at all.
-    expect(fromNamespace("/work/intentic/src/x.ts", undefined)).toBe("/work/intentic/src/x.ts");
+    expect(inWorktree("/work/intentic/src/x.ts", undefined)).toBe("/work/intentic/src/x.ts");
 });
 
 test("re-bound subtrees resolve to the main tree in both namespaces and are never translated", () => {
     // Translating these would send the daemon looking in a worktree that has no such file.
-    expect(fromNamespace("/work/.intentic/attachments/a.png", plan)).toBe("/work/.intentic/attachments/a.png");
-    expect(fromNamespace("/work/_apps/web/node_modules/vue/index.js", plan)).toBe("/work/_apps/web/node_modules/vue/index.js");
+    expect(inWorktree("/work/.intentic/attachments/a.png", plan)).toBe("/work/.intentic/attachments/a.png");
+    expect(inWorktree("/work/_apps/web/node_modules/vue/index.js", plan)).toBe("/work/_apps/web/node_modules/vue/index.js");
     // A path that merely STARTS like one of them is still worktree content.
-    expect(fromNamespace("/work/.intentic-notes/x.md", plan)).toBe("/history/worktrees/abc/.intentic-notes/x.md");
+    expect(inWorktree("/work/.intentic-notes/x.md", plan)).toBe("/history/worktrees/abc/.intentic-notes/x.md");
 });
 
 test("dependency dirs are discovered shallowest-first so a parent never shadows a child", async () => {

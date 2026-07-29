@@ -73,8 +73,9 @@ test("agentSessionName derives the same agent-* name the hook routes commands th
 });
 
 test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrapper", async () => {
-    const anchor = { pid: 4321, cwd: "/work", plan: { worktree: "/history/worktrees/abc", root: "/work", modules: [] }, dispose: () => {} };
-    const command = await rewritten({ command: "sed -i s/a/b/ x.ts", description: "edit" }, bashTmuxHooks(undefined, [], anchor));
+    const plan = { worktree: "/history/worktrees/abc", root: "/work", modules: [] };
+    const anchor = { pid: 4321, cwd: "/work", plan, dispose: () => {} };
+    const command = await rewritten({ command: "sed -i s/a/b/ x.ts", description: "edit" }, bashTmuxHooks(undefined, [], { plan, anchor }));
     // tmux-run stays OUTSIDE: the server, the pane logs and the terminals panel are daemon-side, and only the
     // command the pane runs crosses into the namespace. Without this, `sed -i` would rewrite the shared tree
     // while the same turn's Edit tool wrote to the worktree.
@@ -96,9 +97,33 @@ test("the rtk backend leaves shell-interpreted commands bare — rtk execs its a
 });
 
 test("the rtk backend's prefix rides inside the namespace with the command it wraps", async () => {
-    const anchor = { pid: 9, cwd: "/work", plan: { worktree: "/wt", root: "/work", modules: [] }, dispose: () => {} };
-    const command = await rewritten({ command: "ls" }, bashTmuxHooks("rtk", [], anchor));
+    const plan = { worktree: "/wt", root: "/work", modules: [] };
+    const command = await rewritten({ command: "ls" }, bashTmuxHooks("rtk", [], { plan, anchor: { pid: 9, cwd: "/work", plan, dispose: () => {} } }));
     expect(command).toContain(`bash -c '\\''rtk ls'\\''`);
     // rtk is the agent's own command line, so it must not run outside the tree the agent is working in.
     expect(command).not.toContain("-- rtk");
+});
+
+/* The no-namespace fallback. A container without CAP_SYS_ADMIN cannot build the mounts, and a Bash tool left
+ * alone there writes the SHARED tree at the same absolute path whose Edit went to the worktree — the exact
+ * disagreement the nsenter hop above exists to prevent. The rewrite is the same substitution by other means. */
+test("without an anchor, an isolated turn's Bash has its main-tree paths rewritten into the worktree", async () => {
+    const plan = { worktree: "/history/worktrees/abc", root: "/work", modules: ["intentic"] };
+    const command = await rewritten({ command: "sed -i s/a/b/ /work/intentic/x.ts" }, bashTmuxHooks(undefined, [], { plan }));
+    expect(command).toContain("/history/worktrees/abc/intentic/x.ts");
+    expect(command).not.toContain("/work/intentic/x.ts");
+    // No namespace to join, so nothing wraps the command — only its paths moved.
+    expect(command).not.toContain("nsenter");
+});
+
+test("the Bash rewrite leaves the shared subtrees and any path that merely starts with the root alone", async () => {
+    const plan = { worktree: "/wt", root: "/work", modules: ["intentic"] };
+    const rewrite = async (command: string): Promise<string> => await rewritten({ command }, bashTmuxHooks(undefined, [], { plan }));
+    // Dependency trees and daemon state resolve to the main checkout on both sides — redirecting them would
+    // aim at a path the worktree does not have.
+    expect(await rewrite("/work/intentic/node_modules/.bin/tsgo")).toContain("/work/intentic/node_modules/.bin/tsgo");
+    expect(await rewrite("cat /work/.intentic/settings.json")).toContain("/work/.intentic/settings.json");
+    // The deliberate main-tree door, and a look-alike that is not the root at all.
+    expect(await rewrite("diff /mnt/intentic-main/x /work/x")).toContain("/mnt/intentic-main/x /wt/x");
+    expect(await rewrite("ls ./workspace")).toContain("./workspace");
 });

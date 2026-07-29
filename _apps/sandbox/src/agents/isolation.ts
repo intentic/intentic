@@ -180,6 +180,19 @@ export const modulesDirs = async (root: string): Promise<string[]> => {
     return found.toSorted((a, b) => a.split("/").length - b.split("/").length || (a < b ? -1 : 1));
 };
 
+/* WHERE A TURN WORKS, and how strongly that is enforced — the two halves the turn hands to the harness.
+ *
+ * `plan` is the mapping and is always present for an isolated turn. `anchor` is present only when the
+ * container could build the namespace to enforce it; without one the turn still runs cwd'd in its worktree
+ * and worktree-redirect.ts rewrites the paths that would otherwise reach the shared tree. Carried as one
+ * value because every consumer needs both answers together, and the pair is what makes "isolated but
+ * unenforced" a state the code can see instead of an absence it has to infer.
+ */
+export interface TurnPlacement {
+    readonly plan: IsolationPlan;
+    readonly anchor?: IsolationAnchor;
+}
+
 export interface IsolationAnchor {
     // The pid holding the namespace open — what everything else joins with nsenter.
     readonly pid: number;
@@ -243,10 +256,14 @@ export const startAnchor = async (plan: IsolationPlan): Promise<IsolationAnchor>
 };
 
 export interface TurnIsolation {
-    // The plan for a conversation's worktree, or undefined when this container can't build a namespace — the
-    // caller then runs the turn exactly as it did before, cwd'd into the worktree.
-    readonly planFor: (worktree: string) => Promise<IsolationPlan | undefined>;
-    // Whether isolation is available at all — read by worktree creation to choose mount points over symlinks.
+    /* WHERE the conversation's worktree sits relative to the workspace root — answered whatever this container
+     * can enforce, because the mapping is a fact about the layout and not about the kernel. Which layer
+     * applies it is the caller's decision: an anchor when the namespace can be built, the tool-input rewrite
+     * in worktree-redirect.ts when it cannot. Returning undefined here (as this once did) collapsed those two
+     * questions into one, and the answer to the second was silently "nothing at all". */
+    readonly planFor: (worktree: string) => Promise<IsolationPlan>;
+    // Whether the namespace itself can be built — read by worktree creation to choose mount points over
+    // symlinks, and by the turn to choose between the two enforcement layers above.
     readonly available: () => Promise<boolean>;
 }
 
@@ -269,37 +286,41 @@ export const createTurnIsolation = (options: { readonly root: string; readonly l
     };
     return {
         available,
-        planFor: async (worktree) => {
-            if (!(await available())) {
-                return undefined;
-            }
-            // Re-read per turn rather than cached: an install that finished since the last turn has to be
-            // visible, and this is one cheap directory walk against a warm dentry cache.
-            return { worktree, root, modules: await modulesDirs(root) };
-        },
+        // Re-read per turn rather than cached: an install that finished since the last turn has to be visible,
+        // and this is one cheap directory walk against a warm dentry cache. Run even when the namespace is
+        // unavailable — the redirect needs the same dependency dirs the mounts would have re-bound.
+        planFor: async (worktree) => ({ worktree, root, modules: await modulesDirs(root) }),
     };
 };
 
-/* An isolated turn's paths, translated for the DAEMON.
+// The root-relative subtrees that mean the MAIN checkout on both sides of the boundary — the namespace binds
+// them back in over the worktree's own copies, and where it cannot be built (worktree-redirect.ts) the
+// worktree reaches them through symlinks. Either way a path into one of these is already correct, so the rule
+// lives here rather than in a copy per caller.
+const sharedPrefixes = (plan: IsolationPlan): string[] => [SHARED_STATE, ...plan.modules.map((pkg) => (pkg === "" ? MODULES : `${pkg}/${MODULES}`))];
+
+/* WHICH FILE A WORKSPACE PATH ACTUALLY NAMES for an isolated turn — one mapping, used by both layers that
+ * need it, because they are the same question asked from opposite ends:
  *
- * The daemon lives outside the namespace, so every absolute path the agent reports (`/work/intentic/x.ts`)
- * names the main checkout from here — the wrong file with the right name. Anything the daemon resolves on the
- * agent's behalf goes through this: the post-edit diagnostics (which would type-check the main tree's copy),
- * the tool-call location chips, and the edit diffs the transcript renders.
+ *  - the DAEMON, translating a path the agent REPORTED. It lives outside the namespace, so the agent's
+ *    `/work/intentic/x.ts` names the main checkout from here — the wrong file with the right name. The
+ *    post-edit diagnostics (which would otherwise type-check the main tree's copy), the tool-call location
+ *    chips and the transcript's edit diffs all resolve through this.
+ *  - the TOOL CALL, when there is no namespace to make the path true by itself (worktree-redirect.ts). The
+ *    agent ASKS for `/work/intentic/x.ts` and the write has to land where the namespace would have put it.
  *
- * Only the root prefix moves, and only for an isolated turn — a path outside the workspace root (a memory
- * file under ~, /tmp scratch) is the same file in both namespaces and is returned untouched. The re-bound
- * subtrees are the exception INSIDE the root: `.intentic` and every node_modules resolve to the main tree in
- * both namespaces, so translating them would send the daemon looking in a worktree that has no such file.
+ * Only the root prefix moves. A path outside the workspace root (a memory file under ~, /tmp scratch) is the
+ * same file either way and is returned untouched, as is anything under sharedPrefixes — those subtrees are
+ * the main checkout on both sides, so moving them would name a file the worktree does not have.
  */
-export const fromNamespace = (path: string, plan: IsolationPlan | undefined): string => {
-    if (plan === undefined || !path.startsWith(`${plan.root}/`)) {
+export const inWorktree = (path: string, plan: IsolationPlan | undefined): string => {
+    if (plan === undefined || (path !== plan.root && !path.startsWith(`${plan.root}/`))) {
         return path;
     }
-    const rel = path.slice(plan.root.length + 1);
-    const shared = [SHARED_STATE, ...plan.modules.map((pkg) => (pkg === "" ? MODULES : `${pkg}/${MODULES}`))];
-    if (shared.some((prefix) => rel === prefix || rel.startsWith(`${prefix}/`))) {
+    const rel = path === plan.root ? "" : path.slice(plan.root.length + 1);
+    if (sharedPrefixes(plan).some((prefix) => rel === prefix || rel.startsWith(`${prefix}/`))) {
         return path;
     }
-    return join(plan.worktree, rel);
+    // The root itself is the worktree root: `ls /work` must list the agent's own tree, not the shared one.
+    return rel === "" ? plan.worktree : join(plan.worktree, rel);
 };

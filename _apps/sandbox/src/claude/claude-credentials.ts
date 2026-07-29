@@ -36,6 +36,54 @@ const SCOPES = "org:create_api_key user:profile user:inference";
 // mid-flight (see getOAuthToken in agent.ts) instead of simply never running dry.
 const REFRESH_AHEAD_MS = 30 * 60_000;
 
+/* WHY A ROTATION WAITS FOR THE TURNS HOLDING THE TOKEN.
+ *
+ * Anthropic retires the previous access token the instant a refresh mints its successor — the superseded one
+ * comes back "401 OAuth access token has been revoked", the same sentence a family-wide revocation produces.
+ * And a turn's token is a SNAPSHOT taken into the agent subprocess env at spawn: it cannot be handed a newer
+ * one. So a rotation that lands mid-turn kills every turn holding the old token, at once, wherever they were.
+ *
+ * That is not hypothetical. One proactive refresh at 09:55:42 killed three unrelated agents within 27 seconds,
+ * each with the same 401, and the harness's own mid-turn recovery could not save them: the CLI only asks for a
+ * replacement when it believes its token EXPIRED, and this one still looked valid by the clock, so it took the
+ * terminal "run /login" road instead. Every session had to be restarted by hand.
+ *
+ * The fix is to rotate when nobody is holding the token. Turns are bursty and the gaps between them are ample,
+ * REFRESH_AHEAD_MS is half an hour, and a rotation deferred by a few minutes costs nothing — so the timer
+ * simply waits its turn. What it must NOT do is wait forever: a token allowed to actually expire fails the
+ * NEXT turn too, so once the real expiry is this close the rotation happens regardless and the turns still
+ * running are covered by the auth resume (agent/turn-resume.ts) instead.
+ */
+const ROTATE_REGARDLESS_MS = 2 * 60_000;
+
+// Turns currently holding a snapshot of each account's access token, by account id. A counter rather than a
+// set of turn ids: nothing here needs to know WHICH turns, only whether rotating now would break one.
+const holders = new Map<string, number>();
+
+// Claim the account for a turn's lifetime; the returned release must run in that turn's finally. Called once
+// per turn that resolved a stored Claude credential — the container-env fallback has no rotation to defer.
+export const holdAccount = (id: string): (() => void) => {
+    holders.set(id, (holders.get(id) ?? 0) + 1);
+    let released = false;
+    return () => {
+        if (released) {
+            return;
+        }
+        released = true;
+        const remaining = (holders.get(id) ?? 1) - 1;
+        if (remaining > 0) {
+            holders.set(id, remaining);
+        } else {
+            holders.delete(id);
+        }
+    };
+};
+
+// Is a rotation worth postponing right now? Only while someone would be broken by it AND the token has enough
+// life left that postponing is safe.
+const deferrable = (account: StoredAccount, now: number): boolean =>
+    (holders.get(account.id) ?? 0) > 0 && account.expiresAt !== undefined && account.expiresAt - now > ROTATE_REGARDLESS_MS;
+
 // A refresh is one HTTPS round-trip. A lock older than this belongs to a process that died holding it.
 const LOCK_STALE_MS = 30_000;
 // How long a caller waits for the holder before treating the lock as unobtainable and refreshing anyway. A
@@ -374,6 +422,15 @@ export const ensureFreshToken = async (store: ClaudeStore, id: string, refresh: 
     if (usable(account) || account.refreshToken === undefined) {
         return account.accessToken;
     }
+    // Live turns are holding this exact token and cannot be handed a new one — see ROTATE_REGARDLESS_MS. The
+    // gate lives here rather than only in the proactive timer because a turn STARTING during the wait resolves
+    // its credential through this same path, and rotating for the newcomer would kill everyone already running.
+    // The token it gets instead is the one in the store: past REFRESH_AHEAD_MS, but valid, and the turn that
+    // outlives even that is the case the auth resume exists for.
+    if (deferrable(account, Date.now())) {
+        store.logger.debug({ account: id }, "claude token rotation deferred — turns are holding it");
+        return account.accessToken;
+    }
     return rotate(store, id, account.accessToken, refresh);
 };
 
@@ -392,7 +449,9 @@ export const replaceRejectedToken = (
 // Refresh every connected account BEFORE a turn needs it. Lazy refresh alone means the rotation lands in the
 // middle of whatever burst of turns happens to cross the expiry window; doing it on a quiet timer means the
 // token a turn picks up is almost always minutes-old, and the locking above is a backstop rather than the
-// mechanism. Runs through the same locked path, so the timer and a turn can never both rotate.
+// mechanism. Runs through the same locked path, so the timer and a turn can never both rotate — and through
+// the same holder gate, so "on a quiet timer" now means what it says: a tick that would break a running turn
+// waits for the next one instead of firing into it.
 export const startClaudeRefresh = (store: ClaudeStore, intervalMs = 5 * 60_000): (() => void) => {
     const tick = async (): Promise<void> => {
         for (const account of await store.list()) {
