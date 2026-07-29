@@ -71,6 +71,27 @@ test("a save paints into the cache before the daemon answers, so the control nev
     expect(save.isPending.value).toBe(true);
 });
 
+test("a field the daemon strips is NAMED, not just snapped back", async () => {
+    // An older daemon: it accepts the POST and stores everything it understands, dropping the toggle its own
+    // copy of the schema predates — so the reconciling read comes back without it and the control springs back
+    // to 0 with no explanation. That is the bug this reports: "the input won't take a number".
+    let reads = 0;
+    jsonMock.mockImplementation((_path: string, init?: RequestInit) => {
+        if (init?.method === `POST`) {
+            return Promise.resolve({ ok: true }) as Promise<never>;
+        }
+        reads += 1;
+        return Promise.resolve(reads === 1 ? DEFAULTS : { ...DEFAULTS, terseHoldout: undefined }) as Promise<never>;
+    });
+    const { save, settings, dropped } = mounted(() => useSandboxSettings());
+    await vi.waitFor(() => expect(settings.value).toEqual(DEFAULTS));
+
+    save.mutate({ ...DEFAULTS, terseHoldout: 0.1 });
+
+    await vi.waitFor(() => expect(settings.value?.terseHoldout).toBe(0));
+    await vi.waitFor(() => expect(dropped.value).toContain(`terseHoldout`));
+});
+
 test("a rejected save rolls back, so a switch never claims a setting the sandbox refused", async () => {
     // Refused after a beat, not instantly: an immediate rejection would paint and roll back inside one tick,
     // and a test that can't observe the optimistic state in between would pass with the optimism removed.
