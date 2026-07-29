@@ -18,7 +18,13 @@ import { sshAlias } from "./ssh.js";
  * The fast-forward is a MIXED reset: branch ref + index move to the sandbox tip, the worktree is untouched —
  * the worktree is file sync's to converge, and once both have caught up `git status` here settles to exactly
  * the sandbox's own uncommitted set. In the window between a fetch and the worktree catching up, status can
- * transiently over- or under-report; it self-corrects within a sync cycle. */
+ * transiently over- or under-report; it self-corrects within a sync cycle.
+ *
+ * That window is why a pass is built to be CHEAP. File sync is event-driven and lands a commit's FILES within
+ * seconds, so between the commit and the bridge moving HEAD the local `git status` reports everything that just
+ * landed as uncommitted — the lag is the whole user-visible symptom. So a pass runs on every watcher tick, and
+ * the steady state costs ONE `ls-remote` per repo: that single listing carries both the sandbox's branch and
+ * its tip, which is enough to answer "nothing moved" and stop. Only a tip that actually moved pays for a fetch. */
 
 // One seam for every effect the bridge has, so the fast-forward policy unit-tests without git, ssh or a disk.
 export interface BridgeExec {
@@ -86,21 +92,32 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
     } else if (current !== url) {
         exec.run("git", ["remote", "set-url", "sandbox", url], dir);
     }
-    // Which branch is the sandbox on? One round-trip; also the reachability probe for everything below.
-    const symref = exec.run("git", ["ls-remote", "--symref", "sandbox", "HEAD"], dir);
-    const branch = /^ref:\s+refs\/heads\/(\S+)\s+HEAD/m.exec(symref ?? "")?.[1];
-    if (branch === undefined) {
+    // THE probe, and the only round trip a quiet repo pays for: one listing answers both which branch the
+    // sandbox is on and where that branch's tip sits, and doubles as the reachability check for the rest.
+    const symref = exec.run("git", ["ls-remote", "--symref", "sandbox", "HEAD"], dir) ?? "";
+    const branch = /^ref:\s+refs\/heads\/(\S+)\s+HEAD/m.exec(symref)?.[1];
+    // The sha line of that same listing. Deliberately not length-checked, so it reads a sha256 repo too; the
+    // trailing anchor is what keeps it off the `<sha> refs/remotes/origin/HEAD` line further down the output.
+    const remoteTip = /^([0-9a-f]+)\s+HEAD\s*$/m.exec(symref)?.[1];
+    if (branch === undefined || remoteTip === undefined) {
         return; // unreachable, or an unborn HEAD in the sandbox — nothing to bridge yet
+    }
+    // Both local, both free. Read here rather than after the fetch so the quiet case can be decided without one.
+    const head = exec.run("git", ["rev-parse", "-q", "--verify", "HEAD"], dir)?.trim();
+    const localBranch = exec.run("git", ["symbolic-ref", "--short", "-q", "HEAD"], dir)?.trim();
+    if (head === remoteTip && localBranch === branch) {
+        return; // nothing moved since the last pass — the overwhelmingly common case, and it ends here
     }
     if (exec.run("git", ["fetch", "-q", "sandbox", `+refs/heads/${branch}:refs/remotes/sandbox/${branch}`], dir) === undefined) {
         log(`  ${repo}: fetch from the sandbox failed — will retry next pass`);
         return;
     }
+    // Re-read the tip from the ref the fetch just wrote instead of trusting the probe's: if the sandbox
+    // committed again in between, this is the sha we actually hold the objects for.
     const tip = exec.run("git", ["rev-parse", "-q", "--verify", `refs/remotes/sandbox/${branch}`], dir)?.trim();
     if (tip === undefined || tip === "") {
         return;
     }
-    const head = exec.run("git", ["rev-parse", "-q", "--verify", "HEAD"], dir)?.trim();
     // Anything staged is a commit the user is composing — the mixed reset below would silently unstage it.
     if (head !== undefined && exec.run("git", ["diff", "--cached", "--quiet"], dir) === undefined) {
         return;
@@ -110,7 +127,6 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
         log(`  ${repo}: local commits diverge from the sandbox — leaving it alone`);
         return;
     }
-    const localBranch = exec.run("git", ["symbolic-ref", "--short", "-q", "HEAD"], dir)?.trim();
     if (localBranch !== branch) {
         // The sandbox checked out a different branch (or this repo was just initialized): follow it by name —
         // symbolic-ref moves HEAD without touching a single file — unless a local branch of that name holds
@@ -135,17 +151,23 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
 };
 
 // One bridge pass over every sandbox repo. Only a "sync"-mode enrollment has a local tree to bridge into.
-export const runGitBridge = (exec: BridgeExec, config: SyncConfig, log: Log): void => {
+//
+// `known` is the repo list an earlier pass returned. The set only changes when a repo is added or removed, so
+// the caller holds onto it and passes undefined when it wants a fresh listing — that keeps the per-tick cost at
+// the one `ls-remote` each repo already pays instead of an ssh round trip just to re-learn the same names.
+// Returns the list that was used, or undefined when there was nothing to bridge or the sandbox was unreachable.
+export const runGitBridge = (exec: BridgeExec, config: SyncConfig, log: Log, known: readonly string[] | undefined): readonly string[] | undefined => {
     if (config.mode !== "sync" || config.localDir === undefined) {
-        return;
+        return undefined;
     }
     const alias = sshAlias(config.sandboxId);
-    const repos = listSandboxRepos(exec, alias);
+    const repos = known ?? listSandboxRepos(exec, alias);
     if (repos === undefined) {
         log("  git bridge: couldn't list the sandbox's repos — will retry next pass");
-        return;
+        return undefined;
     }
     for (const repo of repos) {
         bridgeRepo(exec, alias, config.localDir, repo, log);
     }
+    return repos;
 };

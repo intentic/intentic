@@ -67,7 +67,11 @@ describe("fetchWorkspacePorts", () => {
         const ports = await fetchWorkspacePorts("https://sandbox-abc.example.dev/", "ist_tok");
 
         expect(ports).toEqual([{ port: 47145, host: "::1", forwardable: true, kind: "workspace", command: "vite", forwarded: false }]);
-        expect(fetchMock).toHaveBeenCalledWith("https://sandbox-abc.example.dev/ports", { headers: { "x-intentic-sync": "ist_tok" } });
+        expect(fetchMock).toHaveBeenCalledWith("https://sandbox-abc.example.dev/ports", {
+            headers: { "x-intentic-sync": "ist_tok" },
+            // Bounded, because the watcher loop is sequential: an unbounded read here stalls the git bridge too.
+            signal: expect.any(AbortSignal),
+        });
     });
 
     it("maps a rejected token to the re-pair message", async () => {

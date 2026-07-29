@@ -165,7 +165,7 @@ const setup = buildCommand<SetupFlags>({
         ensureSyncSession(mutagen, config, out);
         // One bridge pass right away, so a fresh pairing's local repos carry the sandbox's git history from
         // the first minute rather than waiting out the watcher's cadence.
-        runGitBridge(realBridgeExec, config, out);
+        runGitBridge(realBridgeExec, config, out, undefined);
         // Register the Mutagen daemon to autostart at login and resume sessions across reboots — it holds BOTH
         // sync and forward sessions, so this covers mirror-only too. Its own native mechanism (launchd/Task
         // Scheduler); no register verb on Linux. Best-effort: already-registered isn't worth failing on.
