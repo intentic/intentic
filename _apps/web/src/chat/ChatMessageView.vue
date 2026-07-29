@@ -781,10 +781,14 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 
             <div v-if="message.question" class="chat-surface w-full overflow-hidden rounded-xl">
                 <!-- The question wraps in full here rather than truncating behind a tooltip; a multi-question
-                     card carries a generic title and breaks each question out inline in the body below. -->
+                     card carries a generic title and breaks each question out inline in the body below.
+                     font-medium, not semibold: this header is a SENTENCE, often two lines of it, and at
+                     semibold two lines of prose read as a banner shouted at the reader rather than as a
+                     question being asked. Weight is doing one job here — separating the ask from the options
+                     under it — and one step is enough to do it. -->
                 <div class="flex items-start gap-2 border-b border-line px-3.5 py-2">
                     <Icon name="comments" class="mt-0.5 text-sm text-link" />
-                    <span class="min-w-0 flex-1 text-sm font-semibold text-content">{{
+                    <span class="min-w-0 flex-1 text-sm font-medium text-content">{{
                         message.question.questions.length > 1 ? "A few questions" : message.question.questions[0]?.question
                     }}</span>
                     <span v-if="message.question.status === 'answered'" class="mt-0.5 shrink-0 text-2xs font-medium text-success">✓ Answered</span>
@@ -915,7 +919,10 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <div v-if="message.permission" class="chat-surface w-full overflow-hidden rounded-xl">
                 <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
                     <Icon name="shield" class="text-sm text-primary-500" />
-                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.left.overflow="permissionTitle">{{
+                    <!-- Same reasoning as the question card above: permissionTitle is usually a full prompt
+                         sentence ("Run `pnpm test` in the workspace root?"), so it takes the sentence weight,
+                         not the title weight the plan card's short name gets. -->
+                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content" v-tooltip.left.overflow="permissionTitle">{{
                         permissionTitle
                     }}</span>
                     <span v-if="message.permission.status === 'allowed'" class="text-2xs font-medium text-success">✓ Allowed</span>

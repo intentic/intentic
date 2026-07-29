@@ -60,7 +60,9 @@
 }
 
 /* Headings. Sized in `em` off the prose size, and spaced with a big top margin and a small bottom one so a
-   heading reads as attached to the section it opens rather than floating between two. */
+   heading reads as attached to the section it opens rather than floating between two.
+   600 is theirs ALONE — `strong` below sits at 500 — so that weight is a reliable "this opens a section"
+   signal rather than something a bold lead-in also says. That is what lets h4 exist at body size at all. */
 .md-prose h1,
 .md-prose h2,
 .md-prose h3,
@@ -72,20 +74,31 @@
     /* A long identifier in a heading must wrap rather than widen the column. */
     overflow-wrap: break-word;
 }
+/* Emphasis inside a heading is part of the heading, not a step down from it: `## The **only** rule` must not
+   render its middle word lighter than the words either side. */
+.md-prose h1 strong,
+.md-prose h2 strong,
+.md-prose h3 strong,
+.md-prose h4 strong {
+    font-weight: inherit;
+}
+/* The ladder is ~1.15 per step (at the transcript's 13px: 19.5 / 16.6 / 14.8 / 13). Even steps matter more
+   than big ones here — the previous 1.55/1.3/1.2/1.0 put h2 and h3 1.3px apart, which at this size is not a
+   level, so a nested section read as a repeat of the one above it. */
 .md-prose h1 {
-    font-size: 1.55em;
+    font-size: 1.5em;
     letter-spacing: -0.01em;
 }
 /* The hairline is what makes a long answer scannable: h2 is where an agent starts a new section, and at these
-   sizes weight alone does not separate one from a bold paragraph lead-in. */
+   sizes weight alone does not separate one from the h3s below it. */
 .md-prose h2 {
-    font-size: 1.3em;
+    font-size: 1.28em;
     letter-spacing: -0.006em;
     padding-bottom: 0.3em;
     border-bottom: 1px solid var(--color-line);
 }
 .md-prose h3 {
-    font-size: 1.2em;
+    font-size: 1.14em;
 }
 .md-prose h4 {
     font-size: 1em;
@@ -130,11 +143,13 @@
     margin: 0.35em 0;
 }
 
-/* 600, not a heavier step: index.html loads Inter/Space Grotesk/JetBrains Mono at 400·500·600·700, so
-   anything between rounds up to 700 and bold prose would outweigh the headings above it. */
+/* 500, one step over the 400 around it — not 600, which is the headings' weight. An agent's answer bolds
+   constantly (a term per bullet, a lead-in per paragraph), so at 600 every one of those read as loud as the
+   section header above it and a bullet list turned into a field of shouting fragments. 500 still lifts a term
+   out of its sentence — that is all emphasis has to do — while leaving the heading ladder legible.
+   The available rungs are 400·500·600·700 (index.html's font loads); anything between rounds up. */
 .md-prose strong {
-    font-weight: 600;
-    color: var(--color-content);
+    font-weight: 500;
 }
 
 .md-prose blockquote {
