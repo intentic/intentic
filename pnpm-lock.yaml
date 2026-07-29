@@ -949,6 +949,9 @@ importers:
       '@intentic-app/ui':
         specifier: workspace:*
         version: link:../../_libs/ui
+      '@intentic/constants':
+        specifier: workspace:*
+        version: link:../../_tools/constants
       '@intentic/ext-activity':
         specifier: workspace:*
         version: file:_extensions/activity(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.39(typescript@5.9.3))
@@ -1665,6 +1668,9 @@ importers:
 
   _libs/providers:
     dependencies:
+      '@intentic/constants':
+        specifier: workspace:*
+        version: link:../../_tools/constants
       '@intentic/engine':
         specifier: workspace:*
         version: link:../engine

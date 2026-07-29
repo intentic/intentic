@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { SANDBOX_CAPABILITIES } from "@intentic/constants";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -213,13 +214,10 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                     `docker run -d --restart unless-stopped --name ${CONTAINER} --label intentic.id=${ctx.id} --label intentic.type=workspace --label intentic.tools=${digest} ` +
                     `--network ${parsed.network} --add-host host.docker.internal:host-gateway --dns 1.1.1.1 --dns 1.0.0.1 ` +
                     `--log-opt max-size=10m --log-opt max-file=3 ` +
-                    // SYS_ADMIN is what lets the daemon give each isolated agent turn its own mount namespace,
-                    // with that conversation's worktree standing in for /work (the sandbox app's
-                    // agents/isolation.ts). Without it the daemon still runs every turn — it just cannot make
-                    // the guarantee, and an agent's absolute /work paths reach the shared tree again. The
-                    // capability is scoped to THIS container's own mounts; it is not host access, and the
-                    // docker socket is still never mounted.
-                    `--cap-add=SYS_ADMIN ` +
+                    // The sandbox container's capability posture — defined once in @intentic/constants (see
+                    // SANDBOX_CAPABILITIES there for what each grant is for and the drift story that made it
+                    // a shared constant), spliced here exactly as the creation scripts splice it.
+                    `${SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`).join(" ")} ` +
                     runtime +
                     `-p ${parsed.internalIp}:${parsed.previewPort}:${parsed.previewPort} -p ${parsed.internalIp}:${parsed.daemonPort}:${parsed.daemonPort} ` +
                     `-v ${WORKSPACE_VOLUME}:/work -v ${DOCKER_VOLUME}:/var/lib/docker ` +
