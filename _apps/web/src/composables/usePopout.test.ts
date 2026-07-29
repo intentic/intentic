@@ -29,6 +29,21 @@ const fakeWindow = (name: string) => {
 // One keeper tick: "is a live page driving me?" — the boolean is what the window acts on.
 const adopt = (name: string, win: ReturnType<typeof fakeWindow>): boolean => window.__intentic?.adoptPopout(name, win as unknown as Window) === true;
 
+// The window's document going away under the panel: its own ×, or a reload out there. Both arrive here as the
+// unload listeners attach() armed, with nothing to tell them apart.
+const unload = (win: ReturnType<typeof fakeWindow>): void => {
+    for (const [type, listener] of win.addEventListener.mock.calls) {
+        if (type === `pagehide`) {
+            (listener as () => void)();
+        }
+    }
+};
+
+// A page load in that same window: the window object survives a navigation, the document under it does not.
+const reload = (win: ReturnType<typeof fakeWindow>): void => {
+    win.document = document.implementation.createHTMLDocument(win.name);
+};
+
 const size = () => ({ width: 500, height: 400 });
 
 beforeEach(() => {
@@ -41,6 +56,28 @@ afterEach(() => {
 });
 
 describe(`createPopout`, () => {
+    it(`opens the pop-out page and lets the window ask for the panel`, () => {
+        const popout = createPopout(`open-panel`, `Panel`, size);
+        const win = fakeWindow(`open-panel`);
+        const open = vi.spyOn(window, `open`).mockReturnValue(win as unknown as Window);
+
+        popout.popOut();
+
+        // A real page of this app, named for the panel it holds — where about:blank left the window with no
+        // address, no icon and a white rectangle in it until the panel landed.
+        expect(open).toHaveBeenCalledWith(`/popout.html?panel=open-panel`, `open-panel`, expect.stringContaining(`popup=1`));
+        expect(win.focus).toHaveBeenCalled();
+        // Nothing is pushed out there from here: the panel stays docked and live until the window's own page
+        // reports in, which is the same handshake a reload comes back through.
+        expect(popout.poppedOut.value).toBe(false);
+
+        expect(adopt(`open-panel`, win)).toBe(true);
+
+        expect(popout.poppedOut.value).toBe(true);
+        expect(popout.body.value).toBe(win.document.body);
+        open.mockRestore();
+    });
+
     it(`adopts the window a reload left floating, without docking on the way`, () => {
         sessionStorage.setItem(`ui-popout-reload-panel`, `1`);
         const popout = createPopout(`reload-panel`, `Panel`, size);
@@ -63,19 +100,23 @@ describe(`createPopout`, () => {
         sessionStorage.setItem(`ui-popout-dress-panel`, `1`);
         const popout = createPopout(`dress-panel`, `Dressed`, size);
         const win = fakeWindow(`dress-panel`);
-        // What the previous page left behind: its own stylesheet clone, and the panel DOM it teleported out —
-        // inert now that the realm animating it is gone.
-        win.document.head.appendChild(Object.assign(win.document.createElement(`style`), { textContent: `.dead{}` }));
+        // What the previous page left behind: its own stylesheet clone, marked as a clone, and the panel DOM it
+        // teleported out — inert now that the realm animating it is gone.
+        const stale = Object.assign(win.document.createElement(`style`), { textContent: `.dead{}` });
+        stale.setAttribute(`data-intentic-clone`, ``);
+        win.document.head.appendChild(stale);
         win.document.body.appendChild(win.document.createElement(`div`));
+        // The pop-out PAGE's own head (popout.html): its icon, its anti-flash style, its keeper. Dressing a
+        // window is not loading a new page into it, so none of that is ours to clear.
+        win.document.head.appendChild(Object.assign(win.document.createElement(`link`), { rel: `icon`, href: `/assets/intentic-logo-sized.png` }));
 
         adopt(`dress-panel`, win);
 
         const styles = [...win.document.head.querySelectorAll(`style`)].map((node) => node.textContent);
         expect(styles).toEqual([`.live{color:red}`]);
+        expect(win.document.head.querySelectorAll(`link[rel="icon"]`)).toHaveLength(1);
         expect(win.document.body.children).toHaveLength(0);
         expect(win.document.title).toBe(`Dressed`);
-        // The keeper is the live thing that brought the window back — re-dressing must not drop or duplicate it.
-        expect(win.document.querySelectorAll(`script[data-intentic-keeper]`)).toHaveLength(1);
         expect(popout.body.value).toBe(win.document.body);
     });
 
@@ -94,6 +135,49 @@ describe(`createPopout`, () => {
         expect(win.addEventListener.mock.calls).toHaveLength(listeners);
         expect(win.close).not.toHaveBeenCalled();
         expect(popout.poppedOut.value).toBe(true);
+    });
+
+    it(`hands the panel back on unload without closing the window`, () => {
+        const popout = createPopout(`unload-panel`, `Panel`, size);
+        const win = fakeWindow(`unload-panel`);
+        adopt(`unload-panel`, win);
+        const panel = win.document.createElement(`div`); // stands in for the DOM the Teleport put out there
+        win.document.body.appendChild(panel);
+
+        unload(win);
+
+        expect(popout.poppedOut.value).toBe(false);
+        expect(popout.body.value).toBeUndefined();
+        // A window that is closing needs no closing — and one that is merely RELOADING must not be closed, or
+        // an F5 out there aborts mid-navigation and takes the user's floating panel with it.
+        expect(win.close).not.toHaveBeenCalled();
+        // Rescued into this document rather than left in one that is being torn down: same live elements, so a
+        // streaming transcript and an attached xterm come back rather than being rebuilt.
+        expect(panel.ownerDocument).toBe(document);
+        expect(sessionStorage.getItem(`ui-popout-unload-panel`)).toBeNull();
+
+        // …and it WAS a reload: the fresh page reports in under the same window name and gets the panel back.
+        reload(win);
+        expect(adopt(`unload-panel`, win)).toBe(true);
+        expect(popout.poppedOut.value).toBe(true);
+        expect(popout.body.value).toBe(win.document.body);
+    });
+
+    it(`takes back a window whose page reloaded without the unload reaching us`, () => {
+        const popout = createPopout(`swap-panel`, `Panel`, size);
+        const win = fakeWindow(`swap-panel`);
+        adopt(`swap-panel`, win);
+        const stale = popout.body.value;
+
+        reload(win);
+
+        // The window is the same object across a navigation; the document under it is not. The panel is in the
+        // old one, so "yes, still driving you" would leave the window holding a page with nothing in it.
+        expect(adopt(`swap-panel`, win)).toBe(true);
+        expect(popout.body.value).toBe(win.document.body);
+        expect(popout.body.value).not.toBe(stale);
+        expect(popout.poppedOut.value).toBe(true);
+        expect(win.close).not.toHaveBeenCalled();
     });
 
     it(`says no for a window no page on this load is driving`, () => {

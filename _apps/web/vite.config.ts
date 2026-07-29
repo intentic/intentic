@@ -49,5 +49,11 @@ export default defineConfig({
         outDir: "dist",
         emptyOutDir: true,
         target: "es2024",
+        rollupOptions: {
+            // Two HTML entries: the app, and the page a popped-out panel is teleported into (see
+            // src/composables/usePopout.ts) — its own document so a pop-out window carries a real URL and icon
+            // instead of about:blank.
+            input: { index: here("./index.html"), popout: here("./popout.html") },
+        },
     },
 });

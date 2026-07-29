@@ -8,7 +8,7 @@ import { useLayout } from "../useLayout";
 
 const layout = useLayout();
 
-const popout = createPopout(`intentic-chat`, `Intentic · Chat`, () => ({
+const popout = createPopout(`chat`, `Intentic · Chat`, () => ({
     width: Math.max(layout.chatWidth.value, 720),
     height: Math.min(window.innerHeight, 900),
 }));

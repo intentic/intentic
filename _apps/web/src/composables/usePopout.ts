@@ -12,12 +12,21 @@ import { computed, type ComputedRef, nextTick, ref, type Ref, shallowRef, type S
  * every browser opens windows, where document PiP was Chromium-only, so there is no `supported` gate left to
  * ask about.
  *
- * The window is same-origin about:blank, so this realm owns its document outright: styles are cloned in, the
- * theme root is mirrored, and the panel is Teleported into its body. Closing it (its own ×) docks the panel
- * back.
+ * The window opens on a real page of this app — /popout.html, a near-empty document whose whole job is to hold
+ * a panel and report in (src/popout/keeper.ts) — rather than the about:blank it used to be. Same origin either
+ * way, so this realm owns that document outright: styles are cloned in, the theme root is mirrored, and the
+ * panel is Teleported into its body. Closing it (its own ×) docks the panel back. What the address buys is what
+ * the WINDOW is: one of the app's own, with the app's URL in the bar and its icon in the taskbar, painting the
+ * canvas from the first frame — where about:blank read to the user (and to the browser's own chrome) as a
+ * window that came from nowhere.
+ *
+ * It also means the keeper is the window's OWN code rather than a script injected from here, so the window can
+ * speak for itself before anything is teleported into it. Which makes the handshake below the ONE way a panel
+ * ever reaches a window: popping out is window.open plus the keeper's first question, so opening a window and
+ * re-adopting one that outlived a reload are the same path, held to the same tests.
  *
  * A page reload does NOT dock it. The window outlives the realm that opened it and is re-adopted by the fresh
- * page (see the keeper below), because a reload is not a decision to dock — dev-server HMR, an update reload
+ * page (src/popout/keeper.ts), because a reload is not a decision to dock — dev-server HMR, an update reload
  * or an F5 would otherwise yank a full-screened chat back into its column every time.
  *
  * WHICH MAKES LIVENESS THE ONE INVARIANT THIS MODULE OWES THE REST OF THE APP: everything a pop-out window
@@ -44,8 +53,14 @@ declare global {
     }
 }
 
-// Marks the keeper script, so re-dressing an adopted document leaves the one live script in it alone.
-const KEEPER_ATTR = `data-intentic-keeper`;
+// The page every popped-out panel floats in (popout.html, at the app's root). Opened with the panel named in
+// its query, for the readers that see a window's address but not its title bar: the address bar itself, the
+// browser's window list, and the session it restores from.
+const POPOUT_PAGE = `/popout.html`;
+
+// Marks the stylesheets THIS realm clones into a pop-out document, so re-dressing one replaces its clones and
+// leaves the page's own head — its icon, its keeper — untouched.
+const CLONE_ATTR = `data-intentic-clone`;
 
 // How long a remembered window gets to come back before the panel stops holding its docked slot shut. One
 // keeper tick plus the app's own boot. Both ways of being wrong are now cheap: overshooting means an emptier
@@ -53,102 +68,44 @@ const KEEPER_ATTR = `data-intentic-keeper`;
 // no longer a deadline the window has to beat to survive (see stopWaiting).
 const RECLAIM_GRACE_MS = 2500;
 
-/* The only script that runs INSIDE the pop-out window — and the only thing about the panel that survives the
- * opener reloading, since every other part of it lives in the opener's realm. That makes it the only party
- * that can speak for this window when the realm behind it dies, so each tick it asks whatever page currently
- * answers on the opener whether anyone is driving it, and acts on the answer:
- *   · yes — a live page holds it (a fresh load takes it over on the very tick it first answers). Nothing to do.
- *   · no  — veil the panel NOW. It may be a page mid-reload, in which case the veil lifts a few ticks later;
- *           what it must never be is a dead panel that still looks like the app.
- *   · nobody, for ~12s — close. The tab was shut, or navigated away from the app; a floating window with
- *           nothing driving it is worse than no window.
- * `window.name` is the target name window.open gave it, which is the key the opener's stores are registered
- * under. */
-const KEEPER_SOURCE = `(() => {
-    const VEIL = "data-intentic-veil";
-    let orphaned = 0;
-    // Covers the panel the moment nobody answers for it, so a frozen picture of the app can never be mistaken
-    // for the app. Re-created rather than toggled: an adoption re-dresses this document (body and head are
-    // cleared), and the next tick simply puts it back if it is still needed.
-    const veil = (on) => {
-        const shown = document.querySelector("[" + VEIL + "]");
-        if (!on) {
-            if (shown) shown.remove();
-            return;
-        }
-        if (shown) return;
-        const el = document.createElement("div");
-        el.setAttribute(VEIL, "");
-        el.textContent = "Reconnecting…";
-        el.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;font:500 13px system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.62)";
-        (document.body || document.documentElement).appendChild(el);
-    };
-    setInterval(() => {
-        const opener = window.opener;
-        if (!opener || opener.closed) {
-            window.close();
-            return;
-        }
-        let driven = false;
-        try {
-            const adopt = opener.__intentic?.adoptPopout;
-            // Running the opener's code IS the proof of life — a page mid-reload has no hook yet, and a dead
-            // realm has none ever again. Either way the answer is false and this window says so.
-            driven = typeof adopt === "function" && adopt(window.name, window) === true;
-        } catch {
-            window.close(); // opener navigated cross-origin: its realm is unreachable, nobody can drive us
-            return;
-        }
-        veil(!driven);
-        orphaned = driven ? 0 : orphaned + 1;
-        if (orphaned > 60) {
-            window.close(); // ~12s with nothing on the other end — long enough to outlast a slow reload
-        }
-    }, 200);
-})();`;
+// What the design system keys off <html>: the color scheme (the PrimeVue dark preset and the role tokens) and
+// the brand theme (themes.css token overrides). The pop-out page ships a static guess at the scheme for its
+// first paint and nothing else, so both are mirrored from the live root here and re-mirrored on every change.
+const THEME_ATTRIBUTES = [`data-mode`, `data-theme`];
 
-// The document arrives styleless with a light-mode root; mirror the theme attribute/classes so the dark preset
-// and role tokens key the same way as the main window.
 const mirrorRoot = (doc: Document): void => {
     doc.documentElement.className = document.documentElement.className;
-    const mode = document.documentElement.getAttribute(`data-mode`);
-    if (mode === null) {
-        doc.documentElement.removeAttribute(`data-mode`);
-    } else {
-        doc.documentElement.setAttribute(`data-mode`, mode);
+    for (const attribute of THEME_ATTRIBUTES) {
+        const value = document.documentElement.getAttribute(attribute);
+        if (value === null) {
+            doc.documentElement.removeAttribute(attribute);
+        } else {
+            doc.documentElement.setAttribute(attribute, value);
+        }
     }
 };
 
 // Clone every stylesheet (Vite/Tailwind/PrimeVue inject <style> in dev, <link> in prod) into the pop-out
-// document, mirror the theme root, and make the body a full-height flex column so the teleported panel fills
-// the window at every size the user drags it to (full-screen included). Re-runnable: adopting a window that
-// outlived its opener means clearing out that page's stylesheet clones and its now-inert panel DOM first.
+// document, mirror the theme root, and make the body a full-height flex column on the app's canvas so the
+// teleported panel fills the window at every size the user drags it to (full-screen included). Re-runnable:
+// adopting a window that outlived its opener means dropping that page's stylesheet clones and its now-inert
+// panel DOM first.
 const dressWindow = (win: Window, title: string): void => {
     const doc = win.document;
-    // about:blank normally parses to an empty html/head/body; write one if the browser handed over a bare
-    // document, so the appends below have somewhere to land.
-    if (doc.body === null) {
-        doc.write(`<!doctype html><html><head></head><body></body></html>`);
-        doc.close();
-    }
-    // Head first, title after: the clear-out takes everything the previous page put there (its stylesheet
-    // clones, its <title>) and spares only the keeper, which is the live script that brought the window back.
-    for (const node of doc.head.querySelectorAll(`:scope > :not([${KEEPER_ATTR}])`)) {
-        node.remove();
+    for (const clone of doc.head.querySelectorAll(`[${CLONE_ATTR}]`)) {
+        clone.remove();
     }
     doc.title = title;
     doc.body.replaceChildren();
-    for (const node of document.head.querySelectorAll(`style, link[rel="stylesheet"]`)) {
-        doc.head.appendChild(node.cloneNode(true));
+    for (const sheet of document.head.querySelectorAll(`style, link[rel="stylesheet"]`)) {
+        const clone = sheet.cloneNode(true) as Element;
+        clone.setAttribute(CLONE_ATTR, ``);
+        doc.head.appendChild(clone);
     }
     mirrorRoot(doc);
-    doc.body.style.cssText = `margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden`;
-    if (doc.querySelector(`script[${KEEPER_ATTR}]`) === null) {
-        const keeper = doc.createElement(`script`);
-        keeper.setAttribute(KEEPER_ATTR, ``);
-        keeper.textContent = KEEPER_SOURCE;
-        doc.head.appendChild(keeper);
-    }
+    // Inline rather than in the page's own stylesheet, because the clones above land after it: the layout the
+    // Teleport target needs cannot be something an app-wide `body` rule gets to override.
+    doc.body.style.cssText = `margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;background:var(--color-canvas);color:var(--color-content)`;
 };
 
 // Where the window opens: the panel's current size, centred on the screen the app is on. Chrome only honors a
@@ -293,8 +250,10 @@ export interface Popout {
     readonly toggle: () => void;
 }
 
-// One pop-out store. `name` is the window's target name, so re-popping reuses that window slot rather than
-// stacking; `size` is read at popOut() time so the window opens at the panel's current dimensions.
+// One pop-out store. `name` is the panel's slug, and every identity the window has is that one string: its
+// target name (so re-popping reuses the window rather than stacking), the `?panel=` in its address, the key its
+// keeper reports in under, and the key of its session note. `size` is read at popOut() time so the window opens
+// at the panel's current dimensions.
 export const createPopout = (name: string, title: string, size: () => { width: number; height: number }): Popout => {
     const poppedOut = ref(false);
     const body = shallowRef<HTMLElement>();
@@ -365,8 +324,6 @@ export const createPopout = (name: string, title: string, size: () => { width: n
     const attach = (win: Window): void => {
         dressWindow(win, title);
         popoutWindow = win;
-        // After the dressing, never before: a bare document is written out with doc.write, which implies
-        // document.open() — and that strips every listener already standing on the document.
         shareListeners(win.document);
         body.value = win.document.body; // set the target before activating the teleport
         restoring.value = false;
@@ -374,15 +331,15 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         remember(true);
         // beforeunload fires while the document is still whole (so `salvage` can rescue the panel); pagehide
         // is the backstop for the paths that skip it.
-        win.addEventListener(`beforeunload`, dock);
-        win.addEventListener(`pagehide`, dock);
+        win.addEventListener(`beforeunload`, released);
+        win.addEventListener(`pagehide`, released);
         themeObserver = new MutationObserver(() => mirrorRoot(win.document));
-        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: [`data-mode`, `class`] });
+        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: [...THEME_ATTRIBUTES, `class`] });
     };
 
-    /* The keeper's question, answered for this store's window. It arrives every 200ms from the moment the
-     * window opens, so the common case by far is "yes, still mine, still alive" — and answering it at all is
-     * the proof, since a torn-down realm never gets here. The three ways to say no each mean something
+    /* The keeper's question, answered for this store's window. It arrives from the moment the window's page
+     * loads and every 200ms after, so the common case by far is "yes, still mine, still alive" — and answering
+     * it at all is the proof, since a torn-down realm never gets here. The ways to say no each mean something
      * different to the asker: a window this page no longer holds (docked deliberately, or replaced by another)
      * is told to close, while a page that simply isn't driving it — because it never adopted it — lets the
      * keeper veil the panel and keep asking. */
@@ -391,9 +348,14 @@ export const createPopout = (name: string, title: string, size: () => { width: n
             return false;
         }
         if (popoutWindow === win) {
-            return true;
-        }
-        if (dismissed || poppedOut.value) {
+            // Ours — unless the document beneath it has been swapped for a new one, which is a reload out there
+            // whose unload never reached us. The panel is in the old document, so this is a window to take over
+            // again rather than one to reassure: answering yes would leave it holding an empty page.
+            if (body.value === win.document.body) {
+                return true;
+            }
+            released();
+        } else if (dismissed || poppedOut.value) {
             win.close();
             return false;
         }
@@ -401,10 +363,14 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         return true;
     });
 
-    const dock = (): void => {
+    /* The two ways a panel leaves a window differ in exactly one thing — what happens to the window:
+     *   · released() — the window is going away on its own, so there is nothing to close. It is also the path a
+     *     RELOAD out there takes, and closing the window on that would abort the navigation and take the panel
+     *     with it; left alone, the reloading window comes back, reports in and is re-adopted, so the panel spends
+     *     a beat in its column and pops straight back out.
+     *   · dock() — the user asked for the panel in its column, so the window has no reason to exist: close it. */
+    const released = (): void => {
         if (!poppedOut.value) {
-            stopWaiting();
-            dismissed = true;
             return;
         }
         const win = popoutWindow;
@@ -412,9 +378,14 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         themeObserver?.disconnect();
         themeObserver = undefined;
         if (win) {
-            win.removeEventListener(`beforeunload`, dock);
-            win.removeEventListener(`pagehide`, dock);
-            unshareListeners(win.document);
+            win.removeEventListener(`beforeunload`, released);
+            win.removeEventListener(`pagehide`, released);
+        }
+        // The document the panel is IN, which is not always `win.document`: a window whose page has already been
+        // replaced hands back the new one, and the listeners — like the panel below — belong to the old.
+        const shared = body.value?.ownerDocument;
+        if (shared !== undefined) {
+            unshareListeners(shared);
         }
         const holder = salvage();
         // Flip after the rescue so the Teleport's move lands on nodes that are already in this document; the
@@ -423,19 +394,34 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         body.value = undefined;
         remember(false);
         void nextTick(() => holder?.remove());
+    };
+
+    const dock = (): void => {
+        if (!poppedOut.value) {
+            stopWaiting();
+            dismissed = true;
+            return;
+        }
+        const win = popoutWindow;
+        released();
         win?.close();
     };
 
+    /* Opening the window is the whole of popping out: the page it loads asks to be adopted (src/popout/keeper.ts)
+     * and the hook above teleports the panel into it, so there is no second path for pushing a panel out and no
+     * way for this one to skip the liveness handshake. The panel stays docked and LIVE for the load in between —
+     * a local page, so a frame or two — rather than being unmounted while the window boots. */
     const popOut = (): void => {
         if (poppedOut.value) {
             return;
         }
-        const win = window.open(``, name, features(size()));
+        // A matching target name reuses the window it already refers to, navigating it: re-popping cannot stack
+        // windows, and a window a reload left floating is taken back over rather than joined by a second one.
+        const win = window.open(`${POPOUT_PAGE}?panel=${name}`, name, features(size()));
         if (win === null) {
             return; // blocked by the popup blocker — the panel stays docked
         }
         dismissed = false;
-        attach(win);
         win.focus();
     };
 

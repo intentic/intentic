@@ -6,7 +6,7 @@ import { createPopout, type Popout } from "../usePopout";
  * popped out the shell teleports the panel there, the docked slot renders nothing, and the tab strip stands
  * on the window's left edge. */
 
-const popout = createPopout(`intentic-terminal`, `Intentic · Terminal`, () => ({
+const popout = createPopout(`terminal`, `Intentic · Terminal`, () => ({
     width: Math.min(window.innerWidth, 1100),
     height: Math.min(window.innerHeight, 700),
 }));

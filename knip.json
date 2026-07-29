@@ -13,6 +13,7 @@
             "entry": [
                 "src/main.ts",
                 "index.html",
+                "popout.html",
                 "vite.config.ts",
                 "src/**/*.test.ts",
                 "scripts/*.mjs",
