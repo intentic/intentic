@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import ProviderLogo from "../chat/ProviderLogo.vue";
 import OriginMark from "../components/OriginMark.vue";
-import { dropActionFor } from "../composables/agents/laneDrop";
+import { dropActionFor, type PendingAction } from "../composables/agents/laneDrop";
 import {
     activityIcon,
     agentStatusMeta,
@@ -38,7 +38,9 @@ const props = defineProps<{
     now: number;
     dense?: boolean;
     dragging?: boolean;
-    busy?: boolean;
+    // What the board has in flight against this card, if anything — the action itself, so the button that
+    // fired it can say so while the rest of the card only dims (see PendingAction).
+    pending?: PendingAction;
     selected?: boolean;
     // The board's filter, when one is on. `match` is the line of the user's own prompt the query hit — the
     // EVIDENCE for this card being in a filtered lane. Absent when the hit was the title (already on the card,
@@ -86,6 +88,14 @@ const resolvable = computed(() => props.agent.archivedAt === undefined && dropAc
  * the review panel's own button: one vocabulary for one action. Excluded in the archive like `resolvable`,
  * and by the same logic — act on filed-away work by restoring it first. */
 const landable = computed(() => props.agent.archivedAt === undefined && props.agent.status === `ready`);
+/* THE PRESS WHILE IT IS STILL OUT. A card mid-action dims, which says the board is doing SOMETHING with it —
+ * not which something, and that is the half that matters on the two controls the card fires itself: a button
+ * holding its resting label through a round trip reads as a press that didn't take, which is what makes people
+ * press it again. So each of them names its own action back, and strictly its own: `pending` carries the
+ * action precisely so archiving a `ready` card doesn't leave its Land button spinning over work nobody asked
+ * to land. What ENDS the state is the daemon's next roster frame — for a land, a card with no button left. */
+const landing = computed(() => props.pending === `land`);
+const handingOver = computed(() => props.pending === `resolve`);
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
 const model = computed(() => (props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined));
 const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
@@ -154,7 +164,7 @@ const grab = (event: PointerEvent): void => {
                   ? 'border-warning/50 hover:border-warning/80'
                   : 'border-line hover:border-line-strong',
             dragging ? 'opacity-40' : '',
-            busy ? 'pointer-events-none opacity-60' : '',
+            pending !== undefined ? 'pointer-events-none opacity-60' : '',
         ]"
         @pointerdown="grab"
         @click="openCard"
@@ -213,7 +223,7 @@ const grab = (event: PointerEvent): void => {
                     <Icon name="undo" class="text-2xs" />
                 </button>
             </template>
-            <Icon v-if="busy" name="spinner" spin class="shrink-0 text-xs text-link" />
+            <Icon v-if="pending !== undefined" name="spinner" spin class="shrink-0 text-xs text-link" />
             <span v-else-if="reason !== undefined" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">{{
                 reason
             }}</span>
@@ -327,7 +337,9 @@ const grab = (event: PointerEvent): void => {
                     "
                     @click.stop="emit('resolve')"
                 >
-                    <Icon name="sparkles" class="mr-1 text-2xs" />Have the agent resolve it
+                    <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" class="mr-1 text-2xs" />{{
+                        handingOver ? "Handing it over…" : "Have the agent resolve it"
+                    }}
                 </button>
             </div>
 
@@ -338,10 +350,12 @@ const grab = (event: PointerEvent): void => {
                 <button
                     type="button"
                     :class="cmp.buttonSuccess('gap-0 whitespace-nowrap px-2 py-0.5 text-2xs')"
-                    v-tooltip.top="'Applies this agent\'s finished work to your workspace as uncommitted changes — your own commit stays the review step.'"
+                    v-tooltip.top="
+                        'Applies this agent\'s finished work to your workspace as uncommitted changes — your own commit stays the review step.'
+                    "
                     @click.stop="emit('land')"
                 >
-                    <Icon name="check" class="mr-1 text-2xs" />Land now
+                    <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" class="mr-1 text-2xs" />{{ landing ? "Landing…" : "Land now" }}
                 </button>
             </div>
 

@@ -14,6 +14,14 @@ import type { FleetAgent } from "./useAgents";
 export type DropTarget = FleetLane | "discard";
 export type DropAction = "land" | "resolve" | "stop" | "discard";
 
+/* WHAT A CARD IS WAITING ON — every action the board can have in flight against one agent, not just the ones a
+ * drop invokes: a card is equally busy while this browser's archive or restore is out.
+ *
+ * It is the action and not a boolean because the two actions the card offers as BUTTONS report their own
+ * progress in place (AgentCard), and a flag cannot tell them apart from the filing pair — archiving a `ready`
+ * card would otherwise leave its Land button spinning on work nobody asked to land. */
+export type PendingAction = DropAction | "archive" | "restore";
+
 export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction | undefined => {
     // A draft is an open tab that never ran: no registry entry, no worktree, no turn — nothing to act on.
     if (agent.status === `draft`) {

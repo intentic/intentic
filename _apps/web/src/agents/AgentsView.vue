@@ -5,7 +5,7 @@ import Dialog from "primevue/dialog";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
-import { dropActionLabel, dropRejection } from "../composables/agents/laneDrop";
+import { dropActionLabel, dropRejection, type PendingAction } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import type { FleetLane } from "../composables/agents/agentStatus";
@@ -93,7 +93,7 @@ const {
     over,
     action,
     accepts,
-    busyId,
+    busy,
     ghostStyle,
     begin,
     consumeSuppressedOpen,
@@ -107,6 +107,20 @@ const {
 // The card behind the resolve confirmation — looked up live rather than snapshotted with the drop, so a
 // rename or a status change while the dialog is open is reflected in what it is asking about.
 const resolveTarget = computed(() => (pendingResolve.value === undefined ? undefined : agentById(pendingResolve.value)));
+
+/* WHAT A CARD IS WAITING ON, from the board's two sources of it: the press or drop this browser is running
+ * (useAgentDrag, which names its action so the button that fired it can spin in place) and the archive/restore
+ * batches, which are addressed by id alone — an id in flight there is being filed AWAY unless it is already
+ * archived, in which case the only thing anyone can be doing to it is putting it back. */
+const pendingFor = (agent: FleetAgent): PendingAction | undefined => {
+    if (busy.value?.id === agent.id) {
+        return busy.value.action;
+    }
+    if (!busyIds.value.includes(agent.id)) {
+        return undefined;
+    }
+    return agent.archivedAt !== undefined ? `restore` : `archive`;
+};
 
 /* --- The filter ------------------------------------------------------------------------------------------
  * Matches what the USER wrote — the card's title (which IS their sanitized first prompt) and every later
@@ -625,7 +639,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :now="now"
                             :dense="narrow"
                             :dragging="draggedId === agent.id && dragging"
-                            :busy="busyId === agent.id || busyIds.includes(agent.id)"
+                            :pending="pendingFor(agent)"
                             :selected="!mobile && active.conversationId === agent.id"
                             :match="snippetOf(agent)"
                             :query="needle"
@@ -704,7 +718,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :agent="agent"
                             :now="now"
                             :dense="narrow"
-                            :busy="busyIds.includes(agent.id)"
+                            :pending="pendingFor(agent)"
                             :selected="!mobile && active.conversationId === agent.id"
                             :match="snippetOf(agent)"
                             :query="needle"

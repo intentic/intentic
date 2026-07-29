@@ -27,7 +27,9 @@ const draggedId = ref<string | undefined>(undefined);
 const dragging = ref(false);
 const pointer = ref({ x: 0, y: 0 });
 const over = ref<DropTarget | undefined>(undefined);
-const busyId = ref<string | undefined>(undefined);
+// The one action this board is running, and which card it is running against — the action and not just the id
+// because the card's own buttons report their progress in place (see PendingAction).
+const busy = ref<{ id: string; action: DropAction } | undefined>(undefined);
 const ghostWidth = ref(0);
 
 // Resolved live against the roster rather than snapshotted at grab time: a turn that ends mid-drag must
@@ -80,7 +82,7 @@ const cancel = (): void => {
 // The card doesn't move lane here — the roster frame the action provokes does that. Until it arrives the card
 // shows as busy in place, so a slow daemon reads as "working", never as a card teleporting back.
 const perform = async (id: string, chosen: DropAction): Promise<void> => {
-    busyId.value = id;
+    busy.value = { id, action: chosen };
     notice.value = undefined;
     try {
         if (chosen === `stop`) {
@@ -112,7 +114,7 @@ const perform = async (id: string, chosen: DropAction): Promise<void> => {
     } catch (caught) {
         notice.value = errorMessage(caught, `That didn't work.`);
     } finally {
-        busyId.value = undefined;
+        busy.value = undefined;
     }
 };
 
@@ -235,7 +237,7 @@ export function useAgentDrag() {
         over,
         action,
         accepts,
-        busyId,
+        busy,
         ghostStyle,
         begin,
         consumeSuppressedOpen,
