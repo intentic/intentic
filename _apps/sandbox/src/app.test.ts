@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
-import { HEALTH_LIMIT, portUrl, sandboxContract } from "@intentic/sandbox-contract";
+import { HEALTH_LIMIT, portUrl, runsClaudeCode, sandboxContract } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 import { createORPCClient } from "@orpc/client";
@@ -186,173 +186,190 @@ const baseConfig: Config = {
     google: { clientId: "" },
 };
 
-const services = (overrides: Partial<Services> = {}): Services => ({
-    config: baseConfig,
-    logger: createLogger(baseConfig),
-    workspace: workspacePaths("/work"),
-    processes: fakeProcesses(),
-    // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.
-    portForwards: createPortForwards(async () => "http"),
-    scanPorts: async () => [],
-    terminalRun: createTerminalRunner(),
-    panelToken: "panel-secret",
-    // In-memory bridge-token fake: one fixed valid token, so middleware tests need no store file.
-    bridgeTokens: {
-        mint: async (label) => ({ id: "bt-1", token: `ibt_minted-${label}` }),
-        verify: async (presented) => presented === "ibt_valid",
-        list: async () => [{ id: "bt-1", label: "test", createdAt: 0 }],
-        revoke: async () => true,
-    },
-    info: undefined,
-    tools: [],
-    capabilities: memoryCapabilitiesStore(),
-    automations: memoryAutomationsStore(),
-    // Inert turn journal: every fire path writes an in-flight entry and clears it, and nothing here resumes.
-    turnJournal: {
-        list: async () => [],
-        recordTurn: async () => {},
-        recordFire: async () => {},
-        clearTurn: async () => {},
-        clearFire: async () => {},
-    },
-    activity: { append: async () => {}, list: async () => [] },
-    usage: { record: async () => {}, rollup: async () => [] },
-    sandboxSettings: {
-        get: async () => ({
-            stableSystemPrompt: false,
-            skills: [],
-            hashlineEdits: false,
-            terseOutput: false,
-            iqSearch: false,
-            outputCleaners: "",
-            outputHoldout: 0,
-            filterBackend: "native" as const,
-        }),
-        set: async () => {},
-    },
-    // A connected account by default, so the /agent guard (no token + no env creds) doesn't short-circuit
-    // turns under test. Tests that exercise the disconnected path override this.
-    claudeStore: {
-        read: async (id) => (id === "default" ? { id: "default", label: "Claude", connectedAt: 0, accessToken: "tok-xyz" } : undefined),
-        write: async () => {},
-        clear: async () => {},
-        list: async () => [{ id: "default", label: "Claude", connectedAt: 0 }],
-    },
-    // No usage measured by default — an account that hasn't run a turn since its window reset reports none.
-    claudeUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
-    // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
-    cliProxy: {
-        accounts: async () => ({ codex: [], grok: [], gemini: [] }),
-        connect: async () => ({ url: "", code: "", state: "" }),
-        complete: async () => {},
-        disconnect: async () => {},
-    },
-    codexHome: "/work/.intentic/codex",
-    codexThreadExists: async () => true,
-    // Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model.
-    claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
-    codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
-    geminiModels: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
-    history: fakeHistory(),
-    agent: async function* () {
-        yield { kind: "done" };
-    },
-    codexAgent: async function* () {
-        yield { kind: "done" };
-    },
-    grokAgent: async function* () {
-        yield { kind: "done" };
-    },
-    openCode: {
-        client: async () => ({}) as never,
-        connected: async () => false,
-        xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),
-        recordModels: async () => {},
-        disconnect: async () => {},
-    },
-    intentic: async function* () {},
-    git: {
-        init: async () => {},
-        status: async () => ({ branch: "main", dirty: false, files: [] }),
-        listFiles: async () => [],
-        commitAll: async () => false,
-        clone: async () => {},
-        changedFiles: async () => ({ conflicted: [], staged: [], unstaged: [] }),
-        stagePaths: async () => {},
-        unstagePaths: async () => {},
-        commitIndex: async () => false,
-        discardPaths: async () => {},
-        listBranches: async () => [],
-        createBranch: async () => {},
-        deleteBranch: async () => {},
-        remoteState: async () => ({ ahead: 0, behind: 0 }),
-        fetchRemote: async () => ({ ok: true as const }),
-        pullRemote: async () => ({ ok: true as const }),
-        pushBranch: async () => ({ ok: true as const }),
-        stagedFileDiff: async () => ({}),
-        unstagedFileDiff: async () => ({}),
-        fileDiff: async () => ({}),
-        changesAgainstBase: async () => [],
-    },
-    // A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
-    // worktree git mechanics are stubbed — the worktree suites cover them against real git.
-    // No land standings to derive here: these suites drive the routes, and where a card's work stands is
-    // standing.test.ts's subject. Every agent this harness makes therefore reads at its turn lifecycle.
-    agents: createAgentsRegistry({ load: async () => [], save: async () => {} }, { of: () => "idle", refresh: async () => false, forget: () => {} }),
-    agentWorktrees: {
-        conversationDir: (id) => `/history/worktrees/${id}`,
-        worktreeDir: (id, repo) => (repo === "root" ? `/history/worktrees/${id}` : `/history/worktrees/${id}/${repo}`),
-        mainDir: (repo) => (repo === "root" ? ABSENT_MAIN : join(ABSENT_MAIN, repo)),
-        exists: async () => false,
-        // A live checkout, so the routes read the worktree path — the steady state these fakes model.
-        attached: async () => true,
-        ensure: async (id) => ({ cwd: `/history/worktrees/${id}`, branch: `agent/${id}`, repos: [{ repo: "root", base: "a".repeat(40) }] }),
-        remove: async () => {},
-        retire: async () => {},
-        prune: async () => {},
-        withRepoLock: (_repo, task) => task(),
-    },
-    // Namespace isolation off, which is what a test runner (and any container without CAP_SYS_ADMIN) really
-    // gets: turns then run straight in the worktree path, the behaviour every route assertion below expects.
-    // The isolation.test.ts suite covers the plan these routes would build when it IS available.
-    // No mount capability, like a container launched without CAP_SYS_ADMIN — the plan still describes where
-    // the worktree is, and the harness enforces it by redirecting tool paths instead of by mounting.
-    turnIsolation: { available: async () => false, planFor: async (worktree: string) => ({ worktree, root: "/work", modules: [] }) },
-    // No agent has landed anything into these fake repos, so every changed file is the user's — and with no
-    // ids to attribute, `identify` has nobody to resolve.
-    agentOrigins: { forRepo: async () => ({}), identify: () => ({}) },
-    files: fakeFiles(),
-    workspaceTree: async () => ({ root: "/work", tree: [], hidden: 0 }),
-    // Inert resident search — no index, no rg. The search route test overrides `run` with a canned outcome.
-    iq: {
-        run: async () => ({
-            result: { mode: "q", total: 0, shown: 0, groups: [], freshness: { state: "fresh" as const }, truncated: false },
-            text: "",
-            exitCode: 1 as const,
-        }),
-        health: async () => ({
-            totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
-            hotspots: [],
-            modules: [],
-            freshness: { state: "fresh" as const },
-        }),
-        markDirty: () => {},
-        warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh" as const, ageMs: 0 } }),
-        close: () => {},
-    },
-    sessions: {
-        list: async () => [],
-        read: async () => [],
-        search: async () => [],
-        prompts: async () => [],
-        exists: async () => true,
-    },
-    platformHostTunnel: async () => ({ status: 200, json: { hostname: "ssh-abc.example.com", tunnelToken: "tok" } }),
-    ensurePreviewRoutes: async () => {},
-    members: { list: async () => [], add: async () => {}, remove: async () => {} },
-    auth: undefined,
-    ...overrides,
-});
+const services = (overrides: Partial<Services> = {}): Services => {
+    const merged: Services = {
+        config: baseConfig,
+        logger: createLogger(baseConfig),
+        workspace: workspacePaths("/work"),
+        processes: fakeProcesses(),
+        // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.
+        portForwards: createPortForwards(async () => "http"),
+        scanPorts: async () => [],
+        terminalRun: createTerminalRunner(),
+        panelToken: "panel-secret",
+        // In-memory bridge-token fake: one fixed valid token, so middleware tests need no store file.
+        bridgeTokens: {
+            mint: async (label) => ({ id: "bt-1", token: `ibt_minted-${label}` }),
+            verify: async (presented) => presented === "ibt_valid",
+            list: async () => [{ id: "bt-1", label: "test", createdAt: 0 }],
+            revoke: async () => true,
+        },
+        info: undefined,
+        tools: [],
+        capabilities: memoryCapabilitiesStore(),
+        automations: memoryAutomationsStore(),
+        // Inert turn journal: every fire path writes an in-flight entry and clears it, and nothing here resumes.
+        turnJournal: {
+            list: async () => [],
+            recordTurn: async () => {},
+            recordFire: async () => {},
+            clearTurn: async () => {},
+            clearFire: async () => {},
+        },
+        activity: { append: async () => {}, list: async () => [] },
+        usage: { record: async () => {}, rollup: async () => [] },
+        sandboxSettings: {
+            get: async () => ({
+                stableSystemPrompt: false,
+                skills: [],
+                hashlineEdits: false,
+                terseOutput: false,
+                iqSearch: false,
+                outputCleaners: "",
+                outputHoldout: 0,
+                filterBackend: "native" as const,
+            }),
+            set: async () => {},
+        },
+        // A connected account by default, so the /agent guard (no token + no env creds) doesn't short-circuit
+        // turns under test. Tests that exercise the disconnected path override this.
+        claudeStore: {
+            read: async (id) => (id === "default" ? { id: "default", label: "Claude", connectedAt: 0, accessToken: "tok-xyz" } : undefined),
+            write: async () => {},
+            clear: async () => {},
+            list: async () => [{ id: "default", label: "Claude", connectedAt: 0 }],
+        },
+        // No usage measured by default — an account that hasn't run a turn since its window reset reports none.
+        claudeUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
+        // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
+        cliProxy: {
+            accounts: async () => ({ codex: [], grok: [], gemini: [] }),
+            connect: async () => ({ url: "", code: "", state: "" }),
+            complete: async () => {},
+            disconnect: async () => {},
+        },
+        codexHome: "/work/.intentic/codex",
+        codexThreadExists: async () => true,
+        // Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model.
+        claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
+        codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
+        geminiModels: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
+        history: fakeHistory(),
+        agent: async function* () {
+            yield { kind: "done" };
+        },
+        codexAgent: async function* () {
+            yield { kind: "done" };
+        },
+        grokAgent: async function* () {
+            yield { kind: "done" };
+        },
+        openCode: {
+            client: async () => ({}) as never,
+            connected: async () => false,
+            xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),
+            recordModels: async () => {},
+            disconnect: async () => {},
+        },
+        intentic: async function* () {},
+        git: {
+            init: async () => {},
+            status: async () => ({ branch: "main", dirty: false, files: [] }),
+            listFiles: async () => [],
+            commitAll: async () => false,
+            clone: async () => {},
+            changedFiles: async () => ({ conflicted: [], staged: [], unstaged: [] }),
+            stagePaths: async () => {},
+            unstagePaths: async () => {},
+            commitIndex: async () => false,
+            discardPaths: async () => {},
+            listBranches: async () => [],
+            createBranch: async () => {},
+            deleteBranch: async () => {},
+            remoteState: async () => ({ ahead: 0, behind: 0 }),
+            fetchRemote: async () => ({ ok: true as const }),
+            pullRemote: async () => ({ ok: true as const }),
+            pushBranch: async () => ({ ok: true as const }),
+            stagedFileDiff: async () => ({}),
+            unstagedFileDiff: async () => ({}),
+            fileDiff: async () => ({}),
+            changesAgainstBase: async () => [],
+        },
+        // A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
+        // worktree git mechanics are stubbed — the worktree suites cover them against real git.
+        // No land standings to derive here: these suites drive the routes, and where a card's work stands is
+        // standing.test.ts's subject. Every agent this harness makes therefore reads at its turn lifecycle.
+        agents: createAgentsRegistry(
+            { load: async () => [], save: async () => {} },
+            { of: () => "idle", refresh: async () => false, forget: () => {} },
+        ),
+        agentWorktrees: {
+            conversationDir: (id) => `/history/worktrees/${id}`,
+            worktreeDir: (id, repo) => (repo === "root" ? `/history/worktrees/${id}` : `/history/worktrees/${id}/${repo}`),
+            mainDir: (repo) => (repo === "root" ? ABSENT_MAIN : join(ABSENT_MAIN, repo)),
+            exists: async () => false,
+            // A live checkout, so the routes read the worktree path — the steady state these fakes model.
+            attached: async () => true,
+            ensure: async (id) => ({ cwd: `/history/worktrees/${id}`, branch: `agent/${id}`, repos: [{ repo: "root", base: "a".repeat(40) }] }),
+            remove: async () => {},
+            retire: async () => {},
+            prune: async () => {},
+            withRepoLock: (_repo, task) => task(),
+        },
+        // Namespace isolation off, which is what a test runner (and any container without CAP_SYS_ADMIN) really
+        // gets: turns then run straight in the worktree path, the behaviour every route assertion below expects.
+        // The isolation.test.ts suite covers the plan these routes would build when it IS available.
+        // No mount capability, like a container launched without CAP_SYS_ADMIN — the plan still describes where
+        // the worktree is, and the harness enforces it by redirecting tool paths instead of by mounting.
+        turnIsolation: { available: async () => false, planFor: async (worktree: string) => ({ worktree, root: "/work", modules: [] }) },
+        // No agent has landed anything into these fake repos, so every changed file is the user's — and with no
+        // ids to attribute, `identify` has nobody to resolve.
+        agentOrigins: { forRepo: async () => ({}), identify: () => ({}) },
+        files: fakeFiles(),
+        workspaceTree: async () => ({ root: "/work", tree: [], hidden: 0 }),
+        // Inert resident search — no index, no rg. The search route test overrides `run` with a canned outcome.
+        iq: {
+            run: async () => ({
+                result: { mode: "q", total: 0, shown: 0, groups: [], freshness: { state: "fresh" as const }, truncated: false },
+                text: "",
+                exitCode: 1 as const,
+            }),
+            health: async () => ({
+                totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
+                hotspots: [],
+                modules: [],
+                freshness: { state: "fresh" as const },
+            }),
+            markDirty: () => {},
+            warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh" as const, ageMs: 0 } }),
+            close: () => {},
+        },
+        sessions: {
+            list: async () => [],
+            read: async () => [],
+            search: async () => [],
+            prompts: async () => [],
+            exists: async () => true,
+        },
+        platformHostTunnel: async () => ({ status: 200, json: { hostname: "ssh-abc.example.com", tunnelToken: "tok" } }),
+        ensurePreviewRoutes: async () => {},
+        members: { list: async () => [], add: async () => {}, remove: async () => {} },
+        auth: undefined,
+        // A conversation's transcript defaults to the same claude-code-only shape production reads before a
+        // provider-native record exists: the SDK session `sessions.read` already stands in for (agent-transcript.ts),
+        // keyed off the same registry `sessionIdOf` the route asks. Reads through `merged` (not the pre-override
+        // fakes above) so a test overriding `sessions.read` or `agents` is exactly what a transcript() call sees.
+        transcripts: {
+            read: async (agent) => {
+                const sessionId = runsClaudeCode(agent.provider, agent.harness) ? merged.agents.sessionIdOf(agent.id) : undefined;
+                return sessionId === undefined ? [] : merged.sessions.read(merged.workspace.root, sessionId);
+            },
+            append: async () => {},
+        },
+        ...overrides,
+    };
+    return merged;
+};
 
 // A typed oRPC client over the in-process Hono app — the same OpenAPILink the browser uses, so streams round-
 // trip through the real SSE encode/decode. JSON routes resolve to their output; thrown ORPCErrors carry `.code`.
