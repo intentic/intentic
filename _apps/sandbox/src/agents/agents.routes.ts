@@ -8,7 +8,7 @@ import { matchPrompts } from "../sessions/prompt-index.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import type { PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents, purgeArchived } from "./archive.js";
-import { anchorOf, landAgent } from "./land.js";
+import { anchorOf, landAgent, outstandingConflicts } from "./land.js";
 
 // The fleet routes: list/get the registry, review a conversation worktree's delta vs its recorded bases
 // (the same GitChanges shape the Changes panel renders), land it into the main tree, archive it off the board,
@@ -190,9 +190,15 @@ export const createAgentsRoutes = (services: Services) => {
                     services.logger.warn({ err: error, repo, id: entry.id }, "agents diff: repo skipped");
                 }
             }
-            // The last land's refusal travels with the review it is about: the panel is opened FROM the
-            // conflicted card, so it has to arrive already knowing what blocked and why (see AgentChangesSchema).
-            return { repos, ...(entry.conflicts !== undefined ? { conflicts: entry.conflicts } : {}) };
+            /* The last land's refusal travels with the review it is about: the panel is opened FROM the
+             * conflicted card, so it has to arrive already knowing what blocked and why (see
+             * AgentChangesSchema). Re-derived, not replayed from the entry: the stored report is the refusal
+             * AT LAND TIME, and its `workspace` rows point at uncommitted edits the user may since have
+             * committed — served verbatim, they kept the resolve flow refusing ("commit or stash them") over
+             * a spotless tree. The entry keeps the event; the probes answer for today (outstandingConflicts).
+             * Omitted once nothing refuses anymore — a report with no rows is not a report. */
+            const conflicts = entry.conflicts === undefined ? [] : await outstandingConflicts(services.agentWorktrees, entry);
+            return { repos, ...(conflicts.length > 0 ? { conflicts } : {}) };
         }),
         // Against the same cumulative anchor as the list above: one row means one question — "what did this
         // agent do to this file" — and its answer must not change the moment the work lands. (Diffing from

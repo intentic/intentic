@@ -11,7 +11,7 @@ import { ensureRootRepo } from "../git/root-repo.js";
 import { createLogger } from "../logger.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import type { PersistedAgent } from "./agents-store.js";
-import { anchorOf, landAgent } from "./land.js";
+import { anchorOf, landAgent, outstandingConflicts } from "./land.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";
 
 const exec = promisify(execFile);
@@ -143,6 +143,40 @@ test("names only the paths that actually refuse, and counts what would land anyw
     // is the difference between "resolve this file" and a wall of every path the agent ever touched.
     expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 1 }]);
     expect(existsSync(join(work, "added.ts"))).toBe(false);
+});
+
+/* The stored report is a snapshot of land time, and its `workspace` reason is the one that rots: the user
+ * clears their uncommitted copy by COMMITTING, which no land observes. Served verbatim, the old report kept
+ * telling them "commit or stash" over a spotless tree — and kept the resolve flow refusing to hand the
+ * conflict to the agent, though a rebase is now exactly what would fix it. */
+test("a workspace refusal re-derives as diverged once the user commits their edit", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
+    const entry = entryFor(conversation.repos);
+    const refusal = await landAgent(worktrees, entry);
+    expect(refusal.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0 }]);
+
+    // While the user's copy is still dirty, the re-derivation agrees with the stored report.
+    expect(await outstandingConflicts(worktrees, entry)).toEqual(refusal.conflicts);
+
+    // The user does what the report asked — commits. No land runs, so the STORED report still says
+    // `workspace`; the re-derivation moves with the world: the same blocker is now a committed divergence.
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "user commits their half");
+    expect(await outstandingConflicts(worktrees, entry)).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0 }]);
+});
+
+test("a refusal whose cause has evaporated re-derives to no conflicts at all", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
+    const entry = entryFor(conversation.repos);
+    expect((await landAgent(worktrees, entry)).landed).toBe(false);
+
+    // The user undoes their edit instead: the delta applies cleanly now, so there is no refusal to report.
+    await writeFile(join(work, "app.ts"), "line one\nline two\nline three\n");
+    expect(await outstandingConflicts(worktrees, entry)).toEqual([]);
 });
 
 test("blames the moved main line, not the workspace, when the conflict is a committed divergence", async () => {

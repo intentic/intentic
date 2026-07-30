@@ -87,7 +87,9 @@ export const PersistedAgentSchema = z.object({
     // Why the last land refused — the EVIDENCE behind a conflicted card, which is a different thing from the
     // card's state: standing.ts reads this only to explain an outstanding delta, never to create one, so a
     // report whose delta has since gone stops being rendered without needing to be rewritten. Written and
-    // cleared by the same recordLanded that advances the tips, so it is exactly as current as they are.
+    // cleared by the same recordLanded that advances the tips — but its per-path CONTENT is a snapshot of
+    // land time (a `workspace` row names uncommitted edits the user clears by committing, which no land
+    // observes), so what surfaces read is re-derived from it, never replayed (land.ts outstandingConflicts).
     conflicts: z.array(LandConflictSchema).optional(),
     costUsd: z.number(),
     inputTokens: z.number(),

@@ -104,7 +104,10 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     }
     const { conflicts } = await sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(id)}/diff`);
     /* NOTHING FOR THE AGENT TO DO IS A REFUSAL, NOT A SEND — and the only guard that can be trusted, because it
-     * is the one made against the report the daemon holds RIGHT NOW.
+     * is made against a report the daemon RE-DERIVES at read time (land.ts outstandingConflicts): fetched
+     * fresh and classified fresh. A fresh fetch alone was not enough — the stored refusal's `workspace` rows
+     * outlive the uncommitted edits they name, and this guard kept refusing "commit or stash them" over a
+     * tree the user had long since committed.
      *
      * The review panel arrives here having already read the report and hidden its button when `mine` is empty
      * (AgentConflictReport). The board cannot: the roster carries `status: "conflict"` and no blockers, so a

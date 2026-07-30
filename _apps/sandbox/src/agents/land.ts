@@ -190,6 +190,68 @@ const classifyDelta = async (main: string, from: string, tip: string, patchDir: 
     return { blocked, clean };
 };
 
+/* THE REFUSAL AS IT STANDS NOW — the stored conflict report re-asked against today's tree, touching nothing.
+ *
+ * A land's report is written once, at refusal time, and its sharpest claim rots from under it: `workspace`
+ * names the user's uncommitted copy as the thing in the way, and the user clears that by COMMITTING — which
+ * no land observes. Served verbatim, the stored report kept saying "commit or stash them" over a spotless
+ * tree, and the resolve flow kept refusing to send the agent (a rebase provably cannot reach the user's
+ * half, so the web gates on exactly this reason — agentActions.ts) — a dead end whose only exit, another
+ * land, is the one thing the message never asks for. The same drift retires rows outright: a main line that
+ * has since absorbed or moved past the delta leaves nothing to refuse.
+ *
+ * So the report is re-derived at read time (agents.routes.ts diff): the land's own anchor, probes and
+ * classifier, minus every write. The stored report remains what it honestly is — the EVENT that the last
+ * land refused, which is what keeps the card on `conflict` (standing.ts) until a land clears it; its
+ * per-path content is what this recomputes. Read-only means no provenance commit, so an attached worktree's
+ * uncommitted remainder is not in the span — the recorded refusal's span exactly, since the land that wrote
+ * it committed everything first; newer work reshapes the report the way it reshapes everything else: at the
+ * next land. */
+export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: PersistedAgent, git: GitRunner = defaultGit): Promise<LandConflict[]> => {
+    const conflicts: LandConflict[] = [];
+    const patchDir = await mkdtemp(join(tmpdir(), "intentic-classify-"));
+    try {
+        for (const { repo, base, landedTip } of entry.repos) {
+            await worktrees.withRepoLock(repo, async () => {
+                const main = worktrees.mainDir(repo);
+                if (!(await exists(join(main, ".git")))) {
+                    // The main checkout vanished — the same per-repo surface the land itself reports.
+                    conflicts.push({ repo, paths: [], clean: 0 });
+                    return;
+                }
+                const attached = await worktrees.attached(entry.id, repo);
+                const worktree = worktrees.worktreeDir(entry.id, repo);
+                const tip = attached ? (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim() : await branchSha(main, entry.branch, git);
+                if (tip === undefined) {
+                    return;
+                }
+                const refDir = attached ? worktree : main;
+                const from = await anchorOf(refDir, main, tip, landedTip, base, git);
+                if (tip === from) {
+                    return;
+                }
+                const patch = (await git(main, ["diff", "--binary", "-M", from, tip])).stdout;
+                if (patch === "") {
+                    return;
+                }
+                const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
+                await writeFile(patchPath, patch);
+                // Applies whole, or is already in whole: nothing refuses today, whatever refused back then.
+                if ((await applies(main, patchPath, "forward", git)) || (await applies(main, patchPath, "reverse", git))) {
+                    return;
+                }
+                const report = await classifyDelta(main, from, tip, patchDir, repo, git);
+                if (report.blocked.length > 0) {
+                    conflicts.push({ repo, paths: report.blocked, clean: report.clean.length });
+                }
+            });
+        }
+    } finally {
+        await rm(patchDir, { recursive: true, force: true });
+    }
+    return conflicts;
+};
+
 export const landAgent = async (
     worktrees: AgentWorktrees,
     entry: PersistedAgent,

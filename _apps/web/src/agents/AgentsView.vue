@@ -327,6 +327,10 @@ onMounted(() => {
         }),
         // The field is on the header already, so this is an accelerator rather than the way in. Focus AND
         // select, so a chord pressed with a stale query in the box starts a new one by typing (VS Code's find
+        // flow). Deliberately UNBOUND: Mod+F belongs to the browser's own find, and this registry is global to
+        // every window the app owns — so a binding claimed while the board is mounted swallowed Mod+F in the
+        // popped-out chat too, where the board is not even on screen and the focus went to a hidden field.
+        // Bindable in Settings → Keybindings by anyone who wants it, like every other command here.
         registerCommand({
             owner: `builtin`,
             command: `agents.filter`,
