@@ -429,7 +429,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                     @click="!nativeFlowLive && startConnect()"
                 >
                     <template v-if="nativeFlowLive" #control>
-                        <Button label="Cancel" size="small" severity="secondary" :text="true" @click="cancelConnect" />
+                        <Button label="Cancel" size="small" severity="secondary" :text="true" @click.stop="cancelConnect" />
                     </template>
                     <template v-if="nativeFlowLive" #below><ConnectFlow kind="native" :provider="managedProvider" /></template>
                 </ConnectionRow>
@@ -514,7 +514,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                     @click="!routedFlowLive && connectTranslator(routedProvider)"
                 >
                     <template v-if="routedFlowLive" #control>
-                        <Button label="Cancel" size="small" severity="secondary" :text="true" @click="cancelTranslatorConnect" />
+                        <Button label="Cancel" size="small" severity="secondary" :text="true" @click.stop="cancelTranslatorConnect" />
                     </template>
                     <template v-if="routedFlowLive" #below><ConnectFlow kind="routed" :provider="routedProvider" /></template>
                 </ConnectionRow>
