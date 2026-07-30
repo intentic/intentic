@@ -56,12 +56,15 @@ export const createWorkspaceRoutes = (services: Services) => {
         tree: i.tree.handler(() => services.workspaceTree(services.workspace.root)),
         // Lazy-load the children of an ignored dir (node_modules, .git, …) the tree didn't descend into.
         children: i.children.handler(({ input }) => services.workspaceChildren(services.workspace.root, input.path)),
+        // A window, not the file (see readWorkspaceFileWindow). The response carries the file's total size, so
+        // the viewer decides how to render from the daemon's number rather than from a tree entry it may not
+        // have — the gate can't be skipped by opening a file the tree never listed.
         file: i.file.handler(async ({ input }) => {
-            const content = await services.files.read(contained(input.path));
-            if (content === undefined) {
+            const window = await services.files.readWindow(contained(input.path), input.offset, input.limit);
+            if (window === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "not found" });
             }
-            return { path: input.path, content };
+            return { path: input.path, ...window };
         }),
         /* Which workspace file a NAMED reference means — the lookup behind every clickable path in the UI (chat
          * prose, terminal output, a tool card's chip). The search itself is resolveReference; this wires it to

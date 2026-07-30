@@ -1,7 +1,10 @@
 // Pure file-type resolution for the workspace viewer: maps a path + size to a render mode (and a Shiki lang id
 // for code), so the viewer dispatches WITHOUT fetching first. No framework code here — unit-testable in isolation.
 
-export type ViewMode = "code" | "markdown" | "image" | "svg" | "pdf" | "audio" | "docx" | "xlsx" | "binary" | "too-large" | "empty";
+/* `big-text` is decided AFTER the read, from the size the daemon reports, like `binary` is decided from the
+ * bytes: text over the editable cap renders windowed and read-only (BigTextView) instead of as a buffer.
+ * `too-large` is now only ever a raw-BYTE family — an image or a PDF past what /workspace/raw will serve. */
+export type ViewMode = "code" | "markdown" | "big-text" | "image" | "svg" | "pdf" | "audio" | "docx" | "xlsx" | "binary" | "too-large" | "empty";
 
 export interface FileResolution {
     readonly mode: ViewMode;
@@ -13,8 +16,11 @@ export interface FileResolution {
 // Size gates (bytes). Tuned for a browser relay, not VSCode's multi-GB limits.
 // Matches the daemon's MAX_RAW_BYTES — a larger image/PDF would 413 on /workspace/raw, so pre-empt it.
 export const RAW_MAX_BYTES = 25 * 1024 * 1024;
-// Above this a text file is never fetched — show "too large" + a download instead of streaming megabytes of text.
-const TEXT_MAX_BYTES = 2_000_000;
+/* Above this a text file opens READ-ONLY and WINDOWED (BigTextView) instead of as an editable buffer: the
+ * editor holds the whole text plus a baseline to diff it against, and a save posts all of it back, none of
+ * which a log wants. It is not a refusal — text always opens. Monaco itself is comfortable far above this
+ * (a 120MB, 1M-line model builds in ~150ms); the ceiling is what the daemon will serve in one window. */
+export const TEXT_EDIT_MAX_BYTES = 2_000_000;
 // Above this fetch the text but SKIP Shiki (plain <pre>): the JS-regex engine janks on huge/minified input.
 const HIGHLIGHT_MAX_BYTES = 512_000;
 
@@ -77,6 +83,9 @@ const EXT_LANG: Record<string, string> = {
     swift: "swift",
     diff: "diff",
     patch: "diff",
+    // Timestamps, levels and paths coloured like a terminal. Only under the highlight cap — the logs that most
+    // want it are the ones far too big for a tokenizer, and those open plain in the windowed viewer.
+    log: "log",
     mk: "make",
     md: "markdown",
     markdown: "markdown",
@@ -241,6 +250,17 @@ export const langFromShebang = (content: string): string | undefined => {
     return SHEBANG_LANG[interpreter] ?? SHEBANG_LANG[interpreter.replace(/[0-9.]+$/, "")];
 };
 
+/* The Shiki lang id for a file whose REAL size is now known (the daemon reported it with the first window),
+ * and whose bytes are in hand: the extension/filename table, then the shebang the way VSCode does it, and
+ * nothing at all above the highlight cap. The one place the tokenizer decision is made once the guesswork is
+ * over — resolveFile's `lang` is only a pre-warm hint, made before the read from a size that may be missing. */
+export const highlightLangFor = (path: string, size: number, content: string): string | undefined => {
+    if (size > HIGHLIGHT_MAX_BYTES) {
+        return undefined;
+    }
+    return codeLangForPath(path) ?? langFromShebang(content);
+};
+
 // Resolve how to render `path` given its byte size (undefined when unknown — the tree cap, or stat failed; we
 // then proceed optimistically and let the post-read NUL check / daemon 413 catch the rare bad case).
 export const resolveFile = (path: string, size: number | undefined): FileResolution => {
@@ -260,7 +280,7 @@ export const resolveFile = (path: string, size: number | undefined): FileResolut
         return empty ? { mode: "empty" } : tooBig(RAW_MAX_BYTES) ? { mode: "too-large" } : { mode: "pdf" };
     }
     if (MARKDOWN_EXTS.has(ext)) {
-        return tooBig(TEXT_MAX_BYTES) ? { mode: "too-large" } : { mode: "markdown" };
+        return { mode: "markdown" };
     }
     // Raw-byte families: fetched via /workspace/raw, so the 25 MiB cap applies (oversize → download).
     if (AUDIO_EXTS.has(ext)) {
@@ -275,10 +295,10 @@ export const resolveFile = (path: string, size: number | undefined): FileResolut
     if (BINARY_EXTS.has(ext)) {
         return empty ? { mode: "empty" } : { mode: "binary" };
     }
-    // Code or plain text — including unknown extensions and dotfiles, optimistically treated as text.
-    if (tooBig(TEXT_MAX_BYTES)) {
-        return { mode: "too-large" };
-    }
+    // Code or plain text — including unknown extensions and dotfiles, optimistically treated as text. No size
+    // gate here: the SIZE the gate needs is the daemon's, which arrives with the first window (FileViewer), and
+    // a resolution made from a tree entry that may be missing is exactly how an unbounded read used to slip
+    // through. Text always resolves to text; how much of it opens, and whether it is editable, is decided there.
     return { mode: "code", lang: tooBig(HIGHLIGHT_MAX_BYTES) ? undefined : langFor(name, ext) };
 };
 

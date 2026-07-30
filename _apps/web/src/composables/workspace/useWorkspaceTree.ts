@@ -1,7 +1,8 @@
-import type { WorkspaceChildrenResponse, WorkspaceFileResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
+import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
+import { readFileWindow } from "./fileWindow";
 import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { errorMessage, useAsyncAction } from "../useAsyncAction";
@@ -111,11 +112,10 @@ const copyRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/
 const removeRaw = (path: string): Promise<unknown> =>
     sandboxJson(`/workspace/entry`, { method: `DELETE`, headers: { "content-type": `application/json` }, body: JSON.stringify({ path }) });
 
-// The file's contents, or throws with a user-facing message (e.g. the daemon's denylist 404).
-const readFile = async (path: string): Promise<string> => {
-    const body = await sandboxJson<WorkspaceFileResponse>(`/workspace/file?path=${encodeURIComponent(path)}`);
-    return body.content;
-};
+// The file's contents, or throws with a user-facing message (e.g. the daemon's denylist 404). One window's
+// worth — the callers here read small managed files (an agent's instructions file), and the route serves text
+// in windows so that no reader can be the one that pulls a log into memory (see readFileWindow).
+const readFile = async (path: string): Promise<string> => (await readFileWindow(path)).content;
 
 // Raw bytes for binary preview (images / PDF), where the text route's utf8 decode would corrupt the file.
 const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?path=${encodeURIComponent(path)}`);

@@ -120,9 +120,11 @@ import {
     moveWorkspacePath,
     readWorkspaceFile,
     readWorkspaceFileBytes,
+    readWorkspaceFileWindow,
     removeWorkspacePath,
     setWorkspaceMtime,
     statWorkspaceFileSize,
+    type WorkspaceFileWindow,
     writeWorkspaceFile,
     writeWorkspaceFileStream,
 } from "./workspace/workspace-files.js";
@@ -318,6 +320,9 @@ export interface Services {
     readonly agentOrigins: AgentOrigins;
     readonly files: {
         readonly read: (absPath: string) => Promise<string | undefined>;
+        // One bounded window of a file's text, for the route the browser reads through — see
+        // readWorkspaceFileWindow. `read` above stays for the daemon's own already-bounded readers.
+        readonly readWindow: (absPath: string, offset?: number, limit?: number) => Promise<WorkspaceFileWindow | undefined>;
         readonly write: (absPath: string, content: string | Uint8Array) => Promise<void>;
         readonly writeStream: (absPath: string, body: ReadableStream<Uint8Array>, limit: number, offset?: number) => Promise<void>;
         readonly setMtime: (absPath: string, mtimeMs: number) => Promise<void>;
@@ -540,6 +545,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         agentOrigins: createAgentOrigins({ agents, logger }),
         files: {
             read: readWorkspaceFile,
+            readWindow: readWorkspaceFileWindow,
             write: writeWorkspaceFile,
             writeStream: writeWorkspaceFileStream,
             setMtime: setWorkspaceMtime,

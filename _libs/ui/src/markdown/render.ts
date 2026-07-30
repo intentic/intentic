@@ -93,8 +93,9 @@ const substitute = (parts: MarkdownParts, colour: boolean): string =>
     parts.blocks.length === 0
         ? parts.html
         : parts.html.replace(CODE_PLACEHOLDER, (match, index: string) => {
-              const block = parts.blocks[Number(index)];
-              return block === undefined ? match : codeBlockHtml(block, colour);
+              const at = Number(index);
+              const block = parts.blocks[at];
+              return block === undefined ? match : codeBlockHtml(block, at, colour);
           });
 
 const asText = (source: string): string => (typeof source === `string` ? source : String(source ?? ``));

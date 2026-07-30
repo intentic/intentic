@@ -3,27 +3,36 @@ import type { WorkspaceFileResponse, WorkspaceTreeEntry } from "@intentic-app/ap
 import { CopyButton, useDevice } from "@intentic-app/ui";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { viewerForExtension } from "../../../core-views/viewerRegistry";
-import { sandboxBlob, SandboxHttpError, sandboxJson } from "../../../composables/sandbox/sandboxClient";
+import { sandboxBlob, SandboxHttpError } from "../../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../../composables/useAsyncAction";
 import { sha256Hex } from "../../../composables/workspace/contentHash";
+import { readFileWindow } from "../../../composables/workspace/fileWindow";
 import { useEditBuffers } from "../../../composables/workspace/useEditBuffers";
 import { useLayout } from "../../../composables/useLayout";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
 import { changeEpochOf } from "../../../composables/workspace/useWorkspaceLive";
 import { useWorkspaceTree } from "../../../composables/workspace/useWorkspaceTree";
+import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
 import FileBreadcrumb from "../FileBreadcrumb.vue";
 import FileUnsupported from "./FileUnsupported.vue";
-import { langFromShebang, resolveFile, type ViewMode } from "../fileType";
+import { highlightLangFor, resolveFile, TEXT_EDIT_MAX_BYTES, type ViewMode } from "../fileType";
 import type { LineJump } from "../workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import SvgViewer from "./SvgViewer.vue";
 
-/* Dispatches one open file to the right renderer (code / markdown / svg / image / pdf / fallback) and owns the
- * fetch. The authenticated blob lifecycle lives here: image/pdf bytes are fetched via the sandbox client
- * (Bearer auth, so they can't go straight into <img src>), turned into a blob: object URL, and REVOKED on
- * file-change or unmount via the watcher's cleanup — leak-safe. A monotonic seq guard drops stale async
- * results when the user switches files mid-fetch. <object :data> takes the blob: URL directly. */
+/* Dispatches one open file to the right renderer (code / markdown / big-text / svg / image / pdf / fallback)
+ * and owns the fetch. The authenticated blob lifecycle lives here: image/pdf bytes are fetched via the sandbox
+ * client (Bearer auth, so they can't go straight into <img src>), turned into a blob: object URL, and REVOKED
+ * on file-change or unmount via the watcher's cleanup — leak-safe. A monotonic seq guard drops stale async
+ * results when the user switches files mid-fetch, and an AbortController cancels the request itself so a
+ * superseded read stops costing the daemon and the wire. <object :data> takes the blob: URL directly.
+ *
+ * Text is read as a bounded WINDOW (readFileWindow) whose response carries the file's true size, and that size
+ * is what decides between an editable buffer and the windowed read-only view. The decision used to be made
+ * BEFORE the read, from the tree entry's `size` — which is absent for any file the loaded tree doesn't hold (a
+ * tab restored before the tree arrives, anything inside node_modules, an entry the walk's budget cut). With no
+ * size, every cap silently passed and the whole file was fetched, whatever it was. */
 
 // `line` = jump the viewer to this line (a content-search match); undefined for a plain open.
 const { path, meta, line } = defineProps<{ path: string; meta?: WorkspaceTreeEntry; line?: LineJump }>();
@@ -56,21 +65,32 @@ const edit = useEditBuffers();
 // instant CodeView mounts — no plain-text-then-color flash.
 const { ensureMonaco, ensureLanguage } = useMonaco();
 
-const readFile = async (target: string): Promise<string> => {
-    const body = await sandboxJson<WorkspaceFileResponse>(`/workspace/file?path=${encodeURIComponent(target)}`);
-    return body.content;
-};
 const readBlob = (target: string): Promise<Blob> => sandboxBlob(`/workspace/raw?path=${encodeURIComponent(target)}`);
 
 let seq = 0;
+/* The current text read. Aborted whenever another one supersedes it — a file switch, or the next change-epoch
+ * reconcile. Without this, a file being appended to (a build log, a report an agent is writing) queued a fresh
+ * whole-file read every 250ms batch with nothing cancelling the last one: requests piled up in flight, each
+ * holding the file's text, and the daemon paid for every one of them. */
+let reading: AbortController | undefined;
+// The window a big text file opened with, handed to BigTextView so it doesn't re-read what we already have.
+const firstWindow = ref<WorkspaceFileResponse | undefined>(undefined);
+
+const readText = (target: string): Promise<WorkspaceFileResponse> => {
+    reading?.abort();
+    reading = new AbortController();
+    return readFileWindow(target, { signal: reading.signal });
+};
+// An aborted read is this component replacing its own request — never an error to show the user.
+const superseded = (err: unknown): boolean => err instanceof DOMException && err.name === `AbortError`;
 // A same-path re-fire in an editable text view is a POSSIBLE external change — but it's also how the user's own
 // save echoes back (upload → daemon file-watch → /events SSE → changeEpochOf bump). Reconcile by content instead
 // of blindly resetting: re-read quietly (never null `text`, so no flicker), then act only on a real difference
 // from the baseline we last knew on disk. After a save, baseline === disk, so the self-echo is a no-op.
 const reconcileOpenFile = (currentPath: string): void => {
     const id = ++seq;
-    readFile(currentPath).then(
-        (content) => {
+    readText(currentPath).then(
+        ({ content }) => {
             if (id !== seq) {
                 return;
             }
@@ -99,7 +119,7 @@ const reconcileOpenFile = (currentPath: string): void => {
             reloadNonce.value++;
         },
         (err) => {
-            if (id !== seq) {
+            if (id !== seq || superseded(err)) {
                 return;
             }
             if (err instanceof SandboxHttpError && err.status === 404) {
@@ -136,6 +156,7 @@ watch(
         blobUrl.value = null;
         fileBlob.value = undefined;
         viewerComponent.value = undefined;
+        firstWindow.value = undefined;
         error.value = null;
         loading.value = false;
         mode.value = resolution.mode;
@@ -147,10 +168,12 @@ watch(
             if (createdUrl !== undefined) {
                 URL.revokeObjectURL(createdUrl);
             }
+            // Nobody is waiting for this file's text any more — stop paying for it mid-flight.
+            reading?.abort();
         });
 
         const fail = (err: unknown): void => {
-            if (id !== seq) {
+            if (id !== seq || superseded(err)) {
                 return;
             }
             loading.value = false;
@@ -167,7 +190,8 @@ watch(
             // so this just hides the load behind the fetch). Markdown renders as prose (marked); warm the markdown
             // grammar for its Source toggle.
             void ensureMonaco().then((monaco) => ensureLanguage(monaco, resolution.mode === `markdown` ? `markdown` : resolution.lang));
-            readFile(currentPath).then((content) => {
+            readText(currentPath).then((window) => {
+                const content = window.content;
                 if (id !== seq) {
                     return;
                 }
@@ -177,11 +201,18 @@ watch(
                     mode.value = `binary`;
                     return;
                 }
-                // The filename resolved no language (extensionless `intentic-machine-boot`, `run`, …): fall back
-                // to the shebang the way VSCode does. Set before `text` so CodeView mounts already colored.
-                if (resolution.mode === `code` && lang.value === undefined) {
-                    lang.value = langFromShebang(content);
+                /* Too big to hold as an editable buffer — the editor keeps the whole text plus a baseline to diff
+                 * it against, and a save posts all of it back, none of which a log wants. It opens windowed and
+                 * read-only instead, seeded with the window just read: a 120MB log costs one bounded read. */
+                if (window.size > TEXT_EDIT_MAX_BYTES) {
+                    firstWindow.value = window;
+                    mode.value = `big-text`;
+                    return;
                 }
+                // With the real size in hand, settle the tokenizer: the extension table, then the shebang the way
+                // VSCode does for an extensionless script, and nothing at all over the highlight cap. Set before
+                // `text` so CodeView mounts already colored.
+                lang.value = highlightLangFor(currentPath, window.size, content);
                 text.value = content;
                 // Record the on-disk text so the editor can diff it for the dirty state (never clobbers live edits).
                 edit.setBaseline(currentPath, content);
@@ -191,7 +222,9 @@ watch(
 
         if (resolution.mode === `svg`) {
             loading.value = true;
-            readFile(currentPath).then((content) => {
+            // One window is the whole picture here: an SVG past it is past RAW_MAX_BYTES too (resolveFile already
+            // sent that to `too-large`), and a partial one would render as a broken image.
+            readText(currentPath).then(({ content }) => {
                 if (id !== seq) {
                     return;
                 }
@@ -243,8 +276,8 @@ watch(
 // — an explicit choice the user makes by clicking Reload.
 const reloadFromDisk = (): void => {
     staleOnDisk.value = false;
-    readFile(path).then(
-        (content) => {
+    readText(path).then(
+        ({ content }) => {
             text.value = content;
             edit.markSaved(path, content);
             reloadNonce.value++;
@@ -389,6 +422,8 @@ const onEditorSave = (value: string): void =>
             <template v-else>
                 <CodeView v-if="mode === 'code' && text !== null" :path="path" :code="text" :lang="lang" :scroll-to-line="line" />
                 <MarkdownViewer v-else-if="mode === 'markdown' && text !== null" :source="text" :path="path" :line="line" />
+                <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
+                <BigTextView v-else-if="mode === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
                 <SvgViewer v-else-if="mode === 'svg' && text !== null && blobUrl" :src="blobUrl" :source="text ?? ''" />
                 <div
                     v-else-if="mode === 'image' && blobUrl"

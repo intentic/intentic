@@ -145,6 +145,7 @@ const fakeHistory = (overrides: Partial<Services["history"]> = {}): Services["hi
 // The files seam with every method a no-op by default; a test overrides just the ones it asserts on.
 const fakeFiles = (overrides: Partial<Services["files"]> = {}): Services["files"] => ({
     read: async () => undefined,
+    readWindow: async () => undefined,
     write: async () => {},
     writeStream: async () => {},
     readBytes: async () => undefined,
@@ -2362,17 +2363,62 @@ test("workspace.file reads any contained file (former-secret paths included), NO
         createApp(
             services({
                 files: fakeFiles({
-                    read: async (absPath) =>
-                        absPath === "/work/app/src/index.ts" ? "console.log(1);" : absPath === "/work/desired-state/.env" ? "SECRET=1" : undefined,
+                    readWindow: async (absPath) => {
+                        const content =
+                            absPath === "/work/app/src/index.ts"
+                                ? "console.log(1);"
+                                : absPath === "/work/desired-state/.env"
+                                  ? "SECRET=1"
+                                  : undefined;
+                        return content === undefined ? undefined : { content, size: content.length, offset: 0, bytes: content.length };
+                    },
                 }),
             }),
         ),
     );
-    expect(await client.workspace.file({ path: "app/src/index.ts" })).toEqual({ path: "app/src/index.ts", content: "console.log(1);" });
+    expect(await client.workspace.file({ path: "app/src/index.ts" })).toEqual({
+        path: "app/src/index.ts",
+        content: "console.log(1);",
+        size: 15,
+        offset: 0,
+        bytes: 15,
+    });
     // No security floor: a former-secret file reads through like any other contained file.
-    expect(await client.workspace.file({ path: "desired-state/.env" })).toEqual({ path: "desired-state/.env", content: "SECRET=1" });
+    expect(await client.workspace.file({ path: "desired-state/.env" })).toEqual({
+        path: "desired-state/.env",
+        content: "SECRET=1",
+        size: 8,
+        offset: 0,
+        bytes: 8,
+    });
     expect(await errorCode(client.workspace.file({ path: "app/nope.ts" }))).toBe("NOT_FOUND");
     expect(await errorCode(client.workspace.file({ path: "../../etc/passwd" }))).toBe("BAD_REQUEST");
+});
+
+// The window arguments reach the reader as numbers (they arrive as query strings), and the reader's answer —
+// including where it actually landed — is what the response carries.
+test("workspace.file passes the requested window through and reports the range it served", async () => {
+    const asked: { offset?: number; limit?: number }[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                files: fakeFiles({
+                    readWindow: async (_absPath, offset, limit) => {
+                        asked.push({ offset, limit });
+                        return { content: "tail\n", size: 4096, offset: 4091, bytes: 5 };
+                    },
+                }),
+            }),
+        ),
+    );
+    expect(await client.workspace.file({ path: "big.log", offset: -8, limit: 64 })).toEqual({
+        path: "big.log",
+        content: "tail\n",
+        size: 4096,
+        offset: 4091,
+        bytes: 5,
+    });
+    expect(asked).toEqual([{ offset: -8, limit: 64 }]);
 });
 
 // Search is backed by the resident in-process iq engine. Round-trip against a REAL engine over a real tmp

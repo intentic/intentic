@@ -1157,7 +1157,24 @@ export const WorkspaceChildrenSchema = z.object({
 });
 export type WorkspaceChildren = z.infer<typeof WorkspaceChildrenSchema>;
 export const WorkspaceFileQuerySchema = z.object({ path: z.string().min(1) });
-export const WorkspaceFileSchema = z.object({ path: z.string(), content: z.string() });
+/* A text read is a read of a WINDOW: `offset` is the byte to start at (negative reads that many bytes from the
+ * END, which is what following a growing log means — the tail's offset isn't knowable until the size is), and
+ * `limit` how many bytes to serve. The daemon clamps `limit` to its own cap, so an omitted or oversized one is
+ * the cap rather than the file. Coerced: these arrive as query strings. */
+export const WorkspaceFileReadQuerySchema = z.object({
+    path: z.string().min(1),
+    offset: z.coerce.number().int().optional(),
+    limit: z.coerce.number().int().min(1).optional(),
+});
+// `size` is the whole file; `offset`/`bytes` the byte range `content` decodes from, so the reader can tell a
+// window from a whole file (offset > 0 || offset + bytes < size ⇒ there is more) and ask for the next one.
+export const WorkspaceFileSchema = z.object({
+    path: z.string(),
+    content: z.string(),
+    size: z.number(),
+    offset: z.number(),
+    bytes: z.number(),
+});
 // Resolve a file reference an agent (or a compiler, or a terminal) NAMED to the workspace path it means. Prose
 // paths are routinely partial — a model that has been discussing `_apps/web/src` writes
 // `pages/workspace/Foo.vue` — so a clickable mention has to be matched as a path SUFFIX against the real tree,

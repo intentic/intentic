@@ -17,6 +17,7 @@ import {
     WorkspaceClassificationSchema,
     WorkspaceDirSchema,
     WorkspaceFileQuerySchema,
+    WorkspaceFileReadQuerySchema,
     WorkspaceFileSchema,
     WorkspaceGraphSchema,
     WorkspaceHealthQuerySchema,
@@ -39,7 +40,9 @@ export const workspaceContract = {
     // Lazy-load one directory's children — the tree returns ignored dirs (node_modules, .git, …) without children,
     // and the client fetches them here on expand so a giant node_modules can't blow the tree walk's entry budget.
     children: oc.route({ method: "GET", path: "/workspace/children" }).input(WorkspaceChildrenQuerySchema).output(WorkspaceChildrenSchema),
-    file: oc.route({ method: "GET", path: "/workspace/file" }).input(WorkspaceFileQuerySchema).output(WorkspaceFileSchema),
+    // One WINDOW of a file's text (plus the file's total size), never the whole file: the browser reads text
+    // through here, and an unbounded read on an HTTP route is a way for any open log to stall the daemon.
+    file: oc.route({ method: "GET", path: "/workspace/file" }).input(WorkspaceFileReadQuerySchema).output(WorkspaceFileSchema),
     // Which file a NAMED reference means — the lookup behind every clickable path in the UI. A path an agent
     // wrote in prose is often only a suffix of the real one, so it is matched against the workspace tree rather
     // than trusted as root-relative.

@@ -52,15 +52,41 @@ const ALIASES: Record<string, string> = {
 // cost scales with the token count. Oversized blocks stay plain (and still copyable).
 const MAX_HIGHLIGHT_LINES = 500;
 
+/* How many blocks of ONE document get coloured. The same trade as the line cap above, in the other dimension:
+ * a document's 3000th fenced block is worth less than a document that renders at all.
+ *
+ * It is also what keeps a big document inside the cache below. Colour arriving invalidates the render that
+ * asked for it, so a render is repeated once per landing highlight — and with more blocks than the cache
+ * holds, every repeat evicted entries the next one would miss again, re-scheduling them forever. A 1.9 MiB
+ * document with 3353 blocks never stopped re-rendering: each pass cost ~500ms of parse plus ~1.3s of layout
+ * for 77k nodes, and the page never reached DOMContentLoaded. Under this cap the work is bounded and the
+ * cache holds what one document needs, so the repeats end. */
+const MAX_HIGHLIGHT_BLOCKS = 150;
+
 // `lang\ncode` → Shiki HTML, or `` for a language we don't ship (remembered so it's attempted only once).
-// Recency-ordered via Map insertion order, so the cap evicts the least recently used.
-const CACHE_LIMIT = 200;
+// Recency-ordered via Map insertion order, so the cap evicts the least recently used. Comfortably above
+// MAX_HIGHLIGHT_BLOCKS: one document's blocks must all fit, or rendering it evicts its own colour.
+const CACHE_LIMIT = 400;
 const cache = new Map<string, string>();
 const inFlight = new Set<string>();
 
-// Bumped whenever a highlight lands. Read on every render (see codeBlockHtml) so the markdown computed that
-// rendered a not-yet-highlighted block re-runs once its colour is ready.
+// Bumped when highlights land. Read on every render (see codeBlockHtml) so the markdown computed that rendered
+// a not-yet-highlighted block re-runs once its colour is ready.
 const highlightVersion = ref(0);
+// Whether any highlight in the current batch produced markup worth re-rendering for.
+let landed = false;
+
+/* One bump per BATCH, not per highlight: a document's blocks are all scheduled by the same render, so waiting
+ * for the last of them to settle turns N re-renders of the whole document into one. Per-highlight bumps were
+ * the storm — each landing invalidated the render, and every re-render scheduled the next landing, so the cost
+ * was quadratic in the block count and ran entirely in microtasks, which starves timers and paint. */
+const settleBatch = (): void => {
+    if (inFlight.size > 0 || !landed) {
+        return;
+    }
+    landed = false;
+    highlightVersion.value += 1;
+};
 
 /* The shared Shiki instance is reached through a dynamic import rather than a top-level one: it drags in
  * shiki/core plus both themes, and a surface that renders prose without a single fenced block should not pay
@@ -85,12 +111,12 @@ const langId = (fence: string): string | undefined => {
 
 // This block's Shiki HTML if it is already in the cache, otherwise undefined — scheduling the highlight so a
 // later render can have it.
-const highlighted = (block: CodeBlock): string | undefined => {
+const highlighted = (block: CodeBlock, index: number): string | undefined => {
     // Read unconditionally: a block that misses today must re-render when its colour lands, and a computed
     // only re-runs on a dependency it actually read.
     void highlightVersion.value;
     const lang = langId(block.lang);
-    if (lang === undefined || block.code.split(`\n`).length > MAX_HIGHLIGHT_LINES) {
+    if (lang === undefined || index >= MAX_HIGHLIGHT_BLOCKS || block.code.split(`\n`).length > MAX_HIGHLIGHT_LINES) {
         return undefined;
     }
     const key = `${lang}\n${block.code}`;
@@ -115,14 +141,14 @@ const highlighted = (block: CodeBlock): string | undefined => {
                         }
                     }
                     // A language we don't ship changes nothing on screen — don't invalidate for it.
-                    if (html !== undefined) {
-                        highlightVersion.value += 1;
-                    }
+                    landed ||= html !== undefined;
+                    settleBatch();
                 },
                 () => {
                     // Grammar chunk failed to load (offline, or a test env that can't resolve it). Leave it
                     // uncached so a later render retries.
                     inFlight.delete(key);
+                    settleBatch();
                 },
             );
     }
@@ -133,10 +159,13 @@ const highlighted = (block: CodeBlock): string | undefined => {
  * changes every frame, so highlighting it would thrash the cache for a block that is about to settle and be
  * highlighted exactly once.
  *
+ * `index` is the block's position in its document, which is what MAX_HIGHLIGHT_BLOCKS bounds — colour goes to
+ * the blocks a reader reaches, not to the three-thousandth one in a generated report.
+ *
  * The wrapper reuses `ui-code`, the class the design system's <Code> component uses, so the Shiki chrome and
  * its dark-mode token flip (code.css) govern chat code blocks and the file viewer identically. */
-export const codeBlockHtml = (block: CodeBlock, colour: boolean): string => {
-    const shiki = colour ? highlighted(block) : undefined;
+export const codeBlockHtml = (block: CodeBlock, index: number, colour: boolean): string => {
+    const shiki = colour ? highlighted(block, index) : undefined;
     // The uncoloured fallback carries Shiki's own class so code.css gives it identical chrome — the block
     // gains colour when highlighting lands without shifting size or position.
     const body = shiki ?? `<pre class="shiki"><code>${escapeHtml(block.code)}</code></pre>`;

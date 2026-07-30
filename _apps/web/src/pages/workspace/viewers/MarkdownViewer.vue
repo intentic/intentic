@@ -18,7 +18,15 @@ import CodeView from "./CodeView.vue";
 // whose references are already workspace-root-relative). Its directory is what the file links inside resolve
 // against, so `docs/a.md` linking `./b.md` opens `docs/b.md`.
 const { source, path, line } = defineProps<{ source: string; path?: string; line?: LineJump }>();
-const view = ref<`preview` | `source`>(line !== undefined ? `source` : `preview`);
+
+/* Past this, prose is not what a reader gets — it is a frozen tab. Rendering is one synchronous pass of
+ * marked → DOMPurify → the file-link walk → serialize → v-html, and then the browser lays out the result:
+ * measured on a 1.9 MiB document, ~500ms of script and 1283ms of layout for 77k nodes. Source view is Monaco,
+ * which renders only the lines on screen, so it opens instantly at any size. The toggle stays — this picks
+ * which side of it a big document LANDS on, it doesn't take prose away. */
+const PROSE_MAX_CHARS = 256 * 1024;
+const heavy = source.length > PROSE_MAX_CHARS;
+const view = ref<`preview` | `source`>(line !== undefined || heavy ? `source` : `preview`);
 watch(
     () => line,
     (next) => {

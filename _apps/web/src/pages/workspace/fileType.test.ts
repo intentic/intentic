@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeLangForPath, langFromShebang, RAW_MAX_BYTES, rendersAsBytes, resolveFile } from "./fileType";
+import { codeLangForPath, highlightLangFor, langFromShebang, RAW_MAX_BYTES, rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "./fileType";
 
 // Empty (0-byte) files: text types stay editable (code/markdown); non-text preview types show the "empty" fallback.
 describe(`resolveFile empty files`, () => {
@@ -152,5 +152,43 @@ describe(`rendersAsBytes`, () => {
         // SVG is text and gets a source toggle in the viewer — it is diffable as lines.
         expect(rendersAsBytes(`icon.svg`, undefined)).toBe(false);
         expect(rendersAsBytes(`LICENSE`, undefined)).toBe(false);
+    });
+});
+
+/* Text no longer dead-ends on size. It used to resolve to `too-large` — a panel offering nothing but a Download
+ * that itself 413s above RAW_MAX_BYTES, so a big log could be neither read nor saved. And because the size came
+ * from a tree entry, a file the loaded tree didn't hold resolved with `size: undefined` and skipped every cap.
+ * Text now always resolves to text; FileViewer decides editable-vs-windowed from the size the daemon reports. */
+describe(`resolveFile large text`, () => {
+    it(`resolves text to text at any size`, () => {
+        expect(resolveFile(`build.log`, TEXT_EDIT_MAX_BYTES * 60)).toEqual({ mode: `code` });
+        expect(resolveFile(`app.ts`, TEXT_EDIT_MAX_BYTES * 60)).toEqual({ mode: `code` });
+        expect(resolveFile(`ARCHITECTURE.md`, TEXT_EDIT_MAX_BYTES * 60)).toEqual({ mode: `markdown` });
+    });
+
+    it(`drops the tokenizer past the highlight cap, whatever the extension says`, () => {
+        expect(resolveFile(`app.ts`, 1_000_000)).toEqual({ mode: `code` });
+        expect(resolveFile(`app.ts`, 1000)).toEqual({ mode: `code`, lang: `typescript` });
+    });
+
+    it(`treats an unknown size optimistically — the read is bounded either way`, () => {
+        expect(resolveFile(`mystery.log`, undefined)).toEqual({ mode: `code`, lang: `log` });
+    });
+});
+
+// The tokenizer decision once the daemon's size is in hand — extension, then shebang, and nothing over the cap.
+describe(`highlightLangFor`, () => {
+    it(`resolves from the extension`, () => {
+        expect(highlightLangFor(`src/app.ts`, 1000, `export const a = 1;`)).toBe(`typescript`);
+        expect(highlightLangFor(`build.log`, 1000, `2026-01-01 ok`)).toBe(`log`);
+    });
+
+    it(`falls back to the shebang for an extensionless script`, () => {
+        expect(highlightLangFor(`run`, 1000, `#!/usr/bin/env bash\nset -eu\n`)).toBe(`bash`);
+    });
+
+    it(`gives up over the highlight cap — the size that matters is the daemon's, not the tree's`, () => {
+        expect(highlightLangFor(`src/app.ts`, 1_000_000, `export const a = 1;`)).toBeUndefined();
+        expect(highlightLangFor(`build.log`, 1_000_000, `2026-01-01 ok`)).toBeUndefined();
     });
 });

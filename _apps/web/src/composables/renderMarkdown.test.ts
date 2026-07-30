@@ -6,6 +6,7 @@
 // on the latter — it strips every tag and keeps <script> CONTENT, which would make these tests worse than
 // useless. This is the only file that needs a document; the rest of the suite stays on `node`.
 import { describe, expect, it, test } from "vitest";
+import { watchEffect } from "vue";
 import { escapeHtml } from "@intentic-app/ui/markdown";
 import { createStreamingMarkdown, markdownParseCount, renderMarkdown, settledEnd } from "./renderMarkdown";
 
@@ -175,5 +176,36 @@ describe(`streaming split`, () => {
         const rewritten = stream.render(`Different entirely.\n\nOther`);
         expect(rewritten.settled).toContain(`Different entirely.`);
         expect(rewritten.settled).not.toContain(`First version.`);
+    });
+});
+
+/* A document's colour must not cost a re-render per code block. Each landing highlight bumps the shared
+ * `highlightVersion`, which invalidates every markdown computed that read it — so a per-highlight bump made a
+ * document re-render once per block, each pass re-scheduling the next. Measured on a 1.9 MiB file with 3353
+ * blocks (~500ms of script and 1283ms of layout per pass, all in microtasks), the tab never came back.
+ *
+ * Bounded two ways now, and this pins both: at most MAX_HIGHLIGHT_BLOCKS blocks of one document are scheduled,
+ * and the bump waits for the batch to drain so the whole document re-renders once rather than N times. */
+describe(`code block highlighting is bounded`, () => {
+    const doc = (blocks: number): string =>
+        Array.from({ length: blocks }, (_, i) => `Prose ${i}\n\n\`\`\`ts\nexport const thing${i} = ${i};\n\`\`\`\n`).join(`\n`);
+
+    it(`re-renders a heavily fenced document a bounded number of times, not once per block`, async () => {
+        const source = doc(400);
+        let renders = 0;
+        const stop = watchEffect(
+            () => {
+                renderMarkdown(source);
+                renders += 1;
+            },
+            { flush: `sync` },
+        );
+        // A timer only fires if the render loop actually yields — the storm ran entirely in microtasks and
+        // starved timers outright, so reaching this line at all is part of what's being asserted.
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        stop();
+        // One initial render, plus at most a couple as batches of colour settle. The storm was ~400.
+        expect(renders).toBeLessThanOrEqual(5);
+        expect(renders).toBeGreaterThan(0);
     });
 });

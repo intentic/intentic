@@ -1,5 +1,6 @@
 import type { BridgeCall } from "./directoryUiVerbs";
 import { resolveBridgeCall } from "./directoryUiVerbs";
+import { readFileWindow } from "./fileWindow";
 import { readIntenticLines } from "../intenticStream";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { errorMessage } from "../useAsyncAction";
@@ -24,8 +25,7 @@ import { errorMessage } from "../useAsyncAction";
 export const loadDirectoryUi = async (dir: string): Promise<string | undefined> => {
     const path = dir === `` ? `.intentic/ui/index.html` : `${dir}/.intentic/ui/index.html`;
     try {
-        const body = await sandboxJson<{ content: string }>(`/workspace/file?path=${encodeURIComponent(path)}`);
-        return body.content;
+        return (await readFileWindow(path)).content;
     } catch {
         return undefined;
     }

@@ -187,9 +187,16 @@ export interface WorkspaceChildrenResponse {
     readonly entries: readonly WorkspaceTreeEntry[];
     readonly hidden: number;
 }
+/* One WINDOW of a file's text. `size` is the whole file on disk, `offset`/`bytes` the byte range `content`
+ * decodes from — so `offset > 0 || offset + bytes < size` means there is more, and `offset + bytes` is where
+ * the next window starts. Byte counts, not `content.length`: they differ on non-ASCII, and the daemon reads
+ * by byte. The viewer gates on `size` from here rather than on a tree entry's, which it may not have. */
 export interface WorkspaceFileResponse {
     readonly path: string;
     readonly content: string;
+    readonly size: number;
+    readonly offset: number;
+    readonly bytes: number;
 }
 // What a NAMED file reference (agent prose, terminal output) resolves to: the workspace path it means, absent
 // when nothing in the workspace ends in that reference.

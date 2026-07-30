@@ -76,8 +76,27 @@ const doSave = (): void => {
     }
     emit(`save`, target.getValue());
 };
+/* Append text at the end of the model, for the windowed viewer loading the next slice of a huge file. An edit
+ * rather than a new `code` prop: setValue() rebuilds the whole model and throws away the view state, so paging
+ * through a log would yank the reader back to wherever the new scroll landed. This keeps the position, and
+ * Monaco only tokenizes and paints what the append touched. */
+const appendText = (text: string): void => {
+    if (monaco === undefined || model === undefined) {
+        return;
+    }
+    const end = model.getFullModelRange().getEndPosition();
+    model.applyEdits([{ range: new monaco.Range(end.lineNumber, end.column, end.lineNumber, end.column), text }]);
+};
+
+// Scroll the last line into view — how a tail-follow lands its newly appended bytes.
+const revealEnd = (): void => {
+    if (model !== undefined) {
+        editor.value?.revealLine(model.getLineCount());
+    }
+};
+
 // The toolbar Save button (FileViewer) saves through this too, so both triggers normalize identically.
-defineExpose({ save: doSave });
+defineExpose({ save: doSave, append: appendText, revealEnd });
 
 onMounted(async () => {
     const m = await ensureMonaco();
