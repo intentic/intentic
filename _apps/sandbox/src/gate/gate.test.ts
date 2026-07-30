@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, OriginAgent, SandboxSettings } from "@intentic/sandbox-contract";
@@ -42,7 +43,9 @@ const fakeServices = (over: Partial<typeof SETTINGS> & { ending?: string } = {})
     const origins: { paths: Record<string, string[]> } = { paths: {} };
     const services = {
         workspace: { root },
-        gateStore: fileGateStore(join(root, "gate.json")),
+        // Under .intentic, exactly where composition puts it — not incidental: the fingerprint excludes that
+        // directory, and a store parked anywhere else in the tree would have the gate hashing its own verdicts.
+        gateStore: fileGateStore(join(root, ".intentic", "gate.json")),
         sandboxSettings: { get: async () => settings.current },
         agents: { ids: () => busy.ids, running: (id: string) => busy.ids.includes(id) },
         agentOrigins: {
@@ -70,14 +73,12 @@ const fakeServices = (over: Partial<typeof SETTINGS> & { ending?: string } = {})
 };
 
 // `discoverRepos` walks the real temp root and finds nothing, so every gate below sees exactly one repo ("root").
-// A git runner that answers the two fingerprint reads; `state` is what a test moves to simulate an edited tree.
+// A git runner standing in for the fingerprint's `add -A` + `write-tree`: `state` is the tree sha it reports, so
+// moving it is how a test simulates content changing under a verdict.
 const fakeGit = (state: { value: string }): GitRunner =>
     (async (_dir: string, args: readonly string[]) => {
-        if (args[0] === "rev-parse") {
-            return { stdout: "headsha\n", stderr: "" };
-        }
-        if (args[0] === "diff") {
-            return { stdout: state.value, stderr: "" };
+        if (args[0] === "write-tree") {
+            return { stdout: `${state.value}\n`, stderr: "" };
         }
         return { stdout: "", stderr: "" };
     }) as unknown as GitRunner;
@@ -192,17 +193,18 @@ test("a burst of lands collapses into a single check run", async () => {
     expect(runs()).toBe(1);
 }, 20_000);
 
-// The fleet still working is not quiet: an agent mid-turn is about to land into this very tree, and a suite
-// started now would be answering about a tree that is already gone.
-test("the check waits while the fleet is still working, and the next land starts it", async () => {
+/* THE REGRESSION GUARD for the deferral this used to do. An earlier version waited for the fleet to fall idle
+ * before running, reasoning that an agent mid-turn is about to land into this very tree. Agents in this workspace
+ * run for HOURS, so a fleet of twenty with one long runner never presents an idle moment: the verdict stayed
+ * `armed` indefinitely and the gate degraded into something only a manual click ever fired — which is how a red
+ * composite reached CI with the gate switched on and configured.
+ *
+ * The tree after a land is the tree the user is about to stage, commit and push, whoever else is still working.
+ * The busy fake stays permanently busy here, so reinstating any fleet check fails this. */
+test("the check runs on the tree it has, even while the fleet is still working", async () => {
     const { services, busy, runs } = fakeServices({ gateQuietMs: QUIET_MS, ending: "exit 0" });
     const gate = createLandingGate(services, fakeWake([]), fakeGit({ value: "clean" }));
-    busy.ids = ["still-going"];
-    gate.arm();
-    await wait(QUIET_MS * 5);
-    expect((await gate.verdict()).status).toBe("armed");
-    expect(runs()).toBe(0);
-    busy.ids = [];
+    busy.ids = ["running-for-hours"];
     gate.arm();
     await vi.waitFor(async () => expect((await gate.verdict()).status).toBe("passed"), { timeout: 5_000 });
     expect(runs()).toBe(1);
@@ -246,6 +248,77 @@ test("a verdict goes stale when the tree moves under it, and says so without re-
     expect(after.status).toBe("passed");
     expect(after.stale).toBe(true);
 }, 20_000);
+
+/* ---- the fingerprint: what must stale a verdict, and what must not ---- */
+
+/* REAL git and the REAL runner below, not the fake — because the claim under test is exactly that `add -A` into
+ * a kept index plus `write-tree` tracks CONTENT rather than git's bookkeeping. A stubbed runner could only
+ * restate the assumption, and the assumption is what was wrong: the previous fingerprint (HEAD plus `diff --raw`)
+ * satisfied every fake-git test in this file and still got both of these backwards against real git — blind to an
+ * unstaged edit, and moved by a stage or a commit that changed nothing. */
+const initRepo = (root: string): void => {
+    execFileSync("git", ["init", "-q", "."], { cwd: root });
+    execFileSync("git", ["config", "user.email", "gate@test"], { cwd: root });
+    execFileSync("git", ["config", "user.name", "gate"], { cwd: root });
+    writeFileSync(join(root, "a.txt"), "committed\n");
+    execFileSync("git", ["add", "-A"], { cwd: root });
+    execFileSync("git", ["commit", "-qm", "init"], { cwd: root });
+};
+
+// Past the fingerprint's own coalescing window, so the next read re-derives instead of reusing the cached value.
+const COALESCE_WAIT_MS = 2_100;
+
+// The user's flow after the gate goes green: stage, then commit, then push. Neither step alters a byte of the
+// tree the check ran over, so a verdict that went stale at either one would have the push guardrail objecting to
+// every push ever made — which is the shape of "cries wolf" that gets a guardrail ignored and then removed.
+test("staging and committing do not stale a verdict, because neither changes content", async () => {
+    const { services, root } = fakeServices({ gateCommand: "exit 0" });
+    initRepo(root);
+    // Landed work: uncommitted, unstaged, which is how it actually arrives.
+    writeFileSync(join(root, "a.txt"), "an agent landed this\n");
+    const gate = createLandingGate(services, fakeWake([]));
+    gate.run();
+    await vi.waitFor(async () => expect((await gate.verdict()).status).toBe("passed"), { timeout: 5_000 });
+    expect((await gate.verdict()).stale).toBe(false);
+
+    execFileSync("git", ["add", "-A"], { cwd: root });
+    await wait(COALESCE_WAIT_MS);
+    expect((await gate.verdict()).stale).toBe(false);
+
+    execFileSync("git", ["commit", "-qm", "the user commits"], { cwd: root });
+    await wait(COALESCE_WAIT_MS);
+    expect((await gate.verdict()).stale).toBe(false);
+}, 30_000);
+
+// The other direction, and the more dangerous one: an edit the verdict has not seen must show as stale rather
+// than leaving a green badge over changed content. Unstaged on purpose — that is both how landed work arrives and
+// the exact case the old fingerprint was blind to.
+test("an unstaged in-place edit stales a verdict", async () => {
+    const { services, root } = fakeServices({ gateCommand: "exit 0" });
+    initRepo(root);
+    const gate = createLandingGate(services, fakeWake([]));
+    gate.run();
+    await vi.waitFor(async () => expect((await gate.verdict()).status).toBe("passed"), { timeout: 5_000 });
+    expect((await gate.verdict()).stale).toBe(false);
+    writeFileSync(join(root, "a.txt"), "edited after the check ran\n");
+    await wait(COALESCE_WAIT_MS);
+    expect((await gate.verdict()).stale).toBe(true);
+}, 30_000);
+
+// The gate's own verdict file lives in the tree it fingerprints. If it counted, every persisted verdict would
+// move the tree it describes and the badge would read stale forever.
+test("the gate's own state does not stale its verdict", async () => {
+    const { services, root } = fakeServices({ gateCommand: "exit 0" });
+    initRepo(root);
+    const gate = createLandingGate(services, fakeWake([]));
+    gate.run();
+    await vi.waitFor(async () => expect((await gate.verdict()).status).toBe("passed"), { timeout: 5_000 });
+    // A second run rewrites .intentic/gate.json (twice — `running`, then the result) under the same content.
+    gate.run();
+    await vi.waitFor(async () => expect((await gate.verdict()).status).toBe("passed"), { timeout: 5_000 });
+    await wait(COALESCE_WAIT_MS);
+    expect((await gate.verdict()).stale).toBe(false);
+}, 30_000);
 
 test("a cleared command reads as idle whatever is on disk, so the badge disappears", async () => {
     const { services, settings } = fakeServices({ gateCommand: "exit 1" });

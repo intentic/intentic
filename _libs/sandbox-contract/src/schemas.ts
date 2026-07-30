@@ -735,10 +735,14 @@ export const SandboxSettingsSchema = z.object({
      * for why this is NOT an automation guard: a suite outlives GUARD_TIMEOUT_MS, and a timed-out guard reads
      * as "skipped" — a silent green over a suite that never finished). */
     gateCommand: z.string().max(500).default(""),
-    /* How long the tree must stand still — no land, no fleet turn in flight — before the gate runs. A landing
-     * burst is the case this exists for: five agents finishing within a minute of each other are five lands,
-     * and a gate that ran per land would spend five suites to answer about four trees nobody will ever push.
-     * Every land re-arms the timer, so the run happens once, on the tree the user is about to review. */
+    /* How long after a land the gate waits before running. A landing burst is the case this exists for: five
+     * agents finishing within a minute of each other are five lands, and a gate that ran per land would spend
+     * five suites to answer about four trees nobody will ever push. Every land re-arms the timer, so the run
+     * happens once, on the tree the user is about to review.
+     *
+     * It counts from the last LAND and nothing else — explicitly not "until the fleet is idle". Agents here run
+     * for hours, so a fleet of twenty with one long runner would never present a quiet moment, and a gate that
+     * waited for one would only ever fire when clicked (gate/gate.ts). */
     gateQuietMs: z.number().min(0).max(600_000).default(20_000),
     // Ceiling on one gate run, after which the child is killed and the verdict is `failed` with `timedOut`.
     // Never a pass: a suite that did not finish has not said anything about the tree, and the one thing this

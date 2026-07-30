@@ -190,7 +190,11 @@ const afterPull = async (): Promise<void> => {
 
 // Remote sync, per repo. Each reports a GitActionResult rather than throwing, so "won't fast-forward" or a
 // credential failure surfaces as git's own reason on the action line instead of a generic request error.
-const syncRepo = (repo: string, action: "fetch" | "pull" | "push", label: string): Promise<void> =>
+//
+// INCOMING ONLY. Pushing is not offered here even though the route would serve it: every push in the panel has
+// to pass the landing gate's guardrail first, and a second door into the same verb is a door around it. A
+// one-repo push is `syncAll` with one target — the same request, the same failure line — so nothing is lost.
+const syncRepo = (repo: string, action: "fetch" | "pull", label: string): Promise<void> =>
     runBatch(
         [
             {
@@ -269,12 +273,8 @@ export function useChanges() {
     // Every reviewable row, including conflicts (they block commits — the badge undercounting exactly the state
     // that needs attention was a bug) and the rows the daemon truncated past its per-repo budget: the badge
     // reports how much work EXISTS, not how much of it got shipped.
-    const count = computed(
-        () =>
-            repos.value.reduce(
-                (total, repo) => total + repo.conflicted.length + repo.staged.length + repo.unstaged.length + (repo.truncated ?? 0),
-                0,
-            ),
+    const count = computed(() =>
+        repos.value.reduce((total, repo) => total + repo.conflicted.length + repo.staged.length + repo.unstaged.length + (repo.truncated ?? 0), 0),
     );
     const hasChanges = computed(() => count.value > 0);
     // How much a plain Commit would record, across every repo — what the commit box reads out, and what decides
@@ -298,7 +298,6 @@ export function useChanges() {
         stageGroups,
         fetchRepo: (repo: string) => syncRepo(repo, `fetch`, `Fetch`),
         pullRepo: (repo: string) => syncRepo(repo, `pull`, `Pull`),
-        pushRepo: (repo: string) => syncRepo(repo, `push`, `Push`),
         syncAll,
         actionBusy,
         // Keyed by repo id (the per-repo verbs) or COMMIT_SCOPE — the panel renders each one where it happened.

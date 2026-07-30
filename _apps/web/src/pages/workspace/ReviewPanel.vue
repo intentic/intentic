@@ -17,7 +17,8 @@ import { ALL_SIDES, originHue, originsOf, summarizeOrigins, YOURS } from "../../
 import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
-import { COMMIT_SCOPE, type RepoPaths, useChanges } from "../../composables/workspace/useChanges";
+import { COMMIT_SCOPE, type RepoPaths, type SyncTarget, useChanges } from "../../composables/workspace/useChanges";
+import { useGate } from "../../composables/workspace/useGate";
 import { useRepos } from "../../composables/workspace/useRepos";
 import GateBadge from "./GateBadge.vue";
 import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
@@ -54,6 +55,9 @@ import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTab
  *     of the panel naming neither, so a failed fetch read as a stray sentence with no visible cause. */
 
 const changes = useChanges();
+// The same one query GateBadge reads — one key, so TanStack serves both from a single poll. The panel needs it
+// for the push guardrail, which has to answer before the badge has been looked at (and while it is hidden).
+const gate = useGate();
 
 // A repo the daemon could not scan at all (a half-written .git from a canceled upload, a corrupt HEAD) arrives
 // with empty change lists and `error` set to git's own one-line reason. It has nothing to commit or discard, so
@@ -696,14 +700,81 @@ const syncSummary = computed<string>(() => {
     const spread = syncRepos.value.length > 1 ? ` · ${plural(syncRepos.value.length, `repo`)}` : ``;
     return (counts.length > 0 ? counts.join(` `) : `no upstream yet`) + spread;
 });
-// One click, every repo that has remote work — git can't span remotes, so the composable fans it out into one
-// real sync per repo (pull what's behind, then push/publish what's ahead), each failure landing on its own row.
-const doSync = (): void => {
+/* --- the push guardrail --------------------------------------------------------------------------------------
+ * EVERY push in this panel funnels through `askSync` — the bar's Push/Sync/Publish and both of a repo row's
+ * pills — because a second way to reach the same verb is a way around the guardrail. That is also why
+ * useChanges no longer exports a one-repo push: a single door is the only kind that can be guarded.
+ *
+ * WHY THE PUSH AND NOT THE COMMIT. The commit is the user's own review boundary and stays unguarded; nothing has
+ * left the machine yet, and interrupting the act of recording work would be objecting to the wrong thing. The
+ * push is the last moment before CI owns the answer, and it is reached — habitually — within a minute of the
+ * land, often inside the gate's own quiet period. So this is where the verdict finally gets a word in.
+ *
+ * IT IS A GUARDRAIL, NOT A GATE, and the asymmetry is deliberate: the objection is a sentence and a button, and
+ * Push anyway is always there. The user knows things the verdict does not — that the failure is the one they are
+ * pushing a fix for, that the suite is flaky, that they need this on a branch to look at it in CI. A prompt that
+ * merely slows down a decision the user has already made would get muscle-memoried away within a week; one that
+ * BLOCKED it would get the whole gate switched off.
+ *
+ * A pull-only sync passes straight through: nothing leaves the machine, so the gate has no standing to comment.
+ *
+ * The objection is resolved AT THE CLICK, exactly like the discard prompt above, so the sentence the user reads
+ * is the one the verdict said then — a poll landing between the two clicks cannot change the question they are
+ * answering. */
+interface PendingSync {
+    // The word the control the user clicked was wearing, so the prompt answers that click instead of renaming it.
+    readonly verb: string;
+    // What is about to leave — "3 commits across 2 repos", "intentic's branch".
+    readonly what: string;
+    readonly objection: string;
+    readonly targets: readonly SyncTarget[];
+}
+const pendingSync = ref<PendingSync | undefined>(undefined);
+
+const askSync = (verb: string, what: string, targets: readonly SyncTarget[]): void => {
     if (changes.actionBusy.value) {
         return;
     }
-    void changes.syncAll(syncRepos.value.map((repo) => ({ repo: repo.repo, pull: behind(repo) > 0, push: ahead(repo) > 0 || unpublished(repo) })));
+    const objection = targets.some((target) => target.push) ? gate.pushObjection.value : undefined;
+    if (objection === undefined) {
+        void changes.syncAll(targets);
+        return;
+    }
+    pendingSync.value = { verb, what, objection, targets };
 };
+
+const confirmSync = (): void => {
+    const target = pendingSync.value;
+    pendingSync.value = undefined;
+    if (target !== undefined) {
+        void changes.syncAll(target.targets);
+    }
+};
+
+// The constructive way out: start the checks and DON'T push. The badge above follows them from there, so the
+// user comes back to a push that has an answer behind it. Hidden while a run is already going — there is nothing
+// to start, and offering it would read as though the gate had missed the first click.
+const runChecksInstead = (): void => {
+    pendingSync.value = undefined;
+    void gate.run();
+};
+
+// One click, every repo that has remote work — git can't span remotes, so the composable fans it out into one
+// real sync per repo (pull what's behind, then push/publish what's ahead), each failure landing on its own row.
+const doSync = (): void =>
+    askSync(
+        syncMeta.value?.label ?? `Sync`,
+        `${aheadTotal.value > 0 ? plural(aheadTotal.value, `commit`) : `this branch`}${syncRepos.value.length > 1 ? ` across ${plural(syncRepos.value.length, `repo`)}` : ``}`,
+        syncRepos.value.map((repo) => ({ repo: repo.repo, pull: behind(repo) > 0, push: ahead(repo) > 0 || unpublished(repo) })),
+    );
+
+// A row's own pill: this repo, outgoing only. Publish and ↑N differ in wording, not in what they send.
+const askPushRepo = (repo: RepoChanges): void =>
+    askSync(
+        unpublished(repo) ? `Publish` : `Push`,
+        unpublished(repo) ? `${repo.repo}'s branch` : `${plural(ahead(repo), `commit`)} in ${repo.repo}`,
+        [{ repo: repo.repo, pull: false, push: true }],
+    );
 
 // Ahead/behind are only ever as fresh as the last fetch, which is why fetch is offered even when both read
 // zero — the zero itself is the claim most likely to be stale.
@@ -746,10 +817,15 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         </div>
 
         <!-- Would this tree survive CI? Above the commit box because it is what the user needs BEFORE deciding
-             what to commit, and because the verdict was computed minutes ago (the daemon runs the check when the
-             fleet goes quiet — gate/gate.ts) rather than being waited for here. It never disables Commit: the
-             panel reports, the user decides. Draws nothing when no check command is configured. -->
-        <GateBadge v-if="changes.count.value > 0" />
+             what to commit, and because the verdict was computed minutes ago (the daemon runs the check a short
+             while after the last land — gate/gate.ts) rather than being waited for here. It never disables
+             Commit: the panel reports, the user decides. Draws nothing when no check command is configured.
+
+             It outlasts the commit box on purpose. Committing empties `count` but changes no content, so the
+             verdict still describes the tree exactly (the fingerprint is the worktree's own tree sha, invariant
+             to staging and committing — gate/gate.ts), and the minutes between the last commit and the push are
+             when it matters most. Gone only when there is neither uncommitted work nor anything to send. -->
+        <GateBadge v-if="changes.count.value > 0 || syncRepos.length > 0" />
 
         <!-- Commit box (VSCode places it at the top). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 border-b border-line p-2">
@@ -1041,7 +1117,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         type="button"
                         class="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded border border-line px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
                         :disabled="changes.actionBusy.value"
-                        @click="changes.pushRepo(group.repo)"
+                        @click="askPushRepo(group)"
                         v-tooltip.right="'Push and start tracking this branch on the remote'"
                     >
                         <Icon name="cloud-upload" class="mr-1 text-[0.6rem]" />Publish
@@ -1051,7 +1127,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         type="button"
                         :class="SYNC_PILL"
                         :disabled="changes.actionBusy.value"
-                        @click="changes.pushRepo(group.repo)"
+                        @click="askPushRepo(group)"
                         v-tooltip.right="pushHint(group)"
                         :aria-label="`Push ${group.repo}`"
                     >
@@ -1281,6 +1357,36 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </button>
                 <button type="button" :class="cmp.buttonDanger('rounded px-3 py-1')" :disabled="changes.actionBusy.value" @click="confirmDiscard">
                     Discard
+                </button>
+            </template>
+        </Dialog>
+
+        <!-- The push guardrail. Warning, not danger: the push is not a mistake, it is a decision the user is
+             better placed to make than the verdict is — so the objection gets stated once, plainly, and both
+             ways forward are offered. "Run checks" leads, because it is the one that makes the question go
+             away; "Push anyway" is right there beside it and needs no second confirmation. -->
+        <Dialog
+            :visible="pendingSync !== undefined"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            :style="{ width: '24rem' }"
+            :header="`${pendingSync?.verb ?? 'Push'} before the checks pass?`"
+            @update:visible="pendingSync = undefined"
+        >
+            <template v-if="pendingSync">
+                <p :class="cmp.alertWarning('break-words text-xs')">{{ pendingSync.objection }}</p>
+                <p class="mt-2 break-words text-xs text-content">
+                    {{ pendingSync.verb }} {{ pendingSync.what }} anyway? This is what CI will run on.
+                </p>
+            </template>
+            <template #footer>
+                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingSync = undefined">Cancel</button>
+                <button v-if="!gate.busy.value" type="button" :class="cmp.buttonPrimary('rounded px-3 py-1')" @click="runChecksInstead">
+                    Run checks
+                </button>
+                <button type="button" :class="cmp.buttonWarning('rounded px-3 py-1')" :disabled="changes.actionBusy.value" @click="confirmSync">
+                    {{ pendingSync?.verb ?? "Push" }} anyway
                 </button>
             </template>
         </Dialog>

@@ -44,7 +44,15 @@ const isLockContention = (error: unknown): boolean => {
 
 // Runs a git subcommand inside `dir`; injectable so git operations are unit-testable without a real repo.
 // Shared between the sandbox's git module and the CLI's adopt.
-export type GitRunner = (dir: string, args: readonly string[]) => Promise<{ readonly stdout: string; readonly stderr: string }>;
+//
+// `env` is MERGED over the daemon's own, for the handful of git behaviours that have no command-line spelling —
+// GIT_INDEX_FILE above all, which is how the landing gate hashes a worktree without touching the index the user
+// stages into. Optional, so every existing runner and every test double stays assignable unchanged.
+export type GitRunner = (
+    dir: string,
+    args: readonly string[],
+    env?: Readonly<Record<string, string>>,
+) => Promise<{ readonly stdout: string; readonly stderr: string }>;
 
 // git's stdout as RAW BYTES, for `cat-file -p` on a blob that is not text — an image side of a diff, which the
 // browser renders from the bytes themselves. GitRunner cannot serve that read at all: it decodes stdout as
@@ -59,11 +67,16 @@ export const gitBytes = async (dir: string, args: readonly string[], maxBytes: n
 };
 const gitRunnerVia =
     (argv: readonly string[]): GitRunner =>
-    async (dir, args) => {
+    async (dir, args, env) => {
         const [command, ...rest] = argv;
         for (let attempt = 1; ; attempt += 1) {
             try {
-                return await exec(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...args], { maxBuffer: MAX_GIT_OUTPUT });
+                return await exec(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...args], {
+                    maxBuffer: MAX_GIT_OUTPUT,
+                    // Merged, never replaced: execFile's `env` REPLACES the child's whole environment, and git
+                    // without PATH/HOME finds neither its helpers nor its config.
+                    ...(env !== undefined ? { env: { ...process.env, ...env } } : {}),
+                });
             } catch (error) {
                 if (attempt >= RETRY_ATTEMPTS || !isLockContention(error)) {
                     throw error;
@@ -80,12 +93,12 @@ export const defaultGit: GitRunner = gitRunnerVia(["git"]);
 // together): priorities only bind under contention, and contention is exactly when the daemon's own loop —
 // the thing serving every browser — must win. Falls back to plain git where the wrappers don't exist (macOS
 // dev has no ionice), because a checkout that fails to start is worse than one that competes.
-export const politeGit: GitRunner = async (dir, args) => {
+export const politeGit: GitRunner = async (dir, args, env) => {
     try {
-        return await gitRunnerVia(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7", "git"])(dir, args);
+        return await gitRunnerVia(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7", "git"])(dir, args, env);
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            return defaultGit(dir, args);
+            return defaultGit(dir, args, env);
         }
         throw error;
     }

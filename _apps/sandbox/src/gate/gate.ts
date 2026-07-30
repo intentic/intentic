@@ -1,12 +1,11 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { GateAgent, GateFix, GateVerdict, OriginAgent } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
-import { headSha } from "../git/changes.js";
-import { EMPTY_TREE } from "../history/history.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { StoredVerdict } from "./gate-store.js";
 
@@ -235,27 +234,66 @@ export const createLandingGate = (services: Services, wake: WakeFn, git: GitRunn
         ...(await discoverRepos(workspace.root)).map((repo) => ({ repo, dir: join(workspace.root, repo) })),
     ];
 
-    /* THE TREE'S SHAPE, as one hash. HEAD plus `diff --raw` (which carries a blob sha per changed path, so it
-     * moves with CONTENT, not just with the path set) plus the untracked path list, over every repo.
+    /* THE CONTENT UNDER TEST, as one hash — each repo's worktree reduced to the tree sha it WOULD commit to,
+     * composed across every repo.
      *
-     * Untracked file CONTENT is deliberately not hashed: it would cost a hash-object per file on a read the
-     * panel polls, and the gate re-arms on every land anyway. So an untracked file edited in place does not by
-     * itself stale a verdict — "Run checks" is the answer for that, and the badge offers it always. */
+     * WHY NOT HEAD PLUS THE DIFF, which this was and which is the obvious thing to reach for. Two failures,
+     * both measured, and both of which make the verdict lie in the direction of a false green:
+     *
+     *   1. `diff --raw` reports the destination blob as all-zeros for anything not staged, because a worktree
+     *      file has no blob in the object store yet. Landed work IS unstaged, so two DIFFERENT edits to the same
+     *      file hashed identically: the check went green, an agent rewrote a file, and the verdict went on
+     *      claiming to be fresh — precisely the stale pass this gate exists to prevent.
+     *   2. Staging and committing each move it while changing no content at all — `git add` fills in that
+     *      destination blob, and a commit advances HEAD and empties the diff. The user's flow is land → check →
+     *      stage → commit → push, so a green verdict was stale twice over by the time it mattered most, and the
+     *      push guardrail would have objected to every push it ever saw.
+     *
+     * `git add -A` against an index of the gate's own, then `write-tree`, answers what a delta cannot: the
+     * identity of the CONTENT, wherever git currently happens to be keeping it. Verified against a scratch repo:
+     * on a clean tree it equals `HEAD^{tree}` exactly; it moves on an in-place edit, a new untracked file and a
+     * deletion; it does not move on a stage or a commit; and it ignores what .gitignore ignores.
+     *
+     * The index is KEPT between calls rather than made fresh, and that is the entire cost argument: it carries
+     * git's stat cache, so over this monorepo the first `add -A` took 279ms and every one after it 4ms. It lives
+     * under .intentic (daemon state, never repo content), one per repo. Because GIT_INDEX_FILE moves the lock
+     * to that file too, this cannot contend with the user staging in the real index — and where two of these do
+     * race each other, defaultGit's own index.lock retry settles it (scaffold/exec.ts).
+     *
+     * A repo git cannot read contributes a constant instead of failing the verdict: an unreadable repo is not a
+     * reason to refuse to say anything about the rest of the tree. It hashes as its own name, so the composite
+     * still changes when a repo appears or disappears.
+     *
+     * THE WORKSPACE ROOT is a repo too — the shadow "root" repo whose git dir lives outside /work (git/root-repo.ts)
+     * — and `add -A` there would otherwise do two harmful things: record each nested repo as a GITLINK, whose sha
+     * is that repo's HEAD and so moves on every commit made inside it (the very sensitivity this rewrite removes,
+     * re-entering by the back door), and add this index file to itself. Neither happens, and not by luck:
+     * root-repo.ts writes `/intentic/`, `/.intentic/` and the rest into that repo's $GIT_DIR/info/exclude, so the
+     * root's tree is only ever the loose files that belong to no repo. Verified: its tree carries no gitlink. */
+    const contentSha = async (repo: string, dir: string): Promise<string> => {
+        // "/" for a nested repo's path, which would otherwise read as a directory that nothing creates.
+        const index = join(workspace.root, ".intentic", "gate-index", repo.replaceAll("/", "%"));
+        await mkdir(dirname(index), { recursive: true });
+        const env = { GIT_INDEX_FILE: index };
+        /* `.intentic` is excluded HERE rather than trusted to the repo's own ignore rules, because that directory
+         * holds this verdict and this index: fingerprint it and the gate reads its own writing, every persisted
+         * verdict moves the tree it was describing, and the badge goes permanently stale. Measured on a scratch
+         * repo — two writes of gate.json, two different trees. The workspace root's info/exclude does already
+         * cover it (root-repo.ts), which is exactly why this must not depend on it: nothing about a gate's
+         * correctness should rest on another module keeping an ignore list in a particular shape. */
+        await git(dir, ["add", "-A", "--", ".", ":(exclude).intentic"], env);
+        const { stdout } = await git(dir, ["write-tree"], env);
+        return stdout.trim();
+    };
+
     const fingerprint = async (): Promise<string> => {
         const hash = createHash("sha256");
         for (const { repo, dir } of await repoDirs()) {
-            const head = await headSha(dir, git).catch(() => undefined);
-            const [raw, untracked] = await Promise.all([
-                git(dir, ["diff", "--raw", head ?? EMPTY_TREE]).then(
-                    (out) => out.stdout,
-                    () => "",
-                ),
-                git(dir, ["ls-files", "--others", "--exclude-standard", "-z"]).then(
-                    (out) => out.stdout,
-                    () => "",
-                ),
-            ]);
-            hash.update(`${repo}\0${head ?? "unborn"}\0${raw}\0${untracked}\0`);
+            const tree = await contentSha(repo, dir).catch((error: unknown) => {
+                logger.debug({ err: error, repo }, "gate: worktree content unreadable");
+                return "unreadable";
+            });
+            hash.update(`${repo}\0${tree}\0`);
         }
         return hash.digest("hex").slice(0, 16);
     };
@@ -513,18 +551,20 @@ export const createLandingGate = (services: Services, wake: WakeFn, git: GitRunn
                 // Every land pushes the countdown out, so a burst resolves to one run once the burst ends.
                 clearTimeout(quietTimer);
                 await persist(armedFrom(await load(), gateCommand));
+                /* THE DEBOUNCE IS THE WHOLE COALESCER, and deliberately knows nothing about whether the fleet is
+                 * still working. An earlier version deferred while any agent was running, on the theory that a
+                 * turn about to land makes the current tree not worth testing. That reasoning does not survive
+                 * this workspace: agents here run for HOURS, so "wait until nobody is busy" means a fleet of
+                 * twenty with one long runner never reaches a quiet moment at all, and the gate silently
+                 * degrades into something only a manual click ever fires — which is how a red composite reached
+                 * CI with the gate switched on.
+                 *
+                 * The tree as it stands after a land is the tree the user is about to stage, commit and push,
+                 * whatever else is still in flight. That makes it exactly the thing worth a verdict. A land that
+                 * arrives later re-arms this (and `rearm` chains a second run when one is already going), so
+                 * work that lands during a run is never left unchecked — it is checked by the next run rather
+                 * than by refusing to start this one. */
                 quietTimer = setTimeout(() => {
-                    /* The fleet still working is not quiet, whatever the timer says: an agent mid-turn is about
-                     * to land into this very tree, and a suite started now would answer about a tree that is
-                     * already gone. Wait for the land that is coming — it re-arms this.
-                     *
-                     * Nothing is lost if that land never comes (an errored or idle turn lands nothing): the
-                     * verdict stays `armed`, and the next land or a click on Run checks starts it. */
-                    const busy = services.agents.ids().filter((id) => services.agents.running(id));
-                    if (busy.length > 0) {
-                        logger.debug({ busy: busy.length }, "gate: quiet period elapsed but the fleet is still working — waiting for the next land");
-                        return;
-                    }
                     void start(undefined).catch((error: unknown) => logger.warn({ err: error }, "gate: check failed to start"));
                 }, gateQuietMs);
                 quietTimer.unref();
