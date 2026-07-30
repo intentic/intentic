@@ -64,7 +64,19 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                                 class="shrink-0 text-xs"
                                 :class="[STATUS_TONE[job.status].text, STATUS_TONE[job.status].spin ? `animate-spin` : ``]"
                             />
+                            <!-- The whole point of opening this popover is usually "so what did that job say?" -->
+                            <a
+                                v-if="job.webUrl"
+                                :href="job.webUrl"
+                                target="_blank"
+                                rel="noopener"
+                                class="min-w-0 flex-1 truncate text-xs hover:underline"
+                                :class="job.status === `failed` ? `font-medium text-danger` : `text-content hover:text-link`"
+                            >
+                                {{ job.name }}
+                            </a>
                             <span
+                                v-else
                                 class="min-w-0 flex-1 truncate text-xs"
                                 :class="job.status === `failed` ? `font-medium text-danger` : `text-content`"
                             >

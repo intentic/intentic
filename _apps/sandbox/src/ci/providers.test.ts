@@ -179,18 +179,27 @@ const gitlabPipelines = [
     { id: 43, ref: "main", sha: "sha-b", status: "failed", web_url: "u43", created_at: "2026-07-29T11:00:00Z", updated_at: "2026-07-29T11:01:00Z" },
 ];
 
-test("gitlab listRuns joins the head commit and looks an avatar up once per distinct author", async () => {
+// The project-wide jobs feed: every job restates its pipeline's commit and triggering user, which is how one
+// call dresses a whole page of runs.
+const projectJob = (pipelineId: number, sha: string, title: string) => ({
+    commit: { id: sha, title, author_name: "Ada Lovelace" },
+    user: { name: "Ada Lovelace", username: "ada", avatar_url: "https://gitlab.example.com/avatar/ada.png" },
+    pipeline: { id: pipelineId, source: "push" },
+});
+
+test("gitlab listRuns dresses a whole page from the single project jobs call", async () => {
     const calls: { method: string; url: string }[] = [];
     const client = ciClientFor(
         "gitlab",
         scriptedFetch(
             {
                 "GET /pipelines?": gitlabPipelines,
-                "GET /repository/commits": [
-                    { id: "sha-a", title: "feat: draw the job graph", author_name: "Ada Lovelace", author_email: "ada@example.com" },
-                    { id: "sha-b", title: "fix: the build", author_name: "Ada Lovelace", author_email: "ada@example.com" },
+                "GET /jobs?": [
+                    projectJob(42, "sha-a", "feat: draw the job graph"),
+                    // A second job of the same pipeline must not re-derive anything.
+                    projectJob(42, "sha-a", "feat: draw the job graph"),
+                    projectJob(43, "sha-b", "fix: the build"),
                 ],
-                "GET /avatar?email=": { avatar_url: "https://cdn.example.com/ada.png" },
             },
             calls,
         ),
@@ -200,15 +209,39 @@ test("gitlab listRuns joins the head commit and looks an avatar up once per dist
         runId: 42,
         title: "feat: draw the job graph",
         authorName: "Ada Lovelace",
-        authorAvatarUrl: "https://cdn.example.com/ada.png",
+        authorAvatarUrl: "https://gitlab.example.com/avatar/ada.png",
+        trigger: "push",
     });
     expect(runs[1]).toMatchObject({ runId: 43, title: "fix: the build", authorName: "Ada Lovelace" });
-    // Both pipelines share an author, so the deduped lookup must cost exactly one avatar call.
-    expect(calls.filter((call) => call.url.includes("/avatar?email=")).length).toBe(1);
+    // The whole page was covered, so the commits fallback must never be reached.
+    expect(calls.some((call) => call.url.includes("/repository/commits"))).toBe(false);
+    expect(calls.filter((call) => call.url.includes("/jobs?")).length).toBe(1);
+});
+
+test("gitlab listRuns falls back to the commits join only for pipelines the jobs feed missed", async () => {
+    const calls: { method: string; url: string }[] = [];
+    const client = ciClientFor(
+        "gitlab",
+        scriptedFetch(
+            {
+                "GET /pipelines?": gitlabPipelines,
+                // Only pipeline 42 appears — 43 is older than the jobs page reaches.
+                "GET /jobs?": [projectJob(42, "sha-a", "feat: draw the job graph")],
+                "GET /repository/commits": [{ id: "sha-b", title: "fix: the build", author_name: "Grace Hopper" }],
+            },
+            calls,
+        ),
+    );
+    const runs = await client.listRuns(gitlabProject, 15);
+    // Covered by the jobs feed: keeps its avatar.
+    expect(runs[0]).toMatchObject({ runId: 42, title: "feat: draw the job graph", authorAvatarUrl: "https://gitlab.example.com/avatar/ada.png" });
+    // Recovered by the fallback: subject and author, but no avatar to be had from a commit.
+    expect(runs[1]).toMatchObject({ runId: 43, title: "fix: the build", authorName: "Grace Hopper" });
+    expect(runs[1]?.authorAvatarUrl).toBeUndefined();
     expect(calls.some((call) => call.url.includes("/repository/commits?all=true"))).toBe(true);
 });
 
-test("gitlab listRuns still lists when the commit join and avatar lookup are refused", async () => {
+test("gitlab listRuns still lists when both enrichments are refused", async () => {
     // Neither enrichment endpoint is scripted, so both answer 404 — the run list must survive that.
     const runs = await ciClientFor("gitlab", scriptedFetch({ "GET /pipelines?": gitlabPipelines }, [])).listRuns(gitlabProject, 15);
     expect(runs).toHaveLength(2);

@@ -6,7 +6,7 @@ import AuthorAvatar from "./AuthorAvatar.vue";
 import PipelineDagGraph from "./PipelineDagGraph.vue";
 import PipelineGraph from "./PipelineGraph.vue";
 import { pipelineStages } from "./pipelineDag";
-import { formatDuration, STATUS_TONE } from "./statusVisual";
+import { formatDuration, STATUS_TONE, triggerLabel } from "./statusVisual";
 import { useRunJobs } from "./useRunJobs";
 
 /* One pipeline run row. It fetches its own jobs on mount so the inline stage circles are there to read
@@ -39,6 +39,7 @@ const duration = computed(() => formatDuration(props.run.durationSeconds));
 // The commit subject is the headline. Without one, the vendor's own name for an unnamed pipeline — its id —
 // beats repeating the branch and sha that the line below already carries.
 const headline = computed(() => props.run.title ?? `#${props.run.runId}`);
+const trigger = computed(() => triggerLabel(props.run.trigger));
 const jobCount = computed(() => stages.value.reduce((total, stage) => total + stage.jobs.length, 0));
 </script>
 
@@ -66,6 +67,13 @@ const jobCount = computed(() => stages.value.reduce((total, stage) => total + st
                         {{ headline }}
                     </a>
                     <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" class="shrink-0" />
+                    <!-- Only unusual origins earn a chip; a plain push is every repo's default. -->
+                    <span
+                        v-if="trigger"
+                        class="shrink-0 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle"
+                    >
+                        {{ trigger }}
+                    </span>
                 </div>
                 <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
                     <span v-if="run.authorName" class="truncate font-medium text-muted">{{ run.authorName }}</span>

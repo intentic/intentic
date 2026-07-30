@@ -82,6 +82,33 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
     },
 };
 
+// A run's trigger, humanized. Push is every repo's overwhelming default, so it earns no chip — only the
+// unusual origins are worth a reader's attention. Unknown vendor words pass through as-is rather than being
+// dropped: a trigger we haven't seen is exactly the one worth showing.
+const TRIGGER_LABEL: Record<string, string> = {
+    schedule: `Scheduled`,
+    merge_request_event: `Merge request`,
+    pull_request: `Pull request`,
+    pull_request_target: `Pull request`,
+    workflow_dispatch: `Manual`,
+    web: `Manual`,
+    api: `API`,
+    trigger: `Trigger`,
+    pipeline: `Upstream`,
+    parent_pipeline: `Upstream`,
+    workflow_run: `Upstream`,
+    repository_dispatch: `Dispatch`,
+    release: `Release`,
+    tag: `Tag`,
+};
+
+export const triggerLabel = (trigger: string | undefined): string | undefined => {
+    if (trigger === undefined || trigger === `push`) {
+        return undefined;
+    }
+    return TRIGGER_LABEL[trigger] ?? trigger.replaceAll(`_`, ` `);
+};
+
 // CI durations are minutes-and-seconds territory; anything longer still reads fine as `73m 4s`.
 export const formatDuration = (seconds: number | undefined): string | undefined => {
     if (seconds === undefined) {

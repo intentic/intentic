@@ -2058,10 +2058,15 @@ export const PipelineRunSchema = z.object({
     // The run's headline: github's display_title (the commit subject, or the PR title when a PR triggered it),
     // gitlab's pipeline name or the head commit's subject. Absent ⇒ the view falls back to ref@sha.
     title: z.string().optional(),
-    // Who the vendor credits for the run — github's triggering actor (matching what Actions itself shows),
-    // gitlab's commit author. The avatar is a vendor-hosted URL; absent ⇒ the view draws initials instead.
+    // Who the vendor credits for the run — the actor who set it off, matching what both vendors' own UIs
+    // show. The avatar is a vendor-hosted URL; absent ⇒ the view draws the author's initials instead.
     authorName: z.string().optional(),
     authorAvatarUrl: z.string().optional(),
+    // What set the run off, in the vendor's own vocabulary: gitlab's pipeline `source` (push, schedule,
+    // merge_request_event, web, api, trigger…) or github's `event` (push, pull_request, schedule,
+    // workflow_dispatch…). Left raw rather than flattened into a shared enum — the vendor's word is the
+    // precise one, and the view only calls it out when it isn't the everyday push.
+    trigger: z.string().optional(),
     branch: z.string(),
     sha: z.string(),
     status: PipelineStatusSchema,
@@ -2086,6 +2091,8 @@ export const PipelineJobSchema = z.object({
     startedAt: z.number().optional(),
     finishedAt: z.number().optional(),
     durationSeconds: z.number().optional(),
+    // The job's page on its host — the shortest path from "this step failed" to the log that says why.
+    webUrl: z.string().optional(),
 });
 export type PipelineJob = z.infer<typeof PipelineJobSchema>;
 
