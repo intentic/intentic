@@ -96,6 +96,23 @@ describe(`turn runs`, () => {
         expect((await second).map((frame) => frame.seq)).toEqual([1, 2]);
     });
 
+    it(`exposes a settlement barrier that does not resolve on an intermediate frame`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const run = startTurnRun(turnFn, turn(`c-wait`))!;
+        let settled = false;
+        const waiting = run.waitUntilFinished().then(() => {
+            settled = true;
+        });
+
+        push({ kind: `delta`, text: `still unwinding` });
+        await vi.waitFor(() => expect(run.seq).toBe(1));
+        expect(settled).toBe(false);
+
+        close();
+        await waiting;
+        expect(settled).toBe(true);
+    });
+
     it(`refuses a second start while the run is live, allows one after it settles`, async () => {
         const { turnFn, close } = crankedTurn();
         const first = startTurnRun(turnFn, turn(`c-busy`))!;

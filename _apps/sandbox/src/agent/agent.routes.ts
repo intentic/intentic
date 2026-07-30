@@ -548,7 +548,10 @@ async function* runTurn(
                 // have helped. No reset instant ⇒ nothing to schedule against ⇒ the plain frame, as before.
                 authRefused ||= event.code === "claude-token-refused";
                 if (event.code === "rate_limit" && input.conversationId !== undefined) {
-                    limitHitAt = limitReset ?? (await accountLimitReset(services, resolvedAccount));
+                    // An api_retry rate limit carries the SDK's own retry instant directly. Older/final refusal
+                    // shapes still resolve through the preceding rate_limit_event or the persisted account
+                    // snapshot. Keeping the precedence here makes every rate-limit source enter one scheduler.
+                    limitHitAt = limitReset ?? event.resetsAt ?? (await accountLimitReset(services, resolvedAccount));
                     if (limitHitAt !== undefined) {
                         const { autoResumeOnLimit } = await services.sandboxSettings.get();
                         // The account is the daemon-resolved one, not the client's selection (which can be
@@ -727,10 +730,20 @@ export const createAgentRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         // Hard-cancel the conversation's running turn daemon-side (the browser's fetch abort can't).
-        stop: i.stop.handler(({ input }) => {
-            if (!stopTurn(input.conversationId)) {
+        stop: i.stop.handler(async ({ input }) => {
+            const run = turnRunOf(input.conversationId);
+            const stopped = stopTurn(input.conversationId);
+            // A run can have unregistered its abort handle while its detached pump is still crossing the final
+            // cleanup boundary. That is already stopped for the caller's purposes; join it instead of returning
+            // NOT_FOUND and reopening the same send race during this smaller tail window.
+            if (!stopped && (run === undefined || run.done)) {
                 throw new ORPCError("NOT_FOUND", { message: "no running turn for that conversation" });
             }
+            // abort() is only a request. The detached pump remains the conversation's live run until its
+            // generator unwinds (including worktree/registry cleanup), so acknowledging before then lets an
+            // immediate next message collide with the old run and get a bogus "another window" conflict.
+            // Join the run here: a successful Stop response now means the conversation lock is truly free.
+            await run?.waitUntilFinished();
             return { ok: true } as const;
         }),
         // Fire the conversation's remembered usage-limit resume NOW, on `account` when the user picked one of

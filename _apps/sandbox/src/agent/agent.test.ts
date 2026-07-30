@@ -1,6 +1,6 @@
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { type AgentQuery, mergeHooks, type OauthRecoveryOptions, type QueryFn, runAgent } from "./agent.js";
 import { resolveRequest } from "./agent-requests.js";
 import { SteeringQueue } from "./agent-steering.js";
@@ -419,7 +419,7 @@ test("a rate_limit assistant error is tagged with a code and a human message, no
             kind: "error",
             code: "rate_limit",
             message:
-                "Claude usage limit reached — this is the Claude subscription's rate limit resetting, not a workspace problem. Your last message wasn't processed; try again shortly.",
+                "Claude usage limit reached — this account's allowance is exhausted, not a provider outage. This turn can continue after the limit resets.",
         },
         { kind: "done" },
     ]);
@@ -459,7 +459,16 @@ test("a 529 at capacity is the same condition as a 500 — one code covers both"
 test("an in-turn retry surfaces as a waiting status with its own next-attempt clock, not an error", async () => {
     const events = await collect(
         request,
-        fakeQuery({ type: "system", subtype: "api_retry", session_id: "s", attempt: 3, max_retries: 300, retry_delay_ms: 45_000, error_status: 529 }),
+        fakeQuery({
+            type: "system",
+            subtype: "api_retry",
+            session_id: "s",
+            attempt: 3,
+            max_retries: 300,
+            retry_delay_ms: 45_000,
+            error_status: 529,
+            error: "overloaded",
+        }),
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
@@ -473,13 +482,58 @@ test("an in-turn retry surfaces as a waiting status with its own next-attempt cl
 test("a retry with no HTTP status behind it omits the status instead of faking one", async () => {
     const events = await collect(
         request,
-        fakeQuery({ type: "system", subtype: "api_retry", session_id: "s", attempt: 1, max_retries: 300, retry_delay_ms: 1_000, error_status: null }),
+        fakeQuery({
+            type: "system",
+            subtype: "api_retry",
+            session_id: "s",
+            attempt: 1,
+            max_retries: 300,
+            retry_delay_ms: 1_000,
+            error_status: null,
+            error: "server_error",
+        }),
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
         { kind: "provider_retry", attempt: 1, maxAttempts: 300, nextAttemptAt: expect.any(Number) },
         { kind: "done" },
     ]);
+});
+
+test("a usage-limit retry parks the turn at its reset instead of masquerading as a provider outage", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-30T20:00:00.000Z"));
+    try {
+        const events = await collect(
+            request,
+            fakeQuery(
+                {
+                    type: "system",
+                    subtype: "api_retry",
+                    session_id: "s",
+                    attempt: 1,
+                    max_retries: 300,
+                    retry_delay_ms: 15 * 60_000,
+                    error_status: 429,
+                    error: "rate_limit",
+                },
+                // Returning on the retry closes the SDK iterator; the exhausted turn does not keep spinning.
+                { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "never" } } },
+            ),
+        );
+        expect(events).toEqual([
+            { kind: "session", sessionId: "s" },
+            {
+                kind: "error",
+                code: "rate_limit",
+                message: expect.stringContaining("allowance is exhausted"),
+                resetsAt: Date.parse("2026-07-30T20:15:00.000Z") / 1000,
+            },
+            { kind: "done" },
+        ]);
+    } finally {
+        vi.useRealTimers();
+    }
 });
 
 // The CLI files a mid-session limit hit under a non-rate_limit category, with only the sentence saying what

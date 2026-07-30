@@ -76,6 +76,17 @@ export class TurnRun {
         this.wake();
     }
 
+    // Resolve only once the detached pump has completely unwound. Stop uses this as its acknowledgement
+    // boundary: aborting the provider is not enough, because a successor cannot start until the old generator's
+    // finally blocks have released the conversation registry and worktree ownership too.
+    async waitUntilFinished(): Promise<void> {
+        while (!this.done) {
+            await new Promise<void>((resolve) => {
+                this.waiters.push(resolve);
+            });
+        }
+    }
+
     private wake(): void {
         const waiting = this.waiters;
         this.waiters = [];

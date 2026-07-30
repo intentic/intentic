@@ -609,6 +609,12 @@ export class Conversation {
     // settles. The turn itself runs detached on the daemon — only /agent/stop cancels it.
     private inflight: AbortController | null = null;
 
+    // The Stop request whose successful response means the daemon's detached run has completely settled and
+    // released this conversation. The local attach aborts immediately for a responsive UI, so without this
+    // barrier the next message can otherwise reach /agent during the daemon's cleanup tail and receive a false
+    // "another window" conflict from the run it just stopped itself.
+    private stopping: Promise<void> | undefined;
+
     // The in-flight reattach probe (see reattach), aborted by a send so the two never race one run.
     private probe: AbortController | undefined;
 
@@ -822,7 +828,15 @@ export class Conversation {
 
     async send(prompt: string, settings: TurnSettings, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<void> {
         const text = prompt.trim();
-        if ((text.length === 0 && attachments.length === 0) || this.streaming.value) {
+        if (text.length === 0 && attachments.length === 0) {
+            return;
+        }
+        // Stop makes the local stream idle before the daemon can finish unwinding. A direct send (branches and
+        // tests use this path; the composer normally comes through drainQueue) joins that cleanup boundary too.
+        if (this.stopping !== undefined) {
+            await this.stopping;
+        }
+        if (this.streaming.value) {
             return;
         }
         // A pending reattach probe must not race this send's own stream over the same run, and the resume this
@@ -894,7 +908,7 @@ export class Conversation {
             if (!response.ok) {
                 throw new Error(
                     response.status === 409
-                        ? `This agent is already running a turn in another window — wait for it to finish.`
+                        ? `This agent already has a turn running — wait for it to finish.`
                         : `Chat request failed (${response.status}).`,
                 );
             }
@@ -1114,6 +1128,12 @@ export class Conversation {
      * belongs to the same request as "and Z", not to a turn each. Public so the card decisions can re-drive it:
      * answering a card un-parks the turn, which is a moment the queue can move that no send() covers. */
     async drainQueue(): Promise<void> {
+        // A message submitted just after Stop is accepted into the queue immediately, but must not be steered
+        // into the aborting turn or started against its still-live detached-run lock. The Stop endpoint resolves
+        // only after that run is genuinely settled, so this is the single ordering barrier for both races.
+        if (this.stopping !== undefined) {
+            await this.stopping;
+        }
         for (;;) {
             const next = this.queued.value[0];
             if (next === undefined) {
@@ -1189,15 +1209,21 @@ export class Conversation {
     }
 
     // User-initiated Stop button: retire any card the turn was parked on, record a muted notice, hard-cancel
-    // the turn daemon-side (/agent/stop — fire-and-forget; NOT_FOUND just means it already settled), then
-    // abort the local stream.
+    // the turn daemon-side (/agent/stop), then abort the local stream. The control request is retained as a
+    // barrier for the next send: its response means the detached run has released the conversation lock.
     stop(): void {
         if (!this.streaming.value) {
             return;
         }
         this.cancelPendingCards();
         this.appendNotice(`Stopped.`);
-        void this.postTurnControl(`/agent/stop`, { conversationId: this.conversationId });
+        const stopping = this.postTurnControl(`/agent/stop`, { conversationId: this.conversationId }).then(() => undefined);
+        this.stopping = stopping;
+        void stopping.finally(() => {
+            if (this.stopping === stopping) {
+                this.stopping = undefined;
+            }
+        });
         this.abort();
         this.persist();
     }

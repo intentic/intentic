@@ -319,6 +319,18 @@ const apiErrorMessage = (message: SDKAssistantMessage): string => {
     return explained ?? `agent error: ${message.error}`;
 };
 
+// One explanation for both ways a spent subscription allowance reaches us: an assistant refusal after the
+// harness gives up, and the earlier api_retry frame whose long delay says it intends to wait for the reset.
+// Keeping the wording here prevents the live-retry path from drifting back into calling the same condition an
+// outage while the terminal path calls it a limit.
+const rateLimitFrame = (resetsAt?: number): Extract<AgentEvent, { kind: "error" }> => ({
+    kind: "error",
+    code: "rate_limit",
+    message:
+        "Claude usage limit reached — this account's allowance is exhausted, not a provider outage. This turn can continue after the limit resets.",
+    ...(resetsAt !== undefined ? { resetsAt } : {}),
+});
+
 /* WHICH CONDITION an API failure actually is — the frame the client branches on.
  *
  * Two of these read the CATEGORY the SDK filed, and two read the SENTENCE, and the split is not arbitrary. A
@@ -338,12 +350,7 @@ const errorFrame = (message: SDKAssistantMessage): Extract<AgentEvent, { kind: "
     // reset; our canned line doesn't) but carries the same code, so every spent-allowance failure reaches the
     // client as one condition.
     if (message.error === "rate_limit") {
-        return {
-            kind: "error",
-            code: "rate_limit",
-            message:
-                "Claude usage limit reached — this is the Claude subscription's rate limit resetting, not a workspace problem. Your last message wasn't processed; try again shortly.",
-        };
+        return rateLimitFrame();
     }
     if (message.error === "server_error" || message.error === "overloaded") {
         return { kind: "error", code: "provider-outage", message: apiErrorMessage(message) };
@@ -666,12 +673,21 @@ async function* streamSdk(
                     yield { kind: "text_end", ...withParent };
                 }
             } else if (message.subtype === "api_retry") {
-                /* The harness is retrying a request it lost to the provider — INSIDE this turn, so nothing has
-                 * failed yet and there is nothing in the transcript to write. Forwarded because the retry budget
-                 * is deliberately long (CLAUDE_CODE_RETRY_WATCHDOG in harness-credentials.ts): a turn riding out
-                 * an outage can now go quiet for minutes, and an agent that has gone quiet is indistinguishable
-                 * from one that has hung. The user's move against an apparent hang is Stop — the one move that
-                 * actually throws the work away — so the wait has to say what it is and when it ends. */
+                /* A spent allowance is not an outage to ride out in a live process. The SDK names it directly
+                 * and sets its retry delay to the closed window's remaining lifetime; turn that into the same
+                 * terminal rate_limit frame as an assistant refusal, carrying the reset instant so the daemon's
+                 * existing resume scheduler can park the turn and bring its session back after the reset. Aside
+                 * from telling the truth, this frees the conversation's live-run lock instead of leaving a CLI
+                 * spinner attached to it for minutes or hours. Returning closes the SDK iterator in sdkTurns'
+                 * finally; runAgent then supplies the ordinary terminal done frame. */
+                if (message.error === "rate_limit") {
+                    yield rateLimitFrame(Math.ceil((Date.now() + message.retry_delay_ms) / 1000));
+                    return;
+                }
+                /* Every other retry is still happening INSIDE this turn, so nothing has failed yet and there is
+                 * nothing in the transcript to write. Forwarded because the retry budget is deliberately long
+                 * (CLAUDE_CODE_RETRY_WATCHDOG in harness-credentials.ts): without this status a turn riding out
+                 * an outage is indistinguishable from one that hung. */
                 yield {
                     kind: "provider_retry",
                     attempt: message.attempt,

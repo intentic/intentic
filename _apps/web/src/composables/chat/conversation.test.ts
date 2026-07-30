@@ -658,6 +658,43 @@ describe(`Conversation`, () => {
         expect(conversation.queued.value).toHaveLength(0);
     });
 
+    it(`waits for the stopped daemon run to release its lock before starting the next message`, async () => {
+        const conversation = new Conversation(`c1`);
+        const parked = sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true });
+        const completed = sseResponse([{ kind: `done` }]);
+        let attaches = 0;
+        let releaseStop: (response: Response) => void = () => {};
+        const stopped = new Promise<Response>((resolve) => {
+            releaseStop = resolve;
+        });
+        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
+            if (path === `/agent/attach`) {
+                attaches += 1;
+                return attaches === 1 ? parked(path, init) : completed(path, init);
+            }
+            if (path === `/agent/stop`) {
+                return stopped;
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r${attaches + 1}` }) } as Response);
+        });
+
+        const first = conversation.send(`start`, settings);
+        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+        conversation.stop();
+        await first;
+
+        const next = conversation.enqueue(`try again`);
+        await Promise.resolve();
+        // The local attach is already gone, but /agent/stop has not yet confirmed daemon-side settlement.
+        expect(turnBodies()).toHaveLength(1);
+
+        releaseStop({ ok: true } as Response);
+        await next;
+        expect(turnBodies()).toHaveLength(2);
+        expect(turnBodies()[1]).toMatchObject({ prompt: `try again` });
+        expect(conversation.error.value).toBeNull();
+    });
+
     it(`parks the turn on a plan card and streams the continuation into a fresh bubble`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -1693,13 +1730,13 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
     });
 
-    it(`surfaces a 409 start (another window mid-turn) as an error without corrupting local state`, async () => {
+    it(`surfaces a genuine 409 start without claiming which window owns the turn`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockResolvedValue({ ok: false, status: 409 } as Response);
 
         await conversation.send(`Hi`, settings);
 
-        expect(conversation.error.value).toContain(`already running`);
+        expect(conversation.error.value).toBe(`This agent already has a turn running — wait for it to finish.`);
         expect(conversation.streaming.value).toBe(false);
     });
 
