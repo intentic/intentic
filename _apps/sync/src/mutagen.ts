@@ -1,5 +1,5 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { binDir, type Log, type SyncConfig } from "./config.js";
 import { IGNORES, sanitizeId, sshAlias } from "./ssh.js";
@@ -156,9 +156,19 @@ const archToken = (): "amd64" | "arm64" => {
     throw new Error(`unsupported CPU arch ${process.arch} — install mutagen and cloudflared manually, then re-run.`);
 };
 
-const onPath = (binary: string, versionArgs: string[]): boolean => {
-    const result = spawnSync(binary, versionArgs, { stdio: "ignore" });
-    return result.error === undefined && result.status === 0;
+// The version an installed copy reports — undefined when there is none, or when it is broken or half-extracted.
+// Both tools print a semver we can read (`mutagen version` → "0.18.1", `cloudflared --version` → "cloudflared
+// version 2026.7.2 (built …)") and both are PINNED above, so this one question decides whether anything needs
+// downloading at all. Asking it matters more than the bandwidth it saves: re-extracting over a copy whose
+// process is resident cannot succeed on Windows, where a running executable can be neither unlinked nor
+// overwritten ("mutagen.exe: Can't unlink already-existing object: Permission denied"), so once the first setup
+// had started the daemon, every later command that needed Mutagen — status, pause, a second setup — died there.
+const installedVersion = (binary: string, versionArgs: string[]): string | undefined => {
+    const result = spawnSync(binary, versionArgs, { encoding: "utf8" });
+    if (result.error !== undefined || result.status !== 0) {
+        return undefined;
+    }
+    return /\d+\.\d+\.\d+/.exec(result.stdout)?.[0];
 };
 
 const download = async (url: string, dest: string): Promise<void> => {
@@ -170,53 +180,82 @@ const download = async (url: string, dest: string): Promise<void> => {
     await writeFile(dest, new Uint8Array(await response.arrayBuffer()));
 };
 
+// Put whatever `write` produces at `binary` in place of what is there now. Windows refuses to unlink or
+// overwrite a RUNNING executable — the Mutagen daemon and the cloudflared processes ssh keeps alive each hold
+// their own image open — but it does allow RENAMING one, which leaves the live process running from the
+// renamed file while the replacement takes its place. (sync.ps1 does exactly this for the agent's own binary.)
+// The displaced copy is swept at both ends, so it survives only while something is still executing it.
+const replaceBinary = async (binary: string, write: () => Promise<void> | void): Promise<void> => {
+    const displaced = `${binary}.old`;
+    // Best-effort: a leftover that cannot go yet is still being run, and the write below is what has to succeed.
+    await rm(displaced, { force: true }).catch(() => {});
+    await rename(binary, displaced).catch(() => {});
+    await write();
+    await chmod(binary, 0o755);
+    await rm(displaced, { force: true }).catch(() => {});
+};
+
 // Extract a gzipped tarball into ~/.intentic/sync/bin using the system `tar` (bsdtar on macOS/Windows 10+).
 const extractTarball = (tarball: string): void => {
     const extract = spawnSync("tar", ["-xzf", tarball, "-C", binDir], { stdio: "inherit" });
     if (extract.status !== 0) {
-        throw new Error(`failed to extract ${tarball} (is \`tar\` installed?)`);
+        throw new Error(`failed to extract ${tarball} — tar's own reason is above (no \`tar\` on PATH, or a file it must replace is in use)`);
     }
 };
 
-// Resolve cloudflared: on PATH, else download the release to ~/.intentic/sync/bin. Asset shapes differ per OS:
-// bare binary on linux, .tgz on darwin, .exe on windows (amd64 only — no windows-arm64 build exists).
+// Resolve cloudflared: the user's own install if they have one, else our pinned copy in ~/.intentic/sync/bin,
+// downloaded only when what is there isn't already the pin. Asset shapes differ per OS: bare binary on linux,
+// .tgz on darwin, .exe on windows (amd64 only — no windows-arm64 build exists).
 export const ensureCloudflared = async (): Promise<string> => {
-    if (onPath("cloudflared", ["--version"])) {
+    if (installedVersion("cloudflared", ["--version"]) !== undefined) {
         return "cloudflared";
+    }
+    const dest = join(binDir, `cloudflared${exe}`);
+    if (installedVersion(dest, ["--version"]) === CLOUDFLARED_VERSION) {
+        return dest;
     }
     const os = osToken();
     const base = `https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}`;
-    const dest = join(binDir, `cloudflared${exe}`);
-    if (os === "darwin") {
-        const tgz = join(binDir, "cloudflared.tgz");
-        await download(`${base}/cloudflared-darwin-${archToken()}.tgz`, tgz);
-        extractTarball(tgz);
-    } else if (os === "windows") {
-        if (archToken() !== "amd64") {
-            throw new Error("cloudflared has no windows-arm64 build — install cloudflared manually, then re-run.");
+    const assetUrl = (): string => {
+        if (os === "darwin") {
+            return `${base}/cloudflared-darwin-${archToken()}.tgz`;
         }
-        await download(`${base}/cloudflared-windows-amd64.exe`, dest);
-    } else {
-        await download(`${base}/cloudflared-linux-${archToken()}`, dest);
-    }
-    await chmod(dest, 0o755);
+        if (os === "windows") {
+            if (archToken() !== "amd64") {
+                throw new Error("cloudflared has no windows-arm64 build — install cloudflared manually, then re-run.");
+            }
+            return `${base}/cloudflared-windows-amd64.exe`;
+        }
+        return `${base}/cloudflared-linux-${archToken()}`;
+    };
+    // The download lands BESIDE the target and only then takes its place: a half-download never becomes the
+    // binary, and the copy being replaced stays runnable until the new bytes are on disk.
+    const staged = join(binDir, os === "darwin" ? "cloudflared.tgz" : `cloudflared${exe}.new`);
+    await download(assetUrl(), staged);
+    await replaceBinary(dest, () => (os === "darwin" ? extractTarball(staged) : rename(staged, dest)));
     return dest;
 };
 
-// Resolve mutagen: on PATH, else download+extract the release tarball (binary + agent bundle side by side, as
-// Mutagen requires) to ~/.intentic/sync/bin using the system `tar`.
+// Resolve mutagen: the user's own install if they have one (at whatever version they run it at), else our
+// pinned copy — downloaded and extracted (binary + agent bundle side by side, as Mutagen requires) only when
+// what is in ~/.intentic/sync/bin isn't already the pin.
 export const ensureMutagen = async (): Promise<string> => {
-    if (onPath("mutagen", ["version"])) {
+    if (installedVersion("mutagen", ["version"]) !== undefined) {
         return "mutagen";
     }
     const dest = join(binDir, `mutagen${exe}`);
+    if (installedVersion(dest, ["version"]) === MUTAGEN_VERSION) {
+        return dest;
+    }
+    // Replacing our copy retires the daemon running FROM it — a daemon of another version never serves this
+    // CLI anyway, and on Windows it is precisely what holds the file open. Best-effort: usually there is none.
+    spawnSync(dest, ["daemon", "stop"], { stdio: "ignore" });
     const tarball = join(binDir, "mutagen.tar.gz");
     await download(
         `https://github.com/mutagen-io/mutagen/releases/download/v${MUTAGEN_VERSION}/mutagen_${osToken()}_${archToken()}_v${MUTAGEN_VERSION}.tar.gz`,
         tarball,
     );
-    extractTarball(tarball);
-    await chmod(dest, 0o755);
+    await replaceBinary(dest, () => extractTarball(tarball));
     return dest;
 };
 
