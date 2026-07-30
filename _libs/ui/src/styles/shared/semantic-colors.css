@@ -84,13 +84,12 @@
     --color-warning:     var(--role-warning);
     --color-info:        var(--role-info);
 
-    /* Filled-control fills — the ONE recipe every solid call-to-action uses (cmp.button*, PrimeVue's
-     * <Button> via theme.ts, the composer send button). Separate from the role tokens above because
-     * those are tuned to read as TEXT on the canvas, so they LIGHTEN in dark mode: a filled button
-     * keeping a white label on top of one lands at 2.6–3.2:1. These flip the other way — each scheme
-     * picks the fill and the label that sits on it TOGETHER, so every filled action clears WCAG AA
-     * (4.5:1) in all four themes and GAINS contrast on hover instead of losing it (light darkens,
-     * dark lightens). `fill-content` is shared: one label color reads on all four fills. */
+    /* Filled-control fills — the accent recipe for PrimeVue's solid-accent components (Checkbox,
+     * RadioButton, ToggleSwitch, Slider) and the composer send button. Buttons themselves now use
+     * these at LOW OPACITY as a tint (cmp.button* and the primeng.css primary-Button override), so
+     * the fill tokens no longer carry a solid-fill WCAG contract for buttons — but the values still
+     * need to clear WCAG AA when used solid (checkboxes, toggles). Each scheme picks the fill and
+     * the label that sits on it TOGETHER. `fill-content` is the shared label color. */
     --color-primary-fill:       var(--role-primary-fill);
     --color-primary-fill-hover: var(--role-primary-fill-hover);
     --color-success-fill:       var(--role-success-fill);
@@ -128,8 +127,8 @@
     --role-success:     var(--color-success-600);
     --role-warning:     var(--color-warning-600);
     --role-info:        var(--color-info-600);
-    /* Deep fill, white label: primary 4.5:1 (ember) … 6.5:1 (meadow), success 6.2:1, warning 4.9:1,
-     * danger 6.7:1. Hover darkens the fill, so the label only gains contrast. */
+    /* Deep fill, white label — used solid by checkboxes/toggles, used as a tint source by buttons.
+     * Hover darkens the fill, so the label only gains contrast in solid contexts. */
     --role-primary-fill:       var(--color-primary-700);
     --role-primary-fill-hover: var(--color-primary-800);
     --role-success-fill:       var(--color-success-700);
@@ -162,10 +161,10 @@
     --role-success:     var(--color-success-500);
     --role-warning:     var(--color-warning-500);
     --role-info:        var(--color-info-500);
-    /* Bright fill, surface-900 label: 5.6:1 (ember) … 8.3:1 (honey). Inverted rather than reusing the
-     * light scheme's deep fill because a deep fill under white clears AA by a hair (~4.5:1) and this
-     * is the shade PrimeVue's buttons already paint in dark — inverting is what makes them all match.
-     * Hover lightens the fill here, which is again the direction that raises label contrast. */
+    /* Bright fill, surface-900 label — used solid by checkboxes/toggles, used as a tint source by
+     * buttons. Inverted from the light scheme (bright fill + dark label) because a deep fill under
+     * white clears AA by a hair (~4.5:1) and this is the shade PrimeVue's controls already paint
+     * in dark. Hover lightens, raising label contrast. */
     --role-primary-fill:       var(--color-primary-400);
     --role-primary-fill-hover: var(--color-primary-300);
     --role-success-fill:       var(--color-success-400);

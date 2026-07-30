@@ -34,6 +34,37 @@
         line-height: var(--text-sm--line-height); /* same metrics as the text-sm inputs → 38px controls */
     }
 
+    /* Primary-severity Button — tinted fill + brand text, matching cmp.buttonPrimary and the app's
+     * established color-mix visual language. :where() zeros the negation list's specificity so a
+     * single utility class can still override any property. */
+    .p-button:where(:not(
+        .p-button-secondary, .p-button-danger, .p-button-success,
+        .p-button-warning, .p-button-info, .p-button-contrast,
+        .p-button-text, .p-button-outlined
+    )) {
+        background: color-mix(in srgb, var(--color-primary-fill) 10%, transparent);
+        color: var(--color-primary-fill);
+        border-color: color-mix(in srgb, var(--color-primary-fill) 20%, transparent);
+    }
+
+    .p-button:where(:not(
+        .p-button-secondary, .p-button-danger, .p-button-success,
+        .p-button-warning, .p-button-info, .p-button-contrast,
+        .p-button-text, .p-button-outlined
+    )):enabled:hover {
+        background: color-mix(in srgb, var(--color-primary-fill) 18%, transparent);
+        color: var(--color-primary-fill);
+        border-color: color-mix(in srgb, var(--color-primary-fill) 35%, transparent);
+    }
+
+    .p-button:where(:not(
+        .p-button-secondary, .p-button-danger, .p-button-success,
+        .p-button-warning, .p-button-info, .p-button-contrast,
+        .p-button-text, .p-button-outlined
+    )):enabled:active {
+        background: color-mix(in srgb, var(--color-primary-fill) 22%, transparent);
+    }
+
     [data-mode="dark"] .p-button-secondary:enabled:hover,
     [data-mode="dark"] .p-button-text:enabled:hover {
         background: color-mix(in srgb, var(--color-content) 12%, transparent);
