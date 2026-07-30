@@ -1,6 +1,7 @@
 import { createHash, type KeyObject } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { calculateJwkThumbprint, exportJWK, FlattenedSign } from "jose";
+import { resolveTxtAuthoritatively } from "./authoritative-dns.js";
 import { base64Url, buildCsr } from "./csr.js";
 
 /* An ACME client (RFC 8555), DNS-01 only, no dependencies beyond `jose` — which the daemon already carries for
@@ -16,10 +17,17 @@ import { base64Url, buildCsr } from "./csr.js";
  * Everything that talks to the network is injected (`fetchImpl`, the publish/remove hooks, `wait`), so the
  * whole order flow is exercised in-process against a fake CA — see acme.test.ts. */
 
-// How long to keep asking whether the CA has validated the challenge before giving up. Generous: it polls
-// authoritative DNS, and a record published seconds ago may take a moment to be visible to it.
+// How long to keep asking whether the CA has validated the challenge before giving up.
 const VALIDATION_TIMEOUT_MS = 120_000;
 const POLL_INTERVAL_MS = 3_000;
+
+/* How long to wait for the challenge record to become visible on the zone's own nameservers before telling the
+ * CA it is there. Generous, because everything about this is asymmetric: waiting a few seconds too long costs
+ * a few seconds, while asking too early costs the whole issuance AND poisons the retry — a CA that looks and
+ * misses marks the authorization `invalid` terminally (no amount of later polling recovers it) and its
+ * resolvers then negative-cache the miss for the zone's SOA minimum, half an hour on Cloudflare. */
+const PUBLICATION_TIMEOUT_MS = 90_000;
+const PUBLICATION_INTERVAL_MS = 2_000;
 
 // Let's Encrypt's production directory. The staging directory is the same shape and is what a first real run
 // should point at — its certificates are untrusted, but its rate limits are the ones you want to hit.
@@ -43,6 +51,9 @@ export interface AcmeOptions {
     // stale challenge record is untidy, not dangerous, and must never fail an otherwise-issued certificate.
     readonly publishChallenge: (recordName: string, value: string) => Promise<void>;
     readonly removeChallenge: (recordName: string) => Promise<void>;
+    // The TXT values a name currently serves, used to confirm the challenge is live before the CA is asked to
+    // look at it. Authoritative by default; injected so the order flow is testable without a zone.
+    readonly resolveTxt?: (recordName: string) => Promise<string[]>;
     readonly fetchImpl?: typeof fetch;
     readonly wait?: (ms: number) => Promise<void>;
     // Epoch ms, injected so the validation deadline is testable without a clock.
@@ -73,6 +84,7 @@ const problemOf = async (response: Response): Promise<string> => {
 
 export const obtainCertificate = async (options: AcmeOptions): Promise<{ certificate: string }> => {
     const doFetch = options.fetchImpl ?? fetch;
+    const resolveTxt = options.resolveTxt ?? resolveTxtAuthoritatively;
     const wait = options.wait ?? ((ms: number) => sleep(ms));
     const now = options.now ?? (() => Date.now());
     const accountJwk = await exportJWK(options.accountKey);
@@ -166,9 +178,22 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
             // base64url, as the TXT value (RFC 8555 §8.4) — NOT the key authorization itself.
             const keyAuthorization = `${dns01["token"]}.${thumbprint}`;
             const recordName = `_acme-challenge.${identifier}`;
+            const digest = base64Url(new Uint8Array(createHash("sha256").update(keyAuthorization).digest()));
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-            await options.publishChallenge(recordName, base64Url(new Uint8Array(createHash("sha256").update(keyAuthorization).digest())));
+            await options.publishChallenge(recordName, digest);
             published.push(recordName);
+            /* WAIT FOR THE ZONE TO ACTUALLY SERVE IT. A zone API returns once it has accepted the write, which
+             * is seconds before its nameservers answer with the record — measured at ~5s on Cloudflare. The CA
+             * validates within a second or two of the POST below, so without this it looks into that gap, and
+             * `NXDOMAIN looking up TXT` is not a retryable "not yet": the authorization is `invalid` for good. */
+            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            await pollUntil(async () => (await resolveTxt(recordName)).includes(digest), {
+                wait,
+                now,
+                what: `publication of ${recordName}`,
+                timeoutMs: PUBLICATION_TIMEOUT_MS,
+                intervalMs: PUBLICATION_INTERVAL_MS,
+            });
             // Tell the CA to look. `{}` (not POST-as-GET) is what "I am ready" means on a challenge.
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
             const accepted = await signedPost(dns01["url"], {});
@@ -185,7 +210,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
                     }
                     return state["status"] === "valid";
                 },
-                { wait, now, what: `validation of ${identifier}` },
+                { wait, now, what: `validation of ${identifier}`, timeoutMs: VALIDATION_TIMEOUT_MS, intervalMs: POLL_INTERVAL_MS },
             );
         }
 
@@ -205,7 +230,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
                     certificateUrl = typeof state["certificate"] === "string" ? state["certificate"] : undefined;
                     return certificateUrl !== undefined;
                 },
-                { wait, now, what: "certificate issuance" },
+                { wait, now, what: "certificate issuance", timeoutMs: VALIDATION_TIMEOUT_MS, intervalMs: POLL_INTERVAL_MS },
             );
         }
         const download = await signedPost(certificateUrl!, undefined);
@@ -227,9 +252,9 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
 // state (the CA said `invalid`), so a definitive no fails immediately rather than waiting out the timeout.
 const pollUntil = async (
     predicate: () => Promise<boolean>,
-    context: { wait: (ms: number) => Promise<void>; now: () => number; what: string },
+    context: { wait: (ms: number) => Promise<void>; now: () => number; what: string; timeoutMs: number; intervalMs: number },
 ): Promise<void> => {
-    const deadline = context.now() + VALIDATION_TIMEOUT_MS;
+    const deadline = context.now() + context.timeoutMs;
     for (;;) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- polling is sequential by definition
         if (await predicate()) {
@@ -239,6 +264,6 @@ const pollUntil = async (
             throw new Error(`timed out waiting for ${context.what}`);
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-        await context.wait(POLL_INTERVAL_MS);
+        await context.wait(context.intervalMs);
     }
 };

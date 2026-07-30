@@ -28,6 +28,15 @@ import { postToPlatform } from "./platform-client.js";
 const RENEW_BEFORE_MS = 30 * 24 * 60 * 60 * 1000;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+/* How soon to try again after a FAILED issuance, as opposed to the daily check that follows a good one. A
+ * sandbox that has no certificate at all is serving its shortcut over plain http — which Safari refuses — so a
+ * day is far too long to sit on a failure that is usually transient.
+ *
+ * The floor on this interval is the CA's memory rather than politeness: a validation that missed leaves the
+ * CA's resolvers holding the NXDOMAIN for the zone's SOA minimum, 1800s on Cloudflare, and retrying inside
+ * that window fails again on cached evidence no matter how correct the retry is. */
+const RETRY_INTERVAL_MS = 45 * 60 * 1000;
+
 export interface LocalCertificate {
     readonly hostname: string;
     readonly certificate: string;
@@ -136,17 +145,34 @@ export const readLocalCertificate = (config: Config): LocalCertificate | undefin
     return hostname === undefined ? undefined : readUsable(config, hostname, Date.now());
 };
 
-// Keep the certificate fresh in the background: once at boot (which is what issues the first one) and daily
-// after. Never rejects — a sandbox whose certificate cannot be obtained is a working sandbox on plain HTTP.
+/* Keep the certificate fresh in the background: once at boot (which is what issues the first one), then on a
+ * cadence that depends on how the last attempt went — daily when there is a certificate to renew, far sooner
+ * when there is none to serve. Never rejects: a sandbox whose certificate cannot be obtained is a working
+ * sandbox on plain HTTP. */
 export const startLocalCertificateRenewal = (config: Config, logger: Logger): { stop: () => void } => {
-    const attempt = (): void => {
-        void ensureLocalCertificate(config, logger).catch((error: unknown) => {
-            logger.warn({ err: error }, "the loopback certificate is unavailable — this sandbox serves its shortcut over plain http");
-        });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    const schedule = (delay: number): void => {
+        if (stopped) {
+            return;
+        }
+        timer = setTimeout(attempt, delay);
+        // Never hold the process open for a renewal check.
+        timer.unref?.();
     };
+    function attempt(): void {
+        void ensureLocalCertificate(config, logger)
+            .then(() => schedule(CHECK_INTERVAL_MS))
+            .catch((error: unknown) => {
+                logger.warn({ err: error }, "the loopback certificate is unavailable — this sandbox serves its shortcut over plain http");
+                schedule(RETRY_INTERVAL_MS);
+            });
+    }
     attempt();
-    const timer = setInterval(attempt, CHECK_INTERVAL_MS);
-    // Never hold the process open for a renewal check.
-    timer.unref?.();
-    return { stop: () => clearInterval(timer) };
+    return {
+        stop: () => {
+            stopped = true;
+            clearTimeout(timer);
+        },
+    };
 };

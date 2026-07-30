@@ -116,17 +116,38 @@ const certificateKey = generateKeyPairSync("ec", { namedCurve: "P-256" }).privat
 // The PUBLIC half — what a CA has, and the only thing that can verify a signature.
 const accountPublicJwk = await exportJWK(createPublicKey(accountKey));
 
-const run = async (ca: ReturnType<typeof fakeCa>, hooks: { publish?: ReturnType<typeof vi.fn>; remove?: ReturnType<typeof vi.fn> } = {}) =>
-    obtainCertificate({
+/* The zone stands in for the one the challenge is published into: by default a record is visible the moment it
+ * is written, and a test that cares about propagation supplies its own `resolveTxt`. The clock is virtual, so a
+ * poll can reach its deadline without a test spending it. */
+const run = async (
+    ca: ReturnType<typeof fakeCa>,
+    hooks: {
+        publish?: (recordName: string, value: string) => Promise<void>;
+        remove?: (recordName: string) => Promise<void>;
+        resolveTxt?: (recordName: string) => Promise<string[]>;
+    } = {},
+) => {
+    const zone = new Map<string, string>();
+    const publish = hooks.publish;
+    let clock = 0;
+    return obtainCertificate({
         directoryUrl: "https://ca.test/directory",
         accountKey,
         certificateKey,
         hostnames: [HOST],
-        publishChallenge: hooks.publish ?? vi.fn(async () => undefined),
+        publishChallenge: async (recordName, value) => {
+            zone.set(recordName, value);
+            await publish?.(recordName, value);
+        },
         removeChallenge: hooks.remove ?? vi.fn(async () => undefined),
+        resolveTxt: hooks.resolveTxt ?? (async (recordName) => (zone.has(recordName) ? [zone.get(recordName)!] : [])),
         fetchImpl: ca.fetchImpl,
-        wait: async () => undefined,
+        wait: async (ms) => {
+            clock += ms;
+        },
+        now: () => clock,
     });
+};
 
 it("walks an order to a certificate, publishing the digest the spec asks for", async () => {
     const publish = vi.fn(async () => undefined);
@@ -185,6 +206,29 @@ it("fails with the CA's own reason when validation is refused, and still cleans 
     await expect(run(fakeCa({ authzStatus: () => "invalid" }), { remove })).rejects.toThrowError(/no TXT record found/);
     // The challenge record must not survive a failed order — the next attempt publishes a different value.
     expect(remove).toHaveBeenCalledWith(`_acme-challenge.${HOST}`);
+});
+
+it("never asks the CA to look before the zone actually serves the record", async () => {
+    const ca = fakeCa();
+    /* The failure this prevents: a zone API returns once it has ACCEPTED the write, seconds before its
+     * nameservers answer with the record, and a CA that looks into that gap marks the authorization `invalid`
+     * for good — `NXDOMAIN looking up TXT` is not a retryable "not yet". So an unpublished record has to fail
+     * here, with the CA never told to validate. */
+    await expect(run(ca, { resolveTxt: async () => [] })).rejects.toThrowError(`timed out waiting for publication of _acme-challenge.${HOST}`);
+    expect(ca.seen.some((request) => request.url.endsWith("/challenge/dns"))).toBe(false);
+});
+
+it("waits out the gap between the zone accepting the record and serving it", async () => {
+    const ca = fakeCa();
+    let value: string | undefined;
+    let lookups = 0;
+    // Invisible for the first two lookups, exactly as a zone mid-propagation is.
+    const resolveTxt = async (): Promise<string[]> => (++lookups > 2 && value !== undefined ? [value] : []);
+    const result = await run(ca, { publish: async (_recordName, published) => void (value = published), resolveTxt });
+    expect(result).toEqual({ certificate: PEM });
+    expect(lookups).toBe(3);
+    // And having waited, it does go on to answer the challenge — the wait must not become its own dead end.
+    expect(ca.seen.some((request) => request.url.endsWith("/challenge/dns"))).toBe(true);
 });
 
 it("never lets a failed cleanup spoil an issued certificate", async () => {
