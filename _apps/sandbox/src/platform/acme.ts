@@ -29,6 +29,12 @@ const POLL_INTERVAL_MS = 3_000;
 const PUBLICATION_TIMEOUT_MS = 90_000;
 const PUBLICATION_INTERVAL_MS = 2_000;
 
+// How many times a request that never reached the CA is re-sent, and how long between. Three is sized to the
+// observed shape of the problem rather than chosen for luck: the connection AFTER a slow one is consistently
+// fast, so the second attempt is the one that lands and the third is the margin.
+const TRANSPORT_ATTEMPTS = 3;
+const TRANSPORT_RETRY_MS = 2_000;
+
 // Let's Encrypt's production directory. The staging directory is the same shape and is what a first real run
 // should point at — its certificates are untrusted, but its rate limits are the ones you want to hit.
 export const LETS_ENCRYPT_DIRECTORY = "https://acme-v02.api.letsencrypt.org/directory";
@@ -83,10 +89,32 @@ const problemOf = async (response: Response): Promise<string> => {
 };
 
 export const obtainCertificate = async (options: AcmeOptions): Promise<{ certificate: string }> => {
-    const doFetch = options.fetchImpl ?? fetch;
     const resolveTxt = options.resolveTxt ?? resolveTxtAuthoritatively;
     const wait = options.wait ?? ((ms: number) => sleep(ms));
     const now = options.now ?? (() => Date.now());
+    const transport = options.fetchImpl ?? fetch;
+    /* Retry a connection that was never made — and only that. Issuance runs at boot and then on a slow cycle,
+     * so its first request is always the one going down a long-idle egress path, and that is routinely slower
+     * than the 10s undici allows a connect. One such moment used to cost the whole certificate.
+     *
+     * A REJECTED fetch is the CA never having heard us, so re-sending is safe: nothing was delivered, and a
+     * request that somehow was spends its nonce, which the badNonce path below already re-signs and resends.
+     * An HTTP error status is a different thing entirely — that is the CA answering, and every caller below
+     * reads it, so it must arrive intact rather than be retried into a rate limit. */
+    const doFetch = async (input: string, init?: RequestInit): Promise<Response> => {
+        for (let attempt = 1; ; attempt += 1) {
+            try {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- retries are sequential by definition
+                return await transport(input, init);
+            } catch (error) {
+                if (attempt >= TRANSPORT_ATTEMPTS) {
+                    throw error;
+                }
+                // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+                await wait(TRANSPORT_RETRY_MS);
+            }
+        }
+    };
     const accountJwk = await exportJWK(options.accountKey);
     // The thumbprint is RFC 7638: only the required members are hashed, so passing the private JWK yields the
     // same value as the public one — and the key authorization below must match what the CA recomputes.

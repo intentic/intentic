@@ -231,6 +231,44 @@ it("waits out the gap between the zone accepting the record and serving it", asy
     expect(ca.seen.some((request) => request.url.endsWith("/challenge/dns"))).toBe(true);
 });
 
+it("re-sends a request that never reached the CA", async () => {
+    const ca = fakeCa();
+    // Issuance runs at boot and then on a slow cycle, so its first request always goes down a long-idle egress
+    // path — routinely slower than the 10s undici allows a connect. One such moment cost the whole certificate.
+    let failures = 2;
+    const flaky = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        if (failures > 0) {
+            failures -= 1;
+            throw new TypeError("fetch failed");
+        }
+        return ca.fetchImpl(input, init);
+    }) as typeof fetch;
+    expect(await run({ ...ca, fetchImpl: flaky })).toEqual({ certificate: PEM });
+    expect(failures).toBe(0);
+});
+
+it("gives up on a transport that never comes back, rather than retrying forever", async () => {
+    const dead = (async () => {
+        throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    await expect(run({ ...fakeCa(), fetchImpl: dead })).rejects.toThrowError("fetch failed");
+});
+
+it("lets an HTTP error status through untouched — that is the CA answering, not a lost connection", async () => {
+    const ca = fakeCa();
+    let accountAttempts = 0;
+    const refusing = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        if (String(input).endsWith("/new-account")) {
+            accountAttempts += 1;
+            return new Response(JSON.stringify({ detail: "too many registrations for this IP" }), { status: 429, headers: { "replay-nonce": "n" } });
+        }
+        return ca.fetchImpl(input, init);
+    }) as typeof fetch;
+    await expect(run({ ...ca, fetchImpl: refusing })).rejects.toThrowError(/too many registrations/);
+    // Retrying a rate limit is how a client turns one refusal into a ban.
+    expect(accountAttempts).toBe(1);
+});
+
 it("never lets a failed cleanup spoil an issued certificate", async () => {
     const remove = vi.fn(async () => {
         throw new Error("zone unreachable");
