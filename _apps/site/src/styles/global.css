@@ -127,12 +127,14 @@
             color 0.2s ease;
     }
     .btn-primary {
-        background: var(--color-primary-500);
-        color: var(--color-canvas);
+        background: color-mix(in srgb, var(--color-primary-500) 12%, transparent);
+        color: var(--color-primary-400);
+        border: 1px solid color-mix(in srgb, var(--color-primary-500) 22%, transparent);
         font-weight: 600;
     }
     .btn-primary:hover {
-        background: var(--color-primary-400);
+        background: color-mix(in srgb, var(--color-primary-500) 20%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary-500) 38%, transparent);
     }
     .btn-secondary {
         border: 1px solid var(--color-line-strong);

@@ -304,12 +304,13 @@
         border-color 0.15s;
 }
 .plan-approve {
-    background: var(--color-primary-fill);
-    color: var(--color-fill-content);
-    border: 1px solid transparent;
+    background: color-mix(in srgb, var(--color-primary-fill) 10%, transparent);
+    color: var(--color-primary-fill);
+    border: 1px solid color-mix(in srgb, var(--color-primary-fill) 20%, transparent);
 }
 .plan-approve:hover {
-    background: var(--color-primary-fill-hover);
+    background: color-mix(in srgb, var(--color-primary-fill) 18%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary-fill) 35%, transparent);
 }
 .plan-reject {
     background: transparent;
@@ -454,15 +455,15 @@
     height: 2rem;
     width: 2rem;
     border-radius: 9999px;
-    background: var(--color-primary-fill);
-    color: var(--color-fill-content);
+    background: color-mix(in srgb, var(--color-primary-fill) 14%, transparent);
+    color: var(--color-primary-fill);
     cursor: pointer;
     transition:
         background-color 0.15s,
         opacity 0.15s;
 }
 .composer-send:hover {
-    background: var(--color-primary-fill-hover);
+    background: color-mix(in srgb, var(--color-primary-fill) 22%, transparent);
 }
 .composer-send:disabled {
     background: var(--color-overlay);
