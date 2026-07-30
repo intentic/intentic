@@ -8,6 +8,12 @@ import { providerReady } from "../../composables/chat/access";
 import { relativeTime } from "../../composables/chat/catalog";
 import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
+import {
+    usageDetail,
+    usagePercent,
+    usageStatusByAccount,
+    usageTone,
+} from "../../composables/chat/usageStatus";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
@@ -155,6 +161,72 @@ const usageLine = (id: string): string | undefined => {
     return `${usage.turns} turns · ${formatTokens(usage.inputTokens)} in / ${formatTokens(usage.outputTokens)} out${cache}${cost}`;
 };
 
+/* --- Usage ring per account ---------------------------------------------------------------------------------
+ * Plan-limit utilization from the account's subscription snapshot, surfaced as a ProgressRing on the connection
+ * row. Same data the chat composer chip reads (usageStatusByAccount) — the ring here answers at a glance which
+ * accounts still have headroom and which are spent, without opening the Usage tab. */
+const accountRing = (account: OauthAccount): { percent: number; tone: string; tooltip: string } | undefined => {
+    const usage = usageStatusByAccount.value[account.id] ?? account.usage;
+    const percent = usagePercent(usage);
+    if (usage === undefined || percent === undefined) {
+        return undefined;
+    }
+    return { percent, tone: usageTone(percent), tooltip: usageDetail(usage) };
+};
+
+// An account whose binding pool is ≥90% full — effectively spent.
+const isExhausted = (account: OauthAccount): boolean => {
+    const usage = usageStatusByAccount.value[account.id] ?? account.usage;
+    const percent = usagePercent(usage);
+    return percent !== undefined && percent >= 90;
+};
+
+/* --- Sorted accounts (active first, exhausted last) ----------------------------------------------------------
+ * When a provider holds many accounts the list is only useful if the ones with headroom are at the top. Accounts
+ * without usage data are considered active (unknown ≠ exhausted). Within each group the original order holds. */
+const sortedAccounts = computed<readonly OauthAccount[]>(() => {
+    const active: OauthAccount[] = [];
+    const spent: OauthAccount[] = [];
+    for (const account of managedAccounts.value) {
+        (isExhausted(account) ? spent : active).push(account);
+    }
+    return [...active, ...spent];
+});
+
+/* --- Collapsing long lists -----------------------------------------------------------------------------------
+ * Five accounts fit comfortably; beyond that the card becomes a scroll trap that pushes the rest of the Agent
+ * page off screen. Show the first three and collapse the rest behind a toggle. The threshold is on TOTAL visible
+ * rows (native + routed), not on either list alone, so a mix of two native + four routed collapses correctly. */
+const COLLAPSE_THRESHOLD = 5;
+const VISIBLE_WHEN_COLLAPSED = 3;
+const expanded = ref(false);
+
+// The count of ALL visible accounts, both native and routed — the metric that decides whether collapsing fires.
+const totalAccountCount = computed(() => {
+    const routed = routedProvider.value !== undefined ? translatorAccounts.value[routedProvider.value].length : 0;
+    return sortedAccounts.value.length + routed;
+});
+const shouldCollapse = computed(() => totalAccountCount.value > COLLAPSE_THRESHOLD);
+const collapsedCount = computed(() => totalAccountCount.value - VISIBLE_WHEN_COLLAPSED);
+
+// How many native accounts to show when collapsed: the first VISIBLE_WHEN_COLLAPSED, unless routed rows exist
+// and would push the total above VISIBLE_WHEN_COLLAPSED — then native gets fewer to make room for at least one
+// routed row. When expanded, all of them.
+const visibleNativeAccounts = computed<readonly OauthAccount[]>(() => {
+    if (!shouldCollapse.value || expanded.value) {
+        return sortedAccounts.value;
+    }
+    return sortedAccounts.value.slice(0, VISIBLE_WHEN_COLLAPSED);
+});
+
+// How many routed accounts to show when collapsed: fill the remaining slots after native accounts.
+const visibleRoutedLimit = computed(() => {
+    if (!shouldCollapse.value || expanded.value) {
+        return Infinity;
+    }
+    return Math.max(0, VISIBLE_WHEN_COLLAPSED - visibleNativeAccounts.value.length);
+});
+
 // The switcher's own label for the managed provider ("Kimi Code", not "Kimi"), so the empty row names the
 // provider with the words the chip the user just pressed used.
 const managedLabel = computed(() => providerTabs.find((tab) => tab.value === managedProvider.value)?.label ?? providerLabel(managedProvider.value));
@@ -290,7 +362,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                  none — the subscription row below IS their connection — so they skip straight to it. -->
             <template v-if="hasNativeAccounts">
                 <ConnectionRow
-                    v-for="account in managedAccounts"
+                    v-for="account in visibleNativeAccounts"
                     :key="account.id"
                     :title="account.label"
                     :state="account.needsReauth ? `reauth` : `connected`"
@@ -298,6 +370,10 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :note="identityNote(account)"
                     :description="account.needsReauth ? (account.detail ?? `Signed out — reconnect to keep using it.`) : usageLine(account.id)"
                     :renamable="renamable"
+                    :usage-percent="accountRing(account)?.percent"
+                    :usage-tone="accountRing(account)?.tone"
+                    :usage-tooltip="accountRing(account)?.tooltip"
+                    :exhausted="isExhausted(account)"
                     @rename="(label: string) => renameAccount(account.id, label)"
                 >
                     <template #control>
@@ -325,7 +401,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                      that changes as the sign-in runs — Connect, then Connect spinning, then Cancel — so the
                      handshake never arrives as a control the user didn't press anything to get. -->
                 <ConnectionRow
-                    v-if="managedAccounts.length === 0"
+                    v-if="sortedAccounts.length === 0"
                     :title="`${managedLabel} account`"
                     state="missing"
                     :note="nativeFlowLive ? `signing in…` : `not connected`"
@@ -368,7 +444,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                  asks for the landing URL back. Either way the shared poll lands the new account's row. -->
             <template v-if="routedProvider">
                 <ConnectionRow
-                    v-for="account in translatorAccounts[routedProvider]"
+                    v-for="account in translatorAccounts[routedProvider].slice(0, visibleRoutedLimit)"
                     :key="account.name"
                     :title="ROUTED_ROW[routedProvider].title"
                     state="connected"
@@ -443,6 +519,20 @@ onUnmounted(() => clearTimeout(ringTimer));
                     <template v-if="routedFlowLive" #below><ConnectFlow kind="routed" :provider="routedProvider" /></template>
                 </ConnectionRow>
             </template>
+
+            <!-- Collapse toggle: when more than COLLAPSE_THRESHOLD accounts, the list is truncated to keep the
+                 page scannable. The toggle sits at the seam, styled as a quiet link inside its own row so it
+                 aligns with the rows above and doesn't float between sections. -->
+            <Row v-if="shouldCollapse" interactive @click="expanded = !expanded">
+                <template #title>
+                    <span class="flex items-center gap-2 text-2xs font-medium text-link">
+                        <span class="flex w-[1.125rem] shrink-0 justify-center">
+                            <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                        </span>
+                        {{ expanded ? `Show less` : `Show ${collapsedCount} more accounts` }}
+                    </span>
+                </template>
+            </Row>
         </template>
     </RowGroup>
 </template>

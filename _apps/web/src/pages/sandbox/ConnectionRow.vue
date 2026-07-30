@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { InfoHint, Row } from "@intentic-app/ui";
+import { InfoHint, ProgressRing, Row } from "@intentic-app/ui";
 import { nextTick, ref, useTemplateRef } from "vue";
 
 /* ONE connection row. Every credential the Agent tab can hold renders through this — a native provider account,
@@ -44,6 +44,15 @@ const {
     interactive?: boolean;
     // Whether this connection's name is the user's to change — true only where the sandbox owns the credential.
     renamable?: boolean;
+    // Usage percentage (0-100) from the binding plan-limit window, when available. Replaces the plain dot with
+    // a ProgressRing so the account's headroom is visible at a glance. Undefined = no reading (the dot stays).
+    usagePercent?: number;
+    // Tailwind text-color class for the ring (from usageTone): green / yellow / red depending on headroom.
+    usageTone?: string;
+    // Tooltip for the ring — the per-pool breakdown from usageDetail.
+    usageTooltip?: string;
+    // Whether this account is exhausted (≥90% utilization). Dims the row so active accounts stand out.
+    exhausted?: boolean;
 }>();
 
 const emit = defineEmits<{ rename: [label: string] }>();
@@ -86,13 +95,23 @@ const DOT_TONE: Record<string, string> = {
 </script>
 
 <template>
-    <Row :interactive="interactive" :class="tone === `warning` ? `bg-warning/10` : ``">
+    <Row :interactive="interactive" :class="[tone === `warning` ? `bg-warning/10` : ``, exhausted ? `opacity-50` : ``]">
         <template #title>
             <!-- Wraps rather than truncates: the connection KIND has to stay first (a Grok subscription row must
                  never read as the native account above it), with the identity beside it. -->
             <span class="flex min-w-0 flex-wrap items-center gap-x-2.5" :class="state === `add` ? `text-muted` : ``">
                 <span class="flex w-[1.125rem] shrink-0 justify-center">
                     <Icon v-if="state === `add`" name="plus" class="text-2xs" />
+                    <!-- A ring replaces the dot when usage data is available — the account's headroom is worth
+                         more than a binary "connected" dot, and the ring carries the same color system (green /
+                         yellow / red) so the meaning is consistent. The ring's tooltip lists every pool. -->
+                    <ProgressRing
+                        v-else-if="usagePercent !== undefined"
+                        :value="usagePercent"
+                        :size="14"
+                        :class="usageTone ?? 'text-success'"
+                        v-tooltip.top="usageTooltip"
+                    />
                     <span v-else class="h-1.5 w-1.5 rounded-full" :class="DOT_TONE[state]" />
                 </span>
                 <!-- The name, as a field you can type in the moment it is renamable. `w-44` rather than the
