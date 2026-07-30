@@ -29,6 +29,7 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
         autoLand: true,
         autoResumeOnLimit: false,
         resumeAfterOutage: true,
+        autoResumeOnRestart: true,
     });
 });
 
@@ -61,6 +62,9 @@ test("an empty object is the full default settings object", () => {
         // On, unlike the limit resume beside it: an outage resume spends nothing the dead turn hadn't already
         // committed, and the turns it saves are the unattended ones nobody is watching to restart by hand.
         resumeAfterOutage: true,
+        // On: a daemon restart is usually intentic's own doing (an image update, an approved environment
+        // change), not the user's decision, so the turn it interrupted resumes rather than staying stuck.
+        autoResumeOnRestart: true,
     });
 });
 
