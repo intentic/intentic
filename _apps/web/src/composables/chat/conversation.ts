@@ -518,6 +518,11 @@ export class Conversation {
     // start without one, because whatever shell they inherited belongs to a session they no longer run in.
     readonly agentTerminal = ref<string | undefined>();
 
+    // The same, for the browser this conversation's agent drives (`browser-<sdk session>`, named by the
+    // daemon's `browser` frame). Held for the same reason and cleared on the same edges: a browser card can
+    // offer to watch a live page only while the turn that opened it is the turn on screen.
+    readonly agentBrowser = ref<string | undefined>();
+
     // Whether this conversation's turns run in an isolated git worktree (the parallel-agents mode, the default
     // for new chats) or on the shared /work tree. Flipped off for history-menu restores (their sessions live in
     // the main tree's namespace) and legacy restored tabs.
@@ -835,6 +840,7 @@ export class Conversation {
             // tmux session — the remembered one belongs to the segment that just ended, and offering to watch
             // it would point at a shell this conversation no longer uses.
             this.agentTerminal.value = undefined;
+            this.agentBrowser.value = undefined;
         }
         const history = resume === undefined ? transcriptOf(this.messages.value).slice(-200) : [];
         // The switch divider (if any) is frozen into the transcript — the segment cut happened.
@@ -1616,6 +1622,17 @@ export class Conversation {
                 // xterm/terminal-panel chain.
                 const { session } = effect;
                 this.agentTerminal.value = session;
+                const title = this.title.value;
+                void import("../terminal/useWorkTerminals").then((m) => m.noteAgentTerminal(session, title));
+                void import("../terminal/useTerminalPanel").then((m) => m.useTerminalPanel().surface(session));
+                return;
+            }
+            case `surfaceBrowser`: {
+                // The agent just used a browser tool. Everything above applies unchanged — the browser is the
+                // same kind of thing as the shell (this conversation's, for this turn, watchable but hidden
+                // until asked for), which is why it rides the same three calls rather than a parallel channel.
+                const { session } = effect;
+                this.agentBrowser.value = session;
                 const title = this.title.value;
                 void import("../terminal/useWorkTerminals").then((m) => m.noteAgentTerminal(session, title));
                 void import("../terminal/useTerminalPanel").then((m) => m.useTerminalPanel().surface(session));

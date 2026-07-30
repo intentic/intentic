@@ -98,6 +98,13 @@ export type ToolCallLocation = z.infer<typeof ToolCallLocationSchema>;
 // Structured tool output (ACP's ToolCallContent diff shape, verbatim). `diff` is hunk-level for Edit-style
 // tools (old_string/new_string) and whole-file for Write; an absent oldText means a new file / unknown
 // previous content. Sides are capped daemon-side; `truncated` marks a clipped side.
+//
+// `image` is a PICTURE THE TOOL PRODUCED, carried as a workspace path rather than as bytes: a browser
+// screenshot is already on disk under .intentic/browser/output (the artifact hook put it there), so the client
+// fetches it from /workspace/raw like any other file. Base64 on the wire would push a third of a megabyte
+// through the event stream and into the stored transcript for every screenshot, to show something the
+// workspace can already serve — and the path is what keeps the picture openable afterwards, which the inlined
+// bytes would not be. Root-relative, forward-slash: the same route space as ToolCallLocation.
 export const ToolCallContentSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("text"), text: z.string() }),
     z.object({
@@ -107,6 +114,7 @@ export const ToolCallContentSchema = z.discriminatedUnion("type", [
         newText: z.string(),
         truncated: z.boolean().optional(),
     }),
+    z.object({ type: z.literal("image"), path: z.string() }),
 ]);
 export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
 
@@ -217,6 +225,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // The agent just started running Bash in its live `agent-<id>` tmux session — the client surfaces that
     // terminal in the global panel. One per turn (the session is reused across a turn's commands, incl. subagents').
     z.object({ kind: z.literal("terminal"), session: z.string() }),
+    // The agent just used a browser tool — its Chromium is coming up (or already is) behind a watchable
+    // `browser-<id>` session, and the client surfaces it in the same panel as the terminals. One per turn, for
+    // the same reason: one browser serves every browser call the turn makes.
+    z.object({ kind: z.literal("browser"), session: z.string() }),
     z.object({ kind: z.literal("todos"), items: z.array(TodoItemSchema) }),
     // The provider's own slash commands (ACP available_commands_update), replaced whole each time — the
     // composer's `/` popover lists them; invoking one is plain `/name …` prompt text (the ACP convention).

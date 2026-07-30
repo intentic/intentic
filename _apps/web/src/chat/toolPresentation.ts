@@ -35,6 +35,8 @@ export interface ToolPresentation {
     readonly icon: IconName;
     // The structured diffs to render above the body (Edit/Write and any ACP agent that sends them ready-made).
     readonly diffs: readonly Extract<ToolCallContent, { type: "diff" }>[];
+    // Pictures the call produced — today a browser screenshot, carried as a workspace path the card fetches.
+    readonly images: readonly Extract<ToolCallContent, { type: "image" }>[];
     // Undefined when the call produced no text at all — the card then shows a header with no fold affordance.
     readonly body: ToolBody | undefined;
     // A short result phrase for the header ("43 matches", "+12 −3", "failed") — visible while collapsed, which
@@ -213,10 +215,31 @@ const PRESENTERS: Record<string, Presenter> = {
     askuserquestion: { icon: `question-circle` },
 };
 
+/* THE BROWSER FAMILY, PRESENTED AS ONE.
+ *
+ * Every @playwright/mcp tool arrives named "Browser <verb>" (agent/tool-calls.ts), and there are twenty-odd of
+ * them — a table entry each would be twenty rows saying the same thing. They share a face on purpose: the
+ * globe marks browser work wherever it appears in a turn, matching the pill the panel gives the session those
+ * calls are running in, so "this card" and "that tab" read as the same browser.
+ *
+ * A snapshot is the one body worth shaping. It is a YAML accessibility tree, sometimes hundreds of lines, and
+ * it is written for the model rather than for a person — so the header says how big it was and the box stays
+ * folded, instead of burying the turn in it. */
+const BROWSER_PRESENTER: Presenter = {
+    icon: `globe`,
+    summary: (text, tool) => (tool.name.toLowerCase() === `browser snapshot` && text !== `` ? plural(countLines(text), `line`) : undefined),
+};
+
+const presenterFor = (name: string): Presenter => {
+    const lower = name.toLowerCase();
+    return PRESENTERS[lower] ?? (lower.startsWith(`browser `) ? BROWSER_PRESENTER : {});
+};
+
 export const present = (tool: ChatTool): ToolPresentation => {
-    const presenter = PRESENTERS[tool.name.toLowerCase()] ?? {};
+    const presenter = presenterFor(tool.name);
     const content = tool.content ?? [];
     const diffs = content.filter((entry) => entry.type === `diff`);
+    const images = content.filter((entry) => entry.type === `image`);
     const text = content
         .filter((entry) => entry.type === `text`)
         .map((entry) => entry.text)
@@ -233,11 +256,13 @@ export const present = (tool: ChatTool): ToolPresentation => {
     return {
         icon: presenter.icon ?? CATEGORY_ICONS[tool.category],
         diffs,
-        body: diffs.length === 0 && shown === undefined ? undefined : shown,
+        images,
+        body: diffs.length === 0 && images.length === 0 && shown === undefined ? undefined : shown,
         // A failed call's own message is the summary the header wants; a successful one asks its presenter.
         summary: failed ? `failed` : presenter.summary?.(text, tool),
         // Expanded while it runs (live output is the point) and when it failed (the error is the point);
-        // collapsed once a call settles cleanly, so a long turn stays skimmable.
-        defaultOpen: running || failed,
+        // collapsed once a call settles cleanly, so a long turn stays skimmable — EXCEPT when the call came
+        // back with a picture, which is the whole reason it was made and worth nothing folded away.
+        defaultOpen: running || failed || images.length > 0,
     };
 };

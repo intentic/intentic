@@ -256,12 +256,12 @@ const planHarnessTurn = async (
     ];
     // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
     // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
-    const browserServers = await browserServersOf(capabilities, services.workspace.root);
+    const browser = await browserServersOf(capabilities, services.workspace.root);
     // Turn-scoped roots follow the effective cwd: hashline edits must anchor in the worktree an isolated turn
     // edits. Browser profiles, plugin checkouts, and attachments stay on /work — absolute-path inputs, not edit
     // targets.
     const sdkServers = {
-        ...browserServers,
+        ...browser.servers,
         // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
         ...(hashlineEdits ? { hashline: createHashlineServer(context.localCwd) } : {}),
     };
@@ -332,6 +332,9 @@ const planHarnessTurn = async (
             // The same directory the browser servers got as `--output-dir` — the hook that redirects model-named
             // screenshots into it needs the value too, and one source keeps them from drifting.
             browserOutputDir: browserOutputDir(services.workspace.root),
+            // The debugging ports those same servers' Chromiums will open, so the first browser tool call can
+            // register a session the owner can watch (browser/browser-sessions.ts).
+            ...(Object.keys(browser.ports).length > 0 ? { browserPorts: browser.ports } : {}),
             // hashlineEdits owns file mutation via the hashline MCP server above, so drop the native Edit/Write
             // from the model's context (native Read stays for viewing images/PDFs).
             ...(hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),

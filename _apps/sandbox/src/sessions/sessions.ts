@@ -3,7 +3,7 @@ import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/
 import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
-import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
+import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { stripTurnPreamble } from "../agent/turn-preamble.js";
 import { matchPrompts, readSessionPrompts } from "./prompt-index.js";
 
@@ -191,7 +191,9 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
                 }
                 const tool: RestoredToolCall = {
                     id: block.id,
-                    name: block.name,
+                    // The same normalization the live stream applies, so a restored card reads exactly like
+                    // the one it replaces rather than reverting to the raw MCP tool id.
+                    name: displayNameOf(block.name),
                     category: toolCategoryOf(block.name),
                     // No result in the file ⇒ the turn was interrupted mid-call; the card says so rather than
                     // claiming a completion that never happened.

@@ -35,6 +35,9 @@ const SCROLLBACK_LINES = 1000;
 const DRAG_PX = 5;
 
 export type TerminalSession = {
+    // The discriminant the shared session cache dispatches on — a pane is either a terminal or the agent's
+    // browser (browserSession.ts), and they share nothing but the host-element contract.
+    readonly kind: `terminal`;
     readonly name: string;
     readonly term: Terminal;
     readonly serialize: SerializeAddon;
@@ -451,7 +454,18 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
             Math.max(1, Math.floor(spawnWithin.clientHeight / EST_CELL_H)),
         );
     }
-    const s: TerminalSession = { name, term, serialize, host, mountedDocument: document, onExit, retryDelay: RETRY_MS, closing: false, down: false };
+    const s: TerminalSession = {
+        kind: `terminal`,
+        name,
+        term,
+        serialize,
+        host,
+        mountedDocument: document,
+        onExit,
+        retryDelay: RETRY_MS,
+        closing: false,
+        down: false,
+    };
     observeHost(s);
     // Keystrokes → pty; xterm's resize (from fitSession) → pty resize. Wired once — send() targets the current
     // socket, so these survive reconnects. A read-only session wires no input path at all (disableStdin already

@@ -1,6 +1,6 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { expect, test } from "vitest";
-import { browserArtifactHooks, browserOutputDir } from "./browser-artifacts.js";
+import { browserArtifactHooks, browserOutputDir, screenshotImage } from "./browser-artifacts.js";
 
 const OUTPUT = browserOutputDir("/work");
 
@@ -77,4 +77,26 @@ test("an unnamed screenshot is not touched", async () => {
 
 test.each(["mcp__web__browser_navigate", "Write", "mcp__web__browser_snapshot"])("%s is not a screenshot tool", async (toolName) => {
     expect(await fire(toolName, { filename: "shot.png" })).toEqual({});
+});
+
+/* The other direction: the tool's ANSWER back into a picture the chat can show. @playwright/mcp replies with a
+ * markdown link relative to the agent's cwd, which for a repo cwd climbs out of the repo — useless to fetch
+ * until it is put back into the workspace-root-relative route space. */
+test("a screenshot's answer becomes a workspace path the chat can render", () => {
+    const answer = "### Result\n- [Screenshot of viewport](../.intentic/browser/output/page-2026-07-30.png)\n";
+    expect(screenshotImage(answer, "/work/myrepo", OUTPUT)).toEqual({ type: "image", path: ".intentic/browser/output/page-2026-07-30.png" });
+});
+
+test("a screenshot taken at the workspace root resolves the same way", () => {
+    const answer = "- [Screenshot of viewport](.intentic/browser/output/shot.png)";
+    expect(screenshotImage(answer, "/work", OUTPUT)).toEqual({ type: "image", path: ".intentic/browser/output/shot.png" });
+});
+
+// A link we can't place inside the output dir is a file this module never dictated — claiming it would put an
+// arbitrary path from tool output in front of the user as "the screenshot".
+test.each([
+    ["a link outside the output dir", "- [Something](../src/index.ts)"],
+    ["no link at all", "Took the screenshot."],
+])("%s produces no picture", (_case, answer) => {
+    expect(screenshotImage(answer, "/work/myrepo", OUTPUT)).toBeUndefined();
 });

@@ -11,10 +11,17 @@ const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: 
 
 // Whether the image actually has Chromium decides what browserServersOf can return, and CI images may not.
 // Asserting the SHAPE of each spec is version-independent; the wiring test below adapts.
-const chromiumInstalled = async (): Promise<boolean> => Object.keys(await browserServersOf([], tempRoot())).length > 0;
+const chromiumInstalled = async (): Promise<boolean> => Object.keys((await browserServersOf([], tempRoot())).servers).length > 0;
 
 test("browserServerSpec is a HEADED stdio server bound to the profile + stealth + display", () => {
-    const spec = browserServerSpec("cli.js", "/ms/chrome", "/work/.intentic/browser/reddit", "/work/.intentic/browser/stealth.js", ":99") as {
+    const spec = browserServerSpec(
+        "cli.js",
+        "/ms/chrome",
+        "/work/.intentic/browser/reddit",
+        "/work/.intentic/browser/stealth.js",
+        ":99",
+        "/tmp/cfg.json",
+    ) as {
         type: string;
         command: string;
         args: string[];
@@ -27,6 +34,9 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
     expect(spec.args).toContain("--init-script");
     expect(spec.args).toContain("/work/.intentic/browser/stealth.js");
     expect(spec.args).toContain("--no-sandbox");
+    // The config file is what carries --remote-debugging-port, and so what makes the browser watchable.
+    expect(spec.args).toContain("--config");
+    expect(spec.args).toContain("/tmp/cfg.json");
     // Headed, not the fingerprinted headless shell, and rendering to the shared Xvfb.
     expect(spec.args).not.toContain("--headless");
     expect(spec.env.DISPLAY).toBe(":99");
@@ -35,7 +45,7 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
 // The credential-free browser carries no identity at all — that is what lets it exist without a login, and
 // what lets two turns run one at once.
 test("isolatedBrowserSpec keeps the profile in memory and needs no display", () => {
-    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", "/work/.intentic/browser/output") as {
+    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", "/work/.intentic/browser/output", "/tmp/cfg.json") as {
         args: string[];
         env: Record<string, string>;
     };
@@ -54,9 +64,9 @@ test("a browser is available with no capabilities and no login at all", async ()
     if (!(await chromiumInstalled())) {
         return;
     }
-    expect(Object.keys(await browserServersOf([], tempRoot()))).toEqual(["web"]);
+    expect(Object.keys((await browserServersOf([], tempRoot())).servers)).toEqual(["web"]);
     const github: Capability = { id: "gh", kind: "cli", config: { provider: "github", token: "x" } };
-    expect(Object.keys(await browserServersOf([github], tempRoot()))).toEqual(["web"]);
+    expect(Object.keys((await browserServersOf([github], tempRoot())).servers)).toEqual(["web"]);
 });
 
 // Only the not-logged-in half is assertable here: the logged-in path starts Xvfb, which exists in the sandbox
@@ -65,7 +75,7 @@ test("a browser capability contributes nothing extra until it is logged in", asy
     if (!(await chromiumInstalled())) {
         return;
     }
-    expect(Object.keys(await browserServersOf([reddit], tempRoot()))).toEqual(["web"]);
+    expect(Object.keys((await browserServersOf([reddit], tempRoot())).servers)).toEqual(["web"]);
 });
 
 test("a login in progress suppresses that platform's server (the profile is locked)", async () => {
@@ -76,7 +86,7 @@ test("a login in progress suppresses that platform's server (the profile is lock
     await markConnected(root, "reddit");
     expect(acquireLoginLock("reddit")).toBe(true);
     // The credential-free browser is unaffected — it holds no profile to lock.
-    expect(Object.keys(await browserServersOf([reddit], root))).toEqual(["web"]);
+    expect(Object.keys((await browserServersOf([reddit], root)).servers)).toEqual(["web"]);
     releaseLoginLock("reddit");
 });
 
@@ -87,5 +97,5 @@ test("no Chromium on disk means no browser servers at all", async () => {
     }
     const root = tempRoot();
     await markConnected(root, "reddit");
-    expect(await browserServersOf([reddit], root)).toEqual({});
+    expect(await browserServersOf([reddit], root)).toEqual({ servers: {}, ports: {} });
 });

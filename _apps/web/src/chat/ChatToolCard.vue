@@ -3,6 +3,7 @@ import type { IconName } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import type { ChatTool } from "../composables/chat/transcript";
 import { useChat } from "../composables/chat/useChat";
+import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { openWorkTerminal } from "../composables/terminal/useWorkTerminals";
 import { openWorkspaceRef } from "../composables/workspace/openFileRef";
 import ChatCodeBody from "./ChatCodeBody.vue";
@@ -48,7 +49,12 @@ const statusIcon = computed<{ name: IconName; spin: boolean; class: string }>(()
 // shows just its header, no chevron. A sub-agent card folds over its nested transcript (children + thinking)
 // too, so the whole delegation collapses to one line once it settles.
 const hasContent = computed(
-    () => view.value.diffs.length > 0 || view.value.body !== undefined || props.tool.thinking !== undefined || (props.tool.children?.length ?? 0) > 0,
+    () =>
+        view.value.diffs.length > 0 ||
+        view.value.images.length > 0 ||
+        view.value.body !== undefined ||
+        props.tool.thinking !== undefined ||
+        (props.tool.children?.length ?? 0) > 0,
 );
 
 // Output fold, mirroring the turn's Thinking block. The registry decides the default (open while running or
@@ -69,6 +75,12 @@ const location = computed(() => props.tool.locations?.[0]);
  * renders the ACTIVE conversation, so its terminal is this card's terminal. */
 const { active } = useChat();
 const agentTerminal = computed(() => (view.value.body?.kind === `command` ? active.value.agentTerminal.value : undefined));
+
+/* The BROWSER behind a browser card, on exactly the same terms. Its Chromium is a real session the panel can
+ * screencast, and it no longer tabs itself into the strip either — so the card that made the user wonder "what
+ * is it looking at?" is where the answer is offered. Every browser tool gets the button, not just the ones
+ * that returned a picture: a click or a form fill is precisely when watching is worth more than reading. */
+const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`browser `) ? active.value.agentBrowser.value : undefined));
 </script>
 
 <template>
@@ -125,6 +137,18 @@ const agentTerminal = computed(() => (view.value.body?.kind === `command` ? acti
             >
                 <Icon name="desktop" class="text-2xs" />
             </button>
+            <!-- The same door, onto the live page instead of the live shell. -->
+            <button
+                v-if="agentBrowser"
+                type="button"
+                class="shrink-0 transition-opacity hover:text-content"
+                :class="[running && live ? '' : 'opacity-0 group-hover/tool:opacity-100', { 'ml-auto': !unfinished && !view.summary }]"
+                v-tooltip.top="'Watch the browser'"
+                aria-label="Watch the browser"
+                @click="openWorkTerminal(agentBrowser)"
+            >
+                <Icon name="globe" class="text-2xs" />
+            </button>
         </div>
         <template v-if="isOpen">
             <!-- A sub-agent's own thinking, grouped onto its card as a muted inner-voice block rather than
@@ -139,6 +163,25 @@ const agentTerminal = computed(() => (view.value.body?.kind === `command` ? acti
             <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1 border-l border-line pl-2">
                 <ChatToolCard v-for="child in tool.children" :key="child.id" :tool="child" :live="live" />
             </div>
+            <!-- What the agent actually looked at. The bytes are already in the workspace (the artifact hook
+                 put them under .intentic/browser/output), so this is a path fetched through the same cache the
+                 attachment chips use — and a click opens the file itself, full size, in the workspace. -->
+            <button
+                v-for="image in view.images"
+                :key="image.path"
+                type="button"
+                class="ml-4 overflow-hidden rounded border border-line bg-canvas text-left"
+                v-tooltip.top="'Open in workspace'"
+                @click="openWorkspaceRef(image.path)"
+            >
+                <img
+                    v-if="attachmentPreview(image.path)"
+                    :src="attachmentPreview(image.path)"
+                    :alt="image.path"
+                    class="max-h-80 w-full object-contain"
+                />
+                <span v-else class="block px-2 py-1 font-mono text-2xs text-subtle">{{ image.path }}</span>
+            </button>
             <ChatToolDiff
                 v-for="diff in view.diffs"
                 :key="diff.path"

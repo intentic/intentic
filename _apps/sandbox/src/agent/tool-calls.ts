@@ -40,7 +40,25 @@ const DISPLAY_NAMES: Record<string, string> = {
     task: "Task",
     patch: "Edit",
 };
-export const displayNameOf = (raw: string): string => DISPLAY_NAMES[raw] ?? raw;
+
+/* THE BROWSER TOOLS, SPELLED AS SOMETHING A PERSON READS.
+ *
+ * @playwright/mcp's tools arrive as `mcp__web__browser_navigate` / `mcp__reddit__browser_click`, and a card
+ * headed with that string tells the user nothing they came for. Which SERVER it was is the one part that
+ * doesn't earn its place: the credential-free browser and a logged-in profile do the same things, and where a
+ * platform matters the URL on the card already names it. What is left — "Browser navigate", "Browser click" —
+ * groups on sight in a scrolling transcript and says exactly what happened.
+ *
+ * `take_screenshot` is the one verb that reads badly transliterated ("Browser take screenshot"), so it loses
+ * its verb; every other name is the tool's own, underscores opened out. */
+const BROWSER_TOOL = /^mcp__.+__browser_(.+)$/;
+const BROWSER_VERB_NAMES: Record<string, string> = { take_screenshot: "screenshot" };
+const browserDisplayName = (raw: string): string | undefined => {
+    const verb = BROWSER_TOOL.exec(raw)?.[1];
+    return verb === undefined ? undefined : `Browser ${(BROWSER_VERB_NAMES[verb] ?? verb).replaceAll("_", " ")}`;
+};
+
+export const displayNameOf = (raw: string): string => DISPLAY_NAMES[raw] ?? browserDisplayName(raw) ?? raw;
 
 // The ONE display-name → ACP ToolKind table (case-insensitive), driving card icons and live-writes.
 const CATEGORIES: ReadonlyArray<readonly [string, ToolKind]> = [
@@ -74,12 +92,33 @@ const MCP_VERBS: ReadonlyArray<readonly [string, ToolKind]> = [
     ["exec", "execute"],
 ];
 
+/* Browsing splits into three acts, and the suffix rule above gets all three wrong (`browser_click` ends in no
+ * known verb at all, so every one of them landed on `other` and drew the generic cog).
+ *   · going somewhere        → fetch   (the globe: same act as WebFetch, done in a real page)
+ *   · doing something there  → execute (a click, a keystroke, a form — the browser's side effects)
+ *   · looking at the result  → read    (a snapshot, a screenshot, the console, the network log)
+ * Anything not listed is an act on the page, so `execute` is the floor rather than `other`. */
+const BROWSER_VERB_KINDS: Record<string, ToolKind> = {
+    navigate: "fetch",
+    navigate_back: "fetch",
+    snapshot: "read",
+    take_screenshot: "read",
+    console_messages: "read",
+    network_requests: "read",
+    network_request: "read",
+    tabs: "read",
+};
+
 // What a tool call *does*, from its (display) name. MCP names (`mcp__server__tool`, `server.tool`) categorize
 // by their tool segment's trailing verb; anything unrecognized is `other`.
 export const toolCategoryOf = (name: string): ToolKind => {
     const exact = CATEGORY_BY_NAME.get(name.toLowerCase());
     if (exact !== undefined) {
         return exact;
+    }
+    const browserVerb = BROWSER_TOOL.exec(name)?.[1];
+    if (browserVerb !== undefined) {
+        return BROWSER_VERB_KINDS[browserVerb] ?? "execute";
     }
     const segment = name.includes("__") ? name.split("__").pop() : name.includes(".") ? name.split(".").pop() : undefined;
     if (segment === undefined) {
@@ -95,8 +134,10 @@ export const toolCategoryOf = (name: string): ToolKind => {
 };
 
 // The file path / command / query a tool acts on, for the tool_call frame's target (the raw mono string on
-// the card). Key order matters: the most specific spelling wins.
-const TARGET_KEYS = ["file_path", "filePath", "notebook_path", "command", "pattern", "url", "path", "query"] as const;
+// the card). Key order matters: the most specific spelling wins. `element` is @playwright/mcp's own
+// human-readable description of what a click/type/hover is aimed at ("Submit button") — the only thing those
+// calls carry that means anything to a reader, since their `ref` is a snapshot-local handle like `e12`.
+const TARGET_KEYS = ["file_path", "filePath", "notebook_path", "command", "pattern", "url", "element", "path", "query"] as const;
 export const toolTarget = (input: unknown): string | undefined => {
     if (typeof input !== "object" || input === null) {
         return undefined;

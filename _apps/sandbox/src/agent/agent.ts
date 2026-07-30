@@ -23,7 +23,8 @@ import { relative, sep } from "node:path";
 import { z } from "zod";
 import { daemonMountNs, inWorktree, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../agents/isolation.js";
 import { worktreeRedirectHooks } from "../agents/worktree-redirect.js";
-import { browserArtifactHooks } from "../browser/browser-artifacts.js";
+import { browserArtifactHooks, screenshotImage } from "../browser/browser-artifacts.js";
+import { browserServerOfTool, browserSessionHooks, browserSessionName } from "../browser/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "./agent-commands.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
@@ -35,7 +36,7 @@ import { EventQueue } from "./event-queue.js";
 import { harnessEnv } from "./harness-credentials.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
 import { TaskChecklist } from "./task-checklist.js";
-import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
+import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 import { isAuthFailureText } from "./auth-failure-text.js";
 import { isUsageLimitText } from "./usage-limit-text.js";
 
@@ -105,6 +106,10 @@ export interface AgentRequest {
     // because @playwright/mcp honours it only for the files IT names (browser/browser-artifacts.ts). Drives
     // both the redirect hook and the sentence that tells the agent where to Read a screenshot back from.
     readonly browserOutputDir?: string;
+    // Each browser MCP server's CDP debugging port (server name → port), so the first browser tool call can
+    // register a watchable session for the Chromium that call is launching (browser/browser-sessions.ts).
+    // Absent ⇒ the turn has no browser tools at all, and nothing is watched.
+    readonly browserPorts?: Record<string, number>;
     // Built-in tool names to remove from the model's context this turn (SDK disallowedTools). Set by the
     // hashlineEdits toggle to disable native Edit/Write so file mutations route through the hashline MCP tools.
     readonly disallowedTools?: readonly string[];
@@ -365,6 +370,9 @@ async function* streamSdk(
     options: Options,
     cwd: string,
     tmuxEnabled: boolean,
+    // Where this turn's browser artifacts land — how a screenshot's answer is turned back into a picture the
+    // chat can show. Absent on a turn with no browser tools at all.
+    browserOutputDir: string | undefined,
     steering: SteeringQueue | undefined,
     // Reads the credential's plan-limit pools at turn settle; absent when the turn ran on a credential with no
     // pools to read (an API endpoint, the container env) — no read, no frame.
@@ -378,7 +386,14 @@ async function* streamSdk(
     // idempotent, so the double emit is harmless.
     let terminalResurfaced = false;
     let agentSession: string | undefined;
+    // Same idea for the agent's browser: named once, at the first browser tool call, so the client can offer
+    // "watch this" from the card that asked the question. The PreToolUse hook is what actually registers the
+    // session (browser/browser-sessions.ts); this frame only tells the client its name.
+    let browserSent = false;
     const bashToolIds = new Set<string>();
+    // tool_use ids of browser screenshots, so the result can be turned into a picture the chat actually shows
+    // instead of the literal "[image]" a non-text block collapses to (browser/browser-artifacts.ts).
+    const screenshotToolIds = new Set<string>();
     // tool_use ids whose tool_call already carried the authoritative diff (derived from the Edit/Write input),
     // so the success result's redundant "file updated" text must not REPLACE it (update content is a snapshot).
     const diffToolIds = new Set<string>();
@@ -504,6 +519,21 @@ async function* streamSdk(
                             }
                         }
                     }
+                    // First browser tool of the turn: name the `browser-<id>` session so the card can offer to
+                    // watch it. Unlike Bash there is no resurface pass — the session is registered by the same
+                    // call's PreToolUse hook, which has already run by the time this block is streamed.
+                    if (browserServerOfTool(block.name) !== undefined) {
+                        if (block.name.endsWith("__browser_take_screenshot")) {
+                            screenshotToolIds.add(block.id);
+                        }
+                        if (!browserSent && typeof sessionId === "string") {
+                            const session = browserSessionName(sessionId);
+                            if (session !== undefined) {
+                                browserSent = true;
+                                yield { kind: "browser", session };
+                            }
+                        }
+                    }
                     const target = toolTarget(block.input);
                     const locations = toolLocations(block.input, cwd);
                     const diff = editDiffContent(block.name, block.input, cwd);
@@ -513,7 +543,10 @@ async function* streamSdk(
                     yield {
                         kind: "tool_call",
                         id: block.id,
-                        name: block.name,
+                        // Through the shared vocabulary like every other backend's: Claude's own tool names have
+                        // no entry and pass through untouched, and an MCP browser tool stops being
+                        // `mcp__web__browser_navigate` on the card.
+                        name: displayNameOf(block.name),
                         category: toolCategoryOf(block.name),
                         status: "in_progress",
                         ...(target !== undefined ? { target } : {}),
@@ -552,11 +585,20 @@ async function* streamSdk(
                     // A successful Edit/Write result is only the redundant "file updated" snippet — status alone,
                     // so the call-time diff stays the card's content. Errors DO replace it (the text is the reason).
                     const failed = block.is_error === true;
+                    const text = resultText(block.content);
+                    // A screenshot's answer names the file it wrote; carry the picture alongside the text so the
+                    // card can show what the agent looked at, not just say that it looked.
+                    const image =
+                        !failed && screenshotToolIds.has(block.tool_use_id) && browserOutputDir !== undefined
+                            ? screenshotImage(text, cwd, browserOutputDir)
+                            : undefined;
                     yield {
                         kind: "tool_call_update",
                         id: block.tool_use_id,
                         status: failed ? "failed" : "completed",
-                        ...(diffToolIds.has(block.tool_use_id) && !failed ? {} : { content: [{ type: "text", text: resultText(block.content) }] }),
+                        ...(diffToolIds.has(block.tool_use_id) && !failed
+                            ? {}
+                            : { content: [{ type: "text" as const, text }, ...(image !== undefined ? [image] : [])] }),
                     };
                 }
             }
@@ -871,6 +913,10 @@ const baseOptions = (
         // filename is rewritten into the tool-owned directory before the tool ever sees it. Named here rather
         // than left to the prompt because a convention only holds for the agents that happen to read it.
         request.browserOutputDir !== undefined ? browserArtifactHooks(request.browserOutputDir) : {},
+        // Browser, the other half: a browser tool call is the moment the agent's Chromium becomes real, so it
+        // is where the watchable session is registered. The hook only names what already exists — the browser
+        // is the MCP's to launch and to kill (browser/browser-sessions.ts).
+        request.browserPorts !== undefined ? browserSessionHooks(request.browserPorts) : {},
         // The hook body runs in the DAEMON, outside the turn's namespace, so the file the agent just edited
         // has to be named the way the daemon can reach it — otherwise an isolated turn type-checks the main
         // tree's copy of the path and reports diagnostics for code it did not write.
@@ -1050,7 +1096,11 @@ const permissionGate =
 //
 // A throwing/aborted turn surfaces as an `error` event (errors are reported to the UI, not swallowed), then
 // the stream closes with `done`.
-export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaultQuery, usageFetch: typeof fetch = fetch): AsyncGenerator<AgentEvent> {
+export async function* runAgent(
+    request: AgentRequest,
+    queryFn: QueryFn = defaultQuery,
+    usageFetch: typeof fetch = fetch,
+): AsyncGenerator<AgentEvent> {
     const abortController = new AbortController();
     if (request.signal.aborted) {
         abortController.abort();
@@ -1095,7 +1145,16 @@ export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaul
 
     const pump = (async () => {
         try {
-            for await (const event of streamSdk(queryFn, promptInput(request), options, request.cwd, tmuxEnabled, request.steering, readUsage)) {
+            for await (const event of streamSdk(
+                queryFn,
+                promptInput(request),
+                options,
+                request.cwd,
+                tmuxEnabled,
+                request.browserOutputDir,
+                request.steering,
+                readUsage,
+            )) {
                 push(event);
             }
         } catch (error) {

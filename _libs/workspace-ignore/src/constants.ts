@@ -43,10 +43,15 @@ export const isReferencePath = (relPath: string): boolean => relPath.split(/[\\/
 // constantly-rewritten files (Cookies, Login Data, …). Treated as ignored so the tree grays + lazy-loads the
 // subtree instead of eagerly walking it, and the file watcher skips its churn. Not a read block — its files are
 // served on demand like any other ignored path.
+//
+// `output` is the one child that is NOT profile churn: it holds what the agent's browsing PRODUCED —
+// screenshots, page snapshots, downloads — which is the opposite kind of file. Written deliberately, one at a
+// time, and meant to be looked at: the chat renders those screenshots inline and offers to open them here. It
+// was only ever caught by this rule because it happened to live under the same directory.
 export const isBrowserProfilePath = (path: string): boolean => {
     const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
     const i = segments.indexOf(".intentic");
-    return i !== -1 && segments[i + 1] === "browser";
+    return i !== -1 && segments[i + 1] === "browser" && segments[i + 2] !== "output";
 };
 
 // Agent worktrees (<repo>/.claude/worktrees/<name>) are throwaway full checkouts of their repo. Not junk by

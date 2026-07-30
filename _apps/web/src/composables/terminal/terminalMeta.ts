@@ -14,6 +14,19 @@ export interface TerminalMeta {
     readonly icon?: IconName;
 }
 
+// What each KIND looks like when the user hasn't overridden it — the strip's pills and the Recent-work rows
+// read from the same table, so a glyph means the same thing wherever it appears. The browser's globe is the
+// one the fetch-category tool cards already use, which is what ties the card offering "watch this" to the pill
+// that appears when they do.
+export const KIND_ICONS = {
+    agent: `sparkles`,
+    job: `bolt`,
+    process: `cog`,
+    shell: `desktop`,
+    panel: `desktop`,
+    browser: `globe`,
+} as const satisfies Record<string, IconName>;
+
 // The offered palette (VSCode's terminal-tab colors, roughly), tuned to read on the dark pill background.
 export const TERMINAL_COLORS = {
     red: `#f87171`,

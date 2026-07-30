@@ -30,12 +30,30 @@ test("toolCategoryOf categorizes MCP names by their tool segment's trailing verb
     expect(toolCategoryOf("mcp__voice__join_call")).toBe("other");
 });
 
+// Every browser tool used to fall through the suffix rule to "other" and draw the generic cog — a turn spent
+// clicking through the user's own app read as a column of identical grey rows.
+test("browser tools read as going somewhere, doing something, or looking at the result", () => {
+    expect(displayNameOf("mcp__web__browser_navigate")).toBe("Browser navigate");
+    expect(displayNameOf("mcp__reddit__browser_click")).toBe("Browser click");
+    expect(displayNameOf("mcp__web__browser_take_screenshot")).toBe("Browser screenshot");
+    expect(displayNameOf("mcp__web__browser_navigate_back")).toBe("Browser navigate back");
+
+    expect(toolCategoryOf("mcp__web__browser_navigate")).toBe("fetch");
+    expect(toolCategoryOf("mcp__web__browser_snapshot")).toBe("read");
+    expect(toolCategoryOf("mcp__web__browser_take_screenshot")).toBe("read");
+    expect(toolCategoryOf("mcp__reddit__browser_click")).toBe("execute");
+    // Unlisted verbs are acts on the page, not unknowns.
+    expect(toolCategoryOf("mcp__web__browser_fill_form")).toBe("execute");
+});
+
 test("toolTarget picks the most specific key across both spelling families", () => {
     expect(toolTarget({ file_path: "/work/a.ts" })).toBe("/work/a.ts");
     expect(toolTarget({ filePath: "/work/a.ts" })).toBe("/work/a.ts");
     expect(toolTarget({ command: "ls -la" })).toBe("ls -la");
     expect(toolTarget({ pattern: "TODO" })).toBe("TODO");
     expect(toolTarget({ url: "https://x.dev" })).toBe("https://x.dev");
+    // What a browser click/type is aimed at, in @playwright/mcp's own words — its `ref` ("e12") says nothing.
+    expect(toolTarget({ element: "Submit button", ref: "e12" })).toBe("Submit button");
     expect(toolTarget({ query: "how" })).toBe("how");
     expect(toolTarget({ file_path: "/work/a.ts", command: "ignored" })).toBe("/work/a.ts");
     expect(toolTarget("nope")).toBeUndefined();

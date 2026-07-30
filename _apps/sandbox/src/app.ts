@@ -34,6 +34,7 @@ import { approveEnvironment, readEnvironment, rejectEnvironment } from "./enviro
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserLoginRoute } from "./browser/browser-login.js";
+import { createBrowserViewRoute } from "./browser/browser-view.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoute } from "./webchat/webchat.routes.js";
 import { extractTarToWorkspace, PathEscapeError } from "./workspace/workspace-archive.js";
@@ -136,6 +137,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 // /system/browser-login is a WebSocket upgrade too — it authorizes token+connect from the query
                 // string itself (see createBrowserLoginRoute), same as /system/terminal.
                 c.req.path === "/system/browser-login" ||
+                // …and so is /system/browser-view, the same screencast pointed at the browser the AGENT drives.
+                c.req.path === "/system/browser-view" ||
                 c.req.path === "/enroll" ||
                 c.req.path === "/system/authorized-key" ||
                 eventFirePath.test(c.req.path) ||
@@ -350,6 +353,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Guided browser login for `browser`-kind capabilities: a WebSocket that screencasts a live Chromium the
     // owner signs into (see createBrowserLoginRoute). Same shared `ws` server + query-string auth as the terminal.
     app.get("/system/browser-login", createBrowserLoginRoute(services));
+
+    // Watch the browser the AGENT is driving — the same screencast wire as the login, attached to a live
+    // `browser-*` session instead of a fresh sign-in Chromium (see createBrowserViewRoute).
+    app.get("/system/browser-view", createBrowserViewRoute(services));
 
     // Deploy-target enrollment from the connect-host script (curl, not a browser): authenticated by the connect
     // token alone (exempt from the bearer middleware above), so it self-registers a host without a Google login.

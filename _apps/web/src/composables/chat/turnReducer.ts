@@ -64,6 +64,8 @@ export type TurnEffect =
     | { readonly kind: "toolCall"; readonly call: Extract<AgentEvent, { kind: "tool_call" }> }
     // Surface the agent's live tmux terminal as a tab in the global panel.
     | { readonly kind: "surfaceTerminal"; readonly session: string }
+    // Same, for the live browser the agent drives through its Playwright tools.
+    | { readonly kind: "surfaceBrowser"; readonly session: string }
     // A turn-level failure. Wording and severity are the caller's: several codes need state this module has no
     // business reading (the account's usage windows, the provider's account list) to phrase themselves.
     // rate_limit failures also carry the daemon's resume verdict: when the spent window reopens, whether an
@@ -433,6 +435,8 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             return event.account === undefined ? step(state) : step(state, { kind: `accountUsage`, account: event.account, windows: event.windows });
         case `terminal`:
             return step(state, { kind: `surfaceTerminal`, session: event.session });
+        case `browser`:
+            return step(state, { kind: `surfaceBrowser`, session: event.session });
         case `error`:
             return step(state, {
                 kind: `error`,

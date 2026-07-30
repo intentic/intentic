@@ -2206,8 +2206,12 @@ export const PortForwardResultSchema = z.object({ previewUrl: z.string().optiona
 export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 
 // ---- terminal ----
-// EVERY attachable tmux session in the sandbox — the web app's ONE global terminal panel (the interactive I/O
-// is the /system/terminal WebSocket, not oRPC): `shell` = a web-* session the user opened (numbered pill),
+// EVERY live surface in the sandbox the web app's ONE global panel can show. Mostly tmux sessions (the
+// interactive I/O is the /system/terminal WebSocket, not oRPC), plus the agent's browser, which is not a
+// terminal at all — no more than a `process` row is — but IS the same question: what is running right now,
+// and can I look at it? One list, because the panel that answers that question is one panel.
+//
+// `shell` = a web-* session the user opened (numbered pill),
 // `panel` = a panel-* dev-server session (labeled by its panel key, started via Start; running:false =
 // untracked, e.g. a finished one-shot job's lingering shell), `agent` = an agent-* session the Claude agent's
 // Bash commands run in (live-watchable, AI-marked in the UI; running:false once every window is a finished
@@ -2218,7 +2222,11 @@ export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 // process (a lingering shell after a crash reads false). A process row that maps to an installed extension's
 // declared process carries extensionId+processName, the address for its /extensions start/stop routes. The
 // `{name}` kill-route param is a bare string validated in the handler (a bad name is a BAD_REQUEST) since the
-// same charset gates a `tmux kill-session -t` shell-out.
+// same charset gates a `tmux kill-session -t` shell-out. `browser` = a `browser-<sdk session>` Chromium the
+// agent is driving through its @playwright/mcp tools (browser/browser-sessions.ts) — watchable live over the
+// /system/browser-view WebSocket, `running` while that Chromium is connected, and hidden from the strip by
+// the same rule as `agent`: it is a record of work, not a place. Its `label` is the page's own title and
+// `url` the page it is on, which is the one thing a browser pill has to say that a terminal pill does not.
 //
 // `activityAt` (epoch ms of the session's last output) and `exitCode` (the LAST window's exit status, absent
 // while that pane still lives) are what let a finished session be READ rather than merely listed: the panel's
@@ -2228,12 +2236,14 @@ export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 export const TerminalSessionSchema = z.object({
     name: z.string(),
     label: z.string().optional(),
-    kind: z.enum(["shell", "panel", "agent", "job", "process"]),
+    kind: z.enum(["shell", "panel", "agent", "job", "process", "browser"]),
     running: z.boolean(),
     activityAt: z.number(),
     exitCode: z.number().optional(),
     extensionId: z.string().optional(),
     processName: z.string().optional(),
+    // Browser sessions only: the page the agent is on right now.
+    url: z.string().optional(),
 });
 export const TerminalsListSchema = z.object({ sessions: z.array(TerminalSessionSchema) });
 export type TerminalsList = z.infer<typeof TerminalsListSchema>;

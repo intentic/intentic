@@ -11,6 +11,7 @@ import {
 import { implement, ORPCError } from "@orpc/server";
 import { agentSessionName } from "../agent/agent-terminals.js";
 import type { VerifiedIdentity } from "../auth/auth.js";
+import { BROWSER_SESSION_PREFIX, closeBrowserSession, listBrowserSessions } from "../browser/browser-sessions.js";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -24,6 +25,10 @@ import { isNewer, latestVersion } from "../platform/version-check.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 
 const execFileAsync = promisify(execFile);
+
+// The agent's browsers, in the shape the tmux rows use. They carry no exit code — a browser doesn't exit with a
+// status, it is simply connected or gone — so `running` is the whole liveness story here.
+const browserSessions = (): TerminalsList["sessions"] => listBrowserSessions().map((session) => ({ ...session, kind: "browser" as const }));
 
 // Fold `tmux list-panes -a` output into one row per SESSION: the last pane's foreground command and exit
 // status, the session's last-activity stamp, plus whether any pane in it is still alive. Liveness has to be
@@ -321,9 +326,10 @@ export const createSystemRoutes = (services: Services) => {
                     }
                     return [];
                 });
-                return { sessions };
+                return { sessions: [...sessions, ...browserSessions()] };
             } catch {
-                return { sessions: [] };
+                // No tmux server yet — the agent's browser is still a live surface worth listing.
+                return { sessions: browserSessions() };
             }
         }),
         // Destroy one session (its tab's close button). Validate the name before it reaches the `kill-session`
@@ -332,6 +338,13 @@ export const createSystemRoutes = (services: Services) => {
         killTerminal: i.killTerminal.handler(async ({ input }) => {
             if (!isValidSessionName(input.name)) {
                 throw new ORPCError("BAD_REQUEST", { message: `invalid session name: ${input.name}` });
+            }
+            // A browser session has no tmux behind it — closing its Chromium IS the kill, and the agent's next
+            // browser tool call fails the way it would if the browser had crashed, which is the honest account
+            // of the owner having pulled the plug.
+            if (input.name.startsWith(BROWSER_SESSION_PREFIX)) {
+                await closeBrowserSession(input.name);
+                return { ok: true };
             }
             // A panel session belongs to the process manager — stop through it so `current` unmaps NOW (a Start
             // right after × must not no-op for the sweep interval). stop() kills lingering sessions too.

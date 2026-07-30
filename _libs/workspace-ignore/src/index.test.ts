@@ -8,6 +8,13 @@ test("the browser-login profile subtree (auth cookies) is treated as ignored, bu
     expect(isBrowserProfilePath(".intentic/environment.Dockerfile")).toBe(false);
 });
 
+// What the browsing PRODUCED, as opposed to the profile it ran under: written once, meant to be opened, and
+// linked to from the chat's tool cards. Graying it out was collateral damage from sharing a parent directory.
+test("browser artifacts are ordinary files, not profile churn", () => {
+    expect(isBrowserProfilePath(".intentic/browser/output")).toBe(false);
+    expect(isBrowserProfilePath(".intentic/browser/output/page-2026-07-30T10-00-00.png")).toBe(false);
+});
+
 test("agent worktrees (.claude/worktrees — throwaway full checkouts) are treated as ignored, but the rest of .claude isn't", () => {
     expect(isAgentWorktreePath(".claude/worktrees")).toBe(true);
     expect(isAgentWorktreePath(".claude/worktrees/file-nesting/_apps/api/vitest.config.ts")).toBe(true);

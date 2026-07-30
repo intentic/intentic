@@ -1,9 +1,15 @@
-import { basename, join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import type { ToolCallContent } from "@intentic/sandbox-contract";
 
 // The one directory every browser artifact belongs in. It sits outside every repo of the workspace (the root
 // repo excludes `/.intentic/`), so nothing written here can reach the user's Changes panel or a commit.
 export const browserOutputDir = (root: string): string => join(root, ".intentic", "browser", "output");
+
+// Its inverse, so the two can't drift. A screenshot has to be named in the WORKSPACE-ROOT-relative route space
+// for the web to fetch it (/workspace/raw), and the output dir is the only thing the turn carries that knows
+// where that root is — see AgentRequest.browserOutputDir.
+const rootOf = (outputDir: string): string => resolve(outputDir, "..", "..", "..");
 
 /* Why a hook has to enforce that directory.
  *
@@ -35,6 +41,36 @@ const inOutputDir = (outputDir: string, filename: string): string => {
     const resolved = resolve(outputDir, filename);
     const rel = relative(outputDir, resolved);
     return rel !== "" && !rel.startsWith("..") ? resolved : join(outputDir, basename(filename));
+};
+
+/* THE SCREENSHOT THE USER NEVER SAW.
+ *
+ * @playwright/mcp answers a screenshot with a markdown link to the file it wrote — `- [Screenshot of
+ * viewport](../../.intentic/browser/output/page-….png)`, relative to the AGENT'S cwd — and, when the model
+ * named no file, an image block besides. The chat rendered neither: non-text result blocks collapse to the
+ * literal string "[image]" (resultText), and a relative path climbing out of a repo is not something the
+ * client can fetch. So a turn that screenshotted the user's own app showed them a card that said `[image]`.
+ *
+ * This is the other end of that: pull the path back out of the answer, prove it really is one of ours (inside
+ * the output dir this module dictates), and hand it over as a workspace path the chat can render and the user
+ * can open. Undefined for anything else, including a screenshot that somehow landed elsewhere — a picture we
+ * can't place is one we shouldn't claim. */
+const MARKDOWN_LINK = /]\(([^)]+)\)/g;
+
+export const screenshotImage = (resultText: string, cwd: string, outputDir: string): ToolCallContent | undefined => {
+    const root = rootOf(outputDir);
+    for (const [, link] of resultText.matchAll(MARKDOWN_LINK)) {
+        if (link === undefined) {
+            continue;
+        }
+        const abs = resolve(cwd, link);
+        const inOutput = relative(outputDir, abs);
+        if (inOutput === "" || inOutput.startsWith("..")) {
+            continue;
+        }
+        return { type: "image", path: relative(root, abs).split(sep).join("/") };
+    }
+    return undefined;
 };
 
 export const browserArtifactHooks = (outputDir: string): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({

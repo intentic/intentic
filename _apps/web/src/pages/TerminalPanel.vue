@@ -11,7 +11,7 @@ import RecentTerminals from "../components/RecentTerminals.vue";
 import { inTabSurface } from "../composables/commands/tabSurface";
 import { commandShortcut, registerCommand, type RegisteredCommand } from "../composables/commands/useCommands";
 import { showWorkTerminals } from "../composables/terminal/useWorkTerminals";
-import { setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
+import { KIND_ICONS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
 import { useTerminalsQuery } from "../composables/terminal/terminalsQuery";
 import { createTerminalTabs, type TerminalTab, type TerminalTabsSource } from "../composables/terminal/useTerminal";
 import { consumeSpawnRequest, registerTerminalSpawn } from "../composables/terminal/useTerminalPanel";
@@ -110,7 +110,6 @@ const withShortcut = (text: string, command: string): string => {
     const shortcut = commandShortcut(command);
     return shortcut === undefined ? text : `${text} (${shortcut})`;
 };
-const KIND_ICONS: Record<TerminalTab[`kind`], IconName> = { agent: `sparkles`, job: `bolt`, process: `cog`, shell: `desktop`, panel: `desktop` };
 const segmentIcon = (name: string): IconName => terminalMeta(name).icon ?? KIND_ICONS[tabByName.value.get(name)?.kind ?? `shell`];
 const segmentColor = (name: string): string | undefined => {
     const color = terminalMeta(name).color;
@@ -128,6 +127,11 @@ const segmentTooltip = (name: string): string | undefined => {
     }
     if (tab.kind === `job`) {
         return `Job terminal`;
+    }
+    if (tab.kind === `browser`) {
+        // The URL, not the label: the pill already shows the page's title, so the tooltip's job is to say
+        // WHICH page that title belongs to — the one thing a screencast can't be trusted to make legible.
+        return tab.running === false ? `AI browser — closed${tab.url === undefined ? `` : ` · ${tab.url}`}` : (tab.url ?? `AI browser`);
     }
     if (tab.kind === `process`) {
         return `Background process — read-only logs`;

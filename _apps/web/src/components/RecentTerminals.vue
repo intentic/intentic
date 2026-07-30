@@ -3,13 +3,15 @@ import Popover from "primevue/popover";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { relativeTime } from "../composables/chat/catalog";
+import { KIND_ICONS } from "../composables/terminal/terminalMeta";
 import { clearFinishedWorkTerminals, openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "../composables/terminal/useWorkTerminals";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 
-/* The terminal panel's RECORD of work: the shells the agent's Bash commands ran in and the sessions the daemon
- * ran its jobs in (capability adds, the infra check), listed HERE instead of tabbing themselves into the strip
- * (see useWorkTerminals for why). Mounted in the panel toolbar beside the background-processes popover it is
- * modelled on, and hidden until there is anything to show — so a fresh sandbox never grows a button for it.
+/* The terminal panel's RECORD of work: the shells the agent's Bash commands ran in, the browser it drove
+ * through its Playwright tools, and the sessions the daemon ran its jobs in (capability adds, the infra check),
+ * listed HERE instead of tabbing themselves into the strip (see useWorkTerminals for why). Mounted in the panel
+ * toolbar beside the background-processes popover it is modelled on, and hidden until there is anything to
+ * show — so a fresh sandbox never grows a button for it.
  *
  * This is the surface that lets the strip stay clean. A finished terminal leaves the tab bar by itself, and
  * everything it did is still one click away here — named, stamped with when it ended and how it exited, newest
@@ -43,7 +45,8 @@ const outcome = (row: WorkTerminalRow): string => {
     if (row.running) {
         return `running`;
     }
-    const ended = row.exitCode === undefined ? `finished` : `exit ${row.exitCode}`;
+    // A browser doesn't exit with a status — it is simply closed — so it never reaches the exit-code branch.
+    const ended = row.kind === `browser` ? `closed` : row.exitCode === undefined ? `finished` : `exit ${row.exitCode}`;
     return row.activityAt > 0 ? `${ended} · ${relativeTime(row.activityAt)}` : ended;
 };
 // Failure is the one thing worth colouring: a non-zero exit is the row someone came here to find.
@@ -56,8 +59,8 @@ const failed = (row: WorkTerminalRow): boolean => !row.running && row.exitCode !
         type="button"
         class="relative flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
         @click="panel?.toggle($event)"
-        v-tooltip.top="'Recent terminals'"
-        aria-label="Recent terminals"
+        v-tooltip.top="'Recent work'"
+        aria-label="Recent work"
     >
         <Icon name="history" class="text-xs" />
         <span v-if="rows.some((row) => row.running)" class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-link"></span>
@@ -66,7 +69,7 @@ const failed = (row: WorkTerminalRow): boolean => !row.running && row.exitCode !
     <Popover ref="panel" :append-to="overlayTarget">
         <div class="flex w-80 flex-col p-1">
             <div class="flex items-center gap-2 px-2 py-1.5">
-                <span class="flex-1 text-2xs font-medium uppercase tracking-wide text-muted">Recent terminals</span>
+                <span class="flex-1 text-2xs font-medium uppercase tracking-wide text-muted">Recent work</span>
                 <button
                     v-if="finishedCount > 0"
                     type="button"
@@ -86,9 +89,9 @@ const failed = (row: WorkTerminalRow): boolean => !row.running && row.exitCode !
                 @click="open(row)"
             >
                 <!-- Dot for state (live / failed / done), then the kind glyph — sparkles for an agent's shell,
-                     bolt for a daemon job, the same icons their pills carry in the strip (KIND_ICONS). -->
+                     bolt for a daemon job, globe for its browser: literally the table their pills read from. -->
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="row.running ? 'bg-link' : failed(row) ? 'bg-danger' : 'bg-content/25'"></span>
-                <Icon :name="row.kind === 'agent' ? 'sparkles' : 'bolt'" class="shrink-0 text-2xs text-muted" />
+                <Icon :name="KIND_ICONS[row.kind]" class="shrink-0 text-2xs text-muted" />
                 <div class="min-w-0 flex-1">
                     <div class="truncate text-xs text-content">{{ row.name }}</div>
                     <div class="truncate text-2xs" :class="failed(row) ? 'text-danger' : 'text-muted'">{{ outcome(row) }}</div>
@@ -99,7 +102,7 @@ const failed = (row: WorkTerminalRow): boolean => !row.running && row.exitCode !
             <label class="mt-1 flex cursor-pointer items-center gap-2.5 border-t border-line px-2 pb-1 pt-2">
                 <div class="min-w-0 flex-1">
                     <div class="text-xs text-content">Always show as tabs</div>
-                    <div class="text-2xs text-muted">Give every agent and job terminal its own tab in this panel.</div>
+                    <div class="text-2xs text-muted">Give every agent shell, job and AI browser its own tab in this panel.</div>
                 </div>
                 <ToggleSwitch v-model="showWorkTerminals" />
             </label>
