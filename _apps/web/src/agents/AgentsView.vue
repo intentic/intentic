@@ -15,7 +15,6 @@ import { useChat } from "../composables/chat/useChat";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import FilterField from "../components/FilterField.vue";
 import AgentCard from "./AgentCard.vue";
-
 /* The fleet as a kanban: Attention | Active | Finished — attention leftmost because the board's whole job is
  * routing the user to agents that need them. Lanes are pure projections of the registry status machine
  * (laneOf), so "finished" is automatic: the auto-land flow flips a cleanly-completed turn to landed/idle
@@ -59,7 +58,6 @@ import AgentCard from "./AgentCard.vue";
  * per-card animation to vouch for it, in a pill that floats over the board and retires itself. A FAILURE keeps
  * the strip, since an error is the one thing here that must be read. The way back is on the keyboard (Mod+Z)
  * and, permanently, on every card in the archive — so it never depended on the message being still on screen. */
-
 const router = useRouter();
 const { mobile } = useDevice();
 const {
@@ -103,11 +101,9 @@ const {
     resolveNow,
     landNow,
 } = useAgentDrag();
-
 // The card behind the resolve confirmation — looked up live rather than snapshotted with the drop, so a
 // rename or a status change while the dialog is open is reflected in what it is asking about.
 const resolveTarget = computed(() => (pendingResolve.value === undefined ? undefined : agentById(pendingResolve.value)));
-
 /* WHAT A CARD IS WAITING ON, from the board's two sources of it: the press or drop this browser is running
  * (useAgentDrag, which names its action so the button that fired it can spin in place) and the archive/restore
  * batches, which are addressed by id alone — an id in flight there is being filed AWAY unless it is already
@@ -121,7 +117,6 @@ const pendingFor = (agent: FleetAgent): PendingAction | undefined => {
     }
     return agent.archivedAt !== undefined ? `restore` : `archive`;
 };
-
 /* --- The filter ------------------------------------------------------------------------------------------
  * Matches what the USER wrote — the card's title (which IS their sanitized first prompt) and every later
  * prompt in that agent's transcript. Local for the tabs this browser holds, daemon-side for everything else;
@@ -133,18 +128,15 @@ const pendingFor = (agent: FleetAgent): PendingAction | undefined => {
  * keeps a useful, capped width on a roomy board and wraps rather than being crushed when the board narrows. */
 const { query, needle, active: filtering, matches, snippetOf, archivedMatches, sessionMatches, searching } = useAgentFilter();
 const filterField = ref<InstanceType<typeof FilterField> | undefined>(undefined);
-
 // The Finished lane's two extra states. Both live here rather than in the store: they are how this ONE board
 // is being looked at, and a second surface opening the fleet should not inherit a scroll-position-like choice.
 const showAllFinished = ref(false);
 const archiveOpen = ref(false);
-
 // The results that are OFF the board — expanded by the footer row below the lanes. Collapsed by default so a
 // query answers with the board first and its outskirts second; reset whenever the query changes, since "show
 // me the rest" was said about a set that no longer exists.
 const showBeyond = ref(false);
 watch(needle, () => (showBeyond.value = false));
-
 // The lane's visible cards. Finished shows its window (or the archive, when open); the other two lanes are
 // self-emptying and show everything.
 //
@@ -162,7 +154,6 @@ const cardsFor = (lane: FleetLane): FleetAgent[] => {
                 : lanes.value.finished.slice(0, FINISHED_WINDOW);
     return filtering.value ? source.filter(matches) : source;
 };
-
 // How many of the lane's agents the filter kept, against how many it holds — the `3 of 12` on its header. The
 // denominator is the lane, not the window: while filtering the window is lifted anyway, and a count that
 // disagreed with the cards under it would be worse than none.
@@ -170,9 +161,7 @@ const laneCount = (lane: FleetLane): string => {
     const total = archiveOpen.value && lane === `finished` ? archived.value.length : lanes.value[lane].length;
     return filtering.value ? `${cardsFor(lane).length} of ${total}` : `${total}`;
 };
-
 const hiddenFinished = computed(() => Math.max(0, lanes.value.finished.length - FINISHED_WINDOW));
-
 // What a query found that the board isn't showing: agents in the archive, and conversations no agent owns
 // (a plain chat, or one whose registry entry is long gone). Without this the filter would answer "nothing"
 // for something sitting one click away, which is the failure a search is least forgiven for.
@@ -189,17 +178,14 @@ const beyondLabel = computed(() => {
     }
     return parts.join(` · `);
 });
-
 // A never-carded conversation opens as an ordinary tab — the same route the History menu's rows take.
 const openSession = (id: string): void => {
     void openConversation(id);
 };
-
 // What the board says to a screen reader, since neither of its two visual reports — the archive counter's
 // pulse, the receipt pill — is anything one can convey. Every archive lands here (see the archivedFlash watch
 // below), and so does every deletion, so there is exactly one thing doing the announcing.
 const announcement = ref(``);
-
 /* --- Emptying the archive -------------------------------------------------------------------------------
  * The board's one irreversible act, so it is the one that stops and asks. It sits in the archive header's
  * trailing slot — where the Finished lane puts "Clear" — because that slot is already read as "this column's
@@ -235,7 +221,6 @@ const confirmPurge = async (): Promise<void> => {
         purging.value = false;
     }
 };
-
 const toggleArchive = (): void => {
     archiveOpen.value = !archiveOpen.value;
     purged.value = false;
@@ -243,9 +228,7 @@ const toggleArchive = (): void => {
         void loadArchived();
     }
 };
-
 /* --- Saying that an archive happened -------------------------------------------------------------------- */
-
 // The receipt retires itself: an archive is not something the user has to acknowledge, and one more thing to
 // dismiss is precisely what made the strip it replaces feel like a toll. The window restarts on each new
 // receipt and PAUSES while the pointer is on the pill — vanishing under the cursor that came for its Undo
@@ -260,7 +243,6 @@ watch([receipt, receiptHovered], () => {
         receiptTimer = setTimeout(dismissReceipt, RECEIPT_MS);
     }
 });
-
 // The ambient half of the report, and the whole of it for a single card: the archive counter is where the
 // cards went, so it is what acknowledges them. Long enough to catch the eye that was following the card out
 // of the lane, short enough that it reads as "that just moved" rather than as a new state.
@@ -272,11 +254,9 @@ watch(archivedFlash, () => {
     clearTimeout(pulseTimer);
     pulseTimer = setTimeout(() => (pulsing.value = false), PULSE_MS);
 });
-
 watch(archivedFlash, () => {
     announcement.value = `${undoable.value.length} agent${undoable.value.length === 1 ? `` : `s`} archived`;
 });
-
 // Undo also lives on the keyboard, because an archive that says nothing has to be reversible by the reflex
 // people already have. Registered with the board and disposed with it, so the chord is only claimed while the
 // fleet is on screen; the `when` gate hands it straight back whenever it would be the wrong Mod+Z — nothing
@@ -286,7 +266,6 @@ const editable = (target: EventTarget | null): boolean =>
     target instanceof HTMLElement && (target.isContentEditable || target.tagName === `INPUT` || target.tagName === `TEXTAREA`);
 const undoShortcut = computed(() => commandShortcut(`agents.undoArchive`));
 let boardCommands: readonly Disposable[] = [];
-
 // A lane's drop affordance, as ONE class string per state — two ring widths or two min-heights in the same
 // list would resolve by Tailwind's emit order rather than by intent. The min-height only exists mid-drag, to
 // give an empty lane something to aim at.
@@ -301,7 +280,6 @@ const laneDropClass = (lane: FleetLane): string => {
     }
     return over.value === lane ? `min-h-24 bg-primary-600/5 ring-2 ring-primary-500/60` : `min-h-24 ring-1 ring-line-strong/60`;
 };
-
 // What the ghost promises while it's over a target: the action's verb, or the reason there isn't one.
 const hint = computed(() => {
     if (action.value !== undefined) {
@@ -312,7 +290,6 @@ const hint = computed(() => {
     }
     return dropRejection(dragged.value, over.value);
 });
-
 // Three columns need ~270px each before a card starts truncating its title — below that the board stacks.
 // Measured off the board element rather than declared as a CSS container query, because `container-type`
 // makes an element a containing block for its fixed-position descendants, and the drag ghost is fixed at
@@ -323,7 +300,6 @@ const boardEl = ref<HTMLElement | undefined>(undefined);
 // is never seen, and defaulting the other way would flash three columns on a phone.
 const boardWidth = ref(Number.POSITIVE_INFINITY);
 const narrow = computed(() => boardWidth.value < NARROW_BOARD_PX);
-
 // One shared ticker for every card's elapsed/time-ago readout.
 const now = ref(Date.now());
 let ticker: ReturnType<typeof setInterval> | undefined;
@@ -351,14 +327,11 @@ onMounted(() => {
         }),
         // The field is on the header already, so this is an accelerator rather than the way in. Focus AND
         // select, so a chord pressed with a stale query in the box starts a new one by typing (VS Code's find
-        // flow). Claimed only while the board is mounted — Mod+F outside it is still the browser's own find —
-        // and rebindable in Settings → Keybindings like every other command here.
         registerCommand({
             owner: `builtin`,
             command: `agents.filter`,
             title: `Filter Agents…`,
             icon: `search`,
-            keybinding: `Mod+F`,
             handler: () => filterField.value?.focus(),
         }),
     ];
@@ -376,28 +349,22 @@ onUnmounted(() => {
     // came back to the board from.
     dismissReceipt();
 });
-
 const LANES: readonly { key: FleetLane; label: string; dot: string; empty: string }[] = [
     { key: `attention`, label: `Attention`, dot: `bg-warning`, empty: `Nothing needs you right now.` },
     { key: `active`, label: `Active`, dot: `bg-success`, empty: `No agents working. Start one and delegate.` },
     { key: `finished`, label: `Finished`, dot: `bg-line-strong`, empty: `Finished agents land their work in your workspace.` },
 ];
-
 const total = computed(() => LANES.reduce((sum, lane) => sum + lanes.value[lane.key].length, 0));
-
 // The header's tally. Summed over the same cardsFor the lanes render, so it can never disagree with the
 // `n of m` counts under it.
 const kept = computed(() => LANES.reduce((sum, lane) => sum + cardsFor(lane.key).length, 0));
 const matchTally = computed(() => `${kept.value} of ${total.value}`);
-
 // Nothing on the board AND nothing beyond it — the filter's own empty state, which is a different thing from
 // an empty fleet (there ARE agents; none of them is this one).
 const noMatches = computed(() => filtering.value && !archiveOpen.value && kept.value === 0 && beyondCount.value === 0);
-
 // "Clear" only appears when it would do something — the Finished lane holds the archivable set exactly (it is
 // landed-or-idle by construction), so its length is the answer.
 const clearable = computed(() => lanes.value.finished.length);
-
 // Card click FOCUSES, it does not navigate: on desktop it only points the docked chat (the ONE chat surface)
 // at this agent and highlights the card — cheap and reversible, so the user can click down a lane to skim.
 // The view-change to the review detail is a deliberate, separate act (reviewAgent, below). Mobile has no dock,
@@ -412,7 +379,6 @@ const focusAgent = (agent: FleetAgent): void => {
         void router.push(`/agents/${encodeURIComponent(agent.id)}`);
     }
 };
-
 // The deliberate view-change: focus the dock AND swap the surface to the agent's review detail. Fired by the
 // card's contextual affordance or its double-click accelerator (never a plain click); the card only offers it
 // for a registered agent, so there is always a detail to land on.
@@ -420,7 +386,6 @@ const reviewAgent = (agent: FleetAgent): void => {
     open(agent);
     void router.push(`/agents/${encodeURIComponent(agent.id)}`);
 };
-
 // A FILTERED board is a result set wearing the lanes' shape, so it does not drag. Half the lanes may be
 // reading "no matches", the archive's own matches sit in a group with no lane at all, and a card dropped onto
 // a lane that is currently a lens would be acted on for a reason the user never sees. The gesture comes
@@ -433,7 +398,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     begin(event, agent, card);
 };
 </script>
-
 <template>
     <!-- `relative` positions the receipt inside the BOARD rather than the viewport, so the pill clears the
          mobile tab bar and the docked terminal without either of them having to be measured. It is not a
@@ -484,7 +448,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </button>
             </div>
         </div>
-
         <!-- Failures only. This strip costs a layout shift and a dismissal, which is the right price for
              something the user must read and the wrong one for a routine action's receipt — that floats
              instead, at the bottom of the board. -->
@@ -495,11 +458,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <Icon name="times" class="text-2xs" />
             </button>
         </p>
-
         <!-- What the counter's pulse cannot tell a screen reader. Covers every archive, quiet or not, so the
              pill below stays purely visual and nothing is announced twice. -->
         <span class="sr-only" aria-live="polite">{{ announcement }}</span>
-
         <!-- Nothing on the board AND nothing archived is the only true empty state. With an archive behind it,
              the same screen would otherwise be a dead end: every agent the user ever ran, and no door to it. -->
         <div v-if="total === 0 && !archiveOpen" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
@@ -521,7 +482,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <Icon name="history" class="text-2xs" />{{ archived.length }} archived agent{{ archived.length === 1 ? "" : "s" }}
             </button>
         </div>
-
         <!-- The scroller carries no padding of its own: the stacked board's lane headers pin to `top-0`, and a
              padded scrollport would leave a strip above them for the cards to scroll through. -->
         <div v-else class="scrollbar-thin min-h-0 flex-1 overflow-auto">
@@ -666,7 +626,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     </button>
                 </section>
             </div>
-
             <!-- The filter's own empty state, which is NOT the empty board's: there are agents, just none of
                  them this one. Says what was searched, so a typo is visible without looking back up at the
                  field, and names the rule — the commonest reason for a miss is searching for something the
@@ -675,7 +634,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 No agent of yours mentions “{{ query.trim() }}”. This searches the messages you wrote — not the agents' replies.
             </p>
         </div>
-
         <!-- WHAT THE QUERY FOUND OFF THE BOARD. The board hides by design — the Finished lane windows to a
              handful and archived agents leave the roster entirely — so a filter confined to the lanes would
              answer "no matches" for an agent sitting one click away, and the user only has to catch that
@@ -700,7 +658,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <span class="shrink-0 font-medium text-link">{{ showBeyond ? "Hide" : "Show" }}</span>
                 <Icon :name="showBeyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
             </button>
-
             <div v-if="showBeyond" class="scrollbar-thin mt-2 flex min-h-0 flex-col gap-3 overflow-auto">
                 <section v-if="archivedMatches.length > 0" class="flex min-w-0 flex-col gap-2">
                     <div class="flex items-center gap-2 px-1">
@@ -728,7 +685,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         />
                     </div>
                 </section>
-
                 <section v-if="sessionMatches.length > 0" class="flex min-w-0 flex-col gap-1">
                     <div class="flex items-center gap-2 px-1">
                         <Icon name="history" class="shrink-0 text-2xs text-subtle" />
@@ -752,7 +708,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </section>
             </div>
         </div>
-
         <!-- The sweep's receipt. It OVERLAYS the board rather than sitting in the column, so the cards it is
              reporting on don't move to make room for the report — and it expires, so acknowledging it is not
              work. Hidden mid-drag: the discard target lands in the same place, and one of them is destructive.
@@ -778,7 +733,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </div>
             </div>
         </Transition>
-
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is in flight. -->
         <div
             v-if="dragging"
@@ -794,7 +748,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         >
             <Icon name="trash" class="text-2xs" />Discard
         </div>
-
         <!-- Dropping a conflicted card on Finished spends a turn, and a drag is the easiest gesture on this
              board to make by accident — so unlike stop / land / discard it stops here first. The dialog is the
              whole explanation of what the agent is about to do, because the drag hint that got here is four
@@ -818,7 +771,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <button type="button" :class="cmp.buttonPrimary('rounded px-3 py-1')" @click="confirmResolve">Ask the agent</button>
             </template>
         </Dialog>
-
         <!-- The one dialog on this board that guards something unrecoverable. It says what GOES in the terms the
              archive has been promising all along ("nothing is lost" — this is the press that revokes it) and
              what STAYS, because the commonest fear here is about work already landed in the workspace, which is
@@ -848,7 +800,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </button>
             </template>
         </Dialog>
-
         <!-- The ghost is a real card so the drag reads as the card itself; pointer-events-none keeps the hit
              test underneath it. -->
         <div v-if="dragging && dragged !== undefined" class="pointer-events-none fixed left-0 top-0 z-50 rotate-2" :style="ghostStyle">
@@ -864,7 +815,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         </div>
     </div>
 </template>
-
 <style scoped>
 /* Kanban motion: FLIP reorder within a lane (`lane-move`), scale-fade on lane entry/exit. The leaving card
  * is absolutely positioned so its siblings glide into place instead of jumping — the standard
@@ -886,7 +836,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     left: 0.5rem;
     right: 0.5rem;
 }
-
 /* The receipt rises into place and sinks out of it — the same direction both ways, so a pill that expires on
  * its own and one dismissed by an Undo read as the same object leaving. */
 .receipt-enter-active,
