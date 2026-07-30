@@ -41,6 +41,7 @@ import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/ca
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
 import { createRunsCache, type RunsCache } from "./ci/runs-cache.js";
+import { fileGateStore, type GateStore } from "./gate/gate-store.js";
 import { createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, type MembersStore, type VerifiedIdentity } from "./auth/auth.js";
 import { createSessions, type MintedSession } from "./auth/session.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
@@ -180,6 +181,10 @@ export interface Services {
     // CI state (.intentic/ci.json): the webhook secret + the per repo+branch conclusion memory that makes a
     // success after a failure read as `pipeline_fixed`.
     readonly ciStore: CiStore;
+    // The landing gate's last verdict (.intentic/gate.json) — see gate/gate-store.ts. The gate SERVICE is a
+    // module singleton rather than a member here (gate/gate.ts): it needs a WakeFn, and taking one would put
+    // composition downstream of agent.routes.
+    readonly gateStore: GateStore;
     // The Pipelines view's read model: webhook deliveries freshen it, /ci/runs backfills it when stale.
     readonly ciRuns: RunsCache;
     // Keeps every mapped repo's provider webhook pointing at this sandbox; its warnings ride /ci/runs.
@@ -473,6 +478,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
     );
     const ciStore = fileCiStore(join(workspace.root, ".intentic", "ci.json"));
+    const gateStore = fileGateStore(join(workspace.root, ".intentic", "gate.json"));
     // Bound once, and against the SAME registry instance above — `sessionIdOf` answers from live turn state as
     // well as the persisted entry, so a second registry would report no session for a first turn still running.
     const transcriptDeps: AgentTranscriptDeps = {
@@ -500,6 +506,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         tools: internalTools(config.intenticAgentTools),
         capabilities,
         ciStore,
+        gateStore,
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
         bridgeTokens: fileBridgeTokens(join(workspace.root, ".intentic", "bridge-tokens.json")),

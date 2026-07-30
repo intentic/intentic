@@ -19,6 +19,7 @@ import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
 import { COMMIT_SCOPE, type RepoPaths, useChanges } from "../../composables/workspace/useChanges";
 import { useRepos } from "../../composables/workspace/useRepos";
+import GateBadge from "./GateBadge.vue";
 import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
 
 /* The Changes review — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
@@ -744,6 +745,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </div>
         </div>
 
+        <!-- Would this tree survive CI? Above the commit box because it is what the user needs BEFORE deciding
+             what to commit, and because the verdict was computed minutes ago (the daemon runs the check when the
+             fleet goes quiet — gate/gate.ts) rather than being waited for here. It never disables Commit: the
+             panel reports, the user decides. Draws nothing when no check command is configured. -->
+        <GateBadge v-if="changes.count.value > 0" />
+
         <!-- Commit box (VSCode places it at the top). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 border-b border-line p-2">
             <!-- The AI autofill sits INSIDE the input's right edge (VSCode's "Generate Commit Message"
@@ -778,7 +785,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </span>
                 <!-- Why the button just refused a Ctrl+Enter. It takes the readout's place rather than adding a
                      line, because it answers the same question the readout does — what will this commit do. -->
-                <span v-else-if="blockerNotice" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-warning" v-tooltip.right.overflow="blockerNotice">
+                <span
+                    v-else-if="blockerNotice"
+                    class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-warning"
+                    v-tooltip.right.overflow="blockerNotice"
+                >
                     {{ blockerNotice }}
                 </span>
                 <!-- The autofill failed. Same slot, same reasoning: the user clicked a button in this box and

@@ -13,6 +13,7 @@ import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import { cliEnvOf } from "../capabilities/cli-env.js";
 import { extensionEnvOf } from "../extensions/extension-env.js";
 import { extensionBinDirsOf } from "../extensions/installed-extensions.js";
+import { landingGate } from "../gate/gate.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
@@ -233,6 +234,12 @@ async function* runConversationTurn(
                         },
                         streamAgent,
                     );
+                    /* The composite just grew — restart the gate's quiet countdown (gate/gate.ts). Deliberately
+                     * AFTER the land and not per turn: the artifact worth checking is the main tree with every
+                     * agent's delta in it, which is the only thing a push can carry, and a check inside this
+                     * turn's worktree would have resolved its cross-package imports against /work's unedited
+                     * sources anyway (agents/worktrees.ts). The gate collapses a landing burst into one run. */
+                    landingGate(services, streamAgent).arm();
                 }
             }
             // A whole turn is now readable — name the job. Fire-and-forget: a title is never worth failing a

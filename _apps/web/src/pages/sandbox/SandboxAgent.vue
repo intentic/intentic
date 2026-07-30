@@ -234,6 +234,38 @@ const toggleAutoLand = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, autoLand: value });
 };
 
+/* --- The landing gate ----------------------------------------------------------------------------------------
+ * The check command run over the COMPOSITE of every agent's landed work, once the fleet goes quiet and before
+ * the user starts staging (the daemon's gate/gate.ts argues that moment against the four alternatives). It
+ * belongs on this tab and not in personal Settings for the same reason the quick model does: it names something
+ * that only exists inside this sandbox — a command that has to run in THIS workspace's toolchain.
+ *
+ * Empty is the default and it means OFF, which is why there is no separate enable switch to disagree with it:
+ * only the owner knows what verifies their workspace, and a guessed `pnpm test` would read as the gate finding a
+ * bug on its first run. Committed on change rather than per keystroke — every save is a daemon round-trip, and
+ * a half-typed command is a command. */
+const setGateCommand = (event: Event): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    const gateCommand = (event.target as HTMLInputElement).value.trim();
+    if (gateCommand !== current.gateCommand) {
+        saveSandboxSettings.mutate({ ...current, gateCommand });
+    }
+};
+
+// Whether a red gate wakes a fixer by itself. On by default WITH a command configured, unlike the other
+// unattended-spend toggles, because the spend is the point: a red verdict nobody acts on has moved the CI
+// round-trip into the workspace without taking it out of the user's day.
+const toggleGateAutoFix = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, gateAutoFix: value });
+};
+
 /* --- Quick model ---------------------------------------------------------------------------------------------
  * The cheap, fast model behind the one-click helpers that are not a conversation (today: the commit box's AI
  * autofill). It belongs on THIS tab and not in personal Settings for one decisive reason — the provider
@@ -839,6 +871,45 @@ const importMemory = async (): Promise<void> => {
                         :model-value="sandboxSettings?.autoLand ?? true"
                         :disabled="sandboxSettings === undefined"
                         @update:model-value="toggleAutoLand"
+                    />
+                </template>
+            </Row>
+
+            <!-- The landing gate — the check run over the composite of everything that has landed, once the
+                 fleet goes quiet. This is the shift-left of the CI round-trip: the same question CI asks, asked
+                 of the same artifact (the uncommitted main tree), while the agents that wrote it are still warm
+                 and their per-file attribution is still live. The verdict surfaces on the Changes panel. -->
+            <Row
+                icon="shield"
+                title="Check landed work before you commit"
+                description="Run this command over your workspace once the fleet goes quiet, and show the result on the Changes panel. It runs in the workspace root, exactly as a terminal would. Empty turns the gate off."
+            >
+                <template #control>
+                    <input
+                        type="text"
+                        placeholder="pnpm test"
+                        spellcheck="false"
+                        :value="sandboxSettings?.gateCommand ?? ``"
+                        :disabled="sandboxSettings === undefined"
+                        :class="cmp.input(`w-56 font-mono text-xs`)"
+                        @change="setGateCommand"
+                    />
+                </template>
+            </Row>
+
+            <!-- Only meaningful with a command configured, so it hides without one rather than sitting there
+                 governing nothing — the same reason the terse-holdout row appears only once the steer is on. -->
+            <Row
+                v-if="(sandboxSettings?.gateCommand ?? ``) !== ``"
+                icon="bolt"
+                title="Fix a failed check with an agent"
+                description="When the check fails, wake an agent on your workspace with the failing output and the files' agent attribution, to fix it in place before you commit. One attempt per result — a check that fails for a reason no agent can fix costs one turn, not a loop."
+            >
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="sandboxSettings?.gateAutoFix ?? true"
+                        :disabled="sandboxSettings === undefined"
+                        @update:model-value="toggleGateAutoFix"
                     />
                 </template>
             </Row>

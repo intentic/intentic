@@ -43,6 +43,14 @@ const DEFAULTS: SandboxSettings = {
     // usually this sandbox's own doing. Neither is a decision the user made.
     resumeAfterOutage: true,
     autoResumeOnRestart: true,
+    // The landing gate is off until the owner names the command that verifies this workspace — nobody else
+    // knows it. The three settings below only ever matter once that string is non-empty, which is also why
+    // `gateAutoFix` may default ON without contradicting the opt-in rule above: it decides what a CONFIGURED
+    // gate does with a red verdict, not whether the gate runs.
+    gateCommand: "",
+    gateQuietMs: 20_000,
+    gateTimeoutMs: 900_000,
+    gateAutoFix: true,
 };
 
 test("get returns the defaults when the file is absent", async () => {

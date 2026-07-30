@@ -10,6 +10,7 @@ import { createCodexRoutes } from "./codex/codex.routes.js";
 import type { Services } from "./composition.js";
 import { createDraftsRoutes } from "./drafts/drafts.routes.js";
 import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
+import { createGateRoutes } from "./gate/gate.routes.js";
 import { createGeminiRoutes } from "./gemini/gemini.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
 import { createGrokRoutes } from "./grok/grok.routes.js";
@@ -47,6 +48,7 @@ export const createRouter = (services: Services) => ({
     settings: createSettingsRoutes(services),
     intentic: createIntenticRoutes(services),
     gemini: createGeminiRoutes(services),
+    gate: createGateRoutes(services),
     git: createGitRoutes(services),
     grok: createGrokRoutes(services),
     kimi: createKimiRoutes(services),
