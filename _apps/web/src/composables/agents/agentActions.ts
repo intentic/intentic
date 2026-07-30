@@ -22,12 +22,24 @@ import { useAgents } from "./useAgents";
 //   · put the caret in its composer, which is what makes the new tab visible as the thing you now type into
 //   · on mobile, go to it — there is no docked chat there, so the agent's own screen IS the result (and a "+"
 //     pressed from an agent's screen would otherwise leave the route pointing at the agent you just left)
-export const startAgent = (): void => {
+//
+// `prompt` is the same action with its first turn already written — what a surface holding a composed task
+// presses (the codebase-health panel's per-row refactor). It goes through `enqueue`, so it is an ORDINARY user
+// message: it sits in the transcript to be read and argued with, the caret is already in the composer to steer
+// it, and Stop works on it like anything else. Not awaited — enqueue's promise settles when the TURN does, and
+// the turn reports itself in the transcript (the same reason askAgentToResolve voids it).
+//
+// Templates must therefore write `@click="startAgent()"`, not `@click="startAgent"`: Vue hands a bare handler
+// reference the MouseEvent, which would arrive here as the prompt and be sent to the agent as its first turn.
+export const startAgent = (prompt?: string): void => {
     const { newChat } = useChat();
     const conversation = newChat();
     focusComposer();
     if (useDevice().mobile.value) {
         void router.push(`/agents/${encodeURIComponent(conversation.conversationId)}`);
+    }
+    if (prompt !== undefined) {
+        void conversation.enqueue(prompt);
     }
 };
 

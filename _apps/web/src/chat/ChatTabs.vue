@@ -911,7 +911,7 @@ const openHistory = (event: Event): void => {
         <!-- Docked: the ✚ / history pair beside the strip, unchanged — a header row has width to spare and no
              room for two labels. Neither ever scrolls with the tabs. -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
-            <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent" v-tooltip.bottom="'New agent'" aria-label="New agent">
+            <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent()" v-tooltip.bottom="'New agent'" aria-label="New agent">
                 <Icon name="plus" class="text-sm" />
             </button>
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="openHistory" v-tooltip.bottom="'History'" aria-label="Chat history">
@@ -940,7 +940,7 @@ const openHistory = (event: Event): void => {
                 <Icon name="history" class="text-2xs" />
                 <span>Past chats…</span>
             </button>
-            <button type="button" :class="cmp.buttonPrimary('w-full justify-center gap-1.5 px-2.5 py-1.5 text-2xs')" @click="startAgent">
+            <button type="button" :class="cmp.buttonPrimary('w-full justify-center gap-1.5 px-2.5 py-1.5 text-2xs')" @click="startAgent()">
                 <Icon name="plus" class="text-2xs" />New agent
             </button>
         </div>

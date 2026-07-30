@@ -479,7 +479,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <!-- The tally, so an empty board under a query reads as "nothing matched" rather than as a board
                      that broke. Only while filtering: the lane headers already carry the unfiltered counts. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted">{{ matchTally }}</span>
-                <button type="button" :class="cmp.buttonPrimary('shrink-0 gap-1 px-2.5 py-1 text-2xs')" @click="startAgent">
+                <button type="button" :class="cmp.buttonPrimary('shrink-0 gap-1 px-2.5 py-1 text-2xs')" @click="startAgent()">
                     <Icon name="plus" class="text-2xs" />New agent
                 </button>
             </div>
@@ -508,7 +508,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 No agents yet. Each agent works on its own isolated branch — run several in parallel and their finished work lands in your workspace
                 automatically.
             </p>
-            <button type="button" :class="cmp.buttonPrimary()" @click="startAgent">Start an agent</button>
+            <button type="button" :class="cmp.buttonPrimary()" @click="startAgent()">Start an agent</button>
             <!-- Clearing the last lane lands the user here, so the empty state carries the pulse too — it is
                  the only archive affordance left on screen once the board is bare. -->
             <button
@@ -857,7 +857,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             </div>
             <p
                 class="mt-1 inline-block rounded px-2 py-1 text-2xs font-medium"
-                :class="action !== undefined ? 'bg-primary-fill text-fill-content' : 'bg-overlay text-subtle'"
+                :class="action !== undefined ? 'bg-primary-fill/10 text-primary-fill border border-primary-fill/20' : 'bg-overlay text-subtle'"
             >
                 {{ hint }}
             </p>

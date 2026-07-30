@@ -56,6 +56,7 @@ import {
     TemplateSummarySchema,
     WorkspaceHealthSchema,
     WorkspaceHotspotSchema,
+    WorkspaceKeyModuleSchema,
     WorkspaceSearchFreshnessSchema,
     WorkspaceSearchGroupSchema,
     WorkspaceSearchHitSchema,
@@ -215,6 +216,7 @@ export type WorkspaceSearchMode = z.infer<typeof WorkspaceSearchQuerySchema>["mo
 // One repository's codebase health (GET /workspace/health): churn × complexity per file, index totals, and the
 // import graph's key modules — the same resident engine that answers search, ranking instead of matching.
 export type WorkspaceHotspot = z.infer<typeof WorkspaceHotspotSchema>;
+export type WorkspaceKeyModule = z.infer<typeof WorkspaceKeyModuleSchema>;
 export type WorkspaceHealth = z.infer<typeof WorkspaceHealthSchema>;
 
 // Workspace history (daemon-captured snapshots). Daemon names: Snapshot / SnapshotsList / SnapshotDiff —

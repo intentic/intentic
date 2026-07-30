@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Picker, Segmented } from "@intentic-app/ui";
 import { computed, ref } from "vue";
+import { startAgent } from "../../composables/agents/agentActions";
 import { useCodebaseHealth } from "../../composables/workspace/useCodebaseHealth";
 import { useRepos } from "../../composables/workspace/useRepos";
-import { type ChurnWindow, CHURN_WINDOWS, formatCount, hotspotRows, perFile, splitPath } from "./codebaseHealth";
+import { type ChurnWindow, CHURN_WINDOWS, formatCount, hotspotRows, moduleRows, perFile } from "./codebaseHealth";
 
 /* One repo's codebase health — the third repository-level surface, beside its management panel (the cog) and
  * its git history (the graph). Where the graph answers "what happened here", this answers "where does the risk
@@ -13,7 +14,12 @@ import { type ChurnWindow, CHURN_WINDOWS, formatCount, hotspotRows, perFile, spl
  * Every number here is a COUNT, never a grade. Branch points, commits, exported symbols: figures a reader can
  * go and recount in the files. A composite "maintainability score" would be unfalsifiable, not comparable
  * between repos, and would quietly replace the reader's judgement with the tool's — the ranking exists to send
- * someone to a FILE, which is why every row here opens one. */
+ * someone to a FILE, which is why every row here opens one.
+ *
+ * The second thing a row can do is hand that file to an agent. It is the SAME claim acted on rather than read:
+ * the prompt quotes the row's own numbers and nothing else, and which refactor it asks for is derived from
+ * them (refactorAsk.ts). The user still picks the row — the ranking never picks it for them, which is why the
+ * action rides on the row instead of standing at the top of the panel as a "fix my repo" button. */
 
 const { repo } = defineProps<{ repo: string }>();
 const emit = defineEmits<{ "open-file": [path: string]; "switch-repo": [repo: string] }>();
@@ -24,13 +30,10 @@ const { health, loading, error, refresh } = useCodebaseHealth(repoRef, churnWind
 const { options } = useRepos();
 
 const totals = computed(() => health.value?.totals);
-const rows = computed(() => hotspotRows(health.value?.hotspots ?? []));
-const modules = computed(() =>
-    (health.value?.modules ?? []).map((module) => {
-        const { dir, name } = splitPath(module.path);
-        return { path: module.path, exports: module.exports, dir, name };
-    }),
-);
+// Dormancy is measured from the read, not from a ticking clock: this recomputes whenever the report or the
+// window does, and no posture here turns on anything finer than a season.
+const rows = computed(() => hotspotRows(health.value?.hotspots ?? [], health.value?.modules ?? [], churnWindow.value, Date.now()));
+const modules = computed(() => moduleRows(health.value?.modules ?? []));
 // The index is built in the background, so a panel opened right after boot can be reading a partial one. Saying
 // so beats rendering "0 symbols" as if it were a fact about the repository.
 const building = computed(() => health.value?.freshness.state === `building`);
@@ -112,27 +115,33 @@ const building = computed(() => health.value?.freshness.state === `building`);
                     </h2>
                     <p class="mt-0.5 text-2xs text-subtle">
                         Commits × branch points. Neither alone is a warning — a churning config file is trivial, and a tangled file nobody touches
-                        costs nobody anything. Open a row to read the file.
+                        costs nobody anything. Open a row to read the file, or
+                        <Icon name="sparkles" class="text-[0.65rem]" aria-hidden="true" /> to start an agent refactoring it.
                     </p>
                     <p v-if="rows.length === 0" class="py-3 text-2xs text-subtle">
                         No file here has both commits and branch points — a repository with no history yet, or one holding only markup and config,
                         ranks nothing.
                     </p>
                     <template v-else>
-                        <div class="hs-row mt-2 px-1 pb-1 text-2xs text-subtle">
-                            <span></span>
-                            <span></span>
-                            <span>risk</span>
-                            <span class="text-right">commits</span>
-                            <span class="text-right">branches</span>
+                        <!-- The action's track is held open in the header too, so the columns below it stay put
+                             whether or not a row is being hovered. -->
+                        <div class="row-line mt-2 px-1 pb-1 text-2xs text-subtle">
+                            <div class="hs-row min-w-0 flex-1">
+                                <span></span>
+                                <span></span>
+                                <span>risk</span>
+                                <span class="text-right">commits</span>
+                                <span class="text-right">branches</span>
+                            </div>
+                            <span class="w-4 shrink-0"></span>
                         </div>
                         <ul class="flex flex-col">
-                            <li v-for="(row, index) in rows" :key="row.path">
+                            <li v-for="(row, index) in rows" :key="row.path" class="row-line group/row rounded px-1 py-1 hover:bg-overlay">
                                 <!-- One hue for every bar: length is the whole message, and a colour keyed to the
                                      bar's own size would double-encode it. Text keeps text tokens throughout. -->
                                 <button
                                     type="button"
-                                    class="hs-row w-full rounded px-1 py-1 text-left transition-colors hover:bg-overlay"
+                                    class="hs-row min-w-0 flex-1 text-left"
                                     v-tooltip.top="`${row.path} — +${row.adds} -${row.dels} lines`"
                                     @click="emit('open-file', row.path)"
                                 >
@@ -152,6 +161,21 @@ const building = computed(() => health.value?.freshness.state === `building`);
                                     <span class="text-right text-2xs tabular-nums text-muted">{{ formatCount(row.commits) }}</span>
                                     <span class="text-right text-2xs tabular-nums text-muted">{{ formatCount(row.complexity) }}</span>
                                 </button>
+                                <!-- Out of the scan until the row is hovered, on a pointer device: the ranking is
+                                     what this panel is for, and twenty always-lit buttons would read as twenty
+                                     things to do. Touch has no hover, so there it stays put. A dormant row keeps
+                                     the action but dims it — the tooltip says why it probably isn't worth it,
+                                     and the user may still know something the git log doesn't. -->
+                                <button
+                                    type="button"
+                                    class="shrink-0 cursor-pointer transition-colors md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
+                                    :class="row.ask.dormant ? 'text-subtle hover:text-muted' : 'text-muted hover:text-link'"
+                                    v-tooltip.top="row.ask.hint"
+                                    :aria-label="`Refactor ${row.name}`"
+                                    @click="startAgent(row.ask.prompt)"
+                                >
+                                    <Icon name="sparkles" class="w-4 text-2xs" />
+                                </button>
                             </li>
                         </ul>
                     </template>
@@ -166,10 +190,10 @@ const building = computed(() => health.value?.freshness.state === `building`);
                     <p v-if="modules.length === 0" class="py-3 text-2xs text-subtle">Nothing in this repository exports a symbol the index reads.</p>
                     <!-- No bar here: the RANK is the claim, and export counts are not a magnitude worth drawing. -->
                     <ul v-else class="mt-2 flex flex-col">
-                        <li v-for="(module, index) in modules" :key="module.path">
+                        <li v-for="(module, index) in modules" :key="module.path" class="row-line group/row rounded px-1 py-1 hover:bg-overlay">
                             <button
                                 type="button"
-                                class="flex w-full items-center gap-2 rounded px-1 py-1 text-left transition-colors hover:bg-overlay"
+                                class="flex min-w-0 flex-1 items-center gap-2 text-left"
                                 v-tooltip.top="module.path"
                                 @click="emit('open-file', module.path)"
                             >
@@ -180,6 +204,21 @@ const building = computed(() => health.value?.freshness.state === `building`);
                                 </span>
                                 <span class="shrink-0 text-2xs tabular-nums text-muted">{{ formatCount(module.exports) }} exports</span>
                             </button>
+                            <!-- Only where the SURFACE is the finding. The top of a PageRank ranking is also where
+                                 a healthy chokepoint lives — an index.ts everything imports and that exports four
+                                 things is the shape you want — so most rows here keep the empty track and stay
+                                 what they are: a pointer at a file. -->
+                            <button
+                                v-if="module.ask"
+                                type="button"
+                                class="shrink-0 cursor-pointer text-muted transition-colors hover:text-link md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
+                                v-tooltip.top="module.ask.hint"
+                                :aria-label="`Refactor ${module.name}`"
+                                @click="startAgent(module.ask.prompt)"
+                            >
+                                <Icon name="sparkles" class="w-4 text-2xs" />
+                            </button>
+                            <span v-else class="w-4 shrink-0"></span>
                         </li>
                     </ul>
                 </section>
@@ -189,6 +228,16 @@ const building = computed(() => health.value?.freshness.state === `building`);
 </template>
 
 <style scoped>
+/* A row is the ranking plus its action, side by side — the ranking a button that opens the file, the action a
+   button of its own beside it, because one cannot nest inside the other. The hover tint lives out here so that
+   reaching for the action still lights the row it belongs to. */
+.row-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background-color 150ms;
+}
+
 /* Header and rows share one track list so the columns line up. The bar column is fixed rather than fluid: a
    ranked bar is compared against its neighbours, and a column that grows with the panel would rescale the
    comparison every time the sidebar moves. */

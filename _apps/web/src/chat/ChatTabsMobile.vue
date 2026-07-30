@@ -71,7 +71,7 @@ const openFromHistory = (id: string): void => {
             />
             <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
         </button>
-        <button type="button" class="composer-ghost h-10 w-10 shrink-0" @click="startAgent" aria-label="New agent">
+        <button type="button" class="composer-ghost h-10 w-10 shrink-0" @click="startAgent()" aria-label="New agent">
             <Icon name="plus" class="text-base" />
         </button>
 

@@ -27,7 +27,11 @@ vi.mock("@intentic-app/ui", () => ({ useDevice: () => ({ mobile: { value: false 
 vi.mock("../chat/useChat", () => ({
     // `active` is read by a module-scope watcher in useAgents (the "seen while you watch it" rule), which
     // evaluates the moment that module loads.
-    useChat: () => ({ conversations: chat.conversations, active: { value: { conversationId: undefined } }, newChat: () => ({ conversationId: `c1` }) }),
+    useChat: () => ({
+        conversations: chat.conversations,
+        active: { value: { conversationId: undefined } },
+        newChat: () => ({ conversationId: `c1`, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
+    }),
     focusComposer: () => {},
     openAgentConversation: () => {},
 }));
@@ -39,7 +43,7 @@ vi.mock("../sandbox/useSandbox", () => ({
 }));
 vi.mock("../sandbox/sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));
 
-const { askAgentToResolve, landAgent } = await import("./agentActions");
+const { askAgentToResolve, landAgent, startAgent } = await import("./agentActions");
 
 // Every request fetch was handed, as the Request the daemon would have received.
 const sent: Request[] = [];
@@ -112,7 +116,14 @@ it("refuses the ask when the report names no blocked path at all", async () => {
 it("sends the composed prompt when the agent's own rebase could reach it, and fences off the user's half", async () => {
     chat.conversations.value = [tab(`a1`)];
     stubConflicts([
-        { repo: `root`, clean: 2, paths: [{ path: `src/app.ts`, reason: `diverged` }, { path: `logo.png`, reason: `binary` }] },
+        {
+            repo: `root`,
+            clean: 2,
+            paths: [
+                { path: `src/app.ts`, reason: `diverged` },
+                { path: `logo.png`, reason: `binary` },
+            ],
+        },
         { repo: `docs`, clean: 0, paths: [{ path: `README.md`, reason: `workspace` }] },
     ]);
     expect(await askAgentToResolve(`a1`)).toEqual({ sent: true });
@@ -122,6 +133,20 @@ it("sends the composed prompt when the agent's own rebase could reach it, and fe
     expect(chat.enqueued[0]).toContain(`src/app.ts`);
     expect(chat.enqueued[0]).toContain(`logo.png`);
     expect(chat.enqueued[0]).toContain(`Leave these alone`);
+});
+
+/* "NEW AGENT" AND "NEW AGENT, ON THIS" ARE ONE ACTION. A surface holding a composed task (the codebase-health
+ * panel's per-row refactor) must not assemble the three steps itself: an opened tab whose prompt never went
+ * reads as a press that did nothing, and a prompt sent to a conversation nobody focused reads as an agent that
+ * started on its own. The prompt goes as an ordinary message, so the transcript shows what was asked. */
+it("starts a fresh agent already running the task it was handed", () => {
+    startAgent(`Refactor src/app.ts.`);
+    expect(chat.enqueued).toEqual([`Refactor src/app.ts.`]);
+});
+
+it("still starts an empty one when there is nothing to say", () => {
+    startAgent();
+    expect(chat.enqueued).toEqual([]);
 });
 
 // A card whose conversation is gone (discarded, purged) has nothing to send to, and inventing one would start a
