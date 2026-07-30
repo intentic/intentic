@@ -6,6 +6,7 @@ import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
+import { dropAgentRef, dropOrphanParkedRefs, parkAgentRefs, unparkAgentRef } from "./agent-refs.js";
 import { overlaysDir, overlaysRoot, type TurnIsolation } from "./isolation.js";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, mirroring the /work layout —
@@ -37,14 +38,16 @@ export interface AgentWorktrees {
     readonly attached: (id: string, repo: string) => Promise<boolean>;
     // Create the composition on first use (recorded = []), else repair what the recorded composition names.
     readonly ensure: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<ConversationWorktree>;
-    // Tear down: worktree remove (before branch -D — git refuses to delete a checked-out branch), then the dir.
+    // Tear down: worktree remove (before the ref goes — git refuses to delete a checked-out branch), then the dir.
     readonly remove: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<void>;
-    // Retire the CHECKOUT and keep the branch — what archiving an agent costs. Everything the worktree still
+    // Retire the CHECKOUT and keep the commits — what archiving an agent costs. Everything the worktree still
     // held is committed onto agent/<id> first (land's move, same author), so the branch is a complete record
-    // and `ensure` can restore the checkout from it whenever the agent runs again.
+    // and `ensure` can restore the checkout from it whenever the agent runs again. The branch itself then
+    // leaves refs/heads/ for the parked shelf (agents/agent-refs.ts), which nothing above this layer can tell.
     readonly retire: (id: string, recorded: readonly { repo: string; base: string }[], title: string | undefined) => Promise<void>;
-    // Boot sweep: delete conversation dirs with no registry entry, then `git worktree prune` every repo.
-    readonly prune: (knownIds: readonly string[]) => Promise<void>;
+    // Boot sweep: delete conversation dirs with no registry entry, `git worktree prune` every repo, park the
+    // branches of agents that are off the board, and drop parked refs the registry no longer knows.
+    readonly prune: (knownIds: readonly string[], archivedIds: readonly string[]) => Promise<void>;
     // Serialize git ops that touch a repo's shared worktree admin area / main index (create/remove/land).
     readonly withRepoLock: <T>(repo: string, task: () => Promise<T>) => Promise<T>;
 }
@@ -192,6 +195,15 @@ export const createAgentWorktrees = (
         if (await exists(join(target, ".git"))) {
             return;
         }
+        /* Past the early return is the RESTORE path, so the branch may be parked — an archived agent the user
+         * just sent a message to (registry.begin cleared the marker moments ago), or one this boot's sweep
+         * archived for having no checkout. Unparking is a no-op for anything else, and it has to come first:
+         * `worktree add` handed a name that resolves only through the shelf checks the commit out DETACHED,
+         * and the resumed turn's commits would then land on nothing. One spawn, on the path that already
+         * spends several — never on the attached path above, which is every ordinary turn. */
+        await unparkAgentRef(mainDir(repo), `agent/${id}`, git).catch((error: unknown) =>
+            logger.warn({ err: error, repo }, "agents: branch unpark failed"),
+        );
         // The worktree analogue of history's healGitPointer: repair rewrites the worktree's .git file and the
         // admin dir's gitdir backlink. A fully deleted worktree dir is re-attached from its surviving branch.
         if (await exists(target)) {
@@ -318,7 +330,9 @@ export const createAgentWorktrees = (
                         // Dir already gone — drop the stale admin entry instead.
                         git(main, ["worktree", "prune"]).catch(() => undefined),
                     );
-                    await git(main, ["branch", "-D", `agent/${id}`]).catch(() => undefined);
+                    // Both spellings: an archived agent being discarded holds its commits on the parked shelf,
+                    // and `branch -D` alone would leave them behind with nothing left to reach them by.
+                    await dropAgentRef(main, `agent/${id}`, git);
                 });
             }
             await rm(conversationDir(id), { recursive: true, force: true });
@@ -363,9 +377,17 @@ export const createAgentWorktrees = (
             const removeOne = (repo: string): Promise<void> =>
                 withRepoLock(repo, async () => {
                     const main = mainDir(repo);
-                    // No `branch -D` — the branch IS the archive. Only the checkout is reclaimed.
                     await git(main, ["worktree", "remove", "--force", worktreeDir(id, repo)]).catch(() =>
                         git(main, ["worktree", "prune"]).catch(() => undefined),
+                    );
+                    /* The commits stay — they ARE the archive — but the BRANCH does not: it moves to the
+                     * parked shelf (agent-refs.ts), so an archive costs the repo no refs/heads/ entry for as
+                     * long as nobody opens the conversation again. Inside the repo lock and strictly after
+                     * the checkout is gone, because that is the one thing that makes the ref deletable.
+                     * Best-effort: an agent whose ref will not park is an agent that archived fine and left a
+                     * branch behind, which the next boot's sweep picks up. */
+                    await parkAgentRefs(main, new Set([id]), git).catch((error: unknown) =>
+                        logger.warn({ err: error, repo, id }, "agents: branch park failed"),
                     );
                 });
             await Promise.all(nested.map(({ repo }) => removeOne(repo)));
@@ -377,8 +399,9 @@ export const createAgentWorktrees = (
             // dependency scratch has no more claim on the disk than a removed one's.
             await rm(overlaysFor(id), { recursive: true, force: true });
         },
-        prune: async (knownIds) => {
+        prune: async (knownIds, archivedIds) => {
             const known = new Set(knownIds);
+            const archived = new Set(archivedIds);
             for (const name of await readdir(worktreesRoot).catch(() => [])) {
                 if (!known.has(name)) {
                     logger.warn({ id: name }, "agents: pruning orphaned worktree dir");
@@ -394,7 +417,27 @@ export const createAgentWorktrees = (
                 }
             }
             for (const repo of await liveRepos()) {
-                await git(mainDir(repo), ["worktree", "prune"]).catch(() => undefined);
+                const main = mainDir(repo);
+                await git(main, ["worktree", "prune"]).catch(() => undefined);
+                /* The ref half of the same sweep, and the only pass that can converge an archive taken before
+                 * parking existed — or one whose park lost its repo lock to a crash. Both calls are a single
+                 * for-each-ref when there is nothing to do, which is every boot after the first.
+                 *
+                 * Orphan parked refs are dropped against `knownIds`, NOT `archivedIds`: a ref whose entry the
+                 * registry has forgotten is holding commits no surface can ever reach again. That is the same
+                 * line the conversation-dir sweep above draws, and it stays on the safe side of it — deletion
+                 * the user can see (discard, purge) is the only other thing that drops an agent's commits. */
+                const parked = await parkAgentRefs(main, archived, git).catch((error: unknown) => {
+                    logger.warn({ err: error, repo }, "agents: branch park sweep failed");
+                    return [];
+                });
+                const dropped = await dropOrphanParkedRefs(main, known, git).catch((error: unknown) => {
+                    logger.warn({ err: error, repo }, "agents: parked ref sweep failed");
+                    return 0;
+                });
+                if (parked.length > 0 || dropped > 0) {
+                    logger.info({ repo, parked: parked.length, dropped }, "agents: swept agent branches off refs/heads");
+                }
             }
         },
         withRepoLock,

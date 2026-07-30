@@ -14,10 +14,14 @@ import type { AgentWorktrees } from "./worktrees.js";
 // What archiving costs the user is therefore exactly nothing, and that is the point — it is what lets the
 // sweep below run unattended and the UI ask no confirmation:
 //   · whatever the worktree still held is COMMITTED onto agent/<id> first (worktrees.retire)
-//   · the branch, the registry entry, every counter, and the transcript all stay
-//   · only the CHECKOUT is reclaimed — the one part that is pure cache, restorable from the branch
-// A follow-up message re-attaches the checkout and clears the marker (registry.begin), the review still reads
-// from the two refs (agents.routes diff/fileDiff), and `unarchive` puts the card back on the board untouched.
+//   · every commit, the registry entry, every counter, and the transcript all stay
+//   · only the CHECKOUT is reclaimed — the one part that is pure cache, restorable from the commits
+//   · and the branch moves off refs/heads/ onto the parked shelf (agents/agent-refs.ts), so a fleet's worth of
+//     archived conversations stops being a fleet's worth of branches in every repo. `agent/<id>` still names
+//     the same commits either way, which is why nothing below this file has to know.
+// A follow-up message re-attaches the checkout, unparks the branch and clears the marker (registry.begin +
+// worktrees.ensure), the review still reads from the two refs (agents.routes diff/fileDiff), and `unarchive`
+// puts the card back on the board untouched.
 //
 // Contrast `discard`, which is the destructive one: it drops the branch too, and with it the only record of
 // work that never landed.
@@ -39,8 +43,7 @@ import type { AgentWorktrees } from "./worktrees.js";
  *     WITH the daemon, so a question-blocked agent used to come back `idle` and not running — passing every
  *     guard here, and eligible to be swept away unread.
  * `idle` with nothing landed is the most archivable case there is: a throwaway agent that produced nothing. */
-export const archivable = (agent: AgentSummary): boolean =>
-    agent.archivedAt === undefined && (agent.status === "landed" || agent.status === "idle");
+export const archivable = (agent: AgentSummary): boolean => agent.archivedAt === undefined && (agent.status === "landed" || agent.status === "idle");
 
 // Aged out of the board, per the sandbox's retention setting. Kept separate from `archivable` so the manual
 // "Clear finished" button can archive on demand while the sweep waits — same safety guards, different clock.

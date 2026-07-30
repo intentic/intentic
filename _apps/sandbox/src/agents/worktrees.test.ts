@@ -269,7 +269,7 @@ test("remove tears down worktrees and branches; prune sweeps orphan dirs", async
 
     const orphan = join(historyRoot, "worktrees", "ghost");
     await mkdir(orphan, { recursive: true });
-    await worktrees.prune(["kept"]);
+    await worktrees.prune(["kept"], []);
     expect(existsSync(orphan)).toBe(false);
 });
 
@@ -285,8 +285,9 @@ test("retire commits the worktree's uncommitted state onto the branch and keeps 
 
     // The checkout is gone — that is the whole point, one file tree per repo reclaimed.
     expect(existsSync(conversation.cwd)).toBe(false);
-    // Both branches survive, and both hold the work the worktree was holding loose.
-    expect(await sh(work, "rev-parse", "-q", "--verify", "refs/heads/agent/c1")).not.toBe("");
+    // Both repos' commits survive, and both hold the work the worktree was holding loose — read by the same
+    // `agent/c1` name the live conversation used, which is the property parking is built to preserve.
+    expect(await sh(work, "rev-parse", "-q", "--verify", "agent/c1")).not.toBe("");
     expect(await sh(work, "show", "agent/c1:new-file.md")).toBe("agent file");
     expect(await sh(join(work, "intent"), "show", "agent/c1:deploy.config.ts")).toBe("agent edit");
     expect(await sh(work, "log", "-1", "--format=%s", "agent/c1")).toBe("Agent: Fix the parser");
@@ -318,6 +319,65 @@ test("retire is a no-op on a clean worktree beyond dropping the checkout", async
     expect(existsSync(conversation.cwd)).toBe(false);
     // No empty "Agent:" commit — the branch still points where it did.
     expect(await sh(work, "rev-parse", "agent/c1")).toBe(tip);
+});
+
+// PARKING — the ref half of retiring. What archiving costs a repo used to include one refs/heads/ entry per
+// conversation forever; these pin the shape that removed it without the caller noticing.
+test("retire takes the branch off refs/heads and ensure puts it back", async () => {
+    const { work, worktrees } = await setup();
+    const created = await worktrees.ensure("c1", []);
+    await writeFile(join(created.cwd, "new-file.md"), "agent file\n");
+    const tip = await sh(work, "rev-parse", "agent/c1");
+
+    await worktrees.retire("c1", created.repos, undefined);
+
+    // Off refs/heads — for both repos of the composition, which is where the count came from.
+    expect(await sh(work, "for-each-ref", "--format=%(refname)", "refs/heads/agent/")).toBe("");
+    expect(await sh(join(work, "intent"), "for-each-ref", "--format=%(refname)", "refs/heads/agent/")).toBe("");
+    // But still named by exactly the string every caller holds as entry.branch, and still the same commits
+    // plus the one retire made — so land, the review diff and every standing keep reading it unchanged.
+    expect(await sh(work, "rev-parse", "refs/agent/c1")).toBe(await sh(work, "rev-parse", "agent/c1"));
+    expect(await sh(work, "merge-base", "--is-ancestor", tip, "agent/c1")).toBe("");
+    expect(await sh(work, "show", "agent/c1:new-file.md")).toBe("agent file");
+
+    // Resuming is the inverse, and the user is owed a real branch: a detached checkout would drop the turn's
+    // commits on the floor.
+    const restored = await worktrees.ensure("c1", created.repos);
+    expect(await sh(restored.cwd, "branch", "--show-current")).toBe("agent/c1");
+    expect(await sh(work, "for-each-ref", "--format=%(refname)", "refs/agent/")).toBe("");
+    expect(await readFile(join(restored.cwd, "new-file.md"), "utf8")).toBe("agent file\n");
+});
+
+test("prune parks the branches of agents that are off the board and drops refs no entry claims", async () => {
+    const { work, worktrees } = await setup();
+    const archived = await worktrees.ensure("c1", []);
+    await worktrees.ensure("c2", []);
+    // An archive taken before parking existed: the checkout is gone but the branch is still a branch.
+    await worktrees.retire("c1", archived.repos, undefined);
+    await sh(work, "branch", "agent/c1", "refs/agent/c1");
+    await sh(work, "update-ref", "-d", "refs/agent/c1");
+    // And a parked ref whose conversation the registry has forgotten entirely.
+    await sh(work, "update-ref", "refs/agent/ghost", await sh(work, "rev-parse", "HEAD"));
+
+    await worktrees.prune(["c1", "c2"], ["c1"]);
+
+    // c1 converges onto the shelf; c2 is live and keeps its branch — the sweep never touches a checked-out one.
+    expect(await sh(work, "for-each-ref", "--format=%(refname:short)", "refs/heads/agent/")).toBe("agent/c2");
+    expect(await sh(work, "rev-parse", "-q", "--verify", "refs/agent/c1")).not.toBe("");
+    // The orphan goes: nothing left in the fleet can ever reach those commits again.
+    await expect(sh(work, "rev-parse", "-q", "--verify", "refs/agent/ghost")).rejects.toThrow();
+});
+
+test("remove drops a parked agent's commits, not just its branch", async () => {
+    const { work, worktrees } = await setup();
+    const created = await worktrees.ensure("c1", []);
+    await worktrees.retire("c1", created.repos, undefined);
+
+    // Discarding an ARCHIVED agent: `branch -D` alone would find nothing and leave the shelf ref behind.
+    await worktrees.remove("c1", created.repos);
+
+    await expect(sh(work, "rev-parse", "-q", "--verify", "agent/c1")).rejects.toThrow();
+    expect(await sh(join(work, "intent"), "for-each-ref", "--format=%(refname)", "refs/agent/")).toBe("");
 });
 
 test("an unborn-HEAD repo is excluded from the composition", async () => {

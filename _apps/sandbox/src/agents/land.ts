@@ -5,6 +5,7 @@ import type { LandConflict, LandConflictReason, LandMode, LandResult } from "@in
 import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import { changedFiles, headSha } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { branchSha } from "./agent-refs.js";
 import type { PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
@@ -53,17 +54,6 @@ const isAncestor = async (dir: string, ancestor: string, descendant: string, git
         return true;
     } catch {
         return false;
-    }
-};
-
-// The branch's tip as the MAIN repo sees it — a retired checkout's stand-in for `rev-parse HEAD` in the
-// worktree (the refs live in the shared .git either way). Undefined when the branch is gone too, which reads
-// as "nothing of this agent's exists in this repo any more".
-export const branchSha = async (main: string, branch: string, git: GitRunner): Promise<string | undefined> => {
-    try {
-        return (await git(main, ["rev-parse", "-q", "--verify", `refs/heads/${branch}`])).stdout.trim();
-    } catch {
-        return undefined;
     }
 };
 

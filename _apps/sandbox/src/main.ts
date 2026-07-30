@@ -22,6 +22,7 @@ import { agentSessionName } from "./agent/agent-terminals.js";
 import { createServices } from "./composition.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
+import { runGitMaintenance } from "./git/maintenance.js";
 import { ensureRepoGitDirs } from "./git/repo-git-dirs.js";
 import { commitRootBaseline, ensureRootRepo } from "./git/root-repo.js";
 import { reconcileSkills } from "./settings/skills.js";
@@ -128,10 +129,12 @@ const main = async (): Promise<void> => {
         .init()
         .then(async () => {
             const vanished: string[] = [];
+            const archived: string[] = [];
             for (const id of services.agents.ids()) {
                 // An ARCHIVED entry is *supposed* to have no worktree — that is what archiving reclaimed. It is
-                // held by its branch instead, so it must never look like the vanished-worktree case below.
+                // held by its commits instead, so it must never look like the vanished-worktree case below.
                 if (services.agents.entry(id)?.archivedAt !== undefined) {
+                    archived.push(id);
                     continue;
                 }
                 if (!(await services.agentWorktrees.exists(id))) {
@@ -148,7 +151,10 @@ const main = async (): Promise<void> => {
                 await services.agents.setArchived(vanished, Date.now());
                 logger.info({ count: vanished.length }, "agents: archived entries whose worktree vanished");
             }
-            await services.agentWorktrees.prune(services.agents.ids());
+            // The `vanished` ids were just archived, so they belong in the park sweep alongside the entries
+            // that arrived already archived — a boot that discovers a missing checkout is exactly a boot that
+            // should get that conversation's branch off refs/heads/ too.
+            await services.agentWorktrees.prune(services.agents.ids(), [...archived, ...vanished]);
         })
         .catch((error: unknown) => logger.warn({ err: error }, "agents registry not initialized — the fleet starts empty"));
 
@@ -163,6 +169,13 @@ const main = async (): Promise<void> => {
             .catch((error: unknown) => logger.warn({ err: error }, "agents: archive sweep failed"));
     void sweepArchive();
     setInterval(() => void sweepArchive(), 60 * 60 * 1000).unref();
+
+    // Git housekeeping (git/maintenance.ts): pack the refs and loose objects a fleet of conversations mints,
+    // and keep the commit-graph current. Never awaited — it is the one boot step whose whole point is to run
+    // while nothing is waiting on it, and a repo mid-relocation simply gets maintained an hour later.
+    const maintain = (): Promise<void> => runGitMaintenance(services.workspace, logger);
+    void maintain();
+    setInterval(() => void maintain(), 60 * 60 * 1000).unref();
 
     // Recompose the environment overlay from the manifest — converges fragment drift (a daemon update that
     // changes a capability's fragment flips the derived state to "pending rebuild"); no-op on fresh sandboxes.
