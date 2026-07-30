@@ -981,7 +981,7 @@ importers:
         version: link:../../_extensions/memory
       '@intentic/ext-pipelines':
         specifier: workspace:*
-        version: file:_extensions/pipelines(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+        version: link:../../_extensions/pipelines
       '@intentic/ext-preview':
         specifier: workspace:*
         version: file:_extensions/preview(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
@@ -1339,7 +1339,7 @@ importers:
         version: link:../../_libs/extension-ui
       '@intentic/sandbox-contract':
         specifier: workspace:*
-        version: file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+        version: link:../../_libs/sandbox-contract
       '@tanstack/vue-query':
         specifier: 'catalog:'
         version: 5.101.4(vue@3.5.40(typescript@5.9.3))
@@ -1350,6 +1350,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(happy-dom@20.11.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.1.5(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       vue:
         specifier: 'catalog:'
         version: 3.5.40(typescript@5.9.3)
@@ -3477,11 +3480,6 @@ packages:
 
   '@intentic/ext-logs@file:_extensions/logs':
     resolution: {directory: _extensions/logs, type: directory}
-    peerDependencies:
-      vue: '3'
-
-  '@intentic/ext-pipelines@file:_extensions/pipelines':
-    resolution: {directory: _extensions/pipelines, type: directory}
     peerDependencies:
       vue: '3'
 
@@ -7087,10 +7085,6 @@ packages:
   highlight.js@10.7.3:
     resolution: {integrity: sha512-tzcUFauisWKNHaRkN4Wjl/ZA07gENAjFl3J/c480dprkGTg5EQstgaNFqBfUqCq54kZRIEcreTsAgF/m2quD7A==}
 
-  hono@4.12.29:
-    resolution: {integrity: sha512-1hNiRjawYrLq/4m3DQQjPGFg0VZkk4RjQJDff/excI6Dm9BiL75qxGrd7/c6YOxPdq6AscP3LiXhQ6fKFC1Waw==}
-    engines: {node: '>=16.9.0'}
-
   hono@4.12.32:
     resolution: {integrity: sha512-XcuyW9qE2kJn07PkecMOBd5Vq/hMy7mmGw+idz1yblbg9N17ijJODrvPkn7/dwL3Kulj8LcRJ69DLOWf91dRUg==}
     engines: {node: '>=16.9.0'}
@@ -10334,7 +10328,7 @@ snapshots:
     dependencies:
       '@better-auth/utils': 0.4.2
       '@better-fetch/fetch': 1.3.1
-      '@opentelemetry/semantic-conventions': 1.41.1
+      '@opentelemetry/semantic-conventions': 1.43.0
       '@standard-schema/spec': 1.1.0
       better-call: 1.3.7(zod@4.4.3)
       jose: 6.2.3
@@ -10348,7 +10342,7 @@ snapshots:
     dependencies:
       '@better-auth/utils': 0.4.2
       '@better-fetch/fetch': 1.3.1
-      '@opentelemetry/semantic-conventions': 1.41.1
+      '@opentelemetry/semantic-conventions': 1.43.0
       '@standard-schema/spec': 1.1.0
       better-call: 1.3.7(zod@4.4.3)
       jose: 6.2.5
@@ -10996,9 +10990,9 @@ snapshots:
       protobufjs: 7.6.5
       yargs: 17.7.3
 
-  '@hono/node-server@1.19.14(hono@4.12.29)':
+  '@hono/node-server@1.19.14(hono@4.12.32)':
     dependencies:
-      hono: 4.12.29
+      hono: 4.12.32
 
   '@hono/node-server@2.0.12(hono@4.12.32)':
     dependencies:
@@ -11314,18 +11308,6 @@ snapshots:
       - '@vue/composition-api'
       - typescript
 
-  '@intentic/ext-pipelines@file:_extensions/pipelines(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_libs/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_libs/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
   '@intentic/ext-preview@file:_extensions/preview(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
       '@intentic/extension-api': file:_libs/extension-api(vue@3.5.40(typescript@5.9.3))
@@ -11408,7 +11390,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.29.0(zod@4.4.3)':
     dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.29)
+      '@hono/node-server': 1.19.14(hono@4.12.32)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -11418,8 +11400,8 @@ snapshots:
       eventsource-parser: 3.1.0
       express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
-      hono: 4.12.29
-      jose: 6.2.3
+      hono: 4.12.32
+      jose: 6.2.5
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
@@ -14955,7 +14937,7 @@ snapshots:
       buffer-image-size: 0.6.4
       entities: 7.0.1
       whatwg-mimetype: 3.0.0
-      ws: 8.21.0
+      ws: 8.21.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -15071,8 +15053,6 @@ snapshots:
   hex-rgb@4.3.0: {}
 
   highlight.js@10.7.3: {}
-
-  hono@4.12.29: {}
 
   hono@4.12.32: {}
 
