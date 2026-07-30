@@ -8,7 +8,12 @@ import { formatDuration, STATUS_TONE } from "./statusVisual";
  * by the worst status inside it. Clicking a circle opens that stage's job list. Stages arrive already
  * derived (pipelineDag.ts) so this and the expanded DagGraph can never disagree about the shape of a run. */
 
-const { stages } = defineProps<{ stages: readonly PipelineStage[] }>();
+const { stages, recurring } = defineProps<{
+    stages: readonly PipelineStage[];
+    // Job name → consecutive runs it has been failing. A job in here is the same breakage as last time, not a
+    // new one — the difference between "triage this" and "you already know".
+    recurring: ReadonlyMap<string, number>;
+}>();
 
 // Popovers are addressed by stage index — a derived GitHub wave has no name to key on, and GitLab stage
 // names are only unique by convention.
@@ -82,6 +87,12 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                             >
                                 {{ job.name }}
                             </span>
+                            <span
+                                v-if="recurring.get(job.name)"
+                                class="shrink-0 rounded bg-danger/10 px-1 text-2xs font-semibold text-danger"
+                                v-tooltip.top="`Failing for ${recurring.get(job.name)} runs in a row`"
+                                >×{{ recurring.get(job.name) }}</span
+                            >
                             <span v-if="formatDuration(job.durationSeconds)" class="shrink-0 text-2xs text-subtle">
                                 {{ formatDuration(job.durationSeconds) }}
                             </span>

@@ -13,6 +13,10 @@ export const ViewContributionSchema = z.object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
     label: z.string().min(1),
     surface: z.enum(["rail", "directory", "sandbox"]),
+    // Whether this view may badge its tile (ViewRegistration.badge). Declared here, like a command's
+    // keybinding, because it is consequential: a badge interrupts the user from every other screen in the app.
+    // Absent ⇒ the host drops any badge the extension registers.
+    badge: z.boolean().optional(),
 });
 export type ViewContribution = z.infer<typeof ViewContributionSchema>;
 

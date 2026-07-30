@@ -92,8 +92,18 @@ export const createExtensionApi = (
                 if (declared === undefined || declared.surface !== view.surface) {
                     throw new Error(`view "${view.id}" (${view.surface}) is not declared in the manifest's contributes.views`);
                 }
-                // The manifest's label is what the install dialog showed — it wins over the runtime value.
-                return track(registerView(extensionId, { ...view, label: declared.label }));
+                // The manifest's label is what the install dialog showed — it wins over the runtime value. So
+                // does its badge permission: a view the owner never approved to badge simply loses the
+                // function, rather than the registration failing — the view itself was approved and still
+                // works, it just cannot interrupt from the rail.
+                const { badge, ...rest } = view;
+                return track(
+                    registerView(extensionId, {
+                        ...rest,
+                        label: declared.label,
+                        ...(declared.badge === true && badge !== undefined ? { badge } : {}),
+                    }),
+                );
             },
         },
         viewers: {

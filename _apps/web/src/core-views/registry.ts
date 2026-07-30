@@ -1,4 +1,4 @@
-import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewRegistration } from "@intentic/extension-api";
+import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, ViewRegistration } from "@intentic/extension-api";
 import { shallowRef } from "vue";
 import { coreViews } from "./coreViews";
 
@@ -75,4 +75,21 @@ export const detectActivations = (repos: readonly RepoFacts[], capabilities: rea
             activation,
         })),
     );
+};
+
+// An element's tile badge, contained the same way detect() is: a throwing badge costs its own tile a number,
+// never the whole rail. Called from the surfaces' render computeds, so the extension reading its own refs in
+// here is what makes the tile repaint. A count of 0 is "nothing to say" and normalizes to undefined, so
+// callers only ever test for presence.
+export const activationBadge = ({ extension, activation }: ActiveExtension): ViewBadge | undefined => {
+    if (extension.badge === undefined) {
+        return undefined;
+    }
+    try {
+        const badge = extension.badge(activation);
+        return badge === undefined || badge.count <= 0 ? undefined : badge;
+    } catch (error) {
+        console.error(`extension view ${extension.id}: badge() failed`, error);
+        return undefined;
+    }
 };

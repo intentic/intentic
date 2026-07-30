@@ -24,6 +24,23 @@ export interface Activation {
     readonly props?: Record<string, unknown> | undefined;
 }
 
+// What a sidebar element may say on its own tile without being opened. The rail is glanced at, not read, so
+// this is deliberately the smallest useful vocabulary: a number and how alarmed to be about it.
+//
+// A badge is a claim on the user's attention, so the bar is the same one the core surfaces already hold
+// themselves to: it must mean "something happened here that you don't already know about", never "here is a
+// statistic". A count that is lit most of the day teaches the user to stop seeing the rail.
+export interface ViewBadge {
+    // Omitted or 0 ⇒ no badge. The host renders anything above 99 as "99+".
+    readonly count: number;
+    // `info` is the resting tone every core count uses (unread agents, uncommitted changes, live terminals);
+    // `warning` marks a risk the user is carrying (an exposed port); `danger` means something is BROKEN.
+    // Reach for danger sparingly — its whole value is that it is rare enough to still mean something.
+    readonly tone?: "info" | "warning" | "danger" | undefined;
+    // Hover text. Say what happened and how much, not just the number the user can already see.
+    readonly tooltip?: string | undefined;
+}
+
 // A view's runtime registration — for third-party extensions, `id`, `label` and `surface` must match a
 // `contributes.views` entry in the approved manifest or the host refuses the registration.
 export interface ViewRegistration {
@@ -40,6 +57,16 @@ export interface ViewRegistration {
     // Evidence-based detection over the public facts — one activation per sidebar element. Called on every
     // facts poll; a throwing detect contributes nothing that round.
     readonly detect: (repos: readonly RepoFacts[], capabilities: readonly CapabilityFacts[]) => Activation[];
+    // What this activation's tile should say without being opened. Read inside the host's own computed, so
+    // reading a ref here re-renders the tile when it changes — no push channel needed. Called on every render
+    // of every surface that draws tiles, so it must be cheap and pure: derive from state the extension already
+    // keeps, never fetch. A throwing badge simply yields none.
+    //
+    // Requires `badge: true` on the manifest's matching contributes.views entry — the host drops the function
+    // otherwise, because a tile that can interrupt the user is a contribution the owner must have approved.
+    // The source has to stay alive while the view is UNMOUNTED (a badge you only see once you have already
+    // navigated to the view is pointless), so it belongs in module state owned by activate(), not in the view.
+    readonly badge?: ((activation: Activation) => ViewBadge | undefined) | undefined;
     // A fallback view's activations are dropped for repos already claimed by a non-fallback one.
     readonly fallback?: true | undefined;
     // An AUXILIARY view adds a surface BESIDE whatever else serves the repo instead of replacing it — a test

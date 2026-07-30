@@ -16,6 +16,9 @@ import { useRunJobs } from "./useRunJobs";
 const props = defineProps<{
     run: PipelineRun;
     busy: string | undefined;
+    // Job name → consecutive runs it has been failing on this branch. Lifted to the view because it is a fact
+    // ACROSS runs, which no single row can see.
+    recurring: ReadonlyMap<string, number>;
 }>();
 const emit = defineEmits<{
     rerun: [run: PipelineRun];
@@ -91,7 +94,7 @@ const jobCount = computed(() => stages.value.reduce((total, stage) => total + st
 
             <!-- Inline stage graph -->
             <div class="flex shrink-0 items-center">
-                <PipelineGraph v-if="stages.length > 0" :stages="stages" />
+                <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
                 <div v-else-if="jobsLoading" class="flex items-center gap-1">
                     <span v-for="i in 3" :key="i" class="h-5 w-5 animate-pulse rounded-full bg-subtle/10"></span>
                 </div>

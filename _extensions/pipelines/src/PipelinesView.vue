@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import { cmp, Icon, InfoHint, Page, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { markPipelinesSeen } from "./ciAttention";
+import { useFailureHistory } from "./useFailureHistory";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import { host } from "./host";
 import { usePipelines } from "./usePipelines";
@@ -11,6 +13,26 @@ import { usePipelines } from "./usePipelines";
  * a stage circle pops over job details; clicking the chevron expands a full horizontal job flow. */
 
 const { repos, runs, error, isLoading, rerun, cancel, fix } = usePipelines();
+
+// Opening the view IS reading it: stamp read state so the rail stops flagging breakages now on screen. Only
+// on mount — re-stamping as runs stream in would swallow a failure that lands while the tab sits in the
+// background, which is exactly the one the badge exists for.
+onMounted(() => void markPipelinesSeen());
+
+// Which jobs keep breaking — free of extra requests, since the rows already load these same job lists.
+const { recurring } = useFailureHistory(runs);
+// job name → how many runs it has been failing, for the branch a given row belongs to.
+const recurringByBranch = computed(() => {
+    const map = new Map<string, Map<string, number>>();
+    for (const item of recurring.value) {
+        const key = `${item.repo}\n${item.branch}`;
+        const jobs = map.get(key) ?? new Map<string, number>();
+        jobs.set(item.job, item.runs);
+        map.set(key, jobs);
+    }
+    return map;
+});
+const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurringByBranch.value.get(`${run.repo}\n${run.branch}`) ?? new Map();
 
 const byRepo = computed(() => {
     const groups = new Map<string, PipelineRun[]>();
@@ -120,6 +142,27 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                 </div>
             </div>
 
+            <!-- ---- What keeps breaking ----
+                 Above the runs on purpose: on a repo that fails often the list answers "did it fail" (yes,
+                 again), while the thing worth acting on is WHICH job has been failing all along. -->
+            <div v-if="recurring.length > 0" class="mb-5 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
+                <div class="flex items-center gap-2">
+                    <Icon name="exclamation-circle" class="text-sm text-danger" />
+                    <span class="text-sm font-semibold text-content">Failing repeatedly</span>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                    <span
+                        v-for="item in recurring"
+                        :key="`${item.repo}:${item.branch}:${item.job}`"
+                        class="inline-flex items-center gap-1.5 rounded-md border border-danger/20 bg-canvas px-2 py-1 text-xs"
+                        v-tooltip.top="`${item.job} has failed the last ${item.runs} runs on ${item.repo} ${item.branch}`"
+                    >
+                        <span class="font-medium text-danger">{{ item.job }}</span>
+                        <span class="text-2xs text-subtle">{{ item.runs }} runs</span>
+                    </span>
+                </div>
+            </div>
+
             <!-- ---- Per-repo sections ---- -->
             <div class="flex flex-col gap-6">
                 <RowGroup v-for="repo in repos" :key="repo.repo" :label="repo.repo">
@@ -139,6 +182,7 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                         :key="actionKey(run)"
                         :run="run"
                         :busy="busy"
+                        :recurring="recurringFor(run)"
                         @rerun="act($event, rerun)"
                         @cancel="act($event, cancel)"
                         @fix="fixRun($event)"

@@ -17,6 +17,12 @@ const CiStateSchema = z.object({
     secret: z.string().min(1),
     // Keyed "<repo>\n<branch>" — \n can appear in neither side, so the compound key can't collide.
     conclusions: z.record(z.string(), ConclusionSchema),
+    // When the owner last LOOKED at the pipelines view. Lives here rather than in a browser, on the same
+    // reasoning the agents registry records `seenAt` daemon-side: whether a breakage has been seen is a fact
+    // about the work, so clearing site data or picking up the phone must not resurrect a badge already dealt
+    // with. One timestamp for the whole surface — the view shows every repo at once, so looking at it is one
+    // act of reading, not one per run.
+    seenAt: z.number().optional(),
 });
 type CiState = z.infer<typeof CiStateSchema>;
 
@@ -26,6 +32,10 @@ export interface CiStore {
     readonly secret: () => Promise<string>;
     readonly lastConclusion: (repo: string, branch: string) => Promise<"success" | "failed" | undefined>;
     readonly recordConclusion: (repo: string, branch: string, status: "success" | "failed", at: number) => Promise<void>;
+    // Undefined until the view has been opened once — which reads as "everything is news", the right answer
+    // for a surface the owner has never looked at.
+    readonly seenAt: () => Promise<number | undefined>;
+    readonly markSeen: (at: number) => Promise<void>;
 }
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
@@ -66,6 +76,12 @@ export const fileCiStore = (path: string): CiStore => {
                     delete state.conclusions[stale];
                 }
             }
+            await write(state);
+        },
+        seenAt: async () => (await read())?.seenAt,
+        markSeen: async (at) => {
+            const state = await readOrInit();
+            state.seenAt = at;
             await write(state);
         },
     };

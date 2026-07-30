@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ViewBadge } from "@intentic/extension-api";
 import type { IconName } from "@intentic-app/ui";
 import { computed, onUnmounted, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
@@ -9,7 +10,7 @@ import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/
 import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 import { commandShortcut } from "../composables/commands/useCommands";
-import { detectActivations, extensionPath } from "../core-views/registry";
+import { type ActiveExtension, activationBadge, detectActivations, extensionPath } from "../core-views/registry";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
@@ -34,7 +35,20 @@ interface AreaTile {
     readonly label: string;
     // An `IconName` for the fixed areas; undefined for a repository tile, which renders its initials instead.
     readonly icon?: IconName;
+    // What the tile says without being opened. The same shape core areas and extensions both fill, so the rail
+    // renders ONE badge element instead of a hardcoded span per route.
+    readonly badge?: ViewBadge;
 }
+
+// Badge tone → chip classes. `info` is the resting tone every core count has always used; `danger` is reserved
+// for "broken", which is why nothing in the core shell claims it.
+const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
+    info: `bg-primary-600/15 text-link`,
+    warning: `bg-warning/15 text-warning`,
+    danger: `bg-danger/15 text-danger`,
+};
+const badgeClass = (badge: ViewBadge): string => BADGE_TONE[badge.tone ?? `info`];
+const badgeText = (badge: ViewBadge): string => (badge.count > 99 ? `99+` : String(badge.count));
 
 /* The desktop chrome of the post-login shell: a square-tile rail, the shared Claude Code chat panel, and a
  * workspace outlet for the active area. Layout is a three-column CSS grid; the chat width is driven by a
@@ -84,30 +98,59 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
 // status, one per monorepo, …) — then the "+" Capabilities tile (rendered separately below). The Sandbox
 // status/management view lives behind the switcher chip, not a rail tile. The rail is capability-first: a repo
 // no extension serves lives only in the Workspace file tree.
-const fixedTiles: readonly AreaTile[] = [
-    { to: `/agents`, label: `Agents`, icon: `comments` },
-    { to: `/workspace`, label: `Workspace`, icon: `folder` },
-];
+const fixedTiles = computed<readonly AreaTile[]>(() => [
+    {
+        to: `/agents`,
+        label: `Agents`,
+        icon: `comments`,
+        ...(agentAttention.value > 0
+            ? {
+                  badge: {
+                      count: agentAttention.value,
+                      tooltip: `${agentAttention.value} agent${agentAttention.value === 1 ? `` : `s`} need${agentAttention.value === 1 ? `s` : ``} you`,
+                  },
+              }
+            : {}),
+    },
+    {
+        to: `/workspace`,
+        label: `Workspace`,
+        icon: `folder`,
+        ...(changes.count.value > 0
+            ? {
+                  badge: {
+                      count: changes.count.value,
+                      tooltip: `${changes.count.value} uncommitted ${changes.count.value === 1 ? `change` : `changes`}`,
+                  },
+              }
+            : {}),
+    },
+]);
 // Slotted in between Agents and Workspace only when the agent has proposed a draft (or left an unreadable draft file) — an
 // empty queue keeps the rail uncluttered, mirroring the extension tiles that appear on content. Drafts stays a
 // core shell surface (the mobile bottom-bar "Review" tab depends on it too), so its tile is not an extension.
 const draftsTile: AreaTile = { to: `/drafts`, label: `Drafts`, icon: `send` };
+// Activation.icon is an open string in the public extension API; the rail trusts it names one of the app's
+// icons (an unknown name renders the icon set's fallback).
+const extensionTile = (active: ActiveExtension): AreaTile => {
+    const { extension, activation } = active;
+    const badge = activationBadge(active);
+    return {
+        to: extensionPath(extension, activation),
+        label: activation.title,
+        ...(activation.icon === undefined ? {} : { icon: activation.icon as IconName }),
+        ...(badge === undefined ? {} : { badge }),
+    };
+};
 const tiles = computed<readonly AreaTile[]>(() => {
-    const base = drafts.value.length > 0 || invalidDrafts.value.length > 0 ? fixedTiles.toSpliced(1, 0, draftsTile) : fixedTiles;
+    const base = drafts.value.length > 0 || invalidDrafts.value.length > 0 ? fixedTiles.value.toSpliced(1, 0, draftsTile) : fixedTiles.value;
     return [
         ...base,
         ...detectActivations(panels.value, capabilities.value)
             // Only rail-surface extensions get a tile; per-repo directory panels (Apps, UI, preview) open from
             // the Workspace tree instead, so the rail stays a short, capability-first list.
             .filter(({ extension }) => extension.surface === `rail`)
-            .map(({ extension, activation }): AreaTile => {
-                const to = extensionPath(extension, activation);
-                // Activation.icon is an open string in the public extension API; the rail trusts it names one
-                // of the app's icons (an unknown name renders the icon set's fallback).
-                return activation.icon === undefined
-                    ? { to, label: activation.title }
-                    : { to, label: activation.title, icon: activation.icon as IconName };
-            }),
+            .map(extensionTile),
     ];
 });
 
@@ -207,17 +250,13 @@ onUnmounted(() => {
             >
                 <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initials(tile.label) }}</span>
                 <Icon v-else :name="tile.icon!" class="text-lg" />
+                <!-- One badge for every tile, core or extension — see AreaTile.badge. -->
                 <span
-                    v-if="tile.to === '/workspace' && changes.count.value > 0"
-                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
-                    v-tooltip.right="`${changes.count.value} uncommitted ${changes.count.value === 1 ? 'change' : 'changes'}`"
-                    >{{ changes.count.value > 99 ? "99+" : changes.count.value }}</span
-                >
-                <span
-                    v-if="tile.to === '/agents' && agentAttention > 0"
-                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
-                    v-tooltip.right="`${agentAttention} agent${agentAttention === 1 ? '' : 's'} need${agentAttention === 1 ? 's' : ''} you`"
-                    >{{ agentAttention > 99 ? "99+" : agentAttention }}</span
+                    v-if="tile.badge"
+                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
+                    :class="badgeClass(tile.badge)"
+                    v-tooltip.right="tile.badge.tooltip"
+                    >{{ badgeText(tile.badge) }}</span
                 >
             </RouterLink>
 

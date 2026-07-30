@@ -4,9 +4,9 @@
     "version": "1.0.0",
     "engines": { "intentic": "^0.4.0" },
     "permissions": {
-        "sandbox": ["GET /ci/runs", "POST /ci/runs/rerun", "POST /ci/runs/cancel", "POST /ci/runs/jobs", "POST /ci/fix"]
+        "sandbox": ["GET /ci/runs", "POST /ci/runs/rerun", "POST /ci/runs/cancel", "POST /ci/runs/jobs", "POST /ci/fix", "POST /ci/seen"]
     },
     "contributes": {
-        "views": [{ "id": "pipelines", "label": "Pipelines", "surface": "rail" }]
+        "views": [{ "id": "pipelines", "label": "Pipelines", "surface": "rail", "badge": true }]
     }
 }

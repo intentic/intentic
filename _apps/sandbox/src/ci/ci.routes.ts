@@ -57,9 +57,11 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                     ...(warning !== undefined ? { hookWarning: warning } : {}),
                 };
             });
+            const seenAt = await services.ciStore.seenAt();
+            const seen = seenAt === undefined ? {} : { seenAt };
             const cached = services.ciRuns.sweep();
             if (cached !== undefined) {
-                return { repos, runs: cached };
+                return { repos, runs: cached, ...seen };
             }
             // Backfill sweep: one list call per project, a failing vendor degrades to its repos missing rather
             // than the whole view erroring (the other host's runs are still worth showing).
@@ -73,7 +75,14 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                         }),
                 ),
             );
-            return { repos, runs: services.ciRuns.replace(listed.flat()) };
+            return { repos, runs: services.ciRuns.replace(listed.flat()), ...seen };
+        }),
+        // The daemon's clock, not the browser's: a device with a fast clock would otherwise stamp itself past
+        // failures that have not happened yet and silence them before they arrive.
+        seen: i.seen.handler(async () => {
+            const at = Date.now();
+            await services.ciStore.markSeen(at);
+            return { seenAt: at };
         }),
         rerun: i.rerun.handler(async ({ input }) => {
             const project = await resolve(input.repo);

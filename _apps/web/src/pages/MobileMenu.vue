@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import type { ViewBadge } from "@intentic/extension-api";
 import type { IconName } from "@intentic-app/ui";
 import { computed, onMounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { detectActivations, extensionPath } from "../core-views/registry";
+import { type ActiveExtension, activationBadge, detectActivations, extensionPath } from "../core-views/registry";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useMissingSecretCount } from "../composables/secrets/useSecrets";
 import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../composables/usePresence";
@@ -18,8 +19,29 @@ interface AreaRow {
     readonly to: string;
     readonly label: string;
     readonly icon?: IconName;
-    readonly attention?: number;
+    // Same shape the rail badges with, so a core area and an extension say "there is something here" the one
+    // way. There is no hover on a phone, so the row spells the badge's tooltip out where the rail would only
+    // show its count.
+    readonly badge?: ViewBadge;
 }
+
+const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
+    info: `bg-primary-600/15 text-link`,
+    warning: `bg-warning/15 text-warning`,
+    danger: `bg-danger/15 text-danger`,
+};
+
+// Activation.icon is an open string in the public extension API; trusted to name one of the app's icons.
+const extensionRow = (active: ActiveExtension): AreaRow => {
+    const { extension, activation } = active;
+    const badge = activationBadge(active);
+    return {
+        to: extensionPath(extension, activation),
+        label: activation.title,
+        ...(activation.icon === undefined ? {} : { icon: activation.icon as IconName }),
+        ...(badge === undefined ? {} : { badge }),
+    };
+};
 
 const router = useRouter();
 const sandbox = useSandbox();
@@ -40,16 +62,17 @@ const areas = computed<readonly AreaRow[]>(() => [
     // Automations is now a rail extension — it flows through detectActivations below like every other rail tile.
     ...detectActivations(panels.value, capabilities.value)
         .filter(({ extension }) => extension.surface === `rail`)
-        .map(({ extension, activation }): AreaRow => {
-            const to = extensionPath(extension, activation);
-            // Activation.icon is an open string in the public extension API; trusted to name one of the app's icons.
-            return activation.icon === undefined
-                ? { to, label: activation.title }
-                : { to, label: activation.title, icon: activation.icon as IconName };
-        }),
+        .map(extensionRow),
     { to: `/capabilities`, label: `Add a capability`, icon: `plus` },
     { to: `/terminal`, label: `Terminal`, icon: `code` },
-    { to: `/sandbox`, label: `Sandbox`, icon: `box`, attention: missingRequiredCount.value },
+    {
+        to: `/sandbox`,
+        label: `Sandbox`,
+        icon: `box`,
+        ...(missingRequiredCount.value > 0
+            ? { badge: { count: missingRequiredCount.value, tone: `warning` as const, tooltip: `${missingRequiredCount.value} missing` } }
+            : {}),
+    },
     { to: `/settings`, label: `Settings`, icon: `cog` },
 ]);
 
@@ -149,9 +172,10 @@ const logout = async (): Promise<void> => {
                 </span>
                 <span class="min-w-0 flex-1 truncate">{{ area.label }}</span>
                 <span
-                    v-if="area.attention !== undefined && area.attention > 0"
-                    class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning"
-                    >{{ area.attention }} missing</span
+                    v-if="area.badge"
+                    class="shrink-0 rounded-full px-1.5 py-px text-2xs font-semibold"
+                    :class="BADGE_TONE[area.badge.tone ?? `info`]"
+                    >{{ area.badge.tooltip ?? area.badge.count }}</span
                 >
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
             </RouterLink>
