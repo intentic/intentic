@@ -333,8 +333,10 @@ ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-mode
 # The bundled translator's fixed localhost endpoint + a loopback-only bearer (the token is just what Claude Code
 # must send as ANTHROPIC_AUTH_TOKEN to a same-host proxy). Baked so config.translator.url is set in the image; a
 # bare `tsx watch` dev run leaves both empty ⇒ no translator, and routed (codex/grok-under-Claude-Code) turns
-# surface streamAgent's clean "no translator" error.
-ENV TRANSLATOR_URL=http://127.0.0.1:8788 TRANSLATOR_TOKEN=intentic-translator-local
+# surface streamAgent's clean "no translator" error. The port is TRANSLATOR_PORT (@intentic/constants) — every
+# fixed bind in this container is declared there and asserted distinct, because this line once read 8788 and
+# silently fought the loopback listener for it. container-ports.test.ts holds the two in step.
+ENV TRANSLATOR_URL=http://127.0.0.1:8789 TRANSLATOR_TOKEN=intentic-translator-local
 # Privacy hardening for every agent CLI the daemon spawns (they all inherit process.env): telemetry, error
 # reporting, feedback uploads, and update checks off — the CLIs are version-pinned in this image, so an update
 # probe is pure phone-home. DO_NOT_TRACK covers Claude Code and anything else honoring the convention; Codex

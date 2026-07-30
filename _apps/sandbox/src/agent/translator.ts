@@ -63,8 +63,8 @@ const STABLE_MS = 60_000;
 export const nextRestartDelay = (previousDelayMs: number, uptimeMs: number): number =>
     uptimeMs >= STABLE_MS ? RESTART_DELAY_BASE_MS : Math.min(previousDelayMs * 2, RESTART_DELAY_CAP_MS);
 
-// The tail of stderr kept per run — enough to carry a Go panic or a bind error into the exit log.
-const STDERR_TAIL_BYTES = 2_048;
+// The tail of the proxy's output kept per run — enough to carry a Go panic or a bind error into the exit log.
+const OUTPUT_TAIL_BYTES = 2_048;
 
 // Start the CLIProxyAPI server and keep it alive. Best-effort and non-throwing: a routed turn that finds it down
 // surfaces its own error. Returns immediately; the proxy runs for the daemon's lifetime. No-op when no translator
@@ -89,17 +89,21 @@ export const startTranslator = (services: Services): void => {
         await mkdir(dirname(configPath), { recursive: true });
         await writeFile(configPath, renderConfig({ port, authDir, token: config.translator.token }), { mode: 0o600 });
         const startedAt = Date.now();
-        // stderr is the only place the proxy says WHY it exited (a taken port, a bad config, a panic) — keep
-        // the tail so the exit log carries the reason instead of a bare code.
-        let stderrTail = "";
-        child = spawn("cli-proxy-api", ["--config", configPath], { stdio: ["ignore", "ignore", "pipe"], env: process.env });
-        child.stderr?.on("data", (chunk: Buffer) => {
-            stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_BYTES);
-        });
+        // The proxy states WHY it exited (a taken port, a bad config, a panic) in its own log — and that log
+        // goes to STDOUT. Its stderr stays empty even for a fatal `bind: address already in use`, so watching
+        // stderr alone is why hundreds of restarts each reported a bare `code: 0` beside an empty reason while
+        // the one line that named the cause was being discarded. Both streams, one tail, in the order said.
+        let outputTail = "";
+        const keepTail = (chunk: Buffer): void => {
+            outputTail = (outputTail + chunk.toString()).slice(-OUTPUT_TAIL_BYTES);
+        };
+        child = spawn("cli-proxy-api", ["--config", configPath], { stdio: ["ignore", "pipe", "pipe"], env: process.env });
+        child.stdout?.on("data", keepTail);
+        child.stderr?.on("data", keepTail);
         child.on("exit", (code) => {
             child = undefined;
             delayMs = nextRestartDelay(delayMs, Date.now() - startedAt);
-            logger.warn({ code, stderr: stderrTail.trim(), restartInMs: delayMs }, "translator: cli-proxy-api exited — restarting");
+            logger.warn({ code, output: outputTail.trim(), restartInMs: delayMs }, "translator: cli-proxy-api exited — restarting");
             setTimeout(() => void start().catch((error: unknown) => logger.warn({ err: error }, "translator restart failed")), delayMs).unref();
         });
     };

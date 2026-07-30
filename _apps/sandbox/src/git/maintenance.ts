@@ -34,16 +34,45 @@ import type { WorkspacePaths } from "../workspace/workspace.js";
  * repos that grow at human speed, so the task that matters most here is the one --auto skips. Every task in the
  * list is bounded by its own batch limits, so running them unconditionally is cheap enough to not need gating.
  */
+
+/* ONE INVOCATION PER TASK, in the order written — because a single `run --task=a --task=b` does NOT honor it.
+ * git sorts the selected tasks by selection order DESCENDING (builtin/gc.c compare_tasks_by_selection), so
+ * this list ran backwards: `incremental-repack` went FIRST, indexing packs that `loose-objects` had not yet
+ * created, which is a hard error rather than a no-op on any repo whose objects are still loose — a fresh
+ * workspace, on every boot ("error: no pack files to index" / "task 'incremental-repack' failed"). Confirmed
+ * under GIT_TRACE on git 2.39.5: the one process emitted multi-pack-index, then prune-packed + pack-objects,
+ * then commit-graph, then pack-refs. Exactly reversed.
+ *
+ * Four processes instead of one is the price of the order being OURS rather than a detail of whichever git the
+ * image ships — and it buys per-task isolation: a task that fails is named in its own log line and costs only
+ * itself, where before one failure marked the whole repo's sweep failed and said nothing about which. */
 const TASKS = ["pack-refs", "commit-graph", "loose-objects", "incremental-repack"] as const;
 
+// `incremental-repack` writes a multi-pack-index over the repo's packs, and git treats an object store with no
+// pack at all as an ERROR, not as nothing to do. `loose-objects` just above mints the first pack — but only
+// out of loose objects, so a repo holding NO objects (a bare `git init` the user has yet to commit into) stays
+// packless and would fail this one task on every sweep, forever. Asking first is what keeps it quiet.
+const packCount = async (dir: string, git: GitRunner): Promise<number> => {
+    const { stdout } = await git(dir, ["count-objects", "-v"]);
+    return Number(/^packs: (\d+)$/m.exec(stdout)?.[1] ?? 0);
+};
+
+// The precondition rides with the task that needs it, so failing to ASK fails only that task too.
+const runTask = async (dir: string, task: (typeof TASKS)[number], git: GitRunner): Promise<void> => {
+    if (task === "incremental-repack" && (await packCount(dir, git)) === 0) {
+        return;
+    }
+    await git(dir, ["maintenance", "run", "--quiet", `--task=${task}`]);
+};
+
 // Sequential across repos on purpose: these are IO-bound and the user is working in this workspace while they
-// run. Best-effort per repo, like every other convergence pass — a repo that cannot be maintained (an unborn
+// run. Best-effort per task, like every other convergence pass — a repo that cannot be maintained (an unborn
 // HEAD, a git dir mid-relocation) must not stop the ones that can, and must never reach the caller.
 export const runGitMaintenance = async (workspace: WorkspacePaths, logger: Logger, git: GitRunner = defaultGit): Promise<void> => {
-    const args = ["maintenance", "run", "--quiet", ...TASKS.map((task) => `--task=${task}`)];
     for (const repo of ["root", ...(await discoverRepos(workspace.root))]) {
-        await git(repo === "root" ? workspace.root : join(workspace.root, repo), args).catch((error: unknown) =>
-            logger.warn({ err: error, repo }, "git maintenance: run failed"),
-        );
+        const dir = repo === "root" ? workspace.root : join(workspace.root, repo);
+        for (const task of TASKS) {
+            await runTask(dir, task, git).catch((error: unknown) => logger.warn({ err: error, repo, task }, "git maintenance: task failed"));
+        }
     }
 };

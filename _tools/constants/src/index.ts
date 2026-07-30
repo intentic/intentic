@@ -7,10 +7,17 @@
 export const LEGAL_VERSION = "2026-07-03";
 export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
 
-// The three fixed in-container ports the sandbox exposes: the daemon (oRPC + preview proxy front), the app
-// dev-server preview origin, and the loopback listener. The daemon binds them, the CLI/platform route
-// Cloudflare ingress to them, and the state-resolver emits them into the workspace node — one source so
-// container bind, ingress, and graph agree.
+/* THE FOUR FIXED IN-CONTAINER PORTS: the daemon (oRPC + preview proxy front), the app dev-server preview
+ * origin, the loopback listener, and the bundled translator. The daemon binds them, the CLI/platform route
+ * Cloudflare ingress to them, and the state-resolver emits them into the workspace node — one source so
+ * container bind, ingress, and graph agree.
+ *
+ * ALL FOUR BELONG HERE, including the one nothing outside the container ever dials. The translator's port was
+ * picked in the Dockerfile instead, as a literal inside TRANSLATOR_URL; when the loopback listener later
+ * claimed the next number up, the two collided on 8788 and nothing could see it — the daemon won the bind and
+ * cli-proxy-api died on arrival on every sandbox, taking every routed (Codex/Grok/Gemini) turn with it. A port
+ * that is not in this file is a port the next pick cannot avoid, so a fixed bind anywhere in the container is
+ * declared here and asserted distinct (sandbox app, container-ports.test.ts). */
 export const DAEMON_PORT = 8787;
 export const PREVIEW_PORT = 5173;
 
@@ -22,6 +29,13 @@ export const PREVIEW_PORT = 5173;
  * TLS — while the loopback listener MUST, or Safari refuses it as mixed content (WebKit 171934). One port per
  * job, and neither constrains the other. */
 export const LOCAL_PORT = 8788;
+
+/* The bundled translator (CLIProxyAPI), which re-serves the user's Codex/Grok/Gemini subscriptions behind an
+ * Anthropic-compatible endpoint for the Claude Code harness (sandbox app agent/translator.ts). Loopback-only
+ * and never routed: the daemon dials it, and the agent CLIs it spawns point ANTHROPIC_BASE_URL at it — all
+ * three inside this container. The Dockerfile bakes it into TRANSLATOR_URL, which is why the value has to be
+ * legible from here rather than only from there. */
+export const TRANSLATOR_PORT = 8789;
 
 /* The Linux capabilities EVERY sandbox workspace container is granted at creation — the container's security
  * posture, defined once because it has to hold across six creation paths in four dialects: the platform
