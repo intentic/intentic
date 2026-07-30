@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { localDaemonPort } from "@intentic/sandbox-run";
 import { expect, test } from "vitest";
 
 /* The verb is a thin shell over @intentic/sandbox-run (where the shape itself is unit-tested); what needs
@@ -53,6 +55,27 @@ test("--format json prints the argv for PowerShell to splat", async () => {
     expect(argv[0]).toBe("run");
     expect(argv).toContain("--cap-add=SYS_ADMIN");
     expect(argv.at(-1)).toBe("i");
+}, 30_000);
+
+/* The loopback shortcut is derived, never passed: the verb already receives CONNECT_TOKEN on the env channel,
+ * so the port a browser will probe falls out of the same digest that names the tunnel. Proving it end-to-end
+ * here (rather than only in the shape unit test) is what stops a flow from having to compute an address. */
+test("the loopback publish is derived from the connect token the env channel already carries", async () => {
+    const port = localDaemonPort(sandboxIdFromToken("s3cret")!);
+    const { stdout } = await runVerb(["--slug", "s4", "--image", "i", "--base-image", "i"], "CONNECT_TOKEN=s3cret\0");
+    // The loopback listener (8788), never the tunnel origin (8787) — that one must stay plain HTTP for the
+    // connector, while this one carries the TLS the browser needs.
+    expect(stdout).toContain(`-p 127.0.0.1:${port}:8788`);
+    // Bound to the id, not the slug: two sandboxes sharing a slug shape still get their own port.
+    expect(port).not.toBe(localDaemonPort(sandboxIdFromToken("other")!));
+}, 30_000);
+
+test("--no-local-publish drops only the shortcut, so a port docker refused can't fail the launch twice", async () => {
+    const { stdout } = await runVerb(["--slug", "s5", "--image", "i", "--base-image", "i", "--no-local-publish"], "CONNECT_TOKEN=s3cret\0");
+    expect(stdout).not.toContain("-p ");
+    // Everything else about the run is untouched — the retry is the same sandbox, minus one optimization.
+    expect(stdout).toContain("--cap-add=SYS_ADMIN");
+    expect(stdout).toContain("-v intentic-workspace-s5:/work");
 }, 30_000);
 
 test("an unallowlisted runtime directive fails the whole verb — never a command minus a privilege", async () => {

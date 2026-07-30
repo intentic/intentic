@@ -9,6 +9,7 @@ import { useSandboxSession } from "./sandboxSession";
 import { applySystemEvent } from "./systemEvents";
 import { sandboxQueryPredicate } from "./systemEventRouting";
 import { resetDaemonRoutes } from "./useDaemonRoutes";
+import { useEndpoint } from "./useEndpoint";
 import { signalConnection, useSandbox } from "./useSandbox";
 
 /* The DRIVER: hold one long-lived `/events` stream open to the active sandbox daemon, and reconnect when it
@@ -28,6 +29,7 @@ import { signalConnection, useSandbox } from "./useSandbox";
 const WATCHDOG_MS = 6000;
 
 const { daemonUrl, connection, activeSandboxId, refresh } = useSandbox();
+const { daemonBase, usingLocal, resolve: resolveEndpoint, demote: demoteEndpoint, reset: resetEndpoint } = useEndpoint();
 const { invalidateSession } = useSandboxSession();
 
 let running = false;
@@ -80,6 +82,11 @@ const failureOf = (error: unknown): ConnectionFailure => {
 // that abort must not be written onto the sandbox the user just moved TO.
 const switchedDuring = (sandboxId: string): boolean => activeSandboxId.value !== sandboxId;
 
+// Did the ADDRESS move out from under an in-flight attempt? Promoting to the loopback shortcut aborts the
+// stream on purpose (see the watch below), and that abort is not the sandbox failing — checked BEFORE the
+// demotion branch, or a promotion would read its own abort as "local is broken" and immediately undo itself.
+const retargetedDuring = (base: string | undefined): boolean => daemonBase.value !== base;
+
 // Consume the stream until it ends or breaks. Returns normally only when the daemon closed it cleanly — a
 // healthy stream never does, so the caller treats that as its own throttled failure rather than a success.
 const stream = async (sandboxId: string): Promise<void> => {
@@ -120,10 +127,20 @@ const attempt = async (): Promise<void> => {
         signalConnection({ kind: `failed`, failure: classifyFailure({ unaddressed: true, message: `No sandbox is selected.` }) });
         return;
     }
+    // Qualify the fastest address for this sandbox IN THE BACKGROUND — never awaited, so a hung loopback
+    // probe cannot delay the connect. The attempt below opens against the tunnel (or an already-resolved
+    // shortcut); if the probe qualifies mid-stream the watch at the bottom retargets us onto it.
+    void resolveEndpoint().catch(() => undefined);
+    // The address this attempt is bound to, so its own deliberate abort can be told from a real break.
+    const base = daemonBase.value;
     signalConnection({ kind: `connect` });
     try {
         await stream(sandboxId);
         if (!running || switchedDuring(sandboxId)) {
+            return;
+        }
+        if (retargetedDuring(base)) {
+            signalConnection({ kind: `retargeted` });
             return;
         }
         // The daemon answered and then closed the body without erroring. Reported as a failure so the machine
@@ -131,6 +148,19 @@ const attempt = async (): Promise<void> => {
         signalConnection({ kind: `failed`, failure: classifyFailure({ closed: true, message: `The sandbox closed the connection.` }) });
     } catch (error) {
         if (!running || switchedDuring(sandboxId)) {
+            return;
+        }
+        if (retargetedDuring(base)) {
+            signalConnection({ kind: `retargeted` });
+            return;
+        }
+        // The shortcut stopped answering (docker restarted, the machine slept, this browser moved to another
+        // network than the container). The tunnel is known-good, so this is a repair rather than an outage:
+        // fall back and retry AT ONCE instead of backing off against an address we have just abandoned. The
+        // retarget check above already excluded a deliberate abort, so reaching here means it really failed.
+        if (usingLocal.value) {
+            demoteEndpoint(sandboxId);
+            signalConnection({ kind: `retargeted` });
             return;
         }
         const failure = failureOf(error);
@@ -189,10 +219,24 @@ watch(activeSandboxId, (id, previous) => {
     if (previous !== undefined) {
         lastKnown.set(previous, connection.value.phase === `online`);
     }
+    // Switching away and back is the user's own "try again" for a shortcut that was demoted earlier in this
+    // session — the machine they are on may well have changed since.
+    if (id !== undefined) {
+        resetEndpoint(id);
+    }
     signalConnection({ kind: `switched`, lastKnownOnline: id !== undefined && (lastKnown.get(id) ?? false) });
     // Another sandbox runs another image — attributing the outgoing daemon's route surface to it would hide or
     // invent features on the incoming one.
     resetDaemonRoutes();
+    controller?.abort();
+    wake?.();
+});
+
+// The address changed under the open stream — the loopback shortcut qualified (promotion), the daemon
+// re-announced a new URL, or a demotion put us back on the tunnel. Abort so the loop reconnects against it
+// immediately: the alternative is a stream that keeps running on the address we stopped choosing, for as long
+// as it happens to stay healthy. The attempt itself tells this abort from a real break (retargetedDuring).
+watch(daemonBase, () => {
     controller?.abort();
     wake?.();
 });

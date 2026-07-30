@@ -6,10 +6,12 @@ import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { type Auth, createAuth } from "./auth.js";
-import { CloudflareTokenError, ensurePreviewRoutes, provisionHostSshTunnel } from "./sandbox/cloudflare.js";
+import { localHostname } from "@intentic/sandbox-contract";
+import { CloudflareTokenError, ensureLocalDnsRecord, ensurePreviewRoutes, provisionHostSshTunnel, setAcmeChallenge } from "./sandbox/cloudflare.js";
 import type { Config } from "./config.js";
 import { buildOrpcContext, type OrpcContext } from "./context.js";
-import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { localDaemonPort } from "@intentic/sandbox-run";
 import { decryptSecret } from "./crypto.js";
 import type { Logger } from "pino";
 import { router } from "./router.js";
@@ -124,7 +126,16 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         // sandbox.setupCode stored.
         const payload =
             typeof sandbox.setupPayload === `string` ? (JSON.parse(decryptSecret(config, sandbox.setupPayload)) as Record<string, string>) : {};
-        const lines = [`CONNECT_TOKEN=${decryptSecret(config, sandbox.token)}`];
+        const connectToken = decryptSecret(config, sandbox.token);
+        const lines = [`CONNECT_TOKEN=${connectToken}`];
+        // The loopback shortcut's host port, for the COMPOSE path only. Every other flow asks the image for its
+        // run command and the run contract derives this from the same token (see @intentic/sandbox-run); a
+        // compose file is written before the token exists, so it interpolates ${LOCAL_PORT} from this .env
+        // instead. The browser derives the identical port from the token it holds — nothing is stored.
+        const sandboxId = sandboxIdFromToken(connectToken);
+        if (sandboxId !== undefined) {
+            lines.push(`LOCAL_PORT=${localDaemonPort(sandboxId)}`);
+        }
         // Intentic path (marked by SANDBOX_HOSTNAME in the payload): the tunnel was provisioned when
         // sandbox.setupCode minted this code — the hostname must resolve before the wizard's first probe, or
         // resolvers negative-cache the NXDOMAIN — so just return the cached connector token. The own-Cloudflare
@@ -194,6 +205,53 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
                 return c.json({ error: error.message }, 400);
             }
             return c.json({ error: error instanceof Error ? error.message : `host tunnel provisioning failed` }, 502);
+        }
+    });
+
+    /* Lend the sandbox this zone for its LOOPBACK CERTIFICATE. The daemon runs its own ACME order and keeps
+     * the private key; all it cannot do on the intentic-provided path is write DNS, because it holds no token
+     * for this zone. So it relays exactly two records here and nothing else: the `local-<id>` A record at
+     * 127.0.0.1, and the `_acme-challenge` TXT for the length of one order (`value` absent withdraws it).
+     *
+     * Authenticated by the connect token like /sandbox/announce, and the hostname is DERIVED from that token's
+     * sandbox rather than taken from the body — so possession of one sandbox's token can only ever move that
+     * sandbox's records, never a name the caller names. Own-Cloudflare sandboxes are a no-op: they hold their
+     * own token and do this themselves. */
+    app.post(`/sandbox/local-dns`, async (c) => {
+        const token = c.req.header(`x-intentic-connect`);
+        if (token === undefined || token === ``) {
+            return c.text(`error: missing token`, 400);
+        }
+        const body = (await c.req.json().catch(() => undefined)) as { challenge?: unknown } | undefined;
+        const challenge = body?.challenge;
+        if (challenge !== undefined && (typeof challenge !== `string` || challenge.length > 128)) {
+            return c.text(`error: challenge must be a string of at most 128 characters`, 400);
+        }
+        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
+        if (!sandbox) {
+            return c.text(`error: unknown sandbox`, 404);
+        }
+        if (sandbox.tunnelToken === null) {
+            return c.json({ ok: true });
+        }
+        const { apiToken, zone } = config.intenticCloudflare;
+        if (apiToken === `` || zone === ``) {
+            return c.json({ error: `intentic-provided tunnels are not enabled` }, 404);
+        }
+        const sandboxId = sandboxIdFromToken(decryptSecret(config, sandbox.token));
+        if (sandboxId === undefined) {
+            return c.json({ error: `this sandbox has no connect token to derive a hostname from` }, 404);
+        }
+        const hostname = localHostname(sandboxId, zone);
+        try {
+            await ensureLocalDnsRecord(apiToken, zone, hostname);
+            await setAcmeChallenge(apiToken, zone, `_acme-challenge.${hostname}`, challenge as string | undefined);
+            return c.json({ ok: true, hostname });
+        } catch (error) {
+            if (error instanceof CloudflareTokenError) {
+                return c.json({ error: error.message }, 400);
+            }
+            return c.json({ error: error instanceof Error ? error.message : `local DNS update failed` }, 502);
         }
     });
 

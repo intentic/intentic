@@ -409,10 +409,16 @@ const runAgentTurn = async (
     return frames.flatMap((frame) => (frame.kind === "frame" ? [frame.event] : []));
 };
 
-test("GET /health reports ok", async () => {
+test("GET /health reports ok, and names the sandbox so a loopback probe can tell WHICH daemon answered", async () => {
     const res = await createApp(services()).request("/health");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
+    // No connect token (the loopback/test shape) ⇒ no id to claim, and no loopback shortcut to publish either.
+    expect(await res.json()).toEqual({ ok: true, sandboxId: undefined });
+
+    // With one, the id is the SAME digest the tunnel hostname and the published port derive from — that
+    // agreement is what makes the browser's "did I reach the right daemon" check meaningful.
+    const named = await createApp(services({ config: { ...baseConfig, connectToken: "tok" } })).request("/health");
+    expect(await named.json()).toEqual({ ok: true, sandboxId: sandboxIdFromToken("tok") });
 });
 
 test("panels.list enumerates every repo with its operator panel + runtime status", async () => {

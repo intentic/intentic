@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { type EnrollHostInput, EnrollHostInputSchema } from "@intentic/sandbox-contract";
+import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
 import { type Context, Hono } from "hono";
@@ -208,7 +209,16 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         });
     }
 
-    app.get("/health", (c) => c.json({ ok: true }));
+    /* Unauthenticated by design (the gate above exempts it) — it is the "is a daemon there" probe every flow
+     * makes: the launch scripts' readiness loop, /setup's attach check, and the browser's LOOPBACK PROBE.
+     *
+     * That last one is why the sandbox id is here. A browser on the same machine dials 127.0.0.1 at a port
+     * derived from this sandbox's id (@intentic/sandbox-run localDaemonPort) instead of going out to
+     * Cloudflare and back — but a port is not an identity: a second sandbox, or an unrelated process, can be
+     * behind it. Answering with the id lets the probe prove it reached THIS daemon before routing a session's
+     * traffic at it; a mismatch means the browser silently keeps using the tunnel. The id is already the
+     * leading label of the sandbox's public hostname, so naming it here discloses nothing new. */
+    app.get("/health", (c) => c.json({ ok: true, sandboxId: sandboxIdFromToken(services.config.connectToken) }));
 
     // The same bytes, for one side of a diff rather than a file in the tree — an image the review surfaces can
     // only flag as `binary` over the JSON contract. Mounted here beside /workspace/raw for the same reason it

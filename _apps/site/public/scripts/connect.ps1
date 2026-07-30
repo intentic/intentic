@@ -432,10 +432,25 @@ if ($LASTEXITCODE -ne 0 -or -not $ArgvJson) {
     Write-Error "$SandboxImage could not produce its run command (see the docker output above)."
     exit 1
 }
+# Two attempts, because exactly one part of the run may fail without the sandbox being broken. The run
+# contract publishes a LOOPBACK SHORTCUT — 127.0.0.1:<port derived from the sandbox id>:8787 — so a browser on
+# this machine reaches the daemon directly instead of going out to Cloudflare and back. docker refuses the
+# WHOLE launch when something already holds that port, so the retry drops just the shortcut. Any other failure
+# fails both attempts. The failed attempt leaves a created-but-stopped container holding the name.
 docker @($ArgvJson | ConvertFrom-Json) | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    Write-Error 'failed to start the sandbox container (see the docker output above).'
-    exit 1
+    docker rm -f $Container *> $null
+    $ArgvJson = ($EnvPairs -join "`0") + "`0" | docker run -i --rm --entrypoint intentic $SandboxImage @VerbArgs --no-local-publish
+    if ($LASTEXITCODE -ne 0 -or -not $ArgvJson) {
+        Write-Error "$SandboxImage could not produce its run command (see the docker output above)."
+        exit 1
+    }
+    docker @($ArgvJson | ConvertFrom-Json) | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error 'failed to start the sandbox container (see the docker output above).'
+        exit 1
+    }
+    Write-Host 'intentic: started without the local shortcut (its port is taken) - this browser reaches the sandbox over its tunnel.'
 }
 
 # Start the tunnel connector: cloudflared on the shared network routes sandbox-<id>.<zone> → the daemon and

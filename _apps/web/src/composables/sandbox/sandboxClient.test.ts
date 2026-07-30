@@ -1,7 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
 
 vi.mock("./sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));
-vi.mock("./useSandbox", () => ({ useSandbox: () => ({ active: { value: { token: `connect` } }, daemonUrl: { value: `https://daemon.test` } }) }));
+// The real useEndpoint rides on top of this mock: with no loopback shortcut resolved for the sandbox, its
+// daemonBase falls through to daemonUrl — which is the behaviour every call here depends on.
+vi.mock("./useSandbox", () => ({
+    useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),
+}));
 
 const { sandboxJson } = await import("./sandboxClient");
 

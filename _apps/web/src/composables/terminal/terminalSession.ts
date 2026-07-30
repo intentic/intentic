@@ -6,6 +6,7 @@ import { useDevice } from "@intentic-app/ui";
 import { boundCommand } from "../commands/useCommands";
 import { isApplePlatform } from "../commands/keybindings";
 import { useSandboxSession } from "../sandbox/sandboxSession";
+import { useEndpoint } from "../sandbox/useEndpoint";
 import { useSandbox } from "../sandbox/useSandbox";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
@@ -112,9 +113,11 @@ const socketUrl = async (name: string, cols: number, rows: number): Promise<stri
     if (token === undefined) {
         return undefined;
     }
-    // Read the daemon URL and connect token together AFTER the token await, so both come from the same active
+    // Read the base and connect token together AFTER the token await, so both come from the same active
     // sandbox snapshot (a switch/list-refresh during the await would otherwise pair them across sandboxes).
-    const base = useSandbox().daemonUrl.value;
+    // The resolved transport base, so a same-machine sandbox's PTY rides loopback instead of the tunnel —
+    // where keystroke latency is the thing a user feels most directly.
+    const base = useEndpoint().daemonBase.value;
     if (base === undefined || base === ``) {
         return undefined;
     }

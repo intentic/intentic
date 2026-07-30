@@ -1,4 +1,4 @@
-import { DAEMON_PORT } from "@intentic/constants";
+import { DAEMON_PORT, LOCAL_PORT } from "@intentic/constants";
 
 /* THE SANDBOX CONTAINER'S RUN CONTRACT — every way a sandbox starts, composed from one definition.
  *
@@ -130,6 +130,43 @@ export const replayableEnv = (pairs: readonly (readonly [string, string])[]): [s
 // /health with the same patience before declaring the sandbox up.
 export const HEALTH = { url: `http://localhost:${DAEMON_PORT}/health`, attempts: 15, intervalSeconds: 2 } as const;
 
+// ——— The loopback shortcut ————————————————————————————————————————————————————————————————————————————
+/* A sandbox running on the SAME machine as the browser does not need Cloudflare in the middle: the container
+ * publishes its daemon port on the host's loopback, and the browser dials that instead of the tunnel. Nobody
+ * announces the address — the browser DERIVES it from the sandbox id it already holds (the leading label of
+ * the public URL) using the two builders below, and proves it reached the right daemon by matching the id
+ * /health answers with. That is why this is a pure derivation and not a wire field: an address that is only
+ * meaningful on one machine has no business in the platform's registry, which serves every machine.
+ *
+ * Loopback, never 0.0.0.0. The daemon authenticates every route but /health, but CORS is not a boundary and a
+ * LAN-exposed daemon is a wider target than this optimization is worth.
+ *
+ * The band is chosen to be quiet: above the range dev servers and databases claim by default, and below
+ * Linux's ephemeral floor (32768), so the derived port collides with neither an app the user is running nor a
+ * socket the kernel hands out. Two sandboxes on one machine derive different ports; the ~1-in-4000 chance that
+ * two collide anyway (or that something else already holds the port) is what `localPublish: false` is for —
+ * the publish is the only part of the run that may fail without the sandbox being broken, so every flow
+ * retries without it rather than failing the launch. */
+const LOCAL_PORT_BASE = 28000;
+const LOCAL_PORT_SPAN = 4000;
+
+// The host loopback port a sandbox with this 12-hex id publishes its LOOPBACK LISTENER on (container-side
+// LOCAL_PORT, never the tunnel's DAEMON_PORT — see @intentic/constants for why the two are separate).
+// Deterministic, so a recreate lands on the same port and the browser can derive it without being told.
+export const localDaemonPort = (sandboxId: string): number => LOCAL_PORT_BASE + (Number.parseInt(sandboxId.slice(0, 6), 16) % LOCAL_PORT_SPAN);
+
+/* The two addresses that port can answer on, best first — what the browser probes.
+ *
+ * HTTPS when the daemon has obtained a certificate for `local-<id>.<zone>` (a public name resolving to
+ * 127.0.0.1). Every browser accepts that, including Safari, which refuses http loopback from an HTTPS page as
+ * mixed content. Plain http is the fallback the daemon serves before a certificate exists, or forever if
+ * issuance is unavailable — the mixed-content spec calls loopback potentially-trustworthy, so Chrome and
+ * Firefox take it. Neither is assumed: the browser tries both and the daemon's identity decides. */
+export const localDaemonUrl = (sandboxId: string, zone: string | undefined): string | undefined =>
+    zone === undefined || zone === "" ? undefined : `https://local-${sandboxId}.${zone}:${localDaemonPort(sandboxId)}`;
+
+export const localDaemonUrlInsecure = (sandboxId: string): string => `http://127.0.0.1:${localDaemonPort(sandboxId)}`;
+
 // ——— The run ——————————————————————————————————————————————————————————————————————————————————————————
 export interface SandboxRun {
     readonly names: SandboxNames;
@@ -150,6 +187,12 @@ export interface SandboxRun {
     readonly ports?: readonly string[];
     readonly labels?: readonly string[];
     readonly dns?: readonly string[];
+    // The sandbox's 12-hex id (sandboxIdFromToken of its connect token) — what the loopback port derives from.
+    // Absent on a sandbox with no connect token (a bare dev run), which therefore publishes nothing.
+    readonly sandboxId?: string;
+    // Publish the loopback shortcut. Default true wherever a `sandboxId` is known; set false to retry a launch
+    // that docker refused because the derived port was already allocated (see localDaemonPort).
+    readonly localPublish?: boolean;
     // The hosted provider runs without a /history volume, --init, or the network alias (no tunnel sidecar
     // shares its network); every local flow has all three. Defaults are the local shape.
     readonly history?: boolean;
@@ -182,6 +225,7 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => [
     ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
     ...(run.runtime ?? []),
     ...(run.ports ?? []).flatMap((port) => ["-p", port]),
+    ...(run.sandboxId !== undefined && run.localPublish !== false ? ["-p", `127.0.0.1:${localDaemonPort(run.sandboxId)}:${LOCAL_PORT}`] : []),
     "-v",
     `${run.names.workspaceVolume}:/work`,
     ...(run.history === false ? [] : ["-v", `${run.names.historyVolume}:/history`]),

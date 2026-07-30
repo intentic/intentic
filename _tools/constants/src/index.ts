@@ -7,11 +7,21 @@
 export const LEGAL_VERSION = "2026-07-03";
 export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
 
-// The two fixed in-container ports the sandbox exposes: the daemon (oRPC + preview proxy front) and the app
-// dev-server preview origin. The daemon binds them, the CLI/platform route Cloudflare ingress to them, and the
-// state-resolver emits them into the workspace node — one source so container bind, ingress, and graph agree.
+// The three fixed in-container ports the sandbox exposes: the daemon (oRPC + preview proxy front), the app
+// dev-server preview origin, and the loopback listener. The daemon binds them, the CLI/platform route
+// Cloudflare ingress to them, and the state-resolver emits them into the workspace node — one source so
+// container bind, ingress, and graph agree.
 export const DAEMON_PORT = 8787;
 export const PREVIEW_PORT = 5173;
+
+/* The LOOPBACK listener: the same daemon app on a second port, the only one ever published to the host, so a
+ * browser on this machine can skip the Cloudflare round trip (@intentic/sandbox-run localDaemonPort).
+ *
+ * Separate from DAEMON_PORT because the two speak different protocols. The tunnel connector's ingress dials
+ * `http://intentic-sandbox-workspace:8787` in plain HTTP over the container network, so 8787 can never carry
+ * TLS — while the loopback listener MUST, or Safari refuses it as mixed content (WebKit 171934). One port per
+ * job, and neither constrains the other. */
+export const LOCAL_PORT = 8788;
 
 /* The Linux capabilities EVERY sandbox workspace container is granted at creation — the container's security
  * posture, defined once because it has to hold across six creation paths in four dialects: the platform

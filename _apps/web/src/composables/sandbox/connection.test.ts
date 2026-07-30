@@ -117,6 +117,25 @@ describe(`applyConnectionSignal`, () => {
         expect(state.generation).toBe(2);
     });
 
+    it(`treats a changed ADDRESS as a retry, not an outage — in either direction`, () => {
+        // Promotion: the loopback shortcut qualified mid-stream, so the driver aborts to reconnect onto it.
+        // That abort is deliberate; recording it as a failure would put a "reconnecting" gate over a workspace
+        // that is about to get FASTER, and would make the first attempt on the new address wait out a backoff.
+        const promoted = drive({ kind: `connect` }, { kind: `opened` }, { kind: `retargeted` });
+        expect(promoted.phase).toBe(`connecting`);
+        expect(promoted.failure).toBeUndefined();
+        expect(promoted.retryDelayMs).toBe(0);
+
+        // Demotion: the shortcut died after a run of real failures. The tunnel is known-good, so the ladder
+        // those failures built must not be carried onto it — the next attempt goes out immediately.
+        const demoted = drive({ kind: `failed`, failure: network() }, { kind: `failed`, failure: network() }, { kind: `retargeted` });
+        expect(demoted.attempt).toBe(0);
+        expect(demoted.retryDelayMs).toBe(0);
+
+        // The sandbox did not change, so nothing keyed to it goes stale — unlike a switch, which bumps.
+        expect(drive({ kind: `retargeted` }).generation).toBe(0);
+    });
+
     it(`returns to idle on disconnect without rewinding the generation`, () => {
         const state = drive({ kind: `switched`, lastKnownOnline: false }, { kind: `connect` }, { kind: `opened` }, { kind: `disconnect` });
         expect(state.phase).toBe(`idle`);

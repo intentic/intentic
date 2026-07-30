@@ -254,11 +254,20 @@ docker logs --tail 5000 "$CONTAINER" >>"$LOG" 2>&1 || true
 docker rm -f "$CONTAINER" >/dev/null
 echo "== run command ==" >>"$LOG"
 cat "$run_command" >>"$LOG"
+# The loopback shortcut (127.0.0.1:<port derived from the sandbox id>:8787, which lets a browser on this
+# machine skip the tunnel) is the one part of the run that may fail without the sandbox being broken: docker
+# refuses the whole launch when that port is already held. Retry once without it; any other failure fails both
+# attempts and reports below. The failed attempt leaves a created-but-stopped container holding the name.
 if ! sh "$run_command" >/dev/null 2>>"$LOG"; then
-    tail -n 5 "$LOG" >&2
-    echo "error: starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?)." >&2
-    echo "       The previous container's logs and this error are saved to ${LOG}. Re-run your connect one-liner to restore the stock sandbox." >&2
-    exit 1
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    if ! docker run -i --rm --entrypoint intentic "$TARGET_IMAGE" sandbox run-command "$@" --no-local-publish <"$envdump" >"$run_command" 2>>"$LOG" ||
+        ! [ -s "$run_command" ] || ! sh "$run_command" >/dev/null 2>>"$LOG"; then
+        tail -n 5 "$LOG" >&2
+        echo "error: starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?)." >&2
+        echo "       The previous container's logs and this error are saved to ${LOG}. Re-run your connect one-liner to restore the stock sandbox." >&2
+        exit 1
+    fi
+    echo "intentic: recreated without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel."
 fi
 
 # A container that starts but crash-loops (an overlay that breaks the daemon) would otherwise read as success —

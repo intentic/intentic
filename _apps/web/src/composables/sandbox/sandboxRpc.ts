@@ -3,6 +3,7 @@ import { createORPCClient, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
 import { useSandboxSession } from "./sandboxSession";
+import { useEndpoint } from "./useEndpoint";
 import { useSandbox } from "./useSandbox";
 
 /* The TYPED client for the active sandbox daemon, derived from the same `sandboxContract` the daemon
@@ -23,7 +24,8 @@ import { useSandbox } from "./useSandbox";
  * routes (/health, /workspace/raw), the chunked XHR upload path, and the extension host's deliberately
  * path-based data plane (an extension bundle cannot import our contract). */
 
-const { active, daemonUrl } = useSandbox();
+const { active } = useSandbox();
+const { daemonBase } = useEndpoint();
 const { getSessionToken } = useSandboxSession();
 
 // The active sandbox has no address yet (setup unfinished, or the daemon has not announced itself). Its own
@@ -42,9 +44,10 @@ export const sandboxRpc: ContractRouterClient<typeof sandboxContract> = createOR
         // instrumentation wrapper). No credentials — the daemon is cross-origin and bearer-authed, never cookied.
         fetch: (request) => globalThis.fetch(request),
         // Read per request, not captured: a sandbox switch (or a daemon that re-announced a new URL after a
-        // restart) must be picked up by the very next call, with no client rebuild.
+        // restart) must be picked up by the very next call, with no client rebuild. Same reason the loopback
+        // shortcut can be adopted mid-session — this hook simply starts returning the faster base.
         url: () => {
-            const base = daemonUrl.value;
+            const base = daemonBase.value;
             if (base === undefined || base === ``) {
                 throw new SandboxUnaddressedError();
             }

@@ -2,8 +2,10 @@ import type { SystemEvent } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 
 vi.mock("./sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));
+// The real useEndpoint rides on top of this mock: with no loopback shortcut resolved for the sandbox, its
+// daemonBase falls through to daemonUrl — which is what keeps every call below aimed at the tunnel.
 vi.mock("./useSandbox", () => ({
-    useSandbox: () => ({ active: { value: { token: `connect` } }, daemonUrl: { value: `https://daemon.test` } }),
+    useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),
 }));
 
 const { sandboxRpc, daemonErrorMessage, daemonErrorStatus } = await import("./sandboxRpc");
@@ -69,7 +71,9 @@ it(`surfaces the daemon's status so a refusal can be told from a failure to conn
 
 it(`names an unaddressed sandbox as its own condition, before any request goes out`, async () => {
     vi.resetModules();
-    vi.doMock("./useSandbox", () => ({ useSandbox: () => ({ active: { value: undefined }, daemonUrl: { value: undefined } }) }));
+    vi.doMock("./useSandbox", () => ({
+        useSandbox: () => ({ active: { value: undefined }, activeSandboxId: { value: undefined }, daemonUrl: { value: undefined } }),
+    }));
     const unaddressed = await import("./sandboxRpc");
     const fetchMock = vi.fn();
     vi.stubGlobal(`fetch`, fetchMock);

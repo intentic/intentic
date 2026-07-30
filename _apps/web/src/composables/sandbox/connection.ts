@@ -87,6 +87,12 @@ export type ConnectionSignal =
     // The user switched sandboxes. `lastKnownOnline` is what this browser last observed for the INCOMING
     // sandbox, which the shell paints optimistically (stale-while-revalidate) while the stream re-establishes.
     | { readonly kind: "switched"; readonly lastKnownOnline: boolean }
+    // The ADDRESS changed under an in-flight attempt — the loopback shortcut qualified and was promoted to,
+    // or it stopped answering and was demoted back to the tunnel (see useEndpoint). Not a failure of the
+    // sandbox in either direction: another address is there to be tried and the very next attempt uses it, so
+    // this clears the cause and the backoff instead of climbing the retry ladder against an address we have
+    // already stopped using. Without it a promotion would record its own deliberate abort as an outage.
+    | { readonly kind: "retargeted" }
     // The shell tore the loop down (logout, unmount).
     | { readonly kind: "disconnect" };
 
@@ -136,6 +142,10 @@ export const applyConnectionSignal = (state: ConnectionState, signal: Connection
                 retryDelayMs: 0,
                 generation: state.generation + 1,
             };
+        case `retargeted`:
+            // Same shape as a switch minus the generation bump: the sandbox did not change, only the address
+            // we reach it at, so in-flight results stay valid and the loop retries at once (retryDelayMs 0).
+            return { ...state, phase: `connecting`, failure: undefined, attempt: 0, retryDelayMs: 0 };
         case `disconnect`:
             return { ...initialConnection, generation: state.generation };
     }

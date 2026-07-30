@@ -10,6 +10,7 @@
  * and the workspace data all stay compatible: a sandbox can move between script-managed and compose-managed
  * without losing /work. Keep the two in lockstep. */
 
+import { LOCAL_PORT } from "@intentic/constants";
 import { ORIGIN_HOST, SANDBOX_CAPABILITIES, sandboxNames } from "@intentic/sandbox-run";
 
 export interface ComposeArgs {
@@ -102,6 +103,13 @@ export const composeFile = (args: ComposeArgs): string => {
         `        logging:`,
         `            driver: json-file`,
         `            options: { max-size: 10m, max-file: "3" }`,
+        // The loopback shortcut: a browser on THIS machine reaches the daemon here instead of going out to
+        // Cloudflare and back. Every other flow asks the image for its run command and the run contract derives
+        // this port from the connect token; a compose file is written before that token exists, so the .env
+        // bootstrap carries it as LOCAL_PORT. The browser derives the identical port from the token it holds.
+        // Delete this line if something else on the machine already holds the port — compose refuses to start
+        // the service rather than falling back, and the sandbox works over its tunnel without it.
+        `        ports: ["127.0.0.1:\${LOCAL_PORT}:${LOCAL_PORT}"]`,
         `        volumes:`,
         `            - work:/work`,
         `            - history:/history`,

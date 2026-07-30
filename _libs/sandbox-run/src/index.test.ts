@@ -1,6 +1,9 @@
 import { expect, test } from "vitest";
 import {
     HEALTH,
+    localDaemonPort,
+    localDaemonUrl,
+    localDaemonUrlInsecure,
     ORIGIN_HOST,
     parseNulEnv,
     replayableEnv,
@@ -119,4 +122,41 @@ test("runtime directives: allowlisted tokens pass, anything else stops the recre
 test("the health gate is one definition: daemon port, bounded patience", () => {
     expect(HEALTH.url).toBe("http://localhost:8787/health");
     expect(HEALTH.attempts * HEALTH.intervalSeconds).toBe(30);
+});
+
+test("the loopback port is derived from the id alone — the browser computes the same one without being told", () => {
+    // Stable across calls (a recreate must land on the port the browser is already probing) and inside the
+    // quiet band: above what dev servers claim, below Linux's ephemeral floor.
+    expect(localDaemonPort("0f310c3c4db4")).toBe(localDaemonPort("0f310c3c4db4"));
+    // HTTPS on a public name that resolves to loopback — the only shape Safari will accept. Same port either
+    // way: one published mapping, and what the daemon serves on it decides which of the two answers.
+    expect(localDaemonUrl("0f310c3c4db4", "intentic.dev")).toBe(`https://local-0f310c3c4db4.intentic.dev:${localDaemonPort("0f310c3c4db4")}`);
+    expect(localDaemonUrlInsecure("0f310c3c4db4")).toBe(`http://127.0.0.1:${localDaemonPort("0f310c3c4db4")}`);
+    // No zone ⇒ no name a CA could certify ⇒ no https candidate to offer.
+    expect(localDaemonUrl("0f310c3c4db4", undefined)).toBeUndefined();
+    for (const id of ["0f310c3c4db4", "abc123def456", "000000000000", "ffffffffffff"]) {
+        expect(localDaemonPort(id)).toBeGreaterThanOrEqual(28000);
+        expect(localDaemonPort(id)).toBeLessThan(32000);
+    }
+    // Two sandboxes on one machine must not race for one port.
+    expect(localDaemonPort("000000000000")).not.toBe(localDaemonPort("000001000000"));
+});
+
+test("a sandbox with an id publishes the loopback shortcut on 127.0.0.1 — never on every interface", () => {
+    const argv = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", sandboxId: "0f310c3c4db4" });
+    // The LOOPBACK listener (8788), not the tunnel origin (8787): the connector dials 8787 in plain HTTP over
+    // the container network, so that port can never carry the TLS the browser needs.
+    expect(argv.join(" ")).toContain(`-p 127.0.0.1:${localDaemonPort("0f310c3c4db4")}:8788`);
+    expect(argv.join(" ")).not.toContain(`:8787`);
+});
+
+test("the publish is the one part of the run that may be dropped: no id, or a port docker already refused", () => {
+    // A bare dev run has no connect token, so no id, so nothing to publish.
+    expect(sandboxRunArgv({ names, image: "i", baseImage: "i" }).join(" ")).not.toContain("-p ");
+    // The retry every flow makes when docker answered "port is already allocated" — same sandbox, no shortcut.
+    const retry = sandboxRunArgv({ names, image: "i", baseImage: "i", sandboxId: "0f310c3c4db4", localPublish: false });
+    expect(retry.join(" ")).not.toContain("-p ");
+    // Hosted-provider ports are unaffected by the retry — they are the sandbox's real ingress, not a shortcut.
+    const hosted = sandboxRunArgv({ names, image: "i", baseImage: "i", ports: ["10.0.0.2:5173:5173"], sandboxId: "abc123def456", localPublish: false });
+    expect(hosted.join(" ")).toContain("-p 10.0.0.2:5173:5173");
 });

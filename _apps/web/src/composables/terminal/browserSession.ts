@@ -1,4 +1,5 @@
 import { useSandboxSession } from "../sandbox/sandboxSession";
+import { useEndpoint } from "../sandbox/useEndpoint";
 import { useSandbox } from "../sandbox/useSandbox";
 
 /* One live view of the agent's browser ↔ one `browser-*` session over the daemon's /system/browser-view
@@ -62,13 +63,13 @@ const send = (s: BrowserSession, message: object): void => {
 };
 
 // Build the authenticated wss URL, or undefined if the sandbox isn't reachable / not signed in. Reads the
-// daemon URL and connect token together AFTER the token await, so both come from one active-sandbox snapshot.
+// base and connect token together AFTER the token await, so both come from one active-sandbox snapshot.
 const socketUrl = async (name: string): Promise<string | undefined> => {
     const token = await useSandboxSession().getSessionToken();
     if (token === undefined) {
         return undefined;
     }
-    const base = useSandbox().daemonUrl.value;
+    const base = useEndpoint().daemonBase.value;
     if (base === undefined || base === ``) {
         return undefined;
     }

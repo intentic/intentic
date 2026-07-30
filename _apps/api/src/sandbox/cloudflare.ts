@@ -4,6 +4,7 @@ import {
     cfargotunnelCname,
     hostSshTunnelName,
     labelHostname,
+    LOCAL_ADDRESS,
     PORT_SLOTS,
     portHostname,
     sandboxHostname as sandboxHost,
@@ -128,6 +129,64 @@ const upsertCname = async (apiToken: string, zoneId: string, hostname: string, c
     await cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(recordId)}`, z.unknown(), {
         method: "PUT",
         body,
+    });
+};
+
+/* The DNS half of the sandbox's LOOPBACK CERTIFICATE (see @intentic/sandbox-contract localHostname).
+ *
+ * Two records, both under intentic's own zone, both for one sandbox:
+ *   • `local-<id>.<zone>` A → 127.0.0.1, UNPROXIED. Proxying would send it to Cloudflare, which is the round
+ *     trip this whole path exists to avoid — and Cloudflare will not proxy a loopback origin anyway.
+ *   • `_acme-challenge.local-<id>.<zone>` TXT, published for the length of one ACME order and removed after.
+ *
+ * The daemon drives its own issuance and holds the key; it relays here for these records ONLY, because on the
+ * intentic-provided path the sandbox has no token for this zone. That is the same split as the tunnel and
+ * preview routes: the platform lends its zone, never the private material.
+ *
+ * A TXT upsert must REPLACE rather than append: a retried order mints a fresh challenge value, and leaving the
+ * previous one behind is how a DNS-01 validation starts passing against a stale token.
+ */
+export const ensureLocalDnsRecord = async (apiToken: string, zone: string, hostname: string): Promise<void> => {
+    const { zoneId } = await resolveZone(apiToken, zone);
+    const records = await cfCall(
+        apiToken,
+        `/zones/${encodeURIComponent(zoneId)}/dns_records?type=A&name=${encodeURIComponent(hostname)}`,
+        z.array(z.object({ id: z.string() })),
+    );
+    const body = JSON.stringify({ type: "A", name: hostname, content: LOCAL_ADDRESS, proxied: false, comment: "intentic sandbox loopback" });
+    const recordId = records[0]?.id;
+    await cfCall(
+        apiToken,
+        recordId === undefined
+            ? `/zones/${encodeURIComponent(zoneId)}/dns_records`
+            : `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(recordId)}`,
+        z.unknown(),
+        { method: recordId === undefined ? "POST" : "PUT", body },
+    );
+};
+
+// Publish (value given) or withdraw (value undefined) the sandbox's DNS-01 challenge record.
+export const setAcmeChallenge = async (apiToken: string, zone: string, recordName: string, value: string | undefined): Promise<void> => {
+    const { zoneId } = await resolveZone(apiToken, zone);
+    const existing = await cfCall(
+        apiToken,
+        `/zones/${encodeURIComponent(zoneId)}/dns_records?type=TXT&name=${encodeURIComponent(recordName)}`,
+        z.array(z.object({ id: z.string() })),
+    );
+    for (const record of existing) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- at most a couple of records; a stale one left behind can validate a dead token
+        await cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(record.id)}`, z.unknown(), {
+            method: "DELETE",
+        });
+    }
+    if (value === undefined) {
+        return;
+    }
+    await cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records`, z.unknown(), {
+        method: "POST",
+        // 60s TTL: the record lives for one validation and is then withdrawn, so a long TTL only delays the
+        // next order's fresh value becoming visible.
+        body: JSON.stringify({ type: "TXT", name: recordName, content: value, ttl: 60, comment: "intentic sandbox acme" }),
     });
 };
 

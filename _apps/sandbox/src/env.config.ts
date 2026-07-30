@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { DAEMON_PORT, PREVIEW_PORT } from "@intentic/constants";
+import { DAEMON_PORT, LOCAL_PORT, PREVIEW_PORT } from "@intentic/constants";
 import { type ConfigDefinition, cliArgs, env, envFile, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
 import { z } from "zod";
 
@@ -49,6 +49,12 @@ const configSchema = z.object({
             url: z.string().default(""),
         })
         .prefault({}),
+    // The ACME directory the LOOPBACK CERTIFICATE is ordered from (see platform/local-cert.ts). Empty ⇒ Let's
+    // Encrypt production. Point it at the staging directory
+    // (https://acme-staging-v02.api.letsencrypt.org/directory) to exercise issuance end to end without
+    // spending the production rate limit — staging certificates are untrusted, so the browser's probe will
+    // reject them and fall back, which is exactly the behaviour you want while testing the ORDER.
+    acmeDirectoryUrl: z.string().default(""),
     // Intent-declared internal MCP tools (base64 JSON) the workspace provider set; constant for the sandbox.
     intenticAgentTools: z.string().default(""),
     // Daemon-wide default Claude model for turns that don't pin one (headless wakes like Discord). Empty ⇒
@@ -100,6 +106,8 @@ const configSchema = z.object({
         .object({
             port: z.coerce.number().default(DAEMON_PORT),
             // Binds 0.0.0.0 by default (reached over the tunnel / host-internal ip); override for local runs.
+            // Inside the container this is not an exposure: only the loopback listener's port is published,
+            // and only to the host's 127.0.0.1 (@intentic/sandbox-run localDaemonPort).
             host: z.string().default("0.0.0.0"),
             // This sandbox's public URL (set by connect.{sh,ps1} after the tunnel is created).
             publicUrl: z.string().default(""),
@@ -124,6 +132,14 @@ const configSchema = z.object({
             // (per-panel preview-<panel>-<id>.<zone> rules on the intentic-provided path, the *.<zone>
             // wildcard elsewhere). Each panel's port is auto-assigned when it starts; the proxy routes by Host.
             port: z.coerce.number().default(PREVIEW_PORT),
+        })
+        .prefault({}),
+    local: z
+        .object({
+            // The port the LOOPBACK LISTENER binds — the same app as `sandbox.port`, and the only port ever
+            // published to the host, so a browser on this machine skips the tunnel. Separate from the daemon
+            // port because that one must stay plain HTTP for the connector while this one carries TLS.
+            port: z.coerce.number().default(LOCAL_PORT),
         })
         .prefault({}),
     google: z

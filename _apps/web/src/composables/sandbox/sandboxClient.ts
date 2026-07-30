@@ -1,18 +1,21 @@
 import { useSandboxSession } from "./sandboxSession";
 import { staleDaemonReason } from "./useDaemonRoutes";
+import { useEndpoint } from "./useEndpoint";
 import { useSandbox } from "./useSandbox";
 import { CHUNK_BYTES } from "../workspace/uploadChunking";
 
-// Calls the ACTIVE sandbox's daemon DIRECTLY (browser → https://sandbox-<id>.<zone>), authenticated by a
-// daemon-session bearer (no cookies; see sandboxSession) — the platform is out of this path. The daemon base
-// URL + connection token come from the active sandbox (useSandbox, populated by sandbox.list).
+// Calls the ACTIVE sandbox's daemon DIRECTLY (browser → https://sandbox-<id>.<zone>, or its loopback shortcut
+// when the sandbox turns out to be on this machine — see useEndpoint), authenticated by a daemon-session
+// bearer (no cookies; see sandboxSession) — the platform is out of this path. The base comes from the resolved
+// endpoint and the connection token from the active sandbox (useSandbox, populated by sandbox.list).
 // Returns the raw Response so callers read `.json()` or stream `.body` themselves.
 
-const { active, daemonUrl } = useSandbox();
+const { active } = useSandbox();
+const { daemonBase } = useEndpoint();
 const { getSessionToken } = useSandboxSession();
 
 export async function sandboxRequest(path: string, init?: RequestInit): Promise<Response> {
-    const base = daemonUrl.value;
+    const base = daemonBase.value;
     if (base === undefined || base === ``) {
         throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
     }
@@ -89,7 +92,8 @@ const UPLOAD_STALL_MS = 60_000;
 
 // Upload a file body to the daemon via XMLHttpRequest — deliberately NOT fetch. A fetch streaming body
 // (ReadableStream + duplex:"half") only works over HTTP/2, so it sends NOTHING when the daemon is reached over
-// HTTP/1.1 (a direct/local daemonUrl, no Cloudflare tunnel in front). A plain File/Blob body still streams from
+// HTTP/1.1 (the loopback shortcut, or any direct base with no Cloudflare tunnel in front — and the shortcut
+// makes that the COMMON case, not the exotic one). A plain File/Blob body still streams from
 // disk (never buffered into JS memory) and works on any HTTP version; xhr.upload's progress gives real byte
 // feedback. Same auth as sandboxRequest. `onProgress` receives the CUMULATIVE uploaded byte count for this body.
 // The promise ALWAYS settles — abort (via opts.signal), stall watchdog, error, and load are all handled — so a
@@ -101,7 +105,7 @@ const UPLOAD_STALL_MS = 60_000;
 // fresh stall watchdog, and a failed part rejects the whole call — the caller's retry re-sends from part 0,
 // which is idempotent because offset writes just overwrite.
 export async function sandboxUpload(path: string, body: Blob, opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal }): Promise<void> {
-    const base = daemonUrl.value;
+    const base = daemonBase.value;
     if (base === undefined || base === ``) {
         throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
     }

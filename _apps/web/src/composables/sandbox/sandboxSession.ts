@@ -1,6 +1,7 @@
 import { computed, ref } from "vue";
 import { useGoogleIdentity } from "../useGoogleIdentity";
 import { routeAdvertised } from "./useDaemonRoutes";
+import { useEndpoint } from "./useEndpoint";
 import { useSandbox } from "./useSandbox";
 
 /* The credential every browser→daemon call presents, as a module-level singleton: a DAEMON-MINTED session,
@@ -38,7 +39,11 @@ const EXPIRY_MARGIN_MS = 60_000;
 const RENEW_UNDER_MS = 7 * 24 * 60 * 60 * 1000;
 
 const { getIdToken, signedInEmail } = useGoogleIdentity();
-const { active, activeSandboxId, daemonUrl } = useSandbox();
+const { active, activeSandboxId } = useSandbox();
+// The session is minted by the DAEMON, which signs with one secret regardless of the address it was reached
+// at — so a session established over the tunnel keeps working over the loopback shortcut and back. That is
+// why the store below is keyed by sandbox id and not by base: switching address must not sign the user out.
+const { daemonBase } = useEndpoint();
 
 // In-memory mirror of the persisted sessions (hydrated lazily per sandbox), so presentedEmail is reactive to
 // mints and invalidations without re-reading storage.
@@ -76,7 +81,7 @@ const write = (sandboxId: string, session: StoredSession): void => {
 // A raw fetch on purpose: sandboxRpc's own headers hook calls back into this module, so routing the exchange
 // through it would recurse. `unsupported` is a 404 — the daemon predates the route.
 const exchange = async (bearer: string): Promise<StoredSession | `unsupported` | undefined> => {
-    const base = daemonUrl.value;
+    const base = daemonBase.value;
     if (base === undefined || base === ``) {
         return undefined;
     }

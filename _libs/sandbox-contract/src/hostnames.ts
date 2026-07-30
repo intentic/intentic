@@ -14,6 +14,22 @@ export const sandboxHostname = (id: string, zone: string): string => `${sandboxS
 // The container sshd hostname the desktop-sync (Mutagen) reaches over the sandbox tunnel: `ssh-<id>.<zone>`.
 export const sshHostname = (id: string, zone: string): string => `ssh-${id}.${zone}`;
 
+/* The LOOPBACK name: `local-<id>.<zone>`, an A record pointing at 127.0.0.1.
+ *
+ * A public DNS name for a private address looks odd until you ask what the alternative is. A browser on the
+ * same machine as the sandbox can reach its daemon in microseconds instead of crossing to a Cloudflare edge
+ * and back — but only over HTTPS, because Safari refuses http://127.0.0.1 from an HTTPS page as mixed content
+ * (WebKit 171934, open since 2017), and HTTPS needs a name a public CA will certify. An IP literal cannot have
+ * one; this can. The daemon holds the key and gets the certificate by proving control of the zone over
+ * DNS-01 (there is nothing on the public internet for a CA to connect to).
+ *
+ * It discloses nothing: the id is already the leading label of the sandbox's public hostname, and the address
+ * it resolves to is every machine's own loopback. */
+export const localHostname = (id: string, zone: string): string => `local-${id}.${zone}`;
+
+// What that record points at, and the reason it is safe to publish: every resolver on earth gets 127.0.0.1.
+export const LOCAL_ADDRESS = "127.0.0.1";
+
 // A per-host SSH tunnel's Cloudflare tunnel NAME (its hostname reuses sshHostname with the host-ssh id).
 export const hostSshTunnelName = (id: string): string => `host-ssh-${id}`;
 

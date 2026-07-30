@@ -1,4 +1,5 @@
 import { mkdir, rm } from "node:fs/promises";
+import { createServer as createSecureServer } from "node:https";
 import { join } from "node:path";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -38,6 +39,7 @@ import { createPreviewProxy } from "./panels/preview-proxy.js";
 import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { linkClaudeState } from "./sessions/session-store.js";
 import { createAnnouncer } from "./platform/announce.js";
+import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
@@ -271,6 +273,36 @@ const main = async (): Promise<void> => {
     const server = serve({ fetch: app.fetch, port: config.sandbox.port, hostname: config.sandbox.host, websocket: { server: terminalSockets } });
     logger.info({ host: config.sandbox.host, port: config.sandbox.port, workspace: config.workspaceRoot }, "intentic sandbox daemon listening");
 
+    /* THE LOOPBACK LISTENER — the same app on a second port, and the only one ever published to the host, so a
+     * browser on this machine reaches the daemon directly instead of crossing to a Cloudflare edge and back.
+     *
+     * A second listener rather than TLS on the one above, because the two ports answer to different callers:
+     * the tunnel connector dials this daemon in plain HTTP over the container network and would break the
+     * moment 8787 spoke TLS, while the browser needs TLS or Safari refuses the address as mixed content.
+     *
+     * The certificate is whatever is already on disk — issuance is a CA validating DNS, far slower than a boot
+     * should wait, so it happens in the background and lands at the next restart. Without one the listener
+     * serves plain HTTP, which Chrome and Firefox still accept for loopback; the browser probes both and the
+     * daemon's identity decides. Its own WebSocket server: `ws` in noServer mode is bound to one HTTP server,
+     * so sharing the instance above would leave terminals on this port unupgradeable. */
+    const localCertificate = readLocalCertificate(config);
+    const localSockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
+    const localServer = serve({
+        fetch: app.fetch,
+        port: config.local.port,
+        hostname: config.sandbox.host,
+        websocket: { server: localSockets },
+        ...(localCertificate === undefined
+            ? {}
+            : { createServer: createSecureServer, serverOptions: { cert: localCertificate.certificate, key: localCertificate.privateKey } }),
+    });
+    logger.info(
+        { port: config.local.port, tls: localCertificate !== undefined, hostname: localCertificate?.hostname },
+        "loopback listener ready",
+    );
+    // Obtain/renew in the background. Never rejects: a sandbox with no certificate is a working sandbox.
+    const localCertRenewal = startLocalCertificateRenewal(config, logger);
+
     // The preview proxy: preview-<panel>-<id>.<zone> and port-<slot>-<id>.<zone> land here (the tunnel's
     // fixed origin) and the Host header's first label routes to the panel's running port or the slot's
     // forwarded port. Always listening — with nothing up it answers 502, not connection-refused. Every preview
@@ -363,11 +395,13 @@ const main = async (): Promise<void> => {
         limitResume.stop();
         versionCheck.stop();
         announcer.stop();
+        localCertRenewal.stop();
         services.history.stop();
         // Stops the extension gateway processes too (tmux kill-session ⇒ SIGHUP) — each flushes its own
         // in-flight voice transcript on the way down.
         services.processes.stopAll();
         previewProxy.close();
+        localServer.close();
         server.close();
         process.exit(0);
     };

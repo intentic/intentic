@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import {
     parseNulEnv,
     replayableEnv,
@@ -33,6 +34,7 @@ export const sandboxRunCommandCli = buildCommand<{
     mounts?: string;
     dns?: string;
     format?: string;
+    noLocalPublish: boolean;
 }>({
     docs: { brief: "Print the canonical docker-run command for a sandbox container (used by connect.sh/recreate.sh)" },
     parameters: {
@@ -69,15 +71,25 @@ export const sandboxRunCommandCli = buildCommand<{
                 brief: "DNS resolvers, space-separated (fresh public resolvers dodge negatively-cached tunnel NXDOMAINs)",
             },
             format: { kind: "parsed", parse: String, optional: true, brief: "sh (default): one quoted command line; json: the docker argv" },
+            noLocalPublish: {
+                kind: "boolean",
+                brief: "Drop the loopback shortcut's -p — what a flow re-asks for when docker refused the derived port",
+            },
         },
     },
     func(this: CommandContext, flags) {
         // stdin carries NAME=VALUE pairs, NUL-framed; empty input means a fresh container with no env to carry.
         const env = replayableEnv(parseNulEnv(readFileSync(0, "utf8")));
+        // The loopback shortcut's port derives from the sandbox id, which derives from the connect token this
+        // container is already being handed — so no flow computes an address, and a recreate reproduces the
+        // same port by replaying the same token. A run with no token (bare dev) publishes nothing.
+        const sandboxId = sandboxIdFromToken(env.find(([name]) => name === "CONNECT_TOKEN")?.[1] ?? "");
         const run = {
             names: sandboxNames(flags.slug),
             image: flags.image,
             baseImage: flags.baseImage,
+            ...(sandboxId !== undefined ? { sandboxId } : {}),
+            localPublish: flags.noLocalPublish !== true,
             ...(flags.environmentHash !== undefined && flags.environmentHash !== "" ? { environmentHash: flags.environmentHash } : {}),
             env,
             // The caller hands the directive LINES through; extraction + allowlist validation both live in the

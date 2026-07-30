@@ -22,7 +22,8 @@ const tab = (id: string) => ({
 // mocked is only what agentActions imports for its OTHER actions (startAgent's tab/caret/route, the post-land
 // cache invalidation) and whose module scope wants a browser: ui's useDevice reads window.matchMedia at import,
 // the router builds a history, and useSandbox reaches environment.ts's window.env. The useSandbox stub serves
-// both consumers — sandboxClient reads `daemonUrl`/`active`, agentActions reads `sandboxKey`.
+// both consumers — agentActions reads `sandboxKey`, and sandboxClient reads its base through the real
+// useEndpoint, whose daemonBase falls through to `daemonUrl` when no loopback shortcut is resolved.
 vi.mock("@intentic-app/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
 vi.mock("../chat/useChat", () => ({
     // `active` is read by a module-scope watcher in useAgents (the "seen while you watch it" rule), which
@@ -38,7 +39,11 @@ vi.mock("../chat/useChat", () => ({
 vi.mock("../queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined } }));
 vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../sandbox/useSandbox", () => ({
-    useSandbox: () => ({ active: { value: { token: `connect` } }, daemonUrl: { value: `https://daemon.test` } }),
+    useSandbox: () => ({
+        active: { value: { token: `connect` } },
+        activeSandboxId: { value: `s1` },
+        daemonUrl: { value: `https://daemon.test` },
+    }),
     sandboxKey: (...parts: unknown[]) => parts,
 }));
 vi.mock("../sandbox/sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));

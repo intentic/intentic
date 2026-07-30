@@ -857,10 +857,21 @@ if ! docker run -i --rm --entrypoint intentic "$SANDBOX_IMAGE" sandbox run-comma
 fi
 echo "== docker run ${SANDBOX_IMAGE} ==" >>"$LOG"
 cat "$run_command" >>"$LOG"
+# Two attempts, because exactly one part of the run may fail without the sandbox being broken. The run
+# contract publishes a LOOPBACK SHORTCUT — 127.0.0.1:<port derived from the sandbox id>:8787 — so a browser on
+# this machine can reach the daemon directly instead of going out to Cloudflare and back. docker refuses the
+# WHOLE launch when something already holds that port, so the retry drops just the shortcut and the sandbox
+# behaves exactly as it did before it existed. Any other failure fails both attempts and reports from the
+# second. The failed first attempt leaves a created-but-stopped container holding the name — remove it.
 if ! sh "$run_command" >/dev/null 2>>"$LOG"; then
-    tail -n 5 "$LOG" >&2
-    echo "error: starting the sandbox failed — the full docker error is saved to ${LOG}." >&2
-    exit 1
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    if ! docker run -i --rm --entrypoint intentic "$SANDBOX_IMAGE" sandbox run-command "$@" --no-local-publish <"$env_pairs" >"$run_command" 2>>"$LOG" ||
+        ! [ -s "$run_command" ] || ! sh "$run_command" >/dev/null 2>>"$LOG"; then
+        tail -n 5 "$LOG" >&2
+        echo "error: starting the sandbox failed — the full docker error is saved to ${LOG}." >&2
+        exit 1
+    fi
+    echo "intentic: started without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel."
 fi
 
 # Start the tunnel connector: cloudflared on the shared network routes sandbox-<id>.<zone> → the daemon and
