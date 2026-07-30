@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { applyConnectionSignal, classifyFailure, type ConnectionSignal, type ConnectionState, initialConnection, isBlocked } from "./connection";
+import {
+    applyConnectionSignal,
+    classifyFailure,
+    type ConnectionSignal,
+    type ConnectionState,
+    initialConnection,
+    isBlocked,
+    showOutageGate,
+} from "./connection";
 
 // Drive the machine the way the loop does, so a test reads as a sequence of observations rather than a
 // hand-built state object.
@@ -37,6 +45,26 @@ describe(`classifyFailure`, () => {
         // 401 stays transient: a stale Google token is refreshed on the next attempt, and parking the user on
         // a permanent screen they cannot act on would be wrong.
         expect(isBlocked(classifyFailure({ status: 401, message: `unauthorized` }))).toBe(false);
+    });
+});
+
+describe(`showOutageGate`, () => {
+    it(`rides out one transient failure and gates on the second`, () => {
+        // One missed-watchdog blip (a daemon briefly starved under its own builds) heals on the next attempt;
+        // tearing the workspace down for it is what made every stall read as an outage.
+        expect(showOutageGate(drive({ kind: `failed`, failure: watchdog() }))).toBe(false);
+        expect(showOutageGate(drive({ kind: `failed`, failure: watchdog() }, { kind: `failed`, failure: network() }))).toBe(true);
+    });
+
+    it(`gates a blocked cause immediately — retrying will not change a 403`, () => {
+        expect(showOutageGate(drive({ kind: `failed`, failure: forbidden() }))).toBe(true);
+    });
+
+    it(`never gates while nothing has failed`, () => {
+        expect(showOutageGate(initialConnection)).toBe(false);
+        expect(showOutageGate(drive({ kind: `connect` }, { kind: `opened` }))).toBe(false);
+        // Recovery clears the gate even after a long run of failures.
+        expect(showOutageGate(drive({ kind: `failed`, failure: network() }, { kind: `failed`, failure: network() }, { kind: `frame` }))).toBe(false);
     });
 });
 

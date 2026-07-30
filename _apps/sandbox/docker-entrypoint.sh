@@ -31,4 +31,9 @@ mkdir -p /run/sshd
 /usr/sbin/sshd
 
 # The daemon is the main process — exec so it becomes PID 1 and owns SIGTERM/SIGINT graceful shutdown.
-exec node /opt/sandbox/dist/main.js
+#
+# --report-on-fatalerror: a V8 fatal error (heap limit, native OOM) prints only to stderr and dies — and
+# stderr lives in `docker logs`, which the next recreate erases. The diagnostic report lands on /history
+# instead, where the next boot's death check (src/platform/boot-marker.ts) finds and names it — without this,
+# a daemon that dies on a fatal error dies without a trace.
+exec node --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js

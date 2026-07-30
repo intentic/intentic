@@ -57,15 +57,36 @@ export const gitBytes = async (dir: string, args: readonly string[], maxBytes: n
     const { stdout } = await exec("git", [...GIT_GLOBAL_ARGS, "-C", dir, ...args], { maxBuffer: maxBytes, encoding: "buffer" });
     return stdout;
 };
-export const defaultGit: GitRunner = async (dir, args) => {
-    for (let attempt = 1; ; attempt += 1) {
-        try {
-            return await exec("git", [...GIT_GLOBAL_ARGS, "-C", dir, ...args], { maxBuffer: MAX_GIT_OUTPUT });
-        } catch (error) {
-            if (attempt >= RETRY_ATTEMPTS || !isLockContention(error)) {
-                throw error;
+const gitRunnerVia =
+    (argv: readonly string[]): GitRunner =>
+    async (dir, args) => {
+        const [command, ...rest] = argv;
+        for (let attempt = 1; ; attempt += 1) {
+            try {
+                return await exec(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...args], { maxBuffer: MAX_GIT_OUTPUT });
+            } catch (error) {
+                if (attempt >= RETRY_ATTEMPTS || !isLockContention(error)) {
+                    throw error;
+                }
+                await new Promise((resolve) => setTimeout(resolve, attempt * attempt * 50));
             }
-            await new Promise((resolve) => setTimeout(resolve, attempt * attempt * 50));
         }
+    };
+
+export const defaultGit: GitRunner = gitRunnerVia(["git"]);
+
+// The same runner, demoted — CPU nice +10, IO best-effort lowest. For git work done ON BEHALF OF agents in
+// bulk (a conversation's worktree checkout is the whole monorepo hitting the disk at once, and several start
+// together): priorities only bind under contention, and contention is exactly when the daemon's own loop —
+// the thing serving every browser — must win. Falls back to plain git where the wrappers don't exist (macOS
+// dev has no ionice), because a checkout that fails to start is worse than one that competes.
+export const politeGit: GitRunner = async (dir, args) => {
+    try {
+        return await gitRunnerVia(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7", "git"])(dir, args);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return defaultGit(dir, args);
+        }
+        throw error;
     }
 };

@@ -269,7 +269,10 @@ test("remove tears down worktrees and branches; prune sweeps orphan dirs", async
 
     const orphan = join(historyRoot, "worktrees", "ghost");
     await mkdir(orphan, { recursive: true });
-    await worktrees.prune(["kept"], []);
+    await worktrees.prune(
+        () => ["kept"],
+        () => [],
+    );
     expect(existsSync(orphan)).toBe(false);
 });
 
@@ -359,7 +362,10 @@ test("prune parks the branches of agents that are off the board and drops refs n
     // And a parked ref whose conversation the registry has forgotten entirely.
     await sh(work, "update-ref", "refs/agent/ghost", await sh(work, "rev-parse", "HEAD"));
 
-    await worktrees.prune(["c1", "c2"], ["c1"]);
+    await worktrees.prune(
+        () => ["c1", "c2"],
+        () => ["c1"],
+    );
 
     // c1 converges onto the shelf; c2 is live and keeps its branch — the sweep never touches a checked-out one.
     expect(await sh(work, "for-each-ref", "--format=%(refname:short)", "refs/heads/agent/")).toBe("agent/c2");

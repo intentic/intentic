@@ -151,6 +151,17 @@ export const applyConnectionSignal = (state: ConnectionState, signal: Connection
     }
 };
 
+/* Whether a painted-but-unreachable workspace should yield to the full connecting gate.
+ *
+ * One failed attempt used to flip it — so a daemon that missed a few heartbeats under build/test load cost a
+ * full-screen "reconnecting" takeover for a blip the next attempt healed. A BLOCKED cause still gates at once
+ * (the answer will not change on its own, and painting an operable workspace over a 403 misleads), but a
+ * transient cause has to fail twice: with the retry ladder that is ~5–10s of genuinely dead air before the
+ * takeover, while a stall rides on the (accurately stale) workspace it was already showing. */
+const SUSTAINED_FAILURES = 2;
+export const showOutageGate = (state: ConnectionState): boolean =>
+    state.failure !== undefined && (isBlocked(state.failure) || state.attempt >= SUSTAINED_FAILURES);
+
 // What the driver observed, mapped onto a failure. Kept here (not in the driver) so the mapping is covered by
 // the same tests as the transitions it feeds — this is exactly the step that used to be a message sniff.
 export const classifyFailure = (observation: {

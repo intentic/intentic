@@ -302,8 +302,20 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
     return {
         init: async () => {
             entries = await store.load();
-            // Before the first roster goes out: a reboot's cache is empty, and an unprobed agent reads `idle`.
-            await reprobe();
+            /* The roster goes out the moment it is loaded — an /events stream that connected during boot is
+             * already holding an empty fleet and this frame is what fills it. Standings are probed BEHIND the
+             * broadcast, not before it: a reboot's verdict cache is empty, so the probe is a git spawn per live
+             * agent, and awaiting it here held the whole boot (and with it every route) behind minutes of git
+             * on a machine that had just crashed. Unprobed agents read `idle` for the seconds until the
+             * refresh's own broadcast corrects them. */
+            broadcast();
+            void reprobe()
+                .then((moved) => {
+                    if (moved) {
+                        broadcast();
+                    }
+                })
+                .catch(() => undefined);
         },
         refreshStandings: async () => {
             if (await reprobe()) {

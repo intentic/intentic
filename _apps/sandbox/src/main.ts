@@ -39,6 +39,8 @@ import { createPreviewProxy } from "./panels/preview-proxy.js";
 import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { linkClaudeState } from "./sessions/session-store.js";
 import { createAnnouncer } from "./platform/announce.js";
+import { claimBootMarker } from "./platform/boot-marker.js";
+import { startLoopWatchdog } from "./platform/loop-watchdog.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { reapFinishedSessions } from "./terminal/terminal-session.js";
@@ -49,6 +51,13 @@ import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/work
 // The sandbox container's entrypoint. Config comes from env set at `docker run` — by connect.sh (your PC) or
 // the workspace provider (a server); the workspace (the repos) and agent credentials are injected there,
 // never baked in.
+//
+// LISTEN FIRST, CONVERGE BEHIND THE GATE. The boot chain below (state links, git-dir healing, the registry
+// load) used to run before serve(), so every daemon death cost its crash PLUS a couple of minutes of
+// connection-refused while sweeps re-walked a fleet of worktrees — the browser sat on the reconnect screen
+// for all of it. The listeners now come up immediately: /health and /events answer at once (the UI paints,
+// heartbeats flow), and every data route waits on the readiness gate (app.ts), which resolves when the chain
+// finishes — the same ordering guarantees, minus the outage.
 const main = async (): Promise<void> => {
     const config = loadConfig();
     // Every intentic CLI run spawned in here (the /intentic routes, the panel-infra-apply tmux session) tees
@@ -64,6 +73,16 @@ const main = async (): Promise<void> => {
     // catches a hard crash. The pre-logger config-load throw stays unguarded — a bad config should crash loudly.
     process.on("unhandledRejection", (reason) => logger.error({ err: reason }, "unhandled rejection"));
     process.on("uncaughtException", (err) => logger.error({ err }, "uncaught exception"));
+    // Death forensics: name the previous run's unannounced death (with its fatal report, when V8 wrote one)
+    // and stamp this run's marker; the exit hook below is what flips it to "exited" on every deliberate path.
+    // Skipped without a history volume (dev, tests) — same opt-out as the file log destination.
+    if (config.historyRoot !== "") {
+        const bootMarker = claimBootMarker(logsRoot(config.historyRoot), logger);
+        process.on("exit", (code) => bootMarker.markExited(code));
+    }
+    // The stall detector: any future freeze — a synchronous path in here, or the whole VM thrashing under a
+    // fleet of builds — leaves a log line with the lag and the machine's pressure numbers attributing it.
+    startLoopWatchdog(logger);
     const services = createServices(config, logger);
 
     // The sandbox-wide CODEX_HOME's config.toml: privacy hardening plus, when a translator is baked, the
@@ -78,193 +97,14 @@ const main = async (): Promise<void> => {
         seedPairing(config.syncPairToken);
     }
 
-    // Desktop enrollments live on /history and outlive the container; the authorized_keys sshd reads does NOT
-    // (it is ~/.ssh, container-local), so re-derive it from the store before sshd serves a laptop's first
-    // reconnect. Awaited for that ordering — a rebuild otherwise leaves every enrollment valid but unauthorized.
-    await restoreAuthorizedKeys(config.historyRoot).catch((error: unknown) =>
-        logger.warn({ err: error }, "authorized_keys not restored — enrolled machines will be refused until they re-enroll"),
-    );
-
-    // Claude conversation state (transcripts, plans, backups, task outputs, todos) lives under the SDK's
-    // ~/.claude — ephemeral container fs. Converge every store onto /work BEFORE serving (turns can't arrive
-    // until serve(), so the CLI can never race this). Awaited, unlike the best-effort steps below, because a
-    // turn spawning the CLI mid-link would fork stores.
-    await linkClaudeState(services.workspace.root).catch((error: unknown) =>
-        logger.warn({ err: error }, "claude session state not persisted — sessions will not survive a rebuild whole"),
-    );
-
-    // The managed ssh dir (git-provider keys + every ssh capability's key) is the other store that lived in the
-    // container's ephemeral HOME — point it at the /history volume before anything reads or writes an alias, so
-    // a recreate stops silently taking git access and the ssh machines down with it. Awaited for that ordering;
-    // a failure (a dev-host run, where the guard refuses to touch a real ~/.ssh/intentic-hosts) leaves the
-    // pre-existing local dir in place rather than the daemon down.
-    await linkSshHosts(config.historyRoot).catch((error: unknown) =>
-        logger.warn({ err: error }, "ssh hosts dir not persisted — git access and ssh aliases will not survive a rebuild"),
-    );
-
-    // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge
-    // excludes. Awaited (cheap, and the git routes assume it), but a failure must not take the daemon down — a
-    // failure reads as "not fresh" so we skip the baseline commit below.
-    const freshRoot = await ensureRootRepo(services.workspace, config.historyRoot).catch((error: unknown) => {
-        logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade");
-        return false;
+    // The readiness gate the data routes await (app.ts): resolved when the boot chain has converged the state
+    // those routes serve. A request that arrives early WAITS a few seconds instead of reading half-built state.
+    let resolveReady!: () => void;
+    const ready = new Promise<void>((resolve) => {
+        resolveReady = resolve;
     });
 
-    // The reference shelf (REFERENCE_DIR, @intentic/workspace-ignore): furniture, like .intentic — its presence
-    // IS the affordance. Every scanner already excludes it; without the dir on disk the convention is invisible
-    // (nothing to drop onto, nothing in the tree to explain itself). Idempotent, so a shelf deleted mid-session
-    // stays gone until the next boot re-ensures an empty one.
-    await mkdir(join(config.workspaceRoot, REFERENCE_DIR), { recursive: true }).catch((error: unknown) =>
-        logger.warn({ err: error }, "reference shelf not ensured — refs/ drops have no target"),
-    );
-
-    // No repo keeps its git dir under /work: a worktree's gitdir pointer has to resolve identically inside an
-    // isolated turn's namespace, where /work IS that worktree (agents/isolation.ts). Every daemon-created repo
-    // is already shaped this way; this converges the ones that arrived by other roads. After ensureRootRepo,
-    // whose excludes it does not disturb, and before the registry loads the worktrees it repairs.
-    await ensureRepoGitDirs(services.workspace, config.historyRoot, logger);
-
-    // The fleet registry: load persisted conversations, file away entries whose worktree vanished, sweep
-    // orphaned worktree dirs + stale admin entries (`git worktree prune`). Awaited (cheap, and the /agents
-    // routes assume a loaded registry); a failure degrades to an empty fleet, never a dead daemon.
-    await services.agents
-        .init()
-        .then(async () => {
-            const vanished: string[] = [];
-            const archived: string[] = [];
-            for (const id of services.agents.ids()) {
-                // An ARCHIVED entry is *supposed* to have no worktree — that is what archiving reclaimed. It is
-                // held by its commits instead, so it must never look like the vanished-worktree case below.
-                if (services.agents.entry(id)?.archivedAt !== undefined) {
-                    archived.push(id);
-                    continue;
-                }
-                if (!(await services.agentWorktrees.exists(id))) {
-                    vanished.push(id);
-                }
-            }
-            // A live entry with no checkout is an ARCHIVED agent in every way that matters — off the board,
-            // held by its branch — so that is what it becomes. This sweep used to `remove()` these outright,
-            // and it was the fleet's quietest data loss: a rebuild that lost worktree dirs, or an unarchive
-            // whose re-attach failed mid-way, left live entries with no checkout, and the next boot deleted
-            // the user's only handle on their branches and transcripts. Deletion stays where the user can see
-            // it: discard, and the archive's own purge. One write for the whole sweep either way.
-            if (vanished.length > 0) {
-                await services.agents.setArchived(vanished, Date.now());
-                logger.info({ count: vanished.length }, "agents: archived entries whose worktree vanished");
-            }
-            // The `vanished` ids were just archived, so they belong in the park sweep alongside the entries
-            // that arrived already archived — a boot that discovers a missing checkout is exactly a boot that
-            // should get that conversation's branch off refs/heads/ too.
-            await services.agentWorktrees.prune(services.agents.ids(), [...archived, ...vanished]);
-        })
-        .catch((error: unknown) => logger.warn({ err: error }, "agents registry not initialized — the fleet starts empty"));
-
-    // Keep the Finished lane from becoming the sandbox's permanent record: archive agents that have sat
-    // finished past the retention window (settings.agentRetentionDays; 0 ⇒ never). Once at boot, then hourly —
-    // the window is measured in days, so nothing finer is worth a timer. Losslessly: see agents/archive.ts.
-    const sweepArchive = (): Promise<void> =>
-        services.sandboxSettings
-            .get()
-            .then((settings) => sweepAgedAgents(services, Date.now(), settings.agentRetentionDays * 24 * 60 * 60 * 1000))
-            .then(() => undefined)
-            .catch((error: unknown) => logger.warn({ err: error }, "agents: archive sweep failed"));
-    void sweepArchive();
-    setInterval(() => void sweepArchive(), 60 * 60 * 1000).unref();
-
-    // Git housekeeping (git/maintenance.ts): pack the refs and loose objects a fleet of conversations mints,
-    // and keep the commit-graph current. Never awaited — it is the one boot step whose whole point is to run
-    // while nothing is waiting on it, and a repo mid-relocation simply gets maintained an hour later.
-    const maintain = (): Promise<void> => runGitMaintenance(services.workspace, logger);
-    void maintain();
-    setInterval(() => void maintain(), 60 * 60 * 1000).unref();
-
-    // Recompose the environment overlay from the manifest — converges fragment drift (a daemon update that
-    // changes a capability's fragment flips the derived state to "pending rebuild"); no-op on fresh sandboxes.
-    // Writes only under .intentic/ (in ROOT_EXCLUDES), so it never affects the baseline below.
-    void composeEnvironment(services);
-
-    // Converge the daemon-owned /work skill files BEFORE the baseline commit so a fresh sandbox reads clean
-    // instead of surfacing them as a phantom add. Awaited for exactly that ordering; still log-and-continue, and
-    // on a non-fresh boot (no baseline) their writes become ordinary pending changes for the Changes review.
-    // - the drafts skill: how the agent writes post drafts for approval, so its prose tracks the daemon.
-    await ensureDraftsSkill(services).catch((error: unknown) => logger.warn({ err: error }, "drafts skill not converged"));
-    // - the baked-tool skills, per the settings `skills` list — each present only when named (the CLIs are
-    //   always on PATH; the skill file is what surfaces one to the agent).
-    await services.sandboxSettings
-        .get()
-        .then((settings) => reconcileSkills(services, settings.skills))
-        .catch((error: unknown) => logger.warn({ err: error }, "skill reconcile failed"));
-
-    // Baseline "Initialize workspace" commit, taken once on a fresh sandbox now that the daemon's /work-owned
-    // files exist — so the Changes review starts with zero pending changes.
-    if (freshRoot) {
-        await commitRootBaseline(services.workspace).catch((error: unknown) =>
-            logger.warn({ err: error }, "root baseline commit failed — the Changes review will start dirty"),
-        );
-    }
-
-    // Preview routes for every existing repo (best-effort; the ensurer never throws) — self-heals any repo
-    // whose creation-time mint was missed, so hostnames exist well before a browser ever resolves them.
-    void ensureAllPreviewRoutes(services);
-
-    // Panel/agent/job tmux sessions outlive a daemon restart (the tmux server is container-scoped) — kill
-    // leftovers so "panels are stopped after a restart" holds and no orphan dev server squats an untracked
-    // port. EXCEPT a live infra apply (killing it would truncate the host mutation mid-run, orphan the host
-    // apply lock for its TTL, and report the run complete — when the event log records a started-but-not-exited
-    // run and its session survives, re-adopt it; the web reattaches through the same event log) and a live
-    // dockerd (panel-docker keeps serving containers across daemon restarts — adopt it back). The sweep is
-    // AWAITED so the capability restores below can't race a kill of the session they just started.
-    const applyLive =
-        (await applyRunLive(applyEventsPath(config.historyRoot)).catch(() => false)) &&
-        (await services.processes.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
-    const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
-    await killStaleManagedSessions([
-        ...(applyLive ? [panelSession(INFRA_APPLY_KEY)] : []),
-        ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
-    ]).catch(() => undefined);
-    // A previous boot's check runs left per-run event files behind (their streams died with the daemon).
-    void rm(checkEventsDir(config.historyRoot), { recursive: true, force: true });
-
-    // The in-container `vpn` CLI reads this to reach the daemon's /vpn routes; written before the restores
-    // below so a tunnel the agent dials during boot already has a token to present.
-    await writeAgentToken(services.agentToken).catch((error: unknown) => services.logger.warn({ err: error }, "agent token: could not write"));
-
-    // Auto-connect VPN tunnels die with the container while the manifest survives on /work — dial them again
-    // AFTER the sweep; dockerd starts the same way when a docker capability is enabled (the engine is baked
-    // into every image but dormant without it). Both best-effort: a failure lands in the VPN link's state /
-    // the daemon log, not the boot path.
-    const bootCtx = capabilityCtx(services);
-    void reconnectVpns(services.capabilities, services.logger);
-    // Git access dies with the container the same way: the keypair is on /history (linked above), but the
-    // credential helper, the https line and the ssh-config Include were in HOME — re-derive them from the
-    // manifest so the owner's first `git pull` and the agent's first clone authenticate.
-    void restoreConnectorGitAccess(services.capabilities, services.logger);
-    void startDockerdIfEnabled(bootCtx);
-    // The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": starts when TRANSLATOR_URL
-    // is baked (no-op on a bare dev run) and serves those providers on their connected subscription OAuth.
-    // Best-effort — a routed turn that finds it down surfaces its own error, and a native-harness turn never touches it.
-    startTranslator(services);
-    // Installed extensions' declared autoStart processes come back the same way (manifests on /work).
-    void startAllExtensionProcesses(services);
-
-    // Debug-log upkeep: re-arm the tmux pipe-pane hooks on a tmux server that outlived a daemon restart
-    // (best-effort; the image's tmux.conf covers server start) and sweep historyRoot/logs at boot + hourly.
-    void applyTmuxLogHooks(config.historyRoot);
-    void pruneLogFiles(logsRoot(config.historyRoot));
-    const logsSweep = setInterval(() => void pruneLogFiles(logsRoot(config.historyRoot)), 3_600_000);
-
-    // Session retention (terminal-session.ts): abandoned web-* shells, which are exempt from the boot sweep
-    // because they're the user's own, plus the agent-*/job-* sessions of work that finished hours ago and that
-    // the panel has long stopped tabbing. Both at boot + hourly. The `keep` predicate is what makes it safe to
-    // run unattended: an agent BETWEEN two commands has only dead panes, and so does a job whose runner still
-    // has something queued — the same two facts system.routes reports as `running`.
-    const stillWorking = (session: string): boolean =>
-        services.terminalRun.running(session) || services.agents.liveSessionIds().some((sessionId) => agentSessionName(sessionId) === session);
-    void reapFinishedSessions(stillWorking);
-    const sessionSweep = setInterval(() => void reapFinishedSessions(stillWorking), 3_600_000);
-
-    const app = createApp(services);
+    const app = createApp(services, ready);
     // The interactive-terminal WebSocket (/system/terminal) rides node-server's native WS support: `ws` in
     // noServer mode handles the upgrade, node-server routes it through Hono's upgradeWebSocket to the terminal.
     // `ws`'s WebSocketServer types its options.noServer as `boolean | undefined`; node-server's WebSocketServerLike
@@ -310,6 +150,239 @@ const main = async (): Promise<void> => {
     const previewProxy = createPreviewProxy(services.processes.portOf, services.portForwards.targetOf, sandboxIdFromToken(config.connectToken));
     previewProxy.listen(config.preview.port, config.sandbox.host);
 
+    // Phone home: announce this sandbox's URL + liveness to the platform registry (boot + every 30s), so the
+    // setup wizard sees it come online without any browser→sandbox probing. Needs all three env values —
+    // headless/test runs without them just don't announce. Started with the listeners, not after the boot
+    // chain: the announcement is how a waiting browser learns the daemon is back, and it must not queue behind
+    // the very sweeps it would be reporting through.
+    const announcer = createAnnouncer(config, logger);
+    if (config.platform.url !== "" && config.sandbox.publicUrl !== "" && config.connectToken !== "") {
+        announcer.start();
+    }
+
+    // Boot-step stopwatch: a boot that takes minutes has ONE slow step, and until it is named in the log every
+    // slow boot reads as "the daemon is just slow". Logged only past the threshold — a healthy boot stays quiet.
+    const timed = async <T>(step: string, run: () => Promise<T>): Promise<T> => {
+        const startedAt = performance.now();
+        try {
+            return await run();
+        } finally {
+            const ms = Math.round(performance.now() - startedAt);
+            if (ms > 1_000) {
+                logger.info({ step, ms }, "boot: slow step");
+            }
+        }
+    };
+
+    // Desktop enrollments live on /history and outlive the container; the authorized_keys sshd reads does NOT
+    // (it is ~/.ssh, container-local), so re-derive it from the store before sshd serves a laptop's first
+    // reconnect. Ordered before the gate resolves — a rebuild otherwise leaves every enrollment valid but unauthorized.
+    await timed("restoreAuthorizedKeys", () =>
+        restoreAuthorizedKeys(config.historyRoot).catch((error: unknown) =>
+            logger.warn({ err: error }, "authorized_keys not restored — enrolled machines will be refused until they re-enroll"),
+        ),
+    );
+
+    // Claude conversation state (transcripts, plans, backups, task outputs, todos) lives under the SDK's
+    // ~/.claude — ephemeral container fs. Converge every store onto /work BEFORE the gate opens (turns wait on
+    // it, so the CLI can never race this). Awaited, unlike the best-effort steps below, because a turn
+    // spawning the CLI mid-link would fork stores.
+    await timed("linkClaudeState", () =>
+        linkClaudeState(services.workspace.root).catch((error: unknown) =>
+            logger.warn({ err: error }, "claude session state not persisted — sessions will not survive a rebuild whole"),
+        ),
+    );
+
+    // The managed ssh dir (git-provider keys + every ssh capability's key) is the other store that lived in the
+    // container's ephemeral HOME — point it at the /history volume before anything reads or writes an alias, so
+    // a recreate stops silently taking git access and the ssh machines down with it. Awaited for that ordering;
+    // a failure (a dev-host run, where the guard refuses to touch a real ~/.ssh/intentic-hosts) leaves the
+    // pre-existing local dir in place rather than the daemon down.
+    await timed("linkSshHosts", () =>
+        linkSshHosts(config.historyRoot).catch((error: unknown) =>
+            logger.warn({ err: error }, "ssh hosts dir not persisted — git access and ssh aliases will not survive a rebuild"),
+        ),
+    );
+
+    // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge
+    // excludes. Awaited (cheap, and the git routes assume it), but a failure must not take the daemon down — a
+    // failure reads as "not fresh" so we skip the baseline commit below.
+    const freshRoot = await timed("ensureRootRepo", () =>
+        ensureRootRepo(services.workspace, config.historyRoot).catch((error: unknown) => {
+            logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade");
+            return false;
+        }),
+    );
+
+    // The reference shelf (REFERENCE_DIR, @intentic/workspace-ignore): furniture, like .intentic — its presence
+    // IS the affordance. Every scanner already excludes it; without the dir on disk the convention is invisible
+    // (nothing to drop onto, nothing in the tree to explain itself). Idempotent, so a shelf deleted mid-session
+    // stays gone until the next boot re-ensures an empty one.
+    await mkdir(join(config.workspaceRoot, REFERENCE_DIR), { recursive: true }).catch((error: unknown) =>
+        logger.warn({ err: error }, "reference shelf not ensured — refs/ drops have no target"),
+    );
+
+    // No repo keeps its git dir under /work: a worktree's gitdir pointer has to resolve identically inside an
+    // isolated turn's namespace, where /work IS that worktree (agents/isolation.ts). Every daemon-created repo
+    // is already shaped this way; this converges the ones that arrived by other roads. After ensureRootRepo,
+    // whose excludes it does not disturb, and before the registry loads the worktrees it repairs.
+    await timed("ensureRepoGitDirs", () => ensureRepoGitDirs(services.workspace, config.historyRoot, logger));
+
+    // The fleet registry: load persisted conversations and broadcast the roster (an /events stream opened
+    // during boot is already holding an empty fleet). Awaited — the /agents routes assume a loaded registry —
+    // but a failure degrades to an empty fleet, never a dead daemon. The worktree sweeps run DETACHED below.
+    await timed("agentsRegistryInit", () =>
+        services.agents.init().catch((error: unknown) => logger.warn({ err: error }, "agents registry not initialized — the fleet starts empty")),
+    );
+
+    // Converge the daemon-owned /work skill files BEFORE the baseline commit so a fresh sandbox reads clean
+    // instead of surfacing them as a phantom add. Awaited for exactly that ordering; still log-and-continue, and
+    // on a non-fresh boot (no baseline) their writes become ordinary pending changes for the Changes review.
+    // - the drafts skill: how the agent writes post drafts for approval, so its prose tracks the daemon.
+    await ensureDraftsSkill(services).catch((error: unknown) => logger.warn({ err: error }, "drafts skill not converged"));
+    // - the baked-tool skills, per the settings `skills` list — each present only when named (the CLIs are
+    //   always on PATH; the skill file is what surfaces one to the agent).
+    await services.sandboxSettings
+        .get()
+        .then((settings) => reconcileSkills(services, settings.skills))
+        .catch((error: unknown) => logger.warn({ err: error }, "skill reconcile failed"));
+
+    // Baseline "Initialize workspace" commit, taken once on a fresh sandbox now that the daemon's /work-owned
+    // files exist — so the Changes review starts with zero pending changes.
+    if (freshRoot) {
+        await commitRootBaseline(services.workspace).catch((error: unknown) =>
+            logger.warn({ err: error }, "root baseline commit failed — the Changes review will start dirty"),
+        );
+    }
+
+    // Panel/agent/job tmux sessions outlive a daemon restart (the tmux server is container-scoped) — kill
+    // leftovers so "panels are stopped after a restart" holds and no orphan dev server squats an untracked
+    // port. EXCEPT a live infra apply (killing it would truncate the host mutation mid-run, orphan the host
+    // apply lock for its TTL, and report the run complete — when the event log records a started-but-not-exited
+    // run and its session survives, re-adopt it; the web reattaches through the same event log) and a live
+    // dockerd (panel-docker keeps serving containers across daemon restarts — adopt it back). The sweep is
+    // ORDERED before the gate opens so the capability restores below can't race a kill of the session they
+    // just started.
+    const applyLive =
+        (await applyRunLive(applyEventsPath(config.historyRoot)).catch(() => false)) &&
+        (await services.processes.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
+    const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
+    await timed("killStaleManagedSessions", () =>
+        killStaleManagedSessions([
+            ...(applyLive ? [panelSession(INFRA_APPLY_KEY)] : []),
+            ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
+        ]).catch(() => undefined),
+    );
+    // A previous boot's check runs left per-run event files behind (their streams died with the daemon).
+    void rm(checkEventsDir(config.historyRoot), { recursive: true, force: true });
+
+    // The in-container `vpn` CLI reads this to reach the daemon's /vpn routes; written before the restores
+    // below so a tunnel the agent dials during boot already has a token to present.
+    await writeAgentToken(services.agentToken).catch((error: unknown) => services.logger.warn({ err: error }, "agent token: could not write"));
+
+    // The state the data routes serve is converged — open the gate. Everything below is background machinery
+    // that no queued request depends on.
+    resolveReady();
+
+    /* The worktree sweeps, DETACHED: archive entries whose checkout vanished, prune orphaned dirs and stale
+     * admin entries, park the branches of off-board agents. This is the spawn-heaviest part of a boot (git per
+     * repo per conversation) and it used to hold serve() — after a crash, on a machine still thrashing, that
+     * was most of the outage. It reads the registry through callbacks and takes the per-repo locks, so turns
+     * that start while it walks are safe from it. */
+    void (async () => {
+        const vanished: string[] = [];
+        const archived: string[] = [];
+        for (const id of services.agents.ids()) {
+            // An ARCHIVED entry is *supposed* to have no worktree — that is what archiving reclaimed. It is
+            // held by its commits instead, so it must never look like the vanished-worktree case below.
+            if (services.agents.entry(id)?.archivedAt !== undefined) {
+                archived.push(id);
+                continue;
+            }
+            if (!(await services.agentWorktrees.exists(id))) {
+                vanished.push(id);
+            }
+        }
+        // A live entry with no checkout is an ARCHIVED agent in every way that matters — off the board,
+        // held by its branch — so that is what it becomes. This sweep used to `remove()` these outright,
+        // and it was the fleet's quietest data loss: a rebuild that lost worktree dirs, or an unarchive
+        // whose re-attach failed mid-way, left live entries with no checkout, and the next boot deleted
+        // the user's only handle on their branches and transcripts. Deletion stays where the user can see
+        // it: discard, and the archive's own purge. One write for the whole sweep either way.
+        if (vanished.length > 0) {
+            await services.agents.setArchived(vanished, Date.now());
+            logger.info({ count: vanished.length }, "agents: archived entries whose worktree vanished");
+        }
+        // Membership is re-read per decision inside prune (the callbacks), so a conversation the user opens
+        // mid-sweep is never judged by this pre-sweep snapshot.
+        await services.agentWorktrees.prune(
+            () => services.agents.ids(),
+            () => services.agents.ids().filter((id) => services.agents.entry(id)?.archivedAt !== undefined),
+        );
+    })().catch((error: unknown) => logger.warn({ err: error }, "agents: boot worktree sweep failed"));
+
+    // Keep the Finished lane from becoming the sandbox's permanent record: archive agents that have sat
+    // finished past the retention window (settings.agentRetentionDays; 0 ⇒ never). Once at boot, then hourly —
+    // the window is measured in days, so nothing finer is worth a timer. Losslessly: see agents/archive.ts.
+    const sweepArchive = (): Promise<void> =>
+        services.sandboxSettings
+            .get()
+            .then((settings) => sweepAgedAgents(services, Date.now(), settings.agentRetentionDays * 24 * 60 * 60 * 1000))
+            .then(() => undefined)
+            .catch((error: unknown) => logger.warn({ err: error }, "agents: archive sweep failed"));
+    void sweepArchive();
+    setInterval(() => void sweepArchive(), 60 * 60 * 1000).unref();
+
+    // Git housekeeping (git/maintenance.ts): pack the refs and loose objects a fleet of conversations mints,
+    // and keep the commit-graph current. Never awaited — it is the one boot step whose whole point is to run
+    // while nothing is waiting on it, and a repo mid-relocation simply gets maintained an hour later.
+    const maintain = (): Promise<void> => runGitMaintenance(services.workspace, logger);
+    void maintain();
+    setInterval(() => void maintain(), 60 * 60 * 1000).unref();
+
+    // Recompose the environment overlay from the manifest — converges fragment drift (a daemon update that
+    // changes a capability's fragment flips the derived state to "pending rebuild"); no-op on fresh sandboxes.
+    // Writes only under .intentic/ (in ROOT_EXCLUDES), so it never affects the baseline above.
+    void composeEnvironment(services);
+
+    // Preview routes for every existing repo (best-effort; the ensurer never throws) — self-heals any repo
+    // whose creation-time mint was missed, so hostnames exist well before a browser ever resolves them.
+    void ensureAllPreviewRoutes(services);
+
+    // Auto-connect VPN tunnels die with the container while the manifest survives on /work — dial them again
+    // AFTER the sweep; dockerd starts the same way when a docker capability is enabled (the engine is baked
+    // into every image but dormant without it). Both best-effort: a failure lands in the VPN link's state /
+    // the daemon log, not the boot path.
+    const bootCtx = capabilityCtx(services);
+    void reconnectVpns(services.capabilities, services.logger);
+    // Git access dies with the container the same way: the keypair is on /history (linked above), but the
+    // credential helper, the https line and the ssh-config Include were in HOME — re-derive them from the
+    // manifest so the owner's first `git pull` and the agent's first clone authenticate.
+    void restoreConnectorGitAccess(services.capabilities, services.logger);
+    void startDockerdIfEnabled(bootCtx);
+    // The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": starts when TRANSLATOR_URL
+    // is baked (no-op on a bare dev run) and serves those providers on their connected subscription OAuth.
+    // Best-effort — a routed turn that finds it down surfaces its own error, and a native-harness turn never touches it.
+    startTranslator(services);
+    // Installed extensions' declared autoStart processes come back the same way (manifests on /work).
+    void startAllExtensionProcesses(services);
+
+    // Debug-log upkeep: re-arm the tmux pipe-pane hooks on a tmux server that outlived a daemon restart
+    // (best-effort; the image's tmux.conf covers server start) and sweep historyRoot/logs at boot + hourly.
+    void applyTmuxLogHooks(config.historyRoot);
+    void pruneLogFiles(logsRoot(config.historyRoot));
+    const logsSweep = setInterval(() => void pruneLogFiles(logsRoot(config.historyRoot)), 3_600_000);
+
+    // Session retention (terminal-session.ts): abandoned web-* shells, which are exempt from the boot sweep
+    // because they're the user's own, plus the agent-*/job-* sessions of work that finished hours ago and that
+    // the panel has long stopped tabbing. Both at boot + hourly. The `keep` predicate is what makes it safe to
+    // run unattended: an agent BETWEEN two commands has only dead panes, and so does a job whose runner still
+    // has something queued — the same two facts system.routes reports as `running`.
+    const stillWorking = (session: string): boolean =>
+        services.terminalRun.running(session) || services.agents.liveSessionIds().some((sessionId) => agentSessionName(sessionId) === session);
+    void reapFinishedSessions(stillWorking);
+    const sessionSweep = setInterval(() => void reapFinishedSessions(stillWorking), 3_600_000);
+
     // Scheduled agent wake-ups: poll the automations manifest and fire whatever comes due.
     const scheduler = createAutomationsScheduler(services, streamAgent);
     scheduler.start();
@@ -336,14 +409,6 @@ const main = async (): Promise<void> => {
     // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking
     // update without ever fetching on the request path.
     const versionCheck = startVersionCheck();
-
-    // Phone home: announce this sandbox's URL + liveness to the platform registry (boot + every 30s), so the
-    // setup wizard sees it come online without any browser→sandbox probing. Needs all three env values —
-    // headless/test runs without them just don't announce.
-    const announcer = createAnnouncer(config, logger);
-    if (config.platform.url !== "" && config.sandbox.publicUrl !== "" && config.connectToken !== "") {
-        announcer.start();
-    }
 
     // Realtime agent wake-ups are provider gateways now: a listener extension (ext-discord) runs an autoStart
     // process that holds the connection and drives the daemon's /listeners/<provider> routes — the daemon holds
@@ -403,6 +468,8 @@ const main = async (): Promise<void> => {
         previewProxy.close();
         localServer.close();
         server.close();
+        // process.exit fires the "exit" hook above, which stamps the marker "exited" — the next boot's death
+        // check reads a deliberate shutdown, not a crash.
         process.exit(0);
     };
     process.on("SIGTERM", shutdown);

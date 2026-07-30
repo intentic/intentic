@@ -83,11 +83,21 @@ const memberEmail = async (c: Context): Promise<string | undefined> => {
     return typeof body?.email === "string" ? body.email.toLowerCase() : undefined;
 };
 
+// The routes that answer BEFORE the boot chain converges (see the `ready` gate below): the liveness probe,
+// the /events stream (heartbeats + snapshots — what the browser paints its connection from), and the
+// WebSocket upgrades, whose sessions live outside the boot-converged state entirely. Everything else reads
+// state a boot step builds (registry, git dirs, claude session links), so it waits.
+const READY_EXEMPT = new Set(["/health", "/events", "/system/terminal", "/system/browser-login", "/system/browser-view"]);
+
 // The HTTP API the browser drives DIRECTLY over the sandbox's own Cloudflare tunnel. When services.auth is set
 // the daemon verifies the owner's Google ID token on every route but /health (it owns its own auth). No auth
 // only in tests or the host-internal server preview. All routes are oRPC except the plain /health and binary
 // /workspace/raw, registered before the catch-all.
-export const createApp = (services: Services): Hono<AppEnv> => {
+//
+// `ready` is the boot gate (main.ts): the listeners come up the moment the process can serve so a restart
+// stops reading as an outage, and every data route awaits the boot chain instead of racing it — a request
+// that lands early waits a few seconds where it used to get connection-refused for the whole boot.
+export const createApp = (services: Services, ready?: Promise<void>): Hono<AppEnv> => {
     const orpcHandler = new OpenAPIHandler(createRouter(services), {
         interceptors: [
             async (options) => {
@@ -110,6 +120,18 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     });
 
     const app = new Hono<AppEnv>();
+
+    // The boot gate, first so nothing below runs against half-built state. Waiting is deliberate: the caller
+    // already retried through the whole connection-refused window this replaces, so holding the request the
+    // last few seconds of a boot is strictly less waiting.
+    if (ready !== undefined) {
+        app.use("*", async (c, next) => {
+            if (!READY_EXEMPT.has(c.req.path)) {
+                await ready;
+            }
+            return next();
+        });
+    }
 
     if (services.auth !== undefined) {
         const authorize = services.auth.authorize;

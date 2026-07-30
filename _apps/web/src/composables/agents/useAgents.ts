@@ -125,20 +125,28 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
     applySnapshot(agents, rev);
 };
 
-// A disconnected roster is meaningless; the reconnect's immediate snapshot repaints it. The revision goes with
-// it: the next daemon we speak to may be a restarted one whose counter began again at 0, and holding onto a
-// higher number would make us reject its every frame. Pending moves are dropped for the same reason — they were
-// promises about a revision line that no longer exists.
-export const resetAgents = (): void => {
-    registry.value = [];
+/* Drop everything that is a promise to a PARTICULAR daemon, keeping (or not) the painted roster.
+ *
+ * The revision always goes: the next daemon we speak to may be a restarted one whose counter began again at
+ * 0, and holding onto a higher number would make us reject its every frame. Pending moves and undo offers are
+ * promises about ids and revision lines that daemon may never have heard of — dropped with it.
+ *
+ * The roster itself is the split. A sandbox SWITCH clears it (another sandbox's agents must never paint), but
+ * a mere disconnect KEEPS it: the chat list blanking for the length of a reconnect turned every stall into a
+ * visible outage, and the reconnect's immediate snapshot overwrites whatever staleness survived. */
+const desync = (keepRoster: boolean): void => {
+    if (!keepRoster) {
+        registry.value = [];
+    }
     pending.clear();
     appliedRev = -1;
-    // An undo is a promise to a particular daemon about particular ids; the next one we speak to may be a
-    // restart that has never heard of them. The reports offering it go with it.
     undoable.value = [];
     receipt.value = undefined;
     notice.value = undefined;
 };
+export const resetAgents = (): void => desync(false);
+// The disconnect flavor: stale-while-reconnecting.
+export const desyncAgents = (): void => desync(true);
 
 // Unread tracking: an agent whose updatedAt outruns the last time it was OPENED, while it isn't running, "has
 // something for you". The read marker itself lives on the daemon entry (AgentSummary.seenAt), not in this

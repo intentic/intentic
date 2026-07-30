@@ -5,6 +5,7 @@ import { useAuth } from "../composables/useAuth";
 import { useEnvironment } from "../composables/sandbox/useEnvironment";
 import { useSandboxVersion } from "../composables/sandbox/useSandboxVersion";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
+import { showOutageGate } from "../composables/sandbox/connection";
 import { useSandboxSession } from "../composables/sandbox/sandboxSession";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
@@ -24,10 +25,11 @@ const { reachable, connection } = useSandbox();
 // The daemon answered and refused this Google account (403) — its own screen, distinct from every reason the
 // daemon simply didn't answer. Read off the failure's tag rather than a separate sticky boolean.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
-// An attempt actually resolved and failed, as opposed to one still in flight. This is what decides whether a
-// hydrated cache may keep painting: a sandbox that is merely slow deserves the stale view, one that is
-// positively down must not look operable.
-const attemptFailed = computed(() => connection.value.failure !== undefined);
+// A SUSTAINED failure (or a blocked one), as opposed to one blip the next attempt heals. This is what decides
+// whether a hydrated cache may keep painting: a sandbox that is merely slow — or briefly starved under its
+// own builds — deserves the stale view; one that is positively down must not look operable (connection.ts
+// showOutageGate owns the line between the two).
+const outage = computed(() => showOutageGate(connection.value));
 // A hydrated (IndexedDB-restored) tree marks the sandbox as previously visited: paint it stale-while-
 // revalidate instead of the connecting gate; the SSE connect refetches everything the moment it lands.
 const { tree } = useWorkspaceTree();
@@ -69,9 +71,10 @@ const switchAccount = (): void => {
         </button>
     </div>
     <SandboxUnauthorized v-if="denied" />
-    <!-- Cached paint only while connecting is unresolved: the moment an attempt fails, fall back to the full
-         gate so a dead sandbox (cleanup.sh, stopped container) never renders an operable-looking workspace. -->
-    <SandboxConnecting v-else-if="!reachable && (tree.length === 0 || attemptFailed)" />
+    <!-- Cached paint while connecting is unresolved OR through a short blip: only a sustained/blocked failure
+         falls back to the full gate, so a dead sandbox (cleanup.sh, stopped container) never renders an
+         operable-looking workspace for more than the couple of attempts that prove it dead. -->
+    <SandboxConnecting v-else-if="!reachable && (tree.length === 0 || outage)" />
     <template v-else>
         <!-- The sandbox environment needs owner action that lives on the Sandbox ▸ Environment tab — surface it
              everywhere, since that hub has no rail tile. Rebuild takes priority over an unreviewed proposal. -->

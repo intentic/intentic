@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { connect, type Socket } from "node:net";
+import os from "node:os";
 // Aliased: `resolve` is the promise-executor name throughout this file, and path's would shadow confusingly.
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -92,7 +93,18 @@ const ask = (socket: Socket, request: Request): Promise<Response> =>
 // started it, and an inherited stdio pipe nobody drains would wedge it the first time it logged anything.
 const spawnDaemon = (root: string): void => {
     const cli = fileURLToPath(new URL("cli.js", import.meta.url));
-    spawn(process.execPath, [cli, "daemon", root], { detached: true, stdio: "ignore" }).unref();
+    const child = spawn(process.execPath, [cli, "daemon", root], { detached: true, stdio: "ignore" });
+    // Demoted: the daemon's project load is a whole-monorepo parse (hundreds of MB, minutes of CPU) that runs
+    // once per agent worktree — background tooling that must lose to the sandbox's control plane under
+    // contention. Best-effort: an unsupported platform keeps the default priority, never loses the daemon.
+    if (child.pid !== undefined) {
+        try {
+            os.setPriority(child.pid, 10);
+        } catch {
+            // EPERM/ESRCH — the daemon just runs undemoted.
+        }
+    }
+    child.unref();
 };
 
 const connectOrSpawn = async (root: string): Promise<Socket | undefined> => {

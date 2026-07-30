@@ -25,6 +25,7 @@ import {
     gitListFiles,
     gitStatus,
     gitSync,
+    politeGit,
 } from "@intentic/scaffold";
 import { createResidentEngine, type ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
@@ -447,13 +448,18 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const turnIsolation = createTurnIsolation({ root: workspace.root, historyRoot: config.historyRoot, logger });
     // Hoisted ABOVE the registry, which now derives each card's land standing through it (standing.ts) rather
     // than reading a verdict off the entry.
-    const agentWorktrees = createAgentWorktrees({
-        workspace,
-        worktreesRoot: join(config.historyRoot, "worktrees"),
-        historyRoot: config.historyRoot,
-        isolation: turnIsolation,
-        logger,
-    });
+    const agentWorktrees = createAgentWorktrees(
+        {
+            workspace,
+            worktreesRoot: join(config.historyRoot, "worktrees"),
+            historyRoot: config.historyRoot,
+            isolation: turnIsolation,
+            logger,
+        },
+        // Demoted git: a worktree ensure is a whole-monorepo checkout (and several conversations start
+        // together) — bulk agent-plane IO that must lose to the daemon's own loop under contention.
+        politeGit,
+    );
     // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to — a
     // second instance would answer from a stale agents.json.
     const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")), createLandStandings(agentWorktrees));

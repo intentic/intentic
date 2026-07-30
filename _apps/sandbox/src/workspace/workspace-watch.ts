@@ -103,8 +103,24 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
 
 // Boot-time singleton the /events handler subscribes to. Started once in main.ts (like the announcer/scheduler),
 // so createWorkspaceWatch stays a plain factory the test can drive and close on its own temp root.
+//
+// Subscribers register into a module-level set that outlives the start: the daemon listens (and /events
+// streams open) BEFORE the watcher spins up its /work scan, and a subscription taken in that window used to
+// be silently dropped — a whole browser session with no live tree refresh. The watcher, whenever it starts,
+// fans out to whatever the set holds by then.
+const subscribers = new Set<(paths: string[]) => void>();
 let instance: WorkspaceWatch | undefined;
 export const startWorkspaceWatch = (root: string, logger: Logger): void => {
-    instance ??= createWorkspaceWatch(root, logger);
+    if (instance === undefined) {
+        instance = createWorkspaceWatch(root, logger);
+        instance.subscribe((paths) => {
+            for (const listener of subscribers) {
+                listener(paths);
+            }
+        });
+    }
 };
-export const subscribeWorkspaceChanges = (listener: (paths: string[]) => void): (() => void) => instance?.subscribe(listener) ?? (() => undefined);
+export const subscribeWorkspaceChanges = (listener: (paths: string[]) => void): (() => void) => {
+    subscribers.add(listener);
+    return () => subscribers.delete(listener);
+};

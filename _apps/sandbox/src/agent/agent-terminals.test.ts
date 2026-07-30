@@ -1,5 +1,10 @@
 import { expect, test } from "vitest";
+import { shellQuote } from "../terminal/terminal-run.js";
 import { agentSessionName, bashTmuxHooks } from "./agent-terminals.js";
+
+// What the hook makes of the agent's command line before tmux-run sees it: demoted (nice/ionice — priorities
+// only bind under contention, and agent builds are what has starved the daemon) and run as ONE bash -c tree.
+const demoted = (command: string): string => `nice -n 10 ionice -c 2 -n 7 bash -c ${shellQuote(command)}`;
 
 const hookOf = (hooks: ReturnType<typeof bashTmuxHooks>) => {
     const hook = hooks.PreToolUse?.[0]?.hooks[0];
@@ -30,14 +35,14 @@ const rewritten = async (toolInput: unknown, hooks?: ReturnType<typeof bashTmuxH
     return updated?.["command"] as string | undefined;
 };
 
-test("wraps the command in tmux-run under the session's agent-* tmux session", async () => {
+test("wraps the command in tmux-run under the session's agent-* tmux session, demoted", async () => {
     const command = await rewritten({ command: "echo hi", description: "Say Hi!" });
-    expect(command).toBe("/usr/local/bin/tmux-run agent-3f2a9b1c 'echo hi' say-hi");
+    expect(command).toBe(`/usr/local/bin/tmux-run agent-3f2a9b1c ${shellQuote(demoted("echo hi"))} say-hi`);
 });
 
 test("single-quotes in the command survive the rewrite", async () => {
     const command = await rewritten({ command: "echo 'a b'" });
-    expect(command).toBe(`/usr/local/bin/tmux-run agent-3f2a9b1c 'echo '\\''a b'\\''' run`);
+    expect(command).toBe(`/usr/local/bin/tmux-run agent-3f2a9b1c ${shellQuote(demoted("echo 'a b'"))} run`);
 });
 
 test("keeps the tool input's other fields", async () => {
@@ -56,13 +61,13 @@ test("leaves non-string commands and already-wrapped commands alone", async () =
 test("forwards env key NAMES as sorted -e flags before the session — never values", async () => {
     const hooks = bashTmuxHooks(undefined, ["IMAP_PASSWORD_IMAP", "DISCORD_BOT_TOKEN_DISCORD"]);
     const command = await rewritten({ command: "echo hi", description: "Say Hi!" }, hooks);
-    expect(command).toBe("/usr/local/bin/tmux-run -e DISCORD_BOT_TOKEN_DISCORD -e IMAP_PASSWORD_IMAP agent-3f2a9b1c 'echo hi' say-hi");
+    expect(command).toBe(`/usr/local/bin/tmux-run -e DISCORD_BOT_TOKEN_DISCORD -e IMAP_PASSWORD_IMAP agent-3f2a9b1c ${shellQuote(demoted("echo hi"))} say-hi`);
 });
 
 test("drops env keys that are not plain identifiers — they land unquoted in every rewritten command", async () => {
     const hooks = bashTmuxHooks(undefined, ["PATH", "bad key", "1BAD", "A=B"]);
     const command = await rewritten({ command: "echo hi" }, hooks);
-    expect(command).toBe("/usr/local/bin/tmux-run -e PATH agent-3f2a9b1c 'echo hi' run");
+    expect(command).toBe(`/usr/local/bin/tmux-run -e PATH agent-3f2a9b1c ${shellQuote(demoted("echo hi"))} run`);
 });
 
 test("agentSessionName derives the same agent-* name the hook routes commands through", () => {
@@ -77,10 +82,10 @@ test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrappe
     const anchor = { pid: 4321, cwd: "/work", plan, dispose: () => {} };
     const command = await rewritten({ command: "sed -i s/a/b/ x.ts", description: "edit" }, bashTmuxHooks(undefined, [], { plan, anchor }));
     // tmux-run stays OUTSIDE: the server, the pane logs and the terminals panel are daemon-side, and only the
-    // command the pane runs crosses into the namespace. Without this, `sed -i` would rewrite the shared tree
-    // while the same turn's Edit tool wrote to the worktree.
+    // command the pane runs crosses into the namespace (with the demotion, which is the command's own).
+    // Without this, `sed -i` would rewrite the shared tree while the same turn's Edit tool wrote to the worktree.
     expect(command).toBe(
-        `/usr/local/bin/tmux-run agent-3f2a9b1c 'nsenter --mount=/proc/4321/ns/mnt --wd='\\''/work'\\'' -- bash -c '\\''sed -i s/a/b/ x.ts'\\''' edit`,
+        `/usr/local/bin/tmux-run agent-3f2a9b1c ${shellQuote(`nsenter --mount=/proc/4321/ns/mnt --wd='/work' -- ${demoted("sed -i s/a/b/ x.ts")}`)} edit`,
     );
 });
 

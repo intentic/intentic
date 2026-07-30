@@ -53,6 +53,19 @@ const portOf = (url: string): number | undefined => {
     }
 };
 
+// The restart ladder: a proxy that crashes on arrival must not be respawned every 5 seconds forever (it has
+// been — hundreds of spawns and log lines an hour, all saying nothing). Each exit after a SHORT life doubles
+// the wait up to the ceiling; a run that survived past STABLE_MS was a working proxy whose exit is news, so
+// the ladder resets. Exported for the test — this is the whole policy.
+export const RESTART_DELAY_BASE_MS = 5_000;
+export const RESTART_DELAY_CAP_MS = 300_000;
+const STABLE_MS = 60_000;
+export const nextRestartDelay = (previousDelayMs: number, uptimeMs: number): number =>
+    uptimeMs >= STABLE_MS ? RESTART_DELAY_BASE_MS : Math.min(previousDelayMs * 2, RESTART_DELAY_CAP_MS);
+
+// The tail of stderr kept per run — enough to carry a Go panic or a bind error into the exit log.
+const STDERR_TAIL_BYTES = 2_048;
+
 // Start the CLIProxyAPI server and keep it alive. Best-effort and non-throwing: a routed turn that finds it down
 // surfaces its own error. Returns immediately; the proxy runs for the daemon's lifetime. No-op when no translator
 // is baked (config.translator.url empty — the dev path).
@@ -69,16 +82,25 @@ export const startTranslator = (services: Services): void => {
     const authDir = cliProxyAuthDir(authRoot);
     const configPath = cliProxyConfigPath(config);
     let child: ChildProcess | undefined;
+    let delayMs = RESTART_DELAY_BASE_MS;
 
     const start = async (): Promise<void> => {
         await mkdir(authDir, { recursive: true });
         await mkdir(dirname(configPath), { recursive: true });
         await writeFile(configPath, renderConfig({ port, authDir, token: config.translator.token }), { mode: 0o600 });
-        child = spawn("cli-proxy-api", ["--config", configPath], { stdio: "ignore", env: process.env });
+        const startedAt = Date.now();
+        // stderr is the only place the proxy says WHY it exited (a taken port, a bad config, a panic) — keep
+        // the tail so the exit log carries the reason instead of a bare code.
+        let stderrTail = "";
+        child = spawn("cli-proxy-api", ["--config", configPath], { stdio: ["ignore", "ignore", "pipe"], env: process.env });
+        child.stderr?.on("data", (chunk: Buffer) => {
+            stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_BYTES);
+        });
         child.on("exit", (code) => {
             child = undefined;
-            logger.warn({ code }, "translator: cli-proxy-api exited — restarting in 5s");
-            setTimeout(() => void start().catch((error: unknown) => logger.warn({ err: error }, "translator restart failed")), 5_000);
+            delayMs = nextRestartDelay(delayMs, Date.now() - startedAt);
+            logger.warn({ code, stderr: stderrTail.trim(), restartInMs: delayMs }, "translator: cli-proxy-api exited — restarting");
+            setTimeout(() => void start().catch((error: unknown) => logger.warn({ err: error }, "translator restart failed")), delayMs).unref();
         });
     };
 

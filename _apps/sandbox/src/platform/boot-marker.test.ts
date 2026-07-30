@@ -1,0 +1,51 @@
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pino } from "pino";
+import { expect, test } from "vitest";
+import { claimBootMarker } from "./boot-marker.js";
+
+const setup = async (): Promise<{ dir: string; lines: object[]; logger: ReturnType<typeof pino> }> => {
+    const dir = await mkdtemp(join(tmpdir(), "boot-marker-"));
+    const lines: object[] = [];
+    const logger = pino({ level: "debug" }, { write: (line: string) => void lines.push(JSON.parse(line) as object) });
+    return { dir, lines, logger };
+};
+
+test("a first boot claims the marker quietly and a clean exit rewrites it", async () => {
+    const { dir, lines, logger } = await setup();
+    const marker = claimBootMarker(dir, logger);
+    expect(lines).toEqual([]);
+    expect(JSON.parse(await readFile(join(dir, "daemon-exit.json"), "utf8"))).toMatchObject({ state: "running", pid: process.pid });
+
+    marker.markExited(0);
+    expect(JSON.parse(await readFile(join(dir, "daemon-exit.json"), "utf8"))).toMatchObject({ state: "exited", exitCode: 0 });
+});
+
+test("a marker still saying running is reported as an unannounced death", async () => {
+    const { dir, lines, logger } = await setup();
+    await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "running", pid: 4242, startedAt: 1_000 }));
+    claimBootMarker(dir, logger);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: 50, diedPid: 4242 });
+    expect(JSON.stringify(lines[0])).toContain("killed without warning");
+});
+
+test("a fatal-error report left by the dead pid is named in the death certificate", async () => {
+    const { dir, lines, logger } = await setup();
+    await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "running", pid: 4242, startedAt: 1_000 }));
+    await writeFile(join(dir, "report.20260730.161314.4242.0.json"), "{}");
+    // Another pid's report must not be attributed to this death.
+    await writeFile(join(dir, "report.20260730.161314.9999.0.json"), "{}");
+    claimBootMarker(dir, logger);
+    expect(JSON.stringify(lines[0])).toContain("report.20260730.161314.4242.0.json");
+    expect(JSON.stringify(lines[0])).not.toContain("9999");
+    expect(JSON.stringify(lines[0])).toContain("died on a fatal error");
+});
+
+test("a clean previous exit stays quiet", async () => {
+    const { dir, lines, logger } = await setup();
+    await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "exited", pid: 4242, startedAt: 1_000, endedAt: 2_000, exitCode: 0 }));
+    claimBootMarker(dir, logger);
+    expect(lines).toEqual([]);
+});

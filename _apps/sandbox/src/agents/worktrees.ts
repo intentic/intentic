@@ -47,7 +47,11 @@ export interface AgentWorktrees {
     readonly retire: (id: string, recorded: readonly { repo: string; base: string }[], title: string | undefined) => Promise<void>;
     // Boot sweep: delete conversation dirs with no registry entry, `git worktree prune` every repo, park the
     // branches of agents that are off the board, and drop parked refs the registry no longer knows.
-    readonly prune: (knownIds: readonly string[], archivedIds: readonly string[]) => Promise<void>;
+    //
+    // The id sets are CALLBACKS, re-read at each decision, because this runs DETACHED behind the boot (it is
+    // sweep work, and awaiting it held every route for minutes after a crash) — a conversation the user opens
+    // while the sweep walks must not be judged by a roster snapshotted before it existed.
+    readonly prune: (knownIds: () => readonly string[], archivedIds: () => readonly string[]) => Promise<void>;
     // Serialize git ops that touch a repo's shared worktree admin area / main index (create/remove/land).
     readonly withRepoLock: <T>(repo: string, task: () => Promise<T>) => Promise<T>;
 }
@@ -400,10 +404,10 @@ export const createAgentWorktrees = (
             await rm(overlaysFor(id), { recursive: true, force: true });
         },
         prune: async (knownIds, archivedIds) => {
-            const known = new Set(knownIds);
-            const archived = new Set(archivedIds);
             for (const name of await readdir(worktreesRoot).catch(() => [])) {
-                if (!known.has(name)) {
+                // Membership is asked of the registry AT the decision — a conversation minted after this sweep
+                // started (the sweep runs detached behind boot) must not have its dir swept as an orphan.
+                if (!knownIds().includes(name)) {
                     logger.warn({ id: name }, "agents: pruning orphaned worktree dir");
                     await rm(conversationDir(name), { recursive: true, force: true });
                 }
@@ -412,32 +416,36 @@ export const createAgentWorktrees = (
             // drops the worktree and keeps the branch), so the leftovers here are the ones whose conversation
             // is gone entirely — including any a crash left behind between the two removals above.
             for (const name of await readdir(overlaysRoot(historyRoot)).catch(() => [])) {
-                if (!known.has(name)) {
+                if (!knownIds().includes(name)) {
                     await rm(overlaysFor(name), { recursive: true, force: true });
                 }
             }
             for (const repo of await liveRepos()) {
-                const main = mainDir(repo);
-                await git(main, ["worktree", "prune"]).catch(() => undefined);
-                /* The ref half of the same sweep, and the only pass that can converge an archive taken before
-                 * parking existed — or one whose park lost its repo lock to a crash. Both calls are a single
-                 * for-each-ref when there is nothing to do, which is every boot after the first.
-                 *
-                 * Orphan parked refs are dropped against `knownIds`, NOT `archivedIds`: a ref whose entry the
-                 * registry has forgotten is holding commits no surface can ever reach again. That is the same
-                 * line the conversation-dir sweep above draws, and it stays on the safe side of it — deletion
-                 * the user can see (discard, purge) is the only other thing that drops an agent's commits. */
-                const parked = await parkAgentRefs(main, archived, git).catch((error: unknown) => {
-                    logger.warn({ err: error, repo }, "agents: branch park sweep failed");
-                    return [];
+                // Under the repo lock now that the sweep runs concurrently with turns: worktree admin and the
+                // parked shelf are exactly what ensure()/remove() touch for the same repo.
+                await withRepoLock(repo, async () => {
+                    const main = mainDir(repo);
+                    await git(main, ["worktree", "prune"]).catch(() => undefined);
+                    /* The ref half of the same sweep, and the only pass that can converge an archive taken before
+                     * parking existed — or one whose park lost its repo lock to a crash. Both calls are a single
+                     * for-each-ref when there is nothing to do, which is every boot after the first.
+                     *
+                     * Orphan parked refs are dropped against `knownIds`, NOT `archivedIds`: a ref whose entry the
+                     * registry has forgotten is holding commits no surface can ever reach again. That is the same
+                     * line the conversation-dir sweep above draws, and it stays on the safe side of it — deletion
+                     * the user can see (discard, purge) is the only other thing that drops an agent's commits. */
+                    const parked = await parkAgentRefs(main, new Set(archivedIds()), git).catch((error: unknown) => {
+                        logger.warn({ err: error, repo }, "agents: branch park sweep failed");
+                        return [];
+                    });
+                    const dropped = await dropOrphanParkedRefs(main, new Set(knownIds()), git).catch((error: unknown) => {
+                        logger.warn({ err: error, repo }, "agents: parked ref sweep failed");
+                        return 0;
+                    });
+                    if (parked.length > 0 || dropped > 0) {
+                        logger.info({ repo, parked: parked.length, dropped }, "agents: swept agent branches off refs/heads");
+                    }
                 });
-                const dropped = await dropOrphanParkedRefs(main, known, git).catch((error: unknown) => {
-                    logger.warn({ err: error, repo }, "agents: parked ref sweep failed");
-                    return 0;
-                });
-                if (parked.length > 0 || dropped > 0) {
-                    logger.info({ repo, parked: parked.length, dropped }, "agents: swept agent branches off refs/heads");
-                }
             }
         },
         withRepoLock,

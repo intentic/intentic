@@ -49,6 +49,15 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
         .map((key) => `-e ${key} `)
         .join("");
 
+/* Every agent shell command runs DEMOTED — CPU nice +10, IO best-effort lowest — because the agent's builds
+ * and test runs are exactly what has starved this container: a couple of concurrent turns spawning vitest
+ * worker pools flat-lined the machine, the daemon's own loop went silent for tens of seconds, and the browser
+ * declared the sandbox dead. Demotion costs an agent command nothing on an idle machine (priorities only bind
+ * under contention) and keeps the control plane answering during exactly the bursts that used to take it out.
+ * Wrapped in `bash -c` so a compound line (`cd x && make`) demotes as ONE tree — `nice` can exec a binary,
+ * not a shell keyword. */
+const POLITE_PREFIX = "nice -n 10 ionice -c 2 -n 7 ";
+
 // rtk EXECS its first argument: a known subcommand (git, pnpm, tsc, …) gets its filter, an unknown binary is
 // exec'd unfiltered — but a shell-only first word (builtin, keyword, VAR= assignment, compound syntax) cannot
 // be exec'd at all, so `rtk cd …` dies with exit 127 and, in a `cd x && git status` chain, kills the whole
@@ -116,11 +125,13 @@ export const bashTmuxHooks = (
                         const wrapped = filterBackend === "rtk" && rtkPrefixable(command) ? `rtk ${command}` : command;
                         // The namespace hop goes OUTSIDE the rtk prefix and inside the tmux wrapper: rtk is
                         // the agent's own command line and belongs in the namespace with it, while tmux-run
-                        // itself must stay out here where the server and the pane logs are.
+                        // itself must stay out here where the server and the pane logs are. The polite prefix
+                        // goes with the command (inside the hop), so the whole build/test tree it forks
+                        // inherits the demotion.
                         const inner =
                             isolation?.anchor !== undefined
-                                ? `${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}bash -c ${shellQuote(wrapped)}`
-                                : wrapped;
+                                ? `${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}bash -c ${shellQuote(wrapped)}`
+                                : `${POLITE_PREFIX}bash -c ${shellQuote(wrapped)}`;
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",

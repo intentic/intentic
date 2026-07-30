@@ -1,5 +1,5 @@
 import { watch } from "vue";
-import { resetAgents } from "../agents/useAgents";
+import { desyncAgents } from "../agents/useAgents";
 import { queryClient } from "../queryPersistence";
 import { presenceStreamOpened, resetPresence } from "../usePresence";
 import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
@@ -25,8 +25,12 @@ import { signalConnection, useSandbox } from "./useSandbox";
  * Started by the workspace shell for the lifetime of the post-login session. Module-level singleton. */
 
 // No frame for this long means the connection silently half-opened (origin gone without a TCP FIN) — trip
-// offline. The daemon emits a heartbeat every ~2s, so this tolerates ~2 missed beats before reconnecting.
-const WATCHDOG_MS = 6000;
+// offline. The daemon emits a heartbeat every ~2s, so this tolerates ~4 missed beats before reconnecting.
+// Sized for a daemon on a REAL machine, not an idealized one: a container under build/test IO pressure
+// legitimately misses a couple of beats, and at 6s (the old value) every such blip tore the stream down and
+// flashed the workspace to the reconnect gate. Detection of a genuinely dead sandbox arrives 4s later; a
+// stall is ridden out invisibly.
+const WATCHDOG_MS = 10_000;
 
 const { daemonUrl, connection, activeSandboxId, refresh } = useSandbox();
 const { daemonBase, usingLocal, resolve: resolveEndpoint, demote: demoteEndpoint, reset: resetEndpoint } = useEndpoint();
@@ -174,9 +178,13 @@ const attempt = async (): Promise<void> => {
             // A revoked member must not keep a cached (IndexedDB-persisted) copy of the sandbox on disk.
             queryClient.removeQueries({ predicate: sandboxQueryPredicate(sandboxId) });
         }
-        // Disconnected rosters are meaningless — clear both; the reconnect's immediate snapshots repaint them.
+        // Presence is a claim about who is here NOW — meaningless while disconnected, so it clears. The agents
+        // roster only DESYNCS: the revision guard resets (a restarted daemon's counter starts over, and a held
+        // high-water mark would reject its every frame) while the painted list stays up, stale, until the
+        // reconnect's immediate snapshot overwrites it — blanking the chat list for every reconnect is what
+        // used to turn a two-heartbeat stall into a visible outage.
         resetPresence();
-        resetAgents();
+        desyncAgents();
         // A restarted sandbox may have re-registered a fresh daemonUrl — pick it up before retrying. Swallowed
         // on failure for the same reason as the refresh above: the next attempt handles it.
         await refresh().catch(() => undefined);
