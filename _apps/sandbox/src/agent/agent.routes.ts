@@ -270,6 +270,11 @@ async function* runConversationTurn(
     }
 }
 
+// Preflight is a few hundred ms of local work plus one throttled fetch; past this it is a defect worth a line,
+// not ordinary load. Well under the browser's 10s liveness watchdog, so a preflight that trips this has usually
+// already shown the user a "connecting" flash.
+const SLOW_PREFLIGHT_MS = 5_000;
+
 // One agent turn's body, on the main tree (`conversation` undefined) or inside an isolated conversation's
 // worktree — the cwd override is the single binding point every provider adapter, the tmux Bash path, and the
 // SDK session store follow.
@@ -285,6 +290,16 @@ async function* runTurn(
     if (input.conversationId !== undefined) {
         clearPendingResume(input.conversationId);
     }
+    /* Turn preflight is where a slow start hides. Between here and `turn.started` below sit namespace setup, a
+     * network git-fetch, the token refresh, the browser-server bring-up and a history snapshot — and not one of
+     * them records a duration, so a turn that took a minute to start reads in the log exactly like one that
+     * started instantly. These marks make the slow step name itself: a 128s event-loop freeze in this span once
+     * left behind nothing but a `turn.started` that happened to be very late, and cost days to attribute. */
+    const preflightStart = Date.now();
+    const preflightStages: Record<string, number> = {};
+    const mark = (stage: string): void => {
+        preflightStages[stage] = Date.now() - preflightStart;
+    };
     // cli-kind capabilities contribute env vars (their stored credentials) so either agent's shell can run
     // their CLI tools; extension `contributes.settings` with an `env` name inject theirs the same way.
     const cliEnv = { ...(await cliEnvOf(services)), ...(await extensionEnvOf(services)) };
@@ -294,6 +309,7 @@ async function* runTurn(
     if (binDirs.length > 0) {
         cliEnv["PATH"] = [...binDirs, process.env["PATH"] ?? ""].filter((entry) => entry !== "").join(":");
     }
+    mark("env");
     // Attachments arrive workspace-relative; resolve to absolute paths for the provider and reject escapes.
     const attachmentPaths: string[] = [];
     for (const rel of input.attachments ?? []) {
@@ -343,6 +359,7 @@ async function* runTurn(
                   }
                   return { plan, anchor: await startAnchor(plan) };
               });
+    mark("isolation");
     const effectiveCwd = isolation?.anchor?.cwd ?? localCwd;
     // Kick the repo sync off now so its network git-fetch overlaps the token refresh, browser-server setup,
     // and config reads below instead of running strictly after them. Throttled to 60s, so it's a no-op on most
@@ -385,6 +402,7 @@ async function* runTurn(
         yield { kind: "done" };
         return;
     }
+    mark("plan");
     const { run } = plan;
     // The provider account that serves this turn — the attribution key stamped onto the usage/rate-limit frames
     // and the activity log below.
@@ -396,6 +414,7 @@ async function* runTurn(
     // into its outcome, never blocking the turn. Runs before the attribution snapshot so pulled files land as
     // user-authored, not attributed to this turn.
     const advisory = syncPromise === undefined ? undefined : syncAdvisory(await syncPromise);
+    mark("repoSync");
     if (advisory !== undefined) {
         request = { ...request, prompt: `${advisory}\n\n${request.prompt}` };
     }
@@ -419,6 +438,7 @@ async function* runTurn(
             yield { kind: "checkpoint", id: checkpointId };
         }
     }
+    mark("snapshot");
     // Tee every frame past the activity sniffer — outbound provider calls (discord curl) are only visible
     // here, and every turn origin (chat, automation wake, voice wake) flows through this generator.
     const sniffer = createOutboundSniffer(services);
@@ -460,6 +480,10 @@ async function* runTurn(
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "activity: turn event append failed"));
     };
+    const preflightMs = Date.now() - preflightStart;
+    if (preflightMs >= SLOW_PREFLIGHT_MS) {
+        services.logger.warn({ preflightMs, stages: preflightStages }, "turn preflight slow — the stage marks say which step, and a stalled event loop inflates all of them at once");
+    }
     record({ type: "turn.started", content: input.prompt.slice(0, 2_000) });
     /* Claim that account for as long as this turn holds its token. The token rode into the agent subprocess env
      * at spawn and cannot be replaced there, so a rotation landing now would kill this turn outright — the hold

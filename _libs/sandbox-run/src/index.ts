@@ -47,11 +47,22 @@ export const sandboxNames = (slug: string): SandboxNames => ({
 });
 
 // ——— Posture ——————————————————————————————————————————————————————————————————————————————————————————
-// The Linux capabilities EVERY sandbox container is granted. SYS_ADMIN lets the daemon give each isolated
-// agent turn its own mount namespace, with the conversation's worktree standing in for /work (sandbox app
-// agents/isolation.ts). Scoped to the container's own mounts — not host access; the docker socket is never
-// mounted.
-export const SANDBOX_CAPABILITIES = ["SYS_ADMIN"] as const;
+// The Linux capabilities EVERY sandbox container is granted. Scoped to the container — not host access; the
+// docker socket is never mounted.
+//
+// SYS_ADMIN lets the daemon give each isolated agent turn its own mount namespace, with the conversation's
+// worktree standing in for /work (sandbox app agents/isolation.ts).
+//
+// SYS_PTRACE is for diagnosing the daemon in the only place it ever misbehaves: production. When the event loop
+// freezes, the question is always "what is PID 1 blocked in", and answering it needs a stack — but /proc/1/stack,
+// /proc/1/syscall, strace and gdb all require PTRACE_MODE_ATTACH, and yama's ptrace_scope only ever permits a
+// DESCENDANT to attach. The daemon is the ANCESTOR of every shell an agent can open, so without this the one
+// process worth inspecting is the one process that cannot be. A stall that took days to attribute (an 8s
+// blocking reverse-DNS lookup per connected peer) would have been a single backtrace. The exposure is small
+// where it is granted: everything in this container already runs as root with SYS_ADMIN, and ptrace is confined
+// to the container's own PID namespace. It stays OUT of RUNTIME_DIRECTIVES below — the platform grants this to
+// its own daemon, and an owner-authored overlay still may not ask for it.
+export const SANDBOX_CAPABILITIES = ["SYS_ADMIN", "SYS_PTRACE"] as const;
 
 // Extra privileges ride in ONLY through "# intentic:runtime" directive lines in the owner-approved overlay
 // (the vpn's WireGuard needs tun + NET_ADMIN; the docker capability's isolated nested engine needs

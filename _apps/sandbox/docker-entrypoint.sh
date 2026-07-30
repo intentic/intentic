@@ -30,6 +30,33 @@ printf 'HostKey %s\n' "$host_key" > /etc/ssh/sshd_config.d/intentic-hostkey.conf
 mkdir -p /run/sshd
 /usr/sbin/sshd
 
+# DNS THAT CANNOT FREEZE THE DAEMON.
+#
+# Measured in this sandbox: reverse-resolving the Docker gateway (the address EVERY browser and host connection
+# arrives from) takes 8.004s and ends in NXDOMAIN. Docker's embedded resolver has no PTR record for it, forwards
+# to the host, is answered by nobody, and glibc pays its full ladder — two attempts at the 4s per-query timeout.
+# One lookup per peer, done in sequence, and the daemon's event loop is dead for the whole run: 6 peers froze it
+# for 48s, 16 for 128s. No heartbeat goes out, so the browser's 10s liveness watchdog declares the sandbox gone
+# and the UI locks up — the outage users actually report. Container IPs on the same network resolve instantly
+# (the embedded server knows them); it is only the gateway that costs 8s.
+#
+# Two independent guards, because either alone leaves a hole:
+#  - names for the local subnet's ends in /etc/hosts. nsswitch is `files dns`, and glibc's files backend answers
+#    REVERSE lookups too, so the gateway's PTR never reaches the resolver at all. 8.004s -> 0.001s, measured.
+#  - a bounded resolver ladder, which caps every OTHER unresolvable name (a telemetry host, a typo'd remote) at
+#    ~2s instead of 8s. Docker leaves an edited resolv.conf alone, but only for the life of the container.
+#
+# Both files are runtime bind mounts that a recreate resets, which is why this lives here and not in the image —
+# and both are written in place: `sed -i` renames, and renaming onto a bind mount fails with EBUSY.
+gateway="$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')"
+if [ -n "$gateway" ] && ! grep -q "^${gateway}[[:space:]]" /etc/hosts 2>/dev/null; then
+    printf '%s\tdocker-gateway\n' "$gateway" >> /etc/hosts
+fi
+if [ -f /etc/resolv.conf ] && ! grep -q 'timeout:' /etc/resolv.conf 2>/dev/null; then
+    awk '/^options /{print $0" timeout:1 attempts:2"; found=1; next} {print} END{if(!found) print "options timeout:1 attempts:2"}' \
+        /etc/resolv.conf > /tmp/resolv.conf.new && cat /tmp/resolv.conf.new > /etc/resolv.conf && rm -f /tmp/resolv.conf.new
+fi
+
 # The daemon is the main process — exec so it becomes PID 1 and owns SIGTERM/SIGINT graceful shutdown.
 #
 # --report-on-fatalerror: a V8 fatal error (heap limit, native OOM) prints only to stderr and dies — and
