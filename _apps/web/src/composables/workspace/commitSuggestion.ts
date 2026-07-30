@@ -19,10 +19,19 @@
  * corrects by typing over it, and the panel's convention is that the model's word wins whenever the user asks
  * for it. */
 
-// A title that is already written as a Conventional Commits subject — the user's own `fix: …` prompt, or a
-// session the title-summary pass renamed that way. Split rather than re-prefixed: its type is better than any
-// verb table's guess.
-const PREFIXED = /^([a-z]+(?:\([^)]*\))?!?):\s+(\S.*)$/;
+/* A title that is already written as a Conventional Commits subject — the user's own `fix: …` prompt, or a
+ * session the title-summary pass renamed that way. Split rather than re-prefixed: its type is better than any
+ * verb table's guess.
+ *
+ * CASE-INSENSITIVE, because title.ts capitalizes every title it derives (`fix: Codex agents…` is stored as
+ * `Fix: Codex agents…`), so a lowercase-only match never fired on the one shape it was written for and filed the
+ * user's own subject under a second type: `feat: fix: Codex agents…`.
+ *
+ * Which is why the type is then CHECKED rather than trusted. `Note: …`, `Warning: …` and `TODO: …` have the shape
+ * of a prefixed subject and none of its meaning; read as types they produce a line commitlint's `type-enum`
+ * refuses, so they fall through to the verb reading below and are treated as the prose they are. */
+const PREFIXED = /^([a-z]+)((?:\([^)]*\))?!?):\s+(\S.*)$/i;
+const TYPES = new Set([`build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`]);
 // Dropped along with a verb that named the type: `Fix the tree truncation` reads as `fix: tree truncation`, and
 // keeping the article would leave `fix: the tree truncation` — a subject that starts by pointing at something.
 const ARTICLE = /^(?:the|a|an)\s+/i;
@@ -169,13 +178,31 @@ const VERBS = new Map<string, TitleVerb>([
 // wrong is the prefix, and the prefix is the cheap half to correct.
 const DEFAULT_TYPE = `feat`;
 
-// Sentence case is a TITLE's convention (title.ts capitalizes for exactly that reason) and a subject's is the
-// opposite, so it is undone — but only for plainly lowercase prose. `GitLab`, `useAgents` and `API` mean
-// something by their casing, and the mirror-image guard to title.ts's `capitalized` is what leaves them alone.
-const decapitalized = (text: string): string => {
-    const [first = ``] = text.split(` `, 1);
-    if (!/^[A-Z]/.test(first) || /[A-Z/.\\]/.test(first.slice(1))) {
+/* THE FIRST CHARACTER IS THE WHOLE RULE, and it is not a matter of taste: commitlint's `subject-case`
+ * (config-conventional, `never` sentence-case) reduces to `upperFirst(subject) === subject`, so a subject that
+ * OPENS with a capital is sentence case whatever the rest of it looks like, and the commit-msg hook throws the
+ * commit back. `fix: Codex agents broken transcript loading` is refused; the same line with a lowercase `c`
+ * commits. Sentence case is a TITLE's convention (title.ts capitalizes for exactly that reason) and a subject's
+ * is the opposite, so every reading below undoes it — doing it in only some of them is what filed a line the
+ * hook would not take.
+ *
+ * CASING THAT MEANS SOMETHING is not sentence case and is not flattened: `GitHub`, `ChatPanel.vue` and `CI/CD`
+ * are different words in lower case, and the guard for them mirrors title.ts's `capitalized`. They get
+ * commitlint's own escape hatch instead — it deletes backticked and quoted spans before it looks at the subject,
+ * naming proper nouns as the reason — so the name survives verbatim and the line no longer opens with a letter
+ * the rule can call a capital. */
+const MEANINGFUL = /[A-Z/._\\]/;
+// The opening word without whatever punctuation follows it: `GitLab,` is a name and a comma, and only the name
+// belongs inside the backticks.
+const LEAD = /^[\w./\\-]+/;
+
+const subjectCased = (text: string): string => {
+    const [first = ``] = LEAD.exec(text) ?? [];
+    if (!/^[A-Z]/.test(first)) {
         return text;
+    }
+    if (MEANINGFUL.test(first.slice(1))) {
+        return `\`${first}\`${text.slice(first.length)}`;
     }
     return `${first[0]!.toLowerCase()}${text.slice(1)}`;
 };
@@ -189,21 +216,23 @@ const readTitle = (title: string): { readonly type: string; readonly subject: st
         return undefined;
     }
     const prefixed = PREFIXED.exec(clean);
-    if (prefixed !== null) {
-        return { type: prefixed[1]!, subject: prefixed[2]! };
+    if (prefixed !== null && TYPES.has(prefixed[1]!.toLowerCase())) {
+        // The type is lowercased, the scope and the `!` kept as written — commitlint's `type-case` is
+        // `lower-case` and it has nothing to say about the rest.
+        return { type: `${prefixed[1]!.toLowerCase()}${prefixed[2]!}`, subject: subjectCased(prefixed[3]!) };
     }
     const [lead = ``] = clean.split(` `, 1);
     const verb = VERBS.get(lead.toLowerCase());
     if (verb === undefined) {
-        return { type: DEFAULT_TYPE, subject: decapitalized(clean) };
+        return { type: DEFAULT_TYPE, subject: subjectCased(clean) };
     }
     if (!verb.drop) {
-        return { type: verb.type, subject: decapitalized(clean) };
+        return { type: verb.type, subject: subjectCased(clean) };
     }
     const rest = clean.slice(lead.length).trim().replace(ARTICLE, ``);
     // `Fix.` / `Refactor` — the verb was the entire title, so dropping it would leave nothing. The type alone
     // says as much as that title did.
-    return { type: verb.type, subject: rest === `` ? decapitalized(clean) : rest };
+    return { type: verb.type, subject: subjectCased(rest === `` ? clean : rest) };
 };
 
 /* One subject line from one or more session titles.
