@@ -162,7 +162,7 @@
     --role-success:     var(--color-success-500);
     --role-warning:     var(--color-warning-500);
     --role-info:        var(--color-info-500);
-    /* Bright fill, surface-900 label: 6.5:1 (meadow) … 8.3:1 (honey). Inverted rather than reusing the
+    /* Bright fill, surface-900 label: 5.6:1 (ember) … 8.3:1 (honey). Inverted rather than reusing the
      * light scheme's deep fill because a deep fill under white clears AA by a hair (~4.5:1) and this
      * is the shade PrimeVue's buttons already paint in dark — inverting is what makes them all match.
      * Hover lightens the fill here, which is again the direction that raises label contrast. */

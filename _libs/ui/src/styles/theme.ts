@@ -51,7 +51,7 @@ const custom = {
             root: {
                 borderRadius: `var(--radius-md)`,
                 paddingY: `var(--ui-control-padding-y)`,
-                paddingX: `calc(var(--ui-control-padding-x) * 1.25)`,
+                paddingX: `var(--ui-control-padding-x)`,
                 iconOnlyWidth: `2.375rem`,
                 sm: {
                     paddingY: `calc(var(--spacing) * 1.5)`,

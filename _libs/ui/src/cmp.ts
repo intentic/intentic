@@ -11,7 +11,7 @@ import { twMerge } from "tailwind-merge";
  * (`buttonPrimary('px-2.5 py-1 text-2xs')`); they must not recolor it — the fill/label pair is what
  * carries the WCAG AA contrast, in both color schemes and all four themes. */
 const buttonBase =
-    `inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium ` +
+    `inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium ` +
     `text-fill-content transition-colors disabled:cursor-default disabled:opacity-40`;
 
 /** Primary call to action — one per view. */
