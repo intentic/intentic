@@ -1,3 +1,7 @@
+<script lang="ts">
+const loaderStartTimes = new Map<number, number>();
+</script>
+
 <script setup lang="ts">
 import { useDevice } from "@intentic-app/ui";
 import { copyCodeFromEvent } from "@intentic-app/ui/markdown";
@@ -181,9 +185,14 @@ watch(
     () => props.streaming,
     (isStreamingNow, _prev, onCleanup) => {
         if (!isStreamingNow) {
+            loaderStartTimes.delete(props.message.id);
             return;
         }
-        loaderStartedAt = Date.now();
+        if (!loaderStartTimes.has(props.message.id)) {
+            loaderStartTimes.set(props.message.id, Date.now());
+        }
+        loaderStartedAt = loaderStartTimes.get(props.message.id)!;
+        loaderTick.value = Math.floor((Date.now() - loaderStartedAt) / 1000);
         const timer = setInterval(() => (loaderTick.value += 1), 1000);
         onCleanup(() => clearInterval(timer));
     },
