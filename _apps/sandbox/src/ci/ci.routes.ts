@@ -85,6 +85,11 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
             await upstream(ciClientFor(project.account.provider, fetchFn).cancel(project, input.runId));
             return { ok: true as const };
         }),
+        jobs: i.jobs.handler(async ({ input }) => {
+            const project = await resolve(input.repo);
+            const jobs = await upstream(ciClientFor(project.account.provider, fetchFn).allJobs(project, input.runId));
+            return { jobs };
+        }),
         fix: i.fix.handler(async ({ input }) => {
             const project = await resolve(input.repo);
             const client = ciClientFor(project.account.provider, fetchFn);

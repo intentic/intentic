@@ -2052,6 +2052,23 @@ export const PipelineRunSchema = z.object({
 });
 export type PipelineRun = z.infer<typeof PipelineRunSchema>;
 
+// One job inside a pipeline run. The view fetches these lazily (one extra call per visible run) so the list
+// endpoint stays cheap. Both GitHub Actions jobs and GitLab CI jobs normalize onto these fields.
+// `stage` groups jobs into the pipeline's sequential stages (GitLab's native concept); GitHub Actions jobs
+// each become their own single-job stage since Actions has no stage grouping.
+export const PipelineJobSchema = z.object({
+    name: z.string(),
+    status: PipelineStatusSchema,
+    stage: z.string().optional(),
+    durationSeconds: z.number().optional(),
+});
+export type PipelineJob = z.infer<typeof PipelineJobSchema>;
+
+export const CiJobsResponseSchema = z.object({
+    jobs: z.array(PipelineJobSchema),
+});
+export type CiJobsResponse = z.infer<typeof CiJobsResponseSchema>;
+
 // One mapped repo's CI wiring state. `hookWarning` is the manual-setup story when webhook registration was
 // refused (token scope, role) or impossible (no public URL): what happened plus the target URL + secret to
 // paste into the repo's webhook settings — the git-access sshRegistrationWarning pattern.

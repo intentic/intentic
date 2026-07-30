@@ -1,4 +1,4 @@
-import type { PipelineRun, PipelineStatus } from "@intentic/sandbox-contract";
+import type { PipelineJob, PipelineRun, PipelineStatus } from "@intentic/sandbox-contract";
 import { githubHeaders } from "../capabilities/cli/git-access.js";
 import type { CiProject } from "./projects.js";
 
@@ -22,6 +22,8 @@ export interface CiClient {
     readonly listRuns: (project: CiProject, limit: number) => Promise<PipelineRun[]>;
     // Names of the run's failed jobs — the one-extra-call enrichment for failed runs.
     readonly failedJobs: (project: CiProject, runId: number) => Promise<string[]>;
+    // All jobs in a run with their individual statuses — the expanded-row enrichment for the view.
+    readonly allJobs: (project: CiProject, runId: number) => Promise<PipelineJob[]>;
     // The failed jobs' log tails, concatenated and capped — the fix conversation's context.
     readonly failedJobLogs: (project: CiProject, runId: number, maxBytes: number) => Promise<string>;
     readonly rerun: (project: CiProject, runId: number) => Promise<void>;
@@ -136,6 +138,22 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
             return listed.workflow_runs.map((run) => githubRun(project, run));
         },
         failedJobs: async (project, runId) => (await jobsOf(project, runId)).map((job) => job.name),
+        allJobs: async (project, runId) => {
+            const listed = await json<{ jobs: { id: number; name: string; status: string; conclusion: string | null; started_at: string | null; completed_at: string | null }[] }>(
+                await fetchFn(githubApi(project, `/actions/runs/${runId}/jobs?per_page=100`), { headers: githubHeaders(project.account.token) }),
+                "github all jobs",
+            );
+            return listed.jobs.map((job) => {
+                const status = githubStatus(job.status, job.conclusion);
+                const started = epoch(job.started_at);
+                const completed = epoch(job.completed_at);
+                const result: PipelineJob = { name: job.name, status, stage: job.name };
+                if (status !== "running" && completed > started) {
+                    result.durationSeconds = Math.round((completed - started) / 1000);
+                }
+                return result;
+            });
+        },
         failedJobLogs: async (project, runId, maxBytes) => {
             const failed = await jobsOf(project, runId);
             const parts: string[] = [];
@@ -302,6 +320,19 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
             return listed.map((pipeline) => gitlabRun(project, pipeline));
         },
         failedJobs: async (project, runId) => (await failedJobsOf(project, runId)).map((job) => job.name),
+        allJobs: async (project, runId) => {
+            const listed = await json<{ id: number; name: string; status: string; stage: string; duration: number | null }[]>(
+                await fetchFn(gitlabApi(project, `/pipelines/${runId}/jobs?per_page=100`), { headers: gitlabHeaders(project) }),
+                "gitlab all jobs",
+            );
+            return listed.map((job) => {
+                const result: PipelineJob = { name: job.name, status: gitlabStatus(job.status), stage: job.stage };
+                if (job.duration !== null) {
+                    result.durationSeconds = Math.round(job.duration);
+                }
+                return result;
+            });
+        },
         failedJobLogs: async (project, runId, maxBytes) => {
             const failed = await failedJobsOf(project, runId);
             const parts: string[] = [];
