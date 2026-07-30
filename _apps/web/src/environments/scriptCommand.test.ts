@@ -22,6 +22,24 @@ test("production renders the vanity-url curl one-liner", async () => {
     expect(bashCommand(`cleanupHost`, `sudo `, ``)).toBe(`curl -fsSL https://intentic.dev/cleanup-host | sudo sh`);
 });
 
+test("a PowerShell script with no arguments is piped straight into iex", async () => {
+    const { psCommand } = await load(true);
+    expect(psCommand(`ps1`, `$env:SETUP_CODE='abc'; `)).toBe(`$env:SETUP_CODE='abc'; irm https://intentic.dev/connect.ps1 | iex`);
+});
+
+// `irm | iex` cannot forward parameters, so an argument-taking script has to be invoked as a scriptblock.
+test("a PowerShell script with arguments is fetched into a scriptblock", async () => {
+    const { psCommand } = await load(true);
+    expect(psCommand(`cleanupPs1`, ``, `-Slug sandbox-abc123 -Yes`)).toBe(
+        `& ([scriptblock]::Create((irm https://intentic.dev/cleanup.ps1))) -Slug sandbox-abc123 -Yes`,
+    );
+});
+
+test("local dev runs the PowerShell script by path, arguments appended", async () => {
+    const { psCommand } = await load(false);
+    expect(psCommand(`cleanupPs1`, ``, `-Slug sandbox-abc123 -Yes`)).toBe(`& ./_apps/site/public/scripts/cleanup.ps1 -Slug sandbox-abc123 -Yes`);
+});
+
 test("every script key points at a file that exists in the repo", async () => {
     const { SCRIPT_PATHS } = await load(false);
     const repoRoot = fileURLToPath(new URL(`../../../../`, import.meta.url));

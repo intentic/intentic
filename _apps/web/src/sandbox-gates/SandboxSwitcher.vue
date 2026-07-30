@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic-app/api-contract";
-import { Code } from "@intentic-app/ui";
+import { Code, Segmented, useOsPreference } from "@intentic-app/ui";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
@@ -10,7 +10,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useMissingSecretCount } from "../composables/secrets/useSecrets";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useAuth } from "../composables/useAuth";
-import { bashCommand } from "../environments/scriptCommand";
+import { bashCommand, psCommand } from "../environments/scriptCommand";
 
 /* Rail control to switch between the user's sandboxes (owned + shared) or add another. The active sandbox drives
  * the whole workspace (useSandbox) — selecting here re-points every sandbox-backed view + the liveness probe at
@@ -23,6 +23,7 @@ const router = useRouter();
 const route = useRoute();
 const { entitlements, upgradeOpen } = useAuth();
 const { missingRequiredCount } = useMissingSecretCount();
+const { cmdOs } = useOsPreference();
 const switcherLabel = computed(() => {
     const name = sandbox.active.value?.name ?? `Sandboxes`;
     return missingRequiredCount.value === 0
@@ -63,27 +64,36 @@ const addSandbox = (): void => {
 // Non-destructive either way — the daemon keeps running on its host; teardown is the cleanup script's job,
 // so the owner dialog surfaces that command (cleanupCommand) for the machine hosting it.
 const pending = ref<SandboxSummary | undefined>(undefined);
-const cleanupCommand = ref<string | undefined>(undefined);
+const cleanupSlug = ref<string | undefined>(undefined);
 
 // The container slug on the hosting machine: the hostname's first label (sandbox-<id> or a custom subdomain,
 // both equal connect.sh's SLUG), or — for a sandbox that never announced a daemonUrl — the same
 // sandbox-<sha256(token)[:12]> derivation Setup.vue pre-fills the subdomain with (must mirror the CLI).
 watch(pending, async (target) => {
     if (target === undefined || target.role !== `owner`) {
-        cleanupCommand.value = undefined;
+        cleanupSlug.value = undefined;
         return;
     }
-    let slug: string;
     if (target.daemonUrl !== null) {
-        slug = new URL(target.daemonUrl).hostname.split(`.`)[0] ?? ``;
-    } else {
-        const digest = await crypto.subtle.digest(`SHA-256`, new TextEncoder().encode(target.token));
-        const hex = Array.from(new Uint8Array(digest))
-            .map((b) => b.toString(16).padStart(2, `0`))
-            .join(``);
-        slug = sandboxSubdomain(hex.slice(0, 12));
+        cleanupSlug.value = new URL(target.daemonUrl).hostname.split(`.`)[0] ?? ``;
+        return;
     }
-    cleanupCommand.value = bashCommand(`cleanup`, ``, `${slug} -y`);
+    const digest = await crypto.subtle.digest(`SHA-256`, new TextEncoder().encode(target.token));
+    const hex = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, `0`))
+        .join(``);
+    cleanupSlug.value = sandboxSubdomain(hex.slice(0, 12));
+});
+
+// The host may be a Windows PC (the /setup command has a PowerShell lane, so it can be), where the POSIX
+// one-liner is unrunnable — so the teardown follows the same shared Linux/Windows preference every other
+// command surface uses. cleanup.ps1 takes PowerShell parameters, not cleanup.sh's positional slug + -y.
+const cleanupCommand = computed(() => {
+    const slug = cleanupSlug.value;
+    if (slug === undefined) {
+        return undefined;
+    }
+    return cmdOs.value === `windows` ? psCommand(`cleanupPs1`, ``, `-Slug ${slug} -Yes`) : bashCommand(`cleanup`, ``, `${slug} -y`);
 });
 
 const askRemove = (option: SandboxSummary): void => {
@@ -221,7 +231,15 @@ const confirmRemove = async (): Promise<void> => {
         </p>
         <template v-if="pending?.role === 'owner' && cleanupCommand !== undefined">
             <p class="mt-3 text-sm text-muted">To also remove it from the machine hosting it — including its files — run there:</p>
-            <Code class="mt-2" :code="cleanupCommand" lang="bash" label="Cleanup command" :wrap="true" />
+            <Segmented
+                class="mt-2"
+                v-model="cmdOs"
+                :options="[
+                    { label: `Linux / macOS`, value: `unix` },
+                    { label: `Windows (PowerShell)`, value: `windows` },
+                ]"
+            />
+            <Code class="mt-1.5" :code="cleanupCommand" :lang="cmdOs === `windows` ? `powershell` : `bash`" label="Cleanup command" :wrap="true" />
         </template>
         <template #footer>
             <Button label="Cancel" severity="secondary" :text="true" @click="pending = undefined" />

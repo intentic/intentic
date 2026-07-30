@@ -17,6 +17,7 @@ const SCRIPT_URLS = {
     rebuild: `https://intentic.dev/rebuild`,
     update: `https://intentic.dev/update`,
     cleanup: `https://intentic.dev/cleanup`,
+    cleanupPs1: `https://intentic.dev/cleanup.ps1`,
 } as const;
 
 export const SCRIPT_PATHS = {
@@ -31,6 +32,7 @@ export const SCRIPT_PATHS = {
     rebuild: `_apps/site/public/scripts/recreate.sh`,
     update: `_apps/site/public/scripts/recreate.sh`,
     cleanup: `_apps/site/public/scripts/cleanup.sh`,
+    cleanupPs1: `_apps/site/public/scripts/cleanup.ps1`,
 } as const;
 
 type ScriptKey = keyof typeof SCRIPT_URLS;
@@ -45,9 +47,16 @@ export const bashCommand = (key: ScriptKey, prefix: string, args: string): strin
         ? `curl -fsSL ${SCRIPT_URLS[key]} | ${prefix}sh${args ? ` -s -- ${args}` : ``}`
         : `${prefix}sh ${SCRIPT_PATHS[key]}${args ? ` ${args}` : ``}`;
 
-// A PowerShell one-liner. `env` is the `$env:X='..'; …; ` prefix (trailing space); inputs ride env, so there
-// are no positional args. Deploy does `irm <url> | iex`; dev calls the local script with `&`. Caveat: running
-// `& ./_apps/site/public/scripts/*.ps1` can trip PowerShell's ExecutionPolicy on Windows dev boxes (the
-// `irm | iex` form bypassed it) — a local-dev-only wrinkle; loosen the policy or drive the .sh variant under WSL.
-export const psCommand = (key: ScriptKey, env: string): string =>
-    environment.production ? `${env}irm ${SCRIPT_URLS[key]} | iex` : `${env}& ./${SCRIPT_PATHS[key]}`;
+// A PowerShell one-liner. `env` is the `$env:X='..'; …; ` prefix (trailing space); `args` are the script's own
+// PowerShell parameters (e.g. `-Slug abc -Yes`), for scripts that take parameters instead of env vars. Dev calls
+// the local script with `&`. Deploy fetches it — as `irm <url> | iex` when there is nothing to pass, else as
+// `& ([scriptblock]::Create((irm <url>))) ARGS`, because `iex` on a pipeline has no way to forward parameters to
+// the script it runs. Caveat: running `& ./_apps/site/public/scripts/*.ps1` can trip PowerShell's ExecutionPolicy
+// on Windows dev boxes (both fetched forms bypass it) — a local-dev-only wrinkle; loosen the policy or drive the
+// .sh variant under WSL.
+export const psCommand = (key: ScriptKey, env: string, args = ``): string => {
+    if (!environment.production) {
+        return `${env}& ./${SCRIPT_PATHS[key]}${args ? ` ${args}` : ``}`;
+    }
+    return args ? `${env}& ([scriptblock]::Create((irm ${SCRIPT_URLS[key]}))) ${args}` : `${env}irm ${SCRIPT_URLS[key]} | iex`;
+};
