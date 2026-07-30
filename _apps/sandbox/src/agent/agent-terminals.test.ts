@@ -96,6 +96,14 @@ test("the rtk backend leaves shell-interpreted commands bare — rtk execs its a
     }
 });
 
+// The master "Clean command output" switch, off: it beats the backend choice, so rtk does not get to compress
+// anyway. Without this the switch was inert under rtk — the UI greyed it out and the owner had no way to see
+// raw output at all.
+test("cleaning switched off leaves the command bare on the rtk backend too", async () => {
+    expect(await rewritten({ command: "git status" }, bashTmuxHooks("none"))).toContain("'git status'");
+    expect(await rewritten({ command: "git status" }, bashTmuxHooks("none"))).not.toContain("rtk");
+});
+
 test("the rtk backend's prefix rides inside the namespace with the command it wraps", async () => {
     const plan = { worktree: "/wt", root: "/work", modules: [] };
     const command = await rewritten({ command: "ls" }, bashTmuxHooks("rtk", [], { plan, anchor: { pid: 9, cwd: "/work", plan, dispose: () => {} } }));

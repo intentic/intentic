@@ -375,11 +375,14 @@ const { savings } = useSavings({});
 const savedTokens = computed(() => savedByCleaner(savings.value?.input));
 const cleaningOn = computed(() => (sandboxSettings.value?.outputCleaners ?? ``) !== `off`);
 
-/* WHETHER THE CONTROLS BELOW DO ANYTHING. Under the rtk backend the daemon sets INTENTIC_RUN_FILTER=0 and the
- * PreToolUse hook prefixes `rtk ` regardless of the spec (agent.ts cleanerEnv, agent-terminals.ts) — so the
- * cleaner checklist, the holdout and even the master toggle are inert, and rtk is compressing the output
- * whatever they say. Rendering them live was the screen's worst lie: sixteen switches, a measurement control,
- * and a savings figure that came from none of them. */
+/* WHETHER THE PER-CLEANER CONTROLS DO ANYTHING. Under the rtk backend the daemon sets INTENTIC_RUN_FILTER=0 and
+ * the PreToolUse hook prefixes `rtk ` instead (agent.ts outputFilter, agent-terminals.ts) — rtk brings its own
+ * handlers, so the checklist and the holdout are inert and rendering them live was the screen's worst lie:
+ * sixteen switches, a measurement control, and a savings figure that came from none of them.
+ *
+ * The MASTER toggle is not in that set. It says whether shell output is compressed at all, which the daemon now
+ * honours on both backends ("off" ⇒ no filter and no `rtk ` prefix) — greying it out under rtk made the one
+ * control that still worked look like a dead switch stuck in the on position. */
 const nativeFilter = computed(() => (sandboxSettings.value?.filterBackend ?? `native`) === `native`);
 
 // --- Import memory (was ImportMemoryDialog) ----------------------------------------------------------------
@@ -435,21 +438,17 @@ const importMemory = async (): Promise<void> => {
                 description="Trim noisy shell output before it reaches the assistant — fewer tokens, same signal (errors always kept)."
             >
                 <template #control>
-                    <ToggleSwitch
-                        :model-value="cleaningOn"
-                        :disabled="sandboxSettings === undefined || !nativeFilter"
-                        @update:model-value="toggleOutputCleaning"
-                    />
+                    <ToggleSwitch :model-value="cleaningOn" :disabled="sandboxSettings === undefined" @update:model-value="toggleOutputCleaning" />
                 </template>
                 <!-- Per-cleaner switches (the spec, as a checklist) — only meaningful while cleaning is on AND
                      the native filter is the one running. Under rtk none of this is wired to anything, so the
                      row says who is doing the work instead of offering controls that quietly do nothing. -->
-                <template v-if="sandboxSettings !== undefined" #below>
+                <template v-if="sandboxSettings !== undefined && cleaningOn" #below>
                     <p v-if="!nativeFilter" class="text-2xs text-muted">
-                        rtk is compressing output on this sandbox, and it brings its own handlers — these cleaners, the holdout and the toggle above
-                        don't apply until the backend below is back on Native.
+                        rtk is compressing output on this sandbox, and it brings its own handlers — the per-cleaner switches and the holdout apply
+                        only once the backend below is back on Native.
                     </p>
-                    <div v-else-if="cleaningOn" class="flex flex-col gap-2">
+                    <div v-else class="flex flex-col gap-2">
                         <div class="flex items-baseline justify-between gap-2">
                             <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Cleaners</p>
                             <!-- What each switch is WORTH, all-time, next to the switch itself. This is the

@@ -31,11 +31,13 @@ The active set is the **`outputCleaners`** per-sandbox setting (`.intentic/setti
 spec:
 
 - `""` — all cleaners on (default)
-- `"off"` — disable the filter entirely (raw baseline; sets `INTENTIC_RUN_FILTER=0`)
+- `"off"` — no compression at all (raw baseline). Beats `filterBackend`: the filter is off (`INTENTIC_RUN_FILTER=0`)
+  and the hook skips the `rtk ` prefix too, so this one switch means the same thing on either backend
 - `"git,pnpm"` — allow-list (only those)
 - `"-cap"` / `"-dedup,-redact"` — default-minus (all except)
 
-The daemon threads it to the filter as `INTENTIC_OUTPUT_CLEANERS` on the SDK env (`agent.ts` `cleanerEnv`). The UI
+The daemon resolves the two settings into one active backend (`agent.ts` `outputFilter`: `native` | `rtk` | `none`)
+and threads the spec to the filter as `INTENTIC_OUTPUT_CLEANERS` on the SDK env (`cleanerEnv`). The UI
 exposes a master on/off in the Sandbox → Agent settings; finer specs are set via the `/settings` route for
 benchmarking. Unknown tokens are ignored (fail-open).
 

@@ -30,7 +30,7 @@ import { installSteeringHooks } from "./agent-installs.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
-import { agentSessionName, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
+import { agentSessionName, bashTmuxHooks, type FilterBackend, tmuxRunEnabled } from "./agent-terminals.js";
 import { EventQueue } from "./event-queue.js";
 import { harnessEnv } from "./harness-credentials.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
@@ -725,16 +725,20 @@ const errorMessage = (error: unknown, stderr: string): string => {
     return detail ? `${base}: ${detail}` : base;
 };
 
-// Map the output-cleaner settings to the env the Bash output filter reads. The rtk backend runs the compression
-// itself (the hook prefixes `rtk `), so the native filter is turned off and the native-only knobs (spec, holdout)
-// don't apply. On the native backend: "off" disables the filter wholesale (raw baseline), a spec selects
-// cleaners, a non-zero holdout bypasses that fraction of commands as a measured control, and empty leaves the
-// filter at its all-on default.
+/* WHAT COMPRESSES THIS TURN'S SHELL OUTPUT — the master toggle first, the backend choice second. "off" means
+ * "no compression at all", so it beats the backend: the native filter stays off AND the hook skips the `rtk `
+ * prefix. Reading it the other way round is what made the toggle inert under rtk — rtk kept compressing whatever
+ * the switch said, so the UI had to grey the switch out, which reads as a broken control rather than an
+ * unreachable one. Per-cleaner spec and holdout remain native-only: rtk brings its own handlers. */
+export const outputFilter = (request: AgentRequest): FilterBackend =>
+    request.outputCleaners === "off" ? "none" : (request.filterBackend ?? "native");
+
+// Map the output-cleaner settings to the env the Bash output filter reads. Only the native backend runs the
+// filter at all: a spec selects cleaners, a non-zero holdout bypasses that fraction of commands as a measured
+// control, and empty leaves it at its all-on default. Under rtk (which compresses in the hook) or "none" the
+// filter is turned off outright.
 const cleanerEnv = (request: AgentRequest): Record<string, string> => {
-    if (request.filterBackend === "rtk") {
-        return { INTENTIC_RUN_FILTER: "0" };
-    }
-    if (request.outputCleaners === "off") {
+    if (outputFilter(request) !== "native") {
         return { INTENTIC_RUN_FILTER: "0" };
     }
     return {
@@ -857,7 +861,7 @@ const baseOptions = (
     // same problem noticed one step earlier. Diagnostics: every native Edit/Write is type-checked by the
     // resident lsp service and compile errors ride back as additionalContext.
     hooks: mergeHooks(
-        tmuxEnabled ? bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {}), request.isolation) : {},
+        tmuxEnabled ? bashTmuxHooks(outputFilter(request), Object.keys(request.cliEnv ?? {}), request.isolation) : {},
         installSteeringHooks(),
         // The worktree the namespace could not build. Only when this turn is isolated AND unanchored: with an
         // anchor the paths already mean the worktree, and rewriting them a second time would aim the tool at a

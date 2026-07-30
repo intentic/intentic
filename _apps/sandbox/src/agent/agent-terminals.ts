@@ -66,12 +66,16 @@ const rtkPrefixable = (command: string): boolean => {
     return first !== "" && !first.includes("=") && !/^[<>({}![]/.test(first) && !RTK_SHELL_ONLY.has(first);
 };
 
-// When filterBackend is "rtk", a prefixable command is rewritten to `rtk <cmd>` before it's wrapped, so rtk
-// runs it and compresses the output. The native output filter is turned off for this backend (cleanerEnv sets
-// INTENTIC_RUN_FILTER=0), so rtk owns the compression and tmux-run just tees rtk's already-compact output.
-// "native"/undefined keeps today's path.
+// What compresses the agent's shell output: the native filter (agent-output-filter, via tmux-run), rtk, or
+// nothing at all when the owner turned cleaning off. agent.ts `outputFilter` resolves the settings into one.
+export type FilterBackend = "native" | "rtk" | "none";
+
+// Under "rtk", a prefixable command is rewritten to `rtk <cmd>` before it's wrapped, so rtk runs it and
+// compresses the output; the native output filter is turned off for it (cleanerEnv sets INTENTIC_RUN_FILTER=0),
+// so rtk owns the compression and tmux-run just tees rtk's already-compact output. "native"/undefined keeps
+// today's path, and "none" — cleaning switched off — leaves the command exactly as the agent wrote it.
 export const bashTmuxHooks = (
-    filterBackend?: "native" | "rtk",
+    filterBackend?: FilterBackend,
     envKeys: readonly string[] = [],
     /* An isolated turn's Bash must land in the same tree as its Edit/Write, or the two tools disagree about
      * what /work is — the agent edits its worktree and `sed -i` on the same path rewrites the shared tree.

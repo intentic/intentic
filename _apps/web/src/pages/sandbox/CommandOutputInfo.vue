@@ -46,7 +46,8 @@ const GLOBAL_CLEANERS = [
 
 const BACKENDS = [
     [`Who compresses`, `The built-in cleaner`, `The rtk binary`],
-    [`The switches above`, `Apply`, `Ignored`],
+    [`Cleaning on/off`, `Applies`, `Applies`],
+    [`Per-cleaner switches`, `Apply`, `Ignored — rtk brings its own`],
     [`Holdout`, `Applies`, `Ignored`],
     [`Needs`, `Nothing — it ships with the sandbox`, `Nothing — it ships with the sandbox`],
 ];
