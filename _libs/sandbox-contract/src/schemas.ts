@@ -2071,12 +2071,15 @@ export type PipelineRun = z.infer<typeof PipelineRunSchema>;
 
 // One job inside a pipeline run. The view fetches these lazily (one extra call per visible run) so the list
 // endpoint stays cheap. Both GitHub Actions jobs and GitLab CI jobs normalize onto these fields.
-// `stage` groups jobs into the pipeline's sequential stages (GitLab's native concept); GitHub Actions jobs
-// each become their own single-job stage since Actions has no stage grouping.
+// `stage` is GitLab's native sequential grouping and is absent on GitHub — the Actions jobs API exposes no
+// `stage` and no `needs`, so the view instead layers GitHub jobs into execution waves off the timestamps
+// below (overlapping runtimes ⇒ ran in parallel). Both are epoch ms; absent while a job is still queued.
 export const PipelineJobSchema = z.object({
     name: z.string(),
     status: PipelineStatusSchema,
     stage: z.string().optional(),
+    startedAt: z.number().optional(),
+    finishedAt: z.number().optional(),
     durationSeconds: z.number().optional(),
 });
 export type PipelineJob = z.infer<typeof PipelineJobSchema>;

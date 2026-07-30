@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { Button, Icon, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
+import { Button, Icon, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import PipelineDagGraph from "./PipelineDagGraph.vue";
 import PipelineGraph from "./PipelineGraph.vue";
+import { pipelineStages } from "./pipelineDag";
+import { formatDuration, STATUS_TONE } from "./statusVisual";
 import { useRunJobs } from "./useRunJobs";
 
-/* One pipeline run row: auto-fetches its jobs on mount so the inline graph renders without a click,
- * and offers an expand toggle for the detailed job list. The parent owns the action callbacks. */
+/* One pipeline run row. It fetches its own jobs on mount so the inline stage circles are there to read
+ * without a click, and expands into the full job DAG. Stages are derived once here and handed to both
+ * renderers. The parent owns the action callbacks. */
 
 const props = defineProps<{
     run: PipelineRun;
@@ -18,65 +22,30 @@ const emit = defineEmits<{
     fix: [run: PipelineRun];
 }>();
 
-// Auto-fetch jobs for this run (vue-query caches per queryKey, so each row gets its own cache entry).
+// vue-query caches per queryKey, so each row owns its own entry and remounts are free.
 const runRef = computed(() => props.run);
 const { jobs, isLoading: jobsLoading } = useRunJobs(runRef);
+const stages = computed(() => pipelineStages(jobs.value));
 
-// Expand/collapse for detailed job list.
 const expanded = ref(false);
 
+// The run's identity for the parent's in-flight action tracking. A row instance is keyed to one run, so this
+// never has to recompute.
 const actionKey = `${props.run.host}:${props.run.project}:${props.run.runId}`;
 
-const statusVariant = (status: PipelineRun[`status`]): StatusVariant =>
-    status === `success` ? `success` : status === `failed` ? `danger` : status === `running` ? `info` : `neutral`;
-const statusLabel = (status: PipelineRun[`status`]): string =>
-    status === `success` ? `Passed` : status === `failed` ? `Failed` : status === `running` ? `Running` : status === `canceled` ? `Canceled` : `Skipped`;
-const statusIcon = (status: PipelineRun[`status`]): string =>
-    status === `success` ? `check-circle` : status === `failed` ? `exclamation-circle` : status === `running` ? `spinner` : status === `canceled` ? `stop` : `forward`;
-
-const borderColor = computed(() =>
-    props.run.status === `success`
-        ? `border-l-success`
-        : props.run.status === `failed`
-          ? `border-l-danger`
-          : props.run.status === `running`
-            ? `border-l-info`
-            : `border-l-subtle/40`,
-);
-
-const duration = computed(() => {
-    if (props.run.durationSeconds === undefined) return undefined;
-    const m = Math.floor(props.run.durationSeconds / 60);
-    return m > 0 ? `${m}m ${props.run.durationSeconds % 60}s` : `${props.run.durationSeconds}s`;
-});
-
-const jobDuration = (seconds: number | undefined): string | undefined => {
-    if (seconds === undefined) return undefined;
-    const m = Math.floor(seconds / 60);
-    return m > 0 ? `${m}m ${seconds % 60}s` : `${seconds}s`;
-};
+const tone = computed(() => STATUS_TONE[props.run.status]);
+const duration = computed(() => formatDuration(props.run.durationSeconds));
+const jobCount = computed(() => stages.value.reduce((total, stage) => total + stage.jobs.length, 0));
 </script>
 
 <template>
     <div
         class="group border-l-[3px] transition-colors"
-        :class="[borderColor, expanded ? `bg-content/[0.02]` : `hover:bg-content/[0.02]`]"
+        :class="[tone.rowBorder, expanded ? `bg-content/[0.02]` : `hover:bg-content/[0.02]`]"
     >
         <!-- Run header row -->
         <div class="flex w-full items-center gap-3 px-4 py-3">
-            <!-- Status icon -->
-            <div class="flex shrink-0 items-center">
-                <Icon
-                    :name="statusIcon(run.status)"
-                    class="text-base"
-                    :class="[
-                        run.status === `success` ? `text-success` : ``,
-                        run.status === `failed` ? `text-danger` : ``,
-                        run.status === `running` ? `text-info animate-spin` : ``,
-                        run.status === `canceled` || run.status === `skipped` ? `text-subtle` : ``,
-                    ]"
-                />
-            </div>
+            <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />
 
             <!-- Pipeline info -->
             <div class="min-w-0 flex-1">
@@ -89,7 +58,7 @@ const jobDuration = (seconds: number | undefined): string | undefined => {
                     >
                         {{ run.title ?? `${run.branch} @ ${run.sha.slice(0, 7)}` }}
                     </a>
-                    <StatusBadge :variant="statusVariant(run.status)" :label="statusLabel(run.status)" size="xs" />
+                    <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" />
                 </div>
                 <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
                     <span class="inline-flex items-center gap-1">
@@ -104,15 +73,15 @@ const jobDuration = (seconds: number | undefined): string | undefined => {
                 </div>
             </div>
 
-            <!-- Inline pipeline graph (stages column) -->
+            <!-- Inline stage graph -->
             <div class="flex shrink-0 items-center">
-                <PipelineGraph v-if="jobs.length > 0" :jobs="jobs" />
+                <PipelineGraph v-if="stages.length > 0" :stages="stages" />
                 <div v-else-if="jobsLoading" class="flex items-center gap-1">
                     <span v-for="i in 3" :key="i" class="h-5 w-5 animate-pulse rounded-full bg-subtle/10"></span>
                 </div>
             </div>
 
-            <!-- Right side: time + actions -->
+            <!-- Time + actions -->
             <div class="flex shrink-0 items-center gap-2">
                 <span class="text-2xs text-subtle" :title="new Date(run.createdAt).toLocaleString()">
                     {{ timeAgo(run.createdAt) }}
@@ -147,7 +116,12 @@ const jobDuration = (seconds: number | undefined): string | undefined => {
                         @click="emit(`rerun`, run)"
                     />
                 </div>
-                <button type="button" class="cursor-pointer p-1" @click="expanded = !expanded">
+                <button
+                    type="button"
+                    class="cursor-pointer p-1"
+                    :title="expanded ? `Hide job graph` : `Show job graph`"
+                    @click="expanded = !expanded"
+                >
                     <Icon
                         name="chevron-down"
                         class="text-2xs text-subtle transition-transform"
@@ -157,53 +131,22 @@ const jobDuration = (seconds: number | undefined): string | undefined => {
             </div>
         </div>
 
-        <!-- Expanded job detail panel -->
+        <!-- Expanded: the run's job graph -->
         <div v-if="expanded" class="border-t border-line px-4 pb-4 pt-3">
             <div v-if="jobsLoading" class="flex items-center gap-2 py-3 text-xs text-muted">
                 <Icon name="spinner" class="animate-spin text-sm" />
                 Loading jobs...
             </div>
 
-            <div v-else-if="jobs.length > 0">
-                <div class="mb-2 text-2xs font-semibold uppercase tracking-wide text-subtle">Pipeline jobs</div>
-                <!-- Expanded flow: job cards connected by vertical lines, matching the second screenshot -->
-                <div class="flex flex-wrap items-center gap-2">
-                    <template v-for="(job, idx) in jobs" :key="job.name">
-                        <!-- Connector -->
-                        <div v-if="idx > 0" class="flex items-center">
-                            <div class="h-px w-4 bg-line"></div>
-                            <div class="h-1.5 w-1.5 rounded-full bg-line"></div>
-                            <div class="h-px w-4 bg-line"></div>
-                        </div>
-                        <!-- Job card -->
-                        <div
-                            class="flex items-center gap-2 rounded-lg border px-3 py-1.5"
-                            :class="[
-                                job.status === `success` ? `border-success/20 bg-success/5` : ``,
-                                job.status === `failed` ? `border-danger/20 bg-danger/5` : ``,
-                                job.status === `running` ? `border-info/20 bg-info/5` : ``,
-                                job.status === `canceled` || job.status === `skipped` ? `border-line bg-canvas` : ``,
-                            ]"
-                        >
-                            <Icon
-                                :name="statusIcon(job.status)"
-                                class="text-xs"
-                                :class="[
-                                    job.status === `success` ? `text-success` : ``,
-                                    job.status === `failed` ? `text-danger` : ``,
-                                    job.status === `running` ? `text-info animate-spin` : ``,
-                                    job.status === `canceled` || job.status === `skipped` ? `text-subtle` : ``,
-                                ]"
-                            />
-                            <span class="text-xs font-medium" :class="job.status === `failed` ? `text-danger` : `text-content`">
-                                {{ job.name }}
-                            </span>
-                            <span v-if="jobDuration(job.durationSeconds)" class="text-2xs text-subtle">
-                                {{ jobDuration(job.durationSeconds) }}
-                            </span>
-                        </div>
-                    </template>
+            <div v-else-if="stages.length > 0" class="flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-2xs font-semibold uppercase tracking-wide text-subtle">Job graph</span>
+                    <span class="text-2xs text-subtle">
+                        {{ stages.length }} {{ stages.length === 1 ? `stage` : `stages` }} ·
+                        {{ jobCount }} {{ jobCount === 1 ? `job` : `jobs` }} · drag to pan, scroll to zoom
+                    </span>
                 </div>
+                <PipelineDagGraph :stages="stages" />
             </div>
 
             <div v-else-if="run.failedJobs?.length">

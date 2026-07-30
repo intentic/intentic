@@ -138,6 +138,8 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
             return listed.workflow_runs.map((run) => githubRun(project, run));
         },
         failedJobs: async (project, runId) => (await jobsOf(project, runId)).map((job) => job.name),
+        // No `stage` is emitted: Actions has no stage concept, and faking one per job would defeat the
+        // view's wave layering. The timestamps are what it layers on instead.
         allJobs: async (project, runId) => {
             const listed = await json<{ jobs: { id: number; name: string; status: string; conclusion: string | null; started_at: string | null; completed_at: string | null }[] }>(
                 await fetchFn(githubApi(project, `/actions/runs/${runId}/jobs?per_page=100`), { headers: githubHeaders(project.account.token) }),
@@ -147,7 +149,13 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 const status = githubStatus(job.status, job.conclusion);
                 const started = epoch(job.started_at);
                 const completed = epoch(job.completed_at);
-                const result: PipelineJob = { name: job.name, status, stage: job.name };
+                const result: PipelineJob = { name: job.name, status };
+                if (started > 0) {
+                    result.startedAt = started;
+                }
+                if (completed > 0) {
+                    result.finishedAt = completed;
+                }
                 if (status !== "running" && completed > started) {
                     result.durationSeconds = Math.round((completed - started) / 1000);
                 }
@@ -320,13 +328,23 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
             return listed.map((pipeline) => gitlabRun(project, pipeline));
         },
         failedJobs: async (project, runId) => (await failedJobsOf(project, runId)).map((job) => job.name),
+        // `stage` is native here, so the view groups by it directly; the timestamps still ride along to order
+        // the stages by when they actually started.
         allJobs: async (project, runId) => {
-            const listed = await json<{ id: number; name: string; status: string; stage: string; duration: number | null }[]>(
+            const listed = await json<{ id: number; name: string; status: string; stage: string; duration: number | null; started_at: string | null; finished_at: string | null }[]>(
                 await fetchFn(gitlabApi(project, `/pipelines/${runId}/jobs?per_page=100`), { headers: gitlabHeaders(project) }),
                 "gitlab all jobs",
             );
             return listed.map((job) => {
+                const started = epoch(job.started_at);
+                const finished = epoch(job.finished_at);
                 const result: PipelineJob = { name: job.name, status: gitlabStatus(job.status), stage: job.stage };
+                if (started > 0) {
+                    result.startedAt = started;
+                }
+                if (finished > 0) {
+                    result.finishedAt = finished;
+                }
                 if (job.duration !== null) {
                     result.durationSeconds = Math.round(job.duration);
                 }

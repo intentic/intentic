@@ -80,7 +80,8 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                         <span class="mt-1 block text-xs text-muted">
                             Every workspace repo whose remote lands on a connected GitHub/GitLab account is watched: completed pipelines arrive over a
                             webhook, can wake <b>CI automations</b> (see Automations), and land here. <b>Fix with agent</b> opens an isolated agent
-                            conversation seeded with the failed jobs' logs. Click a run to expand its job breakdown.
+                            conversation seeded with the failed jobs' logs. Each row's circles are its stages — click one for that stage's jobs, or
+                            expand the row for the full job graph.
                         </span>
                     </InfoHint>
                 </template>
