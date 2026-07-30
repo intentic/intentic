@@ -20,7 +20,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                     (capability) =>
                         capability.kind === `cli` && (capability.config[`provider`] === `github` || capability.config[`provider`] === `gitlab`),
                 )
-                    ? [{ key: `pipelines`, title: `Pipelines`, icon: `bolt` }]
+                    ? [{ key: `pipelines`, title: `Pipelines`, icon: `sitemap` }]
                     : [],
             // Unacknowledged breakages only — see ciStreaks.ts for why this counts streaks and not failures.
             badge: () => ciBadge(),
