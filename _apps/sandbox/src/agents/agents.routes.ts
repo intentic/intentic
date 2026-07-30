@@ -100,12 +100,20 @@ export const createAgentsRoutes = (services: Services) => {
         // The transcript a card redraws, read root-scoped: the workspace root is the working dir every turn
         // saw, so restored tool locations and attachment paths come back relative to the same tree they
         // streamed against.
+        /* A conversation's transcript, for a client opening its tab. Answers for EVERY agent — the transcript is
+         * the daemon's own record now (sessions/transcript-record.ts), so it no longer depends on the agent
+         * running a harness that keeps a readable session store. This route used to return `{messages: []}` for
+         * anything `sdkSessionIdOf` had no answer for, which is every codex/grok NATIVE and every ACP agent:
+         * their chats opened blank, permanently, with the work sitting on disk the whole time.
+         *
+         * `sessionId` still comes from the SDK-shaped lookup, because it answers a different question — which
+         * session the client should ADOPT so its next turn resumes the right thread — and only the Claude Code
+         * loop has one of those to hand over. */
         transcript: i.transcript.handler(async ({ input }) => {
-            const sessionId = sdkSessionIdOf(entryOf(input.id));
-            if (sessionId === undefined) {
-                return { messages: [] };
-            }
-            return { sessionId, messages: await services.sessions.read(services.workspace.root, sessionId) };
+            const agent = entryOf(input.id);
+            const sessionId = sdkSessionIdOf(agent);
+            const messages = await services.transcripts.read(agent);
+            return { ...(sessionId !== undefined ? { sessionId } : {}), messages };
         }),
         // Legal mid-turn (no notRunning): a title touches no worktree state, and the registry re-reads the
         // entry at begin/finish, so the rename survives a running turn.

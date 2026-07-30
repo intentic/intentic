@@ -7,6 +7,7 @@ import { fileApprovalsStore } from "../automations/approvals-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
+import { fileTranscriptRecord } from "../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../settings/settings-store.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
 import { fileTurnJournal, type JournalledTurn } from "./turn-journal.js";
@@ -23,16 +24,22 @@ import {
     RESUME_DELAY_MS,
     resumeInterruptedTurns,
     resumeTurnOf,
+    startConversationTurn,
 } from "./turn-resume.js";
 
-// The scheduler touches settings/push/logger (and accountLimitReset reads claudeUsage); the fake stays that small.
-const fakeServices = (root: string, usage: Record<string, AccountUsage> = {}): Services =>
-    ({
+// The scheduler touches settings/push/logger (and accountLimitReset reads claudeUsage); the fake stays that
+// small, plus the transcript record every started turn writes its settled frames to (startConversationTurn).
+const fakeServices = (root: string, usage: Record<string, AccountUsage> = {}): Services => {
+    const record = fileTranscriptRecord(join(root, "transcripts"));
+    return {
         sandboxSettings: fileSandboxSettingsStore(join(root, "settings.json")),
         claudeUsage: { read: async () => usage },
         pushSender: { notifyIfAway: async () => {} },
         logger: { info: () => {}, warn: () => {}, error: () => {} },
-    }) as unknown as Services;
+        workspace: { root },
+        transcripts: { append: (agent, messages) => record.append(agent.id, messages, async () => []) },
+    } as unknown as Services;
+};
 
 const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
     async function* (_services, input) {
@@ -48,6 +55,27 @@ const hit = (conversationId: string, extra: Partial<LimitHit> = {}): LimitHit =>
 
 // The instant the scheduler's gate opens for a resetsAt of 1_000 (epoch seconds → ms, plus the fire delay).
 const DUE_AT = 1_000 * 1000 + RESUME_DELAY_MS;
+
+/* startConversationTurn is THE one way a conversation's turn starts, which is why the transcript hangs off it:
+ * every provider goes through here, so every provider's conversation is readable afterwards. Run on codex/native
+ * on purpose — the pair with no Claude Code session store behind it, whose chats opened blank for exactly as
+ * long as the transcript was something the daemon read back out of a provider instead of writing down. */
+test("a started turn records its settled transcript, whatever provider ran it", async () => {
+    const root = mkdtempSync(join(tmpdir(), "turn-resume-"));
+    const record = fileTranscriptRecord(join(root, "transcripts"));
+    const started = startConversationTurn(fakeServices(root), fakeWake([], [{ kind: "delta", text: "shipped" }, { kind: "done" }]), {
+        prompt: "ship it",
+        conversationId: "tr-record",
+        agent: "codex",
+        harness: "native",
+    });
+    expect(started).toBeDefined();
+    await vi.waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2));
+    expect(await record.read("tr-record")).toEqual([
+        { role: "user", text: "ship it" },
+        { role: "assistant", text: "shipped" },
+    ]);
+});
 
 test("resumeTurnOf repeats the original request under the resume note and returns to the failed turn's session", () => {
     const turn = resumeTurnOf(

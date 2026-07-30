@@ -8,13 +8,15 @@ import type { TurnJournal } from "./turn-journal.js";
  * second window, or another device attaches the same way, which is what makes a turn survive all of them.
  *
  * A finished run is retained briefly so a client that lost its stream near the end still replays the tail;
- * after that the session store is the record and attach reports NOT_FOUND. Keyed by conversationId — the
+ * after that the transcript record is the copy and attach reports NOT_FOUND. Keyed by conversationId — the
  * daemon is single-tenant behind its authenticated tunnel (same bet as agent-steering).
  *
- * The frame log is in memory, and deliberately so: the transcript's durable copy is the provider's own session
- * store, which every client replays from before it attaches. What the run writes down instead is the TURN — one
- * journal entry naming what to run again, held for exactly as long as the run is in flight (see turn-journal.ts).
- * That is what carries a turn across the death of this process, which the frame log never could. */
+ * The frame log is in memory; what makes that safe is that the settled turn is written down on its way out. It
+ * used to be the PROVIDER's session store that held the durable copy, which meant a conversation could only be
+ * reopened if its provider kept one and the daemon still held the right key into it — the standing cause of
+ * "the chat opens empty" (see sessions/transcript-record.ts). Two things now leave this pump: the TURN, one
+ * journal entry naming what to run again while it is in flight (turn-journal.ts), and the TRANSCRIPT, the
+ * frames it produced, once it is whole. */
 
 // The turn generator a run pumps — streamAgent's shape, injected to keep this module cycle-free of
 // agent.routes (and swappable in tests).
@@ -56,6 +58,12 @@ export class TurnRun {
     // The log length — a frame's seq is its 1-based position, so this is also the last stamped seq.
     get seq(): number {
         return this.frames.length;
+    }
+
+    // Everything this run pumped, for the transcript sink to write down once the turn is whole. The log stays
+    // the run's own — this hands it out to read, not to hold.
+    get events(): readonly AgentEvent[] {
+        return this.frames;
     }
 
     push(event: AgentEvent): void {
@@ -114,6 +122,10 @@ export interface RunOptions {
     // Where the in-flight turn is written down so a daemon death doesn't take it with it. Injected like TurnFn,
     // for the same reason: this module stays free of the composition (and swappable in tests).
     readonly journal?: TurnJournal;
+    // Where the SETTLED turn is written down — the conversation's durable transcript, the copy every provider
+    // gets whether or not it keeps a session store of its own (sessions/transcript-record.ts). Handed the raw
+    // frame log: what a turn READS BACK as is the caller's shape to decide, not this pump's.
+    readonly transcript?: (events: readonly AgentEvent[]) => Promise<void>;
     // How many boots have already re-run this turn — carried through so a resume that dies again is not resumed
     // a third time (see turn-resume's boot pass). A first-hand turn starts at 0.
     readonly attempts?: number;
@@ -126,7 +138,7 @@ export interface RunOptions {
 export function startTurnRun(
     turnFn: TurnFn,
     input: AgentTurn & { conversationId: string },
-    { observer, journal, attempts = 0 }: RunOptions = {},
+    { observer, journal, transcript, attempts = 0 }: RunOptions = {},
 ): TurnRun | undefined {
     sweep();
     const existing = runs.get(input.conversationId);
@@ -205,6 +217,18 @@ export function startTurnRun(
             run.push({ kind: "done" });
         } finally {
             run.finish();
+            /* The conversation's durable transcript, written once the turn is WHOLE — a settled failure and an
+             * abort included, because both are things the user watched happen and will look for when they come
+             * back. Guarded on both sides like `tell`: a sink that throws where it stands and one whose write
+             * rejects are the same kind of side-channel failure, and neither may reach a turn that is otherwise
+             * finished. The cost is one turn missing from a conversation's history. */
+            if (transcript !== undefined) {
+                try {
+                    void transcript(run.events).catch(() => undefined);
+                } catch {
+                    // Nothing to do and nowhere to report it — the turn is the thing that matters.
+                }
+            }
             // This turn is no longer in flight, however it ended — a failure and an abort are both settled
             // outcomes the user has seen, and only a turn nobody got to see the end of deserves resuming.
             // Queued behind the writes above, never racing them (see the note where journalOp is defined).

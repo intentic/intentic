@@ -671,10 +671,14 @@ describe(`abandoned drafts`, () => {
 });
 
 /* Opening a card on the fleet board resolves the agent's current transcript by durable conversation/worktree
- * identity — the Claude Code Agent SDK store may hold several runtime sessions for it. Gating replay on `provider ===
- * 'claude'` opened a finished Gemini (or Kimi) agent as an empty "start a conversation with Google" panel while
- * its whole transcript sat readable on the daemon: neither provider has a native runtime, so both ALWAYS run the
- * Claude Code loop whatever harness the registry recorded. */
+ * identity — the daemon may hold several runtime sessions for it.
+ *
+ * There is no provider gate here at all, and that is the fix rather than an omission. It was `provider ===
+ * 'claude'` once, which opened a finished Gemini (or Kimi) agent as an empty "start a conversation with Google"
+ * panel; widening it to `runsClaudeCode` fixed those two and left codex/grok NATIVE and every ACP agent blank
+ * for the same reason, one provider later. Each widening asked "does this agent's provider keep a store we can
+ * read?", when the answer that ends the bug is that the DAEMON keeps the store — it records what it streams
+ * (sessions/transcript-record.ts), so the question no longer has to be asked. */
 describe(`opening a fleet agent`, () => {
     beforeEach(() => {
         storage.clear();
@@ -751,12 +755,14 @@ describe(`opening a fleet agent`, () => {
         expect(openAgentConversation({ id: `a5`, provider: `claude`, harness: `native`, registered: false }).model.value).toBe(`claude-fable-5`);
     });
 
-    it(`leaves a NATIVE Codex agent alone — its thread lives in Codex's own rollout store, not the SDK's`, async () => {
+    // The agent this whole change exists for. A native Codex turn runs no Claude Code loop and files no SDK
+    // session, and the tab used to return before it asked anything — so an hour of work opened as "Start a
+    // conversation with Codex." The tab asks now, like every other one.
+    it(`replays a NATIVE Codex agent — the daemon holds what it streamed, whatever ran the turn`, async () => {
         const conversation = openAgentConversation({ id: `a3`, sessionId: `sess-n`, provider: `codex`, harness: `native` });
 
-        await vi.waitFor(() => expect(sandboxRequestMock).toHaveBeenCalledWith(`/agent/attach`, expect.anything()));
-        expect(sandboxRequestMock).not.toHaveBeenCalledWith(`/agents/a3/transcript`);
-        expect(conversation.messages.value).toHaveLength(0);
+        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a3/transcript`);
     });
 });
 

@@ -108,6 +108,8 @@ import {
     workspaceSessionExists,
 } from "./sessions/sessions.js";
 import { readSessionPrompts } from "./sessions/prompt-index.js";
+import { agentTranscript, type AgentTranscriptDeps, storedTranscript, type TranscriptAgent } from "./sessions/agent-transcript.js";
+import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
 import { postToPlatform, type PlatformResponse } from "./platform/platform-client.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
@@ -356,6 +358,14 @@ export interface Services {
         readonly prompts: (dir: string, id: string) => Promise<readonly string[]>;
         readonly exists: (dir: string, id: string) => Promise<boolean>;
     };
+    /* A CONVERSATION's transcript, as opposed to a SESSION's — keyed by conversationId, which is the identity
+     * that survives everything a session id does not (an archive, a worktree retired, a runtime swapped, a
+     * provider with no session store at all). Written by every settled turn, read by /agents/:id/transcript.
+     * See sessions/transcript-record.ts for why this stopped being the provider's job. */
+    readonly transcripts: {
+        readonly read: (agent: TranscriptAgent) => Promise<RestoredMessage[]>;
+        readonly append: (agent: TranscriptAgent, messages: readonly RestoredMessage[]) => Promise<void>;
+    };
     // platformHostTunnel relays to the platform (connect-token auth) to mint an intentic-provided host tunnel,
     // which needs intentic's platform Cloudflare account the daemon doesn't hold.
     readonly platformHostTunnel: (hostName: string) => Promise<PlatformResponse>;
@@ -452,6 +462,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
     );
     const ciStore = fileCiStore(join(workspace.root, ".intentic", "ci.json"));
+    // Bound once, and against the SAME registry instance above — `sessionIdOf` answers from live turn state as
+    // well as the persisted entry, so a second registry would report no session for a first turn still running.
+    const transcriptDeps: AgentTranscriptDeps = {
+        record: fileTranscriptRecord(join(config.historyRoot, "transcripts")),
+        root: workspace.root,
+        codexHome: codexBase,
+        sessionIdOf: agents.sessionIdOf,
+        readClaudeSession: readWorkspaceSession,
+    };
 
     return {
         config,
@@ -579,6 +598,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
             search: searchWorkspaceSessions,
             prompts: readSessionPrompts,
             exists: workspaceSessionExists,
+        },
+        transcripts: {
+            read: (agent) => agentTranscript(transcriptDeps, agent),
+            // storedTranscript, not agentTranscript, as the opening adoption: the record is empty by definition
+            // at the moment it opens, and what a conversation had before it is exactly what the provider store
+            // holds. See TranscriptRecord.append.
+            append: (agent, messages) => transcriptDeps.record.append(agent.id, messages, () => storedTranscript(transcriptDeps, agent)),
         },
         platformHostTunnel: (hostName) => postToPlatform(config, "/sandbox/host-tunnel", { hostName }),
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),

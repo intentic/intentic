@@ -37,8 +37,9 @@ interface AnthropicMessageLike {
 
 // List the workspace's past Claude sessions (newest first, capped) for the history menu. Sessions are
 // persisted by the SDK keyed on the working dir, so passing the workspace root scopes them to this sandbox.
-// ponytail: Claude sessions only — Codex threads persist as rollout JSONL under CODEX_HOME/sessions and a live
-// Codex tab resumes fine; merge them here with a provider tag when users ask for Codex history.
+// ponytail: Claude sessions only — this is the HISTORY MENU, which lists runtime sessions rather than fleet
+// conversations (those are the board's, and read back through /agents/:id/transcript whatever served them).
+// Merge Codex threads here with a provider tag when users ask for Codex history.
 // The list title a stored first prompt yields: the user's words with the daemon's injections removed — an
 // opening turn preamble ("Dependencies are NOT installed…") and the trailing attachment note. An
 // attachment-only opener is titled by what was dropped in, matching what the send derived locally.

@@ -3,6 +3,7 @@ import { fireAutomation, type WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
+import { restoredTurn } from "../sessions/turn-transcript.js";
 import { outageRetryDue, outageRetryFired } from "./provider-health.js";
 import type { JournalEntry, JournalledTurn } from "./turn-journal.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
@@ -233,6 +234,13 @@ export const startConversationTurn = (
     const { conversationId, prompt } = turn;
     return startTurnRun((input, signal) => wake(services, input, signal), turn, {
         journal: services.turnJournal,
+        // The provider/harness normalization is the same one streamAgent applies (absent ⇒ claude/native), so a
+        // turn records against the identity it actually ran under.
+        transcript: (events) =>
+            services.transcripts.append(
+                { id: conversationId, provider: turn.agent ?? "claude", harness: turn.harness ?? "native" },
+                restoredTurn(turn, events, services.workspace.root),
+            ),
         attempts,
         observer: {
             awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),

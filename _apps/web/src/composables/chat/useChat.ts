@@ -11,7 +11,6 @@ import {
     planParts,
     providerLabel,
     type RestoredMessage,
-    runsClaudeCode,
     type TranslatorAccounts,
     type UsageAccount,
 } from "@intentic/sandbox-contract";
@@ -1113,16 +1112,18 @@ const hydrate = async (conversation: Conversation): Promise<boolean> => {
     return seeded ? seededOk : await replayStoredSession(conversation);
 };
 
-// Redraw a conversation from the daemon's own session store — the authoritative transcript, and the only copy
-// that survives a device with no local mirror. False when the READ failed, as opposed to finding nothing to
-// show, so a transient round-trip failure is retried instead of leaving a restored tab visibly empty.
+/* Redraw a conversation from the daemon's own record — the authoritative transcript, and the only copy that
+ * survives a device with no local mirror. False when the READ failed, as opposed to finding nothing to show, so
+ * a transient round-trip failure is retried instead of leaving a restored tab visibly empty.
+ *
+ * Asked for EVERY provider. This used to return here unless the tab ran the Claude Code loop, on the reasoning
+ * that /agents/:id/transcript could only answer for a harness with a readable session store — so a native
+ * codex/grok or ACP tab never even asked, and opening one showed "Start a conversation with …" over a
+ * conversation that had run for an hour. The daemon records what it streams now, whoever served it. */
 const replayStoredSession = async (conversation: Conversation): Promise<boolean> => {
     // A fleet conversation is stable across runtime switches; its session id is not. Resolve registered agents
     // by conversation/worktree identity, then adopt the SDK session that actually supplied the transcript so the
     // next turn resumes what the user is looking at. History-menu tabs still mean one exact runtime session.
-    if (!runsClaudeCode(conversation.provider.value, conversation.harness.value)) {
-        return true;
-    }
     let restored: RestoredMessage[] | undefined;
     if (conversation.registered.value) {
         const transcript = await fetchAgentTranscript(conversation);
@@ -1283,9 +1284,9 @@ const openConversation = async (id: string): Promise<void> => {
 // device), and attaching renders it live mid-stream. Only when nothing is running does the flat transcript
 // hydrate from the session store. `conversations` is in the source so tabs restored by a sandbox switch
 // (when reachability may already be true and never flip) are still picked up; the WeakSet keeps unrelated
-// tab churn from re-firing work already in flight. ponytail: /sessions/:id reads the Claude Code SDK's store,
-// so a NATIVE codex/grok tab restores its draft, title, and session but not the visible transcript — the next
-// turn still resumes the server thread.
+// tab churn from re-firing work already in flight. A registered tab hydrates from /agents/:id/transcript, which
+// answers for every provider (the daemon records what it streams); an unregistered one still means one exact
+// runtime session and reads /sessions/:id, which is the Claude Code SDK's store alone.
 const hydrating = new WeakSet<Conversation>();
 // Conversations showing a locally cached transcript rather than a daemon-confirmed one. They still hydrate —
 // the cache decides what the user looks at during the round-trip, not whether the round-trip happens — so the
