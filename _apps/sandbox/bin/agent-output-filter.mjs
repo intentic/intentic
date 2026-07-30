@@ -56,9 +56,18 @@ export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled
     }
     // Everything below rewrites the body as a whole, so each step is weighed against the body it was handed —
     // the same rule the line stages follow.
+    //
+    // `guard` closes the pipeline: a filter that emits MORE than it was given has not filtered anything, so the
+    // raw capture goes back out and the ledger reads zero for that command. It is the last line of defence, not
+    // the first — the footer below already declines to add itself when it would not pay — but it is total, so no
+    // future cleaner can make a result worse than not running.
     const emitted = (text, id) => {
         stages.push({ id, saved: bodyBytes(lines) - text.length });
-        return { out: text, stages };
+        if (text.length <= raw.length) {
+            return { out: text, stages };
+        }
+        stages.push({ id: "guard", saved: text.length - raw.length });
+        return { out: raw, stages };
     };
     // `cache` (success only): if this command's cleaned body is byte-identical to an earlier run this session,
     // collapse it to the marker (which carries the retrieval handle) and skip the footer — nothing new to show.
@@ -76,7 +85,11 @@ export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled
     // Point at the reversible retrieval command (lossy display, lossless storage) — a ready-to-run handle like
     // iq's `--after <cursor>` continuation. `retrieve-output` greps the full pane log, budget-capped.
     const log = logPath !== undefined && logPath !== "" ? ` · full: retrieve-output ${logPath} [pattern]` : "";
-    return emitted(`${body}\n--- [exit ${exitCode}, ${durationS}s] ${rawCount} lines filtered to ${kept}${log}\n`, "footer");
+    const withFooter = `${body}\n--- [exit ${exitCode}, ${durationS}s] ${rawCount} lines filtered to ${kept}${log}\n`;
+    // The pointer costs ~120 bytes and is only worth them when it explains a trim bigger than itself. Dropping
+    // one `total 48` header buys ten bytes and used to buy a 122-byte footer with them, which is how `ls` came
+    // to hand the model MORE than the raw listing. Under that line it is the pointer that goes, not the trim.
+    return emitted(withFooter.length <= raw.length ? withFooter : `${body}\n`, "footer");
 };
 
 const main = async () => {

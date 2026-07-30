@@ -15,18 +15,11 @@ import { seriesColor } from "./usageChart";
 // Agent tab renders one switch per entry and the savings surfaces label their marks from the same list, so a
 // mechanism cannot end up named two different things on two screens.
 export const CLEANER_OPTIONS = [
-    { id: `npm`, label: `npm / npx` },
     { id: `pnpm`, label: `pnpm` },
-    { id: `yarn`, label: `yarn` },
-    { id: `docker`, label: `docker` },
-    { id: `git`, label: `git` },
-    { id: `pip`, label: `pip` },
     { id: `apt`, label: `apt` },
     { id: `test`, label: `test runners` },
-    { id: `lint`, label: `tsc / eslint` },
-    { id: `ls`, label: `ls listings` },
-    { id: `gh`, label: `gh CLI` },
-    { id: `build`, label: `cargo / go` },
+    { id: `ls`, label: `directory listings` },
+    { id: `files`, label: `file lists` },
     { id: `dedup`, label: `dedupe repeats` },
     { id: `cap`, label: `head/tail cap` },
     { id: `redact`, label: `redact secrets` },
@@ -42,6 +35,7 @@ const FIXED_STAGE_LABELS: Record<string, string> = {
     ansi: `terminal escapes`,
     failtail: `failure tail cap`,
     footer: `retrieval footer`,
+    guard: `refused (output grew)`,
 };
 
 export const stageLabel = (id: string): string => CLEANER_OPTIONS.find((cleaner) => cleaner.id === id)?.label ?? FIXED_STAGE_LABELS[id] ?? id;
@@ -89,9 +83,9 @@ export const compositionOf = (input: InputSavings): Composition => {
         key: stage.id,
         label: stageLabel(stage.id),
         tokens: stage.savedTokens,
-        // Slot by RANK, unlike the provider charts where colour follows the entity for good. There are ~19
-        // possible mechanisms and five checked slots, so an entity-stable mapping isn't available; the ranked
-        // list beside the bar carries identity, and every segment names itself on hover.
+        // Slot by RANK, unlike the provider charts where colour follows the entity for good. There are more
+        // possible mechanisms than the five checked slots, so an entity-stable mapping isn't available; the
+        // ranked list beside the bar carries identity, and every segment names itself on hover.
         color: seriesColor(PALETTE_KEYS[index] ?? ``),
         kind: `saved`,
     }));

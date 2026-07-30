@@ -14,19 +14,22 @@ test("parseCleaners: empty/undefined enables everything", () => {
 });
 
 test("parseCleaners: allow-list selects only the named cleaners", () => {
-    expect(parseCleaners("git,pnpm")).toEqual(new Set(["git", "pnpm"]));
+    expect(parseCleaners("test,pnpm")).toEqual(new Set(["test", "pnpm"]));
 });
 
 test("parseCleaners: default-minus disables the named cleaners", () => {
-    const set = parseCleaners("-git,-cap");
-    expect(set.has("git")).toBe(false);
+    const set = parseCleaners("-test,-cap");
+    expect(set.has("test")).toBe(false);
     expect(set.has("cap")).toBe(false);
     expect(set.has("pnpm")).toBe(true);
 });
 
 test("parseCleaners: unknown tokens are ignored (fail-open), never thrown", () => {
     expect(parseCleaners("nonsense")).toEqual(new Set(CLEANERS)); // all tokens unknown → all on
-    expect(parseCleaners("git,bogus")).toEqual(new Set(["git"])); // known kept, unknown dropped
+    expect(parseCleaners("test,bogus")).toEqual(new Set(["test"])); // known kept, unknown dropped
+    // A retired cleaner id left in an owner's saved spec reads as a typo, not a crash: the spec degrades to the
+    // allow-list it can still honour rather than losing the whole setting.
+    expect(parseCleaners("git,pnpm")).toEqual(new Set(["pnpm"]));
 });
 
 test("cleanLines: strips pnpm progress on success when enabled", () => {
@@ -56,12 +59,28 @@ test("cleanLines: cap disabled keeps all lines", () => {
     expect(cleanLines(lines, { command: "echo", exitCode: "0", enabled: parseCleaners("-cap") }).lines).toHaveLength(200);
 });
 
-test("filterOutput: strips ANSI and appends a footer when lines were dropped", () => {
-    const raw = `${["Progress: a", "Progress: b", "\x1b[32mdone\x1b[0m"].join("\n")}\n`;
+test("filterOutput: strips ANSI and appends a footer when the trim outweighs the pointer", () => {
+    const raw = `${[...Array.from({ length: 8 }, (_, i) => `Progress: resolved ${i}00, reused ${i}00, downloaded 0, added 0`), "\x1b[32mdone\x1b[0m"].join("\n")}\n`;
     const out = filterOutput(raw, "pnpm install", "0", "1", "/logs/x.log").out;
     expect(out).toContain("done");
     expect(out).not.toContain("\x1b[");
     expect(out).toContain("retrieve-output /logs/x.log");
+});
+
+test("filterOutput: a trim smaller than the retrieval pointer keeps the trim and drops the pointer", () => {
+    // One `total 48` header is ten bytes; a footer is over a hundred. Buying the second with the first is how
+    // `ls` came to hand back MORE than it was given.
+    const raw = "total 48\n-rw-r--r--  1 root root  3801 Jul 30 13:38 a.ts\n";
+    const out = filterOutput(raw, "ls -la", "0", "1", "/logs/x.log").out;
+    expect(out).toBe("644 a.ts  3.7K\n");
+    expect(out).not.toContain("retrieve-output");
+});
+
+test("filterOutput: never emits more than it was given", () => {
+    // The total backstop behind the footer rule: whatever a cleaner does, a result that grew is not a result.
+    for (const raw of ["x\n", "total 0\n", "a\nb\n", "(no notable output)\n"]) {
+        expect(filterOutput(raw, "ls -la /empty", "0", "1", "/logs/x.log").out.length).toBeLessThanOrEqual(raw.length);
+    }
 });
 
 test("filterOutput: no footer when nothing was dropped", () => {
@@ -105,26 +124,64 @@ test("redact: masks secret-named assignments, AWS keys, and bearer tokens on suc
     ]);
 });
 
-test("lint cleaner: drops tsc perf diagnostics and node warnings on green, keeps real diagnostics", () => {
-    const lines = ["(node:42) ExperimentalWarning: Type Stripping", "Files:  412", "Check time:  3.10s", "src/a.ts(1,1): warning TS6133: unused"];
-    expect(cleanLines(lines, { command: "tsc --noEmit --diagnostics", exitCode: "0", enabled: parseCleaners("lint") }).lines).toEqual([
-        "src/a.ts(1,1): warning TS6133: unused",
+// --- shape cleaners: gated by the OUTPUT, so `cd x && …` (four out of five agent commands) still reaches them.
+
+test("ls cleaner: rewrites long-listing entries to mode/name/size and drops the header and dot entries", () => {
+    const lines = [
+        "total 24",
+        "drwxr-xr-x  2 root root  4096 Jul 30 13:38 .",
+        "drwxr-xr-x 41 root root  4096 Jul 30 13:38 ..",
+        "drwxr-xr-x  2 root root  4096 Jul 30 13:38 agent",
+        "-rw-r--r--  1 root root  3801 Jul 30 13:38 agent-commands.ts",
+        "-rwxr-xr-x  1 root root  1234 Dec 25  2024 build.sh",
+        "lrwxrwxrwx  1 root root     7 Jul 30 13:38 latest -> agent.ts",
+    ];
+    expect(cleanLines(lines, { command: "cd /work && ls -la src", exitCode: "0", enabled: parseCleaners("ls") }).lines).toEqual([
+        "755 agent/",
+        "644 agent-commands.ts  3.7K",
+        "755 build.sh  1.2K",
+        "777 latest -> agent.ts  7B",
     ]);
 });
 
-test("ls cleaner: strips the `total N` block header", () => {
-    const lines = ["total 24", "-rw-r--r-- 1 u u 120 a.ts", "-rw-r--r-- 1 u u 240 b.ts"];
-    expect(cleanLines(lines, { command: "ls -l", exitCode: "0", enabled: parseCleaners("ls") }).lines).toEqual([
-        "-rw-r--r-- 1 u u 120 a.ts",
-        "-rw-r--r-- 1 u u 240 b.ts",
+test("ls cleaner: an owner or group containing a space still parses (the date is the anchor, not a column)", () => {
+    const lines = ["-rw-r--r--  1 fjeanne utilisa. du domaine 1234 Mar 31 16:18 data.json"];
+    expect(cleanLines(lines, { command: "ls -l", exitCode: "0", enabled: parseCleaners("ls") }).lines).toEqual(["644 data.json  1.2K"]);
+});
+
+test("ls cleaner: output it cannot parse is handed back untouched (a non-English locale must not vanish)", () => {
+    const lines = ["total 8", "drwxr-xr-x  2 user user  4096  1月  1 12:00 src", "-rw-r--r--  1 user user 1234  1月  1 12:00 main.rs"];
+    expect(cleanLines(lines, { command: "ls -la", exitCode: "0", enabled: parseCleaners("ls") }).lines).toEqual(lines);
+});
+
+test("files cleaner: folds a run of bare paths by directory, keeping every name and saying the root once", () => {
+    const lines = [
+        ...Array.from({ length: 6 }, (_, i) => `/work/src/agent/mod-${i}.ts`),
+        ...Array.from({ length: 6 }, (_, i) => `/work/src/logs/mod-${i}.ts`),
+    ];
+    const out = cleanLines(lines, { command: "cd /work && find . -name '*.ts'", exitCode: "0", enabled: parseCleaners("files") }).lines;
+    expect(out).toEqual([
+        "12 paths in 2 directories under /work/src/:",
+        "agent/ mod-0.ts mod-1.ts mod-2.ts mod-3.ts mod-4.ts mod-5.ts",
+        "logs/ mod-0.ts mod-1.ts mod-2.ts mod-3.ts mod-4.ts mod-5.ts",
     ]);
 });
 
-test("build cleaner: strips cargo per-crate Compiling/Updating noise, keeps Finished", () => {
-    const lines = ["   Compiling serde v1.0", "   Updating crates.io index", "    Finished dev [unoptimized] in 12.4s"];
-    expect(cleanLines(lines, { command: "cargo build", exitCode: "0", enabled: parseCleaners("build") }).lines).toEqual([
-        "    Finished dev [unoptimized] in 12.4s",
-    ]);
+test("files cleaner: leaves short runs, grep diagnostics and word lists alone", () => {
+    const short = ["a/one.ts", "a/two.ts", "a/three.ts"];
+    expect(cleanLines(short, { command: "find .", exitCode: "0", enabled: parseCleaners("files") }).lines).toEqual(short);
+    // `path:line:` is a diagnostic, not a path — folding it would destroy the line numbers it exists to carry.
+    const grep = Array.from({ length: 20 }, (_, i) => `src/mod.ts:${i}:import x`);
+    expect(cleanLines(grep, { command: "grep -rn import src", exitCode: "0", enabled: parseCleaners("files") }).lines).toEqual(grep);
+    const words = Array.from({ length: 20 }, (_, i) => `package-${i}`);
+    expect(cleanLines(words, { command: "ls", exitCode: "0", enabled: parseCleaners("files") }).lines).toEqual(words);
+});
+
+test("files cleaner: a run mixing absolute and relative paths shares no root and still terminates", () => {
+    const lines = [...Array.from({ length: 6 }, (_, i) => `/abs/dir/f-${i}.ts`), ...Array.from({ length: 6 }, (_, i) => `rel/dir/f-${i}.ts`)];
+    const out = cleanLines(lines, { command: "find .", exitCode: "0", enabled: parseCleaners("files") }).lines;
+    expect(out[0]).toBe("12 paths in 2 directories:");
+    expect(out).toHaveLength(3);
 });
 
 test("sessionKeyFromLog: recovers the agent session name from a per-command pane-log path", () => {
@@ -151,17 +208,25 @@ test("collapseCached: different output for the same command is not a hit", () =>
 
 test("filterOutput: cache collapses a byte-identical success repeat, and is a no-op without a store", () => {
     const store = memoryStore();
-    const raw = "hello\nworld\n";
-    expect(filterOutput(raw, "echo hi", "0", "0", "", new Set(CLEANERS), store).out).toBe("hello\nworld\n");
-    const repeat = filterOutput(raw, "echo hi", "0", "0", "/logs/y.log", new Set(CLEANERS), store).out;
+    // Longer than the collapse marker, or the never-worse guard would rightly refuse to trade the output for it.
+    const raw = `${Array.from({ length: 8 }, (_, i) => `branch-${i} is up to date with origin/main`).join("\n")}\n`;
+    expect(filterOutput(raw, "git branch -vv", "0", "0", "", new Set(CLEANERS), store).out).toBe(raw);
+    const repeat = filterOutput(raw, "git branch -vv", "0", "0", "/logs/y.log", new Set(CLEANERS), store).out;
     expect(repeat).toContain(CACHE_MARKER);
     // Without a store the same input passes through unchanged (deterministic for the offline bench).
-    expect(filterOutput(raw, "echo hi", "0", "0", "").out).toBe("hello\nworld\n");
+    expect(filterOutput(raw, "git branch -vv", "0", "0", "").out).toBe(raw);
+});
+
+test("filterOutput: a repeat too short to pay for the collapse marker is left alone", () => {
+    const store = memoryStore();
+    const raw = "hello\nworld\n";
+    filterOutput(raw, "echo hi", "0", "0", "/logs/y.log", new Set(CLEANERS), store);
+    expect(filterOutput(raw, "echo hi", "0", "0", "/logs/y.log", new Set(CLEANERS), store).out).toBe(raw);
 });
 
 test("filterOutput: cache disabled leaves a repeat untouched", () => {
     const store = memoryStore();
-    const raw = "same\noutput\n";
-    filterOutput(raw, "echo x", "0", "0", "", parseCleaners("-cache"), store);
-    expect(filterOutput(raw, "echo x", "0", "0", "", parseCleaners("-cache"), store).out).toBe("same\noutput\n");
+    const raw = `${Array.from({ length: 8 }, (_, i) => `branch-${i} is up to date with origin/main`).join("\n")}\n`;
+    filterOutput(raw, "git branch -vv", "0", "0", "", parseCleaners("-cache"), store);
+    expect(filterOutput(raw, "git branch -vv", "0", "0", "", parseCleaners("-cache"), store).out).toBe(raw);
 });

@@ -30,10 +30,171 @@ const strip = (id, match, patterns) => ({
     apply: (lines) => lines.filter((line) => !patterns.some((re) => re.test(line))),
 });
 
-// Command-scoped cleaners (id ↔ command regex ↔ transform). Composable: every enabled cleaner whose `match`
-// tests the command runs, in array order. Extend here as filter-stats.jsonl surfaces new noisy commands.
+// What a line array would weigh once joined with newlines — measured without building the string, because the
+// pipeline measures it after EVERY stage and materialising a 500k-line capture per stage would cost more than
+// the cleaning does.
+export const bodyBytes = (lines) => (lines.length === 0 ? 0 : lines.reduce((sum, line) => sum + line.length, 0) + lines.length - 1);
+
+// ---- shape cleaners: they read the output, not the command -------------------------------------------------
+// A command regex cannot see past `cd x && …`, and four out of five of an agent's commands are written that
+// way. So the two shapes carrying the most bytes are recognised in the TEXT instead. Each self-gates on what it
+// recognises and hands back the lines it was given when it recognises nothing, which is what makes it safe to
+// run on every success rather than behind a command match.
+
+const humanSize = (bytes) =>
+    bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)}M` : bytes >= 1024 ? `${(bytes / 1024).toFixed(1)}K` : `${bytes}B`;
+
+// `-rwsr-xr-t` → `4755`. `s`/`t` mean the special bit AND execute, `S`/`T` the special bit alone; the leading
+// digit is emitted only when one is set, so the overwhelmingly common case stays three characters.
+const EXECUTABLE = new Set(["x", "s", "t"]);
+const permsToOctal = (perms) => {
+    const triad = (read, write, exec) => (perms[read] === "r" ? 4 : 0) + (perms[write] === "w" ? 2 : 0) + (EXECUTABLE.has(perms[exec]) ? 1 : 0);
+    const special = ("sS".includes(perms[3]) ? 4 : 0) + ("sS".includes(perms[6]) ? 2 : 0) + ("tT".includes(perms[9]) ? 1 : 0);
+    const mode = `${triad(1, 2, 3)}${triad(4, 5, 6)}${triad(7, 8, 9)}`;
+    return special > 0 ? `${special}${mode}` : mode;
+};
+
+// The date is the anchor, not a column index: an owner or group name containing a space shifts every column
+// left of the name and `ls` has no quoting to recover it from. Both GNU spellings are matched — the default
+// `Mon DD HH:MM` / `Mon DD  YYYY`, and `--time-style=long-iso`.
+const LS_DATE = /\s(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})|\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2})\s/;
+const LS_MODE = /^[-dlbcps][rwxSsTt-]{9}[.+@]?$/;
+
+const parseListingLine = (line) => {
+    const date = LS_DATE.exec(line);
+    if (date === null) {
+        return undefined;
+    }
+    const head = line
+        .slice(0, date.index)
+        .split(/\s+/)
+        .filter((token) => token !== "");
+    if (head.length < 4 || !LS_MODE.test(head[0])) {
+        return undefined;
+    }
+    // Size is the RIGHTMOST integer before the date: the link count is numeric too but comes first, and a device
+    // node's `166, 0` is no integer at all — those entries keep their name and lose only the size.
+    const size = head.reduceRight((found, token) => (found === undefined && /^\d+$/.test(token) ? Number(token) : found), undefined);
+    return { mode: permsToOctal(head[0]), directory: head[0].startsWith("d"), size, name: line.slice(date.index + date[0].length) };
+};
+
+// `ls -l` spends ~50 bytes per entry on a link count, owner, group and timestamp the model asked nothing about.
+// Rewrite each entry to `<octal> <name>[/]  <size>`, drop the `total N` header and the `.`/`..` entries. Entry
+// ORDER is preserved — rtk sorts directories first, which it can afford because it re-runs `ls` itself; we only
+// see the output, and reordering it would silently destroy the answer to `ls -lt`.
+const compactListing = (lines) => {
+    let parsed = 0;
+    const out = lines.flatMap((line) => {
+        if (/^total \d+$/.test(line)) {
+            return [];
+        }
+        const entry = parseListingLine(line);
+        if (entry === undefined) {
+            return [line];
+        }
+        parsed++;
+        if (entry.name === "." || entry.name === "..") {
+            return [];
+        }
+        if (entry.directory) {
+            return [`${entry.mode} ${entry.name}/`];
+        }
+        return [`${entry.mode} ${entry.name}${entry.size === undefined ? "" : `  ${humanSize(entry.size)}`}`];
+    });
+    // Nothing recognised — a non-English locale, or not a listing at all. Hand back exactly what came in.
+    return parsed === 0 ? lines : out;
+};
+
+// A run of bare paths is what `find`, `git ls-files`, `rg -l` and `ls -R | …` all emit, and a repo-wide run is
+// thousands of lines whose directory prefix repeats on nearly every one. Fold each run to one line per
+// directory: every NAME survives, only the repetition goes.
+const PATH_RUN_MIN = 10;
+const PATH_RUN_DIRS = 60;
+const PATH_RUN_NAMES = 40;
+
+// No whitespace (a listing line has plenty), no `:<digit>` (that is a `file:line:` diagnostic, not a path), and
+// nothing absurdly long. Deliberately strict: a run this misreads is a run folded into the wrong shape.
+const isPathLine = (line) => line !== "" && !/\s/.test(line) && !/:\d/.test(line) && line.length < 300;
+
+// The longest directory prefix every entry shares — a repo-wide `find` repeats it on all 393 lines, and it is
+// the single biggest thing in the output. Trimmed one whole segment at a time so the result is always a real
+// directory, never a truncated name.
+const sharedRoot = (directories) => {
+    if (directories.length < 2) {
+        return "";
+    }
+    let prefix = directories[0];
+    for (const directory of directories) {
+        while (prefix !== "" && !directory.startsWith(prefix)) {
+            const shorter = prefix.slice(0, prefix.lastIndexOf("/", prefix.length - 2) + 1);
+            // "/" has no shorter form to fall back to, and lastIndexOf would keep handing it back — a run mixing
+            // absolute and relative paths shares no root at all, and says so by terminating here.
+            prefix = shorter === prefix ? "" : shorter;
+        }
+    }
+    return prefix;
+};
+
+const foldPaths = (run) => {
+    // A run of loose words is not a path list — real `find` output is dominated by lines carrying a directory.
+    if (run.filter((line) => line.includes("/")).length * 5 < run.length * 3) {
+        return run;
+    }
+    const byDirectory = new Map();
+    for (const path of run) {
+        const cut = path.lastIndexOf("/");
+        const directory = cut === -1 ? "./" : path.slice(0, cut + 1);
+        const names = byDirectory.get(directory);
+        if (names === undefined) {
+            byDirectory.set(directory, [path.slice(cut + 1)]);
+        } else {
+            names.push(path.slice(cut + 1));
+        }
+    }
+    // Below a segment or so the header costs more than the repetition it replaces, so the root stays inline.
+    const root = sharedRoot([...byDirectory.keys()]);
+    const trim = root.length > 8 ? root.length : 0;
+    const folded = [`${run.length} paths in ${byDirectory.size} directories${trim === 0 ? "" : ` under ${root}`}:`];
+    let shown = 0;
+    for (const [directory, names] of [...byDirectory].slice(0, PATH_RUN_DIRS)) {
+        const kept = names.slice(0, PATH_RUN_NAMES);
+        shown += kept.length;
+        folded.push(`${directory.slice(trim) === "" ? "./" : directory.slice(trim)} ${kept.join(" ")}`);
+    }
+    if (shown < run.length) {
+        folded.push(`… ${run.length - shown} more paths elided`);
+    }
+    // One directory of long names can fold to more than it replaced; then the fold is simply not taken.
+    return bodyBytes(folded) < bodyBytes(run) ? folded : run;
+};
+
+const foldPathRuns = (lines) => {
+    const out = [];
+    for (let i = 0; i < lines.length;) {
+        let j = i;
+        while (j < lines.length && isPathLine(lines[j])) {
+            j++;
+        }
+        if (j === i) {
+            out.push(lines[i]);
+            i++;
+            continue;
+        }
+        out.push(...(j - i >= PATH_RUN_MIN ? foldPaths(lines.slice(i, j)) : lines.slice(i, j)));
+        i = j;
+    }
+    return out;
+};
+
+// The registry: command-scoped cleaners (id ↔ command regex ↔ transform) and shape cleaners (no `match`, so
+// they are offered on every success and gate themselves on the text). Composable — every enabled cleaner that
+// applies runs, in array order.
+//
+// The strippers here are the ones a replay of 10,682 real agent commands showed removing bytes. The eight that
+// removed exactly zero over that corpus (npm, yarn, docker, git, pip, lint, gh, build) are gone: a stripper
+// that fires constantly and removes nothing is registry surface with a maintenance cost, a switch on the
+// settings page and no payer. Adding one back is three lines — `discover` says when a corpus asks for it.
 const COMMAND_CLEANERS = [
-    strip("npm", /\b(npm|npx)\b/, [/^npm (?:warn|notice)\b/i]),
     strip("pnpm", /\bpnpm\b/, [
         /^\s*Progress: /,
         /^Packages: [+-]/,
@@ -42,16 +203,6 @@ const COMMAND_CLEANERS = [
         /^Virtual store is at/,
         /^Lockfile is up to date/,
     ]),
-    strip("yarn", /\byarn\b/, [/^warning /]),
-    strip("docker", /\bdocker\b/, [
-        /^#\d+ (?:sha256:|extracting|transferring|resolve|DONE|CACHED)/,
-        /(?:Pulling fs layer|Waiting|Downloading|Download complete|Verifying Checksum|Extracting|Pull complete)\s*$/,
-    ]),
-    strip("git", /\bgit\b/, [
-        /^(?:remote: )?(?:Enumerating|Counting|Compressing|Receiving|Resolving|Unpacking|Writing) (?:objects|deltas)[: ]/,
-        /^remote: Total /,
-    ]),
-    strip("pip", /\bpip3?\b/, [/^\s*(?:Downloading|Using cached|Collecting|Requirement already satisfied)/]),
     strip("apt", /\bapt(?:-get)?\b/, [/^(?:Get:|Hit:|Ign:|Fetched |Selecting |Preparing to unpack|Unpacking |Setting up |Processing triggers)/]),
     // Test runners: on a green run (this only fires on exit 0) the per-test PASS lines are noise — drop them and
     // keep the summary. Failures (exit ≠ 0) skip all command cleaners, so failing tests survive verbatim.
@@ -62,26 +213,13 @@ const COMMAND_CLEANERS = [
         /^PASS\s+\S/, // jest per-file PASS header
         /^\s*[.·]+\s*$/, // pytest/mocha dot progress
     ]),
-    // Typecheck/lint: on green (exit 0), the file:line diagnostics are absent, so what's left is perf/summary
-    // chatter — tsc's --diagnostics timing table and Node's experimental/deprecation warning preambles.
-    // Failures keep everything (command cleaners skip on non-zero exit), so real errors survive.
-    strip("lint", /\b(?:tsc|eslint|biome|ruff|golangci-lint)\b/, [
-        /^(?:Files|Lines|Nodes|Identifiers|Symbols|Types|Instantiations|Memory used|Parse time|Bind time|Check time|Emit time|Total time)\s*:/,
-        /^\(node:\d+\)\s/, // (node:NN) ExperimentalWarning / DeprecationWarning
-    ]),
-    // Directory listings: `ls -l` prints a `total N` block header per directory — pure noise once the entries
-    // follow. (Long listings are still capped by the global `cap` stage.)
-    strip("ls", /\bls\b/, [/^total \d+$/]),
-    // GitHub CLI: `gh pr/issue/run list` prepend a "Showing 30 of 152 …" header that just restates the list.
-    strip("gh", /\bgh\b/, [/^\s*Showing \d+ of \d+ /]),
-    // Build tools: cargo/go emit a line per compiled crate + dependency download — high-volume progress noise on
-    // a successful build. Strip the per-unit chatter; the final `Finished`/binary line survives.
-    strip("build", /\b(?:cargo|go|kubectl)\b/, [/^\s*(?:Compiling|Downloading|Downloaded|Updating|Installing|Blocking) /, /^\s*go: downloading /]),
+    { id: "ls", apply: compactListing },
+    { id: "files", apply: foldPathRuns },
 ];
 
-// The full toggle vocabulary: every command cleaner id, plus the global stages. `dedup` and `redact` have no
-// command match (they run on all output); `cap` is the head/tail truncation; `cache` collapses a command whose
-// output is byte-identical to an earlier run this session (applied in agent-output-filter, which owns the store).
+// The full toggle vocabulary: every registry cleaner id, plus the global stages. `dedup` and `redact` run on all
+// output; `cap` is the head/tail truncation; `cache` collapses a command whose output is byte-identical to an
+// earlier run this session (applied in agent-output-filter, which owns the store).
 export const CLEANERS = [...COMMAND_CLEANERS.map((cleaner) => cleaner.id), "dedup", "cap", "redact", "cache"];
 
 // Collapse a run of ≥3 identical consecutive lines to one line + a count marker. Lossless on distinct content —
@@ -147,11 +285,6 @@ const TAIL = 50;
 const MAX = 100;
 const FAIL_TAIL = 500;
 
-// What a line array would weigh once joined with newlines — measured without building the string, because the
-// pipeline measures it after EVERY stage and materialising a 500k-line capture per stage would cost more than
-// the cleaning does.
-export const bodyBytes = (lines) => (lines.length === 0 ? 0 : lines.reduce((sum, line) => sum + line.length, 0) + lines.length - 1);
-
 // The gated cleaning pipeline over already-split, ANSI/\r-cleaned lines. Exit-code-asymmetric: on success run the
 // matching command cleaners then the cap; on failure keep everything but a generous tail. `enabled` gates each id.
 //
@@ -175,7 +308,8 @@ export const cleanLines = (lines, { command, exitCode, enabled }) => {
     };
     if (exitCode === "0") {
         for (const cleaner of COMMAND_CLEANERS) {
-            if (enabled.has(cleaner.id) && cleaner.match.test(command)) {
+            // A shape cleaner has no `match`: it is offered every command and decides from the text itself.
+            if (enabled.has(cleaner.id) && (cleaner.match === undefined || cleaner.match.test(command))) {
                 ran(cleaner.id, cleaner.apply(out));
             }
         }
@@ -204,9 +338,14 @@ export const cleanLines = (lines, { command, exitCode, enabled }) => {
     return { lines: out, stages };
 };
 
-// Which command cleaners actually fired for this command — recorded in filter-stats.jsonl to attribute savings.
+// Which cleaners CLAIMED this command — recorded in filter-stats.jsonl, and the question `gaps` is built on
+// ("high-volume commands no handler claimed ⇒ where to write the next one"). Command-scoped only: a shape
+// cleaner claims nothing in advance, it decides from the output, so counting it here would make every command
+// look handled and empty the gaps list. What the shape cleaners were worth is in `stageBytes`.
 export const matchedCleaners = (command, enabled) =>
-    COMMAND_CLEANERS.filter((cleaner) => enabled.has(cleaner.id) && cleaner.match.test(command)).map((cleaner) => cleaner.id);
+    COMMAND_CLEANERS.filter((cleaner) => cleaner.match !== undefined && enabled.has(cleaner.id) && cleaner.match.test(command)).map(
+        (cleaner) => cleaner.id,
+    );
 
 // ---- `cache` cleaner: collapse a byte-identical repeat of a command's output within one agent session ----
 // Agents re-run the same command (git status, pnpm test, tsc) across a turn; when the cleaned output is identical

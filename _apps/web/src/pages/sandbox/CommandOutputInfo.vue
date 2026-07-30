@@ -27,15 +27,11 @@ const PNPM_OUTPUT = [
 const CLEANED_OUTPUT = PNPM_OUTPUT.filter((line) => !line.dropped).map((line) => line.text);
 
 const PER_TOOL_CLEANERS = [
-    [`npm / pnpm / yarn`, `Progress bars, download lines, package counters, install warnings`],
-    [`docker`, `The per-layer pull, extract and cache lines`],
-    [`git`, `"Counting objects", "Resolving deltas" and the rest of the transfer progress`],
-    [`pip / apt`, `Fetching, unpacking and "already satisfied" lines`],
+    [`pnpm`, `Progress bars, download lines, package counters`],
+    [`apt`, `Fetching, unpacking and "setting up" lines`],
     [`test runners`, `On a green run, the line-per-passing-test list — the summary stays`],
-    [`tsc / eslint`, `Timing tables and Node's experimental-feature warnings`],
-    [`ls listings`, `The "total 48" header each directory prints`],
-    [`gh CLI`, `The "Showing 30 of 152" banner above the list it restates`],
-    [`cargo / go`, `The "Compiling …" line per crate; the final result survives`],
+    [`directory listings`, `Every long-listing entry loses its link count, owner, group and timestamp, keeping mode, name and size`],
+    [`file lists`, `A run of paths — from find, git ls-files, rg -l — groups under its directory, saying the shared root once`],
 ];
 const GLOBAL_CLEANERS = [
     [`dedupe repeats`, `3 or more identical lines in a row become one, plus a count`],
