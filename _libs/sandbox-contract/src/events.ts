@@ -262,12 +262,14 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * actually loses the work — so the wait has to be visible, with its own next-attempt clock.
      *
      * `attempt`/`maxAttempts` are the harness's own counters; `nextAttemptAt` (epoch ms) is when it will try
-     * again, so the readout counts down instead of freezing on a number nobody can interpret. */
+     * again, so the readout counts down instead of freezing on a number nobody can interpret. Optional because
+     * only Claude's harness reports the delay: Codex says which attempt it is on and nothing else
+     * (codex-agent.ts), and inventing a countdown for it would be a clock the retry never keeps. */
     z.object({
         kind: z.literal("provider_retry"),
         attempt: z.number(),
         maxAttempts: z.number(),
-        nextAttemptAt: z.number(),
+        nextAttemptAt: z.number().optional(),
         // The HTTP status behind it when there was one (529 reads as capacity, 500 as a fault — the client says
         // which). Absent for a transport failure that never got a response.
         status: z.number().optional(),

@@ -593,7 +593,7 @@ export class Conversation {
      * matters most to a waiting user: nothing has failed and nothing has been lost — this turn is still running.
      * Rendered as a status beside the streaming indicator and dropped the moment the turn produces anything or
      * settles, so it can never outlive the wait it describes. */
-    readonly providerRetry = ref<{ attempt: number; maxAttempts: number; nextAttemptAt: number; status?: number } | undefined>();
+    readonly providerRetry = ref<Extract<AgentEvent, { kind: `provider_retry` }> | undefined>();
 
     // Whether the running turn can absorb a message mid-flight: the Claude Code loop only (see runsClaudeCode,
     // the same predicate the daemon's streamAgent gates its SteeringQueue on). Used for WORDING alone (the

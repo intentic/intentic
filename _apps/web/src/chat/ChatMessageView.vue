@@ -166,10 +166,13 @@ const loaderSeconds = computed(() => {
  * the only move that actually throws away the work the turn has already done. Rides the same one-second tick as
  * the elapsed counter, so the countdown moves and stale-looks impossible. */
 const providerRetry = computed(() => active.value.providerRetry.value);
-const retryIn = computed(() => {
+// "and here is when it tries again" holds only when the harness said when — Claude's does. Codex reports which
+// attempt it is on and nothing else (codex-agent.ts), so its line drops the countdown rather than name an
+// instant the retry never agreed to.
+const retryWait = computed(() => {
     void loaderTick.value;
-    const retry = providerRetry.value;
-    return retry === undefined ? 0 : Math.max(0, Math.round((retry.nextAttemptAt - Date.now()) / 1000));
+    const nextAttemptAt = providerRetry.value?.nextAttemptAt;
+    return nextAttemptAt === undefined ? `retrying` : `retrying in ${Math.max(0, Math.round((nextAttemptAt - Date.now()) / 1000))}s`;
 });
 // 529 is capacity, everything else in this frame is a fault. Worth distinguishing: "at capacity" tells a user
 // their request was fine and a smaller model would probably go through right now, which is actionable.
@@ -968,7 +971,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <div v-if="showTyping" class="flex items-center gap-2 self-start rounded-lg bg-overlay px-3 py-2 text-2xs text-muted">
                 <Icon name="spinner" class="text-2xs text-link" spin />
                 <span v-if="providerRetry"
-                    >The model provider is {{ retryReason }} — retrying in {{ retryIn }}s
+                    >The model provider is {{ retryReason }} — {{ retryWait }}
                     <span class="text-subtle">(attempt {{ providerRetry.attempt }}, nothing lost)</span></span
                 >
                 <span v-else

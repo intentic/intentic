@@ -294,6 +294,70 @@ test("a plan turn survives an advisory and still proposes its plan", async () =>
     expect(calls[1]!.options.sandboxMode).toBe("danger-full-access");
 });
 
+// Codex's in-turn stream retry, verbatim off `codex exec --json`: the top-level `error` EVENT (not an item),
+// carrying the retry counters its own loop minted and the transport reason in parentheses. The turn keeps going.
+const STREAM_RETRY = "Reconnecting... 1/5 (stream disconnected before completion: stream closed before response.completed)";
+
+test("an in-turn stream retry is a wait, not a failure — the turn's answer still lands", async () => {
+    // The incident: this frame put a red error line under a turn that then answered normally four minutes later.
+    const { runner } = fakeRunner([
+        { type: "thread.started", thread_id: "thr-11" },
+        { type: "error", message: STREAM_RETRY },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "back" } },
+    ]);
+    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+        { kind: "session", sessionId: "thr-11" },
+        // The same frame the Claude path emits for its own in-turn retries: the chat's loader line says the turn
+        // is waiting, and the next frame retires it.
+        { kind: "provider_retry", attempt: 1, maxAttempts: 5 },
+        { kind: "delta", text: "back" },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
+test("a plan turn survives a stream retry and still proposes its plan", async () => {
+    // A retry that marked the phase errored would have plan-emulation abandon a turn the CLI recovered by itself.
+    const { runner, calls } = fakeRunner(
+        [
+            { type: "thread.started", thread_id: "thr-12" },
+            { type: "error", message: STREAM_RETRY },
+            { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } },
+        ],
+        [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
+    );
+    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+
+    expect(events).toEqual([
+        { kind: "session", sessionId: "thr-12" },
+        { kind: "provider_retry", attempt: 1, maxAttempts: 5 },
+        { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route." },
+        {
+            kind: "resolved",
+            requestId: expect.any(String) as string,
+            reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
+        },
+        { kind: "delta", text: "Done." },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+    expect(calls).toHaveLength(2);
+});
+
+test("a stream retry doesn't stand in for the real failure when the retries run out", async () => {
+    // Codex retries five times and then fails for real. The retry notices must not count as this turn's surfaced
+    // error, or the failure that follows them would arrive silent.
+    const runner: CodexRunner = async function* () {
+        yield { type: "error", message: STREAM_RETRY } as ThreadEvent;
+        throw new Error("Codex Exec exited with code 1: Reading prompt from stdin...");
+    };
+    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+        { kind: "provider_retry", attempt: 1, maxAttempts: 5 },
+        { kind: "error", message: "Codex Exec exited with code 1: Reading prompt from stdin..." },
+        { kind: "done" },
+    ]);
+});
+
 test("an advisory doesn't stand in for the real failure when the turn then dies", async () => {
     // surfacedError exists to stop the SDK's generic exit-code wrapper from clobbering an actionable message.
     // An advisory is not that message — counting it as one would leave a genuinely failed turn silent.

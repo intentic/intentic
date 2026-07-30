@@ -119,6 +119,36 @@ const mcpResultText = (item: Extract<ThreadItem, { type: "mcp_tool_call" }>): st
     return content.map((block) => (block.type === "text" ? block.text : `[${block.type}]`)).join("");
 };
 
+/* Codex's IN-TURN stream retry, which arrives on the same error channels a real failure does. The CLI lost the
+ * response stream mid-turn, is reconnecting, and the turn carries on from where it was — the message is
+ * `Reconnecting... <attempt>/<max> (<reason>)`, minted by codex's own retry loop (core/src/responses_retry.rs)
+ * and forwarded with `will_retry: true`, which its JSONL surface then drops.
+ *
+ * Read as a failure it painted a red error line under a turn that answered normally four minutes later, wrote a
+ * turn.error into the activity log, reddened the agent's card on the fleet board, and — in plan mode — would
+ * have dropped the plan (plan-emulation abandons an errored phase). It is still worth SAYING, because a turn
+ * riding out a dropped socket goes quiet and silence reads as a hang: it says it as the wait it is, on the
+ * `provider_retry` frame the Claude path emits for exactly this (agent.ts, api_retry), which takes over the
+ * chat's loader line and retires itself on the next frame.
+ *
+ * No `nextAttemptAt`: codex reports the counters but not its backoff, and the contract makes the instant
+ * optional rather than have this guess one. */
+const CODEX_STREAM_RETRY = /^Reconnecting\.\.\.\s*(\d+)\s*\/\s*(\d+)/;
+
+/* What a codex error message actually is, when it is not a failure. Both of codex's error channels run through
+ * here so a notice reads the same whichever one carries it — the CLI has moved them before (an advisory rides
+ * the item channel, a stream retry the top-level event) and the two are one `error` kind by the time they reach
+ * us. Undefined ⇒ a real failure, which is every other message. */
+const codexNotice = (message: string): AgentEvent | undefined => {
+    const retry = CODEX_STREAM_RETRY.exec(message);
+    if (retry !== null) {
+        return { kind: "provider_retry", attempt: Number(retry[1]), maxAttempts: Number(retry[2]) };
+    }
+    // An advisory shares this channel with real failures but is not one — the turn answers normally after it. So
+    // it must not mark the phase errored: a plan turn that hit one still has a plan to propose (CODEX_ADVISORY).
+    return CODEX_ADVISORY.test(message) ? { kind: "error", code: "codex-advisory", message } : undefined;
+};
+
 // What phase-1 of a plan turn holds back: the thread id (to resume for execution) and the trailing
 // agent_message (the plan text the user approves).
 interface TurnCapture {
@@ -221,11 +251,9 @@ async function* streamTurn(events: AsyncIterable<ThreadEvent>, cwd: string, capt
                 };
             } else if (item.type === "error") {
                 if (event.type === "item.completed") {
-                    // An advisory shares this channel with real failures but is not one — the turn answers
-                    // normally after it. So it must not mark the phase errored: a plan turn that hit one still
-                    // has a plan to propose (see CODEX_ADVISORY).
-                    if (CODEX_ADVISORY.test(item.message)) {
-                        yield { kind: "error", code: "codex-advisory", message: item.message };
+                    const notice = codexNotice(item.message);
+                    if (notice !== undefined) {
+                        yield notice;
                         continue;
                     }
                     yield { kind: "error", message: item.message };
@@ -248,6 +276,11 @@ async function* streamTurn(events: AsyncIterable<ThreadEvent>, cwd: string, capt
                 capture.errored = true;
             }
         } else if (event.type === "error") {
+            const notice = codexNotice(event.message);
+            if (notice !== undefined) {
+                yield notice;
+                continue;
+            }
             yield { kind: "error", message: event.message };
             if (capture !== undefined) {
                 capture.errored = true;
