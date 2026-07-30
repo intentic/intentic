@@ -164,13 +164,19 @@ const usageLine = (id: string): string | undefined => {
 /* --- Usage ring per account ---------------------------------------------------------------------------------
  * Plan-limit utilization from the account's subscription snapshot, surfaced as a ProgressRing on the connection
  * row. Same data the chat composer chip reads (usageStatusByAccount) — the ring here answers at a glance which
- * accounts still have headroom and which are spent, without opening the Usage tab. */
+ * accounts still have headroom and which are spent, without opening the Usage tab.
+ *
+ * The chat composer's `usagePercent` returns undefined when all limit windows have reset (empty array). That is
+ * the right answer there — a stale reading should not pin a chip. But on this manage page a reset account IS at
+ * 0%, not unmeasured: it was measured at some point, every window reopened, and saying "we don't know" is less
+ * useful than saying "you have room". So the ring treats empty-windows-but-measured as 0%. */
 const accountRing = (account: OauthAccount): { percent: number; tone: string; tooltip: string } | undefined => {
     const usage = usageStatusByAccount.value[account.id] ?? account.usage;
-    const percent = usagePercent(usage);
-    if (usage === undefined || percent === undefined) {
+    if (usage === undefined) {
         return undefined;
     }
+    // usagePercent returns undefined when windows is empty (all pools reset) — treat as 0% here.
+    const percent = usagePercent(usage) ?? 0;
     return { percent, tone: usageTone(percent), tooltip: usageDetail(usage) };
 };
 
