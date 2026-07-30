@@ -2,6 +2,7 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
 import { Button, Icon, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import AuthorAvatar from "./AuthorAvatar.vue";
 import PipelineDagGraph from "./PipelineDagGraph.vue";
 import PipelineGraph from "./PipelineGraph.vue";
 import { pipelineStages } from "./pipelineDag";
@@ -35,6 +36,9 @@ const actionKey = `${props.run.host}:${props.run.project}:${props.run.runId}`;
 
 const tone = computed(() => STATUS_TONE[props.run.status]);
 const duration = computed(() => formatDuration(props.run.durationSeconds));
+// The commit subject is the headline. Without one, the vendor's own name for an unnamed pipeline — its id —
+// beats repeating the branch and sha that the line below already carries.
+const headline = computed(() => props.run.title ?? `#${props.run.runId}`);
 const jobCount = computed(() => stages.value.reduce((total, stage) => total + stage.jobs.length, 0));
 </script>
 
@@ -47,20 +51,24 @@ const jobCount = computed(() => stages.value.reduce((total, stage) => total + st
         <div class="flex w-full items-center gap-3 px-4 py-3">
             <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />
 
+            <AuthorAvatar :name="run.authorName" :avatar-url="run.authorAvatarUrl" />
+
             <!-- Pipeline info -->
             <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <div class="flex items-center gap-2">
                     <a
                         :href="run.url"
                         target="_blank"
                         rel="noopener"
-                        class="truncate text-sm font-medium text-content hover:text-link"
+                        class="min-w-0 truncate text-sm font-medium text-content hover:text-link"
+                        :title="headline"
                     >
-                        {{ run.title ?? `${run.branch} @ ${run.sha.slice(0, 7)}` }}
+                        {{ headline }}
                     </a>
-                    <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" />
+                    <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" class="shrink-0" />
                 </div>
                 <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
+                    <span v-if="run.authorName" class="truncate font-medium text-muted">{{ run.authorName }}</span>
                     <span class="inline-flex items-center gap-1">
                         <Icon name="code" class="text-2xs" />
                         <span class="font-mono">{{ run.branch }}</span>

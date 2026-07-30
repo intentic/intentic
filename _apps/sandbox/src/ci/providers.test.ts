@@ -63,6 +63,7 @@ test("githubRun normalizes a workflow_run object — duration only once terminal
         created_at: "2026-07-29T10:00:00Z",
         run_started_at: "2026-07-29T10:00:10Z",
         updated_at: "2026-07-29T10:02:10Z",
+        actor: { login: "octocat", avatar_url: "https://avatars.github.com/u/1" },
     });
     expect(run).toMatchObject({
         repo: "web",
@@ -72,6 +73,8 @@ test("githubRun normalizes a workflow_run object — duration only once terminal
         branch: "main",
         status: "failed",
         durationSeconds: 120,
+        authorName: "octocat",
+        authorAvatarUrl: "https://avatars.github.com/u/1",
     });
     const running = githubRun(githubProject, {
         id: 8,
@@ -86,6 +89,8 @@ test("githubRun normalizes a workflow_run object — duration only once terminal
     expect(running.status).toBe("running");
     expect(running.durationSeconds).toBeUndefined();
     expect(running.title).toBeUndefined();
+    expect(running.authorName).toBeUndefined();
+    expect(running.authorAvatarUrl).toBeUndefined();
 });
 
 test("gitlabRun and gitlabHookRun normalize both pipeline shapes", () => {
@@ -167,6 +172,50 @@ test("ensureHook is idempotent by delivery url; removeHook deletes exactly the m
         spec.url,
     );
     expect(removing.some((call) => call.method === "DELETE" && call.url.endsWith("/hooks/9"))).toBe(true);
+});
+
+const gitlabPipelines = [
+    { id: 42, ref: "main", sha: "sha-a", status: "success", web_url: "u42", created_at: "2026-07-29T10:00:00Z", updated_at: "2026-07-29T10:03:00Z" },
+    { id: 43, ref: "main", sha: "sha-b", status: "failed", web_url: "u43", created_at: "2026-07-29T11:00:00Z", updated_at: "2026-07-29T11:01:00Z" },
+];
+
+test("gitlab listRuns joins the head commit and looks an avatar up once per distinct author", async () => {
+    const calls: { method: string; url: string }[] = [];
+    const client = ciClientFor(
+        "gitlab",
+        scriptedFetch(
+            {
+                "GET /pipelines?": gitlabPipelines,
+                "GET /repository/commits": [
+                    { id: "sha-a", title: "feat: draw the job graph", author_name: "Ada Lovelace", author_email: "ada@example.com" },
+                    { id: "sha-b", title: "fix: the build", author_name: "Ada Lovelace", author_email: "ada@example.com" },
+                ],
+                "GET /avatar?email=": { avatar_url: "https://cdn.example.com/ada.png" },
+            },
+            calls,
+        ),
+    );
+    const runs = await client.listRuns(gitlabProject, 15);
+    expect(runs[0]).toMatchObject({
+        runId: 42,
+        title: "feat: draw the job graph",
+        authorName: "Ada Lovelace",
+        authorAvatarUrl: "https://cdn.example.com/ada.png",
+    });
+    expect(runs[1]).toMatchObject({ runId: 43, title: "fix: the build", authorName: "Ada Lovelace" });
+    // Both pipelines share an author, so the deduped lookup must cost exactly one avatar call.
+    expect(calls.filter((call) => call.url.includes("/avatar?email=")).length).toBe(1);
+    expect(calls.some((call) => call.url.includes("/repository/commits?all=true"))).toBe(true);
+});
+
+test("gitlab listRuns still lists when the commit join and avatar lookup are refused", async () => {
+    // Neither enrichment endpoint is scripted, so both answer 404 — the run list must survive that.
+    const runs = await ciClientFor("gitlab", scriptedFetch({ "GET /pipelines?": gitlabPipelines }, [])).listRuns(gitlabProject, 15);
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({ runId: 42, status: "success", branch: "main" });
+    expect(runs[0]?.title).toBeUndefined();
+    expect(runs[0]?.authorName).toBeUndefined();
+    expect(runs[0]?.authorAvatarUrl).toBeUndefined();
 });
 
 test("gitlab client addresses the project by its url-encoded path", async () => {

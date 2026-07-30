@@ -86,6 +86,9 @@ export interface GithubRun {
     readonly created_at: string;
     readonly run_started_at?: string;
     readonly updated_at: string;
+    // Who set the run off. Present on both the runs list and the workflow_run webhook, so the view's avatar
+    // costs no extra call on either path. Actions' own UI credits this same actor.
+    readonly actor?: { readonly login?: string; readonly avatar_url?: string } | null;
 }
 
 // One workflow_run object → the normalized run — shared verbatim by the list call and the webhook receiver
@@ -100,6 +103,8 @@ export const githubRun = (project: Pick<CiProject, "repo" | "project">, run: Git
         project: project.project,
         runId: run.id,
         ...(run.display_title !== undefined && run.display_title !== "" ? { title: run.display_title } : {}),
+        ...(run.actor?.login !== undefined && run.actor.login !== "" ? { authorName: run.actor.login } : {}),
+        ...(run.actor?.avatar_url !== undefined && run.actor.avatar_url !== "" ? { authorAvatarUrl: run.actor.avatar_url } : {}),
         branch: run.head_branch ?? "",
         sha: run.head_sha,
         status,
@@ -243,18 +248,37 @@ interface GitlabPipeline {
     readonly updated_at?: string;
 }
 
+// What a pipeline's head commit adds to its run. The pipelines list carries none of it, so listRuns joins it
+// in from the commits endpoint — a pipeline named only by its id is useless to read.
+export interface GitlabCommit {
+    readonly id: string;
+    readonly title?: string;
+    readonly author_name?: string;
+    readonly author_email?: string;
+}
+
 // One pipelines-list row → the normalized run. The list carries no duration; a terminal pipeline's
 // created→updated span stands in (webhook events carry the true one and overwrite this in the cache).
-export const gitlabRun = (project: Pick<CiProject, "repo" | "project">, pipeline: GitlabPipeline): PipelineRun => {
+// `commit`/`avatarUrl` are the listRuns enrichment; both absent still yields a valid run.
+export const gitlabRun = (
+    project: Pick<CiProject, "repo" | "project">,
+    pipeline: GitlabPipeline,
+    commit?: GitlabCommit,
+    avatarUrl?: string,
+): PipelineRun => {
     const status = gitlabStatus(pipeline.status);
     const created = epoch(pipeline.created_at);
     const updated = epoch(pipeline.updated_at);
+    // A named pipeline says more than a commit subject; fall back to the subject when it has no name.
+    const title = pipeline.name !== undefined && pipeline.name !== null && pipeline.name !== "" ? pipeline.name : commit?.title;
     return {
         repo: project.repo,
         host: "gitlab",
         project: project.project,
         runId: pipeline.id,
-        ...(pipeline.name !== undefined && pipeline.name !== null && pipeline.name !== "" ? { title: pipeline.name } : {}),
+        ...(title !== undefined && title !== "" ? { title } : {}),
+        ...(commit?.author_name !== undefined && commit.author_name !== "" ? { authorName: commit.author_name } : {}),
+        ...(avatarUrl !== undefined && avatarUrl !== "" ? { authorAvatarUrl: avatarUrl } : {}),
         branch: pipeline.ref,
         sha: pipeline.sha,
         status,
@@ -279,18 +303,22 @@ export interface GitlabPipelineHook {
     };
     readonly project: { readonly path_with_namespace: string; readonly web_url: string };
     readonly commit?: { readonly title?: string };
-    readonly user?: { readonly name?: string; readonly username?: string };
+    // The hook is the one gitlab path that hands us an avatar outright — no /avatar lookup needed.
+    readonly user?: { readonly name?: string; readonly username?: string; readonly avatar_url?: string };
 }
 
 export const gitlabHookRun = (project: Pick<CiProject, "repo" | "project">, hook: GitlabPipelineHook): PipelineRun => {
     const attributes = hook.object_attributes;
     const title = attributes.name ?? hook.commit?.title;
+    const author = hook.user?.name ?? hook.user?.username;
     return {
         repo: project.repo,
         host: "gitlab",
         project: project.project,
         runId: attributes.id,
         ...(title !== undefined && title !== null && title !== "" ? { title } : {}),
+        ...(author !== undefined && author !== "" ? { authorName: author } : {}),
+        ...(hook.user?.avatar_url !== undefined && hook.user.avatar_url !== "" ? { authorAvatarUrl: hook.user.avatar_url } : {}),
         branch: attributes.ref,
         sha: attributes.sha,
         status: gitlabStatus(attributes.status),
@@ -303,7 +331,49 @@ export const gitlabHookRun = (project: Pick<CiProject, "repo" | "project">, hook
 const gitlabApi = (project: CiProject, path: string): string => `${project.account.apiBase}/projects/${encodeURIComponent(project.project)}${path}`;
 const gitlabHeaders = (project: CiProject): Record<string, string> => ({ "PRIVATE-TOKEN": project.account.token });
 
+// How far back the commit join reaches. The 15 newest pipelines sit inside the last 100 commits on any real
+// repo; a run older than that keeps the ref@sha headline rather than costing a per-run lookup.
+const GITLAB_COMMIT_SCAN = 100;
+// Avatars cost one call per distinct author, so a wildly multi-author page can't fan out without bound.
+const GITLAB_AVATAR_LOOKUPS = 8;
+
 const gitlabClient = (fetchFn: FetchFn): CiClient => {
+    // `all` sweeps every ref, so a pipeline on a side branch resolves too — without it gitlab answers with the
+    // default branch alone. Enrichment never fails a listing: an error here just leaves runs unadorned.
+    const commitsBySha = async (project: CiProject): Promise<Map<string, GitlabCommit>> => {
+        try {
+            const commits = await json<GitlabCommit[]>(
+                await fetchFn(gitlabApi(project, `/repository/commits?all=true&per_page=${GITLAB_COMMIT_SCAN}`), { headers: gitlabHeaders(project) }),
+                "gitlab commits list",
+            );
+            return new Map(commits.map((commit) => [commit.id, commit]));
+        } catch {
+            // Deliberate swallow, not a rethrow: a token without read_repository still deserves a run list.
+            return new Map();
+        }
+    };
+
+    // gitlab exposes no avatar on commits, but `/avatar?email=` resolves one per address. Deduped, capped, and
+    // individually best-effort, so the common single-author page costs exactly one call.
+    const avatarsByEmail = async (project: CiProject, emails: readonly (string | undefined)[]): Promise<Map<string, string>> => {
+        const distinct = [...new Set(emails.filter((email): email is string => email !== undefined && email !== ""))].slice(0, GITLAB_AVATAR_LOOKUPS);
+        const found = await Promise.all(
+            distinct.map(async (email): Promise<readonly [string, string] | undefined> => {
+                try {
+                    const avatar = await json<{ avatar_url?: string | null }>(
+                        await fetchFn(`${project.account.apiBase}/avatar?email=${encodeURIComponent(email)}`, { headers: gitlabHeaders(project) }),
+                        "gitlab avatar",
+                    );
+                    return avatar.avatar_url === undefined || avatar.avatar_url === null ? undefined : ([email, avatar.avatar_url] as const);
+                } catch {
+                    // One unresolvable address must not cost the page its other avatars.
+                    return undefined;
+                }
+            }),
+        );
+        return new Map(found.filter((entry) => entry !== undefined));
+    };
+
     const post = async (project: CiProject, path: string, what: string, body?: object): Promise<void> => {
         await throwOn(
             await fetchFn(gitlabApi(project, path), {
@@ -325,7 +395,16 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
                 await fetchFn(gitlabApi(project, `/pipelines?per_page=${limit}`), { headers: gitlabHeaders(project) }),
                 "gitlab pipelines list",
             );
-            return listed.map((pipeline) => gitlabRun(project, pipeline));
+            // A pipeline row names neither its commit nor its author, so the view would show "ref @ sha" for
+            // every run. Two batched enrichments fix that, and both are best-effort: a run reads fine without
+            // them, and this sits on the cache-miss backfill path rather than the poll.
+            const commits = await commitsBySha(project);
+            const avatars = await avatarsByEmail(project, listed.map((pipeline) => commits.get(pipeline.sha)?.author_email));
+            return listed.map((pipeline) => {
+                const commit = commits.get(pipeline.sha);
+                const avatar = commit?.author_email === undefined ? undefined : avatars.get(commit.author_email);
+                return gitlabRun(project, pipeline, commit, avatar);
+            });
         },
         failedJobs: async (project, runId) => (await failedJobsOf(project, runId)).map((job) => job.name),
         // `stage` is native here, so the view groups by it directly; the timestamps still ride along to order

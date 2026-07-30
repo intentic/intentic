@@ -2055,8 +2055,13 @@ export const PipelineRunSchema = z.object({
     project: z.string(),
     // The vendor's numeric run/pipeline id — what rerun/cancel address.
     runId: z.number(),
-    // github's display_title (the commit/PR line); gitlab's pipeline name when set. Absent ⇒ the view shows ref@sha.
+    // The run's headline: github's display_title (the commit subject, or the PR title when a PR triggered it),
+    // gitlab's pipeline name or the head commit's subject. Absent ⇒ the view falls back to ref@sha.
     title: z.string().optional(),
+    // Who the vendor credits for the run — github's triggering actor (matching what Actions itself shows),
+    // gitlab's commit author. The avatar is a vendor-hosted URL; absent ⇒ the view draws initials instead.
+    authorName: z.string().optional(),
+    authorAvatarUrl: z.string().optional(),
     branch: z.string(),
     sha: z.string(),
     status: PipelineStatusSchema,

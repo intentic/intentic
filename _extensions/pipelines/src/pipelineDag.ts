@@ -92,6 +92,17 @@ export const pipelineStages = (jobs: readonly PipelineJob[]): PipelineStage[] =>
     return groups.map((group) => ({ name: group.name, status: worstStatus(group.jobs), jobs: group.jobs }));
 };
 
+// What to call a stage on screen. GitLab names its own. A derived GitHub wave has no vendor name, but a wave
+// holding a single job is that job — "build" beats "Step 1" — so only a genuinely parallel unnamed wave falls
+// back to its position.
+export const stageLabel = (stage: PipelineStage, index: number): string => {
+    if (stage.name !== undefined) {
+        return stage.name;
+    }
+    const [only] = stage.jobs;
+    return stage.jobs.length === 1 && only !== undefined ? only.name : `Step ${index + 1}`;
+};
+
 // Stable per-job node id. Positional rather than name-based: GitHub matrix legs and reruns can repeat a name
 // within a run, and a duplicate id would silently drop a node from the graph.
 export const jobNodeId = (stageIndex: number, jobIndex: number): string => `${stageIndex}:${jobIndex}`;

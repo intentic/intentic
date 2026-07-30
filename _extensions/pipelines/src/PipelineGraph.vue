@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Icon, Popover, StatusBadge } from "@intentic/extension-ui";
 import { ref } from "vue";
-import type { PipelineStage } from "./pipelineDag";
+import { type PipelineStage, stageLabel } from "./pipelineDag";
 import { formatDuration, STATUS_TONE } from "./statusVisual";
 
 /* The mini pipeline graph that sits in a run row: one circle per stage, connected left→right, each coloured
@@ -23,8 +23,12 @@ const toggleStage = (index: number, event: Event): void => {
     open.value = open.value === index ? undefined : index;
 };
 
-// GitLab names its stages; a GitHub wave is identified by its position in the run instead.
-const stageLabel = (stage: PipelineStage, index: number): string => stage.name ?? `Step ${index + 1}`;
+// Hover text: what the stage is called, how it ended, and — when it holds more than the one job its label
+// already names — how many jobs are inside.
+const stageTooltip = (stage: PipelineStage, index: number): string => {
+    const detail = stage.jobs.length > 1 ? ` · ${stage.jobs.length} jobs` : ``;
+    return `${stageLabel(stage, index)} — ${STATUS_TONE[stage.status].label}${detail}`;
+};
 </script>
 
 <template>
@@ -37,7 +41,7 @@ const stageLabel = (stage: PipelineStage, index: number): string => stage.name ?
                 type="button"
                 class="relative flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-transform hover:scale-110"
                 :class="STATUS_TONE[stage.status].circle"
-                :title="`${stageLabel(stage, index)} — ${STATUS_TONE[stage.status].label}`"
+                v-tooltip.top="stageTooltip(stage, index)"
                 @click="toggleStage(index, $event)"
             >
                 <Icon
@@ -50,7 +54,7 @@ const stageLabel = (stage: PipelineStage, index: number): string => stage.name ?
             <Popover :ref="(el: any) => { popovers[index] = el; }">
                 <div class="flex w-64 flex-col gap-2 p-1">
                     <div class="flex items-center gap-2">
-                        <span class="text-sm font-semibold text-content">{{ stageLabel(stage, index) }}</span>
+                        <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content">{{ stageLabel(stage, index) }}</span>
                         <StatusBadge :variant="STATUS_TONE[stage.status].variant" :label="STATUS_TONE[stage.status].label" size="xs" />
                     </div>
                     <div class="flex flex-col divide-y divide-line">
