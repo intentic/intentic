@@ -8,6 +8,7 @@ import { daemonErrorMessage, daemonErrorStatus, sandboxRpc, SandboxUnaddressedEr
 import { useSandboxSession } from "./sandboxSession";
 import { applySystemEvent } from "./systemEvents";
 import { sandboxQueryPredicate } from "./systemEventRouting";
+import { resetDaemonBoot } from "./useDaemonBoot";
 import { resetDaemonRoutes } from "./useDaemonRoutes";
 import { useEndpoint } from "./useEndpoint";
 import { signalConnection, useSandbox } from "./useSandbox";
@@ -233,9 +234,11 @@ watch(activeSandboxId, (id, previous) => {
         resetEndpoint(id);
     }
     signalConnection({ kind: `switched`, lastKnownOnline: id !== undefined && (lastKnown.get(id) ?? false) });
-    // Another sandbox runs another image — attributing the outgoing daemon's route surface to it would hide or
-    // invent features on the incoming one.
+    // Another sandbox runs another image, on its own clock — attributing the outgoing daemon's route surface
+    // to it would hide or invent features on the incoming one, and its boot state would gate (or ungate) the
+    // wrong daemon's reads. Both re-report on the next hello.
     resetDaemonRoutes();
+    resetDaemonBoot();
     controller?.abort();
     wake?.();
 });

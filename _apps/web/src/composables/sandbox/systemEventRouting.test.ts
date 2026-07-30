@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { manifestQueryKeys, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
+import { daemonRebuilt, manifestQueryKeys, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 
 describe(`manifestQueryKeys`, () => {
     it(`maps a manifest write to the queries it makes stale`, () => {
@@ -57,6 +57,45 @@ describe(`workspaceReplaced`, () => {
     it(`tracks each sandbox's workspace independently`, () => {
         workspaceReplaced(`sbx-1`, `ws-a`);
         expect(workspaceReplaced(`sbx-2`, `ws-b`)).toBe(false);
+    });
+});
+
+describe(`daemonRebuilt`, () => {
+    beforeEach(() => localStorage.clear());
+
+    it(`accepts a first sighting without claiming a rebuild`, () => {
+        expect(daemonRebuilt(`sbx-1`, `0.0.0:1000`)).toBe(false);
+    });
+
+    it(`stays quiet across restarts of the same build`, () => {
+        // The common case by far: a daemon restart is not a reason to throw away a working cache.
+        daemonRebuilt(`sbx-1`, `0.0.0:1000`);
+        expect(daemonRebuilt(`sbx-1`, `0.0.0:1000`)).toBe(false);
+    });
+
+    it(`reports a rebuilt daemon exactly once`, () => {
+        daemonRebuilt(`sbx-1`, `0.0.0:1000`);
+        expect(daemonRebuilt(`sbx-1`, `0.0.0:2000`)).toBe(true);
+        expect(daemonRebuilt(`sbx-1`, `0.0.0:2000`)).toBe(false);
+    });
+
+    it(`tracks each sandbox's build independently`, () => {
+        daemonRebuilt(`sbx-1`, `0.0.0:1000`);
+        expect(daemonRebuilt(`sbx-2`, `0.0.0:2000`)).toBe(false);
+    });
+
+    it(`a daemon that advertises no build neither reports nor forgets`, () => {
+        // Too old to interrogate — the silence must not read as a change, and must not overwrite what a newer
+        // daemon on the same sandbox already told us.
+        daemonRebuilt(`sbx-1`, `0.0.0:1000`);
+        expect(daemonRebuilt(`sbx-1`, undefined)).toBe(false);
+        expect(daemonRebuilt(`sbx-1`, `0.0.0:2000`)).toBe(true);
+    });
+
+    it(`is independent of the workspace identity on the same sandbox`, () => {
+        // Two guards, two records: a rebuild must not read as a wipe, or a wipe as a rebuild.
+        workspaceReplaced(`sbx-1`, `ws-a`);
+        expect(daemonRebuilt(`sbx-1`, `ws-a`)).toBe(false);
     });
 });
 

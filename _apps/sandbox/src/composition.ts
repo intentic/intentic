@@ -112,6 +112,7 @@ import { readSessionPrompts } from "./sessions/prompt-index.js";
 import { agentTranscript, type AgentTranscriptDeps, storedTranscript, type TranscriptAgent } from "./sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
+import { type BootTracker, createBootTracker } from "./platform/boot.js";
 import { postToPlatform, type PlatformResponse } from "./platform/platform-client.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
 import { version } from "./version.js";
@@ -141,6 +142,10 @@ import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/workspace-
 export interface Services {
     readonly config: Config;
     readonly logger: Logger;
+    // Where the boot chain is. main.ts declares its steps and drives it; app.ts gates every data route on its
+    // `converged` promise, and /events streams its progress so the browser can WAIT VISIBLY instead of firing
+    // a workspace's worth of reads at a daemon that will only park them (see platform/boot.ts).
+    readonly boot: BootTracker;
     readonly workspace: WorkspacePaths;
     // Per-repository operator panels: the in-memory process manager the /panels routes and the preview proxy
     // drive (discovery of which repo has a panel is convention-only — see panels/panels.ts).
@@ -481,6 +486,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     return {
         config,
         logger,
+        // Born converged — main() declares the chain and closes the gate behind it, so a services object built
+        // for a test or the host-internal preview has nothing to wait for.
+        boot: createBootTracker(logger),
         workspace,
         processes: createManagedProcesses(),
         portForwards: createPortForwards(),

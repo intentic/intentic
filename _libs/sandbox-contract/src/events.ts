@@ -395,19 +395,63 @@ export type IntenticLine = z.infer<typeof IntenticLineSchema>;
 export const HeartbeatSchema = z.object({ kind: z.literal("heartbeat") });
 export type Heartbeat = z.infer<typeof HeartbeatSchema>;
 
+// One step of the daemon's boot chain. `key` is the stable id the daemon declares it under, `label` the words
+// the browser shows. A step that FAILED is still a step that finished — the boot chain is log-and-continue by
+// design (see main.ts), so a failure degrades one subsystem rather than holding the gate closed forever.
+export const BootStepSchema = z.object({
+    key: z.string(),
+    label: z.string(),
+    state: z.enum(["pending", "running", "done", "failed"]),
+    // Elapsed ms, once the step has finished.
+    ms: z.number().optional(),
+});
+export type BootStep = z.infer<typeof BootStepSchema>;
+
+/* WHERE THE DAEMON IS IN ITS BOOT. The listeners come up before the state they serve has converged (main.ts:
+ * "listen first, converge behind the gate"), which is what stops a restart from reading as an outage — but it
+ * also means the daemon spends the first seconds of every boot both reachable and unable to answer, and until
+ * this frame existed the browser had no way to tell that apart from a healthy sandbox. It painted an operable
+ * workspace off its persisted cache and then parked every request the user made against the readiness gate.
+ *
+ * The step list is declared UP FRONT and sent whole, pending entries included, so the browser can say "4 of 11,
+ * loading the conversation registry" rather than "something is happening" — a boot that takes minutes has one
+ * slow step, and naming it is the whole point. Snapshot-not-diff, like every other roster on this stream. */
+export const BootProgressSchema = z.object({
+    // False only while the chain is still converging. The browser holds every daemon read until this is true.
+    ready: z.boolean(),
+    // Epoch ms the daemon started converging, so the browser can show a total elapsed that survives a reconnect.
+    startedAt: z.number(),
+    steps: z.array(BootStepSchema),
+});
+export type BootProgress = z.infer<typeof BootProgressSchema>;
+
+// Pushed on every step transition and once more when the gate opens. Rides /events, which answers before the
+// gate precisely so this can be delivered while everything else waits.
+export const BootSchema = z.object({ kind: z.literal("boot"), ...BootProgressSchema.shape });
+export type Boot = z.infer<typeof BootSchema>;
+
 // The stream's first frame: the workspace's stable identity, minted at the first boot of an empty /work. The
 // browser remembers it per sandbox id and drops that sandbox's persisted query cache when it changes — a wiped
 // and recreated workspace (cleanup.sh + reconnect keeps the same sandbox id) must not be painted from the
-// previous workspace's cache.
+// previous workspace's cache. `build` is the same guard against a different axis: the daemon's own compiled
+// tree, so an image update (or a `pnpm build:sandbox` swap in dev) drops what the browser cached from the
+// PREVIOUS build instead of hydrating payloads the new one no longer shapes that way.
 //
 // It also advertises `routes` — the contract route names (`vpn.list`, `kimi.models`) this daemon actually
 // implements, from ITS build of the contract. A browser is routinely newer than the daemon it talks to (a
 // released app plane serves whatever image each user last pulled; in local dev the web app is always ahead of
 // the last `pnpm build:sandbox`), and that stays fully supported — the browser just compares the two sets so a
 // route the daemon predates surfaces as a named, explained gap instead of a bare 404 nobody can attribute.
-// Optional: a daemon built before this field simply advertises nothing, and every route is assumed present,
-// which is exactly the pre-existing behaviour.
-export const HelloSchema = z.object({ kind: z.literal("hello"), workspaceId: z.string(), routes: z.array(z.string()).optional() });
+//
+// Every added field is optional: a daemon built before one simply says nothing, and the browser's fallback is
+// the pre-existing behaviour — routes all assumed present, the daemon assumed ready, the cache left alone.
+export const HelloSchema = z.object({
+    kind: z.literal("hello"),
+    workspaceId: z.string(),
+    routes: z.array(z.string()).optional(),
+    build: z.string().optional(),
+    boot: BootProgressSchema.optional(),
+});
 export type Hello = z.infer<typeof HelloSchema>;
 
 // The FULL discovered repo set (sorted root-relative ids), pushed whenever it changes — a clone, a scaffold,
@@ -457,12 +501,13 @@ export type Presence = z.infer<typeof PresenceSchema>;
 export const AgentsSchema = z.object({ kind: z.literal("agents"), agents: z.array(AgentSummarySchema), rev: z.number() });
 export type Agents = z.infer<typeof AgentsSchema>;
 
-// The /events stream union: the hello identity frame, then liveness heartbeats interleaved with
+// The /events stream union: the hello identity frame, then liveness heartbeats interleaved with boot progress,
 // workspace-change batches, repo-set snapshots, and presence + fleet roster snapshots. oRPC validates every
 // yielded frame against this, so all kinds must live here.
 export const SystemEventSchema = z.discriminatedUnion("kind", [
     HelloSchema,
     HeartbeatSchema,
+    BootSchema,
     WorkspaceChangedSchema,
     ReposChangedSchema,
     PresenceSchema,

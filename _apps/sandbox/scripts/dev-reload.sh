@@ -55,7 +55,9 @@ echo "intentic: restarting ${CONTAINER}…"
 docker restart "$CONTAINER" >/dev/null
 
 # Gate on the daemon's own /health, exactly like dev-sandbox.sh: a container that comes back up but crash-loops
-# on the new code must not report success.
+# on the new code must not report success. Then on its BOOT: /health answers the moment the process listens,
+# while every data route stays parked behind the readiness gate until the chain converges — returning at the
+# first 200 reports "reloaded" for a daemon the browser cannot read yet.
 echo "intentic: waiting for the daemon…"
 tries=0
 until docker exec "$CONTAINER" curl -sf http://localhost:8787/health >/dev/null 2>&1; do
@@ -66,6 +68,16 @@ until docker exec "$CONTAINER" curl -sf http://localhost:8787/health >/dev/null 
         exit 1
     fi
     sleep 2
+done
+# A daemon too old to report a boot answers no `"ready":false`, which reads as ready — the old behaviour.
+waited=0
+while docker exec "$CONTAINER" curl -sf http://localhost:8787/health 2>/dev/null | grep -qF '"ready":false'; do
+    waited=$((waited + 1))
+    if [ "$waited" -ge 120 ]; then
+        echo "intentic: still warming up after 2 minutes — it keeps going in the background."
+        break
+    fi
+    sleep 1
 done
 
 echo "intentic: daemon reloaded — docker logs -f ${CONTAINER}"

@@ -11,6 +11,8 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
 import SandboxConnecting from "./SandboxConnecting.vue";
 import SandboxUnauthorized from "./SandboxUnauthorized.vue";
+import SandboxWarming from "./SandboxWarming.vue";
+import { daemonReady } from "../composables/sandbox/useDaemonBoot";
 
 /* The sandbox-readiness gates + global banners, shared by both shells (desktop grid, mobile tabs): the
  * pre-bind account-mismatch nudge, the denied (403) and connecting gates, and the environment action banner.
@@ -30,6 +32,11 @@ const denied = computed(() => connection.value.failure?.kind === `forbidden`);
 // own builds — deserves the stale view; one that is positively down must not look operable (connection.ts
 // showOutageGate owns the line between the two).
 const outage = computed(() => showOutageGate(connection.value));
+// The daemon answered and is still converging its boot chain — reachable, and unable to serve a single data
+// route until it finishes (useDaemonBoot). Its own gate, ahead of the hydrated-cache paint below, because this
+// is the one unreachable-ish state a stale paint actively harms: everything it renders is operable-LOOKING and
+// every request it makes parks. `phase === online` rather than `reachable`, which this very fact gates.
+const warming = computed(() => connection.value.phase === `online` && !daemonReady.value);
 // A hydrated (IndexedDB-restored) tree marks the sandbox as previously visited: paint it stale-while-
 // revalidate instead of the connecting gate; the SSE connect refetches everything the moment it lands.
 const { tree } = useWorkspaceTree();
@@ -46,7 +53,9 @@ const { bannerVisible: versionUpdateVisible, dismiss: dismissVersionUpdate } = u
 // screen names both) and once reachable (a reachable mismatch is a legit member on a second Google identity).
 const accountMismatch = computed(
     () =>
-        user.value?.email !== undefined && presentedEmail.value !== undefined && user.value.email.toLowerCase() !== presentedEmail.value.toLowerCase(),
+        user.value?.email !== undefined &&
+        presentedEmail.value !== undefined &&
+        user.value.email.toLowerCase() !== presentedEmail.value.toLowerCase(),
 );
 const switchAccount = (): void => {
     clearCredential();
@@ -71,6 +80,10 @@ const switchAccount = (): void => {
         </button>
     </div>
     <SandboxUnauthorized v-if="denied" />
+    <!-- A daemon still converging its boot: ALWAYS its own screen, cached tree or not. The stale paint below
+         exists to ride out a sandbox that is slow to answer; a warming one answers instantly and refuses
+         everything, which the paint would present as a working workspace. -->
+    <SandboxWarming v-else-if="warming" />
     <!-- Cached paint while connecting is unresolved OR through a short blip: only a sustained/blocked failure
          falls back to the full gate, so a dead sandbox (cleanup.sh, stopped container) never renders an
          operable-looking workspace for more than the couple of attempts that prove it dead. -->

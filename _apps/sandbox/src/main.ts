@@ -58,6 +58,25 @@ import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/work
 // for all of it. The listeners now come up immediately: /health and /events answer at once (the UI paints,
 // heartbeats flow), and every data route waits on the readiness gate (app.ts), which resolves when the chain
 // finishes — the same ordering guarantees, minus the outage.
+//
+// The chain NAMES ITSELF, in the table below. Every awaited step is declared here before any of it runs, so
+// /health and /events can report which one is in flight and how far along the boot is — the browser holds its
+// reads and shows the wait rather than painting an operable workspace over a daemon that answers nothing (see
+// platform/boot.ts). A step added below without an entry here throws on its first run.
+const BOOT_STEPS = [
+    { key: "authorizedKeys", label: "Restoring desktop enrollments" },
+    { key: "claudeState", label: "Linking conversation state" },
+    { key: "sshHosts", label: "Linking ssh hosts" },
+    { key: "rootRepo", label: "Preparing the workspace repo" },
+    { key: "referenceShelf", label: "Ensuring the reference shelf" },
+    { key: "repoGitDirs", label: "Healing repository git dirs" },
+    { key: "agentsRegistry", label: "Loading conversations" },
+    { key: "skills", label: "Converging agent skills" },
+    { key: "baseline", label: "Taking the workspace baseline" },
+    { key: "staleSessions", label: "Sweeping stale sessions" },
+    { key: "agentToken", label: "Writing the agent token" },
+] as const;
+
 const main = async (): Promise<void> => {
     const config = loadConfig();
     // Every intentic CLI run spawned in here (the /intentic routes, the panel-infra-apply tmux session) tees
@@ -97,14 +116,12 @@ const main = async (): Promise<void> => {
         seedPairing(config.syncPairToken);
     }
 
-    // The readiness gate the data routes await (app.ts): resolved when the boot chain has converged the state
-    // those routes serve. A request that arrives early WAITS a few seconds instead of reading half-built state.
-    let resolveReady!: () => void;
-    const ready = new Promise<void>((resolve) => {
-        resolveReady = resolve;
-    });
+    // Close the readiness gate the data routes await (app.ts) and name what it is waiting for. A request that
+    // arrives early WAITS a few seconds instead of reading half-built state; a browser that arrives early is
+    // told which step is running and holds its reads until the last one lands.
+    services.boot.declare(BOOT_STEPS);
 
-    const app = createApp(services, ready);
+    const app = createApp(services);
     // The interactive-terminal WebSocket (/system/terminal) rides node-server's native WS support: `ws` in
     // noServer mode handles the upgrade, node-server routes it through Hono's upgradeWebSocket to the terminal.
     // `ws`'s WebSocketServer types its options.noServer as `boolean | undefined`; node-server's WebSocketServerLike
@@ -136,10 +153,7 @@ const main = async (): Promise<void> => {
             ? {}
             : { createServer: createSecureServer, serverOptions: { cert: localCertificate.certificate, key: localCertificate.privateKey } }),
     });
-    logger.info(
-        { port: config.local.port, tls: localCertificate !== undefined, hostname: localCertificate?.hostname },
-        "loopback listener ready",
-    );
+    logger.info({ port: config.local.port, tls: localCertificate !== undefined, hostname: localCertificate?.hostname }, "loopback listener ready");
     // Obtain/renew in the background. Never rejects: a sandbox with no certificate is a working sandbox.
     const localCertRenewal = startLocalCertificateRenewal(config, logger);
 
@@ -160,24 +174,15 @@ const main = async (): Promise<void> => {
         announcer.start();
     }
 
-    // Boot-step stopwatch: a boot that takes minutes has ONE slow step, and until it is named in the log every
-    // slow boot reads as "the daemon is just slow". Logged only past the threshold — a healthy boot stays quiet.
-    const timed = async <T>(step: string, run: () => Promise<T>): Promise<T> => {
-        const startedAt = performance.now();
-        try {
-            return await run();
-        } finally {
-            const ms = Math.round(performance.now() - startedAt);
-            if (ms > 1_000) {
-                logger.info({ step, ms }, "boot: slow step");
-            }
-        }
-    };
+    // Every awaited step below runs through the tracker: it stamps the step's state and elapsed time, logs the
+    // slow ones (a boot that takes minutes has ONE slow step, and until it is named every slow boot reads as
+    // "the daemon is just slow"), and streams the transition to whatever browser is watching.
+    const boot = services.boot;
 
     // Desktop enrollments live on /history and outlive the container; the authorized_keys sshd reads does NOT
     // (it is ~/.ssh, container-local), so re-derive it from the store before sshd serves a laptop's first
     // reconnect. Ordered before the gate resolves — a rebuild otherwise leaves every enrollment valid but unauthorized.
-    await timed("restoreAuthorizedKeys", () =>
+    await boot.step("authorizedKeys", () =>
         restoreAuthorizedKeys(config.historyRoot).catch((error: unknown) =>
             logger.warn({ err: error }, "authorized_keys not restored — enrolled machines will be refused until they re-enroll"),
         ),
@@ -187,7 +192,7 @@ const main = async (): Promise<void> => {
     // ~/.claude — ephemeral container fs. Converge every store onto /work BEFORE the gate opens (turns wait on
     // it, so the CLI can never race this). Awaited, unlike the best-effort steps below, because a turn
     // spawning the CLI mid-link would fork stores.
-    await timed("linkClaudeState", () =>
+    await boot.step("claudeState", () =>
         linkClaudeState(services.workspace.root).catch((error: unknown) =>
             logger.warn({ err: error }, "claude session state not persisted — sessions will not survive a rebuild whole"),
         ),
@@ -198,7 +203,7 @@ const main = async (): Promise<void> => {
     // a recreate stops silently taking git access and the ssh machines down with it. Awaited for that ordering;
     // a failure (a dev-host run, where the guard refuses to touch a real ~/.ssh/intentic-hosts) leaves the
     // pre-existing local dir in place rather than the daemon down.
-    await timed("linkSshHosts", () =>
+    await boot.step("sshHosts", () =>
         linkSshHosts(config.historyRoot).catch((error: unknown) =>
             logger.warn({ err: error }, "ssh hosts dir not persisted — git access and ssh aliases will not survive a rebuild"),
         ),
@@ -207,7 +212,7 @@ const main = async (): Promise<void> => {
     // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge
     // excludes. Awaited (cheap, and the git routes assume it), but a failure must not take the daemon down — a
     // failure reads as "not fresh" so we skip the baseline commit below.
-    const freshRoot = await timed("ensureRootRepo", () =>
+    const freshRoot = await boot.step("rootRepo", () =>
         ensureRootRepo(services.workspace, config.historyRoot).catch((error: unknown) => {
             logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade");
             return false;
@@ -218,20 +223,22 @@ const main = async (): Promise<void> => {
     // IS the affordance. Every scanner already excludes it; without the dir on disk the convention is invisible
     // (nothing to drop onto, nothing in the tree to explain itself). Idempotent, so a shelf deleted mid-session
     // stays gone until the next boot re-ensures an empty one.
-    await mkdir(join(config.workspaceRoot, REFERENCE_DIR), { recursive: true }).catch((error: unknown) =>
-        logger.warn({ err: error }, "reference shelf not ensured — refs/ drops have no target"),
+    await boot.step("referenceShelf", () =>
+        mkdir(join(config.workspaceRoot, REFERENCE_DIR), { recursive: true }).catch((error: unknown) =>
+            logger.warn({ err: error }, "reference shelf not ensured — refs/ drops have no target"),
+        ),
     );
 
     // No repo keeps its git dir under /work: a worktree's gitdir pointer has to resolve identically inside an
     // isolated turn's namespace, where /work IS that worktree (agents/isolation.ts). Every daemon-created repo
     // is already shaped this way; this converges the ones that arrived by other roads. After ensureRootRepo,
     // whose excludes it does not disturb, and before the registry loads the worktrees it repairs.
-    await timed("ensureRepoGitDirs", () => ensureRepoGitDirs(services.workspace, config.historyRoot, logger));
+    await boot.step("repoGitDirs", () => ensureRepoGitDirs(services.workspace, config.historyRoot, logger));
 
     // The fleet registry: load persisted conversations and broadcast the roster (an /events stream opened
     // during boot is already holding an empty fleet). Awaited — the /agents routes assume a loaded registry —
     // but a failure degrades to an empty fleet, never a dead daemon. The worktree sweeps run DETACHED below.
-    await timed("agentsRegistryInit", () =>
+    await boot.step("agentsRegistry", () =>
         services.agents.init().catch((error: unknown) => logger.warn({ err: error }, "agents registry not initialized — the fleet starts empty")),
     );
 
@@ -239,21 +246,25 @@ const main = async (): Promise<void> => {
     // instead of surfacing them as a phantom add. Awaited for exactly that ordering; still log-and-continue, and
     // on a non-fresh boot (no baseline) their writes become ordinary pending changes for the Changes review.
     // - the drafts skill: how the agent writes post drafts for approval, so its prose tracks the daemon.
-    await ensureDraftsSkill(services).catch((error: unknown) => logger.warn({ err: error }, "drafts skill not converged"));
     // - the baked-tool skills, per the settings `skills` list — each present only when named (the CLIs are
     //   always on PATH; the skill file is what surfaces one to the agent).
-    await services.sandboxSettings
-        .get()
-        .then((settings) => reconcileSkills(services, settings.skills))
-        .catch((error: unknown) => logger.warn({ err: error }, "skill reconcile failed"));
+    await boot.step("skills", async () => {
+        await ensureDraftsSkill(services).catch((error: unknown) => logger.warn({ err: error }, "drafts skill not converged"));
+        await services.sandboxSettings
+            .get()
+            .then((settings) => reconcileSkills(services, settings.skills))
+            .catch((error: unknown) => logger.warn({ err: error }, "skill reconcile failed"));
+    });
 
     // Baseline "Initialize workspace" commit, taken once on a fresh sandbox now that the daemon's /work-owned
     // files exist — so the Changes review starts with zero pending changes.
-    if (freshRoot) {
-        await commitRootBaseline(services.workspace).catch((error: unknown) =>
-            logger.warn({ err: error }, "root baseline commit failed — the Changes review will start dirty"),
-        );
-    }
+    await boot.step("baseline", async () => {
+        if (freshRoot) {
+            await commitRootBaseline(services.workspace).catch((error: unknown) =>
+                logger.warn({ err: error }, "root baseline commit failed — the Changes review will start dirty"),
+            );
+        }
+    });
 
     // Panel/agent/job tmux sessions outlive a daemon restart (the tmux server is container-scoped) — kill
     // leftovers so "panels are stopped after a restart" holds and no orphan dev server squats an untracked
@@ -263,26 +274,28 @@ const main = async (): Promise<void> => {
     // dockerd (panel-docker keeps serving containers across daemon restarts — adopt it back). The sweep is
     // ORDERED before the gate opens so the capability restores below can't race a kill of the session they
     // just started.
-    const applyLive =
-        (await applyRunLive(applyEventsPath(config.historyRoot)).catch(() => false)) &&
-        (await services.processes.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
-    const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
-    await timed("killStaleManagedSessions", () =>
-        killStaleManagedSessions([
+    await boot.step("staleSessions", async () => {
+        const applyLive =
+            (await applyRunLive(applyEventsPath(config.historyRoot)).catch(() => false)) &&
+            (await services.processes.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
+        const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
+        await killStaleManagedSessions([
             ...(applyLive ? [panelSession(INFRA_APPLY_KEY)] : []),
             ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
-        ]).catch(() => undefined),
-    );
+        ]).catch(() => undefined);
+    });
     // A previous boot's check runs left per-run event files behind (their streams died with the daemon).
     void rm(checkEventsDir(config.historyRoot), { recursive: true, force: true });
 
     // The in-container `vpn` CLI reads this to reach the daemon's /vpn routes; written before the restores
     // below so a tunnel the agent dials during boot already has a token to present.
-    await writeAgentToken(services.agentToken).catch((error: unknown) => services.logger.warn({ err: error }, "agent token: could not write"));
+    await boot.step("agentToken", () =>
+        writeAgentToken(services.agentToken).catch((error: unknown) => services.logger.warn({ err: error }, "agent token: could not write")),
+    );
 
     // The state the data routes serve is converged — open the gate. Everything below is background machinery
     // that no queued request depends on.
-    resolveReady();
+    boot.finish();
 
     /* The worktree sweeps, DETACHED: archive entries whose checkout vanished, prune orphaned dirs and stale
      * admin entries, park the branches of off-board agents. This is the spawn-heaviest part of a boot (git per

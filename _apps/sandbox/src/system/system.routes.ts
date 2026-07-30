@@ -22,6 +22,7 @@ import { subscribeWorkspaceChanges } from "../workspace/workspace-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 import { AGENT_SESSION_PREFIX, isValidSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "../terminal/terminal-session.js";
 import { isNewer, latestVersion } from "../platform/version-check.js";
+import { buildId } from "../version.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 
 const execFileAsync = promisify(execFile);
@@ -82,11 +83,25 @@ async function* systemEvents(
     if (abort.aborted) {
         return;
     }
-    // First frame: the workspace's identity, so the browser can drop its persisted cache for a workspace that
-    // was wiped and recreated under the same sandbox id (see workspace-identity.ts), plus the route surface
-    // THIS daemon build implements. A browser newer than the daemon reads the difference and explains the gap
-    // instead of 404-ing blind; see the contract's routes.ts.
-    yield { kind: "hello", workspaceId: await workspaceIdentity(services), routes: [...SANDBOX_ROUTE_NAMES] };
+    /* First frame: the workspace's identity, so the browser can drop its persisted cache for a workspace that
+     * was wiped and recreated under the same sandbox id (see workspace-identity.ts), plus the route surface
+     * THIS daemon build implements. A browser newer than the daemon reads the difference and explains the gap
+     * instead of 404-ing blind; see the contract's routes.ts.
+     *
+     * `build` is the cache guard on the other axis — a rebuilt daemon may shape its answers differently, so
+     * the browser drops what it cached from the previous build rather than hydrating it (see version.ts).
+     *
+     * And `boot` is where the daemon is in its own convergence. This frame is the only thing the browser has
+     * to tell "up and serving" from "up and still parking every read"; without it a hydrated cache painted an
+     * operable workspace over a boot, and the user's first click went into the readiness gate. Sent BEFORE the
+     * subscription below so the wait is visible from the stream's very first frame. */
+    yield {
+        kind: "hello",
+        workspaceId: await workspaceIdentity(services),
+        routes: [...SANDBOX_ROUTE_NAMES],
+        build: buildId(),
+        boot: services.boot.progress(),
+    };
     const queue: SystemEvent[] = [];
     // Resolver of the current idle wait, so a change (or an abort) ends it immediately instead of stalling until
     // the next heartbeat tick.
@@ -107,6 +122,13 @@ async function* systemEvents(
     // subscribe paints the fleet, then every registry change (turn lifecycle, usage, land, discard) re-frames.
     const unsubscribeAgents = services.agents.subscribe((agents, rev) => {
         queue.push({ kind: "agents", agents, rev });
+        onWake();
+    });
+    // Boot transitions, for a stream opened DURING one: the hello above carried the snapshot at connect, and
+    // each step then re-frames it until the gate opens. Snapshot-not-diff like the rosters, so a browser that
+    // reconnects mid-boot is consistent from its first frame.
+    const unsubscribeBoot = services.boot.subscribe((progress) => {
+        queue.push({ kind: "boot", ...progress });
         onWake();
     });
     const unsubscribe = subscribeWorkspaceChanges((paths) => {
@@ -147,6 +169,7 @@ async function* systemEvents(
         unsubscribe();
         unsubscribeRepos();
         unsubscribeAgents();
+        unsubscribeBoot();
         unsubscribePresence();
         unregisterPresence?.();
     }

@@ -25,6 +25,7 @@ import type { Config } from "./env.config.js";
 import { createLogger } from "./logger.js";
 import type { ManagedProcesses, ProcessSpec } from "./processes/managed-processes.js";
 import { createPortForwards } from "./ports/port-forwards.js";
+import { createBootTracker } from "./platform/boot.js";
 import { mintPairing } from "./platform/sync.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { AgentTool } from "./agent/agent-tools.js";
@@ -190,6 +191,9 @@ const services = (overrides: Partial<Services> = {}): Services => {
     const merged: Services = {
         config: baseConfig,
         logger: createLogger(baseConfig),
+        // No chain declared ⇒ converged from birth, so these tests exercise the routes and not a boot gate.
+        // The gate's own behaviour is covered below by a tracker with a declared chain.
+        boot: createBootTracker(createLogger(baseConfig)),
         workspace: workspacePaths("/work"),
         processes: fakeProcesses(),
         // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.
@@ -430,12 +434,52 @@ test("GET /health reports ok, and names the sandbox so a loopback probe can tell
     const res = await createApp(services()).request("/health");
     expect(res.status).toBe(200);
     // No connect token (the loopback/test shape) ⇒ no id to claim, and no loopback shortcut to publish either.
-    expect(await res.json()).toEqual({ ok: true, sandboxId: undefined });
+    expect(await res.json()).toMatchObject({ ok: true });
+    expect(await (await createApp(services()).request("/health")).json()).not.toHaveProperty("sandboxId");
 
     // With one, the id is the SAME digest the tunnel hostname and the published port derive from — that
     // agreement is what makes the browser's "did I reach the right daemon" check meaningful.
     const named = await createApp(services({ config: { ...baseConfig, connectToken: "tok" } })).request("/health");
-    expect(await named.json()).toEqual({ ok: true, sandboxId: sandboxIdFromToken("tok") });
+    expect(await named.json()).toMatchObject({ ok: true, sandboxId: sandboxIdFromToken("tok") });
+});
+
+test("GET /health carries the boot progress, so a poller can tell 'starting' from 'serving'", async () => {
+    const boot = createBootTracker(createLogger(baseConfig));
+    boot.declare([{ key: "registry", label: "Loading conversations" }]);
+    const app = createApp(services({ boot }));
+
+    expect(await (await app.request("/health")).json()).toMatchObject({
+        ok: true,
+        boot: { ready: false, steps: [{ key: "registry", label: "Loading conversations", state: "pending" }] },
+    });
+
+    boot.finish();
+    expect(await (await app.request("/health")).json()).toMatchObject({ boot: { ready: true } });
+});
+
+test("the boot gate holds data routes and lets the probe and the session exchange through", async () => {
+    const boot = createBootTracker(createLogger(baseConfig));
+    boot.declare([{ key: "registry", label: "Loading conversations" }]);
+    const app = createApp(services({ boot }));
+
+    // A data route parks until the chain converges — an early request WAITS instead of reading half-built state.
+    let settled = false;
+    const held = app.request("/settings").then((response) => {
+        settled = true;
+        return response;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+
+    // The exempt ones answer straight through. /system/session especially: it is the credential a browser needs
+    // before it can open /events at all, so parking it left a cold browser unable to watch the very boot it
+    // was waiting on. Its 4xx/5xx here is the auth-less shape refusing to mint — what matters is that it
+    // ANSWERS rather than joining the queue.
+    expect((await app.request("/health")).status).toBe(200);
+    expect((await app.request("/system/session", { method: "POST" })).status).not.toBe(200);
+
+    boot.finish();
+    expect((await held).status).toBe(200);
 });
 
 test("panels.list enumerates every repo with its operator panel + runtime status", async () => {
@@ -1088,6 +1132,46 @@ test("events: the first frame is the workspace-identity hello, stable across con
     const minted = await firstFrame();
     expect(minted).not.toBe("");
     expect(await firstFrame()).toBe(minted);
+});
+
+test("events: the hello names the daemon's build and where its boot is, then streams every step", async () => {
+    const boot = createBootTracker(createLogger(baseConfig));
+    boot.declare([{ key: "registry", label: "Loading conversations" }]);
+    const client = clientFor(createApp(services({ boot })));
+    const controller = new AbortController();
+    const frames = (await client.system.events({}, { signal: controller.signal }))[Symbol.asyncIterator]();
+
+    // /events answers BEFORE the gate on purpose: this frame is the only thing telling a browser that a daemon
+    // it can reach is not a daemon it can read yet.
+    const hello = (await frames.next()).value;
+    expect(hello).toMatchObject({
+        kind: "hello",
+        // A build identity the browser compares against what it last cached from this sandbox.
+        build: expect.stringContaining(":"),
+        boot: { ready: false, steps: [{ key: "registry", state: "pending" }] },
+    });
+
+    // …and each transition re-frames it, so a browser connected mid-boot follows along rather than guessing.
+    // The presence + fleet subscriptions push their own immediate snapshots onto this stream, so pull past
+    // whatever the connect produced rather than assuming an order the contract never promised.
+    const nextBoot = async () => {
+        for (;;) {
+            const { value, done } = await frames.next();
+            if (done === true) {
+                throw new Error("the stream ended before a boot frame arrived");
+            }
+            if (value.kind === "boot") {
+                return value;
+            }
+        }
+    };
+    const step = boot.step("registry", async () => undefined);
+    expect(await nextBoot()).toMatchObject({ ready: false, steps: [{ key: "registry", state: "running" }] });
+    await step;
+    expect(await nextBoot()).toMatchObject({ ready: false, steps: [{ key: "registry", state: "done" }] });
+    boot.finish();
+    expect(await nextBoot()).toMatchObject({ ready: true });
+    controller.abort();
 });
 
 test("POST /system/authorized-key authorizes via the pairing token alone (no bearer)", async () => {

@@ -272,6 +272,12 @@ fi
 
 # A container that starts but crash-loops (an overlay that breaks the daemon) would otherwise read as success —
 # gate on the daemon's own /health before declaring it.
+#
+# Two waits, because a daemon that ANSWERS is not yet a daemon that SERVES: it listens the moment the process
+# can (so a restart stops reading as an outage) and converges its state behind a readiness gate, during which
+# every route but /health and /events parks. Returning here at the first 200 handed the user a prompt back and
+# a browser that would sit on its first click, so the second wait holds until /health reports `"ready":true`
+# and echoes the step it is on meanwhile — the same chain the browser's warm-up screen shows.
 echo "intentic: waiting for the sandbox daemon to come up…"
 tries=0
 until docker exec "$CONTAINER" curl -sf http://localhost:8787/health >/dev/null 2>&1; do
@@ -284,6 +290,37 @@ until docker exec "$CONTAINER" curl -sf http://localhost:8787/health >/dev/null 
         exit 1
     fi
     sleep 2
+done
+
+# The running step's label, or empty once the chain is done. Parsed with grep/sed rather than a JSON tool: this
+# script runs on whatever the user's machine has, and jq is not a given. Splitting on `{` puts each step object
+# on its own line, so the line carrying "state":"running" is the same one carrying its label. A daemon too old
+# to report a boot answers neither field, which reads as "no step running, ready" — the old single-wait behaviour.
+boot_step() {
+    docker exec "$CONTAINER" curl -sf http://localhost:8787/health 2>/dev/null |
+        tr '{' '\n' | grep -F '"state":"running"' | sed -n 's/.*"label":"\([^"]*\)".*/\1/p' | head -n 1
+}
+boot_ready() {
+    docker exec "$CONTAINER" curl -sf http://localhost:8787/health 2>/dev/null | grep -qF '"ready":false' && return 1
+    return 0
+}
+waited=0
+last_step=""
+while ! boot_ready; do
+    step="$(boot_step)"
+    if [ -n "$step" ] && [ "$step" != "$last_step" ]; then
+        echo "intentic:   ${step}…"
+        last_step="$step"
+    fi
+    waited=$((waited + 1))
+    # No hard failure: a slow boot is a slow boot, not a broken sandbox, and the daemon is already reachable.
+    # Past two minutes say so and hand the prompt back rather than holding the terminal indefinitely.
+    if [ "$waited" -ge 120 ]; then
+        echo "intentic: the daemon is still warming up after 2 minutes — it keeps going in the background."
+        echo "          Watch it with: docker logs -f ${CONTAINER}"
+        break
+    fi
+    sleep 1
 done
 
 case "$MODE" in

@@ -83,21 +83,39 @@ const memberEmail = async (c: Context): Promise<string | undefined> => {
     return typeof body?.email === "string" ? body.email.toLowerCase() : undefined;
 };
 
-// The routes that answer BEFORE the boot chain converges (see the `ready` gate below): the liveness probe,
-// the /events stream (heartbeats + snapshots — what the browser paints its connection from), and the
-// WebSocket upgrades, whose sessions live outside the boot-converged state entirely. Everything else reads
-// state a boot step builds (registry, git dirs, claude session links), so it waits.
-const READY_EXEMPT = new Set(["/health", "/events", "/system/terminal", "/system/browser-login", "/system/browser-view"]);
+/* The routes that answer BEFORE the boot chain converges (services.boot, driven by main.ts).
+ *
+ * The liveness probe and the /events stream lead the list because they are how the boot is OBSERVED: /health
+ * carries the progress snapshot for the launch scripts and the loopback probe, /events streams each transition
+ * to the browser, and between them a browser can wait visibly instead of firing a workspace's worth of reads
+ * at routes that would only park them. The WebSocket upgrades follow — their sessions live outside the
+ * boot-converged state entirely.
+ *
+ * /system/session and /system/presence are exempt for the same reason, arrived at from the opposite direction:
+ * both are boot-independent (the session secret lives on /history, the roster is in memory), and parking the
+ * session exchange left a browser with no stored session unable to open the very stream that reports the boot
+ * — the failure mode where clearing site data "fixed" a sandbox that was only ever starting up.
+ *
+ * Everything else reads state a boot step builds (registry, git dirs, claude session links), so it waits. */
+const READY_EXEMPT = new Set([
+    "/health",
+    "/events",
+    "/system/session",
+    "/system/presence",
+    "/system/terminal",
+    "/system/browser-login",
+    "/system/browser-view",
+]);
 
 // The HTTP API the browser drives DIRECTLY over the sandbox's own Cloudflare tunnel. When services.auth is set
 // the daemon verifies the owner's Google ID token on every route but /health (it owns its own auth). No auth
 // only in tests or the host-internal server preview. All routes are oRPC except the plain /health and binary
 // /workspace/raw, registered before the catch-all.
 //
-// `ready` is the boot gate (main.ts): the listeners come up the moment the process can serve so a restart
-// stops reading as an outage, and every data route awaits the boot chain instead of racing it — a request
-// that lands early waits a few seconds where it used to get connection-refused for the whole boot.
-export const createApp = (services: Services, ready?: Promise<void>): Hono<AppEnv> => {
+// services.boot is the boot gate: the listeners come up the moment the process can serve so a restart stops
+// reading as an outage, and every data route awaits the boot chain instead of racing it — a request that lands
+// early waits a few seconds where it used to get connection-refused for the whole boot.
+export const createApp = (services: Services): Hono<AppEnv> => {
     const orpcHandler = new OpenAPIHandler(createRouter(services), {
         interceptors: [
             async (options) => {
@@ -123,15 +141,15 @@ export const createApp = (services: Services, ready?: Promise<void>): Hono<AppEn
 
     // The boot gate, first so nothing below runs against half-built state. Waiting is deliberate: the caller
     // already retried through the whole connection-refused window this replaces, so holding the request the
-    // last few seconds of a boot is strictly less waiting.
-    if (ready !== undefined) {
-        app.use("*", async (c, next) => {
-            if (!READY_EXEMPT.has(c.req.path)) {
-                await ready;
-            }
-            return next();
-        });
-    }
+    // last few seconds of a boot is strictly less waiting. Read per request, never captured — a tracker whose
+    // chain main() declares AFTER the app is built still gates the requests that arrive next, and one that
+    // declared nothing (tests, the host-internal preview) resolves at once.
+    app.use("*", async (c, next) => {
+        if (!READY_EXEMPT.has(c.req.path)) {
+            await services.boot.converged;
+        }
+        return next();
+    });
 
     if (services.auth !== undefined) {
         const authorize = services.auth.authorize;
@@ -239,8 +257,12 @@ export const createApp = (services: Services, ready?: Promise<void>): Hono<AppEn
      * Cloudflare and back — but a port is not an identity: a second sandbox, or an unrelated process, can be
      * behind it. Answering with the id lets the probe prove it reached THIS daemon before routing a session's
      * traffic at it; a mismatch means the browser silently keeps using the tunnel. The id is already the
-     * leading label of the sandbox's public hostname, so naming it here discloses nothing new. */
-    app.get("/health", (c) => c.json({ ok: true, sandboxId: sandboxIdFromToken(services.config.connectToken) }));
+     * leading label of the sandbox's public hostname, so naming it here discloses nothing new.
+     *
+     * `boot` rides along for the callers that poll this before a stream exists — the launch scripts' readiness
+     * loop and /setup's attach check — so "not answering yet" and "answering, still converging" stop looking
+     * alike from the outside. Purely additive: `ok` and `sandboxId` are unchanged. */
+    app.get("/health", (c) => c.json({ ok: true, sandboxId: sandboxIdFromToken(services.config.connectToken), boot: services.boot.progress() }));
 
     // The same bytes, for one side of a diff rather than a file in the tree — an image the review surfaces can
     // only flag as `binary` over the JSON contract. Mounted here beside /workspace/raw for the same reason it

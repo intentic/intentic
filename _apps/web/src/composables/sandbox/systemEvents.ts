@@ -5,7 +5,8 @@ import { queryClient } from "../queryPersistence";
 import { throttleTrailing } from "../throttleTrailing";
 import { setPresenceUsers } from "../usePresence";
 import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
-import { manifestQueryKeys, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
+import { daemonRebuilt, manifestQueryKeys, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
+import { setDaemonBoot } from "./useDaemonBoot";
 import { setDaemonRoutes } from "./useDaemonRoutes";
 
 /* Where a daemon `/events` frame LANDS. Everything here is routing — which store takes a roster, which queries
@@ -31,7 +32,15 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
         case `hello`: {
             // The advertised route surface first: it gates features for the rest of this connection.
             setDaemonRoutes(event.routes);
-            if (workspaceReplaced(sandboxId, event.workspaceId)) {
+            // Then where the daemon's boot is: `reachable` reads it, so learning this before anything else
+            // decides whether a single daemon query is allowed to fire this tick.
+            setDaemonBoot(event.boot);
+            /* Two independent reasons the cache this browser persisted for the sandbox may describe something
+             * that no longer exists — a workspace wiped and recreated under the same sandbox id, and a daemon
+             * rebuilt into one that shapes its answers differently. Either one makes hydrating that cache a
+             * lie, and the remedy is the same, so they share it. Both RECORD on every hello, so only the first
+             * one after the change reports true. */
+            if (workspaceReplaced(sandboxId, event.workspaceId) || daemonRebuilt(sandboxId, event.build)) {
                 // Reset, not remove: active observers must refetch rather than render an empty cache.
                 void queryClient.resetQueries({ predicate: sandboxQueryPredicate(sandboxId) });
             }
@@ -39,6 +48,11 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
         }
         case `heartbeat`:
             // Liveness only — the connection machine already consumed this frame's arrival.
+            return;
+        case `boot`:
+            // A step moved. The frame IS the whole snapshot (snapshot-not-diff, like the rosters), and the
+            // `kind` discriminant is the only field the progress itself doesn't carry.
+            setDaemonBoot({ ready: event.ready, startedAt: event.startedAt, steps: event.steps });
             return;
         case `presence`:
             setPresenceUsers(event.users);

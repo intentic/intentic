@@ -5,6 +5,7 @@ import { queryClient } from "../queryPersistence";
 import { apiClient } from "../useApi";
 import { withConcurrency } from "../concurrency";
 import { applyConnectionSignal, type ConnectionSignal, type ConnectionState, initialConnection } from "./connection";
+import { daemonReady } from "./useDaemonBoot";
 
 /* The browser's view of the user's sandboxes, as a module-level singleton. A user can own several sandboxes and
  * be a member of others; the platform is the registry — each daemon announces its own URL + lastSeenAt, and the
@@ -68,9 +69,17 @@ export const signalConnection = (signal: ConnectionSignal): void => {
     connection.value = applyConnectionSignal(connection.value, signal);
 };
 
-// Can this browser talk to the active daemon right now — the gate on every daemon-backed query and on the
-// rail's inert-while-offline affordances. The one projection of the machine that most callers want.
-const reachable = computed(() => connection.value.phase === `online`);
+/* Can this browser READ the active daemon right now — the gate on every daemon-backed query and on the rail's
+ * inert-while-offline affordances. The one projection most callers want, and two facts rather than one.
+ *
+ * A live stream is not enough. The daemon brings its listeners up before the state they serve has converged
+ * (its main.ts: listen first, converge behind the gate), so for the first seconds of a boot it answers /events
+ * and parks everything else. Reading `online` as "go" meant every query fired into that gate at once — the
+ * pending storm that made a fresh `dev-sandbox.sh` swap look hung, and made a workspace hydrated from the
+ * persisted cache look operable while nothing it offered could work. So the daemon's own readiness (received
+ * on the hello + boot frames — useDaemonBoot) is the second half, and the wait becomes a visible warm-up
+ * instead of a workspace that silently does nothing. */
+const reachable = computed(() => connection.value.phase === `online` && daemonReady.value);
 
 const active = computed(() => sandboxes.value.find((sandbox) => sandbox.id === activeSandboxId.value));
 // The active sandbox's public URL — what the sandbox client + liveness talk to. Undefined until one is bound.
