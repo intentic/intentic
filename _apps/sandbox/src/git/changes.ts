@@ -18,7 +18,11 @@ const STATUS_OF: Record<string, GitChange["status"]> = { A: "added", M: "modifie
 // not a fixed stride. Keyed by the (new) path so a later record for the same path wins — EXCEPT that
 // "conflicted" is sticky: `git diff` emits an unmerged path twice (`U` then `M`), and letting the second record
 // win is what used to make a conflict render as an ordinary modification.
-const parseNameStatusZ = (stdout: string): GitChange[] => {
+//
+// Exported because land.ts classifies a delta by CHANGE rather than by path, and `status` + `from` is what says
+// a change spans two of them (agents/land.ts DeltaChange). Reading the delta with `--name-only` instead is what
+// made renames land half-applied: that output names a rename's destination and nothing else.
+export const parseNameStatusZ = (stdout: string): GitChange[] => {
     const parts = stdout.split("\0");
     const changes = new Map<string, GitChange>();
     let cursor = 0;

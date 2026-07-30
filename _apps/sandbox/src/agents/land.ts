@@ -1,9 +1,9 @@
 import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
+import type { GitChange, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
-import { changedFiles, headSha } from "../git/changes.js";
+import { changedFiles, headSha, parseNameStatusZ } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { branchSha } from "./agent-refs.js";
 import type { PersistedAgent } from "./agents-store.js";
@@ -127,14 +127,43 @@ const applies = async (main: string, patch: string, direction: "forward" | "reve
     }
 };
 
-// A delta's paths, split by what the main tree makes of each one: `clean` is what a land would carry, `blocked`
-// is the genuine conflict set. Paths already IN the main tree are in neither — see classifyDelta.
-interface DeltaReport {
-    readonly blocked: { path: string; reason: LandConflictReason }[];
-    readonly clean: string[];
+/* ONE CHANGE of a delta, carrying the COMPLETE set of paths its own diff spans.
+ *
+ * The unit is a CHANGE, not a path, and that distinction is load-bearing rather than tidy: a rename is ONE
+ * change across TWO paths, so any git pathspec derived from a delta has to name both. Name the destination
+ * alone and `-M` has nothing left to pair — git emits a bare "new file" in place of a rename, and applying
+ * THAT creates the destination while leaving the source sitting in the tree.
+ *
+ * This is not a hypothetical. Reading the delta with `--name-only` (which reports a rename at its destination
+ * and nowhere else) is what shipped a land that carried every rename's add and dropped every rename's delete:
+ * the main tree ended up holding both halves of each renamed file, the user's commit recorded the stale halves
+ * as still-present, and they surfaced later as deletions nobody could attribute to anything.
+ */
+interface DeltaChange {
+    // The destination path — what a conflict report names, because it is the path the user goes looking for.
+    readonly path: string;
+    // Every path this change's own diff spans: the destination, plus a rename's source.
+    readonly paths: readonly string[];
+    // What must NOT exist once this change has applied: a deletion's own path, a rename's source.
+    readonly removes: readonly string[];
 }
 
-/* WHICH paths of a delta actually refuse to apply, and why.
+// A delta's changes, split by what the main tree makes of each: `clean` is what a land would carry, `blocked` is
+// the genuine conflict set. Changes already IN the main tree are in neither — see classifyDelta.
+interface DeltaReport {
+    readonly blocked: { path: string; reason: LandConflictReason }[];
+    readonly clean: DeltaChange[];
+}
+
+// A `--name-status` row's path set. `from` is git's rename source; a copy carries none (parseNameStatusZ reports
+// it as a plain add, which is what it is for our purposes — the source stays put).
+const deltaChangeOf = (change: GitChange): DeltaChange => ({
+    path: change.path,
+    paths: change.from === undefined ? [change.path] : [change.from, change.path],
+    removes: change.status === "deleted" ? [change.path] : change.from === undefined ? [] : [change.from],
+});
+
+/* WHICH changes of a delta actually refuse to apply, and why.
  *
  * `git apply` is ATOMIC: one unapplicable file rejects the entire patch. So a failed bulk check says only
  * "something in here does not fit" — it says nothing about WHAT, and the first version of this code guessed,
@@ -142,9 +171,12 @@ interface DeltaReport {
  * that intersection came up empty. That fallback fires exactly when the cause is a moved main line, which is
  * the common case, so the common case reported every file as a conflict.
  *
- * Re-checking each path on its own is the only way to tell four real conflicts from the fourteen an atomic
- * failure implicates. Rename detection stays on so each probe sees the same patch shape the real apply will;
- * a rename probed one leg at a time degrades to a delete plus an add, which is accurate enough for a report.
+ * Re-checking each change on its own is the only way to tell four real conflicts from the fourteen an atomic
+ * failure implicates. Each probe is diffed over that change's WHOLE path set, so rename detection pairs inside
+ * it and the probe is the patch shape the real apply will use — a rename probed at its destination alone is a
+ * bare creation, which applies cleanly no matter what state the source is in. That made two lies at once: the
+ * change was called clean when the user's own edit to the source was in the way, and the "clean" set it joined
+ * went on to build a pathspec that could no longer express the rename at all (see DeltaChange).
  *
  * The reverse probe is what keeps ALREADY-LANDED work out of the report. An agent that commits its own delta
  * straight onto the main line — pushing to main, or a user committing the branch by hand — leaves content git
@@ -153,7 +185,8 @@ interface DeltaReport {
  * of it then fails to apply, and reporting that as a conflict is a dead end — there is nothing for the user to
  * resolve and no edit of theirs to point at. Asked in reverse, those paths answer plainly: already here. */
 const classifyDelta = async (main: string, from: string, tip: string, patchDir: string, repo: string, git: GitRunner): Promise<DeltaReport> => {
-    const deltaPaths = (await git(main, ["diff", "--name-only", "-z", from, tip])).stdout.split("\0").filter((path) => path !== "");
+    const rows = parseNameStatusZ((await git(main, ["diff", "--name-status", "-z", "-M", from, tip])).stdout);
+    const changes = rows.map(deltaChangeOf);
     // A path the user STAGED conflicts with the incoming patch exactly as much as one they left unstaged, so
     // "yours is the copy at risk" has to consider the union — rename `from` legs included.
     const mainState = await changedFiles(main, git);
@@ -165,17 +198,17 @@ const classifyDelta = async (main: string, from: string, tip: string, patchDir: 
         }
     }
     const blocked: { path: string; reason: LandConflictReason }[] = [];
-    const clean: string[] = [];
-    for (const [index, path] of deltaPaths.entries()) {
-        const single = (await git(main, ["diff", "--binary", "-M", from, tip, "--", path])).stdout;
+    const clean: DeltaChange[] = [];
+    for (const [index, change] of changes.entries()) {
+        const single = (await git(main, ["diff", "--binary", "-M", from, tip, "--", ...change.paths])).stdout;
         if (single === "") {
-            clean.push(path);
+            clean.push(change);
             continue;
         }
         const probePath = join(patchDir, `${repo.replaceAll("/", "_")}.probe.${index}.patch`);
         await writeFile(probePath, single);
         if (await applies(main, probePath, "forward", git)) {
-            clean.push(path);
+            clean.push(change);
             continue;
         }
         if (await applies(main, probePath, "reverse", git)) {
@@ -184,10 +217,57 @@ const classifyDelta = async (main: string, from: string, tip: string, patchDir: 
             continue;
         }
         // Binary first: it outranks the other two, because no three-way merge of it exists to offer.
-        const reason: LandConflictReason = single.includes("GIT binary patch") ? "binary" : mainDirty.has(path) ? "workspace" : "diverged";
-        blocked.push({ path, reason });
+        const reason: LandConflictReason = single.includes("GIT binary patch")
+            ? "binary"
+            : change.paths.some((path) => mainDirty.has(path))
+              ? "workspace"
+              : "diverged";
+        blocked.push({ path: change.path, reason });
     }
     return { blocked, clean };
+};
+
+/* Apply exactly `changes` to the main WORKING TREE — the subset land, taken when part of a delta is already in
+ * the main tree and only the remainder is genuinely outstanding.
+ *
+ * Re-diffed over the changes' own paths rather than sliced out of the full patch, so one git invocation keeps
+ * rename detection coherent — and it stays coherent only because the pathspec carries BOTH legs of every
+ * rename (see DeltaChange). An empty change set therefore has to return early rather than run the diff: a `--`
+ * with no paths after it is not an empty pathspec to git, it is NO pathspec, and the subset land would quietly
+ * become a whole-delta land including the parts that were excluded on purpose.
+ *
+ * Then the post-condition, and it lives in here rather than at the call site so the two cannot drift apart: this
+ * is the one apply whose patch is built from a pathspec, so it is the one that can under-express the delta, and
+ * the way it failed was silent. A tree left holding a file the delta deletes reads as the user's own content —
+ * git says nothing, the user's commit records it as present, and it resurfaces days later as a deletion with no
+ * author. Finishing the removal is not a guess: the delta is derived from git refs, and a path absent at `tip`
+ * is absent. Nor can it collide with something the same set creates — git reports a rename only when the source
+ * is gone at `tip`, so a rename's source is never another change's destination.
+ */
+const applyChanges = async (
+    main: string,
+    from: string,
+    tip: string,
+    changes: readonly DeltaChange[],
+    patchDir: string,
+    repo: string,
+    git: GitRunner,
+): Promise<void> => {
+    if (changes.length === 0) {
+        return;
+    }
+    const patch = (await git(main, ["diff", "--binary", "-M", from, tip, "--", ...changes.flatMap((change) => change.paths)])).stdout;
+    if (patch === "") {
+        return;
+    }
+    const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.remainder.patch`);
+    await writeFile(patchPath, patch);
+    await git(main, ["apply", patchPath]);
+    await Promise.all(
+        // `force` so an already-absent path — which is all of them, whenever the patch expressed its own
+        // removals — costs one stat and no error.
+        changes.flatMap((change) => change.removes).map(async (path) => await rm(join(main, path), { force: true })),
+    );
 };
 
 /* THE REFUSAL AS IT STANDS NOW — the stored conflict report re-asked against today's tree, touching nothing.
@@ -207,7 +287,11 @@ const classifyDelta = async (main: string, from: string, tip: string, patchDir: 
  * uncommitted remainder is not in the span — the recorded refusal's span exactly, since the land that wrote
  * it committed everything first; newer work reshapes the report the way it reshapes everything else: at the
  * next land. */
-export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: PersistedAgent, git: GitRunner = defaultGit): Promise<LandConflict[]> => {
+export const outstandingConflicts = async (
+    worktrees: AgentWorktrees,
+    entry: PersistedAgent,
+    git: GitRunner = defaultGit,
+): Promise<LandConflict[]> => {
     const conflicts: LandConflict[] = [];
     const patchDir = await mkdtemp(join(tmpdir(), "intentic-classify-"));
     try {
@@ -383,14 +467,7 @@ export const landAgent = async (
                      * outstanding (nothing at all, when the agent put its whole delta on the main line itself)
                      * and advance, so the work stops being re-offered on every future land. */
                     if (report.blocked.length === 0) {
-                        if (report.clean.length > 0) {
-                            // Re-diffed over just those paths rather than sliced out of `patch`: one git
-                            // invocation over the subset keeps rename detection coherent within it.
-                            const remainder = (await git(main, ["diff", "--binary", "-M", from, tip, "--", ...report.clean])).stdout;
-                            const remainderPath = join(patchDir, `${repo.replaceAll("/", "_")}.remainder.patch`);
-                            await writeFile(remainderPath, remainder);
-                            await git(main, ["apply", remainderPath]);
-                        }
+                        await applyChanges(main, from, tip, report.clean, patchDir, repo, git);
                         next = await advanced();
                         return;
                     }

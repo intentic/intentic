@@ -559,6 +559,87 @@ test("deletes and renames land; a conflicted land keeps landedTip so recovery ap
     expect(await readFile(join(work, "renamed.ts"), "utf8")).toBe("line one AGENT\nline two\nline three\n");
 });
 
+/* THE RENAME THAT LANDED HALF-APPLIED. Whole-delta landing has always carried renames correctly (the test
+ * above); the SUBSET land did not, and the two only meet when part of a delta is already in the main tree — a
+ * combination nothing covered, which is how this shipped.
+ *
+ * The mechanism, in one line: the subset was described by PATHS, and `git diff --name-only` names a rename at
+ * its destination and nowhere else, so the pathspec built from it could no longer express the rename. `-M` had
+ * nothing to pair, emitted a bare creation, and the apply wrote the new file while leaving the old one in the
+ * tree. The user's commit then recorded the stale copy as still-present, and it surfaced later as a deletion
+ * with no author. See land.ts DeltaChange. */
+test("a rename landing as part of a half-landed delta leaves no stale source behind", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const recorded = entryFor(conversation.repos);
+    await sh(conversation.cwd, "mv", "app.ts", "moved.ts");
+    await writeFile(join(conversation.cwd, "already.ts"), "already on main\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "rename plus a file");
+    // Half of the delta reached main by another road, so the whole patch can no longer apply atomically and the
+    // land falls back to carrying only the outstanding remainder — here, the rename.
+    await writeFile(join(work, "already.ts"), "already on main\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "half of it, by hand");
+
+    const result = await landAgent(worktrees, recorded);
+
+    expect(result.conflicts).toBeUndefined();
+    expect(result.landed).toBe(true);
+    expect(await readFile(join(work, "moved.ts"), "utf8")).toBe("line one\nline two\nline three\n");
+    // The delete leg. This is the assertion the bug failed.
+    expect(existsSync(join(work, "app.ts"))).toBe(false);
+});
+
+// The same subset land carrying an outright DELETION — the other change whose whole content is the removal of a
+// path, and so the other one a pathspec-built patch can silently decline to express.
+test("a deletion landing as part of a half-landed delta removes the file", async () => {
+    const { work, worktrees } = await setup();
+    await writeFile(join(work, "doomed.ts"), "delete me\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a file to delete");
+    // A checkout taken AFTER that commit, so the branch has the file to delete — setup()'s own predates it.
+    const conversation = await worktrees.ensure("c2", []);
+    const recorded = { ...entryFor(conversation.repos), id: "c2", branch: "agent/c2" };
+    await rm(join(conversation.cwd, "doomed.ts"));
+    await writeFile(join(conversation.cwd, "already.ts"), "already on main\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "delete plus a file");
+    await writeFile(join(work, "already.ts"), "already on main\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "half of it, by hand");
+
+    const result = await landAgent(worktrees, recorded);
+
+    expect(result.conflicts).toBeUndefined();
+    expect(result.landed).toBe(true);
+    expect(existsSync(join(work, "doomed.ts"))).toBe(false);
+});
+
+/* The classifier's own half of the same defect. A rename-WITH-EDITS probed at its destination alone is a bare
+ * file creation, and a creation applies against any tree whatsoever — so the user's conflicting edit to the
+ * SOURCE was invisible to the probe and the change got called clean. The probe now spans both legs, which is
+ * what lets the pre-image hunks meet the user's copy and refuse.
+ *
+ * (A 100%-similarity rename is a different case and not a conflict: it carries no hunks, so git renames the
+ * user's content to the new path and nothing is lost — which is what `git mv` on a dirty file does too.) */
+test("a user edit under a rename-with-edits is a conflict, not a clean change", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await sh(conversation.cwd, "mv", "app.ts", "moved.ts");
+    await writeFile(join(conversation.cwd, "moved.ts"), "line one AGENT\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "rename and edit");
+    await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos));
+
+    expect(result.landed).toBe(false);
+    // Reported at the destination — the path the user will go looking for — with their own copy as the cause.
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "moved.ts", reason: "workspace" }], clean: 0 }]);
+    // `check` promises a refusal changes nothing: the user's edit stands and no half-rename was written.
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one USER\nline two\nline three\n");
+    expect(existsSync(join(work, "moved.ts"))).toBe(false);
+});
+
 /* The review's span, measured the way the diff route now measures it (agents.routes.ts → anchorOf without
  * the landedTip rung). The bug this pins down: an agent whose worktree fast-forwarded onto newer main
  * commits reviewed everything main gained in between as ITS OWN output — one real card showed a hundred
