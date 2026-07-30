@@ -583,7 +583,6 @@ const endResize = (event: PointerEvent): void => {
                          the switch's "Changes" tab already titles the panel and carries its count, so a second
                          line below it spent height restating both before a single file was named. -->
                     <template v-if="layout.sidebarPanel.value === 'changes'">
-                        <Icon name="spinner" v-if="changes.actionBusy.value" v-tooltip.right="'Working…'" class="text-xs text-muted" spin />
                         <!-- Git history: the committed side of the same real-git story the panel below reviews
                              uncommitted. Opens the /work root repo's graph — as does the Files toolbar's icon,
                              root having no tree row of its own; nested repos open theirs from their tree row. -->
@@ -602,8 +601,9 @@ const endResize = (event: PointerEvent): void => {
                             @click="changes.refresh()"
                             v-tooltip.right="'Refresh'"
                             aria-label="Refresh changes"
+                            :disabled="changes.actionBusy.value || changes.loading.value"
                         >
-                            <Icon name="refresh" class="text-xs" :spin="changes.loading.value" />
+                            <Icon name="refresh" class="text-xs" :spin="changes.loading.value || changes.actionBusy.value" />
                         </button>
                     </template>
                 </div>
