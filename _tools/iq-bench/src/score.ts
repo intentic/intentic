@@ -11,7 +11,10 @@ export interface RankedAnchor {
 }
 
 // Groups are already relevance-ranked and each is one rank — the unit an agent decides to open. `related`
-// definition anchors ("name — def path:line · refs: …") count as extra ranks after the groups.
+// definition anchors ("name — def path:line · called from …") count as extra ranks after the groups, and so do the
+// `candidates` anchors: all three are printed in one response, above the code, and each is a `path:line` the reader
+// can open without asking iq anything else. Scoring only the groups charged iq for spending its budget on code —
+// a file the candidates line anchored but did not show counted as not found, which is not what the agent sees.
 export const rankedAnchors = (result: WorkspaceSearchResult): RankedAnchor[] => {
     const ranked: RankedAnchor[] = result.groups.map((group) => ({ file: group.path, lines: group.hits.map((hit) => hit.line) }));
     for (const entry of result.related ?? []) {
@@ -22,6 +25,10 @@ export const rankedAnchors = (result: WorkspaceSearchResult): RankedAnchor[] => 
             continue;
         }
         ranked.push({ file, lines: [Number(line)] });
+    }
+    for (const anchor of result.candidates ?? []) {
+        const match = /^(.*):(\d+)$/.exec(anchor);
+        ranked.push(match === null ? { file: anchor, lines: [] } : { file: match[1]!, lines: [Number(match[2])] });
     }
     return ranked;
 };

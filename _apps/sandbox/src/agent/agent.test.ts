@@ -1,6 +1,6 @@
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { type AgentQuery, mergeHooks, type OauthRecoveryOptions, type QueryFn, runAgent } from "./agent.js";
 import { resolveRequest } from "./agent-requests.js";
 import { SteeringQueue } from "./agent-steering.js";
@@ -24,7 +24,19 @@ const collect = async (request: Parameters<typeof runAgent>[0], queryFn: QueryFn
 
 const request = { prompt: "add a /ping route", cwd: "/work", signal: new AbortController().signal };
 
-test("a turn surfaces session, text deltas, tool actions, and a terminal done", async () => {
+// Bash routing through bin/tmux-run is decided by whether the wrapper is baked into the image, so a suite run
+// INSIDE that image sees a `terminal` frame these event-shape assertions never asked for. Every case below states
+// the mode it means: "0" for the shapes that predate tmux routing, and the dedicated case at the bottom for the
+// frame itself. Left to the host, the same test asserts different things in an image, a dev checkout, and CI.
+const withoutTmux = (): void => {
+    vi.stubEnv("INTENTIC_AGENT_TMUX", "0");
+};
+
+// Without a vitest config there is no unstubEnvs, so a stub outlives its test and the mode leaks down the file.
+afterEach(() => vi.unstubAllEnvs());
+
+test("a turn surfaces session, text deltas, tool actions, and done", async () => {
+    withoutTmux();
     const events = await collect(
         request,
         fakeQuery(
@@ -64,7 +76,37 @@ test("a turn surfaces session, text deltas, tool actions, and a terminal done", 
     ]);
 });
 
+test("with the wrapper baked in, the first Bash of a turn names its live agent-* tmux session", async () => {
+    vi.stubEnv("INTENTIC_AGENT_TMUX", "1");
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "system", subtype: "init", session_id: "sess-1", model: "sonnet" },
+            {
+                type: "assistant",
+                session_id: "sess-1",
+                message: { content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "pnpm test" } }] },
+            },
+            {
+                type: "assistant",
+                session_id: "sess-1",
+                message: { content: [{ type: "tool_use", id: "b2", name: "Bash", input: { command: "pnpm lint" } }] },
+            },
+            { type: "result", subtype: "success", result: "done" },
+        ),
+    );
+    const terminals = events.filter((event) => event.kind === "terminal");
+    // Announced once per turn (the second Bash joins the same session), and named by the same derivation the
+    // PreToolUse hook routes commands through — 8 chars of the SDK session id.
+    expect(terminals).toEqual([{ kind: "terminal", session: "agent-sess-1" }]);
+    // It precedes the Bash call it belongs to, so the browser can attach before output arrives.
+    expect(events.findIndex((event) => event.kind === "terminal")).toBeLessThan(
+        events.findIndex((event) => event.kind === "tool_call" && event.id === "b1"),
+    );
+});
+
 test("each prose block closes with text_end, before the tool calls that block introduced", async () => {
+    withoutTmux();
     const events = await collect(
         request,
         fakeQuery(
@@ -626,11 +668,8 @@ test("a turn with no plan limits to read yields no account_usage frame at all", 
 });
 
 test("a failed usage read cannot fail the turn it was measuring", async () => {
-    const events = await collect(
-        oauthRequest,
-        fakeQuery({ type: "result", subtype: "success", total_cost_usd: 0.42 }),
-        (() => Promise.reject(new Error("usage endpoint timed out"))) as unknown as typeof fetch,
-    );
+    const events = await collect(oauthRequest, fakeQuery({ type: "result", subtype: "success", total_cost_usd: 0.42 }), (() =>
+        Promise.reject(new Error("usage endpoint timed out"))) as unknown as typeof fetch);
     // The answer the user was waiting for is already accounted for; the headroom read is strictly a bonus.
     expect(events).toEqual([{ kind: "usage", costUsd: 0.42 }, { kind: "done" }]);
 });

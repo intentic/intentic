@@ -89,7 +89,7 @@ export const runSearch = async (context: CommandContext, verb: Verb, query: stri
     (context.process as { exitCode?: number | string | null }).exitCode = outcome.exitCode;
 };
 
-const VERBS = new Set<Verb>(["find", "files", "def", "refs", "sym", "ast", "ask", "outline", "context", "recent", "log", "who"]);
+const VERBS = new Set<Verb>(["find", "files", "def", "refs", "sym", "ast", "outline", "context", "recent", "log", "who"]);
 
 // Shell-like tokenizer for multi lines: whitespace-separated, "…"/'…' quoting, \" escapes inside double quotes.
 const tokenize = (line: string): string[] => {
@@ -254,18 +254,17 @@ const readStdin = (): Promise<string> =>
         process.stdin.on("error", reject);
     });
 
-// `iq multi`: one query per stdin line — `<verb> <query> [flags]` or a bare auto-mode query — sharing one
-// process spawn and one --budget (split equally, min 150 tokens per section). Per-line flags merge over the
-// command-level ones (line wins). Exit 0 if any section hit, 1 if all empty.
-export const runMulti = async (context: CommandContext, flags: SearchFlags, input?: string): Promise<void> => {
+// `iq multi`: several queries — `<verb> <query> [flags]` or a bare auto-mode query — sharing one process spawn
+// and one --budget (split equally, min 150 tokens per section). Each query is an operand, or one per stdin line
+// when they are generated rather than typed; transcript mining found agents writing heredocs and temp files to
+// reach a batch, which is a shell round-trip for something that is just an argument list. Per-line flags merge
+// over the command-level ones (line wins). Exit 0 if any section hit, 1 if all empty.
+export const runMulti = async (context: CommandContext, flags: SearchFlags, queries: readonly string[], input?: string): Promise<void> => {
     const mode = resolveMode(flags, loadConfig().intenticOutput);
-    const stdin = input ?? (await readStdin());
-    const lines = stdin
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line !== "");
+    const source = queries.length > 0 ? queries : ((input ?? (await readStdin())).split("\n") as readonly string[]);
+    const lines = source.map((line) => line.trim()).filter((line) => line !== "");
     if (lines.length === 0) {
-        throw new Error("iq multi: no queries on stdin (one per line)");
+        throw new Error("iq multi: no queries — pass them as arguments (iq multi 'def foo' 'refs bar') or one per stdin line");
     }
     const engine = engineFromEnv(flags.features);
     const root = workspaceRoot();

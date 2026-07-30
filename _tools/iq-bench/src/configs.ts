@@ -20,6 +20,7 @@ export const CONFIGS: readonly BenchConfig[] = [
     config("no-rerank", "-rerank"),
     config("no-prf", "-prf"),
     config("no-shaping", "-boosts,-symctx,-graph"),
+    config("no-srcfirst", "-srcfirst"),
     config("no-pack", "-pack"),
     config("lexical", "-semantic,-rerank,-prf"),
     config("bm25-only", "bm25"),

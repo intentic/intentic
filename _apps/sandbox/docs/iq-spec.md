@@ -90,11 +90,13 @@ iq: def — 1 definition · showing 1/1
 
 ```
 $ iq refs createIgnoreScope --kind call
-iq: refs — 18 calls in 5 files · showing 12/18
-════ src/workspace/workspace-tree.ts (4 calls) ════
+iq: refs createIgnoreScope --kind call — 18 refs in 5 files · showing 12/18
+answer: src/workspace/workspace-tree.ts:48 · walkTree (fn) · [call]
+candidates: src/workspace/search.ts:212 · src/agent/context.ts:77
+more: 6 refs in 2 files — iq refs createIgnoreScope --kind call --after h3x1
+════ src/workspace/workspace-tree.ts (4) ════
   48:   const scope = createIgnoreScope(root);
-     … 3 more in walkTree() — `iq context src/workspace/workspace-tree.ts:48`
-──── truncated: 6 calls in 2 more files · next: iq refs createIgnoreScope --kind call --after h3x1 ────
+     … 3 more — iq context src/workspace/workspace-tree.ts:48
 ```
 
 ### `iq sym <pattern>` — fuzzy symbol-name search
@@ -123,19 +125,25 @@ iq: ast — 2 matches in 2 files · showing 2/2
   98:    await run(turn).catch(() => undefined)
 ```
 
-### `iq ask "<question>"` — semantic / natural-language search
+### `iq "<question>"` — semantic / natural-language search
 
-Full hybrid-retrieval pipeline: **BM25** (SQLite FTS5 over the indexed chunks, rarity-weighted sparse ranking, tag `[bm25 0.42]`) fused with **embeddings** (dense), then a **cross-encoder rerank** of the top fused hits (tag `[rerank 0.93]`, noted in the header). Without the baked models it degrades to BM25-only — and says so in the header. Auto-mode natural queries use BM25+embeddings without the rerank pass (kept fast).
+There is no separate verb: a bare query whose words are not an identifier, path or regex runs the full
+hybrid-retrieval pipeline, and an exact query that matches nothing escalates into it. **BM25** (SQLite FTS5 over
+the indexed chunks, rarity-weighted sparse ranking, tag `[bm25 0.42]`) fused with **embeddings** (dense), then a
+**cross-encoder rerank** of the top fused hits (tag `[rerank 0.93]`, noted in the header). Without the baked
+models it degrades to BM25-only — and says so in the header.
+
+The response opens with the capsule, then the top hits' full enclosing bodies as live file lines:
 
 ```
-$ iq ask "how does the daemon expose tools to Claude agents?"
-iq: ask — 8 hits in 4 files · index fresh (2.1s) · showing 5/8 (budget)
+$ iq "how does the daemon expose tools to Claude agents?"
+iq: "how does the daemon expose tools…" — 8 hits in 4 files · index fresh (2.1s) · reranked · showing 5/8
+answer: src/workspace/tools.ts:12 · agentToolSchema (const) · confident · [sem 0.90] [rerank 0.93]
+candidates: src/agent/agent.ts:341 · src/mcp/registry.ts:19
+more: 3 hits in 2 files — iq "how does the daemon expose tools…" --after p2m9
 ════ src/workspace/tools.ts ════
   12: export const agentToolSchema = z.object({                     [sem 0.90]
   38: export const mcpServersOf = (tools: AgentTool[]) =>           [sem 0.89]
-════ src/agent/agent.ts ════
-  67:   mcpServers: { ...remote, ...sdkServers },                   [sem 0.84]
-──── truncated: 3 hits · next: iq ask "…" --after p2m9 ────
 ```
 
 ### `iq outline <path>` — file skeleton
@@ -249,13 +257,16 @@ iq: multi — 3 queries · budget 3000 shared
 ## Retrieval pipeline & feature toggles
 
 Hybrid retrieval: ripgrep (exact), FTS5 **BM25** (ranked sparse) + **RM3 pseudo-relevance feedback** expansion,
-dense **embeddings**, RRF fusion with def/path/recency **boosts**, **cross-encoder rerank** with irrelevance
-pruning and **confidence** disclosure (`low confidence (best 0.22) — rephrase`). Hits carry their enclosing
-symbol (**symctx**, `⟨in createWidget (fn)⟩`); `ask` appends **graph** neighbors (`related:` definition anchors).
+dense **embeddings**, RRF fusion with def/path/recency **boosts** and a **srcfirst** class prior (implementation
+ranks above its tests and docs, natural-language answers only), **cross-encoder rerank** that votes rather than
+vetoes, and **confidence** stated on the answer line (`confident` / `ambiguous`). Hits carry their enclosing
+symbol (**symctx**, `⟨in createWidget (fn)⟩`); natural-language answers append **graph** neighbors (`related:`
+definition anchors, each with its strongest caller resolved) and **pack** the top groups as live code — source
+groups only, because a packed test body spends the budget that would have shown the ranked files under it.
 For hard questions the AGENT is the query rewriter: 2–3 phrasings through one `iq multi` spawn (HyDE inverted).
 
 Every stage toggles for benchmarking via `--features` / `IQ_FEATURES`:
-`bm25, semantic, rerank, prf, confidence, symctx, graph, boosts` — `--features bm25` = only BM25;
+`bm25, semantic, rerank, prf, confidence, symctx, graph, boosts, srcfirst, pack` — `--features bm25` = only BM25;
 `--features -rerank,-prf` = everything except those. The disabled set is echoed in the header
 (`features -rerank`) and recorded in `--json` as `features` for run provenance.
 
@@ -288,7 +299,7 @@ Five realistic agent tasks, each answerable in ≤2 invocations:
 
 | Task | Invocations |
 |---|---|
-| "Where is the ignore model enforced in search?" | `iq ask "where is the ignore model enforced in search?"` → 1 |
+| "Where is the ignore model enforced in search?" | `iq "where is the ignore model enforced in search?"` → 1 |
 | "Who calls createIgnoreScope?" | `iq refs createIgnoreScope --kind call` → 1 |
 | "What's the shape of the search wire contract?" | `iq sym 'WorkspaceSearch*'` → `iq context <hit>` → 2 |
 | "What changed around search recently?" | `iq recent search --since 7d` → 1 |

@@ -3,31 +3,31 @@
     "cases": [
         {
             "id": "regexp-router",
-            "verb": "ask",
+            "verb": "q",
             "query": "how does the regexp router match incoming routes?",
             "expected": [{ "file": "src/router/reg-exp-router/router.ts" }]
         },
         {
             "id": "middleware-compose",
-            "verb": "ask",
+            "verb": "q",
             "query": "where is the middleware chain composed into a single handler?",
             "expected": [{ "file": "src/compose.ts" }]
         },
         {
             "id": "jwt-verify",
-            "verb": "ask",
+            "verb": "q",
             "query": "how are JWT tokens verified?",
             "expected": [{ "file": "src/utils/jwt/jwt.ts", "line": 96, "tolerance": 60 }]
         },
         {
             "id": "streaming-sse",
-            "verb": "ask",
+            "verb": "q",
             "query": "how are server-sent events streamed to the client?",
             "expected": [{ "file": "src/helper/streaming/sse.ts" }]
         },
         {
             "id": "smart-router-choice",
-            "verb": "ask",
+            "verb": "q",
             "query": "how does the smart router pick which underlying router to use?",
             "expected": [{ "file": "src/router/smart-router/router.ts" }]
         },
@@ -76,68 +76,68 @@
         },
         {
             "id": "basic-auth-check",
-            "verb": "ask",
+            "verb": "q",
             "query": "where are basic auth credentials checked against the configured username and password?",
             "expected": [{ "file": "src/middleware/basic-auth/index.ts" }]
         },
         {
             "id": "csrf-protection",
-            "verb": "ask",
+            "verb": "q",
             "query": "how is CSRF protection enforced for form submissions?",
             "expected": [{ "file": "src/middleware/csrf/index.ts" }]
         },
         {
             "id": "response-compression",
-            "verb": "ask",
+            "verb": "q",
             "query": "where are responses compressed with gzip or deflate?",
             "expected": [{ "file": "src/middleware/compress/index.ts" }]
         },
         {
             "id": "static-files",
-            "verb": "ask",
+            "verb": "q",
             "query": "how are static files served from disk?",
             "expected": [{ "file": "src/middleware/serve-static/index.ts" }]
         },
         {
             "id": "timeout-abort",
-            "verb": "ask",
+            "verb": "q",
             "query": "how does the timeout middleware abort long-running handlers?",
             "expected": [{ "file": "src/middleware/timeout/index.ts" }]
         },
         {
             "id": "security-headers",
-            "verb": "ask",
+            "verb": "q",
             "query": "where are security headers like content security policy added to responses?",
             "expected": [{ "file": "src/middleware/secure-headers/secure-headers.ts" }]
         },
         {
             "id": "trailing-slash",
-            "verb": "ask",
+            "verb": "q",
             "query": "how are trailing slashes added to or removed from request paths?",
             "expected": [{ "file": "src/middleware/trailing-slash/index.ts" }]
         },
         {
             "id": "body-parsing",
-            "verb": "ask",
+            "verb": "q",
             "query": "where is the request body parsed as form data or json?",
             "expected": [{ "file": "src/utils/body.ts", "line": 97, "tolerance": 80 }, { "file": "src/request.ts" }],
             "notes": "Cross-file concept: parseBody in utils/body.ts, exposed via HonoRequest."
         },
         {
             "id": "websocket-upgrade",
-            "verb": "ask",
+            "verb": "q",
             "query": "how are websocket connections handled and their events dispatched?",
             "expected": [{ "file": "src/helper/websocket/index.ts" }]
         },
         {
             "id": "response-cache",
-            "verb": "ask",
+            "verb": "q",
             "query": "where does the cache middleware store and match cached responses?",
             "expected": [{ "file": "src/middleware/cache/index.ts" }]
         },
         {
             "id": "not-found-handler",
-            "verb": "ask",
+            "verb": "q",
             "query": "what decides the 404 response when no route matches?",
             "expected": [{ "file": "src/hono-base.ts", "line": 31, "tolerance": 20 }],
             "notes": "Synonym gap: '404 when no route matches' vs notFoundHandler vocabulary."

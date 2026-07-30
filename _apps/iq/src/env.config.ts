@@ -9,7 +9,7 @@ const configSchema = z.object({
     // Output rendering when no --json/--ndjson flag is given: agent-facing text (default), one JSON document, or
     // one JSON line per result group.
     intenticOutput: z.enum(["text", "json", "ndjson"]).catch("text"),
-    // Baked embedding model dir; unset → `iq ask` degrades to keyword-expanded lexical search.
+    // Baked embedding model dir; unset → natural-language queries degrade to keyword-expanded lexical search.
     iqModelDir: z.string().default(""),
     // Override the ripgrep binary resolved from PATH.
     iqRgPath: z.string().default(""),

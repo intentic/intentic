@@ -1,5 +1,4 @@
 import { buildApplication, buildRouteMap, text_en } from "@stricli/core";
-import { ask } from "./commands/ask.command.js";
 import { ast } from "./commands/ast.command.js";
 import { context } from "./commands/context.command.js";
 import { def } from "./commands/def.command.js";
@@ -29,7 +28,8 @@ const formatException = (exc: unknown): string => {
 };
 
 // The agent-facing contract, kept under ~400 tokens — this is what `iq --help` prints.
-const HELP = `One search tool, intent-first. Bare query auto-detects intent and fuses engines:
+const HELP = `One search tool, intent-first. A bare query auto-detects intent, fuses engines, and answers
+natural language semantically — there is no second verb for questions:
   iq "where do we enforce the secrets floor?"
 
   iq find 'createServer\\(' --lang ts      text/regex match (--literal --word --case)
@@ -38,7 +38,6 @@ const HELP = `One search tool, intent-first. Bare query auto-detects intent and 
   iq refs createIgnoreScope --kind call   who uses a symbol (call|import|type|write)
   iq sym 'Workspace*Schema' --kind type   symbols by name pattern
   iq ast 'await $FN($$$)' --lang ts       structural AST pattern
-  iq ask "how are tools exposed?"         natural-language semantic search
   iq outline src/app.ts                   file skeleton without reading it
   iq context src/app.ts:48                enclosing function of an anchor
   iq map --budget 4000                    repo skeleton: top files + their exports
@@ -46,11 +45,16 @@ const HELP = `One search tool, intent-first. Bare query auto-detects intent and 
   iq recent --since 2d                    recently changed files
   iq log "MAX_MATCHES" --path src         git history of a string
   iq who src/app.ts:15                    blame an anchor
-  iq multi                                queries from stdin, one spawn
+  iq multi "def foo" "refs bar"           several queries, one spawn (or one per stdin line)
   iq sessions files "auth refresh"        files past sessions touched for a topic
 
-Every hit is a path:line anchor. Output fits --budget (default 1500 tokens); truncation footers
-give the exact --after command to continue. Scope: --in <dir|file> --repo <name> --lang ts,py
+Read the first lines and stop: every answer opens with a capsule — \`answer:\` names the top
+path:line, its enclosing symbol and whether the top result is confident or ambiguous;
+\`candidates:\` names the ranked paths that did not fit; \`more:\` gives the exact --after command.
+The code follows below it, so \`head\` never cuts the part that matters. Natural-language answers
+carry the top hits' full enclosing bodies — read those instead of re-opening the file.
+
+Output fits --budget (default 1500 tokens). Scope: --in <dir|file> --repo <name> --lang ts,py
 --glob/--not-glob --only tests|src|docs|config --ignored (secrets floor never lifts).
 Exit codes: 0 hits, 1 none, 2 error. The index self-manages — iq index rebuild only if stale.
 
@@ -68,7 +72,6 @@ export const app = buildApplication(
             refs,
             sym,
             ast,
-            ask,
             outline,
             context,
             map,

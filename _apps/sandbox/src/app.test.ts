@@ -14,7 +14,7 @@ import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
 import type { Hono } from "hono";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { createAgentsRegistry } from "./agents/agents-registry.js";
 import { createApp } from "./app.js";
 import { ForbiddenError } from "./auth/auth.js";
@@ -379,6 +379,9 @@ const services = (overrides: Partial<Services> = {}): Services => {
 // trip through the real SSE encode/decode. JSON routes resolve to their output; thrown ORPCErrors carry `.code`.
 const clientFor = (app: Hono): ContractRouterClient<typeof sandboxContract> =>
     createORPCClient(new OpenAPILink(sandboxContract, { url: "http://sandbox", fetch: (request) => app.request(request) }));
+
+// Without a vitest config there is no unstubEnvs, so a stubbed var would outlive the test that set it.
+afterEach(() => vi.unstubAllEnvs());
 
 // An auth stub that refuses every bearer as an AUTHENTICATION failure (→ 401) — proves a route's gate (or its
 // exemption from the bearer middleware).
@@ -755,7 +758,12 @@ test("ports.forward on a loopback sandbox (no zone/token) still maps the slot bu
     expect(await client.ports.forward({ port: 3000 })).toEqual({});
 });
 
-test("system.terminals lists every attachable web-*/panel-* tmux session (none in the test env)", async () => {
+test("system.terminals reports an empty list, not an error, when there is no tmux server to ask", async () => {
+    // Pointed at a socket directory that holds no server: `list-panes` exits non-zero and that is an empty list.
+    // Both vars matter — TMUX_TMPDIR picks the socket, and $TMUX (set whenever the suite itself runs inside tmux)
+    // would otherwise send the query to the REAL server, where this machine's own agent-* sessions live.
+    vi.stubEnv("TMUX_TMPDIR", mkdtempSync(join(tmpdir(), "terminals-empty-")));
+    vi.stubEnv("TMUX", undefined);
     const client = clientFor(createApp(services()));
     expect(await client.system.terminals()).toEqual({ sessions: [] });
 });

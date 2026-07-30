@@ -1,7 +1,8 @@
 import type { WorkspaceSearchFreshness, WorkspaceSearchResult, WorkspaceSearchTag } from "@intentic/sandbox-contract";
 
-export type Verb =
-    "q" | "find" | "files" | "def" | "refs" | "sym" | "ast" | "ask" | "outline" | "context" | "recent" | "log" | "who" | "hotspots" | "map";
+// No separate natural-language verb: a bare `q` whose words are not a symbol, path or regex IS the semantic
+// pipeline, and an exact query that finds nothing escalates into it.
+export type Verb = "q" | "find" | "files" | "def" | "refs" | "sym" | "ast" | "outline" | "context" | "recent" | "log" | "who" | "hotspots" | "map";
 
 export type FileClass = "tests" | "src" | "docs" | "config";
 

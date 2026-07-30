@@ -1,10 +1,17 @@
 import type { WorkspaceSearchTag } from "@intentic/sandbox-contract";
-import type { EngineResult, RankedGroup, RankedHit } from "../types.js";
+import type { FileClass, EngineResult, RankedGroup, RankedHit } from "../types.js";
+import { classOf } from "../workspace/scan.js";
 
 const RRF_K = 60;
 const DEF_BOOST = 1.5;
 const PATH_BOOST = 1.25;
 const RECENCY_HALF_LIFE_DAYS = 14;
+
+// Class prior for natural-language answers only. "How does X work" is answered by the implementation; its test
+// file names the same vocabulary more densely and used to outrank it, which cost the reading agent a second
+// query. Exact verbs (find/refs/def) never apply this — there, a hit in a test IS a hit. Independent of `boosts`
+// so the bench can attribute the prior's contribution on its own (`-srcfirst`).
+const CLASS_PRIOR: Record<FileClass, number> = { src: 1, config: 0.9, tests: 0.75, docs: 0.7 };
 
 export interface FuseContext {
     // Lowercased tokens from the query — hits in paths containing one get a boost.
@@ -13,6 +20,8 @@ export interface FuseContext {
     readonly now: number;
     // The `boosts` feature toggle: false = pure RRF, no def/path/recency multipliers (benchmark baseline).
     readonly boosts: boolean;
+    // Prefer implementation over tests/docs/config — natural-language queries only.
+    readonly sourceFirst: boolean;
 }
 
 const TAG_ORDER = ["def", "path", "fuzzy", "rerank", "sem", "bm25", "import", "call", "type", "write", "text", "heuristic"];
@@ -79,6 +88,9 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
                 const ageDays = Math.max(0, (context.now - mtime) / 86_400_000);
                 score *= 1 + 0.2 * 2 ** (-ageDays / RECENCY_HALF_LIFE_DAYS);
             }
+        }
+        if (context.sourceFirst) {
+            score *= CLASS_PRIOR[classOf(hit.path)];
         }
         hits.push({ ...hit, tags: dedupeTags(hit.tags), score });
     }

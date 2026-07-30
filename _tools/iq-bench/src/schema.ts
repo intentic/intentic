@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // Verbs whose output is ranked groups — the only ones golden-anchor scoring makes sense for.
 // Anchor/git verbs (outline, context, recent, log, who) are excluded on purpose.
-const SEARCH_VERBS = ["q", "find", "files", "def", "refs", "sym", "ast", "ask"] as const;
+const SEARCH_VERBS = ["q", "find", "files", "def", "refs", "sym", "ast"] as const;
 
 // Expected location. `line` omitted = file-level match; `tolerance` = ± lines accepted around `line`.
 const AnchorSchema = z.object({

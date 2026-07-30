@@ -66,18 +66,22 @@ const CLASS_TESTS = /(^|\/)((__tests__|tests?)\/|test_[^/]*$)|\.(test|spec)\.[^/
 const CLASS_DOCS = /(^|\/)(docs?\/)|\.(md|mdx|rst|txt)$/i;
 const CLASS_CONFIG = /(^|\/)[^/]*\.(json|jsonc|ya?ml|toml|ini)$|(^|\/)\.[^/]*rc[^/]*$|(^|\/)[^/]*\.config\.[^/.]+$/;
 
-const matchesClass = (path: string, cls: FileClass): boolean => {
-    if (cls === "tests") {
-        return CLASS_TESTS.test(path);
+// Which class a path belongs to — the same four buckets `--only` selects, as a total function so ranking can
+// prefer implementation over its tests and docs without a second set of patterns to keep in step.
+export const classOf = (path: string): FileClass => {
+    if (CLASS_TESTS.test(path)) {
+        return "tests";
     }
-    if (cls === "docs") {
-        return CLASS_DOCS.test(path);
+    if (CLASS_DOCS.test(path)) {
+        return "docs";
     }
-    if (cls === "config") {
-        return CLASS_CONFIG.test(path);
+    if (CLASS_CONFIG.test(path)) {
+        return "config";
     }
-    return !CLASS_TESTS.test(path) && !CLASS_DOCS.test(path) && !CLASS_CONFIG.test(path);
+    return "src";
 };
+
+const matchesClass = (path: string, cls: FileClass): boolean => classOf(path) === cls;
 
 const EXT_LANG: Record<string, string> = {
     ts: "ts",

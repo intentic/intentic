@@ -64,10 +64,14 @@ const reasoningEffort = (effort: string): ModelReasoningEffort | undefined => {
 
 // process.env with undefined entries dropped (CodexOptions.env is Record<string, string>), cli-kind capability
 // credentials merged, and CODEX_HOME pinned to the workspace-scoped auth/session store.
+//
+// CODEX_API_KEY is NOT inherited: it is the translator bearer, and the only turn entitled to one is the turn that
+// resolved a codexEndpoint (which sets it explicitly below). A daemon whose own environment carries a bearer —
+// exactly what a sandbox running the translator looks like — would otherwise hand it to native account turns too.
 const codexEnv = (codexHome: string, cliEnv: Record<string, string> | undefined): Record<string, string> => {
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) {
-        if (value !== undefined) {
+        if (value !== undefined && key !== "CODEX_API_KEY") {
             env[key] = value;
         }
     }

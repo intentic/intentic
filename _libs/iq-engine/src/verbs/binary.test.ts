@@ -31,6 +31,6 @@ test("a stray NUL byte does not void a file's symbols or chunks", async () => {
     expect(def.exitCode).toBe(0);
     expect(def.result.groups[0]?.path).toBe("alpha/src/nul-file.ts");
 
-    const ask = await engine.run(request("ask", "nul separated string helper"));
-    expect(ask.result.groups.some((group) => group.path === "alpha/src/nul-file.ts")).toBe(true);
+    const natural = await engine.run(request("q", "nul separated string helper"));
+    expect(natural.result.groups.some((group) => group.path === "alpha/src/nul-file.ts")).toBe(true);
 });

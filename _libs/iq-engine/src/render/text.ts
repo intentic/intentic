@@ -24,9 +24,11 @@ export interface RenderRequest {
     readonly hint?: string;
     // Code-graph neighbor lines, rendered (and budget-reserved) like hint.
     readonly related?: readonly string[];
-    // Compact ranked path map so the reader can scan to a candidate that ranked below the shown/packed groups
-    // (benchmarked: the true answer often sits at rank 5–13, invisible behind the packed top-2). Budget-reserved.
-    readonly candidates?: readonly string[];
+    // Whether the capsule opens with an `answer:` anchor — true for the "where is it" verbs, false where the
+    // ranking itself is the answer (path lists, git history, whole-file skeletons).
+    readonly lead?: boolean;
+    // Whether the top result stands out from the field, when a reranker was there to judge it.
+    readonly confidence?: "confident" | "ambiguous";
     // Spool id for continuation cursors; the renderer only formats it, the caller persists the spool.
     readonly cursorId: string;
 }
@@ -37,8 +39,17 @@ export interface Rendered {
     readonly shownHits: number;
     readonly truncated: boolean;
     readonly cursor?: string;
+    // The paths the candidates line named, so the structured result can report exactly what the text did instead
+    // of re-deriving it from a shown-count and drifting the moment the budget rules change.
+    readonly candidates?: readonly string[];
     readonly exitCode: 0 | 1;
 }
+
+// How many unshown paths the candidates line names — benchmarked, the true answer often sits at rank 5–13,
+// invisible behind the packed top groups.
+const CANDIDATE_COUNT = 12;
+// Ceiling on what the capsule's optional lines may take, so the code they point at still fits beside them.
+const CAPSULE_SHARE = 0.5;
 
 const tagText = (tags: readonly WorkspaceSearchTag[]): string =>
     tags.map((tag) => (tag.score === undefined ? `[${tag.kind}]` : `[${tag.kind} ${tag.score.toFixed(2)}]`)).join(" ");
@@ -48,7 +59,10 @@ const freshnessText = (freshness: WorkspaceSearchFreshness): string => {
         return `index building ${Math.round((freshness.progress ?? 0) * 100)}%`;
     }
     if (freshness.state === "stale") {
-        return "index stale";
+        // Naming the lag is the difference between a fact and an alarm: transcript analytics found 69% of answers
+        // led with a bare "index stale" while the answer was correct, and text matches are read from disk anyway.
+        const behind = freshness.behind ?? 0;
+        return behind > 0 ? `index ${behind} files behind (text matches are live)` : "index catching up (text matches are live)";
     }
     return `index fresh (${((freshness.ageMs ?? 0) / 1000).toFixed(1)}s)`;
 };
@@ -66,36 +80,89 @@ const pathLine = (group: RankedGroup, showTags: boolean): string => {
     return `  ${group.path}${summary}${tags.length > 0 ? `    ${tagText(tags)}` : ""}`;
 };
 
-// Render ranked groups under a hard token budget: header and worst-case footer reserved first, then groups fill
-// greedily (whole groups, with intra-group elision past a per-group soft cap). Never splits a group across pages.
+const candidateLine = (anchors: readonly string[]): string => `candidates: ${anchors.join(" · ")}`;
+
+const bestHit = (group: RankedGroup): RankedHit | undefined =>
+    group.hits.reduce<RankedHit | undefined>((best, hit) => (best === undefined || hit.score > best.score ? hit : best), undefined);
+
+// A candidate names its best hit's line, not just its file. Four more characters buy the one thing that decides
+// whether the reader opens the file at the right place or greps it again — and a bare path was the only anchor iq
+// ever handed back without a line, in the line-anchored response format the whole tool is built on.
+const candidateAnchor = (group: RankedGroup): string => {
+    const hit = bestHit(group);
+    return hit === undefined ? group.path : `${group.path}:${hit.line}`;
+};
+
+// The one line that answers the question: where the top-ranked evidence sits, what symbol encloses it, whether
+// it stands out, and which engines agreed. Everything else in the response elaborates on it.
+const answerLine = (group: RankedGroup, confidence: RenderRequest["confidence"]): string | undefined => {
+    const hit = bestHit(group);
+    if (hit === undefined) {
+        return undefined;
+    }
+    const parts = [`${group.path}:${hit.line}`];
+    if (hit.context !== undefined) {
+        parts.push(hit.context);
+    }
+    if (confidence !== undefined) {
+        parts.push(confidence);
+    }
+    if (hit.tags.length > 0) {
+        parts.push(tagText(hit.tags));
+    }
+    return `answer: ${parts.join(" · ")}`;
+};
+
+// Render ranked groups under a hard token budget. The capsule — answer anchor, graph neighbours, the paths that
+// did NOT fit, and the continuation command — is reserved first and printed BEFORE the body, because transcript
+// analytics found 90% of answers piped through `head`/`sed`: anything below the code was never read.
 export const renderText = (request: RenderRequest): Rendered => {
     const { groups, offset, unit, style } = request;
     const totalHits = style === "paths" ? groups.length : groups.reduce((sum, group) => sum + group.hits.length, 0);
     const totalFiles = groups.length;
     const pending = groups.slice(offset, request.limit !== undefined ? offset + request.limit : undefined);
+    // A path list, a commit log and a --files-only sweep already ARE their own candidate map.
+    const wantsCandidates = style === "hits" && request.filesOnly !== true && request.count !== true;
 
     const header = (shown: number, note?: string): string => {
         const scope = style === "paths" ? `${totalHits} ${unit}` : `${totalHits} ${unit} in ${totalFiles} files`;
         const noteText = note !== undefined ? ` · ${note}` : "";
         return `iq: ${request.echo} — ${scope} · ${freshnessText(request.freshness)}${noteText} · showing ${shown}/${totalHits}`;
     };
-    const footer = (remainingHits: number, remainingFiles: number, cursor: string): string =>
+    const moreLine = (remainingHits: number, remainingFiles: number, cursor: string): string =>
         style === "paths"
-            ? `──── truncated: ${remainingHits} more ${unit} · next: iq ${request.echo} --after ${cursor} ────`
-            : `──── truncated: ${remainingHits} ${unit} in ${remainingFiles} more files · next: iq ${request.echo} --after ${cursor} ────`;
+            ? `more: ${remainingHits} ${unit} — iq ${request.echo} --after ${cursor}`
+            : `more: ${remainingHits} ${unit} in ${remainingFiles} files — iq ${request.echo} --after ${cursor}`;
 
-    // Reserve with worst-case widths so the final assembly can only shrink.
+    // Reserve with worst-case widths so the final assembly can only shrink: the totals are the widest counts, the
+    // cursor the widest offset, and the candidates line the longest paths it could possibly name. The header and
+    // the continuation command are unconditional — an answer nobody can page through is a dead end.
     const worstCursor = encodeCursor(request.cursorId, offset + pending.length);
-    const relatedLines = (request.related ?? []).map((line) => `related: ${line}`);
-    const candidateLine =
-        request.candidates !== undefined && request.candidates.length > 0 ? `candidates: ${request.candidates.join(" · ")}` : undefined;
     let remaining =
-        request.budget -
-        estimateTokens(header(totalHits, request.headerNote)) -
-        estimateTokens(footer(totalHits, totalFiles, worstCursor)) -
-        relatedLines.reduce((sum, line) => sum + estimateTokens(line), 0) -
-        (candidateLine !== undefined ? estimateTokens(candidateLine) : 0) -
-        (request.hint !== undefined ? estimateTokens(`hint: ${request.hint}`) : 0);
+        request.budget - estimateTokens(header(totalHits, request.headerNote)) - estimateTokens(moreLine(totalHits, totalFiles, worstCursor));
+    // The capsule must not crowd out the code it describes, so its optional lines share a fraction of the budget
+    // and each is admitted only if it fits — in priority order, because a 100-token budget can afford some.
+    let allowance = Math.floor(request.budget * CAPSULE_SHARE);
+    const admit = (line: string): boolean => {
+        const cost = estimateTokens(line);
+        if (cost > allowance || cost > remaining) {
+            return false;
+        }
+        allowance -= cost;
+        remaining -= cost;
+        return true;
+    };
+    const answer = request.lead === true && pending[0] !== undefined ? answerLine(pending[0], request.confidence) : undefined;
+    const leadLine = answer !== undefined && admit(answer) ? answer : undefined;
+    const hintLine = request.hint !== undefined && admit(`hint: ${request.hint}`) ? `hint: ${request.hint}` : undefined;
+    const worstCandidates = wantsCandidates
+        ? pending
+              .map(candidateAnchor)
+              .toSorted((a, b) => b.length - a.length)
+              .slice(0, CANDIDATE_COUNT)
+        : [];
+    const showCandidates = worstCandidates.length > 0 && admit(candidateLine(worstCandidates));
+    const relatedLines = (request.related ?? []).map((line) => `related: ${line}`).filter(admit);
 
     const groupCap = Math.max(200, Math.floor(request.budget / 6));
     const bodyLines: string[] = [];
@@ -165,26 +232,30 @@ export const renderText = (request: RenderRequest): Rendered => {
     const truncated = offset + shownGroups < groups.length;
     const cursor = truncated ? encodeCursor(request.cursorId, offset + shownGroups) : undefined;
     const shownTotal = style === "paths" ? shownGroups : shownHits;
-    const parts = [header(shownTotal, request.headerNote), ...bodyLines];
+    const unshown = groups.slice(offset + shownGroups);
+    const capsule = [header(shownTotal, request.headerNote)];
+    if (leadLine !== undefined) {
+        capsule.push(leadLine);
+    }
+    const candidates = showCandidates ? unshown.slice(0, CANDIDATE_COUNT).map(candidateAnchor) : [];
+    if (candidates.length > 0) {
+        capsule.push(candidateLine(candidates));
+    }
+    capsule.push(...relatedLines);
     if (truncated && cursor !== undefined) {
-        const remainingFiles = groups.length - offset - shownGroups;
-        const remainingHits =
-            style === "paths" ? remainingFiles : groups.slice(offset + shownGroups).reduce((sum, group) => sum + group.hits.length, 0);
-        parts.push(footer(remainingHits, remainingFiles, cursor));
+        const remainingHits = style === "paths" ? unshown.length : unshown.reduce((sum, group) => sum + group.hits.length, 0);
+        capsule.push(moreLine(remainingHits, unshown.length, cursor));
     }
-    parts.push(...relatedLines);
-    if (candidateLine !== undefined) {
-        parts.push(candidateLine);
-    }
-    if (request.hint !== undefined) {
-        parts.push(`hint: ${request.hint}`);
+    if (hintLine !== undefined) {
+        capsule.push(hintLine);
     }
     return {
-        text: `${parts.join("\n")}\n`,
+        text: `${[...capsule, ...bodyLines].join("\n")}\n`,
         shownGroups,
         shownHits: shownTotal,
         truncated,
         ...(cursor !== undefined ? { cursor } : {}),
+        ...(candidates.length > 0 ? { candidates } : {}),
         exitCode: totalHits > 0 ? 0 : 1,
     };
 };

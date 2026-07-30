@@ -3,7 +3,7 @@ import type { Verb } from "@intentic/iq-engine";
 import { outputAliases, outputFlagParameters, scopeFlagParameters, type SearchFlags } from "../lib/flags.js";
 import { runSearch } from "../lib/run.js";
 
-const MODES = ["find", "files", "def", "refs", "sym", "ast", "ask"] as const;
+const MODES = ["find", "files", "def", "refs", "sym", "ast"] as const;
 
 type QFlags = SearchFlags & { readonly mode?: (typeof MODES)[number] };
 

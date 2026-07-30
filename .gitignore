@@ -21,6 +21,9 @@ _archive/**/gen
 **/tmp
 **/.astro-indexnow-cache.json
 
+# Benchmark output — every iq-bench run writes a timestamped dir here; the datasets are the input worth keeping.
+_tools/iq-bench/results
+
 # env / secrets
 **/.env
 **/.env.local

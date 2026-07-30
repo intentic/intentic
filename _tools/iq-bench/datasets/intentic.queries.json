@@ -4,32 +4,32 @@
     "cases": [
         {
             "id": "budget-enforcement",
-            "verb": "ask",
+            "verb": "q",
             "query": "where is the output token budget estimated and enforced when rendering search results?",
             "expected": [{ "file": "_libs/iq-engine/src/render/budget.ts" }, { "file": "_libs/iq-engine/src/render/text.ts" }],
             "notes": "estimateTokens lives in budget.ts; renderText spends the budget."
         },
         {
             "id": "feature-toggles",
-            "verb": "ask",
+            "verb": "q",
             "query": "how are retrieval pipeline stages toggled on and off for benchmarking?",
             "expected": [{ "file": "_libs/iq-engine/src/features.ts" }]
         },
         {
             "id": "secrets-floor",
-            "verb": "ask",
+            "verb": "q",
             "query": "where is the secrets floor enforced so ignored files stay unreachable?",
             "expected": [{ "file": "_libs/iq-engine/src/workspace/floor.ts" }]
         },
         {
             "id": "rrf-fusion",
-            "verb": "ask",
+            "verb": "q",
             "query": "how are results from multiple engines fused with reciprocal rank fusion?",
             "expected": [{ "file": "_libs/iq-engine/src/plan/fuse.ts", "line": 34, "tolerance": 30 }]
         },
         {
             "id": "reranker-prune",
-            "verb": "ask",
+            "verb": "q",
             "query": "how does the cross-encoder reranker prune irrelevant candidates?",
             "expected": [{ "file": "_libs/iq-engine/src/embed/reranker.ts" }]
         },
@@ -78,69 +78,69 @@
         },
         {
             "id": "prf-expansion",
-            "verb": "ask",
+            "verb": "q",
             "query": "how does iq expand a query with related terms taken from the top results?",
             "expected": [{ "file": "_libs/iq-engine/src/engines/bm25.ts", "line": 27, "tolerance": 30 }],
             "notes": "Synonym gap: 'expand with related terms' vs prfTerms/RM3 vocabulary."
         },
         {
             "id": "chunking",
-            "verb": "ask",
+            "verb": "q",
             "query": "where are files split into chunks before embedding?",
             "expected": [{ "file": "_libs/iq-engine/src/indexer/chunker.ts" }]
         },
         {
             "id": "symbol-extraction",
-            "verb": "ask",
+            "verb": "q",
             "query": "where are function and class symbols extracted from source files?",
             "expected": [{ "file": "_libs/iq-engine/src/indexer/symbols.ts" }]
         },
         {
             "id": "sqlite-schema",
-            "verb": "ask",
+            "verb": "q",
             "query": "where is the sqlite index database opened and its schema created?",
             "expected": [{ "file": "_libs/iq-engine/src/store/db.ts" }]
         },
         {
             "id": "change-detection",
-            "verb": "ask",
+            "verb": "q",
             "query": "how does the index detect which files changed since the last run?",
             "expected": [{ "file": "_libs/iq-engine/src/indexer/indexer.ts", "line": 28, "tolerance": 60 }],
             "notes": "Synonym gap: 'detect changed files' vs revalidate/mtime diff vocabulary."
         },
         {
             "id": "vector-search",
-            "verb": "ask",
+            "verb": "q",
             "query": "where is the dense vector similarity search over embeddings implemented?",
             "expected": [{ "file": "_libs/iq-engine/src/engines/semantic.ts", "line": 36, "tolerance": 30 }]
         },
         {
             "id": "recent-git",
-            "verb": "ask",
+            "verb": "q",
             "query": "how are recently changed files listed from git history?",
             "expected": [{ "file": "_libs/iq-engine/src/engines/git.ts", "line": 61, "tolerance": 60 }]
         },
         {
             "id": "ast-search",
-            "verb": "ask",
+            "verb": "q",
             "query": "where does the structural AST pattern search run?",
             "expected": [{ "file": "_libs/iq-engine/src/engines/astq.ts" }]
         },
         {
             "id": "fuzzy-filenames",
-            "verb": "ask",
+            "verb": "q",
             "query": "how are fuzzy filename matches scored?",
             "expected": [{ "file": "_libs/iq-engine/src/engines/files.ts" }]
         },
         {
             "id": "agent-turns",
-            "verb": "ask",
+            "verb": "q",
             "query": "how does the sandbox daemon run agent turns with the Claude SDK?",
             "expected": [{ "file": "_apps/sandbox/src/agent/agent.ts" }]
         },
         {
             "id": "web-search-route",
-            "verb": "ask",
+            "verb": "q",
             "query": "where does the web UI's workspace search shell into the iq binary?",
             "expected": [{ "file": "_apps/sandbox/src/workspace/workspace.routes.ts" }]
         },

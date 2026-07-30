@@ -37,8 +37,12 @@ const stubs = async (): Promise<{ dir: string; calls: () => Promise<string[]> }>
 
 const run = async (env: Record<string, string>): Promise<string[]> => {
     const { dir, calls } = await stubs();
+    // INTENTIC_TMUX_NS is dropped from the inherited environment first: these cases are ABOUT that variable, and
+    // a sandbox that runs its own tmux under a namespace exports it — so "without the var" has to mean absent,
+    // not merely unset by the caller.
+    const { INTENTIC_TMUX_NS: _inherited, ...base } = process.env;
     await execFileAsync("bash", [TMUX_RUN, "agent-abc", "true", "probe"], {
-        env: { ...process.env, PATH: `${dir}:${process.env["PATH"] ?? ""}`, INTENTIC_RUN_FILTER: "0", INTENTIC_RUN_SOFT_TIMEOUT_S: "0", ...env },
+        env: { ...base, PATH: `${dir}:${process.env["PATH"] ?? ""}`, INTENTIC_RUN_FILTER: "0", INTENTIC_RUN_SOFT_TIMEOUT_S: "0", ...env },
     }).catch(() => undefined);
     return calls();
 };

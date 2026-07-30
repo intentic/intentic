@@ -18,7 +18,7 @@ npm i -g @intentic/iq      # or: pnpm add -g @intentic/iq
 
 - **Node ≥ 24** (uses `node:sqlite`).
 - **ripgrep** on `PATH` — the lexical engine shells into `rg`. Install via your package manager (`apt install ripgrep`, `brew install ripgrep`, …) or point `IQ_RG_PATH` at a binary.
-- **Semantic search is optional.** `iq ask` uses a local embedding + cross-encoder model. Set `IQ_MODEL_DIR` to a directory holding them (fetch once with the bundled `node_modules/@intentic/iq-engine/scripts/fetch-model.mjs <dir>`). Without it, `ask` degrades to keyword-expanded lexical search — everything else works unchanged.
+- **Semantic search is optional.** Natural-language queries use a local embedding + cross-encoder model. Set `IQ_MODEL_DIR` to a directory holding them (fetch once with the bundled `node_modules/@intentic/iq-engine/scripts/fetch-model.mjs <dir>`). Without it, they degrade to keyword-expanded lexical search — everything else works unchanged.
 
 The index self-manages: it builds on first query and revalidates against disk on every run. Nothing to set up.
 
@@ -26,7 +26,7 @@ The index self-manages: it builds on first query and revalidates against disk on
 
 - **You know the file** (a stack trace or failing test names it) → open it directly; `iq context path:line` / `iq who path:line` for the surroundings. Searching is overhead here.
 - **You know the exact identifier** → `iq def X` / `iq refs X` — one call replaces a grep-then-filter chain.
-- **You don't know where it lives**, or your words may not match the code's vocabulary → bare `iq "…"` or `iq ask "…"`. This is where `iq` decisively beats grep.
+- **You don't know where it lives**, or your words may not match the code's vocabulary → bare `iq "…"`, phrased as a question. Natural language has no verb of its own. This is where `iq` decisively beats grep.
 - **You have error-message text** → `iq find 'literal text'`, then `iq context` on the hit.
 - **You know nothing yet** — a repo you've never opened → `iq map --budget 4000` for the shape, `iq hotspots` for where the risk sits. These answer "what is this and where do I start", which no amount of searching does.
 
@@ -40,31 +40,32 @@ The index self-manages: it builds on first query and revalidates against disk on
 | who uses X | `iq refs createIgnoreScope --kind call` |
 | symbols by pattern | `iq sym 'Workspace*Schema' --kind type` |
 | structural AST pattern | `iq ast 'await $FN($$$)' --lang ts` |
-| a natural-language answer | `iq ask "how does the daemon expose tools?"` |
+| a natural-language answer | `iq "how does the daemon expose tools?"` |
 | a file's skeleton | `iq outline src/workspace/workspace-ignore.ts` |
 | code around a hit | `iq context src/workspace/workspace-tree.ts:48` |
 | recent changes | `iq recent --since 2d` |
 | history of a string | `iq log "MAX_TOTAL_MATCHES" --path src/workspace` |
 | blame a line | `iq who src/file.ts:15` |
-| several queries, one spawn | `iq multi <<'EOF'` … one per line … `EOF` |
+| several queries, one spawn | `iq multi "how is auth refreshed" "def refreshToken"` |
 
 Regex is **rust syntax**: alternation is `a|b` (not `a\|b`); for literal text use `--literal`.
 
 ## Output contract
 
-- **Token budget is first-class.** Output fits `--budget` (default 1500 tokens); the tool decides how to spend it and truncates from the tail. Truncation footers print the exact `--after <cursor>` command to continue.
-- **Every hit is a `path:line` anchor**; hits show their enclosing symbol (`⟨in createWidget (fn)⟩`), and `ask` appends `related:` definition anchors for follow-up.
+- **Answer first.** Every response opens with a capsule that precedes the code: `answer:` names the top anchor, its enclosing symbol and whether the top result is `confident` or `ambiguous`; `candidates:` names the ranked `path:line` anchors that did not fit; `more:` gives the exact `--after <cursor>` command. A reader that keeps only the first few lines keeps everything actionable.
+- **Token budget is first-class.** Output fits `--budget` (default 1500 tokens); the tool decides how to spend it and truncates whole groups from the tail.
+- **Every hit is a `path:line` anchor** into the live file; hits show their enclosing symbol (`⟨in createWidget (fn)⟩`), and natural-language answers deliver the top hits' full enclosing bodies plus `related:` definition anchors for follow-up.
 - **Scope** with `--in <dir>`, `--repo <name>`, `--lang ts,py`, `--glob`/`--not-glob`, `--only tests|src|docs|config`; `--ignored` includes gitignored files (the security floor — secrets, `.git` — never lifts).
 - **Exit codes** follow grep convention: `0` hits, `1` none, `2` usage error.
 - **Machine output**: `--json` (one result document) or `--ndjson` (one line per group).
-- **Zero hits are never a dead end** — the footer diagnoses the likely cause (grep-style regex, over-narrow scope, exact-name miss) and suggests the next command.
+- **Zero hits are never a dead end** — an identifier, path or pattern that matches nothing exactly is re-run semantically (the header says so), and a genuine zero carries a `hint:` diagnosing the likely cause.
 
 ## Configuration (environment)
 
 | Var | Effect |
 |---|---|
 | `WORKSPACE_ROOT` | Directory to search (default: current directory). |
-| `IQ_MODEL_DIR` | Embedding/reranker model directory; unset → `ask` degrades to lexical. |
+| `IQ_MODEL_DIR` | Embedding/reranker model directory; unset → natural-language queries degrade to lexical. |
 | `IQ_RG_PATH` | Override the ripgrep binary resolved from `PATH`. |
 | `INTENTIC_OUTPUT` | Default output mode when no flag is given: `text` (default), `json`, `ndjson`. |
 | `IQ_FEATURES` | Retrieval-stage toggles (see below); the `--features` flag overrides it. |
@@ -74,11 +75,11 @@ Regex is **rust syntax**: alternation is `a|b` (not `a\|b`); for literal text us
 
 A bare query is classified (identifier / regex / path / natural-language) and routed through a fused pipeline:
 
-**ripgrep** (exact) + **FTS5 BM25** (sparse relevance) + **RM3 pseudo-relevance feedback** (query expansion) + **dense embeddings** (semantic) → **reciprocal-rank fusion** with def/path/recency boosts → **cross-encoder rerank** (blended into the fused order via RRF — it *votes*, it doesn't veto) → **enclosing-symbol context** + **graph** neighbor anchors + **pack** (the top groups arrive as the actual code slice, not just a pointer, so the reader usually needs no follow-up open).
+**ripgrep** (exact) + **FTS5 BM25** (sparse relevance) + **RM3 pseudo-relevance feedback** (query expansion) + **dense embeddings** (semantic) → **reciprocal-rank fusion** with def/path/recency boosts and a **source-first** class prior (implementation over its tests and docs, natural-language answers only) → **cross-encoder rerank** (blended into the fused order via RRF — it *votes*, it doesn't veto) → **enclosing-symbol context** + **graph** neighbor anchors + **pack** (the top groups arrive as the actual code slice, not just a pointer, so the reader usually needs no follow-up open).
 
-All nine stages are independently toggleable for benchmarking and deployment tuning, via `--features` or `IQ_FEATURES` (allow-list `bm25` = only BM25; default-minus `-rerank,-prf` = all except those):
+All ten stages are independently toggleable for benchmarking and deployment tuning, via `--features` or `IQ_FEATURES` (allow-list `bm25` = only BM25; default-minus `-rerank,-prf` = all except those):
 
-`bm25`, `semantic`, `rerank`, `prf`, `confidence`, `symctx`, `graph`, `boosts`, `pack`.
+`bm25`, `semantic`, `rerank`, `prf`, `confidence`, `symctx`, `graph`, `boosts`, `srcfirst`, `pack`.
 
 Structural search (`ast`) uses ast-grep; history verbs (`log`, `who`, `recent`) use git.
 

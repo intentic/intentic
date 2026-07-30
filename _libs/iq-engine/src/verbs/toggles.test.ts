@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { createEngine, type Engine, parseFeatures } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
@@ -33,27 +35,29 @@ test("symctx: hits carry the enclosing symbol; off drops it", async () => {
     expect(off.result.features).toContain("symctx");
 });
 
-test("bm25 off: ask has no [bm25] tags and discloses the disabled set", async () => {
-    const outcome = await engineWith("-bm25,-prf").run(request("ask", "how are widgets built for the registry?"));
+test("bm25 off: a natural-language query has no [bm25] tags and discloses the disabled set", async () => {
+    const outcome = await engineWith("-bm25,-prf").run(request("q", "how are widgets built for the registry?"));
     expect(outcome.result.groups.flatMap((group) => group.hits).every((hit) => hit.tags.every((tag) => tag.kind !== "bm25"))).toBe(true);
     expect(outcome.result.features).toEqual(expect.arrayContaining(["bm25", "prf"]));
     expect(outcome.text).toContain("features -bm25,-prf");
 });
 
 test("allow-list: only bm25 runs, and only [bm25] tags appear", async () => {
-    const outcome = await engineWith("bm25").run(request("ask", "how are widgets built for the registry?"));
+    const outcome = await engineWith("bm25").run(request("q", "how are widgets built for the registry?"));
     const kinds = new Set(outcome.result.groups.flatMap((group) => group.hits).flatMap((hit) => hit.tags.map((tag) => tag.kind)));
     expect([...kinds]).toEqual(["bm25"]);
 });
 
-test("graph: ask returns related definition anchors; off drops them", async () => {
-    const on = await engineWith().run(request("ask", "how are widgets built for the registry?"));
+test("graph: a natural-language query returns related definition anchors; off drops them", async () => {
+    const on = await engineWith().run(request("q", "how are widgets built for the registry?"));
     // The fixture is tiny; related lines appear when a top hit sits inside a symbol.
     if (on.result.related !== undefined) {
         expect(on.text).toContain("related: ");
-        expect(on.result.related.some((line) => line.includes("iq refs "))).toBe(true);
+        expect(on.result.related.every((line) => line.includes(" — def "))).toBe(true);
+        // A caller is resolved inline, not deferred to a follow-up `iq refs` the agent has to spend a turn on.
+        expect(on.result.related.some((line) => line.includes(" · called from "))).toBe(true);
     }
-    const off = await engineWith("-graph").run(request("ask", "how are widgets built for the registry?"));
+    const off = await engineWith("-graph").run(request("q", "how are widgets built for the registry?"));
     expect(off.result.related).toBeUndefined();
 });
 
@@ -66,24 +70,55 @@ test("boosts off changes ranking deterministically (pure RRF)", async () => {
     expect(JSON.stringify(withoutBoosts.result.groups)).toBe(JSON.stringify(again.result.groups));
 });
 
-test("pack: top ask groups carry the enclosing chunk as contiguous lines; off keeps sparse hits", async () => {
-    const packed = await engineWith().run(request("ask", "how are widgets built for the registry?"));
+test("pack: top natural-language groups carry the enclosing symbol body as contiguous lines; off keeps sparse hits", async () => {
+    const packed = await engineWith().run(request("q", "how are widgets built for the registry?"));
     const top = packed.result.groups[0];
     expect(top).toBeDefined();
-    // Contiguous line numbers = a code slice, not isolated matches.
+    // The slice is a contiguous run of lines = a code slice, not isolated matches. Anchors beyond the packed
+    // symbol may follow it as pointers, so contiguity is asserted over the prefix, not the whole group.
     const lines = top!.hits.map((hit) => hit.line);
-    for (let i = 1; i < lines.length; i++) {
-        expect(lines[i]).toBe(lines[i - 1]! + 1);
-    }
-    expect(lines.length).toBeGreaterThan(1);
+    const slice = lines.findIndex((line, i) => i > 0 && line !== lines[i - 1]! + 1);
+    const packedLines = slice === -1 ? lines : lines.slice(0, slice);
+    expect(packedLines.length).toBeGreaterThan(1);
     // The anchor hit keeps its retrieval tags; synthesized slice lines carry none.
     expect(top!.hits.some((hit) => hit.tags.length > 0)).toBe(true);
     expect(top!.hits.some((hit) => hit.tags.length === 0)).toBe(true);
 
-    const sparse = await engineWith("-pack").run(request("ask", "how are widgets built for the registry?"));
+    const sparse = await engineWith("-pack").run(request("q", "how are widgets built for the registry?"));
     expect(sparse.result.features).toContain("pack");
     expect(sparse.result.groups[0]?.path).toBe(top!.path);
     expect(sparse.result.groups[0]!.hits.length).toBeLessThanOrEqual(top!.hits.length);
+});
+
+test("packed lines are the file's real lines at their real numbers", async () => {
+    const packed = await engineWith().run(request("q", "how are widgets built for the registry?"));
+    const top = packed.result.groups[0]!;
+    const source = (await readFile(join(root, top.path), "utf8")).split(/\r?\n/);
+    // The indexed chunk carries a synthetic `path § label` first line; packing must never surface it, nor shift
+    // the anchors by the one line it occupies.
+    for (const hit of top.hits) {
+        expect(hit.text).toBe(source[hit.line - 1]);
+    }
+    expect(top.hits.some((hit) => hit.text.includes(" § "))).toBe(false);
+});
+
+test("a packed slice cannot spend the whole budget and hide the ranked candidates under it", async () => {
+    // Regression: an unbounded slice (a 107-line implementation packed at rank 1) consumed a 1500-token budget by
+    // itself, so the candidates below it never reached the answer at all — the file the reader wanted was one of
+    // them. Packing gets a bounded share; a tighter budget must buy fewer packed lines, never fewer candidates.
+    const query = "how are widgets built for the registry?";
+    const wide = await engineWith().run({ ...request("q", query), render: { budget: 1500 } });
+    const tight = await engineWith().run({ ...request("q", query), render: { budget: 300 } });
+    const packedRun = (outcome: typeof wide): number => {
+        const lines = outcome.result.groups[0]!.hits.map((hit) => hit.line);
+        const broken = lines.findIndex((line, i) => i > 0 && line !== lines[i - 1]! + 1);
+        return broken === -1 ? lines.length : broken;
+    };
+    expect(packedRun(tight)).toBeLessThanOrEqual(packedRun(wide));
+    // Whatever the budget, the anchor that earned the group its rank stays inside the slice.
+    for (const outcome of [wide, tight]) {
+        expect(outcome.result.groups[0]!.hits.some((hit) => hit.tags.length > 0)).toBe(true);
+    }
 });
 
 test("pack applies to natural-language q but not identifier q", async () => {
@@ -98,7 +133,7 @@ const shape = (outcome: { result: { groups: readonly { path: string; hits: reado
     JSON.stringify(outcome.result.groups.map((group) => ({ path: group.path, hits: group.hits.map((hit) => [hit.line, hit.tags]) })));
 
 test("prf terms feed a second bm25 engine without breaking determinism", async () => {
-    const a = await engineWith().run(request("ask", "how are widgets built for the registry?"));
-    const b = await engineWith().run(request("ask", "how are widgets built for the registry?"));
+    const a = await engineWith().run(request("q", "how are widgets built for the registry?"));
+    const b = await engineWith().run(request("q", "how are widgets built for the registry?"));
     expect(shape(a)).toBe(shape(b));
 });

@@ -3,13 +3,16 @@ import { outputAliases, outputFlagParameters, scopeFlagParameters, type SearchFl
 import { runMulti } from "../lib/run.js";
 
 export const multi = buildCommand({
-    docs: { brief: "Batch queries in one spawn — one query per stdin line, shared --budget" },
+    docs: { brief: "Batch queries in one spawn — one query per argument (or per stdin line), shared --budget" },
     parameters: {
         flags: { ...scopeFlagParameters, ...outputFlagParameters },
         aliases: outputAliases,
-        positional: { kind: "tuple", parameters: [] },
+        positional: {
+            kind: "array",
+            parameter: { parse: String, brief: "A query, optionally led by a verb: 'def foo', 'refs bar --kind call'", placeholder: "query" },
+        },
     },
-    async func(this: CommandContext, flags: SearchFlags) {
-        await runMulti(this, flags);
+    async func(this: CommandContext, flags: SearchFlags, ...queries: string[]) {
+        await runMulti(this, flags, queries);
     },
 });

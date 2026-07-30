@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { WorkspaceSearchFreshness, WorkspaceSearchGroup, WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import type { Embedder } from "../embed/embedder.js";
 import type { Reranker } from "../embed/reranker.js";
@@ -6,18 +8,19 @@ import { bm25Search, prfTerms } from "../engines/bm25.js";
 import { fileSearch } from "../engines/files.js";
 import { logSearch, recentFiles, whoAnchor } from "../engines/git.js";
 import { hotspotFiles } from "../engines/hotspots.js";
-import { rgSearch } from "../engines/lexical.js";
+import { type RgOptions, rgSearch } from "../engines/lexical.js";
 import { repoMap } from "../engines/map.js";
 import { embedPending, semanticSearch } from "../engines/semantic.js";
 import { defOf, refsOf, symSearch } from "../engines/symbols.js";
 import { disabledOf, type Feature } from "../features.js";
 import { classify } from "../plan/classify.js";
 import { fuse, type FuseContext, queryTokens } from "../plan/fuse.js";
+import { estimateTokens } from "../render/budget.js";
 import { cursorId, decodeCursor, readSpool, writeSpool } from "../render/cursor.js";
 import { renderText, type Rendered } from "../render/text.js";
 import type { IndexDb } from "../store/db.js";
 import type { EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb } from "../types.js";
-import { filterScope, langOf, sweep } from "../workspace/scan.js";
+import { classOf, filterScope, langOf, sweep } from "../workspace/scan.js";
 import { contextOf, outlineOf, parseAnchor } from "./context.js";
 
 export interface DispatchContext {
@@ -48,20 +51,26 @@ interface VerbPlan {
     readonly hint?: string;
     readonly headerNote?: string;
     readonly related?: string[];
-    readonly candidates?: readonly string[];
+    // Whether the response opens with an `answer:` anchor — see RenderRequest.lead.
+    readonly lead?: boolean;
+    readonly confidence?: "confident" | "ambiguous";
+    // Whether the top groups should be delivered as code rather than as anchors (the `pack` stage).
+    readonly pack?: boolean;
 }
 
-// Compact ranked path map for ask/q — how far down the model can scan to a candidate that ranked below the
-// packed/shown groups.
-const CANDIDATE_COUNT = 12;
-const candidatesOf = (groups: readonly RankedGroup[]): string[] => groups.slice(0, CANDIDATE_COUNT).map((group) => group.path);
-
-const toGroups = (results: EngineResult[], query: string, entries: readonly FileEntry[], boosts: boolean): RankedGroup[] => {
+const toGroups = (
+    results: EngineResult[],
+    query: string,
+    entries: readonly FileEntry[],
+    boosts: boolean,
+    sourceFirst: boolean = false,
+): RankedGroup[] => {
     const context: FuseContext = {
         queryTokens: queryTokens(query),
         mtimes: new Map(entries.map((entry) => [entry.path, entry.mtimeMs])),
         now: Date.now(),
         boosts,
+        sourceFirst,
     };
     return fuse(results, context);
 };
@@ -128,12 +137,16 @@ const enrichContext = (db: IndexDb, groups: readonly RankedGroup[]): void => {
 
 const RELATED_TOP = 3;
 
-// graph: code-graph neighbors of the answer — the top hits' enclosing symbols as definition anchors with
-// ready-made follow-up commands (GraphRAG-lite over the symbol table, zero extra processes).
-const relatedOf = (db: IndexDb, groups: readonly RankedGroup[]): string[] => {
+const isCall = (ref: EngineHit): boolean => ref.tags.some((tag) => tag.kind === "call");
+
+// graph: code-graph neighbors of the answer — the top hits' enclosing symbols as definition anchors, each with its
+// strongest caller RESOLVED rather than suggested (GraphRAG-lite over the symbol table plus one rg per symbol).
+// A bare `refs: iq refs X` spent the agent's next turn re-asking iq for something iq already knew, and the caller
+// is usually the other half of the answer: the public entry point that reaches the implementation just found.
+const relatedOf = async (db: IndexDb, groups: readonly RankedGroup[], rgBase: Omit<RgOptions, "pattern">): Promise<string[]> => {
     const cache = new Map<string, FileSymbolRange[]>();
-    const lines: string[] = [];
     const seen = new Set<string>();
+    const anchors: { name: string; path: string; line: number }[] = [];
     for (const group of groups.slice(0, RELATED_TOP)) {
         const hit = group.hits[0];
         if (hit === undefined) {
@@ -144,9 +157,24 @@ const relatedOf = (db: IndexDb, groups: readonly RankedGroup[]): string[] => {
             continue;
         }
         seen.add(symbol.name);
-        lines.push(`${symbol.name} — def ${hit.path}:${symbol.line} · refs: iq refs ${symbol.name}`);
+        anchors.push({ name: symbol.name, path: hit.path, line: symbol.line });
     }
-    return lines;
+    // One rg per symbol, all at once: sequentially they tripled this stage's latency for no ordering reason.
+    return Promise.all(
+        anchors.map(async (anchor) => {
+            const refs = await refsOf(db, anchor.name, undefined, rgBase);
+            // A call site answers "who reaches this"; an import only says a file mentions it. Prefer a caller in
+            // source: "called from its own test" is the least informative true answer available.
+            const caller =
+                refs.hits.find((ref) => isCall(ref) && classOf(ref.path) === "src") ??
+                refs.hits.find(isCall) ??
+                refs.hits.find((ref) => classOf(ref.path) === "src") ??
+                refs.hits[0];
+            const from = caller !== undefined ? ` · called from ${caller.path}:${caller.line}` : "";
+            const more = refs.hits.length > 1 ? ` · ${refs.hits.length - 1} more: iq refs ${anchor.name}` : "";
+            return `${anchor.name} — def ${anchor.path}:${anchor.line}${from}${more}`;
+        }),
+    );
 };
 
 interface Chunk {
@@ -169,36 +197,109 @@ const chunkAt = (db: IndexDb, path: string, line: number): Chunk | undefined => 
 };
 
 const PACK_TOP = 2;
+// Ceiling on one packed symbol — past this the slice stops being an answer and starts being a file.
+const PACK_MAX_LINES = 120;
+// …and a second ceiling, in tokens, because PACK_MAX_LINES alone is budget-blind: a 107-line pager implementation
+// packed at rank 1 spent a 1500-token budget by itself, so the ranked candidates underneath it never made the
+// answer at all (benchmarked: it evicted the case's expected file from the result entirely). Packing may take at
+// most this share of the budget across all packed groups — the rest belongs to the candidates it should not hide.
+const PACK_SHARE = 0.5;
+// Floor on a packed slice. A one-line const IS its whole definition, but a single line with nothing around it
+// reads as less than the chunk this replaced; short symbols get their neighbourhood too.
+const PACK_MIN_LINES = 12;
+// Radius around an anchor with no enclosing symbol.
+const PACK_WINDOW = 8;
 
-// pack: the top groups arrive as the actual code slice, not a pointer — the enclosing chunk of each group's
-// best hit becomes per-line hits, so the reading agent usually skips the follow-up Read that transcript
-// analytics showed on every iq answer. The budget renderer's per-group cap still shapes the slice.
-const packGroups = (db: IndexDb, groups: readonly RankedGroup[]): RankedGroup[] =>
-    groups.map((group, index) => {
-        if (index >= PACK_TOP) {
-            return group;
-        }
-        const anchor = group.hits.toSorted((a, b) => b.score - a.score)[0];
-        if (anchor === undefined) {
-            return group;
-        }
-        const chunk = chunkAt(db, group.path, anchor.line);
-        if (chunk === undefined) {
-            return group;
-        }
-        const lines = chunk.text.split("\n");
-        if (lines.at(-1) === "") {
-            lines.pop();
-        }
-        const hits = lines.map((text, offset): RankedHit => {
-            const line = chunk.startLine + offset;
-            if (line === anchor.line) {
-                return Object.assign({}, anchor, { text });
+// Which lines of the enclosing symbol to deliver. Whole body when it fits; otherwise the declaration plus as
+// much as fits, unless the anchor sits beyond that, in which case the window centres on the anchor. The anchor
+// is always inside the span — a packed slice that omits the matching line would be a worse answer than a
+// pointer to it.
+const packSpan = (symbol: FileSymbolRange, anchorLine: number): { from: number; to: number } => {
+    const span = symbol.endLine - symbol.line + 1;
+    if (span < PACK_MIN_LINES) {
+        const pad = Math.floor((PACK_MIN_LINES - span) / 2);
+        return { from: Math.max(1, symbol.line - pad), to: symbol.endLine + (PACK_MIN_LINES - span - pad) };
+    }
+    if (span <= PACK_MAX_LINES) {
+        return { from: symbol.line, to: symbol.endLine };
+    }
+    if (anchorLine - symbol.line < PACK_MAX_LINES) {
+        return { from: symbol.line, to: symbol.line + PACK_MAX_LINES - 1 };
+    }
+    const half = Math.floor(PACK_MAX_LINES / 2);
+    return { from: anchorLine - half, to: Math.min(symbol.endLine, anchorLine - half + PACK_MAX_LINES - 1) };
+};
+
+// pack: the top groups arrive as the actual code, not a pointer — each group's best hit is replaced by its
+// enclosing symbol's LIVE body, read from disk. Transcript analytics found a follow-up Read after 54% of answers,
+// 78% of them re-opening a file iq had just named, which is exactly the read this is meant to save.
+//
+// Live text, never the indexed chunk: a chunk's stored text is prefixed with a synthetic `path § label` line, so
+// slicing it shifted every line number by one and presented that marker as the file's first line of code — a
+// packed answer whose anchors did not match the file it came from. Anchors are the one thing a search tool cannot
+// get wrong. Hits with no enclosing symbol (a chunk-aligned semantic hit, an unparsed language) get a window
+// around the anchor instead, which is the same answer `iq context` would give.
+// Shrink a span to `ceiling` tokens, keeping the anchor line inside: prefer to drop the tail (a symbol reads from
+// its declaration down), and only slide the window forward when the anchor itself sits past what fits.
+const fitSpan = (lines: readonly string[], from: number, to: number, anchorLine: number, ceiling: number): { from: number; to: number } => {
+    const spend = (start: number, limit: number): number => {
+        let used = 0;
+        let end = start - 1;
+        for (let line = start; line <= limit; line++) {
+            used += estimateTokens(lines[line - 1] ?? "");
+            if (used > ceiling && line > start) {
+                break;
             }
-            return { path: group.path, line, text, tags: [], score: 0 };
-        });
-        return { path: group.path, score: group.score, hits };
-    });
+            end = line;
+        }
+        return end;
+    };
+    const end = spend(from, to);
+    if (end >= anchorLine) {
+        return { from, to: end };
+    }
+    const slid = Math.max(from, anchorLine - 2);
+    return { from: slid, to: spend(slid, to) };
+};
+
+const packGroups = async (db: IndexDb, root: string, groups: readonly RankedGroup[], budget: number): Promise<RankedGroup[]> => {
+    const cache = new Map<string, FileSymbolRange[]>();
+    const ceiling = Math.floor((budget * PACK_SHARE) / PACK_TOP);
+    return Promise.all(
+        groups.map(async (group, index): Promise<RankedGroup> => {
+            // Only implementation is worth a body. A test that places in the top two still spends the pack budget
+            // on 40 lines of assertions nobody asked to read, and that budget is what shows the ranked files under
+            // it — benchmarked: a packed test at rank 2 pushed the query's own answer out of the shown set.
+            // Its anchors stay, which for a test is the useful part: where the thing under test is exercised.
+            if (index >= PACK_TOP || classOf(group.path) !== "src") {
+                return group;
+            }
+            const anchor = [...group.hits].toSorted((a, b) => b.score - a.score)[0];
+            if (anchor === undefined) {
+                return group;
+            }
+            const content = await readFile(join(root, group.path), "utf8").catch(() => undefined);
+            if (content === undefined) {
+                return group;
+            }
+            const lines = content.split(/\r?\n/);
+            const symbol = enclosingSymbol(db, cache, group.path, anchor.line);
+            const wanted =
+                symbol !== undefined
+                    ? packSpan(symbol, anchor.line)
+                    : { from: Math.max(1, anchor.line - PACK_WINDOW), to: anchor.line + PACK_WINDOW };
+            const { from, to } = fitSpan(lines, Math.max(1, wanted.from), Math.min(wanted.to, lines.length), anchor.line, ceiling);
+            const packed = lines.slice(from - 1, to).map((text, offset): RankedHit => {
+                const line = from + offset;
+                return line === anchor.line ? Object.assign({}, anchor, { text }) : { path: group.path, line, text, tags: [], score: 0 };
+            });
+            // Anchors outside the slice stay as pointers: packing shows ONE symbol, and dropping the file's other
+            // matches would silently narrow the answer to it.
+            const outside = group.hits.filter((hit) => hit.line < from || hit.line > to);
+            return { path: group.path, score: group.score, hits: [...packed, ...outside] };
+        }),
+    );
+};
 
 const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "recent", "log", "who", "hotspots", "map"]);
 
@@ -223,10 +324,9 @@ const zeroHitHint = (request: QueryRequest): string | undefined => {
     if (request.verb === "def" || request.verb === "refs") {
         return `0 hits — names are exact here; try iq sym '${request.query}*' or iq find ${request.query}`;
     }
-    if (request.verb === "ask" || (request.verb === "q" && classify(request.query) === "natural")) {
-        return "0 hits — rephrase, or search literal text with iq find 'exact text'";
-    }
-    return `0 hits — try auto mode: iq "${request.query.slice(0, 60)}" or a natural question via iq ask`;
+    // A bare query that reaches zero has already been through both the exact engines and the semantic pipeline
+    // (see the escalation in `q`), so there is no other iq verb left to suggest — only different words.
+    return "0 hits — rephrase, or search literal text with iq find 'exact text'";
 };
 
 const RERANK_TOP = 32;
@@ -294,6 +394,77 @@ const rerankGroups = async (
     return { groups: regrouped, best: sorted[0] ?? 0, margin: (sorted[0] ?? 0) - (sorted[1] ?? 0) };
 };
 
+// The full natural-language pipeline: BM25 with RM3 expansion, semantic vectors, a cross-encoder rerank, and
+// code-graph neighbours. Every query whose words are not already a symbol, a path or a regex arrives here, and so
+// does an exact query that found nothing — which is why there is no separate verb for it. Traces recorded one
+// `ask` in 245 calls against ~90 bare natural-language queries: the split was never learned, it only decided
+// which callers got a reranked answer and which got raw BM25.
+const naturalPlan = async (
+    context: DispatchContext,
+    request: QueryRequest,
+    entries: readonly FileEntry[],
+    allowed: ReadonlySet<string>,
+): Promise<VerbPlan> => {
+    const on = (feature: Feature): boolean => context.features.has(feature);
+    const results: EngineResult[] = [];
+    const notes: string[] = [];
+    if (on("bm25")) {
+        results.push({ engine: "bm25", hits: bm25Search(context.db, request.query, allowed) });
+        if (on("prf")) {
+            // RM3: the expanded query enters fusion as its own engine, so original-query ranks keep weight.
+            const expansion = prfTerms(context.db, request.query);
+            if (expansion.length > 0) {
+                results.push({ engine: "bm25prf", hits: bm25Search(context.db, `${request.query} ${expansion.join(" ")}`, allowed) });
+            }
+        }
+    }
+    const embedder = on("semantic") ? await context.getEmbedder() : undefined;
+    if (embedder === undefined) {
+        notes.push(on("semantic") ? "no embedding backend — BM25 only" : "semantic off");
+    } else {
+        const remaining = context.topUpEmbeddings
+            ? await embedPending(context.db, embedder)
+            : Number(context.db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NULL")?.["n"] ?? 0);
+        results.push({ engine: "semantic", hits: semanticSearch(context.db, await embedder.embedQuery(request.query), allowed) });
+        if (remaining > 0) {
+            const total = Number(context.db.get("SELECT COUNT(*) AS n FROM chunks")?.["n"] ?? 0);
+            notes.push(`embeddings ${Math.floor(((total - remaining) / Math.max(1, total)) * 100)}%`);
+        }
+    }
+    let groups = toGroups(results, request.query, entries, on("boosts"), on("srcfirst"));
+    let confidence: VerbPlan["confidence"];
+    const reranker = on("rerank") ? await context.getReranker() : undefined;
+    if (reranker !== undefined && groups.length > 0) {
+        const { groups: rerankedGroups, margin } = await rerankGroups(context.db, reranker, request.query, groups);
+        groups = rerankedGroups;
+        notes.push("reranked");
+        // A flat field means no clear winner. Say which of the two it is on the answer line: "confident" is
+        // permission to stop reading, "ambiguous" points at the candidates — never out of iq into a grep spiral
+        // (benchmarked: the old "try iq find" note made models abandon a correct rank-1 hit).
+        if (on("confidence")) {
+            confidence = margin < CONFIDENCE_MARGIN ? "ambiguous" : "confident";
+        }
+    }
+    const rgBase = {
+        root: context.root,
+        allowed,
+        ...(request.scope.ignored ? { ignored: true } : {}),
+        ...(context.rgPath !== undefined ? { rgPath: context.rgPath } : {}),
+    };
+    const related = on("graph") ? await relatedOf(context.db, groups, rgBase) : [];
+    return {
+        groups,
+        unit: "hits",
+        style: "hits",
+        showTags: true,
+        lead: true,
+        pack: true,
+        ...(confidence !== undefined ? { confidence } : {}),
+        ...(notes.length > 0 ? { headerNote: notes.join(" · ") } : {}),
+        ...(related.length > 0 ? { related } : {}),
+    };
+};
+
 const runVerb = async (context: DispatchContext, request: QueryRequest, entries: readonly FileEntry[]): Promise<VerbPlan> => {
     const on = (feature: Feature): boolean => context.features.has(feature);
     const boosts = on("boosts");
@@ -344,6 +515,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             unit: "matches",
             style: "hits",
             showTags: false,
+            lead: true,
             ...(note !== undefined ? { headerNote: note } : {}),
         };
     }
@@ -359,7 +531,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         const hits = defOf(context.db, request.query, allowed);
         if (hits.length > 0) {
             const groups = toGroups([{ engine: "symbols", hits }], request.query, entries, boosts);
-            return { groups, unit: "definitions", style: "hits", showTags: true, hint: `refs: iq refs ${request.query}` };
+            return { groups, unit: "definitions", style: "hits", showTags: true, lead: true, hint: `refs: iq refs ${request.query}` };
         }
         // No exact definition — fall back to a fuzzy symbol match instead of a dead end (the query is often a
         // concept, not a symbol, or a near-miss on the name). Empty here means genuinely nothing.
@@ -370,13 +542,14 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             unit: "symbols",
             style: "hits",
             showTags: true,
+            lead: true,
             ...(groups.length > 0 ? { headerNote: `no exact definition of "${request.query}" — showing fuzzy symbol matches` } : {}),
         };
     }
 
     if (request.verb === "sym") {
         const hits = symSearch(context.db, request.query, request.options.symKind, allowed);
-        return { groups: groupByPath(hits), unit: "symbols", style: "hits", showTags: true };
+        return { groups: groupByPath(hits), unit: "symbols", style: "hits", showTags: true, lead: true };
     }
 
     if (request.verb === "refs") {
@@ -386,6 +559,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             unit: "refs",
             style: "hits",
             showTags: true,
+            lead: true,
             ...(hint !== undefined ? { hint } : {}),
         };
     }
@@ -395,7 +569,13 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             throw new Error("iq ast: --lang is required (the pattern's parse language)");
         }
         const hits = await astSearch(request.query, request.options.astLang, entries);
-        return { groups: toGroups([{ engine: "ast", hits }], request.query, entries, boosts), unit: "matches", style: "hits", showTags: false };
+        return {
+            groups: toGroups([{ engine: "ast", hits }], request.query, entries, boosts),
+            unit: "matches",
+            style: "hits",
+            showTags: false,
+            lead: true,
+        };
     }
 
     if (request.verb === "outline") {
@@ -460,58 +640,11 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         return { groups, unit: "commits", style: "plain", showTags: false };
     }
 
-    if (request.verb === "ask") {
-        const results: EngineResult[] = [];
-        const notes: string[] = [];
-        if (on("bm25")) {
-            results.push({ engine: "bm25", hits: bm25Search(context.db, request.query, allowed) });
-            if (on("prf")) {
-                // RM3: the expanded query enters fusion as its own engine, so original-query ranks keep weight.
-                const expansion = prfTerms(context.db, request.query);
-                if (expansion.length > 0) {
-                    results.push({ engine: "bm25prf", hits: bm25Search(context.db, `${request.query} ${expansion.join(" ")}`, allowed) });
-                }
-            }
-        }
-        const embedder = on("semantic") ? await context.getEmbedder() : undefined;
-        if (embedder === undefined) {
-            notes.push(on("semantic") ? "no embedding backend — BM25 only" : "semantic off");
-        } else {
-            const remaining = context.topUpEmbeddings
-                ? await embedPending(context.db, embedder)
-                : Number(context.db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NULL")?.["n"] ?? 0);
-            results.push({ engine: "semantic", hits: semanticSearch(context.db, await embedder.embedQuery(request.query), allowed) });
-            if (remaining > 0) {
-                const total = Number(context.db.get("SELECT COUNT(*) AS n FROM chunks")?.["n"] ?? 0);
-                notes.push(`embeddings ${Math.floor(((total - remaining) / Math.max(1, total)) * 100)}%`);
-            }
-        }
-        let groups = toGroups(results, request.query, entries, boosts);
-        const reranker = on("rerank") ? await context.getReranker() : undefined;
-        if (reranker !== undefined && groups.length > 0) {
-            const { groups: rerankedGroups, margin } = await rerankGroups(context.db, reranker, request.query, groups);
-            groups = rerankedGroups;
-            notes.push("reranked");
-            // Flat field = no clear winner: keep the model IN iq, pointing at the candidate list, never steering it
-            // out to a grep-guessing spiral (benchmarked: the old "try iq find" note made models abandon a rank-1 hit).
-            if (on("confidence") && margin < CONFIDENCE_MARGIN) {
-                notes.push("top results are close — scan the candidates below; the answer may be any of the top few");
-            }
-        }
-        const related = on("graph") ? relatedOf(context.db, groups) : [];
-        return {
-            groups,
-            unit: "hits",
-            style: "hits",
-            showTags: true,
-            ...(notes.length > 0 ? { headerNote: notes.join(" · ") } : {}),
-            ...(related.length > 0 ? { related } : {}),
-            ...(groups.length > 1 ? { candidates: candidatesOf(groups) } : {}),
-        };
-    }
-
     if (request.verb === "q") {
         const kind = classify(request.query);
+        if (kind === "natural") {
+            return naturalPlan(context, request, entries, allowed);
+        }
         const results: EngineResult[] = [];
         if (kind === "path") {
             results.push({ engine: "files", hits: fileSearch(request.query, paths, /[*?[]/.test(request.query)) });
@@ -523,7 +656,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             if (on("bm25")) {
                 results.push({ engine: "bm25", hits: bm25Search(context.db, request.query, allowed) });
             }
-        } else if (kind === "regex") {
+        } else {
             // Same recovery as `find`: a query that only LOOKS like regex (`foo({`) must not crash auto mode.
             const hits = await rgSearch({ ...rgBase, pattern: request.query }).catch(async (error: Error) => {
                 if (!error.message.includes("regex parse error")) {
@@ -532,30 +665,17 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
                 return rgSearch({ ...rgBase, pattern: request.query, literal: true });
             });
             results.push({ engine: "lexical", hits });
-        } else {
-            if (on("bm25")) {
-                results.push({ engine: "bm25", hits: bm25Search(context.db, request.query, allowed) });
-                if (on("prf")) {
-                    const expansion = prfTerms(context.db, request.query);
-                    if (expansion.length > 0) {
-                        results.push({ engine: "bm25prf", hits: bm25Search(context.db, `${request.query} ${expansion.join(" ")}`, allowed) });
-                    }
-                }
-            }
-            const embedder = on("semantic") ? await context.getEmbedder() : undefined;
-            if (embedder !== undefined) {
-                results.push({ engine: "semantic", hits: semanticSearch(context.db, await embedder.embedQuery(request.query), allowed) });
-            }
         }
         const groups = toGroups(results, request.query, entries, boosts);
-        // Natural-language bare queries get the same scannable candidate map as `ask` (they're packed too).
-        return {
-            groups,
-            unit: "hits",
-            style: "hits",
-            showTags: true,
-            ...(kind === "natural" && groups.length > 1 ? { candidates: candidatesOf(groups) } : {}),
-        };
+        if (groups.length > 0) {
+            return { groups, unit: "hits", style: "hits", showTags: true, lead: true };
+        }
+        // Nothing matched that name, path or pattern exactly. A zero here was the most expensive outcome in the
+        // traces — one wasted turn per occurrence — and the words are usually a concept rather than an identifier.
+        // Answer it semantically instead of spending the agent's next turn on a hint telling it to.
+        const escalated = await naturalPlan(context, request, entries, allowed);
+        const note = `no exact ${kind} match — answered semantically`;
+        return { ...escalated, headerNote: escalated.headerNote === undefined ? note : `${note} · ${escalated.headerNote}` };
     }
 
     throw new Error(`iq: verb not implemented yet: ${request.verb}`);
@@ -594,6 +714,7 @@ const toResult = (
         ...(rendered.cursor !== undefined ? { cursor: rendered.cursor } : {}),
         ...(hint !== undefined ? { hint } : {}),
         ...(plan.related !== undefined && plan.related.length > 0 ? { related: plan.related } : {}),
+        ...(rendered.candidates !== undefined ? { candidates: [...rendered.candidates] } : {}),
         ...(disabled.length > 0 ? { features: disabled } : {}),
     };
 };
@@ -613,7 +734,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         offset = decoded.offset;
         const spool = readSpool(context.indexDir, decoded.id);
         if (spool !== undefined && spool.generation === context.generation) {
-            plan = { groups: [...spool.groups], unit: spool.unit, style: spool.style, showTags: spool.showTags };
+            plan = { groups: [...spool.groups], unit: spool.unit, style: spool.style, showTags: spool.showTags, lead: spool.lead };
         } else {
             headerNote = "cursor stale — re-ran";
         }
@@ -640,13 +761,15 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
             }
         }
         plan = await runVerb(context, request, entries);
-        if (context.features.has("symctx") && ["find", "q", "ask", "refs"].includes(request.verb)) {
+        // Before packing, never after: pack copies the anchor hit into a run of plain lines, and enriching those
+        // would label every line of a body with the symbol that body already is.
+        if (context.features.has("symctx") && ["find", "q", "refs"].includes(request.verb)) {
             enrichContext(context.db, plan.groups);
         }
-        // Show-don't-point applies only where the agent's next move would be a Read: natural-language answers.
-        // Cursor replays skip this block — spooled groups are already packed.
-        if (context.features.has("pack") && (request.verb === "ask" || (request.verb === "q" && classify(request.query) === "natural"))) {
-            plan = { ...plan, groups: packGroups(context.db, plan.groups) };
+        // Show-don't-point applies only where the agent's next move would be a Read: natural-language answers,
+        // including an exact query that escalated into one. Cursor replays skip this — spooled groups are packed.
+        if (context.features.has("pack") && plan.pack === true) {
+            plan = { ...plan, groups: await packGroups(context.db, context.root, plan.groups, request.render.budget) };
         }
     }
 
@@ -671,7 +794,8 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         ...(note !== undefined ? { headerNote: note } : {}),
         ...(hint !== undefined ? { hint } : {}),
         ...(plan.related !== undefined && plan.related.length > 0 ? { related: plan.related } : {}),
-        ...(plan.candidates !== undefined && plan.candidates.length > 0 ? { candidates: plan.candidates } : {}),
+        ...(plan.lead === true ? { lead: true } : {}),
+        ...(plan.confidence !== undefined ? { confidence: plan.confidence } : {}),
         cursorId: id,
     });
 
@@ -683,6 +807,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
             unit: plan.unit,
             style: plan.style,
             showTags: plan.showTags,
+            lead: plan.lead === true,
             groups: plan.groups,
         });
     }

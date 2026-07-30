@@ -93,7 +93,7 @@ const freshnessOf = (db: IndexDb, entries: FileEntry[], sweepStart: number, wrot
         return { state: "fresh", ageMs };
     }
     const lag = indexLag(db, entries);
-    return lag === 0 ? { state: "fresh", ageMs } : { state: "stale", ageMs, progress: 1 - lag / Math.max(entries.length, 1) };
+    return lag === 0 ? { state: "fresh", ageMs } : { state: "stale", ageMs, progress: 1 - lag / Math.max(entries.length, 1), behind: lag };
 };
 
 export const createEngine = (options: EngineOptions): Engine => {

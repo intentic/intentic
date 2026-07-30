@@ -13,6 +13,7 @@ export interface Spool {
     readonly unit: string;
     readonly style: "hits" | "paths" | "plain";
     readonly showTags: boolean;
+    readonly lead: boolean;
     readonly groups: readonly RankedGroup[];
 }
 

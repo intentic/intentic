@@ -5,6 +5,10 @@
 const VERB_REWRITES: Record<string, string> = {
     search: "q",
     grep: "find",
+    // `ask` shipped as its own verb before the natural-language pipeline became what a bare query does. Removing
+    // it must not turn a habit into an exit-2: the rewrite is the same trade as `search` — free here, one wasted
+    // turn otherwise — and the note teaches the spelling that survives.
+    ask: "q",
 };
 
 const FLAG_REWRITES: Record<string, string> = {

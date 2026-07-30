@@ -1243,8 +1243,9 @@ export type WorkspaceClassification = z.infer<typeof WorkspaceClassificationSche
 // within `text` so clients highlight without re-finding the needle.
 export const WorkspaceSearchQuerySchema = z.object({
     query: z.string().min(2).max(512),
-    // Search verbs only — anchor/git verbs (outline, context, log, who, …) are CLI-only surface.
-    mode: z.enum(["q", "find", "files", "def", "refs", "sym", "ast", "ask"]).optional(),
+    // Search verbs only — anchor/git verbs (outline, context, log, who, …) are CLI-only surface. Natural language
+    // has no verb of its own: `q` classifies the query and answers it semantically when the words call for it.
+    mode: z.enum(["q", "find", "files", "def", "refs", "sym", "ast"]).optional(),
     includeIgnored: z.stringbool().optional(),
     limit: z.coerce.number().int().positive().optional(),
     after: z.string().optional(),
@@ -1272,6 +1273,9 @@ export const WorkspaceSearchFreshnessSchema = z.object({
     state: z.enum(["fresh", "building", "stale"]),
     ageMs: z.number().optional(),
     progress: z.number().optional(),
+    // How many files the index has not caught up with, when it is stale. A count is reportable; "stale" alone
+    // reads as a warning about the answer, which it almost never is.
+    behind: z.number().optional(),
 });
 export type WorkspaceSearchFreshness = z.infer<typeof WorkspaceSearchFreshnessSchema>;
 export const WorkspaceSearchResultSchema = z.object({
@@ -1283,8 +1287,12 @@ export const WorkspaceSearchResultSchema = z.object({
     truncated: z.boolean(),
     cursor: z.string().optional(),
     hint: z.string().optional(),
-    // Code-graph neighbors of the top hits (definition anchors + ready-made follow-up commands).
+    // Code-graph neighbors of the top hits (definition anchors + the strongest caller of each).
     related: z.array(z.string()).optional(),
+    // Ranked `path:line` anchors that placed but were NOT shown, best first — the answer often sits at rank 5–13,
+    // behind groups the budget spent itself on. The text surface has always printed this map; a JSON caller could
+    // not see it, so it had to page through `cursor` to learn what the terminal was told up front.
+    candidates: z.array(z.string()).optional(),
     // Run provenance for benchmarking: retrieval stages DISABLED this invocation (absent = full pipeline).
     features: z.array(z.string()).optional(),
 });

@@ -88,9 +88,13 @@ test("scope flags pass through (--lang)", async () => {
     expect(result.groups.every((group) => group.path.endsWith(".py"))).toBe(true);
 });
 
-test("ask without a model degrades to the lexical fallback; usage errors exit 2 with one line", async () => {
-    const ask = await invoke(["ask", "how are widgets built?"]);
-    expect(ask.out).toContain("no embedding backend — BM25 only");
+test("a natural-language query degrades to the lexical fallback; usage errors exit 2 with one line", async () => {
+    const natural = await invoke(["q", "how are widgets built?"]);
+    expect(natural.out).toContain("no embedding backend — BM25 only");
+    // The retired `ask` verb is absorbed rather than rejected, and reaches the same pipeline.
+    expect(normalizeArgv(["ask", "how are widgets built?"]).argv).toEqual(["q", "how are widgets built?"]);
+    const absorbed = await invoke(normalizeArgv(["ask", "how are widgets built?"]).argv);
+    expect(absorbed.out).toContain("no embedding backend — BM25 only");
 
     const usage = await invoke(["ast", "createWidget($A)"]);
     expect(usage.exitCode).toBe(2);
@@ -240,11 +244,32 @@ test("multi: flagged sub-lines hit, error lines report without aborting the batc
     await runMulti(
         context as unknown as Parameters<typeof runMulti>[0],
         flags as Parameters<typeof runMulti>[1],
+        [],
         'find "createWidget" --lang ts\nfind foo --bogus\ndef zz_nope',
     );
     expect(out).toContain("[1/3] iq: find createWidget --lang ts —");
     expect(out).toContain("widget.ts");
     expect(out).toContain("[2/3] iq: find foo --bogus — error: unknown flag --bogus");
     expect(out).toContain("[3/3]");
+    expect(context.process.exitCode).toBe(0);
+});
+
+test("multi: queries given as arguments need no stdin", async () => {
+    let out = "";
+    const context = {
+        process: {
+            stdout: { write: (chunk: string) => void (out += chunk) },
+            stderr: { write: () => true },
+            env: process.env,
+            exitCode: undefined as number | string | null | undefined,
+        },
+    };
+    const flags = { budget: 1500, filesOnly: false, count: false, full: false, json: false, ndjson: false, ignored: false };
+    await runMulti(context as unknown as Parameters<typeof runMulti>[0], flags as Parameters<typeof runMulti>[1], [
+        'find "createWidget" --lang ts',
+        "def createWidget",
+    ]);
+    expect(out).toContain("[1/2] iq: find createWidget --lang ts —");
+    expect(out).toContain("[2/2] iq: def createWidget —");
     expect(context.process.exitCode).toBe(0);
 });

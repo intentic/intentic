@@ -7,7 +7,7 @@ const TOPUP_CAP = 256;
 const TOPUP_TIME_MS = 2000;
 const BATCH = 16;
 
-// Opportunistic embedding top-up during `iq ask`: fill NULL embeddings until the cap or time budget runs out.
+// Opportunistic embedding top-up during a natural-language query: fill NULL embeddings until the cap or time budget runs out.
 // Returns how many chunks remain unembedded (0 = semantic coverage is complete).
 export const embedPending = async (db: IndexDb, embedder: Embedder, cap = TOPUP_CAP, timeBudgetMs = TOPUP_TIME_MS): Promise<number> => {
     const started = Date.now();

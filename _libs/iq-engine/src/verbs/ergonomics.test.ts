@@ -54,10 +54,43 @@ test("def on an exact symbol still returns the definition with a refs hint", asy
     expect(outcome.exitCode).toBe(0);
 });
 
-test("ask emits a compact candidate map so buried answers stay scannable", async () => {
-    const outcome = await engine.run(request("ask", "how are widgets built for the registry?"));
-    // Fixture has no embedding model → lexical fallback, but multiple groups still yield a candidate map.
-    if (outcome.result.groups.length > 1) {
-        expect(outcome.text).toContain("candidates:");
+test("the capsule leads with the answer anchor, before any code", async () => {
+    const outcome = await engine.run(request("q", "how are widgets built for the registry?"));
+    const lines = outcome.text.split("\n");
+    expect(lines[0]).toContain("iq: ");
+    expect(lines[1]).toMatch(/^answer: \S+:\d+/);
+    // Everything the agent needs to decide its next move precedes the first code line.
+    expect(lines.findIndex((line) => line.startsWith("════"))).toBeGreaterThan(1);
+});
+
+test("candidates name the ranked paths that did not fit, above the code", async () => {
+    const outcome = await engine.run({ ...request("q", "widget"), render: { budget: 200 } });
+    if (!outcome.result.truncated) {
+        return;
+    }
+    const lines = outcome.text.split("\n");
+    const candidates = lines.findIndex((line) => line.startsWith("candidates:"));
+    const more = lines.findIndex((line) => line.startsWith("more:"));
+    expect(more).toBeGreaterThan(0);
+    expect(lines[more]).toContain("--after ");
+    const firstCode = lines.findIndex((line) => line.startsWith("════"));
+    if (candidates >= 0 && firstCode >= 0) {
+        expect(candidates).toBeLessThan(firstCode);
+    }
+});
+
+test("the structured result names the same candidates the text does, and never a shown group", async () => {
+    // A JSON caller (the web search route) used to get strictly less than the terminal: the ranked map of what
+    // placed but did not fit was printed and then dropped from the result, leaving paging as the only way to it.
+    const outcome = await engine.run({ ...request("q", "widget"), render: { budget: 200 } });
+    const printed = outcome.text
+        .split("\n")
+        .find((line) => line.startsWith("candidates: "))
+        ?.slice("candidates: ".length)
+        .split(" · ");
+    expect(outcome.result.candidates).toEqual(printed);
+    const shown = new Set(outcome.result.groups.map((group) => group.path));
+    for (const candidate of outcome.result.candidates ?? []) {
+        expect(shown.has(candidate)).toBe(false);
     }
 });
