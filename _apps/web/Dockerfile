@@ -8,7 +8,7 @@
 # _tools/scripts/docker-release.sh). The context is this app dir; .dockerignore keeps only dist, nginx.conf
 # and entrypoint.sh:
 #   pnpm --filter=@intentic-app/web build && docker build -t …/web _apps/web
-FROM nginx:1.27-alpine
+FROM nginx:1.30-alpine
 LABEL org.opencontainers.image.source=https://gitlab.com/radarsu/intentic
 # Staged as a template, not dropped straight into conf.d — the entrypoint renders it. Also NOT into the base
 # image's /etc/nginx/templates/, whose auto-envsubst runs with no variable filter and would blank every $uri.

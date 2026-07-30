@@ -85,7 +85,7 @@ services:
         networks: [intentic-platform]
 
     cloudflared:
-        image: cloudflare/cloudflared:2026.7.2
+        image: cloudflare/cloudflared:2026.7.3
         restart: unless-stopped
         command: tunnel --no-autoupdate run --token ${PLATFORM_TUNNEL_TOKEN:?set PLATFORM_TUNNEL_TOKEN in .env}
         depends_on: [web, api]

@@ -27,11 +27,17 @@ overrides:
   "@posthog/core": 1.40.2
 
 minimumReleaseAgeExclude:
-  - knip@6.23.0
-  - "@vue/language-core@3.3.6"
-  - vite@8.1.2
-  - vue-tsc@3.3.6
+  - knip@6.29.0
+  - "@vue/language-core@3.3.8"
+  - vite@8.1.5
+  - vue-tsc@3.3.8
   - "@posthog/core@1.40.2"
+  - '@posthog/browser-common@0.2.5'
+  - '@posthog/types@1.399.0'
+  - imapflow@1.6.5
+  - jose@6.2.5
+  - posthog-js@1.408.2
+  - stripe@22.4.0
 
 allowBuilds:
   "@ast-grep/lang-go": true
@@ -65,22 +71,22 @@ allowBuilds:
 # tailwindcss/@tailwindcss/vite 4.3.1. The former @intentic/graph + @intentic/sandbox-contract
 # npm pins are gone — they are workspace packages now.
 catalog:
-  "@agentclientprotocol/sdk": 1.2.1
+  "@agentclientprotocol/sdk": 1.3.0
   "@anthropic-ai/claude-agent-sdk": 0.3.220
   "@astrojs/check": 0.9.9
-  "@astrojs/sitemap": 3.7.2
-  "@better-auth/stripe": 1.6.22
-  "@commitlint/cli": 20.1.0
-  "@commitlint/config-conventional": 20.0.0
-  "@commitlint/types": 20.0.0
+  "@astrojs/sitemap": 3.7.3
+  "@better-auth/stripe": 1.6.25
+  "@commitlint/cli": 21.2.1
+  "@commitlint/config-conventional": 21.2.0
+  "@commitlint/types": 21.2.0
   "@dagrejs/dagre": 3.0.0
   "@discordjs/opus": 0.10.0
   "@discordjs/voice": 0.19.2
-  "@hono/node-server": 2.0.6
+  "@hono/node-server": 2.0.12
   "@hono/otel": 1.1.2
-  "@huggingface/hub": 2.13.3
+  "@huggingface/hub": 2.14.4
   "@huggingface/transformers": 4.2.0
-  "@iconify-json/hugeicons": 1.2.30
+  "@iconify-json/hugeicons": 1.2.31
   "@iconify-json/ph": 1.2.2
   "@iconify-json/prime": 1.2.5
   "@iconify-json/ri": 1.2.10
@@ -89,35 +95,35 @@ catalog:
   "@iconify/utils": 3.1.4
   "@iconify/vue": 5.0.1
   "@openai/codex-sdk": 0.146.0
-  "@opencode-ai/sdk": 1.17.18
+  "@opencode-ai/sdk": 1.18.9
   "@opentelemetry/api": 1.9.1
-  "@opentelemetry/context-async-hooks": 2.7.1
-  "@opentelemetry/core": 2.7.1
-  "@opentelemetry/exporter-trace-otlp-proto": 0.218.0
-  "@opentelemetry/resources": 2.7.1
-  "@opentelemetry/sdk-trace-node": 2.7.1
-  "@opentelemetry/semantic-conventions": 1.41.1
-  "@orpc/client": 1.14.3
-  "@orpc/contract": 1.14.3
-  "@orpc/openapi": 1.14.3
-  "@orpc/openapi-client": 1.14.3
-  "@orpc/server": 1.14.3
-  "@playwright/mcp": 0.0.77
-  "@playwright/test": 1.61.1
+  "@opentelemetry/context-async-hooks": 2.10.0
+  "@opentelemetry/core": 2.10.0
+  "@opentelemetry/exporter-trace-otlp-proto": 0.221.0
+  "@opentelemetry/resources": 2.10.0
+  "@opentelemetry/sdk-trace-node": 2.10.0
+  "@opentelemetry/semantic-conventions": 1.43.0
+  "@orpc/client": 1.14.13
+  "@orpc/contract": 1.14.13
+  "@orpc/openapi": 1.14.13
+  "@orpc/openapi-client": 1.14.13
+  "@orpc/server": 1.14.13
+  "@playwright/mcp": 0.0.78
+  "@playwright/test": 1.62.0
   "@primeuix/themes": 2.0.3
-  "@prisma/adapter-pg": 7.8.0
-  "@prisma/client": 7.8.0
-  "@puristic/env": 1.4.1
+  "@prisma/adapter-pg": 7.9.1
+  "@prisma/client": 7.9.1
+  "@puristic/env": 1.6.1
   "@resvg/resvg-js": 2.6.2
   "@semantic-release/exec": 7.1.0
   "@semantic-release/gitlab": 13.3.3
-  "@shikijs/langs": 4.3.0
-  "@shikijs/monaco": 4.3.0
-  "@shikijs/themes": 4.3.0
-  "@stricli/core": 1.2.8
-  "@tailwindcss/vite": 4.3.0
-  "@tanstack/query-persist-client-core": 5.101.2
-  "@tanstack/vue-query": 5.101.2
+  "@shikijs/langs": 4.3.1
+  "@shikijs/monaco": 4.3.1
+  "@shikijs/themes": 4.3.1
+  "@stricli/core": 1.3.0
+  "@tailwindcss/vite": 4.3.3
+  "@tanstack/query-persist-client-core": 5.101.4
+  "@tanstack/vue-query": 5.101.4
   "@types/bun": 1.3.14
   "@types/mailparser": 3.4.6
   "@types/node": 24.13.2
@@ -126,7 +132,7 @@ catalog:
   "@types/tar-stream": 3.1.4
   "@types/ws": 8.18.1
   "@typescript/native-preview": 7.0.0-dev.20260707.2
-  "@vitejs/plugin-vue": 6.0.7
+  "@vitejs/plugin-vue": 6.0.8
   "@vue-flow/core": 1.48.2
   "@xterm/addon-fit": 0.11.0
   "@xterm/addon-serialize": 0.14.0
@@ -141,57 +147,57 @@ catalog:
   "@ast-grep/lang-java": 0.0.7
   astro: 6.3.1
   bcryptjs: 3.0.3
-  better-auth: 1.6.22
+  better-auth: 1.6.25
   bun: 1.3.14
   chokidar: 4.0.3
   croner: 10.0.1
-  discord.js: 14.26.5
+  discord.js: 14.27.0
   docx-preview: 0.3.7
-  dompurify: 3.4.11
+  dompurify: 3.4.12
   esbuild: 0.28.1
   eta: 4.6.0
   file-type: 22.0.1
-  hono: 4.12.27
-  idb-keyval: 6.2.6
-  ignore: 7.0.5
-  imapflow: 1.4.7
-  jose: 6.2.3
+  hono: 4.12.32
+  idb-keyval: 6.3.0
+  ignore: 7.0.6
+  imapflow: 1.6.5
+  jose: 6.2.5
   jsdom: 29.1.1
-  knip: 6.23.0
+  knip: 6.29.0
   mailparser: 3.9.14
-  marked: 18.0.5
-  mermaid: 11.15.0
+  marked: 18.0.7
+  mermaid: 11.16.0
   monaco-editor-core: 0.55.1
   node-pty: 1.1.0
-  oxlint: 1.72.0
+  oxlint: 1.76.0
   pg: 8.22.0
   pino: 10.3.1
   pino-pretty: 13.1.3
-  playwright: 1.61.1
-  posthog-js: 1.398.2
-  prettier: 3.9.4
+  playwright: 1.62.0
+  posthog-js: 1.408.2
+  prettier: 3.9.6
   primevue: 4.5.5
-  prisma: 7.8.0
+  prisma: 7.9.1
   satori: 0.26.0
-  semantic-release: 25.0.5
-  shiki: 4.3.0
+  semantic-release: 25.0.8
+  shiki: 4.3.1
   ssh2: 1.17.0
-  stripe: 22.3.0
+  stripe: 22.4.0
   tailwind-merge: 3.6.0
-  tailwindcss: 4.3.0
-  tar-stream: 3.1.7
-  testcontainers: 12.0.3
+  tailwindcss: 4.3.3
+  tar-stream: 3.2.0
+  testcontainers: 12.0.4
   tslib: 2.8.1
-  tsx: 4.22.4
-  turbo: 2.10.5
+  tsx: 4.23.1
+  turbo: 2.10.7
   typescript: 5.9.3
-  vite: 8.1.2
-  vitest: 4.1.9
-  vue: 3.5.39
+  vite: 8.1.5
+  vitest: 4.1.10
+  vue: 3.5.40
   vue-router: 4.6.4
-  vue-tsc: 3.3.6
-  wrangler: 4.113.0
-  ws: 8.21.0
+  vue-tsc: 3.3.8
+  wrangler: 4.115.0
+  ws: 8.21.1
   xlsx: 0.18.5
   yaml: 2.9.0
   zod: 4.4.3

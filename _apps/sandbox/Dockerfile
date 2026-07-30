@@ -133,7 +133,7 @@ RUN npm install -g @openai/codex@0.142.5 && codex --version
 # flow) connect the subscriptions. A prebuilt Go release, pinned like the npm CLIs above.
 # ponytail: bump the pin deliberately; a wire-API or Management-endpoint change surfaces as a translator-only
 # failure (native-harness turns never touch it).
-ARG CLIPROXY_VERSION=7.2.85
+ARG CLIPROXY_VERSION=7.2.110
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
     && arch="$(dpkg --print-architecture)" \
     && mkdir -p /tmp/cliproxy \
@@ -145,7 +145,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 # through its Cloudflare tunnel when the host is registered with via:"cloudflared" (a NAT'd local machine).
 # Pinned to the same version connect.sh runs as the tunnel sidecar. Placed HERE, before the tree COPYs below,
 # so the layer stays cache-stable across source changes.
-ARG CLOUDFLARED_VERSION=2026.7.2
+ARG CLOUDFLARED_VERSION=2026.7.3
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \
