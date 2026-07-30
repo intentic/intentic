@@ -112,10 +112,10 @@ remove_all() {
     done
 }
 
-# Host-side desktop-sync state (per-user: ~/.intentic/sync, the ~/.ssh/config Include, the Mutagen session +
-# daemon registration) — removed as the INVOKING user, mirroring how connect.sh installed it. This is host/desktop-
-# wide, not per-sandbox, so it runs only when NO sandboxes remain (or on --all). The agent's own `uninstall`
-# terminates the session and strips the ssh-config Include; best-effort, state may be absent.
+# Host-side desktop-sync state (per-user: ~/.intentic/sync, ~/.ssh/intentic-sync.conf and the Include of it, the
+# Mutagen session + daemon registration) — removed as the INVOKING user, mirroring how connect.sh installed it.
+# This is host/desktop-wide, not per-sandbox, so it runs only when NO sandboxes remain (or on --all). The agent's
+# own `uninstall` terminates the session and strips the ssh-config Include; best-effort, state may be absent.
 remove_sync_state() {
     echo "intentic: removing desktop-sync state…"
     if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then
@@ -130,7 +130,7 @@ remove_sync_state() {
         $sync_user "$sync_home/.intentic/sync/bin/intentic-sync" uninstall >/dev/null 2>&1 || true
     fi
     # shellcheck disable=SC2086 -- see above
-    $sync_user rm -rf "$sync_home/.intentic/sync" "$sync_home/.local/bin/intentic-sync" 2>/dev/null || true
+    $sync_user rm -rf "$sync_home/.intentic/sync" "$sync_home/.local/bin/intentic-sync" "$sync_home/.ssh/intentic-sync.conf" 2>/dev/null || true
 }
 
 # The shared dev agent-auth volume (connect.sh's INTENTIC_AGENT_AUTH_VOLUME): the AI-provider OAuth stores for

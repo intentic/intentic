@@ -1,6 +1,9 @@
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { mutagenCreateArgs, sessionMatchesSpec, sessionName, type SyncSessionSpec } from "./mutagen.js";
-import { IGNORES, sanitizeId, sshAlias, sshConfigBlock } from "./ssh.js";
+import { IGNORES, INCLUDE_MARKER, mutagenSshPath, resolvedHostname, sanitizeId, sshAlias, sshConfigBlock, stripManagedIncludes } from "./ssh.js";
 
 describe("id sanitization", () => {
     it("keeps only alias-safe chars and trims stray dashes", () => {
@@ -40,6 +43,65 @@ describe("sshConfigBlock", () => {
         expect(win).toContain('IdentityFile "C:/Users/First Last/.intentic/sync/id_ed25519"');
         expect(win).toContain('UserKnownHostsFile "C:/Users/First Last/.intentic/sync/known_hosts"');
         expect(win).toContain('ProxyCommand "C:/Users/First Last/.intentic/sync/bin/cloudflared.exe" access ssh --hostname %h');
+    });
+});
+
+// The include line is the whole feature on Windows. Mutagen ignores PATH there and takes the first ssh.exe from
+// its own hardcoded list — Git for Windows' Cygwin build long before Microsoft's — and a Cygwin ssh does not
+// consider "C:/Users/…" absolute: it anchors it under ~/.ssh, matches no file, and (a no-match include being
+// silent) reads no config at all. Every Windows setup then died at "unable to receive server magic number: EOF"
+// with the alias echoed back as an unresolvable hostname. A relative name is the one spelling every build
+// anchors identically.
+describe("the managed ssh-config include", () => {
+    it("is a bare relative name, never an absolute path", () => {
+        expect(INCLUDE_MARKER).toBe("Include intentic-sync.conf");
+        expect(INCLUDE_MARKER).not.toMatch(/[/\\]/);
+    });
+
+    it("strips every spelling we have ever written, so re-running setup cannot leave two", () => {
+        const user = [
+            `Include "C:/Users/First Last/.intentic/sync/ssh_config"`,
+            "Include /home/u/.intentic/sync/ssh_config",
+            "Include intentic-sync.conf",
+            "Host build-box",
+            "    HostName 10.0.0.4",
+        ].join("\n");
+        expect(stripManagedIncludes(user)).toBe("Host build-box\n    HostName 10.0.0.4");
+    });
+
+    it("leaves the user's own includes and hosts alone", () => {
+        const user = ["Include ~/.ssh/work.conf", "Include /etc/ssh/company", "Host intentic-sync-decoy", "    HostName decoy"].join("\n");
+        expect(stripManagedIncludes(user)).toBe(user);
+    });
+});
+
+describe("mutagenSshPath", () => {
+    it("leaves the lookup to PATH on POSIX, as Mutagen does", () => {
+        expect(mutagenSshPath("linux", undefined)).toBe("ssh");
+        expect(mutagenSshPath("darwin", "")).toBe("ssh");
+    });
+
+    it("honours MUTAGEN_SSH_PATH, which overrides the search on every platform", async () => {
+        const dir = await mkdtemp(join(tmpdir(), "intentic-ssh-"));
+        await writeFile(join(dir, "ssh"), "");
+        expect(mutagenSshPath("linux", dir)).toBe(join(dir, "ssh"));
+        expect(mutagenSshPath("linux", join(dir, "nothing-here"))).toBe("ssh");
+    });
+});
+
+// `ssh -G` prints the fully expanded config, so it is ground truth for whether THAT client read our block —
+// one that never saw the include echoes the alias back as the hostname, which is the failure we now catch.
+describe("resolvedHostname", () => {
+    it("reads the resolved HostName out of `ssh -G`", () => {
+        expect(resolvedHostname("host intentic-sync-x\nuser root\nhostname ssh-abc123.example.dev\nport 22\n")).toBe("ssh-abc123.example.dev");
+    });
+
+    it("reads back the alias itself when the config was invisible", () => {
+        expect(resolvedHostname("host intentic-sync-x\nhostname intentic-sync-x\nport 22\n")).toBe("intentic-sync-x");
+    });
+
+    it("is undefined when ssh printed no hostname at all", () => {
+        expect(resolvedHostname("")).toBeUndefined();
     });
 });
 

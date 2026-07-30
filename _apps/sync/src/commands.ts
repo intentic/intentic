@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";
@@ -10,7 +10,17 @@ import { knownHostsPath, type Log, readConfig, type SyncConfig, type SyncMode, s
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { type CliLauncher, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
 import { ensureCloudflared, ensureMutagen, ensureSyncSession, runMutagen, sessionName } from "./mutagen.js";
-import { ensureSshKey, INCLUDE_MARKER, sanitizeId, sshAlias, sshConfigBlock, writeManagedSshConfig } from "./ssh.js";
+import {
+    assertSshConfigVisible,
+    ensureSshKey,
+    mutagenSshPath,
+    probeSshTransport,
+    removeManagedSshConfig,
+    sanitizeId,
+    sshAlias,
+    sshConfigBlock,
+    writeManagedSshConfig,
+} from "./ssh.js";
 
 // Enroll our SSH public key using the browser-minted pairing token (single-use). The daemon returns the tunnel's
 // SSH hostname + the sync token `mirror` reads /ports with — the only HTTP surface the agent ever touches;
@@ -121,15 +131,15 @@ const setup = buildCommand<SetupFlags>({
         out(`enrolled SSH key; sandbox reachable at ${sshHostname}`);
 
         const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
+        const alias = sshAlias(sandboxId);
         await writeManagedSshConfig(
-            sshConfigBlock({
-                alias: sshAlias(sandboxId),
-                hostname: sshHostname,
-                identityFile: sshKeyPath,
-                knownHostsFile: knownHostsPath,
-                cloudflaredPath,
-            }),
+            sshConfigBlock({ alias, hostname: sshHostname, identityFile: sshKeyPath, knownHostsFile: knownHostsPath, cloudflaredPath }),
         );
+        // Prove the transport before handing it to Mutagen, using the very client Mutagen will pick — on
+        // Windows that is not the `ssh` on PATH but the first hit in its own hardcoded list (see ssh.ts).
+        const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
+        assertSshConfigVisible(ssh, alias, sshHostname);
+        probeSshTransport(ssh, alias, out);
 
         // File sync exists only in "sync" mode — a mirror-only enrollment (a collaborator) has no local dir and
         // no sync session, just port forwards. A `~` prefix can reach us verbatim (SYNC_DIR travels as data from
@@ -313,15 +323,7 @@ const uninstall = buildCommand<Record<string, never>>({
         if (config.syncToken !== undefined) {
             await revokeEnrollment(config.sandboxUrl, config.syncToken).catch(() => {});
         }
-        const userConfig = join(homedir(), ".ssh", "config");
-        const current = await readFile(userConfig, "utf8").catch(() => "");
-        const stripped = current
-            .split("\n")
-            .filter((line) => line.trim() !== INCLUDE_MARKER)
-            .join("\n");
-        if (stripped !== current) {
-            await writeFile(userConfig, stripped, { mode: 0o600 });
-        }
+        await removeManagedSshConfig();
         // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely — the login
         // registration and the resident process both. A system-installed `mutagen` on PATH may hold the user's
         // own sessions: leave its daemon alone and say so instead.

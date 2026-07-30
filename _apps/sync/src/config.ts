@@ -4,14 +4,21 @@ import { join } from "node:path";
 import type { PortSummary } from "@intentic/sandbox-contract";
 
 // Everything the agent persists lives under ~/.intentic/sync — the config it was set up with, the SSH keypair
-// Mutagen authenticates with, and the ssh config/known_hosts Mutagen's ssh reads. The one credential besides
-// the key is the enrollment-minted sync token (scoped daemon-side to reading the ports list).
+// Mutagen authenticates with, and the known_hosts its ssh writes. The one credential besides the key is the
+// enrollment-minted sync token (scoped daemon-side to reading the ports list).
 export const baseDir = join(homedir(), ".intentic", "sync");
 const configPath = join(baseDir, "config.json");
 export const sshKeyPath = join(baseDir, "id_ed25519");
-export const sshConfigPath = join(baseDir, "ssh_config");
 export const knownHostsPath = join(baseDir, "known_hosts");
 export const binDir = join(baseDir, "bin");
+
+// The one thing that does NOT live under baseDir: the ssh-config fragment Mutagen's ssh reads. It sits in
+// ~/.ssh so the user's own config can pull it in by a RELATIVE name — the only include spelling every OpenSSH
+// build resolves identically, and the whole reason Windows sync works at all (see ssh.ts).
+export const sshDir = join(homedir(), ".ssh");
+export const sshConfigName = "intentic-sync.conf";
+export const sshConfigPath = join(sshDir, sshConfigName);
+export const userSshConfigPath = join(sshDir, "config");
 // The mirror watcher's liveness pidfile + its append-only log (the watcher runs detached, so stdout goes nowhere).
 export const mirrorPidPath = join(baseDir, "mirror.pid");
 export const mirrorLogPath = join(baseDir, "mirror.log");
