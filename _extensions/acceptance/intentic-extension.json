@@ -1,0 +1,25 @@
+{
+    "publisher": "intentic",
+    "name": "acceptance",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.4.0" },
+    "permissions": {
+        "sandbox": [
+            "GET /workspace/children",
+            "GET /workspace/file",
+            "GET /workspace/raw",
+            "POST /workspace/upload",
+            "DELETE /workspace/entry",
+            "GET /panels",
+            "POST /panels/*/start",
+            "GET /*/models",
+            "POST /agent",
+            "POST /agent/stop",
+            "GET /agents",
+            "GET /system/terminals"
+        ]
+    },
+    "contributes": {
+        "views": [{ "id": "acceptance", "label": "Acceptance", "surface": "rail", "badge": true }]
+    }
+}

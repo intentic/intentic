@@ -1,9 +1,9 @@
 import type { ExtensionManifest, ExtensionModule } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-api";
+import * as acceptance from "@intentic/ext-acceptance";
 import * as activity from "@intentic/ext-activity";
 import * as apps from "@intentic/ext-repo-apps";
 import * as automations from "@intentic/ext-automations";
-import * as exploratoryTests from "@intentic/ext-exploratory-tests";
 import * as logs from "@intentic/ext-logs";
 import * as memory from "@intentic/ext-memory";
 import * as pipelines from "@intentic/ext-pipelines";
@@ -29,7 +29,7 @@ export const builtins: readonly Builtin[] = [
     { manifest: activity.manifest, module: activity },
     { manifest: pipelines.manifest, module: pipelines },
     { manifest: apps.manifest, module: apps },
-    { manifest: exploratoryTests.manifest, module: exploratoryTests },
+    { manifest: acceptance.manifest, module: acceptance },
     { manifest: preview.manifest, module: preview },
     { manifest: viewers.manifest, module: viewers },
 ];

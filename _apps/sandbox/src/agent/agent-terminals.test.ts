@@ -1,6 +1,7 @@
+import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { expect, test } from "vitest";
 import { shellQuote } from "../terminal/terminal-run.js";
-import { agentSessionName, bashTmuxHooks } from "./agent-terminals.js";
+import { bashTmuxHooks } from "./agent-terminals.js";
 
 // What the hook makes of the agent's command line before tmux-run sees it: demoted (nice/ionice — priorities
 // only bind under contention, and agent builds are what has starved the daemon) and run as ONE bash -c tree.

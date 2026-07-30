@@ -8,10 +8,16 @@ import {
     SANDBOX_ROUTE_NAMES,
     systemContract,
 } from "@intentic/sandbox-contract";
+import {
+    AGENT_SESSION_PREFIX,
+    agentSessionName,
+    BROWSER_SESSION_PREFIX,
+    JOB_SESSION_PREFIX,
+    WEB_SESSION_PREFIX,
+} from "@intentic/sandbox-contract/session-names";
 import { implement, ORPCError } from "@orpc/server";
-import { agentSessionName } from "../agent/agent-terminals.js";
 import type { VerifiedIdentity } from "../auth/auth.js";
-import { BROWSER_SESSION_PREFIX, closeBrowserSession, listBrowserSessions } from "../browser/browser-sessions.js";
+import { closeBrowserSession, listBrowserSessions } from "../browser/browser-sessions.js";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -20,7 +26,7 @@ import { PANEL_SESSION_PREFIX, SHELL } from "../processes/managed-processes.js";
 import { subscribeRepoChanges } from "../workspace/repo-watch.js";
 import { subscribeWorkspaceChanges } from "../workspace/workspace-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
-import { AGENT_SESSION_PREFIX, isValidSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "../terminal/terminal-session.js";
+import { isValidSessionName } from "../terminal/terminal-session.js";
 import { isNewer, latestVersion } from "../platform/version-check.js";
 import { buildId } from "../version.js";
 import { workspaceIdentity } from "./workspace-identity.js";

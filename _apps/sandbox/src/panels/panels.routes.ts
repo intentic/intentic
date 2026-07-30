@@ -19,7 +19,7 @@ import { probePort } from "../processes/managed-processes.js";
 // ponytail: substring match, not a manifest parse — parse catalog/devDependencies if a stray mention ever bites.
 const mentionsVitest = (file: string): boolean => existsSync(file) && readFileSync(file, "utf8").includes("vitest");
 
-// The convention the exploratory-tests extension detects on: a repo describing its features as user stories,
+// The convention the acceptance extension detects on: a repo describing its features as user stories,
 // one file each. A directory rather than a marker file because the stories ARE the evidence.
 const USER_STORIES_DIR = join("docs", "user-stories");
 

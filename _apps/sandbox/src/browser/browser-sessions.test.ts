@@ -3,11 +3,11 @@ import { mkdtempSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { expect, test } from "vitest";
 import {
     browserSessionHooks,
     browserServerOfTool,
-    browserSessionName,
     closeBrowserSession,
     browserSessionContext,
     listBrowserSessions,

@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import net from "node:net";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "../terminal/terminal-session.js";
+import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 
 const execFileAsync = promisify(execFile);
 

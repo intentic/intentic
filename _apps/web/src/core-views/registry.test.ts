@@ -1,5 +1,5 @@
 import type { Disposable, IntenticApi, ViewRegistration } from "@intentic/extension-api";
-import * as exploratory from "@intentic/ext-exploratory-tests";
+import * as acceptance from "@intentic/ext-acceptance";
 import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic-app/api-contract";
@@ -13,7 +13,7 @@ import { detectActivations, registerView } from "./registry";
 const registerApi = { views: { register: (view: ViewRegistration) => registerView(`test`, view) } } as unknown as IntenticApi;
 apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [] });
 preview.activate(registerApi, { extensionId: `intentic.preview`, subscriptions: [] });
-exploratory.activate(registerApi, { extensionId: `intentic.exploratory-tests`, subscriptions: [] });
+acceptance.activate(registerApi, { extensionId: `intentic.acceptance`, subscriptions: [] });
 
 // A PanelSummary with everything false — override only the facts a case exercises.
 const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({
@@ -118,29 +118,35 @@ describe(`auxiliary views`, () => {
     });
 });
 
-describe(`exploratory-tests extension`, () => {
-    it(`activates on a repo with user stories`, () => {
-        expect(contributes(`exploratory-tests`, `site`, [panel({ repo: `site`, userStories: true })])).toBe(true);
+/* ACCEPTANCE is the workspace-scoped shape: ONE rail tile for the whole workspace, rooted at no repo, because a
+ * user story is a promise about the product and a product is rarely one repository. That makes its detect a
+ * question about the workspace ("is there anything here to test?") rather than about each repo in turn — the
+ * opposite of every directory view above. */
+describe(`acceptance extension`, () => {
+    const tiles = (panels: PanelSummary[]) => detectActivations(panels, []).filter(({ extension }) => extension.id === `acceptance`);
+
+    it(`contributes ONE tile for the workspace, rooted at no repo`, () => {
+        const found = tiles([panel({ repo: `site`, userStories: true }), panel({ repo: `api`, userStories: true })]);
+        expect(found).toHaveLength(1);
+        expect(found[0]?.activation.key).toBe(`acceptance`);
+        expect(found[0]?.activation.repo).toBeUndefined();
     });
 
-    it(`stays away from a repo that has none`, () => {
-        expect(contributes(`exploratory-tests`, `site`, [panel({ repo: `site`, hasPanel: true })])).toBe(false);
+    // The view is where stories are WRITTEN, so "a repo runs an app" is enough evidence to offer it: gating on
+    // stories alone would mean a workspace with none could never reach the surface that creates the first one.
+    it(`activates on a repo that only runs an app, so the first story can be authored`, () => {
+        expect(tiles([panel({ repo: `site`, hasPanel: true })])).toHaveLength(1);
     });
 
-    // The composition this extension's `auxiliary` flag exists for — a web app with stories is exactly the repo
-    // that also runs a dev server, and it must not lose Preview by gaining a test runner.
-    it(`sits BESIDE the preview fallback on a repo that both runs a dev server and has stories`, () => {
+    it(`stays away from a workspace with neither stories nor a runnable app`, () => {
+        expect(tiles([panel({ repo: `docs` })])).toHaveLength(0);
+    });
+
+    // Rooted at no repo ⇒ it claims none, so a repo that both runs a dev server and has stories keeps Preview.
+    it(`costs no repo its own surface`, () => {
         const panels = [panel({ repo: `site`, hasPanel: true, userStories: true })];
-        expect(contributes(`exploratory-tests`, `site`, panels)).toBe(true);
+        expect(tiles(panels)).toHaveLength(1);
         expect(contributes(`preview`, `site`, panels)).toBe(true);
-    });
-
-    // …while a monorepo, which `apps` DOES claim, still gets the tests tab: auxiliary views are exempt from the
-    // claim rule as subjects, not merely as objects.
-    it(`still activates on a monorepo the apps extension claims`, () => {
-        const panels = [panel({ repo: `mono`, monorepo: true, userStories: true })];
-        expect(contributes(`exploratory-tests`, `mono`, panels)).toBe(true);
-        expect(contributes(`apps`, `mono`, panels)).toBe(true);
     });
 });
 

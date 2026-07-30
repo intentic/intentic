@@ -39,6 +39,17 @@
                 "@intentic/src": "./src/tunnel-ids.ts",
                 "default": "./dist/tunnel-ids.js"
             }
+        },
+        "./session-names": {
+            "types": "./dist/session-names.d.ts",
+            "import": {
+                "@intentic/src": "./src/session-names.ts",
+                "default": "./dist/session-names.js"
+            },
+            "require": {
+                "@intentic/src": "./src/session-names.ts",
+                "default": "./dist/session-names.js"
+            }
         }
     },
     "scripts": {

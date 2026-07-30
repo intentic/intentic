@@ -1,0 +1,277 @@
+import {
+    type AgentSummary,
+    AgentsListSchema,
+    StartedTurnSchema,
+    TerminalsListSchema,
+    WorkspaceChildrenSchema,
+    WorkspaceFileSchema,
+} from "@intentic/sandbox-contract";
+import { browserSessionName } from "@intentic/sandbox-contract/session-names";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { computed, type Ref } from "vue";
+import { briefFor } from "./brief";
+import { host } from "./host";
+import {
+    parseManifest,
+    parseResult,
+    reportPath,
+    resultPath,
+    type RunManifest,
+    runIdAt,
+    runManifestOf,
+    runManifestPath,
+    RUNS_DIR,
+    type StoryResult,
+} from "./runs";
+import type { Story } from "./stories";
+
+/* Runs, and the fleet sessions that produce them.
+ *
+ * A test session is an ISOLATED fleet agent: `POST /agent` with a conversationId and `isolated: true` is what
+ * creates one (agent.routes.ts registers a fleet entry for exactly that shape and no other). That is the whole
+ * reason this extension owns no session machinery — the worktree, the live status, the cost, the transcript and
+ * the /agents/<id> page all already exist, and a run is just N of them started at once with a derived id.
+ *
+ * `bypassPermissions` because a test that parks on a permission card is a test that never finishes: nobody is
+ * watching a fan-out of ten. The blast radius is bounded the way the fleet bounds it — each session is in its
+ * own worktree — and the brief's first paragraph is "you are a tester, do not modify the source".
+ *
+ * Status is JOINED, never stored: the conversation ids are derived from the run id, so `GET /agents` filtered by
+ * prefix IS the run's live state. There is no bookkeeping here that can drift out of sync with the fleet. The
+ * same join reaches one step further for the live BROWSER — see `browsers` below. */
+
+const POLL_MS = 3000;
+
+export interface RunRow {
+    readonly manifest: RunManifest;
+    readonly agents: readonly AgentSummary[];
+    readonly running: boolean;
+}
+
+export interface StoryOutcome {
+    readonly result?: StoryResult;
+    readonly report?: string;
+}
+
+// The live Chromium one test session is driving, when there is one to watch.
+export interface LiveBrowser {
+    // The tmux-listed session name — what `api.terminal.open` is handed.
+    readonly session: string;
+    // The page it is on right now, straight off the daemon's listing.
+    readonly url?: string | undefined;
+}
+
+export interface StartRunInput {
+    readonly stories: readonly Story[];
+    readonly contents: Readonly<Record<string, string>>;
+    // The app under test per REPO — a run spanning two repos points at two servers. Keyed by repo name.
+    readonly targets: Readonly<Record<string, string>>;
+    // The authored acceptance criteria per story path, so the brief can demand one verdict per criterion.
+    readonly criteria: Readonly<Record<string, readonly string[]>>;
+    // Each repo's docs/user-stories/.acceptance.md, keyed by repo name.
+    readonly notes: Readonly<Record<string, string>>;
+    readonly provider: string;
+    readonly model?: string | undefined;
+}
+
+export function useRuns() {
+    const api = host();
+    const queryClient = useQueryClient();
+    const runsKey = computed(() => api.sandbox.key(`acceptance`, `runs`));
+    const agentsKey = computed(() => api.sandbox.key(`acceptance`, `agents`));
+
+    const json = async <T>(path: string): Promise<T | undefined> => {
+        try {
+            return (await api.sandbox.json(path)) as T;
+        } catch {
+            return undefined;
+        }
+    };
+    const file = async (path: string): Promise<string | undefined> => {
+        const parsed = await json<unknown>(`/workspace/file?path=${encodeURIComponent(path)}`);
+        return parsed === undefined ? undefined : WorkspaceFileSchema.parse(parsed).content;
+    };
+
+    const runsQuery = useQuery({
+        queryKey: runsKey,
+        enabled: computed(() => api.sandbox.reachable()),
+        queryFn: async (): Promise<RunManifest[]> => {
+            // No runs directory yet is the ordinary first state, not an error.
+            const listing = await json<unknown>(`/workspace/children?path=${encodeURIComponent(RUNS_DIR)}`);
+            if (listing === undefined) {
+                return [];
+            }
+            const dirs = WorkspaceChildrenSchema.parse(listing).entries.filter((entry) => entry.type === `dir`);
+            const manifests = await Promise.all(dirs.map(async (entry) => await file(`${entry.path}/run.json`)));
+            return manifests
+                .flatMap((text) => (text === undefined ? [] : [parseManifest(text)]))
+                .flatMap((manifest) => (manifest === undefined ? [] : [manifest]))
+                .toSorted((left, right) => right.createdAt - left.createdAt);
+        },
+    });
+
+    // The fleet roster, polled only while some run still has work in flight. `GET /agents` is the whole fleet;
+    // the per-run join happens below.
+    const conversationIds = computed(() => new Set((runsQuery.data.value ?? []).flatMap((run) => run.stories.map((story) => story.conversationId))));
+    const agentsQuery = useQuery({
+        queryKey: agentsKey,
+        enabled: computed(() => api.sandbox.reachable() && conversationIds.value.size > 0),
+        queryFn: async (): Promise<AgentSummary[]> => AgentsListSchema.parse(await api.sandbox.json(`/agents`)).agents,
+        refetchInterval: (state) =>
+            (state.state.data ?? []).some(
+                (agent) => conversationIds.value.has(agent.id) && (agent.status === `running` || agent.status === `awaiting`),
+            )
+                ? POLL_MS
+                : false,
+    });
+
+    const agentsById = computed(() => new Map((agentsQuery.data.value ?? []).map((agent) => [agent.id, agent])));
+    const runs = computed<RunRow[]>(() =>
+        (runsQuery.data.value ?? []).map((manifest) => {
+            const agents = manifest.stories.flatMap((story) => {
+                const agent = agentsById.value.get(story.conversationId);
+                return agent === undefined ? [] : [agent];
+            });
+            return { manifest, agents, running: agents.some((agent) => agent.status === `running` || agent.status === `awaiting`) };
+        }),
+    );
+
+    const live = computed<boolean>(() => runs.value.some((run) => run.running));
+
+    /* THE SUPERVISION SEAM. A test session drives a real Chromium that the daemon already attaches to over CDP
+     * and streams as a pane in the terminal panel — the same surface a tmux session gets, with a Take control
+     * button. Nothing had to be built here for that; what was missing was the pointer.
+     *
+     * The join is two hops and neither may be guessed: the fleet roster gives a conversation's `sessionId`, and
+     * `browserSessionName` (the contract's, shared with the daemon that NAMES the session) turns that into the
+     * listed name. It is checked against the live listing rather than derived and offered blind — a browser
+     * session exists only once the agent has made its first browser call, and a button that opens an empty pane
+     * teaches the user the feature is broken.
+     *
+     * Polled only while a run is live: a finished run's Chromium is gone, and this is the third request in a
+     * three-request view. */
+    const terminalsQuery = useQuery({
+        queryKey: computed(() => api.sandbox.key(`acceptance`, `terminals`)),
+        enabled: computed(() => api.sandbox.reachable() && live.value),
+        refetchInterval: () => (live.value ? POLL_MS : false),
+        queryFn: async (): Promise<Readonly<Record<string, string | undefined>>> =>
+            Object.fromEntries(
+                TerminalsListSchema.parse(await api.sandbox.json(`/system/terminals`))
+                    .sessions.filter((session) => session.kind === `browser` && session.running)
+                    .map((session) => [session.name, session.url] as const),
+            ),
+    });
+
+    const browsers = computed<Readonly<Record<string, LiveBrowser>>>(() => {
+        const listed = terminalsQuery.data.value ?? {};
+        return Object.fromEntries(
+            (agentsQuery.data.value ?? []).flatMap((agent) => {
+                const session = agent.sessionId === undefined ? undefined : browserSessionName(agent.sessionId);
+                return session === undefined || !(session in listed) ? [] : [[agent.id, { session, url: listed[session] }] as const];
+            }),
+        );
+    });
+
+    /* One run's per-story artifacts. Separate from the run list on purpose: results and reports are only read
+     * for the run being LOOKED at, so a workspace with fifty runs costs fifty reads to list and none to browse.
+     * Re-read on the same interval as the roster while the run is live, so a report appears as it is written. */
+    const useRunOutcomes = (runId: Ref<string | undefined>) =>
+        useQuery({
+            queryKey: computed(() => api.sandbox.key(`acceptance`, `outcomes`, runId.value ?? ``)),
+            enabled: computed(() => api.sandbox.reachable() && runId.value !== undefined),
+            refetchInterval: () => (runs.value.find((run) => run.manifest.runId === runId.value)?.running === true ? POLL_MS : false),
+            queryFn: async (): Promise<Record<string, StoryOutcome>> => {
+                const id = runId.value;
+                const manifest = runsQuery.data.value?.find((run) => run.runId === id);
+                if (id === undefined || manifest === undefined) {
+                    return {};
+                }
+                const outcomes = await Promise.all(
+                    manifest.stories.map(async (story) => {
+                        const [result, report] = await Promise.all([file(resultPath(id, story.slug)), file(reportPath(id, story.slug))]);
+                        const parsed = result === undefined ? undefined : parseResult(result);
+                        return [
+                            story.slug,
+                            { ...(parsed === undefined ? {} : { result: parsed }), ...(report === undefined ? {} : { report }) },
+                        ] as const;
+                    }),
+                );
+                return Object.fromEntries(outcomes);
+            },
+        });
+
+    /* Start a run: write the manifest FIRST, then fan out the turns.
+     *
+     * Order matters. The manifest is what makes a run discoverable — if a turn started before it existed and the
+     * browser closed in between, there would be a fleet agent with a derived id and nothing on disk saying which
+     * stories it belonged to. A manifest with no turns behind it is the recoverable failure; the reverse is not. */
+    const start = async (input: StartRunInput): Promise<string> => {
+        const createdAt = Date.now();
+        const runId = runIdAt(createdAt);
+        const manifest = runManifestOf({
+            runId,
+            createdAt,
+            targets: input.targets,
+            provider: input.provider,
+            model: input.model,
+            stories: input.stories,
+        });
+        await api.sandbox.request(`/workspace/upload?path=${encodeURIComponent(runManifestPath(runId))}`, {
+            method: `POST`,
+            body: JSON.stringify(manifest, null, 2),
+        });
+        // Fired together rather than in sequence: the fleet runs them in parallel anyway, and awaiting each ack
+        // in turn would make the last story's card appear seconds after the first's for no reason. The manifest's
+        // own story entries are what the turns are built from, so the conversation id on disk is the one started.
+        await Promise.all(
+            manifest.stories.map(async (story) => {
+                const brief = briefFor({
+                    story,
+                    content: input.contents[story.path] ?? ``,
+                    criteria: input.criteria[story.path] ?? [],
+                    runId,
+                    baseUrl: input.targets[story.repo] ?? ``,
+                    projectNotes: input.notes[story.repo],
+                });
+                const body = {
+                    prompt: brief,
+                    title: `Acceptance: ${story.title}`.slice(0, 80),
+                    conversationId: story.conversationId,
+                    isolated: true,
+                    permissionMode: `bypassPermissions`,
+                    agent: input.provider,
+                    ...(input.model === undefined || input.model === `` ? {} : { model: input.model }),
+                };
+                StartedTurnSchema.parse(
+                    await api.sandbox.json(`/agent`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) }),
+                );
+            }),
+        );
+        await queryClient.invalidateQueries({ queryKey: runsKey.value });
+        return runId;
+    };
+
+    const stop = async (conversationId: string): Promise<void> => {
+        await api.sandbox.json(`/agent/stop`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ conversationId }),
+        });
+        await queryClient.invalidateQueries({ queryKey: agentsKey.value });
+    };
+
+    return {
+        runs,
+        // Keyed by conversationId — the row asks `browsers[story.conversationId]` and shows a Watch button when
+        // there is something to watch.
+        browsers,
+        error: computed(() => runsQuery.error.value?.message),
+        isLoading: runsQuery.isLoading,
+        refresh: async (): Promise<void> => {
+            await queryClient.invalidateQueries({ queryKey: runsKey.value });
+        },
+        start,
+        stop,
+        useRunOutcomes,
+    };
+}

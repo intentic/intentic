@@ -31,6 +31,10 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic-app/ui/markdown": here("../../_libs/ui/src/markdown/index.ts"),
     "@intentic-app/ui": here("../../_libs/ui/src/index.ts"),
     "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
+    // Same reason as the markdown subpath above, and the same ordering requirement: the session-name derivation
+    // is a dependency-free leaf that the daemon, the app and an extension all reach for, so it is exported off
+    // the barrel (a unit test that only wants a session name must not resolve the whole wire contract).
+    "@intentic/sandbox-contract/session-names": here("../../_libs/sandbox-contract/src/session-names.ts"),
     "@intentic/sandbox-contract": here("../../_libs/sandbox-contract/src/index.ts"),
     "@intentic/extension-api": here("../../_libs/extension-api/src/index.ts"),
     ...extensionAliases,

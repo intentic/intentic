@@ -1,13 +1,14 @@
 import { existsSync } from "node:fs";
 import { upgradeWebSocket, type WebSocketLike } from "@hono/node-server";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
+import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import type { WSContext } from "hono/ws";
 import { type IPty, spawn } from "node-pty";
 import type { WebSocket } from "ws";
 import type { Services } from "../composition.js";
 import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
-import { AGENT_SESSION_PREFIX, isValidSessionName, JOB_SESSION_PREFIX } from "./terminal-session.js";
+import { isValidSessionName } from "./terminal-session.js";
 
 // One interactive PTY the browser drives over a WebSocket — the sandbox's "open a terminal in here" surface, so
 // the owner can watch processes, re-run a failed dev command and see WHY it failed, and generally poke around.

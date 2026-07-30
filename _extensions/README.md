@@ -21,10 +21,10 @@ Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/*
 
 | Extension | Kind | What it contributes |
 | --- | --- | --- |
+| `acceptance` | UI view | Every repo's `docs/user-stories` + their acceptance criteria, authored here and walked through the running app by agents driving real browsers (one isolated fleet session per story, screenshots + report, live watchable). |
 | `agent-activity` | UI view | The agent activity feed. |
 | `repo-apps` | UI view | Per-repo apps: preview URLs, add/start/stop, vitest. |
 | `automations` | UI view | Cron / webhook / listener automations. |
-| `exploratory-tests` | UI view | A repo's `docs/user-stories`, run as LLM browser walkthroughs (one isolated fleet session per story, screenshots + report). |
 | `logs` | UI view | Workspace log tail. |
 | `memory` | UI view | The agent's persistent memory notes: review, edit, delete. |
 | `preview` | UI view | Per-repo dev-server preview panels. |

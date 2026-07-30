@@ -1,4 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Page } from "playwright";
 
 /* THE AGENT'S BROWSER, AS A THING THE DAEMON CAN NAME.
@@ -23,8 +24,6 @@ import type { Browser, BrowserContext, Page } from "playwright";
  * it from the tab strip until someone explicitly asks to watch. See system.routes.ts, where it lists beside
  * the tmux sessions, because from the panel's side there is one question ("what is happening right now?") and
  * it should have one answer. */
-
-export const BROWSER_SESSION_PREFIX = "browser-";
 
 // How long to keep asking Chromium's DevTools endpoint to answer. The first browser tool call is what triggers
 // the attach, and Chromium is coming up underneath it — a cold launch plus the first navigation is seconds, not
@@ -64,14 +63,6 @@ const prune = (now: number): void => {
             sessions.delete(name);
         }
     }
-};
-
-// The browser session for one SDK session — `browser-<8 chars of the session UUID>`, the same 8 chars
-// agentSessionName takes, so a conversation's shell and its browser read as the pair they are. undefined when
-// the id sanitizes to empty (never a valid session name).
-export const browserSessionName = (sessionId: string): string | undefined => {
-    const id = sessionId.replaceAll(/[^A-Za-z0-9_-]/g, "").slice(0, 8);
-    return id === "" ? undefined : `${BROWSER_SESSION_PREFIX}${id}`;
 };
 
 // `mcp__web__browser_navigate` → `web`. The server segment is the tool prefix @playwright/mcp was mounted

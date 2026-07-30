@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { nsenterPrefix, type TurnPlacement } from "../agents/isolation.js";
 import { redirectCommand } from "../agents/worktree-redirect.js";
+import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { shellQuote, TMUX_RUN_BIN } from "../terminal/terminal-run.js";
-import { AGENT_SESSION_PREFIX } from "../terminal/terminal-session.js";
 
 // Rewrites every Bash tool command through bin/tmux-run (baked into the image), so the agent's shell
 // commands run live-visible in `agent-<sdk session>` tmux sessions the terminal panel can attach to — the
@@ -12,15 +12,6 @@ import { AGENT_SESSION_PREFIX } from "../terminal/terminal-session.js";
 
 // Off when the wrapper isn't baked in (local dev, tests) or the operator opts out.
 export const tmuxRunEnabled = (): boolean => process.env["INTENTIC_AGENT_TMUX"] !== "0" && existsSync(TMUX_RUN_BIN);
-
-// The tmux session the agent's Bash commands run in for one SDK session — the SAME derivation the hook routes
-// commands through, so the emitted `terminal` frame and the live session can't drift. 8 chars of the SDK
-// session UUID passes the session-name charset guard and groups a whole turn's commands (incl. subagents')
-// under one terminal. undefined when the id sanitizes to empty (never a valid session name).
-export const agentSessionName = (sessionId: string): string | undefined => {
-    const id = sessionId.replaceAll(/[^A-Za-z0-9_-]/g, "").slice(0, 8);
-    return id === "" ? undefined : `${AGENT_SESSION_PREFIX}${id}`;
-};
 
 // tmux window name from the Bash tool's `description`, so the session's window list reads meaningfully.
 // Same safe charset as session names (it lands in the rewritten shell line unquoted).
