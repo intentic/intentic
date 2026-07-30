@@ -9,6 +9,7 @@
             "GET /*/models",
             "POST /automations",
             "DELETE /automations/*",
+            "POST /automations/*/run",
             "GET /automations/pending",
             "POST /automations/pending/*/approve",
             "POST /automations/pending/*/reject"

@@ -715,6 +715,17 @@ export const SandboxSettingsSchema = z.object({
      * (automation wakes, Discord, webhooks), which no browser-held preference could ever rescue. It is the same
      * reasoning that leaves the auth resume ungated: this is the provider's failure, not the user's decision. */
     resumeAfterOutage: z.boolean().default(true),
+    /* When the daemon dies under a running turn, re-run that turn once it is back (agent/turn-journal.ts records
+     * every in-flight turn; the boot pass in agent/turn-resume.ts re-runs what survived). ON by default, where
+     * autoResumeOnLimit is off, and the difference is who broke the turn: a spent allowance is the user's own
+     * budget, while a restart is usually intentic's OWN doing — the container is recreated on every update,
+     * every environment approval and every dev-sandbox.sh swap. Approving the Dockerfile change an agent asked
+     * for must not cost the run that asked for it, and a user who just clicked Approve is in the room expecting
+     * the work to continue, not a second button.
+     *
+     * OFF still records the interruption: the fleet card reads `interrupted` (see AgentStatusSchema) and an
+     * automation's row shows an `interrupted` run — nothing is re-run, but nothing is silently lost either. */
+    autoResumeOnRestart: z.boolean().default(true),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 
@@ -1999,9 +2010,15 @@ export const AutomationApprovalIdParamSchema = z.object({ id: z.string() });
 
 export const AutomationRunSchema = z.object({
     at: z.number(),
-    // skipped = the guard said no; error = the guard passed but the agent turn surfaced an error.
-    outcome: z.enum(["completed", "skipped", "error"]),
+    // skipped = the guard said no; error = the guard passed but the agent turn surfaced an error; interrupted =
+    // the daemon died mid-wake, so the run reached no outcome of its own (see agent/turn-journal.ts). Without
+    // that last one an interrupted fire records NOTHING and simply vanishes from the row's history, which reads
+    // as "it never fired" — the one reading a 3 a.m. automation must not be given.
+    outcome: z.enum(["completed", "skipped", "error", "interrupted"]),
     detail: z.string().optional(),
+    // The runtime session the wake ran in, so the row can open the transcript. Absent for a run that never
+    // reached a provider (skipped by its guard) or whose provider minted no session before it died.
+    sessionId: z.string().optional(),
 });
 export type AutomationRun = z.infer<typeof AutomationRunSchema>;
 

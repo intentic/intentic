@@ -3,6 +3,7 @@ import type { AutomationRun, AutomationSummary, Trigger } from "@intentic/sandbo
 import { CopyButton, Icon, type IconName, ToggleSwitch } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { formatAt, nextIn, scheduleLabel, since } from "./cronSchedule";
+import { host } from "./host";
 import { LISTENER_SOURCES } from "./listenerSources";
 import { webhookUrl } from "./useAutomations";
 
@@ -16,7 +17,7 @@ import { webhookUrl } from "./useAutomations";
  * ordinary automation and must not grow a second presentation that can drift from it. */
 
 const props = defineProps<{ automation: AutomationSummary; expanded: boolean; busy?: boolean }>();
-const emit = defineEmits<{ toggle: [enabled: boolean]; remove: []; expand: [] }>();
+const emit = defineEmits<{ toggle: [enabled: boolean]; remove: []; expand: []; run: [] }>();
 
 const trigger = computed<Trigger>(() => props.automation.trigger);
 const lastRun = computed<AutomationRun | undefined>(() => props.automation.runs[0]);
@@ -44,7 +45,8 @@ const triggerLabel = computed<string>(() => {
 
 /* The dot: one mark carrying "is it on" and "did the last run go wrong". `idle` covers never-run AND
  * all-skipped, because a guard that skipped is the DESIGNED outcome of a tool-driven chore — it checked, found
- * nothing, and cost nothing — and must never wear a warning colour for doing its job. */
+ * nothing, and cost nothing — and must never wear a warning colour for doing its job. An `interrupted` run is
+ * `idle` for the same reason inverted: nothing went wrong with the automation, the sandbox went away under it. */
 type Health = `off` | `ok` | `failed` | `idle`;
 const DOT: Record<Health, string> = {
     ok: `bg-success`,
@@ -60,9 +62,28 @@ const health = computed<Health>(() => {
     return outcome === `error` ? `failed` : outcome === `completed` ? `ok` : `idle`;
 });
 
-const OUTCOME_VERB: Record<AutomationRun[`outcome`], string> = { completed: `ran`, error: `failed`, skipped: `skipped` };
-const OUTCOME_CLASS: Record<AutomationRun[`outcome`], string> = { completed: `text-muted`, error: `text-danger`, skipped: `text-subtle` };
+const OUTCOME_VERB: Record<AutomationRun[`outcome`], string> = {
+    completed: `ran`,
+    error: `failed`,
+    skipped: `skipped`,
+    // Not "failed": the run never reached an outcome of its own — the sandbox restarted under it.
+    interrupted: `cut off`,
+};
+const OUTCOME_CLASS: Record<AutomationRun[`outcome`], string> = {
+    completed: `text-muted`,
+    error: `text-danger`,
+    skipped: `text-subtle`,
+    interrupted: `text-subtle`,
+};
 const runTooltip = (run: AutomationRun): string => `${formatAt(run.at)}${run.detail !== undefined ? ` — ${run.detail}` : ``}`;
+
+// A run's transcript, on the host's one chat surface. Only runs that reached a provider have a session: a
+// guard-skip never woke anything, and an interrupted wake may have died before minting one.
+const openRun = (run: AutomationRun): void => {
+    if (run.sessionId !== undefined) {
+        host().chat.openSession(run.sessionId);
+    }
+};
 
 const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !== undefined ? nextIn(props.automation.nextRun) : undefined));
 </script>
@@ -114,6 +135,21 @@ const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !
                 {{ nextLabel }}
             </span>
 
+            <!-- Fire it now. The reason this exists at all: a 3 a.m. cron, a webhook you would have to forge, a
+                 Discord mention you would have to provoke — none of them testable by waiting. Hover-revealed
+                 beside Delete, because it is an occasional act, not part of reading the column of states. It
+                 works on a disabled row too: trying the prompt before switching it on is the point. -->
+            <button
+                type="button"
+                class="shrink-0 cursor-pointer text-muted transition-colors hover:text-content md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
+                :disabled="busy"
+                :aria-label="`Run ${automation.id} now`"
+                v-tooltip.top="`Run now`"
+                @click="emit(`run`)"
+            >
+                <Icon name="play" class="text-xs" />
+            </button>
+
             <ToggleSwitch
                 :model-value="automation.enabled"
                 :disabled="busy"
@@ -155,13 +191,26 @@ const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !
                 <span v-if="automation.requireApproval">holds for approval</span>
             </div>
 
+            <!-- The run history, and — where the run reached a provider — a way INTO it. "It failed at 3am and I
+                 can't see why" is answered by a transcript, so a run that has a session is a button that opens
+                 one; a guard-skip has nothing behind it and stays plain text. -->
             <div class="flex flex-col gap-1 border-t border-line pt-2">
                 <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">No runs yet.</p>
-                <div v-for="run in automation.runs" :key="run.at" class="flex items-baseline gap-2 text-2xs">
+                <component
+                    :is="run.sessionId ? `button` : `div`"
+                    v-for="run in automation.runs"
+                    :key="run.at"
+                    :type="run.sessionId ? `button` : undefined"
+                    class="flex items-baseline gap-2 rounded text-left text-2xs"
+                    :class="run.sessionId ? `cursor-pointer hover:bg-content/5` : undefined"
+                    :aria-label="run.sessionId ? `Open the transcript of the run from ${formatAt(run.at)}` : undefined"
+                    @click="openRun(run)"
+                >
                     <span class="w-20 shrink-0 text-subtle" v-tooltip.top="formatAt(run.at)">{{ since(run.at) }}</span>
-                    <span class="w-14 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ run.outcome === `skipped` ? `skipped` : run.outcome }}</span>
+                    <span class="w-14 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ OUTCOME_VERB[run.outcome] }}</span>
                     <span v-if="run.detail" class="min-w-0 truncate text-subtle" v-tooltip.top="run.detail">{{ run.detail }}</span>
-                </div>
+                    <Icon v-if="run.sessionId" name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                </component>
             </div>
         </div>
     </div>

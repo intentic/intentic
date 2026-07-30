@@ -25,7 +25,7 @@ import { useAutomations } from "./useAutomations";
  * editable like any other — there is deliberately no chore toggle that isn't an automation: a second place to
  * turn something on is a second place for it to disagree with itself. */
 
-const { automations, pending, error: listError, save, remove, approve, reject } = useAutomations();
+const { automations, pending, error: listError, save, remove, run, approve, reject } = useAutomations();
 
 // The filter bar costs a line, so it earns it only once the list is long enough that scanning it by eye stops
 // being instant. Below that the whole list is on screen and a filter is chrome in front of the answer.
@@ -108,6 +108,21 @@ const toggle = async (automation: AutomationSummary, enabled: boolean): Promise<
         });
     } catch (err) {
         actionError.value = err instanceof Error ? err.message : `Could not update the automation.`;
+    }
+};
+
+/* Fire one by hand. The daemon acks the moment the fire starts and runs the turn detached, so what lands here is
+ * whether it STARTED — the outcome shows up in the row's run history, which the mutation refetches. A schedule
+ * fires exactly as its cron would (headless, main tree): a test that proved something else ran would prove
+ * nothing about the 3 a.m. one it stands in for. */
+const runNow = async (automation: AutomationSummary): Promise<void> => {
+    actionError.value = undefined;
+    // Open the row, so the run appears where the user is already looking instead of behind a disclosure.
+    expanded.add(automation.id);
+    try {
+        await run.mutateAsync(automation.id);
+    } catch (err) {
+        actionError.value = err instanceof Error ? err.message : `Could not run the automation.`;
     }
 };
 
@@ -283,10 +298,11 @@ const toggleDetail = (id: string): void => {
                     :key="chore.id"
                     :automation="chore"
                     :expanded="expanded.has(chore.id)"
-                    :busy="save.isPending.value"
+                    :busy="save.isPending.value || run.isPending.value"
                     @toggle="toggle(chore, $event)"
                     @expand="toggleDetail(chore.id)"
                     @remove="confirmRemoveId = chore.id"
+                    @run="runNow(chore)"
                 />
             </RowGroup>
 
@@ -296,10 +312,11 @@ const toggleDetail = (id: string): void => {
                     :key="automation.id"
                     :automation="automation"
                     :expanded="expanded.has(automation.id)"
-                    :busy="save.isPending.value"
+                    :busy="save.isPending.value || run.isPending.value"
                     @toggle="toggle(automation, $event)"
                     @expand="toggleDetail(automation.id)"
                     @remove="confirmRemoveId = automation.id"
+                    @run="runNow(automation)"
                 />
             </RowGroup>
 

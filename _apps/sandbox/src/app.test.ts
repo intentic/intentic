@@ -207,6 +207,14 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     tools: [],
     capabilities: memoryCapabilitiesStore(),
     automations: memoryAutomationsStore(),
+    // Inert turn journal: every fire path writes an in-flight entry and clears it, and nothing here resumes.
+    turnJournal: {
+        list: async () => [],
+        recordTurn: async () => {},
+        recordFire: async () => {},
+        clearTurn: async () => {},
+        clearFire: async () => {},
+    },
     activity: { append: async () => {}, list: async () => [] },
     usage: { record: async () => {}, rollup: async () => [] },
     sandboxSettings: {
@@ -1238,6 +1246,32 @@ test("POST /automations/:id/fire skips bearer auth, enforces the automation toke
     // The turn runs detached (the fake agent completes instantly) and lands in the run history.
     await vi.waitFor(async () => expect((await store.get("deploy"))?.runs).toHaveLength(1), TURN_SETTLES);
     expect((await store.get("deploy"))?.runs[0]?.outcome).toBe("completed");
+});
+
+test("automations.run fires by hand on the real path — a disabled automation too, and past the approval gate", async () => {
+    const store = memoryAutomationsStore([
+        { id: "cron", trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "sweep the logs", enabled: true, runs: [] },
+        // Trying a prompt BEFORE switching the automation on is the main reason to press Run now, so — unlike the
+        // webhook, which fails closed at 409 against an outside sender — an off automation still fires by hand.
+        { id: "paused", trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "x", enabled: false, runs: [] },
+        // requireApproval would hold a scheduled fire in the owner's queue. Their own click is the approval.
+        { id: "gated", trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "x", requireApproval: true, enabled: true, runs: [] },
+    ]);
+    const client = clientFor(createApp(services({ automations: store })));
+
+    await expect(client.automations.run({ id: "ghost" })).rejects.toThrow();
+
+    // The turn runs detached — the ack does not wait on it, because the guard alone may take a minute.
+    expect(await client.automations.run({ id: "cron" })).toEqual({ ok: true });
+    await vi.waitFor(async () => expect((await store.get("cron"))?.runs).toHaveLength(1), TURN_SETTLES);
+    expect((await store.get("cron"))?.runs[0]?.outcome).toBe("completed");
+
+    expect(await client.automations.run({ id: "paused" })).toEqual({ ok: true });
+    await vi.waitFor(async () => expect((await store.get("paused"))?.runs).toHaveLength(1), TURN_SETTLES);
+
+    expect(await client.automations.run({ id: "gated" })).toEqual({ ok: true });
+    await vi.waitFor(async () => expect((await store.get("gated"))?.runs).toHaveLength(1), TURN_SETTLES);
+    expect((await store.get("gated"))?.runs[0]?.outcome).toBe("completed");
 });
 
 test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist, reflects CORS, and records a run", async () => {

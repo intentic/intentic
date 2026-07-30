@@ -35,13 +35,13 @@ import {
     recordLimitHit,
     recordOutageFailure,
     resumeTurnOf,
+    startConversationTurn,
 } from "./turn-resume.js";
 import { withRuntimeHistory } from "./runtime-history.js";
-import { startTurnRun, turnRunOf } from "./turn-runs.js";
+import { turnRunOf } from "./turn-runs.js";
 import { summarizeAgentTitle } from "./title-summary.js";
 import { planTurn } from "./turn-plan.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
-import { turnAwaiting, turnFinished } from "../push/notifications.js";
 
 // Fold the opt-in editor context (the composer chip, off by default) into the prompt: the file the user is
 // looking at and, when they selected text, the lines themselves — so deictic prompts ("fix this") ground
@@ -653,15 +653,9 @@ export const createAgentRoutes = (services: Services) => {
             const conversationId = input.conversationId;
             // Push notifications ride the run's lifecycle, not this request's: the point is to reach a user
             // whose tab is asleep or closed, which is exactly when nobody is reading the response. Every send
-            // goes through notifyIfAway, so a user watching the turn finish is told nothing.
-            const run = startTurnRun(
-                (turn, signal) => streamAgent(services, turn, signal),
-                { ...input, conversationId },
-                {
-                    awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),
-                    settled: (outcome) => void services.pushSender.notifyIfAway(turnFinished(conversationId, input.prompt, outcome)),
-                },
-            );
+            // goes through notifyIfAway, so a user watching the turn finish is told nothing. The journal entry
+            // rides along too — see startConversationTurn.
+            const run = startConversationTurn(services, streamAgent, { ...input, conversationId });
             if (run === undefined) {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
             }
@@ -746,11 +740,7 @@ export const createAgentRoutes = (services: Services) => {
             // Cleared before firing, like the scheduler's own fire — the turn this starts supersedes the
             // entry (and clears it again at its own start; a resume that re-hits the limit records afresh).
             clearPendingResume(conversationId);
-            const turn = resumeTurnOf(hit, input.account);
-            const run = startTurnRun((resumed, signal) => streamAgent(services, resumed, signal), turn, {
-                awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),
-                settled: (outcome) => void services.pushSender.notifyIfAway(turnFinished(conversationId, turn.prompt, outcome)),
-            });
+            const run = startConversationTurn(services, streamAgent, resumeTurnOf(hit, input.account));
             if (run === undefined) {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
             }

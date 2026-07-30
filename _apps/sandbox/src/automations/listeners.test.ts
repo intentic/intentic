@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { AgentTurn, Automation } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
+import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
 import { fileAutomationsStore } from "./automations-store.js";
 import { createMessageBatcher, dispatchListenerMessage, type ListenerMessage, type MessageContext, reportListenerFailure } from "./listeners.js";
@@ -14,6 +15,7 @@ const fakeServices = (root: string): Services =>
     ({
         automations: fileAutomationsStore(join(root, "automations.json")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
+        turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async () => {}, list: async () => [] },
         workspace: { root },
         logger: { error: () => {}, warn: () => {} },

@@ -82,9 +82,22 @@ export const createAutomationsRoutes = (services: Services) => {
             void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
+        // Run now — see the contract for why this fires the real path, runs the guard, skips only the approval
+        // gate, and fires even when the automation is switched off.
+        run: i.run.handler(async ({ input }) => {
+            const automation = await services.automations.get(input.id);
+            if (automation === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
+            }
+            void fireAutomation(services, automation, streamAgent, { cleared: "approval" }).catch((error: unknown) =>
+                services.logger.error({ err: error, automation: automation.id }, "by-hand automation run failed"),
+            );
+            return { ok: true } as const;
+        }),
         pendingList: i.pendingList.handler(async () => ({ approvals: await services.approvals.list() })),
-        // Approve a held wake: run it now with its snapshotted payload (preApproved skips the guard + gate), then
-        // drop the queue entry. Detached like the /fire webhook — the turn outlives this request.
+        // Approve a held wake: run it now with its snapshotted payload (`cleared: "both"` — its guard ran when the
+        // wake was held and the owner has now approved it), then drop the queue entry. Detached like the /fire
+        // webhook — the turn outlives this request.
         approve: i.approve.handler(async ({ input }) => {
             const pending = await services.approvals.get(input.id);
             if (pending === undefined) {
@@ -96,7 +109,7 @@ export const createAutomationsRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "the automation for that approval no longer exists" });
             }
             void fireAutomation(services, automation, streamAgent, {
-                preApproved: true,
+                cleared: "both",
                 ...(pending.payload !== undefined ? { payload: pending.payload } : {}),
                 // The provenance the held fire snapshotted: an approved external wake opens the same surfaced
                 // conversation the auto path would have.

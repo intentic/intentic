@@ -3,6 +3,7 @@ import { extensionApiVersion, extensionIdOf, sandboxRouteAllowed } from "@intent
 import { useTheme } from "@intentic-app/ui";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { watch } from "vue";
+import { useChat } from "../composables/chat/useChat";
 import { registerCommand, executeCommand } from "../composables/commands/useCommands";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
 import { sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
@@ -193,6 +194,11 @@ export const createExtensionApi = (
         terminal: {
             open: (session) => useTerminalPanel().openFocused(session),
             setOpen: (open) => useTerminalPanel().setOpen(open),
+        },
+        chat: {
+            // The History menu's own open path (useChat.openConversation): it focuses the tab already showing
+            // that session, or loads its transcript into a new one.
+            openSession: (sessionId) => void useChat().openConversation(sessionId),
         },
         navigate: (path) => {
             void router.push(path);

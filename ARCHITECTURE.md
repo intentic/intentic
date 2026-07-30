@@ -110,7 +110,18 @@ survive reconnects. Its subsystems:
   ([agent/turn-runs.ts](_apps/sandbox/src/agent/turn-runs.ts)): `POST /agent` acks with a run id and the
   frames land in a seq-stamped log, which any number of clients render via `/agent/attach`
   (replay-from-cursor, then live) — so a turn survives reloads and dropped connections, and every window or
-  device on the conversation streams it concurrently. Only `/agent/stop` cancels it.
+  device on the conversation streams it concurrently. Only `/agent/stop` cancels it. A turn also survives **the
+  daemon**: every in-flight turn and automation fire is written to a **turn journal** on the history volume
+  ([agent/turn-journal.ts](_apps/sandbox/src/agent/turn-journal.ts)) and cleared when it settles, so whatever
+  is still there at boot is exactly what the process died under — and `resumeInterruptedTurns`
+  ([agent/turn-resume.ts](_apps/sandbox/src/agent/turn-resume.ts)) re-runs it on the session holding its
+  partial work. That matters because intentic's own flows cause the deaths: every update, environment approval
+  and `dev-sandbox.sh` swap recreates the container, so approving the Dockerfile change an agent asked for used
+  to cost the run that asked for it. On by default (`autoResumeOnRestart`), once per turn, and only for turns
+  under six hours old — a turn that OOM-kills the daemon must not resurrect it on every boot. Not resuming is
+  still recorded: the fleet card reads `interrupted` and an automation's row shows an `interrupted` run.
+  The frame log itself stays in memory on purpose — the transcript's durable copy is the provider's session
+  store, which every client replays from before it attaches.
 - **Terminals** — interactive PTYs over WebSocket ([terminal/terminal.ts](_apps/sandbox/src/terminal/terminal.ts)).
 - **Panels & previews** — per-repo dev servers behind `preview-<panel>-<id>.<zone>` hostnames
   ([panels/](_apps/sandbox/src/panels/)); plus generic **port forwarding** for anything run in a terminal
@@ -122,7 +133,13 @@ survive reconnects. Its subsystems:
   machine's localhost (see `@intentic/sync`), the only path where a frontend hard-coded to
   `localhost:<other-port>` works untouched.
 - **Automations** — cron schedules, webhooks (`/automations/:id/fire`), and event listeners
-  ([automations/](_apps/sandbox/src/automations/)).
+  ([automations/](_apps/sandbox/src/automations/)). Any of them can be fired by hand with **Run now**
+  (`POST /automations/:id/run`), down the same path the real trigger takes — a schedule stays a headless
+  main-tree wake, and its guard still runs, because a test-fire that proved something else ran would prove
+  nothing about the 3 a.m. one. Only the approval gate is skipped (the click is the approval), and a *disabled*
+  automation fires too: trying a prompt before switching it on is the main reason to press it. Every run records
+  the session it ran in, so the row's run history opens the transcript — the answer to "it failed overnight and
+  I can't see why".
 - **CI pipelines** — the workspace repos' GitHub Actions / GitLab pipelines, as both an automation source and a
   UI surface ([ci/](_apps/sandbox/src/ci/)). A repo participates when its remote's hostname matches a connected
   github/gitlab capability (`projects.ts` — self-hosted GitLab included, via the capability's instance url). A

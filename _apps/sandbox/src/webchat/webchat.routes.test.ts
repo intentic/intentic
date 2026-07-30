@@ -7,6 +7,7 @@ import { expect, test } from "vitest";
 import { fileApprovalsStore } from "../automations/approvals-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
+import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
 import { createWebchatRoute } from "./webchat.routes.js";
 
@@ -16,6 +17,7 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
     ({
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
+        turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async (e: Omit<ActivityEvent, "id" | "at">) => void appends.push(e as ActivityEvent), list: async () => [] },
         workspace: { root },
         logger: { error: () => {}, warn: () => {} },

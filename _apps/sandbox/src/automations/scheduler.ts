@@ -74,8 +74,22 @@ const mintConversationId = (automationId: string, now: number): string =>
 export interface FireOptions {
     // The trigger's payload — appended to the prompt and handed to the guard as AUTOMATION_PAYLOAD.
     readonly payload?: string;
-    // Set by the approve route: the owner already approved a held wake, so skip the guard + approval gate and run.
-    readonly preApproved?: boolean;
+    /* Which of the two pre-wake gates this fire has ALREADY satisfied and so must not put itself through again.
+     * One field rather than a flag per gate, because the gates are not independent in practice — every caller
+     * that clears the guard has also cleared the approval — and `preApproved, byHand` at a call site reads as
+     * neither.
+     *
+     * "approval" — the owner has approved THIS fire: they pressed Run now (the click is the approval, and holding
+     *   it in their own queue for their own approval is a queue entry that says nothing), or a restart is
+     *   re-firing a wake that was already past the gate and running when the daemon died. The guard still runs,
+     *   deliberately: it is the check on whether the work is still wanted, and "skipped by guard" is the single
+     *   most useful thing a by-hand fire can report about an automation that appears to do nothing.
+     * "both" — the approve route replaying a held wake. Its guard ran and passed when the wake was held; running
+     *   it a second time would be asking a question already answered. */
+    readonly cleared?: "approval" | "both";
+    // How many times a boot has already re-fired this wake, carried through the journal so an interrupted fire
+    // that dies the same way again is not re-fired forever (see turn-resume's boot pass). A first fire is 0.
+    readonly attempts?: number;
     // When set, the agent's text deltas stream here live and it's told (via STREAM_NOTE) not to send the reply itself.
     readonly stream?: TurnStream;
     // Set by the dispatchers that receive an OUTSIDE message (listener sources, the web-chat widget, the event
@@ -95,7 +109,7 @@ export const fireAutomation = async (
     services: Services,
     automation: AutomationRecord,
     wake: WakeFn,
-    { payload, preApproved = false, stream, origin, title }: FireOptions = {},
+    { payload, cleared, attempts = 0, stream, origin, title }: FireOptions = {},
 ): Promise<void> => {
     if (inFlight.has(automation.id)) {
         return;
@@ -103,7 +117,7 @@ export const fireAutomation = async (
     inFlight.add(automation.id);
     try {
         const capped = payload?.slice(0, PAYLOAD_MAX);
-        if (!preApproved) {
+        if (cleared !== "both") {
             if (automation.guard !== undefined) {
                 const guard = await runGuard(automation.guard, services.workspace.root, capped);
                 if (!guard.pass) {
@@ -117,7 +131,7 @@ export const fireAutomation = async (
             }
             // Approval gate: hold the wake (payload snapshotted) instead of running. inFlight releases in the
             // finally, so the lock is NOT held while it waits for the owner — the approve route runs it later.
-            if (automation.requireApproval === true) {
+            if (automation.requireApproval === true && cleared === undefined) {
                 await services.approvals.add({
                     automationId: automation.id,
                     ...(capped !== undefined ? { payload: capped } : {}),
@@ -142,10 +156,25 @@ export const fireAutomation = async (
                 return;
             }
         }
+        /* This fire is now in flight — written down so a daemon death doesn't erase it. Its TRIGGER inputs, not
+         * the resolved turn: a re-fire goes back through this same function (see turn-resume's boot pass), which
+         * is what keeps the overlap guard, the run record and the activity append, and re-reads a prompt the
+         * owner may have fixed in the meantime. Awaited, unlike the chat-turn journal: nothing is waiting on a
+         * response here, and a wake that outlives the write by a millisecond is worth nothing. */
+        await services.turnJournal
+            .recordFire({
+                kind: "automation",
+                automationId: automation.id,
+                ...(capped !== undefined ? { payload: capped } : {}),
+                ...(origin !== undefined ? { origin } : {}),
+                ...(title !== undefined ? { title } : {}),
+                startedAt: Date.now(),
+                attempts,
+            })
+            .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
         // The wake's prompt is the automation's configured one plus the outside context that woke it — which is
         // exactly a chat's opening message, written by the configuration instead of by a person.
         const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- Event payload ---\n${capped}` : automation.prompt;
-        const prompt = stream !== undefined ? `${STREAM_NOTE}\n\n${body}` : body;
         let failure: string | undefined;
         let sessionId: string | undefined;
         // An outside message opens a CONVERSATION: its own id, its own worktree, a card on the fleet and a tab
@@ -156,7 +185,12 @@ export const fireAutomation = async (
         // spend.) A schedule or chore wake stays a headless main-tree turn — its transcript still lands in the
         // workspace sessions like a chat turn.
         const turn: AgentTurn = {
-            prompt,
+            // STREAM_NOTE is applied here rather than folded into `body`, so it belongs to THIS fire and not to
+            // the journal entry above. A re-fire has no live sink to write into — the Discord message the deltas
+            // were being edited into died with the daemon — and a wake still told "your reply is delivered live,
+            // don't send it yourself" would answer into nothing. Without the note it sends its own reply, which
+            // is exactly what an unstreamed wake does.
+            prompt: stream !== undefined ? `${STREAM_NOTE}\n\n${body}` : body,
             ...(origin !== undefined
                 ? {
                       conversationId: mintConversationId(automation.id, Date.now()),
@@ -180,10 +214,14 @@ export const fireAutomation = async (
                 stream?.delta(event.text);
             }
         }
-        await services.automations.recordRun(
-            automation.id,
-            failure === undefined ? { at: Date.now(), outcome: "completed" } : { at: Date.now(), outcome: "error", detail: failure },
-        );
+        // The session rides onto the run record, which is what makes a run in the row's history OPENABLE — the
+        // answer to "it failed at 3 a.m. and I can't see why" is a transcript, and this is the only thing that
+        // says which one. Same value the activity join key uses below.
+        await services.automations.recordRun(automation.id, {
+            at: Date.now(),
+            ...(failure === undefined ? { outcome: "completed" as const } : { outcome: "error" as const, detail: failure }),
+            ...(sessionId !== undefined ? { sessionId } : {}),
+        });
         // sessionId is the activity feed's join key between an inbound trigger and the outbound calls its
         // wake produced (the sniffer stamps the same id on them).
         void services.activity
@@ -200,6 +238,12 @@ export const fireAutomation = async (
     } finally {
         // Flush the final buffered text (the deltas after the last rate-limited edit). No-op if nothing streamed.
         stream?.end();
+        // No longer in flight, by whatever road it left: a completed wake, a failed one, a guard that skipped it
+        // (which never journalled) and a thrown one all reached a state the row can show. Only the fire that got
+        // no chance to reach one leaves its entry behind, which is the whole signal the boot pass reads.
+        await services.turnJournal
+            .clearFire(automation.id)
+            .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not cleared"));
         inFlight.delete(automation.id);
     }
 };

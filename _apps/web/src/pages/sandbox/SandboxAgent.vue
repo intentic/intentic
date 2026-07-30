@@ -212,6 +212,17 @@ const toggleResumeAfterOutage = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, resumeAfterOutage: value });
 };
 
+// Restart auto-resume: re-run a turn the DAEMON died under, from the turn journal, next time it boots (see
+// agent/turn-journal.ts). On by default for the same reason as the outage resume above — a restart is usually
+// this sandbox's own doing, and approving an environment change must not cost the run that asked for it.
+const toggleAutoResumeOnRestart = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, autoResumeOnRestart: value });
+};
+
 // Auto-land: whether a clean turn's work applies to the workspace the moment it finishes, or waits on the
 // agent's branch as a "Ready to land" card. The sandbox-wide default — each agent can override it from its
 // review panel's hold toggle, and agents without an override follow this wherever it points next.
@@ -760,6 +771,24 @@ const importMemory = async (): Promise<void> => {
                         :model-value="sandboxSettings?.resumeAfterOutage ?? true"
                         :disabled="sandboxSettings === undefined"
                         @update:model-value="toggleResumeAfterOutage"
+                    />
+                </template>
+            </Row>
+
+            <!-- Restart auto-resume — the third of these, for the last thing that kills a turn nobody chose to
+                 kill: this sandbox restarting under it. Every update, environment approval and image rebuild
+                 recreates the container, so the common case is the user's OWN approval taking down the run that
+                 asked for it. On by default, like the outage row above it. -->
+            <Row
+                icon="refresh"
+                title="Resume turns after a restart"
+                description="When the sandbox restarts while an agent is mid-turn — an update, an approved environment change, a crash — pick that turn back up when it comes back."
+            >
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="sandboxSettings?.autoResumeOnRestart ?? true"
+                        :disabled="sandboxSettings === undefined"
+                        @update:model-value="toggleAutoResumeOnRestart"
                     />
                 </template>
             </Row>

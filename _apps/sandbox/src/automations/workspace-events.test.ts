@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, Automation, WorkspaceEvent } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
+import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
 import { fileApprovalsStore } from "./approvals-store.js";
 import { fileAutomationsStore } from "./automations-store.js";
@@ -14,6 +15,7 @@ const fakeServices = (root: string): Services =>
     ({
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
+        turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async () => {}, list: async () => [] },
         workspace: { root },
         logger: { error: () => {}, warn: () => {} },

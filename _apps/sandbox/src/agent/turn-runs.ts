@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
 import { recordCommands } from "./agent-commands.js";
+import type { TurnJournal } from "./turn-journal.js";
 
 /* Detached turn runs — turn EXECUTION decoupled from any client connection. POST /agent starts a run: the
  * turn generator is pumped daemon-side into a seq-stamped frame log, and any number of clients render it by
@@ -8,7 +9,12 @@ import { recordCommands } from "./agent-commands.js";
  *
  * A finished run is retained briefly so a client that lost its stream near the end still replays the tail;
  * after that the session store is the record and attach reports NOT_FOUND. Keyed by conversationId — the
- * daemon is single-tenant behind its authenticated tunnel (same bet as agent-steering). */
+ * daemon is single-tenant behind its authenticated tunnel (same bet as agent-steering).
+ *
+ * The frame log is in memory, and deliberately so: the transcript's durable copy is the provider's own session
+ * store, which every client replays from before it attaches. What the run writes down instead is the TURN — one
+ * journal entry naming what to run again, held for exactly as long as the run is in flight (see turn-journal.ts).
+ * That is what carries a turn across the death of this process, which the frame log never could. */
 
 // The turn generator a run pumps — streamAgent's shape, injected to keep this module cycle-free of
 // agent.routes (and swappable in tests).
@@ -101,11 +107,27 @@ const sweep = (): void => {
     }
 };
 
+// Everything a run needs beyond the turn itself, all of it optional because every one of them is a side-channel
+// the turn must be able to run without.
+export interface RunOptions {
+    readonly observer?: TurnObserver;
+    // Where the in-flight turn is written down so a daemon death doesn't take it with it. Injected like TurnFn,
+    // for the same reason: this module stays free of the composition (and swappable in tests).
+    readonly journal?: TurnJournal;
+    // How many boots have already re-run this turn — carried through so a resume that dies again is not resumed
+    // a third time (see turn-resume's boot pass). A first-hand turn starts at 0.
+    readonly attempts?: number;
+}
+
 // Start a detached run for the conversation's turn, or undefined when one is already live (the route 409s —
 // the client serializes its own turns, so a live run means another window/device is mid-turn). The pump owns
 // the generator: a thrown turn is folded into the log as an error frame (an abort — /agent/stop — as a clean
 // done), so followers always see the run settle.
-export function startTurnRun(turnFn: TurnFn, input: AgentTurn & { conversationId: string }, observer?: TurnObserver): TurnRun | undefined {
+export function startTurnRun(
+    turnFn: TurnFn,
+    input: AgentTurn & { conversationId: string },
+    { observer, journal, attempts = 0 }: RunOptions = {},
+): TurnRun | undefined {
     sweep();
     const existing = runs.get(input.conversationId);
     if (existing !== undefined && !existing.done) {
@@ -114,6 +136,25 @@ export function startTurnRun(turnFn: TurnFn, input: AgentTurn & { conversationId
     const run = new TurnRun(input.prompt);
     runs.set(input.conversationId, run);
     const provider = input.agent ?? "claude";
+    /* THE JOURNAL ENTRY — opened here, updated when the session is known, closed in the pump's finally.
+     *
+     * Every one of those is queued behind the previous one rather than fired at the disk independently. None of
+     * them may block the caller (the route acks the run id synchronously), but they must not overtake each other
+     * either: a clear that raced the opening write would delete a file that does not exist yet, and one that
+     * raced the session-frame update would be followed by that update RE-CREATING the entry — leaving behind, in
+     * both cases, a journal entry for a turn that has already finished. Which the next boot would dutifully
+     * resume. Serializing costs nothing here (at most three writes in a whole turn) and removes the entire class.
+     *
+     * A journal write that fails changes nothing else: the turn is the thing that matters, and the cost is one
+     * turn that will not come back from a restart. */
+    let journalled: Promise<unknown> = Promise.resolve();
+    const journalOp = (op: (target: TurnJournal) => Promise<void>): void => {
+        if (journal === undefined) {
+            return;
+        }
+        journalled = journalled.then(() => op(journal)).catch(() => undefined);
+    };
+    journalOp((target) => target.recordTurn({ kind: "turn", turn: input, startedAt: run.startedAt, attempts }));
     // An observer is an optional side-channel, so it must be unable to break the turn — a throw from a
     // notification hook cannot be allowed to abort a run that is otherwise fine.
     const tell = (report: (target: TurnObserver) => void): void => {
@@ -141,6 +182,13 @@ export function startTurnRun(turnFn: TurnFn, input: AgentTurn & { conversationId
                 if (event.kind === "plan" || event.kind === "question" || event.kind === "permission") {
                     tell((target) => target.awaiting(event.kind));
                 }
+                // The session the provider minted or advanced for this turn, folded into the journal entry as
+                // soon as it is known. It is what makes a resume CONTINUE — the partial work of the interrupted
+                // turn lives in that session, and a resume without it re-runs the whole turn from nothing.
+                if (event.kind === "session") {
+                    const sessionId = event.sessionId;
+                    journalOp((target) => target.recordTurn({ kind: "turn", turn: input, sessionId, startedAt: run.startedAt, attempts }));
+                }
                 if (event.kind === "error") {
                     failure = event.message;
                 }
@@ -157,6 +205,10 @@ export function startTurnRun(turnFn: TurnFn, input: AgentTurn & { conversationId
             run.push({ kind: "done" });
         } finally {
             run.finish();
+            // This turn is no longer in flight, however it ended — a failure and an abort are both settled
+            // outcomes the user has seen, and only a turn nobody got to see the end of deserves resuming.
+            // Queued behind the writes above, never racing them (see the note where journalOp is defined).
+            journalOp((target) => target.clearTurn(input.conversationId));
             tell((target) => target.settled(failure === undefined ? { ok: true } : { ok: false, error: failure }));
         }
     })();

@@ -236,6 +236,27 @@ describe.skipIf(!enabled)("sandbox daemon end-to-end (real container, loopback)"
         await client.automations.remove({ id: "e2e-guard" });
     }, 60_000);
 
+    it("run now: a schedule automation nobody has waited for fires by hand, guard and all", async () => {
+        // The whole point of Run now is a cron you would otherwise have to wait until 3 a.m. to try. Its guard
+        // still runs — a by-hand fire that skipped it would prove nothing about the real one.
+        await client.automations.upsert({
+            id: "e2e-run-now",
+            trigger: { kind: "schedule", cron: "0 3 * * *" },
+            guard: "exit 1",
+            prompt: "noop",
+            enabled: true,
+        });
+        expect(await client.automations.run({ id: "e2e-run-now" })).toEqual({ ok: true });
+        const skipped = await until(async () => {
+            const { automations } = await client.automations.list();
+            return automations.find((automation) => automation.id === "e2e-run-now")?.runs[0];
+        }, "the by-hand run");
+        expect(skipped.outcome).toBe("skipped");
+
+        await client.automations.remove({ id: "e2e-run-now" });
+        await expect(client.automations.run({ id: "e2e-run-now" })).rejects.toThrow();
+    }, 60_000);
+
     it("capability → composed overlay → a real `docker build` of it against the published base image", async () => {
         // The vpn capability carries a Dockerfile fragment + runtime directives AND supports remove (docker's
         // deliberately doesn't). The stock container carries no VPN client, so the apply reports the rebuild

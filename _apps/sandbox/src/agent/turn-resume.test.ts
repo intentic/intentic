@@ -1,12 +1,15 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AccountUsage, AgentEvent } from "@intentic/sandbox-contract";
+import type { AccountUsage, AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
+import { fileApprovalsStore } from "../automations/approvals-store.js";
+import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import { fileSandboxSettingsStore } from "../settings/settings-store.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
+import { fileTurnJournal, type JournalledTurn } from "./turn-journal.js";
 import {
     accountLimitReset,
     clearPendingResume,
@@ -18,6 +21,7 @@ import {
     recordLimitHit,
     recordOutageFailure,
     RESUME_DELAY_MS,
+    resumeInterruptedTurns,
     resumeTurnOf,
 } from "./turn-resume.js";
 
@@ -360,4 +364,179 @@ test("one provider's outage never gates a conversation on another", async () => 
     expect(pendingOutageFailure("iso-codex")).toBeUndefined();
     expect(pendingOutageFailure("iso-claude")).toBeDefined();
     clearPendingResume("iso-claude");
+});
+
+/* THE RESTART RESUME — the boot pass over the turn journal. Every entry that survived to boot is a turn or a
+ * fire the daemon stopped existing under, so the whole condition is "there is an entry"; what the tests below
+ * pin down is what it takes to be re-run, and that each entry is consumed exactly once whatever happens. */
+
+// The journal is a real one on a temp dir: what the pass leaves on disk is half of what these assert.
+const journalServices = (root: string): Services =>
+    ({
+        ...fakeServices(root),
+        turnJournal: fileTurnJournal(join(root, "turns")),
+        automations: fileAutomationsStore(join(root, "automations.json")),
+        approvals: fileApprovalsStore(join(root, "approvals")),
+        activity: { append: async () => {}, list: async () => [] },
+        workspace: { root },
+    }) as unknown as Services;
+
+const journalled = (conversationId: string, extra: Partial<JournalledTurn> = {}): JournalledTurn => ({
+    kind: "turn",
+    turn: { prompt: "finish the report", conversationId, isolated: true },
+    startedAt: 10_000,
+    attempts: 0,
+    ...extra,
+});
+
+// Just inside the six-hour staleness cap, measured from the entry's own startedAt.
+const BOOT_AT = 10_000 + 60_000;
+
+test("an interrupted chat turn is re-run under the restart note, on the session holding its partial work", async () => {
+    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    await services.turnJournal.recordTurn(journalled("rs-1", { sessionId: "s-partial" }));
+    const prompts: string[] = [];
+    const inputs: (AgentTurn & { conversationId?: string })[] = [];
+    const capture: WakeFn = async function* (_services, input) {
+        prompts.push(input.prompt);
+        inputs.push(input);
+        yield { kind: "done" };
+    };
+    await resumeInterruptedTurns(services, capture, BOOT_AT);
+
+    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    expect(prompts[0]).toContain("The sandbox restarted");
+    // The request rides again IN FULL — a bare "continue" would lose it.
+    expect(prompts[0]).toContain("finish the report");
+    // On the session the dying turn last reported, which is what makes this a continuation and not a restart.
+    expect(inputs[0]?.sessionId).toBe("s-partial");
+});
+
+test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kills the daemon cannot loop the boot", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const real = fileTurnJournal(join(root, "turns"));
+    await real.recordTurn(journalled("rs-spend"));
+    // The order log is the assertion: this is a happens-before, and a test that read the file from inside the
+    // wake would be racing the resumed run's own (deliberately fire-and-forget) write of a fresh entry.
+    const order: string[] = [];
+    const services = {
+        ...journalServices(root),
+        turnJournal: {
+            ...real,
+            recordTurn: async (entry: JournalledTurn) => {
+                order.push(`record:attempts=${entry.attempts}`);
+                await real.recordTurn(entry);
+            },
+        },
+    } as unknown as Services;
+    const wake: WakeFn = async function* () {
+        order.push(`wake`);
+        yield { kind: "done" };
+    };
+    await resumeInterruptedTurns(services, wake, BOOT_AT);
+    await vi.waitFor(() => expect(order).toContain(`wake`));
+
+    // The spent attempt lands first; the resumed run's own entry (carrying the same spent count) follows.
+    expect(order[0]).toBe(`record:attempts=1`);
+    expect(order.indexOf(`record:attempts=1`)).toBeLessThan(order.indexOf(`wake`));
+});
+
+test("an entry whose attempt is already spent is dropped WITHOUT running — no boot loop on a turn that kills the daemon", async () => {
+    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    await services.turnJournal.recordTurn(journalled("rs-spent", { attempts: 1 }));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    expect(prompts).toEqual([]);
+    expect(await services.turnJournal.list()).toEqual([]);
+});
+
+test("an entry older than the staleness cap is dropped — a sandbox off for the weekend must not wake mid-thought", async () => {
+    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    await services.turnJournal.recordTurn(journalled("rs-stale"));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(services, fakeWake(prompts), 10_000 + 7 * 60 * 60_000);
+    expect(prompts).toEqual([]);
+    expect(await services.turnJournal.list()).toEqual([]);
+});
+
+test("autoResumeOnRestart off records the interruption and re-runs nothing", async () => {
+    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    const settings = await services.sandboxSettings.get();
+    // ON by default — the assertion that matters is that the default is the resuming one.
+    expect(settings.autoResumeOnRestart).toBe(true);
+    await services.sandboxSettings.set({ ...settings, autoResumeOnRestart: false });
+
+    await services.turnJournal.recordTurn(journalled("rs-off"));
+    await services.automations.upsert({ id: "nightly", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", enabled: true });
+    await services.turnJournal.recordFire({ kind: "automation", automationId: "nightly", startedAt: 10_000, attempts: 0 });
+
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    expect(prompts).toEqual([]);
+    expect(await services.turnJournal.list()).toEqual([]);
+    // Nothing re-ran, but nothing is silently lost either: the row still says the fire was cut off.
+    expect((await services.automations.get("nightly"))?.runs[0]).toMatchObject({ outcome: "interrupted" });
+});
+
+test("an interrupted fire records `interrupted`, then re-fires with its snapshotted payload through the guard", async () => {
+    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    // The guard passes only because the payload reached it — proof the re-fire runs the real gate, not around it.
+    await services.automations.upsert({
+        id: "hook",
+        trigger: { kind: "event", token: "t" },
+        guard: `test "$AUTOMATION_PAYLOAD" = "ping"`,
+        prompt: "handle it",
+        enabled: true,
+    });
+    const origin = { automationId: "hook", provider: "webhook" };
+    await services.turnJournal.recordFire({ kind: "automation", automationId: "hook", payload: "ping", origin, startedAt: 10_000, attempts: 0 });
+
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await vi.waitFor(async () => expect((await services.automations.get("hook"))?.runs).toHaveLength(2));
+
+    const runs = (await services.automations.get("hook"))?.runs ?? [];
+    // Newest first: the completed re-fire sits above the interrupted record of the fire it replaced.
+    expect(runs[0]?.outcome).toBe("completed");
+    expect(runs[1]?.outcome).toBe("interrupted");
+    // The re-fire re-reads the automation's own prompt and carries the payload the entry snapshotted.
+    expect(prompts).toEqual(["handle it\n\n--- Event payload ---\nping"]);
+});
+
+test("a re-fire skips the approval gate — the wake was already past it when the daemon died", async () => {
+    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    await services.automations.upsert({
+        id: "gated",
+        trigger: { kind: "schedule", cron: "* * * * *" },
+        prompt: "sweep",
+        requireApproval: true,
+        enabled: true,
+    });
+    await services.turnJournal.recordFire({ kind: "automation", automationId: "gated", startedAt: 10_000, attempts: 0 });
+
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await vi.waitFor(() => expect(prompts).toEqual(["sweep"]));
+    // Re-holding it would ask a question the owner has already answered.
+    expect(await services.approvals.list()).toEqual([]);
+});
+
+test("an entry for an automation since deleted or disabled is consumed, not left to invent a run on every boot", async () => {
+    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    await services.automations.upsert({ id: "off", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", enabled: false });
+    await services.turnJournal.recordFire({ kind: "automation", automationId: "off", startedAt: 10_000, attempts: 0 });
+    await services.turnJournal.recordFire({ kind: "automation", automationId: "deleted", startedAt: 10_000, attempts: 0 });
+
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    expect(prompts).toEqual([]);
+    expect(await services.turnJournal.list()).toEqual([]);
+    expect((await services.automations.get("off"))?.runs[0]?.outcome).toBe("interrupted");
+});
+
+test("an empty journal is a no-op — a clean shutdown reads the settings for nothing", async () => {
+    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    expect(prompts).toEqual([]);
 });

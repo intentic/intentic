@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { defaultGit } from "@intentic/scaffold";
 import { Hono } from "hono";
 import { expect, test, vi } from "vitest";
+import { fileTurnJournal } from "../agent/turn-journal.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -33,6 +34,7 @@ const harness = async (automationId: string) => {
         automations,
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
         ciRuns: createRunsCache(60_000),
+        turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async () => {}, list: async () => [] },
         logger: { error: () => {}, warn: () => {} },
     } as unknown as Services;
@@ -146,6 +148,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         automations,
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
         ciRuns: createRunsCache(60_000),
+        turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async () => {}, list: async () => [] },
         logger: { error: () => {}, warn: () => {} },
     } as unknown as Services;

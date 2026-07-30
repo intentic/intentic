@@ -49,6 +49,7 @@ import { createCodexAgent } from "./codex/codex-agent.js";
 import { type CodexCatalog, createCodexCatalog } from "./codex/codex-catalog.js";
 import { codexThreadExists } from "./sessions/codex-sessions.js";
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
+import { fileTurnJournal, type TurnJournal } from "./agent/turn-journal.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
 import { fileAgentsStore } from "./agents/agents-store.js";
@@ -181,6 +182,11 @@ export interface Services {
     // Agent-proposed post drafts (.intentic/drafts/, one file per draft) — the agent writes them; /drafts is
     // the owner's approve/edit/reject side.
     readonly drafts: DraftsStore;
+    // What is in flight right now (historyRoot/turns/, one file per in-flight turn or automation fire). Written
+    // at the turn's start, cleared when it settles — so whatever is still there at boot is exactly what the
+    // daemon died under, which is what turn-resume re-runs. On the HISTORY volume: it holds full prompts, and
+    // it must outlive the container recreates (rebuild, update, dev-sandbox.sh swap) that cause the deaths.
+    readonly turnJournal: TurnJournal;
     // The activity audit log (historyRoot/activity.jsonl, outside the agent's reach): inbound wakes,
     // sniffed outbound provider calls, voice sessions, failures. /activity reads it; only the daemon appends.
     readonly activity: ActivityStore;
@@ -467,6 +473,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         automations: fileAutomationsStore(join(workspace.root, ".intentic", "automations.json")),
         approvals: fileApprovalsStore(join(workspace.root, ".intentic", "approvals")),
         drafts: fileDraftsStore(join(workspace.root, ".intentic", "drafts")),
+        turnJournal: fileTurnJournal(join(config.historyRoot, "turns")),
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(join(workspace.root, ".intentic", "settings.json")),

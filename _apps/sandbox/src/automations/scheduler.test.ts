@@ -3,16 +3,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, AgentTurn, Automation } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
+import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
 import { fileApprovalsStore } from "./approvals-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import { createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
 
-// The scheduler only touches automations/approvals/activity/workspace/logger; a cast keeps the fake that small.
+// The scheduler only touches automations/approvals/activity/turnJournal/workspace/logger; a cast keeps the fake
+// that small. The journal is a real one on a temp dir — the in-flight entry is the thing several tests assert on.
 const fakeServices = (root: string): Services =>
     ({
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
+        turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async () => {}, list: async () => [] },
         pushSender: { notifyIfAway: async () => {} },
         workspace: { root },
@@ -145,7 +148,7 @@ test("a held external wake snapshots its provenance, so approving it opens the s
     expect(held).toMatchObject({ payload: "help", origin, title: "visitor: help" });
 });
 
-test("a requireApproval automation holds the wake instead of running it; preApproved runs it", async () => {
+test(`a requireApproval automation holds the wake instead of running it; cleared: "both" runs it`, async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automation("gated", { requireApproval: true }));
     const prompts: string[] = [];
@@ -157,9 +160,9 @@ test("a requireApproval automation holds the wake instead of running it; preAppr
     expect((await services.automations.get("gated"))?.runs).toEqual([]);
     expect((await services.approvals.list())[0]?.automationId).toBe("gated");
 
-    // Approving replays it with preApproved=true: the gate is bypassed, the agent wakes, a run is recorded.
+    // Approving replays it with cleared: "both": both gates are bypassed, the agent wakes, a run is recorded.
     const record = (await services.automations.get("gated")) as AutomationRecord;
-    await fireAutomation(services, record, fakeWake(prompts), { preApproved: true });
+    await fireAutomation(services, record, fakeWake(prompts), { cleared: "both" });
     expect(prompts).toEqual(["wake:gated"]);
     expect((await services.automations.get("gated"))?.runs[0]?.outcome).toBe("completed");
 });
@@ -199,4 +202,100 @@ test("disabled automations and not-yet-due crons never fire; agent errors land a
     expect((await services.automations.get("off"))?.runs).toEqual([]);
     expect((await services.automations.get("later"))?.runs).toEqual([]);
     expect(prompts).toEqual(["wake:broken"]);
+});
+
+test("a wake journals itself while in flight and clears the entry when it settles", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("nightly", { trigger: { kind: "event", token: "t" } }));
+    const record = (await services.automations.get("nightly")) as AutomationRecord;
+    // Observed from INSIDE the wake — the entry exists exactly for the window where the daemon could die.
+    let inFlightEntry: unknown;
+    const peeking: WakeFn = async function* () {
+        inFlightEntry = (await services.turnJournal.list())[0];
+        yield { kind: "done" };
+    };
+    const origin = { automationId: "nightly", provider: "webhook" };
+    await fireAutomation(services, record, peeking, { payload: "ping", origin, title: "Webhook: nightly" });
+
+    // The TRIGGER inputs, not the resolved turn: a re-fire goes back through fireAutomation, which re-reads the
+    // automation's own (possibly since-fixed) prompt.
+    expect(inFlightEntry).toEqual({
+        kind: "automation",
+        automationId: "nightly",
+        payload: "ping",
+        origin,
+        title: "Webhook: nightly",
+        startedAt: expect.any(Number),
+        attempts: 0,
+    });
+    expect(await services.turnJournal.list()).toEqual([]);
+});
+
+test("a guard that skips never journals, and an error run still clears its entry", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("skipper", { guard: "exit 1" }));
+    await services.automations.upsert(automation("failer"));
+    const journalled: number[] = [];
+    const peeking: WakeFn = async function* () {
+        journalled.push((await services.turnJournal.list()).length);
+        yield { kind: "error", message: "no credits" };
+        yield { kind: "done" };
+    };
+    await fireAutomation(services, (await services.automations.get("skipper")) as AutomationRecord, peeking);
+    // The wake never ran, so nothing was ever in flight to write down.
+    expect(journalled).toEqual([]);
+    expect(await services.turnJournal.list()).toEqual([]);
+
+    await fireAutomation(services, (await services.automations.get("failer")) as AutomationRecord, peeking);
+    expect(journalled).toEqual([1]);
+    // An error is an outcome the row can show, so the entry goes — only a fire that reached NO outcome stays.
+    expect(await services.turnJournal.list()).toEqual([]);
+    expect((await services.automations.get("failer"))?.runs[0]?.outcome).toBe("error");
+});
+
+test("the journal entry carries no stream note, so a re-fire sends its own reply", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("chat-note"));
+    const record = (await services.automations.get("chat-note")) as AutomationRecord;
+    // The live sink dies with the daemon, so a wake still told "your reply is delivered live" would answer into
+    // nothing. The note belongs to THIS fire; the journal keeps only the trigger inputs.
+    let entryPayload: string | undefined = "unset";
+    const peeking: WakeFn = async function* () {
+        const entry = (await services.turnJournal.list())[0];
+        entryPayload = entry?.kind === "automation" ? entry.payload : undefined;
+        yield { kind: "done" };
+    };
+    await fireAutomation(services, record, peeking, { stream: { delta: () => {}, end: () => {} } });
+    expect(entryPayload).toBeUndefined();
+});
+
+test(`cleared: "approval" skips the approval gate but still runs the guard — the answer a test-fire wants`, async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("gated-hand", { requireApproval: true }));
+    const prompts: string[] = [];
+    const record = (await services.automations.get("gated-hand")) as AutomationRecord;
+    // Pressing the button IS the approval, so the wake runs instead of landing in the owner's own queue.
+    await fireAutomation(services, record, fakeWake(prompts), { cleared: "approval" });
+    expect(prompts).toEqual(["wake:gated-hand"]);
+    expect(await services.approvals.list()).toEqual([]);
+
+    // The guard is NOT skipped: "skipped by guard" is the most useful thing a by-hand fire can report.
+    await services.automations.upsert(automation("gated-guard", { requireApproval: true, guard: "echo not today; exit 1" }));
+    const guarded = (await services.automations.get("gated-guard")) as AutomationRecord;
+    await fireAutomation(services, guarded, fakeWake(prompts), { cleared: "approval" });
+    expect(prompts).toEqual(["wake:gated-hand"]);
+    expect((await services.automations.get("gated-guard"))?.runs[0]).toMatchObject({ outcome: "skipped", detail: "not today" });
+});
+
+test("a run record carries the session its wake ran in, so the row can open the transcript", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("traced"));
+    await services.automations.upsert(automation("sessionless"));
+    const withSession = fakeWake([], [{ kind: "session", sessionId: "sess-42" }, { kind: "done" }]);
+    await fireAutomation(services, (await services.automations.get("traced")) as AutomationRecord, withSession);
+    expect((await services.automations.get("traced"))?.runs[0]).toMatchObject({ outcome: "completed", sessionId: "sess-42" });
+
+    // A provider that minted none leaves the field off rather than recording an unopenable id.
+    await fireAutomation(services, (await services.automations.get("sessionless")) as AutomationRecord, fakeWake([]));
+    expect((await services.automations.get("sessionless"))?.runs[0]?.sessionId).toBeUndefined();
 });

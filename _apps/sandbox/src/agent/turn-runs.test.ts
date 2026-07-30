@@ -142,6 +142,79 @@ describe(`turn runs`, () => {
         }
     });
 
+    /* THE JOURNAL — one entry per in-flight turn, so a daemon death leaves behind exactly what to re-run.
+     *
+     * The fake makes every write SLOW and records completion order, which is the whole point of these two. None
+     * of the writes may block the caller (the route acks the run id synchronously), so they all run detached —
+     * but they must not overtake each other either. A clear that beat the opening write would unlink a file that
+     * does not exist yet; a clear that beat the session-frame update would be followed by that update
+     * re-creating the entry. Either way a journal entry outlives its turn, and the next boot resumes a turn that
+     * already finished. */
+    // A write costs more than an unlink, here as on a real disk — which is exactly what makes the ordering bug
+    // reachable rather than theoretical: fired independently, the clear WINS, and then a write lands after it.
+    const fakeJournal = (writeMs = 20, clearMs = 1) => {
+        const calls: string[] = [];
+        const after = async (ms: number, label: string): Promise<void> => {
+            await new Promise((resolve) => setTimeout(resolve, ms));
+            calls.push(label);
+        };
+        return {
+            calls,
+            journal: {
+                list: async () => [],
+                recordTurn: (entry: { sessionId?: string }) => after(writeMs, entry.sessionId === undefined ? `record` : `record:${entry.sessionId}`),
+                recordFire: async () => undefined,
+                clearTurn: (conversationId: string) => after(clearMs, `clear:${conversationId}`),
+                clearFire: async () => undefined,
+            },
+        };
+    };
+
+    it(`journals the in-flight turn, folds in its session, and clears LAST however slow the writes are`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const { calls, journal } = fakeJournal();
+        startTurnRun(turnFn, turn(`c-journal`), { journal });
+
+        // The turn settles well inside a single write's duration — the window where an unserialized clear wins.
+        push({ kind: `session`, sessionId: `sess-7` });
+        push({ kind: `done` });
+        close();
+        await vi.waitFor(() => expect(turnRunOf(`c-journal`)!.done).toBe(true));
+
+        await vi.waitFor(() => expect(calls).toEqual([`record`, `record:sess-7`, `clear:c-journal`]));
+        // And it STAYS cleared: nothing lands after the clear to re-create the entry.
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        expect(calls).toEqual([`record`, `record:sess-7`, `clear:c-journal`]);
+    });
+
+    it(`clears the entry for a FAILED turn too — only a turn nobody saw the end of deserves resuming`, async () => {
+        const { turnFn, fail } = crankedTurn();
+        const { calls, journal } = fakeJournal();
+        startTurnRun(turnFn, turn(`c-journal-fail`), { journal });
+        fail(new Error(`adapter exploded`));
+        await vi.waitFor(() => expect(turnRunOf(`c-journal-fail`)!.done).toBe(true));
+
+        await vi.waitFor(() => expect(calls).toEqual([`record`, `clear:c-journal-fail`]));
+    });
+
+    it(`a journal that throws cannot break the turn`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const broken = {
+            list: async () => [],
+            recordTurn: () => Promise.reject(new Error(`disk full`)),
+            recordFire: () => Promise.reject(new Error(`disk full`)),
+            clearTurn: () => Promise.reject(new Error(`disk full`)),
+            clearFire: () => Promise.reject(new Error(`disk full`)),
+        };
+        startTurnRun(turnFn, turn(`c-journal-broken`), { journal: broken });
+
+        const followed = collect(`c-journal-broken`);
+        push({ kind: `session`, sessionId: `sess-9` });
+        push({ kind: `done` });
+        close();
+        expect((await followed).map((frame) => frame.event.kind)).toEqual([`session`, `done`]);
+    });
+
     it(`caches each provider's published commands so a conversation that hasn't run a turn can read them`, async () => {
         resetCommands();
         const { turnFn, push, close } = crankedTurn();

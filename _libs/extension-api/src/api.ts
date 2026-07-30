@@ -127,6 +127,14 @@ export interface IntenticApi {
         // Show or hide the panel without focusing a session.
         setOpen(open: boolean): void;
     };
+    // The shell's chat, the way `terminal` is the shell's one terminal panel: the extension names a transcript,
+    // the host owns the tab. What this is for is a record that points at agent work — an automation's run
+    // history, an audit row — where "why did it do that" is only answerable by reading the transcript.
+    readonly chat: {
+        // Open (or focus) the tab for a stored runtime session id — the same path the History menu and the fleet
+        // board take. A session the daemon no longer holds opens an empty tab rather than failing.
+        openSession(sessionId: string): void;
+    };
     // Navigate the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").
     readonly navigate: (path: string) => void;
     readonly theme: {

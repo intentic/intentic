@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { ActivityEvent, AgentEvent, Automation } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
 import { expect, test, vi } from "vitest";
+import { fileTurnJournal } from "../agent/turn-journal.js";
 import { fileApprovalsStore } from "../automations/approvals-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
@@ -19,6 +20,7 @@ const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
+        turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async (e: Omit<ActivityEvent, "id" | "at">) => void appends.push(e as ActivityEvent), list: async () => [] },
         workspace: { root },
         logger: { error: () => {}, warn: () => {} },
