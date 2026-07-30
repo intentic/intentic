@@ -17,12 +17,12 @@ import { createExtensionApi, type HostBindings } from "./apiImpl";
  * shell rather than blob-loaded from the daemon. This is the dogfooding boundary: a builtin can only touch the
  * public IntenticApi, never app internals. */
 
-interface Builtin {
+export interface Builtin {
     readonly manifest: ExtensionManifest;
     readonly module: ExtensionModule;
 }
 
-const builtins: readonly Builtin[] = [
+export const builtins: readonly Builtin[] = [
     { manifest: automations.manifest, module: automations },
     { manifest: logs.manifest, module: logs },
     { manifest: memory.manifest, module: memory },

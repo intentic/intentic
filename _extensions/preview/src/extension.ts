@@ -26,7 +26,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
         api.views.register({
             id: `ports`,
             label: `Ports`,
-            surface: `rail`,
+            surface: `sandbox`,
             detect: () => [{ key: `ports`, title: `Ports`, icon: `globe` }],
             view: async () => (await import(`./PortsView.vue`)).default,
         }),
