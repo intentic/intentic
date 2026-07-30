@@ -1,4 +1,4 @@
-import { isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import type { SessionUpdate, ToolCallContent as AcpToolCallContent, ToolCallLocation as AcpToolCallLocation } from "@agentclientprotocol/sdk";
 import type { AgentEvent, ToolCallContent, ToolCallLocation } from "@intentic/sandbox-contract";
 
@@ -31,19 +31,26 @@ const mapLocations = (locations: readonly ToolCallLocation[] | undefined, cwd: s
         ? undefined
         : locations.map((location) => ({ path: editorPath(location.path, cwd), ...(location.line !== undefined ? { line: location.line } : {}) }));
 
+const mapContentEntry = (entry: ToolCallContent, cwd: string): AcpToolCallContent => {
+    if (entry.type === "text") {
+        return { type: "content", content: { type: "text", text: entry.text } };
+    }
+    if (entry.type === "image") {
+        // ACP's image content block wants base64 bytes; we only carry a path (see ToolCallContentSchema on
+        // why). A resource_link points the editor at the synced mirror copy, which it can open itself.
+        const path = editorPath(entry.path, cwd);
+        return { type: "content", content: { type: "resource_link", uri: `file://${path}`, name: basename(path) } };
+    }
+    return {
+        type: "diff",
+        path: editorPath(entry.path, cwd),
+        ...(entry.oldText !== undefined ? { oldText: entry.oldText } : {}),
+        newText: entry.newText,
+    };
+};
+
 const mapContent = (content: readonly ToolCallContent[] | undefined, cwd: string): AcpToolCallContent[] | undefined =>
-    content === undefined
-        ? undefined
-        : content.map((entry) =>
-              entry.type === "text"
-                  ? { type: "content", content: { type: "text", text: entry.text } }
-                  : {
-                        type: "diff",
-                        path: editorPath(entry.path, cwd),
-                        ...(entry.oldText !== undefined ? { oldText: entry.oldText } : {}),
-                        newText: entry.newText,
-                    },
-          );
+    content === undefined ? undefined : content.map((entry) => mapContentEntry(entry, cwd));
 
 // One AgentEvent → at most one session update. `undefined` = dropped (documented above) or control flow the
 // bridge handles itself (session/plan/question/error/done).

@@ -45,6 +45,21 @@ test("tool_call_update maps statuses and content; text content wraps as a conten
     });
 });
 
+test("image content becomes a resource_link at the mirror copy of the file", () => {
+    expect(
+        sessionUpdateOf({ kind: "tool_call_update", id: "t1", content: [{ type: "image", path: ".intentic/browser/output/shot.png" }] }, CWD),
+    ).toEqual({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "t1",
+        content: [
+            {
+                type: "content",
+                content: { type: "resource_link", uri: `file://${CWD}/.intentic/browser/output/shot.png`, name: "shot.png" },
+            },
+        ],
+    });
+});
+
 test("deltas/thinking become message/thought chunks; todos become the ACP plan checklist", () => {
     expect(sessionUpdateOf({ kind: "delta", text: "hi" }, CWD)).toEqual({
         sessionUpdate: "agent_message_chunk",
