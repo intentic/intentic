@@ -26,6 +26,7 @@ import { createLogger } from "./logger.js";
 import type { ManagedProcesses, ProcessSpec } from "./processes/managed-processes.js";
 import { createPortForwards } from "./ports/port-forwards.js";
 import { createBootTracker } from "./platform/boot.js";
+import { createPerfTracker } from "./platform/perf.js";
 import { mintPairing } from "./platform/sync.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { AgentTool } from "./agent/agent-tools.js";
@@ -194,6 +195,10 @@ const services = (overrides: Partial<Services> = {}): Services => {
         // No chain declared ⇒ converged from birth, so these tests exercise the routes and not a boot gate.
         // The gate's own behaviour is covered below by a tracker with a declared chain.
         boot: createBootTracker(createLogger(baseConfig)),
+        // The real tracker, like every other suite's fake services: it is in-memory, its summary timer is
+        // unref'd, and the request middleware records through it on EVERY route below — a stub would be more
+        // code standing in for something that already costs nothing.
+        perf: createPerfTracker(createLogger(baseConfig)),
         workspace: workspacePaths("/work"),
         processes: fakeProcesses(),
         // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.

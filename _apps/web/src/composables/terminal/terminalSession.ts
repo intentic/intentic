@@ -319,18 +319,18 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         // OSC 8 hyperlinks (CLIs that emit explicit link escapes) — without this, xterm falls back to a
         // blocking confirm() dialog on activation.
         linkHandler: { activate: openLink },
-        // The wheel scrolls THIS buffer (tmux runs with mouse off), so it is the terminal's whole visible
-        // history — xterm's default 1000 lines evaporate under one flooding build.
-        scrollback: 10_000,
+        // NOT the scrollback the wheel moves through — a tmux client lives on the alternate screen, which has
+        // none, so the wheel goes to tmux (mouse on) and scrolls its 100k-line pane history instead. This buffer
+        // is the normal screen: what a session shows before the first attach (the restored reload snapshot, the
+        // disconnect banners) and after the tmux client ends. Deep because a snapshot restores into it.
+        scrollback: 30_000,
         // Snapshotted at creation; fine while --color-terminal is constant across themes/modes.
         theme: { background: getComputedStyle(document.documentElement).getPropertyValue(`--color-terminal`).trim() || `#0a0a0a` },
     });
-    // tmux runs with mouse OFF, so a plain shell is mouse-native: the wheel scrolls xterm's local scrollback
-    // and a drag is a plain local selection — the two compose, so a selection survives scrolling and can span
-    // more than a screenful. Mouse reporting turns on only when a program INSIDE tmux requests it (vim, htop,
-    // turbo's task list — tmux forwards the active pane's mouse mode to the client), and only then are plain
-    // gestures ambiguous: a drag reported to the app is the app's (useless for copying in a browser), while a
-    // CLICK must reach it, like VSCode's terminal. The gate below engages only in that mode and disambiguates
+    // tmux runs with mouse ON (it owns the wheel; see the image's tmux.conf), so mouse reporting is live for the
+    // whole session rather than only while a program inside tmux asks for it (vim, htop, turbo's task list) —
+    // and under reporting every plain gesture is ambiguous: a drag handed to the pane is the pane's (useless for
+    // copying in a browser), while a CLICK must reach it, like VSCode's terminal. The gate below disambiguates
     // by drag distance: swallow the plain primary-button mousedown (capture phase beats xterm's screen
     // listener; preventDefault keeps the browser from blurring xterm's textarea, which xterm's own suppressed
     // handler would have done) and hold it. If the pointer wanders ≥ DRAG_PX it's a drag — replay the held

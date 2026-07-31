@@ -78,11 +78,15 @@ RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh 
 # tmux backs each terminal tab (system/terminal.ts attaches one session per tab). The web UI draws the tab bar,
 # so the tmux status bar is off; default-command launches the oh-my-zsh zsh above (not /bin/sh); destroy-unattached
 # off keeps a session alive when its web client detaches on reload/drop — the whole point of tmux-backed persistence.
-# Mouse stays OFF: on, tmux grabs the wheel into copy-mode and every scroll redraws the screen under the
-# browser's local selection, so a selection could never survive scrolling or span more than one screenful. Off,
-# xterm scrolls its own scrollback and selection is native; full-screen apps that request mouse tracking still
-# get it (tmux forwards the active pane's mouse mode to the client), and the deep history stays reachable via
-# prefix copy-mode, whose `y` lands in the browser clipboard through set-clipboard/OSC 52 below.
+# Mouse is ON because a tmux CLIENT runs on the alternate screen (its first bytes to the pty are ?1049h), and
+# the alternate screen has no scrollback — so with mouse off the wheel is not a scroll at all: xterm takes its
+# no-scrollback branch and sends arrow keys to the pty instead, which at a post-run prompt walks zsh history and
+# leaves a command the user never typed sitting on the prompt line. On, the wheel reaches tmux, which scrolls
+# the history-limit above; tmux's default WheelUpPane is `copy-mode -e`, so scrolling back to the bottom leaves
+# copy-mode on its own, and copy-mode's `y` lands in the browser clipboard through set-clipboard/OSC 52 below.
+# The cost is that mouse reporting is now always on, so a plain drag would belong to the pane rather than the
+# browser — the web client's own gate (terminalSession.ts) is written for exactly that mode and keeps a drag a
+# native selection while letting a click through.
 # The set-hook pipe-pane trio logs every pane (web tabs, panels, agent-run tmux, windows, splits) to
 # /history/logs/terminals — the crashed-session post-mortem the /logs routes serve (logs/log-files.ts keeps
 # the same hooks for re-arming a server that outlived a daemon restart). The stream is replayed through
@@ -94,6 +98,7 @@ RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh 
 RUN printf '%s\n' \
         'set -g status off' \
         'set -g history-limit 100000' \
+        'set -g mouse on' \
         'setw -g aggressive-resize on' \
         'set -g default-terminal "tmux-256color"' \
         'set -g default-command zsh' \

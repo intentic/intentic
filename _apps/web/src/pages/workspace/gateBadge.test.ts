@@ -7,7 +7,7 @@
 // value cannot see this; only a mount can.
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, defineComponent, h, ref } from "vue";
 import type { GateVerdict } from "@intentic/sandbox-contract";
 
 // The import-time globals a mount needs here: ui's useDevice reads window.matchMedia, and the chat chain
@@ -81,8 +81,11 @@ const mount = async (): Promise<HTMLElement> => {
     app.directive(`tooltip`, {});
     app.use(VueQueryPlugin, { queryClient });
     app.mount(el);
-    await nextTick();
-    await nextTick();
+    // The badge draws NOTHING until the first verdict lands (an unloaded gate reads as `off`), and that landing
+    // is an unknowable number of microtasks deep — the queryFn, whatever wraps it (the perf span around every
+    // sandbox query is one such layer, added long after this test was written), then vue-query's batched
+    // notify. Waiting for the render rather than counting ticks is what keeps this test about the mount.
+    await vi.waitFor(() => expect(el.textContent).not.toBe(``));
     return el;
 };
 
