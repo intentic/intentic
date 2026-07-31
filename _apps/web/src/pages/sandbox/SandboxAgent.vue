@@ -265,12 +265,28 @@ const toggleAutoLand = (value: boolean): void => {
  * only the owner knows what verifies their workspace, and a guessed `pnpm test` would read as the check finding
  * a bug on its first run. Committed on change rather than per keystroke — every save is a daemon round-trip,
  * and a half-typed command is a command. */
-const setPrepushCommand = (event: Event): void => {
+const prepushCommandDraft = ref(``);
+let prepushSeededFrom: string | undefined;
+watch(
+    () => sandboxSettings.value?.prepushCommand,
+    (saved) => {
+        if (saved === undefined) {
+            return;
+        }
+        if (prepushSeededFrom === undefined || prepushCommandDraft.value === prepushSeededFrom) {
+            prepushCommandDraft.value = saved;
+        }
+        prepushSeededFrom = saved;
+    },
+    { immediate: true },
+);
+
+const savePrepushCommand = (): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
         return;
     }
-    const prepushCommand = (event.target as HTMLInputElement).value.trim();
+    const prepushCommand = prepushCommandDraft.value.trim();
     if (prepushCommand !== current.prepushCommand) {
         saveSandboxSettings.mutate({ ...current, prepushCommand });
     }
@@ -1009,16 +1025,16 @@ const importMemory = async (): Promise<void> => {
                     >
                         <span class="select-none font-mono text-xs text-subtle" aria-hidden="true">$</span>
                         <input
+                            v-model="prepushCommandDraft"
                             type="text"
                             placeholder="pnpm test"
                             spellcheck="false"
                             autocapitalize="off"
                             autocorrect="off"
                             aria-label="Pre-push check command"
-                            :value="sandboxSettings?.prepushCommand ?? ``"
                             :disabled="sandboxSettings === undefined"
                             class="min-w-0 flex-1 bg-transparent font-mono text-xs text-content placeholder:text-subtle focus:outline-none"
-                            @change="setPrepushCommand"
+                            @change="savePrepushCommand"
                         />
                     </div>
                 </template>
