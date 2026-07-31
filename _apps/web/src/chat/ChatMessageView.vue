@@ -6,7 +6,7 @@ import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vu
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
-import { effectiveAutoLand } from "../composables/agents/agentStatus";
+import { effectiveAutoLand, formatElapsed } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
 import { type ChatMessage, isAcknowledgment, type PlanRequest } from "../composables/chat/transcript";
 import { useMarkdown } from "../composables/useMarkdown";
@@ -150,11 +150,15 @@ const showTyping = computed(() => props.streaming && !awaitingDecision.value);
 // Cycling status-word loader shown while the turn streams. The conversation owns the start instant: send()
 // records it when the command leaves, and a later attach restores the daemon's instant. Deriving from that
 // source means a view mounted halfway through a turn starts halfway through its counter too.
-const loaderTick = ref(0);
+const now = ref(Date.now());
 const loaderSeconds = computed(() => {
-    void loaderTick.value; // read the tick so this re-evaluates each second
     const startedAt = active.value.turnStartedAt.value;
-    return startedAt === undefined ? 0 : Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    return startedAt === undefined ? 0 : Math.max(0, Math.floor((now.value - startedAt) / 1000));
+});
+// The readout itself is the shared elapsed format, so a turn that runs long reads "9m 12s" rather than "552s".
+const loaderElapsed = computed(() => {
+    const startedAt = active.value.turnStartedAt.value;
+    return startedAt === undefined ? undefined : formatElapsed(startedAt, now.value);
 });
 const loaderWord = computed(() => LOADER_WORDS[Math.floor(loaderSeconds.value / 2) % LOADER_WORDS.length] ?? `Thinking`);
 
@@ -171,9 +175,8 @@ const providerRetry = computed(() => active.value.providerRetry.value);
 // attempt it is on and nothing else (codex-agent.ts), so its line drops the countdown rather than name an
 // instant the retry never agreed to.
 const retryWait = computed(() => {
-    void loaderTick.value;
     const nextAttemptAt = providerRetry.value?.nextAttemptAt;
-    return nextAttemptAt === undefined ? `retrying` : `retrying in ${Math.max(0, Math.round((nextAttemptAt - Date.now()) / 1000))}s`;
+    return nextAttemptAt === undefined ? `retrying` : `retrying in ${Math.max(0, Math.round((nextAttemptAt - now.value) / 1000))}s`;
 });
 // 529 is capacity, everything else in this frame is a fault. Worth distinguishing: "at capacity" tells a user
 // their request was fine and a smaller model would probably go through right now, which is actionable.
@@ -184,7 +187,8 @@ watch(
         if (!isStreamingNow) {
             return;
         }
-        const timer = setInterval(() => (loaderTick.value += 1), 1000);
+        now.value = Date.now(); // a turn starting after mount must not read a `now` left over from setup
+        const timer = setInterval(() => (now.value = Date.now()), 1000);
         onCleanup(() => clearInterval(timer));
     },
     { immediate: true },
@@ -975,7 +979,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     <span class="text-subtle">(attempt {{ providerRetry.attempt }}, nothing lost)</span></span
                 >
                 <span v-else
-                    >{{ loaderWord }}… <span class="text-subtle">({{ loaderSeconds }}s)</span></span
+                    >{{ loaderWord }}… <span v-if="loaderElapsed" class="text-subtle">({{ loaderElapsed }})</span></span
                 >
             </div>
         </template>
