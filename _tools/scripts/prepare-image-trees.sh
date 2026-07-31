@@ -21,6 +21,13 @@ pnpm --filter @intentic/lsp deploy --prod "$out/lsp"
 pnpm --filter @intentic/ext-discord deploy --prod "$out/extensions/discord"
 pnpm --filter @intentic/ext-imap deploy --prod "$out/extensions/imap"
 
+# The Dockerfile bakes Chromium from a layer that sits ABOVE the tree COPYs (so a source change can't evict a
+# ~180 MiB download), which means it cannot read the deployed tree's playwright to decide what to install.
+# Hand it the version instead: a playwright version pins its chromium revision, so installing the SAME version
+# yields the same revision — the one the daemon's chromium.executablePath() resolves at runtime. Emitted from
+# the deployed tree rather than package.json so it is the resolved version, catalog indirection included.
+node -p "require('./$out/sandbox/node_modules/playwright/package.json').version" > "$out/playwright-version"
+
 # The baked embedding + reranker models (~57MB from HF). The marker sits OUTSIDE the model dir so the tree
 # COPY'd into the image stays exactly the layout fetch-model.mjs validated.
 if [ ! -f "$out/.iq-models-complete" ]; then

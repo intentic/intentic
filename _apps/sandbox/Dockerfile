@@ -203,6 +203,25 @@ RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${arch}" -o /usr/local/bin/yq \
     && chmod +x /usr/local/bin/yq \
     && yq --version
+# Chromium for the agent's browser tools, deliberately the LAST layer above the tree COPYs. The revision has to
+# be the one the daemon's own playwright resolves — browser-tools.ts calls chromium.executablePath() on it and
+# hands the result to @playwright/mcp as --executable-path — and a playwright version pins its chromium
+# revision, so installing the version prepare-image-trees.sh deployed gives the same revision by construction.
+# Passing that version through a few-byte file is the whole point: this layer's cache key moves only when
+# playwright is upgraded. Driving the install from the tree instead (`cd /opt/sandbox && node
+# node_modules/playwright/cli.js install`) reads the exact same module, but it has to sit BELOW
+# `COPY --from=trees sandbox`, where every commit evicted it — 2m09s re-downloading ~180 MiB, in both the images
+# and release jobs, every pipeline. `install-deps` pulls the shared libraries Chromium links against (fonts,
+# nss, libdrm…), which a plain `install chromium` does not.
+#
+# Baked, not left to a rebuild: a browser is ordinary for coding work (open the docs, screenshot the dev server
+# you just changed), and the alternative is what actually happened — an agent asked to look at a URL found no
+# browser, ran `npx playwright install` mid-turn, and burned a quarter of its session pulling 114 MiB into a
+# container layer that a recreate then threw away. ~180 MiB of image is the cheaper side of that trade. The
+# download lands in /root/.cache/ms-playwright, which is exactly where executablePath() looks.
+COPY --from=trees playwright-version /opt/playwright-version
+RUN npx --yes playwright@"$(cat /opt/playwright-version)" install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/* /root/.npm/_npx
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
 # connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as
@@ -254,19 +273,6 @@ RUN npm install -g node-gyp \
     && cd /opt/sandbox/node_modules/.pnpm/@discordjs+opus@*/node_modules/@discordjs/opus \
     && rm -rf prebuild build-tmp-napi-v3 \
     && npm run install
-# Chromium for the agent's browser tools. Driven by the DAEMON'S OWN playwright — the same module
-# browser-tools.ts calls `chromium.executablePath()` on — so the revision it downloads is by construction the
-# revision the daemon later points @playwright/mcp at with --executable-path. `install-deps` pulls the shared
-# libraries Chromium links against (fonts, nss, libdrm…), which a plain `install chromium` does not.
-#
-# Baked, not left to a rebuild: a browser is ordinary for coding work (open the docs, screenshot the dev server
-# you just changed), and the alternative is what actually happened — an agent asked to look at a URL found no
-# browser, ran `npx playwright install` mid-turn, and burned a quarter of its session pulling 114 MiB into a
-# container layer that a recreate then threw away. ~180 MiB of image is the cheaper side of that trade. The
-# download lands in /root/.cache/ms-playwright, which is exactly where executablePath() looks.
-RUN cd /opt/sandbox \
-    && node node_modules/playwright/cli.js install --with-deps chromium \
-    && rm -rf /var/lib/apt/lists/*
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors is data-only (manifest + connector skills + client image fragments) so it copies straight

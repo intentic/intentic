@@ -17,38 +17,32 @@ variables:
   # site for the key file (90s timeout) and then retries a 403 five times, ~2 min per build. Submit from
   # wherever the site actually deploys.
   INDEXNOW_ENABLED: "0"
+  # The two heavy caches live on a host directory the runner bind-mounts (docs/ci-runner.md — config.toml
+  # `volumes = ["/srv/gitlab-runner/ci-cache:/ci-cache"]`), NOT in a GitLab `cache:` entry. Both are
+  # content-addressed stores that every job reads and appends to — exactly what a shared volume is for, and
+  # exactly what a per-job zip archive is worst at. The pnpm store is ~69k files and archiving it cost the test
+  # job 6m19s per pipeline, CPU spent whether or not anything ever read the result. And mostly nothing did:
+  # this runner has no distributed cache backend ("No URL provided, cache will not be downloaded from shared
+  # cache server"), so each archive went to a Docker volume scoped to the CONCURRENT SLOT. Measured across five
+  # main pipelines, only jobs that happened to land on concurrent-0 restored anything (71/74 turbo tasks
+  # cached); slots 1-3 ran 0/74. A bind mount is shared by every slot, costs nothing to "restore", and needs no
+  # S3/MinIO backend. If the volume is absent both paths fall back to the container's own filesystem — cold,
+  # never broken.
+  # pnpm ignores PNPM_STORE_PATH/PNPM_STORE_DIR, so the store is selected by the --store-dir flag below; this
+  # variable is deliberately named so it can't be mistaken for one pnpm reads on its own.
+  PNPM_STORE: /ci-cache/pnpm-store
+  # turbo's own env var (verified against 2.10.7 — absolute paths work). Unlike the old per-branch cache keys,
+  # one shared dir is safe for every branch at once: entries are keyed by task hash, so a hash either matches
+  # or it doesn't. There is nothing for a branch to pollute.
+  TURBO_CACHE_DIR: /ci-cache/turbo
 
 # Named cache entries, composed per job with !reference — a job's `cache:` list can't splice another job's
-# whole list, so each entry is named and jobs pick the set they need. The *-pull variants restore without the
-# end-of-job re-archive (pushing the ~60k-file pnpm store back is what once blew the release job's timeout).
-# The pnpm store MUST live inside $CI_PROJECT_DIR (GitLab only caches paths under the project) and is selected
-# with `pnpm install --store-dir` — pnpm ignores PNPM_STORE_PATH/PNPM_STORE_DIR, only the flag/config works.
-# Keyed on the lockfile so it re-uploads only when deps change; a warm store turns cold multi-minute installs
-# into fast hardlink installs.
+# whole list, so each entry is named and jobs pick the set they need.
 .cache-defs:
-  pnpm: &cache-pnpm
-    key:
-      files:
-        - pnpm-lock.yaml
-      prefix: pnpm-store
-    paths:
-      - .pnpm-store/
-  # turbo task cache: per-branch, warm-started from main so a fresh MR isn't cold.
-  turbo: &cache-turbo
-    key: turbo-$CI_COMMIT_REF_SLUG
-    fallback_keys:
-      - turbo-main
-    paths:
-      - .turbo
-      - "_*/*/.turbo"
-  pnpm-pull:
-    <<: *cache-pnpm
-    policy: pull
-  turbo-pull:
-    <<: *cache-turbo
-    policy: pull
   # The baked iq models (~57MB), keyed on the fetch script — prepare-image-trees.sh skips the HF download
-  # when this cache restores the completed dir.
+  # when this cache restores the completed dir. This one stays a GitLab cache rather than moving to /ci-cache:
+  # it has to land inside .image-out (the sandbox image COPYs it as the `trees` context), and the images and
+  # release jobs run it CONCURRENTLY — a shared dir would need the fetch to be race-safe first.
   iq-models:
     key:
       files:
@@ -78,18 +72,16 @@ variables:
     # directly. When the versions match, both are no-ops.
     - pnpm --version
     - find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
-    - pnpm install --frozen-lockfile --store-dir "$CI_PROJECT_DIR/.pnpm-store"
-    # Keep the cached .turbo archive bounded: drop entries untouched for 14 days (rebuilt + re-cached if needed).
-    - find .turbo/cache -type f -mtime +14 -delete 2>/dev/null || true
+    - pnpm install --frozen-lockfile --store-dir "$PNPM_STORE"
+    # Bound the shared turbo cache: drop entries untouched for 14 days (rebuilt + re-cached if needed). This
+    # matters more than it did as a cache archive — the dir now outlives the job, so nothing else evicts from it.
+    - find "$TURBO_CACHE_DIR" -type f -mtime +14 -delete 2>/dev/null || true
 
 default:
   # _tools/ci-base: node 24.18.0 + docker CLI/buildx + ripgrep + bun + pnpm, so no job installs tooling at
   # runtime. The tag is mutable (the ci-base job moves it on main), so gitlab-runner's pull_policy must stay
   # "always" — with the layers already on the host that is a manifest digest check, not a download.
   image: $CI_BASE_IMAGE
-  cache:
-    - !reference [.cache-defs, pnpm]
-    - !reference [.cache-defs, turbo]
   before_script:
     - !reference [.pnpm-setup, script]
 
@@ -179,8 +171,6 @@ e2e:nightly:
     SANDBOX_E2E_IMAGE: "$CI_REGISTRY_IMAGE/sandbox:latest"
   timeout: 3h
   cache:
-    - !reference [.cache-defs, pnpm]
-    - !reference [.cache-defs, turbo]
     - key: intentic-e2e-whisper
       paths:
         - .cache/intentic-e2e
@@ -204,8 +194,6 @@ images:
   # Dockerfile is left with pure COPYs.
   interruptible: true
   cache:
-    - !reference [.cache-defs, pnpm-pull]
-    - !reference [.cache-defs, turbo-pull]
     - !reference [.cache-defs, iq-models]
   before_script:
     - !reference [.pnpm-setup, script]
@@ -239,9 +227,6 @@ images:platform:
   extends: .dind
   stage: images
   interruptible: true
-  cache:
-    - !reference [.cache-defs, pnpm-pull]
-    - !reference [.cache-defs, turbo-pull]
   before_script:
     - !reference [.pnpm-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
@@ -271,17 +256,16 @@ release:
   # prepareCmd stamps the release version into every package.json first, and the sandbox READS that at runtime
   # (src/version.ts; ensure-intent's dependencySpec switches `link:` → `~<version>` on it). The images job's
   # sha-/latest images are built unstamped (0.0.0 = dev mode), so they are NOT retaggable as a release. The
-  # duplicated work is bounded by the shared mode=max registry buildcache, and running parallel to images keeps
-  # it off the critical path — provided the runner has slots free (gitlab-runner concurrent >= 4).
+  # duplicated work is bounded by the inline layer cache both jobs read off the published sandbox:latest /
+  # :stable (publish-images.sh), and running parallel to images keeps it off the critical path — provided the
+  # runner has slots free (gitlab-runner concurrent >= 4).
   needs: ["test"]
   resource_group: release
-  # The publish is heavy (cold image builds + registry cache export). Give it room beyond the 1h default so a
-  # cold first-build can't fail the job AFTER the release already succeeded. NOTE: if the job still stops at
+  # The publish is heavy (a cold image build pushes ~1.5 GB). Give it room beyond the 1h default so a cold
+  # first-build can't fail the job AFTER the release already succeeded. NOTE: if the job still stops at
   # exactly 1h, that's the runner's maximum_timeout — raise it in the runner config, this can't override it.
   timeout: 2h
   cache:
-    - !reference [.cache-defs, pnpm-pull]
-    - !reference [.cache-defs, turbo-pull]
     # iq models for publishCmd's prepare-image-trees.sh (same key as the images job).
     - !reference [.cache-defs, iq-models]
   variables:

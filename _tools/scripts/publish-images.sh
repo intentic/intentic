@@ -18,18 +18,11 @@ REGISTRY="registry.gitlab.com/radarsu/intentic"
 # `pnpm install --frozen-lockfile` resolves the root lockfile; `pnpm deploy` prunes the final image to core.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 
-# Layer caching. A docker-container buildx builder lets us export a full (mode=max) registry cache — the
-# default docker driver only does inline (final-stage) cache, which misses this multi-stage build's heavy
-# build stage (pnpm install + turbo build + model fetch). The cache lives in the registry, so it survives the
-# ephemeral dind daemon and is shared across the images + release jobs and across pipelines. If the container
-# builder can't be set up we fall back to the default builder + inline cache so a build NEVER fails over this.
-REGISTRY_CACHE=0
+# A docker-container buildx builder. The default `docker` driver exports no cache beyond inline and pushes
+# over an untested path here, so this stays — but it is best-effort: a build must NEVER fail over builder setup.
 setup_builder() {
     command -v docker >/dev/null || return 0
-    if docker buildx inspect intentic-cache >/dev/null 2>&1; then
-        docker buildx use intentic-cache && REGISTRY_CACHE=1
-        return 0
-    fi
+    docker buildx inspect intentic-cache >/dev/null 2>&1 && { docker buildx use intentic-cache; return 0; }
     # dind serves docker over TLS; the docker-container driver can't read those certs from env vars, only from
     # a named context (that's the "could not create a builder instance with TLS data" error). Build one.
     local ctx=default
@@ -38,37 +31,43 @@ setup_builder() {
             --docker "host=${DOCKER_HOST},ca=${DOCKER_CERT_PATH}/ca.pem,cert=${DOCKER_CERT_PATH}/cert.pem,key=${DOCKER_CERT_PATH}/key.pem" >/dev/null 2>&1 || true
         docker context inspect intentic-dind >/dev/null 2>&1 && ctx=intentic-dind
     fi
-    if docker buildx create --name intentic-cache --driver docker-container --bootstrap --use "$ctx" >/dev/null 2>&1; then
-        REGISTRY_CACHE=1
-    else
-        echo "  note: docker-container builder unavailable; using default builder + inline cache" >&2
-    fi
+    docker buildx create --name intentic-cache --driver docker-container --bootstrap --use "$ctx" >/dev/null 2>&1 \
+        || echo "  note: docker-container builder unavailable; using the default builder" >&2
 }
 setup_builder
 
 # Build + push one image under every requested tag. The Dockerfile + build context differ per image: the
 # sandbox builds from the monorepo root plus the pre-built `trees` context; the dind-host from its
 # self-contained _tools/dind-host package. Extra args after the context pass through to buildx.
-# Caching must never fail a build, on EITHER side. An unreachable/missing cache ref on IMPORT is already a
-# non-fatal warning (so this is safe on a cold registry); ignore-error=true makes a failed cache EXPORT one
-# too. That export is not hypothetical: gitlab.com's registry answers the finalizing PUT of the sandbox
-# image's largest cache blob with a 400, and buildkit cancels the image push running alongside it — the image
-# is fully pushed ("pushing layers 126.7s done") and then thrown away. That is how 1.159.0 and 1.160.0
-# reached npm with no sandbox image behind them.
+#
+# The layer cache rides on the image being pushed anyway: `--cache-to type=inline` records the layer cache keys
+# in the image config, and the next build reads them back through `--cache-from` on the published tags. Both
+# Dockerfiles here are SINGLE-stage — the monorepo is compiled OUTSIDE Docker by prepare-image-trees.sh and
+# enters as the `trees` context — so the pushed image already contains every layer worth caching, and inline
+# covers the identical layer set a separate mode=max ref would.
+#
+# It covers that set far more reliably. A separate `type=registry,ref=…:buildcache` meant a SECOND ~1.5 GB
+# upload, and gitlab.com's registry answers the finalizing PUT of its largest blob with a 400; buildkit then
+# cancels the image push running alongside it, so a fully-pushed image got thrown away — that is how 1.159.0
+# and 1.160.0 reached npm with no sandbox image behind them. ignore-error=true stopped that from failing the
+# build, and thereby made it SILENT: sandbox:buildcache froze at 2026-07-23 and nothing said so for eight days,
+# during which every sandbox build ran fully cold (~20 min, in both the images and release jobs, every
+# pipeline). Inline has no second upload to fail — if the image pushed, the cache is fresh.
 publish() {
     local image="$1" dockerfile="$2" context="$3"
     shift 3
-    local tag_args=() cache_args=()
+    local tag_args=()
     for tag in $TAGS; do
         tag_args+=(-t "$REGISTRY/$image:$tag")
     done
-    if [ "$REGISTRY_CACHE" = 1 ]; then
-        cache_args=(--cache-from "type=registry,ref=$REGISTRY/$image:buildcache"
-                    --cache-to "type=registry,ref=$REGISTRY/$image:buildcache,mode=max,image-manifest=true,ignore-error=true")
-    else
-        cache_args=(--cache-from "$REGISTRY/$image:latest" --cache-to "type=inline")
-    fi
-    docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" "$@" --push "$context"
+    # `latest` moves on every main push that touches the core, `stable` on every release; whichever is newer is
+    # a warm parent, and the release job (which pushes neither) reads both. A missing or unreachable ref is a
+    # non-fatal warning, so this is correct against a cold registry too.
+    docker buildx build -f "$dockerfile" "${tag_args[@]}" \
+        --cache-from "type=registry,ref=$REGISTRY/$image:latest" \
+        --cache-from "type=registry,ref=$REGISTRY/$image:stable" \
+        --cache-to "type=inline" \
+        "$@" --push "$context"
 }
 
 # The sandbox image COPYs its compiled payload from .image-out — prepare-image-trees.sh must have run first.
