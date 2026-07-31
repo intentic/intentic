@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { ConnectorContribution } from "@intentic/extension-api";
-import { type ExtensionHost, installedExtensions } from "../../extensions/installed-extensions.js";
+import { enabledExtensions, type ExtensionHost } from "../../extensions/installed-extensions.js";
 
 /* CLI connectors as DATA: a provider's card/fields/env/skill/fragment come from an installed extension's
  * `contributes.connectors`, not a hardcoded daemon table. The registry resolves a `cli` capability's provider
@@ -16,7 +16,7 @@ export interface ResolvedConnector {
 
 export const connectorRegistry = async (host: ExtensionHost): Promise<Map<string, ResolvedConnector>> => {
     const registry = new Map<string, ResolvedConnector>();
-    for (const extension of await installedExtensions(host)) {
+    for (const extension of await enabledExtensions(host)) {
         for (const spec of extension.manifest.contributes?.connectors ?? []) {
             if (!registry.has(spec.provider)) {
                 registry.set(spec.provider, { spec, dir: extension.dir });

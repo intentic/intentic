@@ -9,7 +9,7 @@ import { capabilityJobSession } from "../terminal/terminal-session.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { capabilityFragments } from "../environment/fragment-sources.js";
 import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensions/extension-processes.js";
-import { installedExtensions } from "../extensions/installed-extensions.js";
+import { enabledExtensions } from "../extensions/installed-extensions.js";
 import { capabilityCtx, echoConfig, secretField } from "./capability.js";
 import { connectorRegistry } from "./cli/connector-registry.js";
 import { browseMarketplace } from "./marketplace.js";
@@ -65,7 +65,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 // A fresh extension checkout brings its declared autoStart processes up (the same post-apply
                 // seam composeEnvironment uses — full Services, so the narrow handler ctx stays narrow).
                 if (input.kind === "extension") {
-                    const installed = (await installedExtensions(services)).find((extension) => extension.id === input.id);
+                    const installed = (await enabledExtensions(services)).find((extension) => extension.id === input.id);
                     if (installed !== undefined) {
                         await startAutoStartProcesses(services, installed);
                     }

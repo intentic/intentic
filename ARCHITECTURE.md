@@ -443,20 +443,31 @@ RUN/ENV-only Dockerfile fragment baked into the sandbox image overlay); `bin` (e
 agent's PATH); `listener` (a realtime event provider its gateway process implements); and
 `permissions.sandbox`, the daemon-route allowlist gating its data plane.
 
-First-party extensions live in `_extensions/` and reach the product by one of **three load paths**:
+First-party extensions live in `_extensions/` and reach the product by one of **three load paths** — but by
+**one list**: every extension, whatever its path, is enumerated by `installedExtensions()`
+([installed-extensions.ts](_apps/sandbox/src/extensions/installed-extensions.ts)) and served by
+`GET /extensions`, which is what the Sandbox hub's Extensions tab renders and what the on/off switch acts on.
 
-- **Compiled into the web bundle** — the UI extensions (`agent-activity`, `apps`, `automations`, `logs`,
-  `preview`, `viewers`), statically imported and activated at shell boot
+- **Compiled into the web bundle** — the UI extensions (`acceptance`, `activity`, `automations`, `logs`,
+  `memory`, `pipelines`, `preview`, `repo-apps`, `viewers`), statically imported and keyed by manifest id
   ([extension-host/builtins.ts](_apps/web/src/extension-host/builtins.ts)). They ship no `entry` over the
-  wire; the bundle IS the SPA.
-- **Baked into the sandbox image** — the daemon-side ones (`connectors`, `discord`) ship at
-  `/opt/extensions` (Dockerfile bake, `EXTENSIONS_DIR`), enumerated by `installedExtensions()`
-  ([installed-extensions.ts](_apps/sandbox/src/extensions/installed-extensions.ts)) alongside git-installed
-  ones and served by `GET /extensions` as `builtin: true` — present in every sandbox, not removable, no
-  capability entry.
+  wire — the bundle IS the SPA — but their manifest is baked into the image beside the daemon-side ones, so
+  the daemon lists them and the loader's only question per extension is where its code comes from. The two
+  ways image and bundle can disagree are surfaced as states, not silence: `missing` (manifest, no module) and
+  `unlisted` (module, no manifest — activated anyway, so the rail survives an older image).
+- **Baked into the sandbox image** — the daemon-side ones (`connectors`, `discord`, `imap`) ship their whole
+  checkout at `/opt/extensions` (Dockerfile bake, `EXTENSIONS_DIR`) and are served as `builtin: true` —
+  present in every sandbox, not removable, no capability entry.
 - **Git-installed** — the `extension` capability: an owner-only, full-sha-pinned clone into
-  `.intentic/extensions/<id>`, validated before swap. Third-party extensions arrive this way; nothing
-  first-party takes this path today.
+  `.intentic/extensions/<id>`, validated before swap. Third-party extensions arrive this way; of the
+  first-party ones only `rtk` does, because its environment fragment composes per capability entry.
+
+Any of them can be **switched off** — `POST /extensions/{id}/enabled`, recorded in
+`.intentic/extension-enablement.json` by `publisher.name`. A disabled extension stays listed (that is what
+keeps its switch reachable) and drops out of `enabledExtensions()`, which every consumer that wires something
+up iterates, so it contributes no agent plugin dir, PATH entry, listener provider, connector card, env var or
+autoStart process; the web loader retires its activation in place. `agent` and `bin` are composed per turn and
+`environment` only at image rebuild, so those three apply later — the tab states which per extension.
 
 Note the current split is a **UI veneer**: an extension is mostly where its
 Vue lives, while its backend (activity, automations, logs, panels…) still sits in the daemon core — moving

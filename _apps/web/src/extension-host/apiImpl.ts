@@ -35,14 +35,23 @@ export interface HostBindings {
 // second copy of every rail icon, and a listener per re-activation firing on stale state.
 const activations = new Map<string, readonly Disposable[]>();
 
+// Retire an extension's live activation. The disposables `track()` collected ARE its whole registration
+// surface — views, viewers, commands, file bindings, and the settings/workspace/theme watchers — so this
+// unwinds exactly what activate() put in place. Used both to supersede a re-activation and to switch an
+// extension off from the Extensions tab without a page reload.
+export const deactivateExtension = (extensionId: string): void => {
+    for (const disposable of activations.get(extensionId) ?? []) {
+        disposable.dispose();
+    }
+    activations.delete(extensionId);
+};
+
 export const createExtensionApi = (
     summary: ExtensionSummary,
     host: HostBindings,
 ): { readonly api: IntenticApi; readonly context: ExtensionContext } => {
     const extensionId = extensionIdOf(summary.manifest);
-    for (const disposable of activations.get(extensionId) ?? []) {
-        disposable.dispose();
-    }
+    deactivateExtension(extensionId);
     const subscriptions: Disposable[] = [];
     activations.set(extensionId, subscriptions);
     const track = (disposable: Disposable): Disposable => {

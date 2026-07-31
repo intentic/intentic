@@ -82,6 +82,14 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
         invalidates: [],
         why: "Held in a module-level shallowRef store per extension (web's extensionSettingsStore) with no query observer, and deliberately so: api.settings.get must answer SYNCHRONOUSLY from an extension's first activate() line, and the store outlives every component scope. A module-level QueryObserver is the one shape that would make invalidation refetch, and this app already ruled it out — it detaches on the queryClient.clear() at logout (see useSandbox's sandbox-list mirror). So a remote member's setting edit reaches this browser on its next load, not live.",
     },
+    /* Unlike the settings file above it, the on/off switch IS observed by a query — the Extensions tab's list,
+     * which carries each row's switch position — so a flip made elsewhere (another member, the agent writing the
+     * file) shows up here live. It does not re-run the host: activating or retiring an extension is the loader's
+     * reconcile, which the tab's own toggle triggers, so a remote flip takes effect on this browser's next load. */
+    {
+        path: ".intentic/extension-enablement.json",
+        invalidates: ["extensions"],
+    },
     {
         path: ".intentic/members.json",
         invalidates: [],

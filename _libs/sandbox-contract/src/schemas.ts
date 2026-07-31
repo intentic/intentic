@@ -1993,6 +1993,10 @@ export const ExtensionSummarySchema = z.object({
     // Image-baked first-party extension (no git checkout, not removable) vs a git-installed capability — the
     // web hides the uninstall affordance for baked ones.
     builtin: z.boolean(),
+    // The owner's switch (.intentic/extension-enablement.json). A disabled extension is still listed — that's
+    // what makes it switchable back on — but the daemon wires none of its contributions up and the web host
+    // doesn't activate it.
+    enabled: z.boolean(),
 });
 export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
 export const ExtensionsListSchema = z.object({ extensions: z.array(ExtensionSummarySchema) });
@@ -2009,6 +2013,9 @@ export const ExtensionSettingsInputSchema = z.object({
     id: z.string(),
     settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
+// Flip one extension on or off. Persisted by publisher.name (like settings), so the choice outlives the
+// checkout; the daemon's immediate half of the flip — declared processes — converges in the same handler.
+export const ExtensionEnabledInputSchema = z.object({ id: z.string(), enabled: z.boolean() });
 // One declared background process (contributes.processes) — status/start/stop, addressed by the capability
 // entry id + the manifest's process name. Undeclared names are NOT_FOUND, the manifest-honesty rule again.
 export const ExtensionProcessParamSchema = z.object({ id: z.string(), name: z.string() });

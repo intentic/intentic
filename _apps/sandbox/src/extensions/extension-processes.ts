@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { ProcessContribution } from "@intentic/extension-api";
 import { previewLabel } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { type ExtensionHost, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
+import { enabledExtensions, type ExtensionHost, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { listenerProcessesDesired, listenerState } from "./listener-state.js";
 
 // The panel key (→ tmux session `panel-ext-<id>-<name>`) for one declared extension process. tmux session
@@ -53,7 +53,7 @@ export const startAutoStartProcesses = async (services: Services, extension: Ins
 // Boot convergence (beside startDockerd): sessions died with the container / the boot sweep while the
 // manifests survived — bring every installed extension's autoStart processes back up. Best-effort.
 export const startAllExtensionProcesses = async (services: Services): Promise<void> => {
-    for (const extension of await installedExtensions(services)) {
+    for (const extension of await enabledExtensions(services)) {
         await startAutoStartProcesses(services, extension);
     }
 };
@@ -64,7 +64,7 @@ export const startAllExtensionProcesses = async (services: Services): Promise<vo
 // (`running`): an untracked key has no session left to kill.
 export const reconcileListenerProcesses = async (services: Services): Promise<void> => {
     try {
-        for (const extension of await installedExtensions(services)) {
+        for (const extension of await enabledExtensions(services)) {
             const listener = extension.manifest.contributes?.listener;
             if (listener === undefined) {
                 continue;

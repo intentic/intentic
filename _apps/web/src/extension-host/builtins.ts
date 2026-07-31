@@ -9,42 +9,22 @@ import * as memory from "@intentic/ext-memory";
 import * as pipelines from "@intentic/ext-pipelines";
 import * as preview from "@intentic/ext-preview";
 import * as viewers from "@intentic/ext-viewers";
-import { createExtensionApi, type HostBindings } from "./apiImpl";
 
-/* The compiled-in first-party extensions. Each is a real in-repo extension package (its own
- * intentic-extension.json + activate), activated through the SAME manifest-gated createExtensionApi path as a
- * git-installed third-party bundle — the only difference is they are statically imported and compiled into the
- * shell rather than blob-loaded from the daemon. This is the dogfooding boundary: a builtin can only touch the
+/* The first-party extensions whose CODE is compiled into this bundle, keyed by the id the daemon lists them
+ * under. Each is a real in-repo extension package (its own intentic-extension.json + activate) activated
+ * through the SAME manifest-gated createExtensionApi path as a git-installed bundle — the only difference is
+ * that its module is statically imported here instead of blob-loaded from the daemon.
+ *
+ * Their MANIFESTS ship baked into the sandbox image (Dockerfile), so `GET /extensions` enumerates them
+ * alongside the daemon-side and git-installed ones and the loader's only remaining question per extension is
+ * where its code comes from. That is what gives the Extensions tab one complete list with one on/off switch,
+ * instead of a view of a single load path. This stays the dogfooding boundary: a builtin can only touch the
  * public IntenticApi, never app internals. */
 
-export interface Builtin {
-    readonly manifest: ExtensionManifest;
-    readonly module: ExtensionModule;
-}
+// The package namespace of a compiled-in extension: an ExtensionModule that also exports the manifest the
+// daemon lists it under. Typed on the array below so a package that stops exporting one fails here.
+export type BuiltinModule = ExtensionModule & { readonly manifest: ExtensionManifest };
 
-export const builtins: readonly Builtin[] = [
-    { manifest: automations.manifest, module: automations },
-    { manifest: logs.manifest, module: logs },
-    { manifest: memory.manifest, module: memory },
-    { manifest: activity.manifest, module: activity },
-    { manifest: pipelines.manifest, module: pipelines },
-    { manifest: apps.manifest, module: apps },
-    { manifest: acceptance.manifest, module: acceptance },
-    { manifest: preview.manifest, module: preview },
-    { manifest: viewers.manifest, module: viewers },
-];
+const modules: readonly BuiltinModule[] = [automations, logs, memory, activity, pipelines, apps, acceptance, preview, viewers];
 
-// Activate every builtin at shell boot, ahead of the daemon-installed extensions. A builtin's activate() only
-// registers views/commands (synchronous); any data it fetches runs on its own via the host api. A throwing
-// builtin is contained so one bad first-party extension can't blank the shell.
-export const loadBuiltins = (host: HostBindings): void => {
-    for (const { manifest, module } of builtins) {
-        const id = extensionIdOf(manifest);
-        try {
-            const { api, context } = createExtensionApi({ id, manifest, commit: `builtin`, builtin: true }, host);
-            void module.activate(api, context);
-        } catch (error) {
-            console.error(`builtin extension ${id} failed to activate`, error);
-        }
-    }
-};
+export const builtinModules: ReadonlyMap<string, BuiltinModule> = new Map(modules.map((module) => [extensionIdOf(module.manifest), module]));

@@ -29,7 +29,7 @@ vi.hoisted(() => {
     };
 });
 
-const { builtins } = await import("./builtins");
+const { builtinModules } = await import("./builtins");
 
 const activateAndCapture = (module: { activate: (api: IntenticApi, ctx: ExtensionContext) => void }): ViewRegistration => {
     let registered: ViewRegistration | undefined;
@@ -50,8 +50,7 @@ const discordCap: CapabilityFacts = { id: `bot`, kind: `cli`, config: { provider
  * registers after the mismatch, with nothing failing but a console line. Checked for all builtins at once
  * because the drift is between two files that no single package's test compares. */
 describe(`every builtin`, () => {
-    for (const { manifest, module } of builtins) {
-        const id = extensionIdOf(manifest);
+    for (const [id, module] of builtinModules) {
         it(`registers only views its manifest declares — ${id}`, () => {
             const registered: ViewRegistration[] = [];
             const api = {
@@ -60,10 +59,15 @@ describe(`every builtin`, () => {
                 commands: { register: () => ({ dispose: () => {} }) },
             } as unknown as IntenticApi;
             module.activate(api, { extensionId: id, subscriptions: [] });
-            const declared = (manifest.contributes?.views ?? []).map((view) => `${view.id} (${view.surface})`);
+            const declared = (module.manifest.contributes?.views ?? []).map((view) => `${view.id} (${view.surface})`);
             for (const view of registered) {
                 expect(declared).toContain(`${view.id} (${view.surface})`);
             }
+        });
+        // The map's key IS how the loader pairs a daemon-listed manifest with the code compiled in here, so a
+        // key that drifts from the manifest silently turns the extension into "missing" in the Extensions tab.
+        it(`is keyed by its own manifest id — ${id}`, () => {
+            expect(extensionIdOf(module.manifest)).toBe(id);
         });
     }
 });

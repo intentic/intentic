@@ -26,7 +26,7 @@ vi.hoisted(() => {
     };
 });
 
-const { builtins } = await import("./builtins");
+const { builtinModules } = await import("./builtins");
 
 const AUTOMATIONS_FILES: readonly FileContribution[] = [{ path: `.intentic/automations.json`, invalidates: [`automations`] }];
 
@@ -72,7 +72,7 @@ describe(`the builtins' declared bindings`, () => {
      * automations store and rendered by the automations EXTENSION, and the core table used to carry the
      * extension's two query keys itself because the extension had no way to declare them. Asserted against the
      * real manifests, not a fixture: the point is that the shipped declaration is the thing that works. */
-    const bindings = builtins.flatMap(({ manifest }) => manifest.contributes?.files ?? []);
+    const bindings = [...builtinModules.values()].flatMap((module) => module.manifest.contributes?.files ?? []);
 
     it(`refreshes the Automations view when the agent edits the manifest on disk`, () => {
         expect(staleQueryKeys([`.intentic/automations.json`], bindings)).toEqual([`automations`]);

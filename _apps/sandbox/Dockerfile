@@ -282,8 +282,6 @@ RUN npm install -g node-gyp \
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors is data-only (manifest + connector skills + client image fragments) so it copies straight
 # from context; discord and imap ship their deployed gateway trees from the trees context (node_modules included).
-# The web-builtin UI extensions (automations, logs, …) are NOT baked — they compile into the web bundle and
-# contribute nothing daemon-side.
 COPY _extensions/connectors /opt/extensions/connectors
 COPY --from=trees extensions/discord /opt/extensions/discord
 # Same glibc rationale as the sandbox rebuild above — the discord gateway's voice stack compiles opus from source.
@@ -291,6 +289,21 @@ RUN cd /opt/extensions/discord/node_modules/.pnpm/@discordjs+opus@*/node_modules
     && rm -rf prebuild build-tmp-napi-v3 \
     && npm run install
 COPY --from=trees extensions/imap /opt/extensions/imap
+# The web-builtin UI extensions bake their MANIFEST ONLY — their code is compiled into the web bundle
+# (extension-host/builtins.ts), so there is nothing daemon-side to ship. The manifest is what makes them exist
+# for the daemon: `GET /extensions` then enumerates all twelve first-party extensions through one enumerator,
+# so the Extensions tab is a complete list with a working on/off switch instead of a view of one load path.
+# The pairing is checked both ways — a manifest here with no compiled-in module shows as "missing" in the tab
+# (image and web bundle built from different commits), and a module with no manifest shows as "unlisted".
+COPY _extensions/acceptance/intentic-extension.json /opt/extensions/acceptance/
+COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
+COPY _extensions/automations/intentic-extension.json /opt/extensions/automations/
+COPY _extensions/logs/intentic-extension.json /opt/extensions/logs/
+COPY _extensions/memory/intentic-extension.json /opt/extensions/memory/
+COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
+COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
+COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/
+COPY _extensions/viewers/intentic-extension.json /opt/extensions/viewers/
 # pane-log-clean on PATH — the tmux pipe-pane hooks (above / logs/log-files.ts) replay each pane's byte
 # stream through it (a headless VT emulator using @xterm/headless from the daemon's node_modules) to keep
 # the terminal logs readable. Symlinked like intentic/iq: node resolves @xterm/headless from the target's

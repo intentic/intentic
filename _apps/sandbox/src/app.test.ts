@@ -30,6 +30,7 @@ import { createPerfTracker } from "./platform/perf.js";
 import { mintPairing } from "./platform/sync.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { AgentTool } from "./agent/agent-tools.js";
+import { listenerProvidersOf } from "./extensions/installed-extensions.js";
 import { workspacePaths } from "./workspace/workspace.js";
 import { MAX_RAW_BYTES, sha256Text, UploadTooLargeError } from "./workspace/workspace-files.js";
 
@@ -3291,4 +3292,53 @@ test("GET /diff/raw serves a commit's before/after blobs and refuses a sha that 
     } finally {
         await rm(root, { recursive: true, force: true });
     }
+});
+
+test("extensions.setEnabled keeps the extension listed, switches it off, and unwires it daemon-side", async () => {
+    // A real workspace root, because the switch persists to <root>/.intentic/extension-enablement.json. The
+    // extensions dir is the repo's own _extensions, so this runs against the shipped first-party manifests.
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-toggle-")));
+    const svc = services({ workspace });
+    const client = clientFor(createApp(svc));
+
+    const listed = async (): Promise<Record<string, boolean>> =>
+        Object.fromEntries((await client.extensions.list()).extensions.map((extension) => [extension.id, extension.enabled]));
+
+    expect((await listed())["intentic.discord"]).toBe(true);
+    expect((await listenerProvidersOf(svc)).get("discord")).toEqual(new Set(["message", "voice_utterance", "voice_transcript"]));
+
+    await client.extensions.setEnabled({ id: "intentic.discord", enabled: false });
+
+    // Still listed — that is what keeps the switch reachable — and off.
+    expect((await listed())["intentic.discord"]).toBe(false);
+    // The listener provider an automations trigger validates against is gone with it, and its declared gateway
+    // can no longer be started by hand.
+    expect((await listenerProvidersOf(svc)).has("discord")).toBe(false);
+    expect(await errorCode(client.extensions.processStart({ id: "intentic.discord", name: "gateway" }))).toBe("PRECONDITION_FAILED");
+
+    // And back on, from the same list the tab renders.
+    await client.extensions.setEnabled({ id: "intentic.discord", enabled: true });
+    expect((await listed())["intentic.discord"]).toBe(true);
+});
+
+test("the extension list carries every first-party extension, compiled-in UI ones included", async () => {
+    // The Extensions tab is only a complete list if the daemon enumerates the web-builtin extensions too —
+    // their manifests ride the image beside the daemon-side ones (Dockerfile), so a bake that drops one shows
+    // up here rather than as a silently missing row.
+    const client = clientFor(createApp(services({ workspace: workspacePaths(mkdtempSync(join(tmpdir(), "ext-list-"))) })));
+    const ids = (await client.extensions.list()).extensions.map((extension) => extension.id).toSorted();
+    expect(ids).toEqual([
+        "intentic.acceptance",
+        "intentic.activity",
+        "intentic.automations",
+        "intentic.connectors",
+        "intentic.discord",
+        "intentic.imap",
+        "intentic.logs",
+        "intentic.memory",
+        "intentic.pipelines",
+        "intentic.preview",
+        "intentic.repo-apps",
+        "intentic.viewers",
+    ]);
 });

@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 import {
     CapabilityIdParamSchema,
+    ExtensionEnabledInputSchema,
     ExtensionProcessParamSchema,
     ExtensionProcessStatusSchema,
     ExtensionSettingsInputSchema,
@@ -17,6 +18,10 @@ export const extensionsContract = {
     list: oc.route({ method: "GET", path: "/extensions" }).output(ExtensionsListSchema),
     settings: oc.route({ method: "GET", path: "/extensions/{id}/settings" }).input(CapabilityIdParamSchema).output(ExtensionSettingsSchema),
     setSettings: oc.route({ method: "POST", path: "/extensions/{id}/settings" }).input(ExtensionSettingsInputSchema).output(OkSchema),
+    // The owner's on/off switch. Disabling stops the extension's declared processes here and now; its agent
+    // plugin dir and PATH entry are rebuilt per turn, and an `environment` fragment only at the next image
+    // rebuild — the Extensions tab states which of those an extension actually has.
+    setEnabled: oc.route({ method: "POST", path: "/extensions/{id}/enabled" }).input(ExtensionEnabledInputSchema).output(OkSchema),
     // Declared background processes (contributes.processes): tmux-managed through the panel machinery
     // (session `panel-ext-<id>-<name>`, PORT-assigned, optional tunneled preview route).
     processStatus: oc

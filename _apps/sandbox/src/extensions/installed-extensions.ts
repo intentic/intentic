@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { type ExtensionManifest, extensionIdOf } from "@intentic/extension-api";
 import type { Capability } from "@intentic/sandbox-contract";
 import { extensionDir, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
+import { readExtensionEnablement } from "./extension-enablement.js";
 
 // The daemon surface the extension enumerator needs — a structural subset of Services, so callers pass
 // `services` directly, and the narrow capability handler ctx passes a small adapter (it has the same fields).
@@ -17,7 +18,9 @@ export interface ExtensionHost {
  * extension consumer (agent plugin dirs, processes, settings, env, the list route) iterates, so a baked
  * first-party extension (ext-discord, ext-connectors) behaves identically to one a user cloned. Baked ones live
  * under services.config.extensionsDir (EXTENSIONS_DIR), one subdir per checkout, the iq-plugin precedent
- * — no capability entry, not removable, present because they shipped in the image. */
+ * — no capability entry, not removable, present because they shipped in the image. The web-builtin UI
+ * extensions bake their MANIFEST ONLY (the code is compiled into the web bundle), so all twelve first-party
+ * extensions enumerate here and the Extensions tab is a complete list rather than a view of one load path. */
 
 export interface InstalledExtension {
     // The routing handle: the capability entry id for a git-installed extension, or the manifest-derived
@@ -28,9 +31,13 @@ export interface InstalledExtension {
     readonly manifest: ExtensionManifest;
     // Image-baked (no clone, not removable) vs a git-installed extension capability.
     readonly builtin: boolean;
+    // The owner's switch (extension-enablement.json). A disabled extension stays in THIS list — the Extensions
+    // tab needs its row to render the toggle — and drops out of enabledExtensions(), which is what every
+    // consumer that actually wires something up iterates.
+    readonly enabled: boolean;
 }
 
-const bakedExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> => {
+const bakedExtensions = async (services: ExtensionHost, enabledOf: (manifest: ExtensionManifest) => boolean): Promise<InstalledExtension[]> => {
     const root = services.config.extensionsDir;
     if (root === "") {
         return [];
@@ -46,16 +53,20 @@ const bakedExtensions = async (services: ExtensionHost): Promise<InstalledExtens
         const dir = join(root, name);
         const manifest = await readExtensionManifest(dir);
         if (manifest !== undefined) {
-            found.push({ id: extensionIdOf(manifest), dir, manifest, builtin: true });
+            found.push({ id: extensionIdOf(manifest), dir, manifest, builtin: true, enabled: enabledOf(manifest) });
         }
     }
     return found;
 };
 
 // Baked first (a baked id shadows a git-installed collision — install already rejects the collision, so this is
-// only a safety net), then the git-installed extension capabilities whose checkout still parses.
+// only a safety net), then the git-installed extension capabilities whose checkout still parses. Every row
+// carries the owner's switch; nothing is filtered here (see enabledExtensions).
 export const installedExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> => {
     const capabilities = await services.capabilities.list();
+    // Keyed by publisher.name, not the capability entry id, so the switch survives a remove/re-add.
+    const enablement = await readExtensionEnablement(services.workspace.root);
+    const enabledOf = (manifest: ExtensionManifest): boolean => enablement[extensionIdOf(manifest)] !== false;
     const installed: InstalledExtension[] = [];
     for (const capability of capabilities) {
         if (capability.kind !== "extension") {
@@ -64,20 +75,27 @@ export const installedExtensions = async (services: ExtensionHost): Promise<Inst
         const dir = extensionRootOf(extensionDir(services.workspace.root, capability.id), capability.config.path);
         const manifest = await readExtensionManifest(dir);
         if (manifest !== undefined) {
-            installed.push({ id: capability.id, dir, manifest, builtin: false });
+            installed.push({ id: capability.id, dir, manifest, builtin: false, enabled: enabledOf(manifest) });
         }
     }
-    const baked = await bakedExtensions(services);
+    const baked = await bakedExtensions(services, enabledOf);
     const bakedIds = new Set(baked.map((extension) => extension.id));
     return [...baked, ...installed.filter((extension) => !bakedIds.has(extension.id))];
 };
+
+/* What the daemon actually wires up. Only the Extensions tab (via the list route) wants the full set — a
+ * disabled extension has to keep its row to keep its toggle. Everything below, and every consumer outside this
+ * file, iterates THIS one, which is what makes the switch mean something: no agent plugin dir, no PATH entry,
+ * no listener provider, no connector card, no env var, no autoStart process. */
+export const enabledExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> =>
+    (await installedExtensions(services)).filter((extension) => extension.enabled);
 
 // The absolute dirs of installed extensions whose manifests contribute agent plugins — appended after
 // pluginDirsOf wherever the SDK's `plugins` option is built. contributes.agent.path is relative to the
 // extension root; the SDK's loader parses the internals (skills/agents/hooks/.mcp.json).
 export const extensionAgentDirsOf = async (services: ExtensionHost): Promise<string[]> => {
     const dirs: string[] = [];
-    for (const extension of await installedExtensions(services)) {
+    for (const extension of await enabledExtensions(services)) {
         const agent = extension.manifest.contributes?.agent;
         if (agent === undefined) {
             continue;
@@ -91,7 +109,7 @@ export const extensionAgentDirsOf = async (services: ExtensionHost): Promise<str
 // agent turn's PATH wherever the shell env is built, so a shipped tool (e.g. `discord-voice`) resolves by name.
 export const extensionBinDirsOf = async (services: ExtensionHost): Promise<string[]> => {
     const dirs: string[] = [];
-    for (const extension of await installedExtensions(services)) {
+    for (const extension of await enabledExtensions(services)) {
         const bin = extension.manifest.contributes?.bin;
         if (bin !== undefined) {
             dirs.push(join(extension.dir, bin));
@@ -105,7 +123,7 @@ export const extensionBinDirsOf = async (services: ExtensionHost): Promise<strin
 // `webchat`), and the listener routes serve a gateway under its provider.
 export const listenerProvidersOf = async (services: ExtensionHost): Promise<Map<string, Set<string>>> => {
     const providers = new Map<string, Set<string>>();
-    for (const extension of await installedExtensions(services)) {
+    for (const extension of await enabledExtensions(services)) {
         const listener = extension.manifest.contributes?.listener;
         if (listener !== undefined) {
             providers.set(listener.provider, new Set(listener.eventTypes));
