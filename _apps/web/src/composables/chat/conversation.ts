@@ -533,6 +533,11 @@ export class Conversation {
      * proposal is not a proposal: only what is still pending at the boundary is waiting on the user. */
     readonly replaying = ref(false);
     readonly error = ref<string | null>(null);
+    // True while a daemon read that should produce this conversation's transcript is in flight and nothing is
+    // painted meanwhile — a history open, or a restored tab whose local mirror came up empty. The panel shows
+    // its loading state on it instead of the "Start a conversation" invitation, which over a chat that merely
+    // hasn't arrived yet reads as data loss.
+    readonly loading = ref(false);
     // This conversation's slash commands — replaced whole per `commands` frame, listed by the composer's `/`
     // popover. Both provider families publish them: an ACP agent mid-session, Claude at each turn's init (plus
     // a republish whenever the session's list changes).

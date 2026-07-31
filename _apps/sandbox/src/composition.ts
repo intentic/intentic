@@ -107,7 +107,13 @@ import {
     workspaceSessionExists,
 } from "./sessions/sessions.js";
 import { readSessionPrompts } from "./sessions/prompt-index.js";
-import { agentTranscript, type AgentTranscriptDeps, storedTranscript, type TranscriptAgent } from "./sessions/agent-transcript.js";
+import {
+    agentTranscript,
+    type AgentTranscriptDeps,
+    createAgentPromptsReader,
+    storedTranscript,
+    type TranscriptAgent,
+} from "./sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
 import { type BootTracker, createBootTracker } from "./platform/boot.js";
@@ -377,6 +383,9 @@ export interface Services {
         // the first time a provider store is read (see transcript-record.ts).
         readonly open: (agent: TranscriptAgent) => Promise<void>;
         readonly append: (agent: TranscriptAgent, messages: readonly RestoredMessage[]) => Promise<void>;
+        // The conversation's user prompts, cached against the record's size — what /agents/search matches per
+        // entry per keystroke, instead of re-reading the whole store (see createAgentPromptsReader).
+        readonly prompts: (agent: TranscriptAgent) => Promise<readonly string[]>;
     };
     // platformHostTunnel relays to the platform (connect-token auth) to mint an intentic-provided host tunnel,
     // which needs intentic's platform Cloudflare account the daemon doesn't hold.
@@ -634,6 +643,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             // holds. This runs before the new turn, so that turn cannot be adopted and appended twice.
             open: (agent) => transcriptDeps.record.open(agent.id, () => storedTranscript(transcriptDeps, agent)),
             append: (agent, messages) => transcriptDeps.record.append(agent.id, messages),
+            prompts: createAgentPromptsReader(transcriptDeps),
         },
         platformHostTunnel: (hostName) => postToPlatform(config, "/sandbox/host-tunnel", { hostName }),
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),

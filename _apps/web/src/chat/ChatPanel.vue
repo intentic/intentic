@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, BottomSheet, useDevice } from "@intentic-app/ui";
+import { AnchoredOverlay, BottomSheet, Icon, useDevice } from "@intentic-app/ui";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { type AgentCommand, providerLabel } from "@intentic/sandbox-contract";
@@ -144,6 +144,9 @@ const modePill = ref<HTMLElement>();
 const { pin, follow } = useStickToBottom(scroller, content, poppedOut);
 
 const activeError = computed(() => active.value.error.value);
+// The active conversation's transcript round-trip, still in flight with nothing painted yet — the empty
+// state defers to a loading one on it.
+const activeLoading = computed(() => active.value.loading.value);
 
 // The active conversation's account when its stored credential can no longer be refreshed — surfaced as a
 // pre-send banner so the user reconnects before hitting an opaque failure mid-turn (Codex today).
@@ -1007,6 +1010,12 @@ watch(
                                 />
                             </section>
                         </template>
+                        <!-- The transcript is on its way (a history open, a restored tab whose local mirror was
+                             empty). Without this state the round-trip wears the "Start a conversation" text
+                             below, which over a chat that merely hasn't arrived yet reads as data loss. -->
+                        <p v-else-if="activeLoading" class="m-auto flex items-center gap-2 text-xs text-muted">
+                            <Icon name="spinner" spin />Loading conversation…
+                        </p>
                         <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">Start a conversation with {{ providerName }}.</p>
                         <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
                     </div>

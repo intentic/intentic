@@ -28,6 +28,7 @@ import { createPortForwards } from "./ports/port-forwards.js";
 import { createBootTracker } from "./platform/boot.js";
 import { createPerfTracker } from "./platform/perf.js";
 import { mintPairing } from "./platform/sync.js";
+import { userPromptsOf } from "./sessions/prompt-index.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { AgentTool } from "./agent/agent-tools.js";
 import { listenerProvidersOf } from "./extensions/installed-extensions.js";
@@ -384,6 +385,9 @@ const services = (overrides: Partial<Services> = {}): Services => {
             // the fake rots in silence.
             open: async () => {},
             append: async () => {},
+            // The same extraction production's cached reader applies over agentTranscript, minus the cache —
+            // a test double re-reading per call is exactly the behavior the cache exists to avoid paying for.
+            prompts: async (agent) => userPromptsOf(await merged.transcripts.read(agent)),
         },
         ...overrides,
     };
@@ -2382,6 +2386,14 @@ test("agents.search matches titles and later prompts, across the archive, and ne
 });
 
 test("agents.search reads the daemon transcript for a provider with no SDK prompt store", async () => {
+    const codexSearchTranscript = (id: string) =>
+        id === "codex-search"
+            ? [
+                  { role: "user" as const, text: "open the codex task" },
+                  { role: "assistant" as const, text: "I mentioned forbidden-assistant-needle" },
+                  { role: "user" as const, text: "find durable-transcript-needle" },
+              ]
+            : [];
     const app = createApp(
         services({
             config: withTranslator,
@@ -2390,18 +2402,14 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
                 yield { kind: "done" };
             },
             // Native Codex has no Claude SDK session to search. The daemon transcript is the provider-neutral
-            // source, and includes a later prompt that is deliberately absent from the card title.
+            // source, and includes a later prompt that is deliberately absent from the card title. `prompts`
+            // extracts from the same record through the real userPromptsOf, so the assistant-exclusion
+            // assertion below exercises the extraction rather than a hand-picked list.
             transcripts: {
-                read: async (agent) =>
-                    agent.id === "codex-search"
-                        ? [
-                              { role: "user" as const, text: "open the codex task" },
-                              { role: "assistant" as const, text: "I mentioned forbidden-assistant-needle" },
-                              { role: "user" as const, text: "find durable-transcript-needle" },
-                          ]
-                        : [],
+                read: async (agent) => codexSearchTranscript(agent.id),
                 open: async () => {},
                 append: async () => {},
+                prompts: async (agent) => userPromptsOf(codexSearchTranscript(agent.id)),
             },
             sessions: {
                 list: async () => [],

@@ -94,7 +94,7 @@ export const createAgentsRoutes = (services: Services) => {
                     if (entry === undefined) {
                         return undefined;
                     }
-                    const snippet = matchPrompts(conversationPrompts(agent.id, await services.transcripts.read(entry)), needle);
+                    const snippet = matchPrompts(conversationPrompts(agent.id, await services.transcripts.prompts(entry)), needle);
                     return snippet === undefined ? undefined : { id: agent.id, snippet };
                 }),
             );

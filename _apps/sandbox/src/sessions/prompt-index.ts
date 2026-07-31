@@ -76,10 +76,15 @@ export const recordConversationPrompt = (conversationId: string, prompt: string)
     conversations.set(conversationId, held.slice(-ROUTED_PER_SESSION));
 };
 
-// Provider-neutral prompt input for the fleet filter: the durable daemon transcript plus prompts routed by
+// What the USER said in a transcript, cleaned of daemon protocol — the extraction the fleet filter matches
+// on, shared with the cached per-conversation read in agent-transcript.ts.
+export const userPromptsOf = (messages: readonly RestoredMessage[]): string[] =>
+    messages.filter((message) => message.role === "user").flatMap((message) => cleanPrompts(message.text));
+
+// Provider-neutral prompt input for the fleet filter: the durable transcript's prompts plus prompts routed by
 // this process but not yet appended to that transcript. Assistant prose and tool output never enter the list.
-export const conversationPrompts = (conversationId: string, messages: readonly RestoredMessage[]): readonly string[] => [
-    ...messages.filter((message) => message.role === "user").flatMap((message) => cleanPrompts(message.text)),
+export const conversationPrompts = (conversationId: string, recorded: readonly string[]): readonly string[] => [
+    ...recorded,
     ...(conversations.get(conversationId) ?? []),
 ];
 

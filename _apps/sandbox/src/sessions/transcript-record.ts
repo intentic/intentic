@@ -37,6 +37,10 @@ export interface TranscriptRecord {
     // The whole conversation, oldest first. Empty ⇒ this conversation has no record (never written, or written
     // under a daemon whose history volume is gone) — the caller decides what that means.
     readonly read: (conversationId: string) => Promise<RestoredMessage[]>;
+    // The record's byte size, undefined when no record exists. The file is append-only, so this is a version
+    // key: an unchanged size means an unchanged record, which is what lets the search fan-out cache what it
+    // extracted instead of re-reading the whole store per keystroke (see agent-transcript.ts).
+    readonly size: (conversationId: string) => Promise<number | undefined>;
 }
 
 const lines = (messages: readonly RestoredMessage[]): string => messages.map((message) => `${JSON.stringify(message)}\n`).join("");
@@ -95,5 +99,14 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
             return [];
         }
         return raw.split("\n").flatMap((line) => (line.length === 0 ? [] : row(line)));
+    },
+    size: async (conversationId) => {
+        if (!FILE_ID.test(conversationId)) {
+            return undefined;
+        }
+        return stat(join(dir, `${conversationId}.jsonl`)).then(
+            (info) => info.size,
+            () => undefined,
+        );
     },
 });

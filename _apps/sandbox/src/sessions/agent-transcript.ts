@@ -1,5 +1,6 @@
 import { type AgentHarness, type AgentProvider, capabilitiesOf, type RestoredMessage } from "@intentic/sandbox-contract";
 import { readCodexSession } from "./codex-sessions.js";
+import { userPromptsOf } from "./prompt-index.js";
 import type { TranscriptRecord } from "./transcript-record.js";
 
 // Which conversation to answer about. The provider/harness pair is the REGISTRY's, never re-derived from the
@@ -51,4 +52,30 @@ export const storedTranscript = async (deps: AgentTranscriptDeps, agent: Transcr
 export const agentTranscript = async (deps: AgentTranscriptDeps, agent: TranscriptAgent): Promise<RestoredMessage[]> => {
     const recorded = await deps.record.read(agent.id);
     return recorded.length > 0 ? recorded : storedTranscript(deps, agent);
+};
+
+/* A conversation's USER prompts, cached — because /agents/search asks for them for every registry entry, live
+ * and archived, on every settled keystroke. Answering that from agentTranscript meant re-reading and
+ * re-validating the entire transcript store (plus the provider-store backfill for pre-record conversations)
+ * per keystroke: measured multi-second event-loop stalls that wedged every other request behind the search,
+ * including the transcript read of the very chat the user then clicked.
+ *
+ * The record's byte size is the cache key. The file is append-only, so an unchanged size is an unchanged
+ * record; a turn settling grows it and the next probe re-reads. A conversation still on the backfill (no
+ * record, size undefined) is frozen by construction — its next turn opens a record before it runs
+ * (transcripts.open), which flips the size from undefined and invalidates. The prompt a LIVE turn is running
+ * on is not this function's problem: the route unions it in from the routed-prompt index (conversationPrompts),
+ * the same way the session search covers its own write-lag window. */
+export const createAgentPromptsReader = (deps: AgentTranscriptDeps): ((agent: TranscriptAgent) => Promise<readonly string[]>) => {
+    const cache = new Map<string, { size: number | undefined; prompts: readonly string[] }>();
+    return async (agent) => {
+        const size = await deps.record.size(agent.id);
+        const held = cache.get(agent.id);
+        if (held !== undefined && held.size === size) {
+            return held.prompts;
+        }
+        const prompts = userPromptsOf(await agentTranscript(deps, agent));
+        cache.set(agent.id, { size, prompts });
+        return prompts;
+    };
 };

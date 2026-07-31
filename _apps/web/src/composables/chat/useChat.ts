@@ -1052,16 +1052,23 @@ const decidePermission = (message: ChatMessage, decision: "once" | "always" | "d
 // --- History ----------------------------------------------------------------------------------
 // Refresh the history list from the sandbox's session store (call when opening the history menu). A query
 // filters the list by chat title or content, server-side.
+// Each call ABORTS the one before it: a search is fired per settled keystroke, and without the abort a burst
+// of queries piles up on the daemon and lands out of order — the slowest, stalest response overwriting the
+// list the newest query already painted.
+let sessionsLoad: AbortController | undefined;
 const loadSessions = async (query?: string): Promise<void> => {
+    sessionsLoad?.abort();
+    const controller = new AbortController();
+    sessionsLoad = controller;
     try {
-        const response = await sandboxRequest(query ? `/sessions?query=${encodeURIComponent(query)}` : `/sessions`);
+        const response = await sandboxRequest(query ? `/sessions?query=${encodeURIComponent(query)}` : `/sessions`, { signal: controller.signal });
         if (!response.ok) {
             return;
         }
         const body = (await response.json()) as { sessions?: ChatSession[] };
         sessions.value = body.sessions ?? [];
     } catch {
-        // Non-fatal; the menu shows whatever was loaded last.
+        // Non-fatal (including our own abort); the menu shows whatever was loaded last.
     }
 };
 
@@ -1136,15 +1143,22 @@ const hydrate = async (conversation: Conversation): Promise<boolean> => {
     // mirror on its own, so a paint that declines because the transcript is already populated must not be read
     // as "empty" and pay a session fetch the user would wait through on every restored tab.
     const seeded = conversation.messages.value.length === 0;
-    // A failed seed still lets the attach below run — a live turn is worth rendering either way — but it rides
-    // out as the return value so the caller re-tries the read rather than settling for a tab that looks empty.
-    const seededOk = seeded ? await replayStoredSession(conversation) : true;
-    if (await conversation.reattach()) {
-        return seededOk;
+    // The one case with nothing to show while the daemon answers — say the transcript is on its way rather
+    // than inviting the user to start over a conversation that merely hasn't arrived yet.
+    conversation.loading.value = seeded;
+    try {
+        // A failed seed still lets the attach below run — a live turn is worth rendering either way — but it rides
+        // out as the return value so the caller re-tries the read rather than settling for a tab that looks empty.
+        const seededOk = seeded ? await replayStoredSession(conversation) : true;
+        if (await conversation.reattach()) {
+            return seededOk;
+        }
+        // With nothing running, what the mirror painted still has to be reconciled against the daemon — unless the
+        // seeding above already read the very same store a moment ago.
+        return seeded ? seededOk : await replayStoredSession(conversation);
+    } finally {
+        conversation.loading.value = false;
     }
-    // With nothing running, what the mirror painted still has to be reconciled against the daemon — unless the
-    // seeding above already read the very same store a moment ago.
-    return seeded ? seededOk : await replayStoredSession(conversation);
 };
 
 /* Redraw a conversation from the daemon's own record — the authoritative transcript, and the only copy that
@@ -1319,10 +1333,15 @@ const openConversation = async (id: string): Promise<void> => {
     // is indistinguishable from an untouched draft, and the focus-leave sweep would close it mid-load.
     const title = sessions.value.find((session) => session.id === id)?.title ?? null;
     conversation.title.value = title;
+    conversation.loading.value = true;
     setConversations([...conversations.value, conversation], conversation.conversationId);
-    const restored = await fetchTranscript(conversation, id);
-    if (restored !== undefined) {
-        conversation.loadTranscript(restored, id, title);
+    try {
+        const restored = await fetchTranscript(conversation, id);
+        if (restored !== undefined) {
+            conversation.loadTranscript(restored, id, title);
+        }
+    } finally {
+        conversation.loading.value = false;
     }
 };
 
