@@ -67,8 +67,15 @@ interface BrowserSessionRecord {
     // Every page currently open, in the order they were opened — which is the order a browser shows its tabs.
     readonly pages: Map<string, PageRecord>;
     nextPageId: number;
-    // The page the agent last drove. Undefined before the first page, and after the last one closes.
+    // The page the agent last drove AND that is still open — what the tab strip highlights. Falls back as tabs
+    // close, and is undefined once none are left.
     activePageId: string | undefined;
+    // The page the agent last drove, full stop. Never walked back, because a finished session's whole value is
+    // where it ENDED: without this every finished pill degrades to the server name ("web") at exactly the moment
+    // its label is the only thing left to tell two records apart. It has to be a SEPARATE field rather than a
+    // softer rule on the one above — Chromium going away closes every page at once in an order nothing here
+    // controls, so the field a close handler walks cannot also be the field that remembers.
+    lastPageId: string | undefined;
     // Set when the browser went away (turn ended, agent called browser_close, Chromium crashed).
     finishedAt: number | undefined;
     browser: Browser | undefined;
@@ -105,9 +112,13 @@ export const browserServerOfTool = (tool: string): string | undefined => {
 const notePage = async (record: BrowserSessionRecord, entry: PageRecord): Promise<void> => {
     record.activityAt = Date.now();
     record.activePageId = entry.id;
+    record.lastPageId = entry.id;
     entry.url = entry.page.url();
-    // A page that navigated out from under us throws here; the next event carries the new title.
-    entry.title = await entry.page.title().catch(() => undefined);
+    // A page that navigated out from under us throws here; the next event carries the new title. An EMPTY title
+    // is the same fact as no title — about:blank has one — and a tab labelled with nothing is worse than a tab
+    // labelled with its host, so it falls through the same ladder.
+    const title = await entry.page.title().catch(() => undefined);
+    entry.title = title === undefined || title === "" ? undefined : title;
 };
 
 const watchPage = (record: BrowserSessionRecord, page: Page): void => {
@@ -123,7 +134,8 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
     // A title set by script after load (SPAs do this on every route change) — the DOM event is the only signal.
     page.on("domcontentloaded", () => void notePage(record, entry));
     // A closed tab leaves the strip. The active slot falls back to the last page still open — the same
-    // follow-the-newest rule the screencast uses when the page it was bound to goes away.
+    // follow-the-newest rule the screencast uses when the page it was bound to goes away. `lastPageId` is
+    // deliberately NOT touched here; that is the half of this that has to survive the browser going away.
     page.on("close", () => {
         entry.closed = true;
         if (record.activePageId === entry.id) {
@@ -200,6 +212,7 @@ export const openBrowserSession = (input: { readonly sessionId: string; readonly
         pages: new Map(),
         nextPageId: 1,
         activePageId: undefined,
+        lastPageId: undefined,
         finishedAt: undefined,
         browser: undefined,
         context: undefined,
@@ -268,17 +281,19 @@ const summarizePage = (entry: PageRecord, activeId: string | undefined): Browser
 
 const summarize = (record: BrowserSessionRecord): BrowserSession => {
     const running = record.finishedAt === undefined;
-    const active = record.activePageId === undefined ? undefined : record.pages.get(record.activePageId);
-    return {
+    // A running session points at the tab the agent is ON; a finished one at the tab it ENDED on — the same
+    // asymmetry as the page list above, and for the same reason.
+    const activeId = running ? record.activePageId : record.lastPageId;
+    const active = activeId === undefined ? undefined : record.pages.get(activeId);
+    const session: BrowserSession = {
         name: record.name,
         label: active?.title ?? hostOf(active?.url) ?? record.server,
         server: record.server,
         running,
         activityAt: record.activityAt,
-        pages: [...record.pages.values()]
-            .filter((entry) => !running || !entry.closed)
-            .map((entry) => summarizePage(entry, record.activePageId)),
+        pages: [...record.pages.values()].filter((entry) => !running || !entry.closed).map((entry) => summarizePage(entry, activeId)),
     };
+    return running ? session : { ...session, finishedAt: record.finishedAt };
 };
 
 export const listBrowserSessions = (): BrowserSession[] => {

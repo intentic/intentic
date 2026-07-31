@@ -1,10 +1,11 @@
 import { onScopeDispose, ref, type Ref, shallowRef, watch } from "vue";
+import { viewportCoords } from "./viewportCoords";
 import { useSandboxSession } from "../sandbox/sandboxSession";
 import { useEndpoint } from "../sandbox/useEndpoint";
 import { useSandbox } from "../sandbox/useSandbox";
 
 /* ONE live view of the agent's browser: a `browser-*` session streamed over the daemon's /system/browser-view
- * WebSocket as JPEG frames, with the owner's clicks and keystrokes going back the other way.
+ * WebSocket as image frames, with the owner's clicks and keystrokes going back the other way.
  *
  * This is NOT built like terminalSession.ts, and the difference is deliberate. A terminal's xterm is a
  * persistent host element shuffled between containers so a tab switch doesn't drop its scrollback — a browser
@@ -35,6 +36,8 @@ const SPECIAL_KEYS = new Set([`Enter`, `Backspace`, `Tab`, `Delete`, `Escape`, `
 
 export interface BrowserView {
     // The current frame as a data URL. Undefined until the first one lands — the view shows `status` instead.
+    // Its encoding changes under it: a low-cost jpeg while the page moves, then one sharp webp once it settles
+    // (see screencast.ts), which is why the frame carries its own format rather than the client assuming one.
     readonly frame: Ref<string | undefined>;
     // What to say while there is no picture: connecting, reconnecting, or why there never will be one.
     readonly status: Ref<string | undefined>;
@@ -92,6 +95,13 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         }
     };
 
+    /* NOBODY LOOKING, NOTHING SENT. A browsing agent paints constantly, and a view left open on a background tab
+     * (or behind another route — this composable's scope outlives a nav) would keep pulling every one of those
+     * frames down the tunnel to an <img> nobody can see. The daemon holds the binding and the pin across a
+     * pause, so coming back is one frame away rather than a reconnect. */
+    const syncVisibility = (): void => send({ type: document.hidden ? `pause` : `resume` });
+    document.addEventListener(`visibilitychange`, syncVisibility);
+
     const connect = async (): Promise<void> => {
         window.clearTimeout(reconnect);
         const session = name.value;
@@ -126,6 +136,9 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             if (pinned !== undefined) {
                 ws.send(JSON.stringify({ type: `bind`, pageId: pinned }));
             }
+            // A socket that opened (or reconnected) while the tab was in the background starts out streaming —
+            // the daemon has no way to know otherwise — so the first thing it hears is where we actually are.
+            syncVisibility();
             ping = window.setInterval(() => {
                 if (Date.now() - lastFrameAt > STALE_MS) {
                     ws.close();
@@ -136,14 +149,14 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         });
         ws.addEventListener(`message`, (event) => {
             lastFrameAt = Date.now();
-            let message: { type?: string; data?: string; message?: string; pageId?: string };
+            let message: { type?: string; data?: string; format?: string; message?: string; pageId?: string };
             try {
                 message = JSON.parse(String(event.data)) as typeof message;
             } catch {
                 return;
             }
-            if (message.type === `frame` && message.data !== undefined) {
-                frame.value = `data:image/jpeg;base64,${message.data}`;
+            if (message.type === `frame` && message.data !== undefined && message.format !== undefined) {
+                frame.value = `data:image/${message.format};base64,${message.data}`;
                 status.value = undefined;
                 return;
             }
@@ -201,21 +214,9 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
 
     onScopeDispose(() => {
         closing = true;
+        document.removeEventListener(`visibilitychange`, syncVisibility);
         teardown();
     });
-
-    // Map a pointer event onto the remote viewport. Measured against the IMAGE, not its container: the frame is
-    // object-contain'd, so the container's box is letterboxed and off by however much the aspect ratios differ.
-    const coords = (event: MouseEvent, element: HTMLElement): { x: number; y: number } => {
-        const rect = element.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) {
-            return { x: 0, y: 0 };
-        }
-        return {
-            x: Math.max(0, Math.round(((event.clientX - rect.left) / rect.width) * VIEW_WIDTH)),
-            y: Math.max(0, Math.round(((event.clientY - rect.top) / rect.height) * VIEW_HEIGHT)),
-        };
-    };
 
     let lastMove = 0;
     return {
@@ -235,16 +236,16 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
                 return;
             }
             lastMove = now;
-            send({ type: `mouse`, action: `move`, ...coords(event, element) });
+            send({ type: `mouse`, action: `move`, ...viewportCoords(event, element, VIEW_WIDTH, VIEW_HEIGHT) });
         },
         onMouseDown: (event, element) => {
             if (driving.value) {
-                send({ type: `mouse`, action: `down`, ...coords(event, element), button: event.button });
+                send({ type: `mouse`, action: `down`, ...viewportCoords(event, element, VIEW_WIDTH, VIEW_HEIGHT), button: event.button });
             }
         },
         onMouseUp: (event, element) => {
             if (driving.value) {
-                send({ type: `mouse`, action: `up`, ...coords(event, element), button: event.button });
+                send({ type: `mouse`, action: `up`, ...viewportCoords(event, element, VIEW_WIDTH, VIEW_HEIGHT), button: event.button });
             }
         },
         onWheel: (event, element) => {
@@ -252,7 +253,13 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
                 return;
             }
             event.preventDefault();
-            send({ type: `mouse`, action: `wheel`, ...coords(event, element), deltaX: event.deltaX, deltaY: event.deltaY });
+            send({
+                type: `mouse`,
+                action: `wheel`,
+                ...viewportCoords(event, element, VIEW_WIDTH, VIEW_HEIGHT),
+                deltaX: event.deltaX,
+                deltaY: event.deltaY,
+            });
         },
         onKeyDown: (event) => {
             // Let real shortcuts (copy/paste/devtools, and the shell's own chords) through; only plain typing

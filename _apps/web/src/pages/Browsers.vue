@@ -6,6 +6,7 @@ import { useRoute, useRouter } from "vue-router";
 import { activePageOf } from "../composables/browser/activePage";
 import { closeBrowser, useBrowsersQuery } from "../composables/browser/browsersQuery";
 import { useBrowserView } from "../composables/browser/useBrowserView";
+import { relativeTime } from "../composables/chat/catalog";
 
 /* THE AGENT'S BROWSER, AS A BROWSER. A live screencast of the Chromium a turn is driving through its
  * @playwright/mcp tools, with the pages it has open as a tab strip across the top — because the agent's browser
@@ -17,7 +18,12 @@ import { useBrowserView } from "../composables/browser/useBrowserView";
  *
  * TWO STRIPS, TWO QUESTIONS. The session pills answer "which browser?" — there is one per conversation that has
  * browsed, and they only render when more than one exists, since a row of one pill is furniture. The page tabs
- * answer "which page?" and are always there while a browser has any. */
+ * answer "which page?" and are always there while a browser has any.
+ *
+ * A FINISHED BROWSER IS A RECORD, NOT A BROKEN ONE. The daemon keeps a session listable for a couple of hours
+ * after its Chromium goes away, and switches its strip from the tabs it had OPEN to every tab it ever had —
+ * which is the answer to the only question left about a browser that has stopped. So the stage below becomes
+ * that record rather than a socket dialling something that isn't there. */
 
 const POLL_MS = 3000;
 
@@ -36,7 +42,12 @@ const selected = computed<string | undefined>(() => {
 });
 const current = computed(() => sessions.value.find((session) => session.name === selected.value));
 
-const view = useBrowserView(selected);
+/* ONLY A RUNNING BROWSER IS DIALLED. A finished one is kept listable for a couple of hours because its tab list
+ * is the record of where the agent went — but there is no Chromium behind it, so opening a socket could only ask
+ * a dead question and get an error chip over a black rectangle back. Passing undefined here is what turns the
+ * stage into that record instead: the composable tears its socket down and stops trying. */
+const watchable = computed(() => (current.value?.running === true ? current.value.name : undefined));
+const view = useBrowserView(watchable);
 
 // The page the user picked. Cleared whenever the browser changes — a page id is only meaningful inside its own
 // session, and carrying one across would bind to a stranger.
@@ -156,6 +167,7 @@ const close = (name: string): void => void closeBrowser(name);
             <!-- The picture. Keeps the terminal surface (dark in BOTH modes) so a page that doesn't fill the box
                  letterboxes into black rather than sitting in a bright rectangle. -->
             <div
+                v-if="current?.running"
                 ref="stageEl"
                 tabindex="0"
                 class="relative flex min-h-0 flex-1 select-none items-center justify-center bg-terminal outline-none"
@@ -169,6 +181,18 @@ const close = (name: string): void => void closeBrowser(name);
                 <img v-show="view.frame.value" ref="frameEl" :src="view.frame.value" alt="" draggable="false" class="h-full w-full object-contain" />
                 <div v-if="view.status.value" class="absolute inset-0 flex items-center justify-center px-4">
                     <span class="rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ view.status.value }}</span>
+                </div>
+            </div>
+
+            <!-- A browser that has closed. Not a failed stream — there is nothing to stream — so it reads as the
+                 record it is, and the strip above it (which lists every tab a finished session ever had, not just
+                 the ones open at the end) is the actual content. -->
+            <div v-else class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+                <Icon name="globe" class="text-2xl text-muted" />
+                <div class="text-sm text-content">This browser has closed</div>
+                <div class="max-w-sm text-xs text-muted">
+                    <template v-if="current?.finishedAt !== undefined">Closed {{ relativeTime(current.finishedAt) }}. </template>
+                    Every page it opened is still listed above, with the one it ended on selected — the record of where the agent went.
                 </div>
             </div>
         </template>

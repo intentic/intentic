@@ -3,12 +3,13 @@ import { cmp } from "@intentic-app/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { onBeforeUnmount, ref, watch } from "vue";
+import { viewportCoords } from "../composables/browser/viewportCoords";
 import { useSandboxSession } from "../composables/sandbox/sandboxSession";
 import { useEndpoint } from "../composables/sandbox/useEndpoint";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* Guided browser login for a `browser`-kind capability. Opens the daemon's /system/browser-login WebSocket: the
- * daemon drives a real (headless) Chromium at the platform's sign-in page and screencasts it here as JPEG frames;
+ * daemon drives a real (headless) Chromium at the platform's sign-in page and screencasts it here as image frames;
  * we forward the user's mouse + keyboard back over the same socket. The user signs in (incl. 2FA/CAPTCHA), clicks
  * "I'm done", and the daemon persists the logged-in profile so the agent's browser tools reuse it. Modeled on
  * terminalSession.ts (same token+connect query-string auth over the sandbox's tunnel). */
@@ -57,9 +58,18 @@ const connect = async (): Promise<void> => {
     const ws = new WebSocket(`${base.replace(/^http/, "ws")}/system/browser-login?${params.toString()}`);
     socket = ws;
     ws.addEventListener("message", (event) => {
-        const message = JSON.parse(String(event.data)) as { type: string; data?: string; width?: number; height?: number; message?: string };
-        if (message.type === "frame" && message.data !== undefined) {
-            frame.value = `data:image/jpeg;base64,${message.data}`;
+        const message = JSON.parse(String(event.data)) as {
+            type: string;
+            data?: string;
+            format?: string;
+            width?: number;
+            height?: number;
+            message?: string;
+        };
+        // The encoding alternates: a cheap jpeg while the page paints, a sharp webp once it settles — so the
+        // frame says which it is rather than the client assuming (screencast.ts).
+        if (message.type === "frame" && message.data !== undefined && message.format !== undefined) {
+            frame.value = `data:image/${message.format};base64,${message.data}`;
         } else if (message.type === "ready") {
             status.value = "ready";
             viewW.value = message.width ?? viewW.value;
@@ -88,19 +98,10 @@ watch(
 );
 onBeforeUnmount(close);
 
-// Map a pointer event to the daemon viewport's coordinate space. Measure the IMAGE, not the bordered container —
-// the frame is object-contain'd inside a 1px border, so the container rect is offset a couple px (enough to miss
-// small hit targets like checkboxes).
-const coords = (event: MouseEvent): { x: number; y: number } => {
-    const rect = imgEl.value?.getBoundingClientRect();
-    if (rect === undefined || rect.width === 0 || rect.height === 0) {
-        return { x: 0, y: 0 };
-    }
-    return {
-        x: Math.max(0, Math.round(((event.clientX - rect.left) / rect.width) * viewW.value)),
-        y: Math.max(0, Math.round(((event.clientY - rect.top) / rect.height) * viewH.value)),
-    };
-};
+// Map a pointer event to the daemon viewport's coordinate space — viewportCoords is the shared rule, and this
+// only supplies the image and the size the `ready` frame reported. Nothing to map before the first frame paints.
+const coords = (event: MouseEvent): { x: number; y: number } =>
+    imgEl.value === undefined ? { x: 0, y: 0 } : viewportCoords(event, imgEl.value, viewW.value, viewH.value);
 
 const onMouseMove = (event: MouseEvent): void => {
     const now = Date.now();

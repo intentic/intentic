@@ -99,9 +99,9 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         // The daemon's own attach sees the page the MCP created, and can stream it.
         const context = await browserSessionContext(SESSION);
         expect(context).toBeDefined();
-        let frames = 0;
-        const screencast = await startScreencast(context!, () => {
-            frames += 1;
+        const formats: string[] = [];
+        const screencast = await startScreencast(context!, (frame) => {
+            formats.push(frame.format);
         });
         await new Promise((resolve) => setTimeout(resolve, 1500));
         await screencast.stop();
@@ -111,7 +111,10 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         // The page's own account of itself, which is what the session's pill says.
         expect(listed?.label).toBe("Probe Page");
         expect(listed?.server).toBe("web");
-        expect(frames).toBeGreaterThan(0);
+        // Motion frames while it paints, then — 400ms after it settles — the high-resolution still that is what
+        // anyone actually reads. A stream that only ever sent jpeg would mean the settle capture never fired.
+        expect(formats).toContain("jpeg");
+        expect(formats).toContain("webp");
 
         // ONE page so far, and it is the active one — the tab strip's first tab.
         expect(listed?.pages).toHaveLength(1);
@@ -156,12 +159,41 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
             await pinnedCast.stop();
         }
 
+        /* PAUSED MEANS SILENT. A view whose tab went to the background holds its binding but must stop costing
+         * tunnel bandwidth, and the only honest way to check that is to make the page repaint while paused and
+         * see nothing arrive. The navigation doubles as what the agent "ended on" for the assertions below. */
+        let whilePaused = 0;
+        const pausedCast = await startScreencast(context!, () => {
+            whilePaused += 1;
+        });
+        try {
+            await pausedCast.setPaused(true);
+            whilePaused = 0;
+            const repaint = await call("tools/call", { name: "browser_navigate", arguments: { url } });
+            expect(repaint.result?.isError ?? false).toBe(false);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            expect(whilePaused).toBe(0);
+            // And one frame away from coming back — no reconnect, no rebind.
+            await pausedCast.setPaused(false);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            expect(whilePaused).toBeGreaterThan(0);
+        } finally {
+            await pausedCast.stop();
+        }
+
         // The kill route's half: closing the browser ends the session, and the row stays readable afterwards —
         // including where the agent went, which is the point of keeping a finished session listable at all.
         await closeBrowserSession(SESSION);
         const dead = listBrowserSessions().find((session) => session.name === SESSION);
         expect(dead?.running).toBe(false);
         expect(dead?.pages.length).toBeGreaterThanOrEqual(2);
+        expect(dead?.finishedAt).toBeGreaterThan(0);
+        /* AND IT STILL SAYS WHERE IT ENDED. A finished session labels off the last page the agent DROVE, not off
+         * the live active slot — that slot is walked back by every closing page, and Chromium going away closes
+         * them all, so reading it here left every finished pill saying "web" at exactly the moment its label was
+         * the only thing left to tell two records apart. */
+        expect(dead?.label).toBe("Probe Page");
+        expect(dead?.pages.filter((page) => page.active)).toHaveLength(1);
         // Nothing to bind once the Chromium is gone; the handles it still lists are dead.
         expect(browserSessionPage(SESSION, dead?.pages[0]?.id ?? "")).toBeUndefined();
     } finally {

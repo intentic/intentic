@@ -2514,7 +2514,7 @@ export const BrowserPageSchema = z.object({
     // The page's own title. Absent mid-navigation, which is exactly when a tab still needs to render.
     title: z.string().optional(),
     url: z.string(),
-    // The page the agent last drove. Exactly one page per running session has it.
+    // The page the agent last drove — on a finished session, the one it ended on. Exactly one page has it.
     active: z.boolean(),
 });
 export const BrowserSessionSchema = z.object({
@@ -2528,6 +2528,9 @@ export const BrowserSessionSchema = z.object({
     // still lists for a while, with the pages it had — the record of where the agent went.
     running: z.boolean(),
     activityAt: z.number(),
+    // When that Chromium went away, for the "closed 20m ago" line a finished session leads with. Absent while
+    // running, which is the same fact as `running` — but the view needs the timestamp, not just the flag.
+    finishedAt: z.number().optional(),
     pages: z.array(BrowserPageSchema),
 });
 export type BrowserPage = z.infer<typeof BrowserPageSchema>;

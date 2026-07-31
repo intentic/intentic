@@ -60,7 +60,7 @@ export const createBrowserViewRoute = (services: Services) =>
                     return;
                 }
                 try {
-                    screencast = await startScreencast(context, (data) => ws.send(JSON.stringify({ type: "frame", data })));
+                    screencast = await startScreencast(context, (frame) => ws.send(JSON.stringify({ type: "frame", ...frame })));
                     ws.send(JSON.stringify({ type: "ready", width: VIEW_WIDTH, height: VIEW_HEIGHT }));
                 } catch (err) {
                     services.logger.warn({ err }, "browser-view screencast failed");
@@ -70,8 +70,7 @@ export const createBrowserViewRoute = (services: Services) =>
                 }
             },
             onMessage: async (event, ws) => {
-                const attached = screencast?.attached();
-                if (attached === undefined || closed) {
+                if (closed) {
                     return;
                 }
                 let message: ScreencastClientMessage;
@@ -84,7 +83,16 @@ export const createBrowserViewRoute = (services: Services) =>
                     // The client's keepalive against tunnel idle-reaping; the pong is its read-side liveness
                     // signal, exactly as on the terminal socket (a screencast of a STILL page sends no frames,
                     // so silence here would otherwise be indistinguishable from a half-open connection).
+                    // Answered before anything is attached, or a slow Chromium start would read as a dead
+                    // socket and the client would tear down the very connection it is waiting on.
                     ws.send(JSON.stringify({ type: "pong" }));
+                    return;
+                }
+                if (message.type === "pause" || message.type === "resume") {
+                    // Nobody is looking (hidden tab, another route). Holding the binding but sending nothing is
+                    // the whole trick: coming back is one frame away, and a browsing agent stops pushing JPEGs
+                    // through the tunnel at an <img> in a background tab.
+                    await screencast?.setPaused(message.type === "pause");
                     return;
                 }
                 if (message.type === "bind") {
@@ -97,6 +105,11 @@ export const createBrowserViewRoute = (services: Services) =>
                         return;
                     }
                     await screencast?.bind(page, true);
+                    return;
+                }
+                // Everything left is a pointer or a keystroke, and needs somewhere to land.
+                const attached = screencast?.attached();
+                if (attached === undefined) {
                     return;
                 }
                 try {

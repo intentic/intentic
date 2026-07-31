@@ -93,7 +93,7 @@ export const createBrowserLoginRoute = (services: Services) =>
                     // so the stream has something to bind to (it follows every later page — popups included —
                     // by itself; see screencast.ts).
                     const page = ctx.pages()[0] ?? (await ctx.newPage());
-                    screencast = await startScreencast(ctx, (data) => ws.send(JSON.stringify({ type: "frame", data })));
+                    screencast = await startScreencast(ctx, (frame) => ws.send(JSON.stringify({ type: "frame", ...frame })));
                     // Don't hard-fail on a slow login page; the user can still interact once it paints.
                     await page.goto(browserProviders[platform].loginUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {
                         services.logger.warn({ err }, "browser-login initial nav");
