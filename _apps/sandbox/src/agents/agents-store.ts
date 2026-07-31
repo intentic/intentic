@@ -37,14 +37,20 @@ import { z } from "zod";
  * now asked of git. */
 const PersistedAgentStatusSchema = z.enum(["idle", "interrupted", "stopped", "error"]).catch("idle");
 
-/* Where a title came from, which is the whole of what decides whether a better one may replace it.
+/* Where a title came from, which is the whole of what decides whether a better one may replace it. The ladder
+ * is one question asked four times — how much authority does whoever wrote this name have over the job?
  *
- * `derived` is the opening prompt read as prose (deriveTitle) — a guess made before the first frame came
- * back. `summary` is the quick model's reading of a finished turn (agent/title-summary.ts): it has seen the
- * answer, so it beats the guess. `plan` is the heading of a plan the agent wrote — its own name for the whole
- * job, better than any reading of it. `user` is a rename, which outranks everything: an agent that renames a
- * tab the user just named is a bug. */
-const AgentTitleSourceSchema = z.enum(["derived", "summary", "plan", "user"]);
+ * `derived` is the opening prompt CUT to a line by a rule with no model behind it (deriveTitle), which is the
+ * best that can be done before the first frame comes back. `model` is the quick model's name for the same
+ * prompt (agent/title-namer.ts): it writes rather than cuts, so it beats the guess. `plan` is the heading of a
+ * plan the agent wrote — its own name for the whole job, better than any reading of the ask alone. `user` is a
+ * rename, which outranks everything: an agent that renames a tab the user just named is a bug.
+ *
+ * `.catch`, for the reason PersistedAgentStatusSchema carries one: agents.json is user data on a volume that
+ * outlives every image, so a value retired from this vocabulary must cost the FIELD and not the row. Reading a
+ * retired source as `derived` says exactly what losing it means — the name that is there stands until anything
+ * better arrives, which is the resting state of every title. */
+const AgentTitleSourceSchema = z.enum(["derived", "model", "plan", "user"]).catch("derived");
 export type AgentTitleSource = z.infer<typeof AgentTitleSourceSchema>;
 
 export const PersistedAgentSchema = z.object({

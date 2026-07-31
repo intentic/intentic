@@ -14,7 +14,7 @@ import type { LandStandings } from "./standing.js";
 const MAX_TITLE_LENGTH = 80;
 // The source ranking as a number, so promoteTitle's comparison is one `<=`. An entry written before it had a
 // source reads as `derived`, i.e. as replaceable by anything better.
-const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, summary: 1, plan: 2, user: 3 };
+const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, model: 1, plan: 2, user: 3 };
 const sanitizeTitle = (prompt: string): string | undefined => {
     const clean = prompt
         .replaceAll(/[\p{Cc}\p{Cf}]+/gu, " ")
@@ -292,10 +292,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
      * applied, so the rename route and the frame path cannot disagree about who may rename what.
      *
      * A rename always lands — including the second one, which an ordinary rank comparison would reject as a
-     * sideways move. Everything else has to strictly outrank what is already there: a summary or a plan
-     * heading may replace the prompt the title was derived from, a plan may replace a summary but never the
+     * sideways move. Everything else has to strictly outrank what is already there: a model name or a plan
+     * heading may replace the prompt the title was derived from, a plan may replace a model name but never the
      * reverse, nothing may replace a rename, and a REPLAN may not rename the job the first plan already named.
-     * The strictness is also what makes the summary pass self-limiting: once one summary lands, the next
+     * The strictness is also what makes the naming pass self-limiting: once one model name lands, the next
      * turn's would be a sideways move and is never even attempted. Returns whether the entry changed, so
      * callers persist and broadcast only when something actually did. */
     const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource): boolean => {
@@ -305,7 +305,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             return false;
         }
         // A provider failure sentence ("You've hit your session limit · resets …", "Failed to authenticate.
-        // API Error: 401 …") is never a NAME, however it got here — a summary pass whose own model call hit
+        // API Error: 401 …") is never a NAME, however it got here — a naming pass whose own model call hit
         // the condition, a plan heading quoting the failure. Only a rename may say it, because a rename is the
         // user's to waste. And a STORED title that is one was stolen exactly that way: it forfeits its
         // source's rank, so the next honest promotion replaces it instead of bouncing off the sideways-move

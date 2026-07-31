@@ -259,27 +259,27 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.title).toBe("Fix the login submit handler");
     });
 
-    it("slots a summary above the derived guess and below a plan's own name", async () => {
+    it("slots a model name above the derived guess and below a plan's own name", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn({ prompt: "we have recently added the fleet board" }), 1_000);
 
-        // The quick model has read the finished turn — its reading beats the pre-turn guess…
-        expect((await registry.setTitle("c1", "Wire the fleet board broadcast", "summary"))?.title).toBe("Wire the fleet board broadcast");
-        // …once. A second summary is a sideways move, so the first reading stands.
-        await registry.setTitle("c1", "A second reading", "summary");
-        expect(registry.get("c1")?.title).toBe("Wire the fleet board broadcast");
+        // The quick model has written a name for the opening prompt — it beats the rule that only cut one…
+        expect((await registry.setTitle("c1", "Fleet board broadcast · wire", "model"))?.title).toBe("Fleet board broadcast · wire");
+        // …once. A second model name is a sideways move, so the first one stands.
+        await registry.setTitle("c1", "A second reading", "model");
+        expect(registry.get("c1")?.title).toBe("Fleet board broadcast · wire");
 
-        // A plan heading is the agent's own name for the job: it replaces a summary —
+        // A plan heading is the agent's own name for the job: it replaces a model name —
         registry.observe("c1", { kind: "plan", requestId: "r1", text: "# Fix the fleet broadcast fan-out" });
         expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
         // — and is never replaced by one.
-        await registry.setTitle("c1", "A late reading", "summary");
+        await registry.setTitle("c1", "A late reading", "model");
         expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
     });
 
     /* The two conditions the CLI reports as prose (agent/failure-sentences.ts), each of which has reached this
-     * function as a proposed name: the limit sentence from a summary pass whose quick-model call was out of
+     * function as a proposed name: the limit sentence from a naming pass whose quick-model call was out of
      * allowance, the auth sentence from one whose token had been revoked. Both are asserted at every rule
      * because guarding the first alone is precisely how the second got in. */
     const FAILURE_SENTENCES = [
@@ -292,15 +292,15 @@ describe("agents registry", () => {
         await registry.init();
         await registry.begin(turn(), 1_000);
 
-        // A summary pass whose own quick-model call hit the condition hands the sentence over as if it were
-        // the name. The derived title must stand, and stand REPLACEABLE (the next honest summary lands).
-        await registry.setTitle("c1", sentence, "summary");
+        // A naming pass whose own quick-model call hit the condition hands the sentence over as if it were
+        // the name. The derived title must stand, and stand REPLACEABLE (the next honest name lands).
+        await registry.setTitle("c1", sentence, "model");
         expect(registry.get("c1")?.title).toBe("Fix the login bug");
-        expect((await registry.setTitle("c1", "Wire the fleet board broadcast", "summary"))?.title).toBe("Wire the fleet board broadcast");
+        expect((await registry.setTitle("c1", "Fleet board broadcast · wire", "model"))?.title).toBe("Fleet board broadcast · wire");
     });
 
-    it.each(FAILURE_SENTENCES)("a stolen title reading %s forfeits its rank, so the next summary heals it", async (sentence) => {
-        // An entry poisoned before the guard covered this sentence: it sits at `summary` rank, where the
+    it.each(FAILURE_SENTENCES)("a stolen title reading %s forfeits its rank, so the next name heals it", async (sentence) => {
+        // An entry poisoned before the guard covered this sentence: it sits at `model` rank, where the
         // sideways-move rule would protect it forever.
         const poisoned: PersistedAgent = {
             id: "c1",
@@ -315,11 +315,11 @@ describe("agents registry", () => {
             createdAt: 1_000,
             updatedAt: 1_000,
             title: sentence,
-            titleSource: "summary",
+            titleSource: "model",
         };
         const registry = createAgentsRegistry(memoryStore([poisoned]), standings());
         await registry.init();
-        expect((await registry.setTitle("c1", "Wire the fleet board broadcast", "summary"))?.title).toBe("Wire the fleet board broadcast");
+        expect((await registry.setTitle("c1", "Fleet board broadcast · wire", "model"))?.title).toBe("Fleet board broadcast · wire");
     });
 
     it("never lets a plan rename what the user named, and still allows a second rename", async () => {

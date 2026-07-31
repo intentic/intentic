@@ -15,8 +15,12 @@
  * names a turn that arrived without one — an automation, a Discord message, a webchat visitor (agents-
  * registry.ts). One rule, because two would let the same prompt open under two different names depending on
  * where it entered. Nothing here calls a model: the title has to exist before the first frame comes back.
- * (A model DOES get its say later — the daemon's title-summary pass renames a still-derived title once the
- * first turn has an answer to read — but that is a promotion over this title, never a replacement for it.) */
+ *
+ * Which is exactly the ceiling on it. Cutting is not naming — what comes out is the user's own sentence,
+ * shortened, and a column of those is scannable only where the users' sentences happened to differ early. The
+ * name a conversation ends up WEARING is written a second or two later by a model that reads the same prompt
+ * and answers in the fleet board's own shape (the daemon's title-namer.ts). This is the title that holds the
+ * tab until that arrives, and the one it keeps if nothing is connected to write a better one. */
 
 // The registry's title budget (agents-registry MAX_TITLE_LENGTH, the rename input's maxlength) — the widest
 // any surface stores. Every surface truncates in CSS to its own width, so the clamp here is a storage cap,

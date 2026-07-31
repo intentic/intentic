@@ -1,11 +1,16 @@
 /* A SESSION TITLE, READ AS A COMMIT SUBJECT — what the Changes panel files into the commit box when the user
  * clicks a session in its "From" legend.
  *
- * Those titles are derived from the opening prompt by the same rule everything else names a conversation with
- * (sandbox-contract's title.ts): an imperative line about the work, cut to one bounded sentence. That is
- * already most of a commit subject — "Fix cascading workspace tree truncation markers" — so a user typing a
- * message above a legend that says exactly what the change was is retyping what they can already read. One
- * click moves it across, in the shape a subject line wants.
+ * Those titles name the work already — a user typing a message above a legend that says exactly what the
+ * change was is retyping what they can already read. One click moves it across, in the shape a subject line
+ * wants.
+ *
+ * They arrive in two shapes, because two things write them. The quick model writes `<subject> · <action>`
+ * (agent/title-namer.ts), which is a commit subject with its type sitting at the far end. Everything else —
+ * the pre-model derivation, a plan heading, a rename — writes an imperative line, which is a commit subject
+ * with its type sitting at the near end. Both are read below, tail first: only the model's shape can put a
+ * bare action word after a separator, so finding one is unambiguous, and a title without one falls through to
+ * the leading-verb reading that has always handled the rest.
  *
  * A CHOSEN LINE, NOT A GUESS ABOUT THE DIFF. It arrives only when asked for, it is one keystroke from being
  * overwritten, and it costs nothing — which is what separates it from the AI autofill next to it: that one
@@ -20,7 +25,7 @@
  * for it. */
 
 /* A title that is already written as a Conventional Commits subject — the user's own `fix: …` prompt, or a
- * session the title-summary pass renamed that way. Split rather than re-prefixed: its type is better than any
+ * session the naming pass renamed that way. Split rather than re-prefixed: its type is better than any
  * verb table's guess.
  *
  * CASE-INSENSITIVE, because title.ts capitalizes every title it derives (`fix: Codex agents…` is stored as
@@ -55,7 +60,7 @@ const NAMES_TYPE: Readonly<Record<string, readonly string[]>> = {
 };
 
 const IMPLIES_TYPE: Readonly<Record<string, readonly string[]>> = {
-    fix: [`prevent`, `stop`, `guard`, `harden`, `tighten`, `ensure`, `restore`],
+    fix: [`prevent`, `stop`, `guard`, `harden`, `tighten`, `ensure`, `restore`, `diagnose`],
     feat: [
         `add`,
         `allow`,
@@ -101,6 +106,7 @@ const IMPLIES_TYPE: Readonly<Record<string, readonly string[]>> = {
     ],
     refactor: [
         `clean`,
+        `cleanup`,
         `consolidate`,
         `convert`,
         `dedupe`,
@@ -128,7 +134,7 @@ const IMPLIES_TYPE: Readonly<Record<string, readonly string[]>> = {
         `unify`,
         `wrap`,
     ],
-    perf: [`optimize`, `optimise`, `speed`, `cache`, `reduce`, `profile`],
+    perf: [`optimize`, `optimise`, `speed`, `cache`, `reduce`, `profile`, `benchmark`],
     docs: [`describe`, `explain`],
     test: [`cover`, `verify`],
     style: [`polish`, `format`, `prettify`, `tweak`],
@@ -140,6 +146,7 @@ const IMPLIES_TYPE: Readonly<Record<string, readonly string[]>> = {
         `avoid`,
         `bump`,
         `check`,
+        `compare`,
         `configure`,
         `deploy`,
         `figure`,
@@ -178,6 +185,11 @@ const VERBS = new Map<string, TitleVerb>([
 // wrong is the prefix, and the prefix is the cheap half to correct.
 const DEFAULT_TYPE = `feat`;
 
+/* The action tag on a model-written title: ` · fix`, ` · remove`, ` · logging`. Anchored to the end and limited
+ * to one word, which is the whole of what makes it distinguishable from a middle dot used as punctuation —
+ * `Auth · session · token refresh` is a path, and only its last segment is a candidate. */
+const ACTION_TAG = /\s+·\s+([\w-]+)$/;
+
 /* THE FIRST CHARACTER IS THE WHOLE RULE, and it is not a matter of taste: commitlint's `subject-case`
  * (config-conventional, `never` sentence-case) reduces to `upperFirst(subject) === subject`, so a subject that
  * OPENS with a capital is sentence case whatever the rest of it looks like, and the commit-msg hook throws the
@@ -207,6 +219,21 @@ const subjectCased = (text: string): string => {
     return `${first[0]!.toLowerCase()}${text.slice(1)}`;
 };
 
+/* The same sentence case undone for a fragment that is about to stop being the start of the line — the head of
+ * a tagged title, once its action tag has moved in front of it. `Agent card line counts · add` must not read
+ * `add Agent card line counts`: that capital was the title's own convention and means nothing here.
+ *
+ * No backticks, and that is the whole difference from subjectCased: those exist to get a name PAST commitlint's
+ * first-character rule, and nothing this returns is at the first character any more. A name simply stays as
+ * written. */
+const uncapitalized = (text: string): string => {
+    const [first = ``] = LEAD.exec(text) ?? [];
+    if (!/^[A-Z]/.test(first) || MEANINGFUL.test(first.slice(1))) {
+        return text;
+    }
+    return `${first[0]!.toLowerCase()}${text.slice(1)}`;
+};
+
 // A title read as one commit type plus one subject fragment. Undefined for a title with nothing in it.
 const readTitle = (title: string): { readonly type: string; readonly subject: string } | undefined => {
     // A trailing full stop belongs to a sentence, not a subject; a question mark carries the tone the title
@@ -220,6 +247,25 @@ const readTitle = (title: string): { readonly type: string; readonly subject: st
         // The type is lowercased, the scope and the `!` kept as written — commitlint's `type-case` is
         // `lower-case` and it has nothing to say about the rest.
         return { type: `${prefixed[1]!.toLowerCase()}${prefixed[2]!}`, subject: subjectCased(prefixed[3]!) };
+    }
+    /* `Sandbox freezes · fix` — the model's shape, and the same two tables read from the other end. The tag
+     * moves to the FRONT of the subject rather than staying where it is, because a subject is a sentence about
+     * the change and English puts its verb first: `refactor: remove resume-with-claude`, not `refactor:
+     * resume-with-claude remove`. A tag that NAMES its type is dropped instead, exactly as a leading verb is.
+     *
+     * A tag in neither table (`logging`, `benchmark`) is not a verb at all — it is the last noun of the title,
+     * which the separator was only ever formatting. It stays where the model put it, joined back as prose. */
+    const tagged = ACTION_TAG.exec(clean);
+    // An empty head (`· fix`) is a tag and nothing else: there is no subject to move it in front of, so the
+    // title falls through and is read as the one word it is.
+    const head = tagged === null ? `` : clean.slice(0, tagged.index).trim().replace(ARTICLE, ``);
+    if (tagged !== null && head !== ``) {
+        const tag = tagged[1]!;
+        const tagVerb = VERBS.get(tag.toLowerCase());
+        if (tagVerb === undefined) {
+            return { type: DEFAULT_TYPE, subject: subjectCased(`${head} ${tag}`) };
+        }
+        return { type: tagVerb.type, subject: tagVerb.drop ? subjectCased(head) : `${tag} ${uncapitalized(head)}` };
     }
     const [lead = ``] = clean.split(` `, 1);
     const verb = VERBS.get(lead.toLowerCase());

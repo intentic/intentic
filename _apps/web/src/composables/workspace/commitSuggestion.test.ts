@@ -72,6 +72,44 @@ describe(`conventionalSubject`, () => {
         expect(conventionalSubject([`Fix the tree`, `Fix the Tree`])).toBe(`fix: tree`);
     });
 
+    /* The model-written shape, `<subject> · <action>` (agent/title-namer.ts): the same two verb tables read
+     * from the other end of the title. */
+
+    test(`an action tag that names its type is dropped, exactly as a leading verb is`, () => {
+        expect(conventionalSubject([`Sandbox freezes · fix`])).toBe(`fix: sandbox freezes`);
+        expect(conventionalSubject([`ChatTabs hover card · refactor`])).toBe("refactor: `ChatTabs` hover card");
+    });
+
+    test(`an action tag that only implies its type moves to the front, where a subject wants its verb`, () => {
+        expect(conventionalSubject([`Resume-with-Claude prompt · remove`])).toBe(`refactor: remove Resume-with-Claude prompt`);
+        expect(conventionalSubject([`Agent card line counts · add`])).toBe(`feat: add agent card line counts`);
+        expect(conventionalSubject([`Pipeline execution speed · audit`])).toBe(`chore: audit pipeline execution speed`);
+        // The article goes with it, for the reason it goes with a dropped verb: a subject should not open by
+        // pointing at something.
+        expect(conventionalSubject([`The auth tests · fix`])).toBe(`fix: auth tests`);
+    });
+
+    test(`the words the naming prompt itself offers all resolve to a type`, () => {
+        // The tag vocabulary is whatever agent/title-namer.ts invites, so its examples are the ones that must
+        // not fall through to `feat` — a title suggested by the prompt and then mistyped by this file is a gap
+        // between two halves of one feature.
+        expect(conventionalSubject([`Turn latency · benchmark`])).toBe(`perf: benchmark turn latency`);
+        expect(conventionalSubject([`Nimbalyst editor · compare`])).toBe(`chore: compare nimbalyst editor`);
+        expect(conventionalSubject([`Sandbox freezes · diagnose`])).toBe(`fix: diagnose sandbox freezes`);
+        expect(conventionalSubject([`Dead imports · cleanup`])).toBe(`refactor: cleanup dead imports`);
+    });
+
+    test(`a tag in neither table is the title's last noun, not a verb`, () => {
+        // `logging` names no commit type and is not something done TO state management — it is what the work
+        // is. Moving it would read as an instruction the title never gave.
+        expect(conventionalSubject([`State management · logging`])).toBe(`feat: state management logging`);
+    });
+
+    test(`a middle dot that is punctuation rather than a tag is left alone`, () => {
+        // Only ONE trailing word can be a tag; anything longer was the title using the separator as a comma.
+        expect(conventionalSubject([`Fix the tree · it truncates mid-word`])).toBe(`fix: tree · it truncates mid-word`);
+    });
+
     /* One assertion for what the commit-msg hook actually checks, over every shape above — a filled box that the
      * hook throws back is the whole failure this file exists to avoid, and it is one rule per half of the line:
      *   type-enum    the type is one of commitlint's eleven
@@ -94,6 +132,12 @@ describe(`conventionalSubject`, () => {
             `Update the sandbox deps`,
             `Why is the tree red?`,
             `Refactor`,
+            `Sandbox freezes · fix`,
+            `Resume-with-Claude prompt · remove`,
+            `ChatPanel.vue scroll anchor · rewrite`,
+            `State management · logging`,
+            `CI/CD rail view · add`,
+            `· fix`,
         ];
         for (const title of titles) {
             const message = conventionalSubject([title]);

@@ -33,7 +33,7 @@ import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } fro
 import { clearPendingResume, recordAuthFailure, recordOutageFailure, startConversationTurn } from "./turn-resume.js";
 import { withRuntimeHistory } from "./runtime-history.js";
 import { turnRunOf } from "./turn-runs.js";
-import { summarizeAgentTitle } from "./title-summary.js";
+import { nameAgentTitle } from "./title-namer.js";
 import { planTurn } from "./turn-plan.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
 
@@ -135,6 +135,18 @@ async function* runConversationTurn(
         yield { kind: "done" };
         return;
     }
+    /* The entry now exists, wearing the cut sentence deriveTitle made of this prompt — so write it a real name
+     * WHILE the turn runs rather than after it. Fire-and-forget in both senses: a title is never worth failing
+     * a turn over, and nothing downstream waits on it (the rename broadcasts on its own, like every other
+     * card-visible change). The gate inside skips a conversation already carrying a better-than-derived name,
+     * which is what keeps this to one model call per conversation rather than one per turn.
+     *
+     * Placed ABOVE the isolated/workspace fork on purpose: naming is a property of a conversation, and the
+     * version of this that lived at the end of the isolated branch's land step left every workspace
+     * conversation on the derived cut forever. */
+    nameAgentTitle(services, conversationId, input.prompt).catch((error: unknown) =>
+        services.logger.debug({ err: error }, "agents: title naming failed"),
+    );
     if (!isolated) {
         try {
             for await (const event of runTurn(services, input, signal, undefined, steering)) {
@@ -184,26 +196,12 @@ async function* runConversationTurn(
         const enforced = await services.turnIsolation.available();
         yield { kind: "worktree", branch: worktree.branch, base, ...(enforced ? {} : { unenforced: true }) };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
-        // The agent's top-level text is accumulated on the way past: the CLOSING block is what the title-
-        // summary pass below reads, and collecting it here costs nothing a transcript re-read would.
-        let textBlock = "";
-        let closing = "";
         for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd }, steering)) {
             services.agents.observe(conversationId, event);
             if (event.kind === "error") {
                 failed = true;
             }
-            if (event.kind === "delta" && event.parentToolUseId === undefined) {
-                textBlock += event.text;
-            }
-            if (event.kind === "text_end" && event.parentToolUseId === undefined && textBlock !== "") {
-                closing = textBlock;
-                textBlock = "";
-            }
             yield event;
-        }
-        if (textBlock !== "") {
-            closing = textBlock;
         }
         // Auto-land at clean turn completion — the Claude Code review model: the delta arrives in the main
         // tree as UNCOMMITTED changes and the user's ordinary Changes-panel commit is the review. Aborted or
@@ -257,11 +255,6 @@ async function* runConversationTurn(
                     landingGate(services, streamAgent).arm();
                 }
             }
-            // A whole turn is now readable — name the job. Fire-and-forget: a title is never worth failing a
-            // turn over, and the gate inside skips conversations already carrying a better-than-derived name.
-            summarizeAgentTitle(services, conversationId, { prompt: input.prompt, closing }).catch((error: unknown) =>
-                services.logger.debug({ err: error }, "agents: title summary failed"),
-            );
         }
     } catch (error) {
         if (!(typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError")) {
