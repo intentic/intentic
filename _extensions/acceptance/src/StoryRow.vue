@@ -16,10 +16,25 @@ import { criteriaOf, narrativeOf, type Story, storyMarkdown } from "./stories";
  * A debounce plus a comparison against what was last written means an author who opens a story to READ it never
  * dirties the file, and a fresh, unedited row never triggers a write.
  *
+ * IT IS SET AS A DOCUMENT, NOT AS A FORM, and that is a readability decision before it is an aesthetic one. This
+ * panel is the only place in the app where someone WRITES paragraphs, and it was the only place typeset below the
+ * design system's own floor: the narrative — the one true prose on the surface — was 12px MONO, a typeface the
+ * system reserves for code and which reads optically larger, so it was set a step down again to compensate for a
+ * job it should not have had. See prose.css: 0.875rem is the floor for text read in paragraphs, ~1.7 is its
+ * leading, and a measure is mandatory on a surface that stretches (this page is 72rem — unbounded, a criterion
+ * ran past 150 characters a line, well past where the eye loses the start of the next one).
+ *
+ * So everything read in sentences is sans, at the floor, at 1.7, inside a 68ch column, in full content colour;
+ * mono survives only where it is an identifier (the path, the criterion numbers). And the fields are BORDERLESS:
+ * three stacked bordered boxes on a `bg-canvas` panel is a form, and it was drawing those borders around the same
+ * colour as the surface behind them — chrome with no figure/ground to show for it. What is left is the text
+ * itself, tinted where the caret is. The mirror of the artifact, in the artifact's own order: heading, prose,
+ * `## Acceptance criteria`, the list.
+ *
  * CRITERIA ARE EDITED AS A LIST, not as a form: Enter opens the next one, Backspace on an empty one removes it,
- * the arrows walk them. That is what the content actually is — a checklist someone adds to as they think — and
- * every criterion typed without reaching for the mouse is one more promise that gets written down instead of
- * being left in someone's head.
+ * the arrows walk them from the ends. That is what the content actually is — a checklist someone adds to as they
+ * think — and every criterion typed without reaching for the mouse is one more promise that gets written down
+ * instead of being left in someone's head.
  *
  * The title still never moves the file. Editing renames the heading and leaves `docs/user-stories/01-sign-in.md`
  * exactly where git, the ordering prefix and every link to it expect it. */
@@ -43,10 +58,47 @@ const emit = defineEmits<{ toggle: []; run: [] }>();
 // never a race with the timer.
 const SAVE_AFTER_MS = 700;
 
+/* The editable-text recipe, shared by all three fields so the document has ONE voice. No border and no fill until
+ * the caret is in it: an editor shows you your text, and shows chrome only for the line you are on.
+ *
+ * EVERY FIELD IS A TEXTAREA, including the one-liners: an <input> scrolls a long criterion sideways inside its
+ * box, hiding the end of a promise behind an edge and defeating the measure entirely. Wrapping is what makes the
+ * list readable, so nothing here is an input.
+ *
+ * They size to their content WITHOUT JAVASCRIPT. Each one shares a grid cell with an invisible replica of its own
+ * text, and the cell is as tall as the taller of the two — so the box tracks the words through anything that
+ * reflows them. That is not a stylistic preference over the app composer's measure-and-set `grow()`: this panel
+ * loads Inter over the network, and measuring on `nextTick` measured the FALLBACK font, then let the swap reflow
+ * the prose 166px taller inside a box already fixed at the old height. The last two paragraphs of every story
+ * were simply clipped (verified in a browser, which is the only way that class of bug is ever seen). A container
+ * resize would have done the same. There is nothing to keep up to date if the browser does the sizing.
+ *
+ * The replica must therefore agree with its textarea to the pixel — same font, size, leading, padding, wrapping —
+ * which is why those live in the *_BOX strings below, applied to BOTH, rather than being written twice. And it
+ * mirrors whatever the field is DISPLAYING, which for an empty one is its placeholder: mirroring only the value
+ * sized a fresh story's prose box to nothing and cut its own instructions off mid-sentence. Hence the hints being
+ * constants rather than literals in the template — one string, read by the replica and the placeholder both. */
+const FIELD = `resize-none overflow-hidden rounded-md bg-transparent text-content placeholder:text-subtle focus:bg-overlay focus:outline-none`;
+// The invisible half. `visibility: hidden` still occupies its cell, which is the whole point.
+const GHOST = `pointer-events-none invisible`;
+// A trailing zero-width space so a value ending in a newline still reserves the line the caret is actually on.
+const TAIL = `​`;
+
+const TITLE_BOX = `[grid-area:1/1] px-2 py-0.5 text-lg leading-snug font-semibold tracking-tight break-words whitespace-pre-wrap`;
+const PROSE_BOX = `[grid-area:1/1] px-2 py-1 text-sm leading-[1.7] break-words whitespace-pre-wrap`;
+
+const TITLE_HINT = `Sign in with an email address`;
+const NARRATIVE_HINT =
+    `As a returning visitor, I want to sign in with my email and password so that I reach my own workspace.\n\n` +
+    `What the user is trying to do, where they start, and what counts as success. Handed to the agent verbatim — a ` +
+    `test login or a fixture it needs belongs here.`;
+const CRITERION_HINT = `A wrong password shows an error and keeps the email field filled`;
+const NEXT_HINT = `and then…`;
+
 const title = ref(``);
 const narrative = ref(``);
 const criteria = ref<string[]>([]);
-const inputs = ref<Record<number, HTMLInputElement | undefined>>({});
+const inputs = ref<Record<number, HTMLTextAreaElement | undefined>>({});
 const state = ref<`clean` | `dirty` | `saving` | `saved`>(`clean`);
 const failure = ref<string | undefined>(undefined);
 const confirmRemove = ref(false);
@@ -83,6 +135,19 @@ const shrink = (index: number, event: KeyboardEvent): void => {
     event.preventDefault();
     criteria.value = criteria.value.filter((_, at) => at !== index);
     focusAt(index - 1);
+};
+
+/* Up and Down walk the list — but only from the ENDS of a criterion, so the arrows still move the caret through
+ * one that wrapped onto three lines. Position, not a guess about visual rows: the caret is at 0 or at the last
+ * character, or the key belongs to the field. */
+const walk = (index: number, event: KeyboardEvent, step: -1 | 1): void => {
+    const el = event.target as HTMLTextAreaElement;
+    const atEdge = step === -1 ? el.selectionStart === 0 : el.selectionEnd === el.value.length;
+    if (!atEdge || el.selectionStart !== el.selectionEnd) {
+        return;
+    }
+    event.preventDefault();
+    focusAt(index + step);
 };
 
 const drop = (index: number): void => {
@@ -160,7 +225,7 @@ onBeforeUnmount(() => void flush());
     <div>
         <button
             type="button"
-            class="flex w-full cursor-pointer items-center gap-3 px-4 py-2 text-left hover:bg-overlay"
+            class="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-overlay"
             :class="expanded && `bg-overlay`"
             :aria-expanded="expanded"
             @click="emit(`toggle`)"
@@ -176,65 +241,90 @@ onBeforeUnmount(() => void flush());
             <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" />
         </button>
 
-        <div v-if="expanded" class="border-t border-line/60 bg-canvas px-4 py-3">
-            <input
-                v-model="title"
-                placeholder="Sign in with an email address"
-                :class="cmp.input(`w-full text-sm font-medium`)"
-                @keydown.enter.prevent="focusAt(0)"
-                @keydown.esc="emit(`toggle`)"
-            />
-
-            <div class="mt-4 flex items-center justify-between">
-                <span :class="cmp.sectionLabel()">Acceptance criteria</span>
-                <span class="text-2xs text-subtle">one verdict each, in this order</span>
-            </div>
-            <div class="mt-2 flex flex-col gap-1.5">
-                <div v-for="(_, index) in criteria" :key="index" class="flex items-center gap-2">
-                    <span class="w-4 shrink-0 text-right font-mono text-2xs text-subtle">{{ index + 1 }}</span>
-                    <input
-                        :ref="(el) => (inputs[index] = el as HTMLInputElement)"
-                        v-model="criteria[index]"
-                        :placeholder="index === 0 ? `A wrong password shows an error and keeps the email field filled` : `and then…`"
-                        :class="cmp.input(`min-w-0 flex-1 py-1.5 text-xs`)"
-                        @keydown.enter.prevent="insertAfter(index)"
-                        @keydown.backspace="shrink(index, $event)"
-                        @keydown.up.prevent="focusAt(index - 1)"
-                        @keydown.down.prevent="focusAt(index + 1)"
+        <!-- THE DOCUMENT. Its own generous margins rather than the list's row padding, a measured column, and
+             `cursor-text` over the whole of it: the page under the words is what says "write here", now that no
+             field draws a box to say it. -->
+        <div v-if="expanded" class="cursor-text border-t border-line/60 bg-canvas px-4 py-6 sm:px-6">
+            <!-- `text-sm` on the COLUMN, not just on the fields inside it: `ch` resolves against the element's own
+                 font-size, so a cap set here while the div still inherited the 16px root made 68ch mean 686px —
+                 101 characters of 14px prose, past the ~90 where the eye stops finding the next line. Set in the
+                 prose's own size it means what it says. -->
+            <div class="flex max-w-[68ch] flex-col px-2 text-sm">
+                <!-- The `# Heading` this writes, at the size a heading is. It was `text-sm font-medium` — the same
+                     size as the collapsed row it replaces, so opening a story changed nothing about how it read. -->
+                <div class="-mx-2 grid">
+                    <div :class="[TITLE_BOX, GHOST]">{{ title || TITLE_HINT }}{{ TAIL }}</div>
+                    <textarea
+                        v-model="title"
+                        rows="1"
+                        :placeholder="TITLE_HINT"
+                        :class="[FIELD, TITLE_BOX, `placeholder:font-normal`]"
+                        @keydown.enter.prevent="focusAt(0)"
                         @keydown.esc="emit(`toggle`)"
                     />
-                    <button
-                        type="button"
-                        class="shrink-0 cursor-pointer p-1 text-subtle hover:text-danger"
-                        aria-label="Remove criterion"
-                        @click="drop(index)"
-                    >
-                        <Icon name="times" />
-                    </button>
                 </div>
+
+                <!-- The story's prose, directly under its heading and unlabelled — in the file it is simply the
+                     body, and a form label over it would be describing what the words already are. -->
+                <div class="-mx-2 mt-3 grid min-h-24">
+                    <div :class="[PROSE_BOX, GHOST]">{{ narrative || NARRATIVE_HINT }}{{ TAIL }}</div>
+                    <textarea v-model="narrative" rows="1" :class="[FIELD, PROSE_BOX]" :placeholder="NARRATIVE_HINT" @keydown.esc="emit(`toggle`)" />
+                </div>
+
+                <!-- `## Acceptance criteria`, set as the subheading it becomes rather than as a form's field
+                     label: the panel is a picture of the file, and this line exists in the file. -->
+                <div class="mt-5 flex items-baseline justify-between border-t border-line/60 pt-4">
+                    <h3 class="text-sm font-semibold text-content">Acceptance criteria</h3>
+                    <span class="text-2xs text-subtle">one verdict each, in this order</span>
+                </div>
+                <div class="mt-2 flex flex-col">
+                    <div v-for="(_, index) in criteria" :key="index" class="group flex items-start gap-1">
+                        <!-- The same line box as the text it numbers — same size, same leading, same padding — so
+                             the digit sits ON the first baseline. Smaller, it rendered as a superscript. It
+                             recedes by colour instead, which costs no alignment. -->
+                        <span class="w-5 shrink-0 py-1 text-right text-sm leading-[1.7] tabular-nums text-subtle">{{ index + 1 }}</span>
+                        <div class="grid min-w-0 flex-1">
+                            <div :class="[PROSE_BOX, GHOST]">{{ criteria[index] || (index === 0 ? CRITERION_HINT : NEXT_HINT) }}{{ TAIL }}</div>
+                            <textarea
+                                :ref="(el) => (inputs[index] = el as HTMLTextAreaElement)"
+                                v-model="criteria[index]"
+                                rows="1"
+                                :placeholder="index === 0 ? CRITERION_HINT : NEXT_HINT"
+                                :class="[FIELD, PROSE_BOX]"
+                                @keydown.enter.prevent="insertAfter(index)"
+                                @keydown.backspace="shrink(index, $event)"
+                                @keydown.up="walk(index, $event, -1)"
+                                @keydown.down="walk(index, $event, 1)"
+                                @keydown.esc="emit(`toggle`)"
+                            />
+                        </div>
+                        <!-- Quiet until the row is under the pointer or holds the caret. Fifteen ×'s down the
+                             margin is fifteen invitations to delete a promise, printed beside every one of them. -->
+                        <button
+                            type="button"
+                            class="mt-0.5 shrink-0 cursor-pointer p-1 text-subtle opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100"
+                            aria-label="Remove criterion"
+                            @click="drop(index)"
+                        >
+                            <Icon name="times" />
+                        </button>
+                    </div>
+                </div>
+                <p class="mt-2 pl-8 text-2xs text-subtle">
+                    Enter opens the next one.
+                    <template v-if="authored === 0">
+                        With none, the agent reads checkable claims out of your prose instead — which works, but then the report grades itself against
+                        its own reading rather than against what you promised.
+                    </template>
+                </p>
+
+                <div v-if="failure" :class="cmp.alertDanger(`mt-4`)">{{ failure }}</div>
             </div>
-            <p class="mt-1.5 pl-6 text-2xs text-subtle">
-                Enter opens the next one.
-                <template v-if="authored === 0">
-                    With none, the agent reads checkable claims out of your prose instead — which works, but then the report grades itself against its
-                    own reading rather than against what you promised.
-                </template>
-            </p>
 
-            <label class="mt-4 flex flex-col gap-1.5">
-                <span :class="cmp.sectionLabel()">The story</span>
-                <textarea
-                    v-model="narrative"
-                    rows="5"
-                    :class="cmp.input(`w-full resize-y font-mono text-xs leading-relaxed`)"
-                    placeholder="As a returning visitor, I want to sign in with my email and password so that I reach my own workspace.&#10;&#10;What the user is trying to do, where they start, and what counts as success. Handed to the agent verbatim — a test login or a fixture it needs belongs here."
-                    @keydown.esc="emit(`toggle`)"
-                />
-            </label>
-
-            <div v-if="failure" :class="cmp.alertDanger(`mt-3`)">{{ failure }}</div>
-
-            <div class="mt-3 flex items-center gap-3">
+            <!-- OUTSIDE the column: the document is measured, the toolbar under it is not. Kept inside the 68ch
+                 rule, these buttons floated in the middle of a 1100px card with empty surface either side, which
+                 reads as a stray cluster rather than as the panel's actions. -->
+            <div class="mt-6 flex items-center gap-3 border-t border-line/60 pt-3">
                 <!-- Autosave is only trustworthy if it says so. Silence here would make a story authored and
                      closed in six seconds feel like a story that was lost. -->
                 <span class="text-2xs" :class="state === `saved` ? `text-success` : `text-subtle`">{{
@@ -244,8 +334,8 @@ onBeforeUnmount(() => void flush());
                     <Button label="Run this story" size="small" severity="secondary" @click="emit(`run`)">
                         <template #icon><Icon name="play" /></template>
                     </Button>
-                    <!-- Delete asks once, in place: a story is a file in the repo, and the ask costs less than a
-                         restore from git for someone who clicked the wrong row. -->
+                    <!-- Delete asks once, in place: a story is a file in the repo, and the ask costs less than
+                         a restore from git for someone who clicked the wrong row. -->
                     <button v-if="!confirmRemove" type="button" :class="cmp.buttonDanger()" @click="confirmRemove = true">Delete</button>
                     <button v-else type="button" :class="cmp.buttonDanger()" @click="discard">Delete {{ story.path.split(`/`).pop() }}?</button>
                 </div>

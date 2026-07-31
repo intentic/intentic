@@ -230,7 +230,11 @@ const addresses = computed(() => reposOf(run.manifest).map((repo) => ({ repo, ur
 
                 <div v-if="open.has(story.slug)" class="border-t border-line/60 bg-canvas px-4 py-3">
                     <!-- The report is the artifact; everything else on this row is a summary of it. -->
-                    <div v-if="outcomes[story.slug]?.report" :ref="(el) => (reportEl[story.slug] = el as HTMLElement)">
+                    <!-- A measure, because this page is 72rem wide and a report is the longest prose in the
+                         extension: unbounded, its paragraphs ran past 150 characters a line. Only text takes the
+                         cap (see prose.css) — the screenshots under it still get the full column, which is where
+                         the extra room is actually worth something. -->
+                    <div v-if="outcomes[story.slug]?.report" :ref="(el) => (reportEl[story.slug] = el as HTMLElement)" style="--prose-measure: 68ch">
                         <Markdown :source="outcomes[story.slug]?.report ?? ``" />
                     </div>
                     <div v-else :class="cmp.emptyState()">
@@ -244,20 +248,25 @@ const addresses = computed(() => reposOf(run.manifest).map((repo) => ({ repo, ur
                     <!-- The criteria matrix: the story's own promises, one verdict each, in the order they were
                          authored. It is the one part of result.json the report's prose does not already say in
                          order — and the reason the brief hands the agent a numbered list. -->
-                    <ul v-if="(outcomes[story.slug]?.result?.criteria ?? []).length > 0" class="mt-3 flex flex-col gap-1">
+                    <!-- The promises themselves, so at the reading size and the full content colour the design
+                         system reserves for text read in sentences — this matrix is the answer to the question
+                         the whole view exists for, and it was set two steps down and dimmed, as if it were the
+                         chrome around the answer rather than the answer. The agent's note stays quiet: that IS
+                         the annotation. -->
+                    <ul v-if="(outcomes[story.slug]?.result?.criteria ?? []).length > 0" class="mt-4 flex max-w-[68ch] flex-col gap-1.5">
                         <li
                             v-for="(criterion, index) in outcomes[story.slug]?.result?.criteria ?? []"
                             :key="index"
-                            class="flex items-start gap-2 text-xs"
+                            class="flex items-start gap-2 text-sm leading-[1.7]"
                         >
                             <Icon
                                 :name="criterion.verdict === `pass` ? `check-circle` : criterion.verdict === `fail` ? `exclamation-circle` : `circle`"
                                 :class="[
-                                    'mt-0.5 shrink-0',
+                                    'mt-1 shrink-0',
                                     criterion.verdict === `pass` ? `text-success` : criterion.verdict === `fail` ? `text-danger` : `text-subtle`,
                                 ]"
                             />
-                            <span class="min-w-0 flex-1 text-muted">
+                            <span class="min-w-0 flex-1 text-content">
                                 {{ criterion.text }}
                                 <span v-if="criterion.note" class="text-subtle"> — {{ criterion.note }}</span>
                             </span>

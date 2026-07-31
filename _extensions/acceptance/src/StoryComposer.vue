@@ -40,7 +40,7 @@ const submit = (): void => {
 </script>
 
 <template>
-    <div class="px-4 py-2">
+    <div class="px-4 py-2.5">
         <div class="flex items-center gap-3">
             <Icon name="plus" class="shrink-0 text-subtle" />
             <input

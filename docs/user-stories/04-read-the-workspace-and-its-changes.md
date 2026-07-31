@@ -1,14 +1,8 @@
 # Read the workspace, and see what changed in it
 
-As someone who has just been handed work by several agents, I want one place that shows the files
-and one that shows the deltas, so that "what does this code look like" and "what did today do to it"
-are two clicks, not two tools.
+As someone who has just been handed work by several agents, I want one place that shows the files and one that shows the deltas, so that "what does this code look like" and "what did today do to it" are two clicks, not two tools.
 
-I open the workspace. Every repository under it is in the tree; opening a file opens it as a tab, and
-my tabs are still there when I come back to the browser tomorrow. The changes view is the same
-workspace addressed by delta instead of by path: every modified file, grouped by repository, with its
-diff on selection. Searching finds a file by its name and a line by its content, so I do not have to
-remember where something lives to go to it.
+I open the workspace. Every repository under it is in the tree; opening a file opens it as a tab, and my tabs are still there when I come back to the browser tomorrow. The changes view is the same workspace addressed by delta instead of by path: every modified file, grouped by repository, with its diff on selection. Searching finds a file by its name and a line by its content, so I do not have to remember where something lives to go to it.
 
 ## Acceptance criteria
 

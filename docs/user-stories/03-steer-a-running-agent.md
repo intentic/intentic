@@ -1,13 +1,8 @@
 # Steer an agent while it is still working
 
-As someone watching an agent take a wrong turn, I want to correct it mid-flight instead of waiting
-for it to finish being wrong, so that a misunderstanding costs one sentence rather than one turn.
+As someone watching an agent take a wrong turn, I want to correct it mid-flight instead of waiting for it to finish being wrong, so that a misunderstanding costs one sentence rather than one turn.
 
-The composer stays live while a turn streams. I type, I send, and the message reaches the running
-turn — or waits visibly until the turn can take it, so I always know whether I have been heard. It
-lands in the transcript as an ordinary message of mine, in order, next to what the agent was doing
-when I sent it. If the correction is bigger than a steer, Stop ends the turn and leaves everything
-written so far in place.
+The composer stays live while a turn streams. I type, I send, and the message reaches the running turn — or waits visibly until the turn can take it, so I always know whether I have been heard. It lands in the transcript as an ordinary message of mine, in order, next to what the agent was doing when I sent it. If the correction is bigger than a steer, Stop ends the turn and leaves everything written so far in place.
 
 ## Acceptance criteria
 

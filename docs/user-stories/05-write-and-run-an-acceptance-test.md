@@ -1,17 +1,10 @@
 # Write a promise down, and have it tested for you
 
-As someone who keeps re-checking the same flows by hand after every change, I want to write what the
-product promises once and have agents walk it through the running app, so that "does sign-in still
-work" is answered by a report rather than by me clicking.
+As someone who keeps re-checking the same flows by hand after every change, I want to write what the product promises once and have agents walk it through the running app, so that "does sign-in still work" is answered by a report rather than by me clicking.
 
-Writing one has to be cheaper than not bothering. In the Acceptance area I type a title into the row
-at the end of the list and press Enter — the story exists, as a markdown file in the repo it belongs
-to, and its row is already open for the criteria. Each criterion is a line; Enter opens the next one.
-Nothing asks me to save, because the file in the repo is the story.
+Writing one has to be cheaper than not bothering. In the Acceptance area I type a title into the row at the end of the list and press Enter — the story exists, as a markdown file in the repo it belongs to, and its row is already open for the criteria. Each criterion is a line; Enter opens the next one. Nothing asks me to save, because the file in the repo is the story.
 
-Then I run it. Each story becomes one isolated agent session that opens the app in a real browser,
-walks every criterion, screenshots what it saw, and writes a verdict. Afterwards the list itself
-carries the answer: every story row shows where that promise currently stands.
+Then I run it. Each story becomes one isolated agent session that opens the app in a real browser, walks every criterion, screenshots what it saw, and writes a verdict. Afterwards the list itself carries the answer: every story row shows where that promise currently stands.
 
 ## Acceptance criteria
 
