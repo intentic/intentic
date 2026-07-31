@@ -1,7 +1,3 @@
-<script lang="ts">
-const loaderStartTimes = new Map<number, number>();
-</script>
-
 <script setup lang="ts">
 import { useDevice } from "@intentic-app/ui";
 import { copyCodeFromEvent } from "@intentic-app/ui/markdown";
@@ -151,15 +147,16 @@ const permissionTitle = computed(() => {
 // prompt the agent was already blocked on.
 const showTyping = computed(() => props.streaming && !awaitingDecision.value);
 
-// Cycling status-word loader shown while the turn streams: tick once a second so the word cycles (every ~2s)
-// and the elapsed counter advances; torn down as soon as streaming stops.
-let loaderStartedAt = 0;
+// Cycling status-word loader shown while the turn streams. The conversation owns the start instant: send()
+// records it when the command leaves, and a later attach restores the daemon's instant. Deriving from that
+// source means a view mounted halfway through a turn starts halfway through its counter too.
 const loaderTick = ref(0);
-const loaderWord = computed(() => LOADER_WORDS[Math.floor(loaderTick.value / 2) % LOADER_WORDS.length] ?? `Thinking`);
 const loaderSeconds = computed(() => {
     void loaderTick.value; // read the tick so this re-evaluates each second
-    return Math.max(0, Math.floor((Date.now() - loaderStartedAt) / 1000));
+    const startedAt = active.value.turnStartedAt.value;
+    return startedAt === undefined ? 0 : Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
 });
+const loaderWord = computed(() => LOADER_WORDS[Math.floor(loaderSeconds.value / 2) % LOADER_WORDS.length] ?? `Thinking`);
 
 /* THE PROVIDER IS FAILING AND THIS TURN IS RIDING IT OUT (the provider_retry frame). It takes the loader line
  * over, because it answers the one question the cycling word cannot: the agent is not stuck, it is waiting, and
@@ -185,14 +182,8 @@ watch(
     () => props.streaming,
     (isStreamingNow, _prev, onCleanup) => {
         if (!isStreamingNow) {
-            loaderStartTimes.delete(props.message.id);
             return;
         }
-        if (!loaderStartTimes.has(props.message.id)) {
-            loaderStartTimes.set(props.message.id, Date.now());
-        }
-        loaderStartedAt = loaderStartTimes.get(props.message.id)!;
-        loaderTick.value = Math.floor((Date.now() - loaderStartedAt) / 1000);
         const timer = setInterval(() => (loaderTick.value += 1), 1000);
         onCleanup(() => clearInterval(timer));
     },
