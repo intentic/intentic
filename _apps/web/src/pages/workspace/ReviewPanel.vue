@@ -2,8 +2,9 @@
 import type { GitChange, GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
 import { cmp, useDevice } from "@intentic-app/ui";
 import Dialog from "primevue/dialog";
-import { computed, ref, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
+import type { Conversation } from "../../composables/chat/conversation";
 import DiffStat from "../../components/DiffStat.vue";
 import HoverCard from "../../components/HoverCard.vue";
 import { useAgents } from "../../composables/agents/useAgents";
@@ -18,9 +19,12 @@ import { formatElapsed, unfinishedMark } from "../../composables/agents/agentSta
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
 import { COMMIT_SCOPE, type RepoPaths, type SyncTarget, useChanges } from "../../composables/workspace/useChanges";
-import { useGate } from "../../composables/workspace/useGate";
+import { usePrepush } from "../../composables/workspace/usePrepush";
 import { useRepos } from "../../composables/workspace/useRepos";
-import GateBadge from "./GateBadge.vue";
+import { composeSession, startSession } from "../../composables/agents/sessionSuggestion";
+import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
+import SuggestedSessionBox from "../../agents/SuggestedSessionBox.vue";
+import { fixPrompt, fixSummary } from "./prepushFix";
 import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
 
 /* The Changes review — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
@@ -55,9 +59,10 @@ import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTab
  *     of the panel naming neither, so a failed fetch read as a stray sentence with no visible cause. */
 
 const changes = useChanges();
-// The same one query GateBadge reads — one key, so TanStack serves both from a single poll. The panel needs it
-// for the push guardrail, which has to answer before the badge has been looked at (and while it is hidden).
-const gate = useGate();
+// The check that runs when a push is about to go out, and the settings that decide whether there is one and
+// what a failure should be handed to.
+const prepush = usePrepush();
+const { settings: sandboxSettings } = useSandboxSettings();
 
 // A repo the daemon could not scan at all (a half-written .git from a canceled upload, a corrupt HEAD) arrives
 // with empty change lists and `error` set to git's own one-line reason. It has nothing to commit or discard, so
@@ -703,64 +708,128 @@ const syncSummary = computed<string>(() => {
     const spread = syncRepos.value.length > 1 ? ` · ${plural(syncRepos.value.length, `repo`)}` : ``;
     return (counts.length > 0 ? counts.join(` `) : `no upstream yet`) + spread;
 });
-/* --- the push guardrail --------------------------------------------------------------------------------------
+/* --- the pre-push check ---------------------------------------------------------------------------------------
  * EVERY push in this panel funnels through `askSync` — the bar's Push/Sync/Publish and both of a repo row's
- * pills — because a second way to reach the same verb is a way around the guardrail. That is also why
- * useChanges no longer exports a one-repo push: a single door is the only kind that can be guarded.
+ * pills — because a second way to reach the same verb is a way around the check. That is also why useChanges
+ * does not export a one-repo push: a single door is the only kind that can be guarded.
  *
- * WHY THE PUSH AND NOT THE COMMIT. The commit is the user's own review boundary and stays unguarded; nothing has
+ * WHY THE PUSH AND NOT THE COMMIT. The commit is the user's own review boundary and stays unchecked; nothing has
  * left the machine yet, and interrupting the act of recording work would be objecting to the wrong thing. The
- * push is the last moment before CI owns the answer, and it is reached — habitually — within a minute of the
- * land, often inside the gate's own quiet period. So this is where the verdict finally gets a word in.
+ * push is the last moment before CI owns the answer, and the first at which what will be pushed is finally
+ * settled — so it is the only moment where a check can be both timely and about the right artifact.
  *
- * IT IS A GUARDRAIL, NOT A GATE, and the asymmetry is deliberate: the objection is a sentence and a button, and
- * Push anyway is always there. The user knows things the verdict does not — that the failure is the one they are
- * pushing a fix for, that the suite is flaky, that they need this on a branch to look at it in CI. A prompt that
- * merely slows down a decision the user has already made would get muscle-memoried away within a week; one that
- * BLOCKED it would get the whole gate switched off.
+ * IT RUNS WHILE THE USER WAITS, and that is the whole reason this replaced a badge. The old landing gate ran on
+ * a debounce after every land and published a verdict the panel polled forever, which meant it was answering
+ * about a tree that kept moving and needed a fingerprint, a staleness rule and a strip of sidebar to say which.
+ * Here the user has just asked for something, the answer is worth the wait, and the wait is the surface.
  *
- * A pull-only sync passes straight through: nothing leaves the machine, so the gate has no standing to comment.
+ * PUSH ANYWAY IS ALWAYS THERE — during the run and after a failure. The user knows things the check does not:
+ * that the failure is the one they are pushing a fix for, that the suite is flaky, that they need this on a
+ * branch to look at it in CI. A check that BLOCKED the push would get switched off within the week.
  *
- * The objection is resolved AT THE CLICK, exactly like the discard prompt above, so the sentence the user reads
- * is the one the verdict said then — a poll landing between the two clicks cannot change the question they are
- * answering. */
+ * A pull-only sync passes straight through: nothing leaves the machine, so there is nothing to check. */
 interface PendingSync {
-    // The word the control the user clicked was wearing, so the prompt answers that click instead of renaming it.
+    // The word the control the user clicked was wearing, so the dialog answers that click instead of renaming it.
     readonly verb: string;
     // What is about to leave — "3 commits across 2 repos", "intentic's branch".
     readonly what: string;
-    readonly objection: string;
     readonly targets: readonly SyncTarget[];
 }
 const pendingSync = ref<PendingSync | undefined>(undefined);
+// The fix session proposed for the failure on screen, composed once when the run settles red so that edits to
+// its text and model survive every re-render of the dialog holding it.
+// shallowRef because a Conversation owns its own refs — see sessionSuggestion.ts.
+const proposedFix = shallowRef<Conversation | undefined>(undefined);
+
+const closePush = (): void => {
+    pendingSync.value = undefined;
+    proposedFix.value = undefined;
+    prepush.forget();
+};
 
 const askSync = (verb: string, what: string, targets: readonly SyncTarget[]): void => {
     if (changes.actionBusy.value) {
         return;
     }
-    const objection = targets.some((target) => target.push) ? gate.pushObjection.value : undefined;
-    if (objection === undefined) {
+    const command = sandboxSettings.value?.prepushCommand ?? ``;
+    if (command === `` || !targets.some((target) => target.push)) {
         void changes.syncAll(targets);
         return;
     }
-    pendingSync.value = { verb, what, objection, targets };
+    const pending: PendingSync = { verb, what, targets };
+    pendingSync.value = pending;
+    proposedFix.value = undefined;
+    void prepush.start().then((settled) => {
+        // The user resolved this dialog while the suite ran — pushed anyway, cancelled, or started another sync.
+        // Whatever it decided about, it is not the question on screen any more.
+        if (pendingSync.value !== pending) {
+            return;
+        }
+        if (settled.status === `passed`) {
+            closePush();
+            void changes.syncAll(targets);
+            return;
+        }
+        // `error` gets no fix proposal: the command could not run, so nothing is known to be wrong with the code
+        // and an agent sent after it would hunt a bug that isn't there. Same for a cancel — the user stopped it.
+        if (settled.status === `failed`) {
+            proposedFix.value = composeSession({
+                prompt: fixPrompt(settled),
+                model: sandboxSettings.value?.prepushFixModel,
+                effort: sandboxSettings.value?.prepushFixEffort,
+                // Isolated, like any other fleet agent: the work under test is committed on a branch, so the fix
+                // belongs in a worktree of its own and arrives as a diff to review rather than as edits landing
+                // underneath the push the user is still deciding about.
+                isolated: true,
+            });
+        }
+    });
 };
 
+// Push anyway. The run keeps going on the daemon if it has not settled — killing it here would be deciding, on
+// the user's behalf, that an answer they chose not to wait for is an answer nobody wants.
 const confirmSync = (): void => {
     const target = pendingSync.value;
-    pendingSync.value = undefined;
+    closePush();
     if (target !== undefined) {
         void changes.syncAll(target.targets);
     }
 };
 
-// The constructive way out: start the checks and DON'T push. The badge above follows them from there, so the
-// user comes back to a push that has an answer behind it. Hidden while a run is already going — there is nothing
-// to start, and offering it would read as though the gate had missed the first click.
-const runChecksInstead = (): void => {
-    pendingSync.value = undefined;
-    void gate.run();
+// Hand the failure to an agent. The push does NOT go: the point of accepting the fix is that this tree is not
+// the one to push, and the agent's diff comes back for review like any other.
+const startFix = (): void => {
+    const fix = proposedFix.value;
+    closePush();
+    if (fix !== undefined) {
+        startSession(fix);
+    }
 };
+
+// Stop the suite and keep the dialog: cancelling the checks is not cancelling the push, and the run settles as
+// `cancelled` so the dialog's own wording comes from the same place every other outcome's does.
+const cancelChecks = (): void => void prepush.cancel();
+
+// The dialog's header once the run has settled. `passed` never appears here — that path closes the dialog and
+// pushes — so every case left is a reason the user is still being asked something.
+const checkOutcome = computed((): string => {
+    const run = prepush.run.value;
+    if (run.timedOut === true) {
+        return `Checks timed out`;
+    }
+    switch (run.status) {
+        case `error`:
+            return `Checks couldn't run`;
+        case `cancelled`:
+            return `Checks stopped`;
+        case `failed`:
+            return `Checks failed`;
+        default:
+            // `idle` reaches here only when the command was cleared between the click and the request — there is
+            // no check any more, so the dialog says so rather than implying one ran and said nothing.
+            return `Checks didn't run`;
+    }
+});
 
 // One click, every repo that has remote work — git can't span remotes, so the composable fans it out into one
 // real sync per repo (pull what's behind, then push/publish what's ahead), each failure landing on its own row.
@@ -818,17 +887,6 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <p class="break-words text-2xs text-muted">{{ changes.error.value }}</p>
             </div>
         </div>
-
-        <!-- Would this tree survive CI? Above the commit box because it is what the user needs BEFORE deciding
-             what to commit, and because the verdict was computed minutes ago (the daemon runs the check a short
-             while after the last land — gate/gate.ts) rather than being waited for here. It never disables
-             Commit: the panel reports, the user decides. Draws nothing when no check command is configured.
-
-             It outlasts the commit box on purpose. Committing empties `count` but changes no content, so the
-             verdict still describes the tree exactly (the fingerprint is the worktree's own tree sha, invariant
-             to staging and committing — gate/gate.ts), and the minutes between the last commit and the push are
-             when it matters most. Gone only when there is neither uncommitted work nor anything to send. -->
-        <GateBadge v-if="changes.count.value > 0 || syncRepos.length > 0" />
 
         <!-- Commit box (VSCode places it at the top). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 border-b border-line p-2">
@@ -1364,30 +1422,61 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </template>
         </Dialog>
 
-        <!-- The push guardrail. Warning, not danger: the push is not a mistake, it is a decision the user is
-             better placed to make than the verdict is — so the objection gets stated once, plainly, and both
-             ways forward are offered. "Run checks" leads, because it is the one that makes the question go
-             away; "Push anyway" is right there beside it and needs no second confirmation. -->
+        <!-- The pre-push check, as ONE dialog across the whole wait: the same box that says "running" says
+             "failed" and then holds the fix that answers it, so the user never loses the thread between asking
+             to push and deciding what to do about the answer.
+
+             Push anyway is present in every state, including mid-run, and never asks a second time — the user
+             knows things the check does not. Cancel means "stop the suite", not "abandon the push": the dialog
+             stays, now saying it was stopped, because the decision it was raised for is still open. -->
         <Dialog
             :visible="pendingSync !== undefined"
             :modal="true"
             :draggable="false"
             :dismissable-mask="true"
-            :style="{ width: '24rem' }"
-            :header="`${pendingSync?.verb ?? 'Push'} before the checks pass?`"
-            @update:visible="pendingSync = undefined"
+            :style="{ width: proposedFix ? '38rem' : '30rem' }"
+            :header="prepush.running.value ? `Checking before ${pendingSync?.verb.toLowerCase() ?? 'push'}…` : checkOutcome"
+            @update:visible="closePush"
         >
             <template v-if="pendingSync">
-                <p :class="cmp.alertWarning('break-words text-xs')">{{ pendingSync.objection }}</p>
-                <p class="mt-2 break-words text-xs text-content">
-                    {{ pendingSync.verb }} {{ pendingSync.what }} anyway? This is what CI will run on.
+                <p v-if="prepush.running.value" class="break-words text-xs text-muted">
+                    <span class="font-mono text-content">{{ prepush.run.value.command || sandboxSettings?.prepushCommand }}</span>
+                    is running over your workspace before {{ pendingSync.what }} goes out.
                 </p>
+                <p v-else class="break-words text-xs text-muted">{{ fixSummary(prepush.run.value) }}</p>
+
+                <!-- The output, live. `flex-col-reverse` pins the view to the TAIL as it grows, which is where a
+                     runner puts the line you are waiting for; a top-anchored box would show a build's banner for
+                     two minutes and the failure never. -->
+                <div
+                    v-if="prepush.run.value.output"
+                    class="scrollbar-thin mt-2 flex max-h-56 flex-col-reverse overflow-auto rounded-md border border-line bg-overlay px-2.5 py-2"
+                >
+                    <pre class="whitespace-pre-wrap break-words font-mono text-2xs leading-relaxed text-muted">{{ prepush.run.value.output }}</pre>
+                </div>
+                <div v-else-if="prepush.running.value" class="mt-2 flex items-center gap-2 text-2xs text-subtle">
+                    <Icon name="spinner" spin /> waiting for output…
+                </div>
+
+                <p v-if="prepush.error.value" :class="cmp.alertDanger('mt-2 break-words text-xs')">{{ prepush.error.value }}</p>
+
+                <!-- The proposal. Composed from the failure and the settings, and editable to the last character
+                     before it costs anything (agents/sessionSuggestion.ts). -->
+                <template v-if="proposedFix">
+                    <p class="mb-1.5 mt-3 text-2xs font-medium uppercase tracking-wide text-subtle">Fix it with an agent</p>
+                    <SuggestedSessionBox :conversation="proposedFix" action="Start agent" @start="startFix" />
+                </template>
             </template>
             <template #footer>
-                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingSync = undefined">Cancel</button>
-                <button v-if="!gate.busy.value" type="button" :class="cmp.buttonPrimary('rounded px-3 py-1')" @click="runChecksInstead">
-                    Run checks
+                <button
+                    v-if="prepush.running.value"
+                    type="button"
+                    class="rounded px-3 py-1 text-xs text-muted hover:text-content"
+                    @click="cancelChecks"
+                >
+                    Stop checks
                 </button>
+                <button v-else type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="closePush">Cancel</button>
                 <button type="button" :class="cmp.buttonWarning('rounded px-3 py-1')" :disabled="changes.actionBusy.value" @click="confirmSync">
                     {{ pendingSync?.verb ?? "Push" }} anyway
                 </button>

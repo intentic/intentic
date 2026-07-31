@@ -41,10 +41,10 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
 /* `join(<root>, ".intentic", "a", "b")` → the quoted segments after ".intentic".
  *
  * The trailing lookahead — rather than a literal `)` — is what lets a call with a COMPUTED final segment still
- * contribute its literal prefix: `join(workspace.root, ".intentic", "gate-index", repo.replaceAll(…))` matches
- * up to "gate-index" and stops. Requiring the closing paren skipped that call entirely, which is how the
- * declared `.intentic/gate-index/` first read as an entry nothing builds. The declared entry is meant to be
- * the directory prefix, not the generated leaf. */
+ * contribute its literal prefix: `join(workspace.root, ".intentic", "drafts", `${id}.json`)` matches up to
+ * "drafts" and stops. Requiring the closing paren skips such a call entirely, which is how a declared directory
+ * entry reads as an entry nothing builds. The declared entry is meant to be the directory prefix, not the
+ * generated leaf. */
 const INTENTIC_JOIN = /join\(\s*([A-Za-z_.]+)\s*,\s*"\.intentic"\s*((?:,\s*"[^"]+"\s*)*)(?=[,)])/g;
 
 const declaredPaths = async (): Promise<{ path: string; source: string }[]> => {

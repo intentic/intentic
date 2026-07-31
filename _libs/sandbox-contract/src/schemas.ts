@@ -781,34 +781,26 @@ export const SandboxSettingsSchema = z.object({
      * OFF still records the interruption: the fleet card reads `interrupted` (see AgentStatusSchema) and an
      * automation's row shows an `interrupted` run — nothing is re-run, but nothing is silently lost either. */
     autoResumeOnRestart: z.boolean().default(true),
-    /* THE LANDING GATE — the check command run over the COMPOSITE of landed work after a landing debounce.
-     * Empty ⇒ no gate at all, which is the default: only the owner knows what verifies this workspace, and a
-     * guessed command that fails on a fresh clone would read as the gate finding a bug on its first run.
+    /* THE PRE-PUSH CHECK — the command run when the user pushes, before anything leaves the machine.
+     * Empty ⇒ no check at all, which is the default: only the owner knows what verifies this workspace, and a
+     * guessed command that fails on a fresh clone would read as the check finding a bug on its first run.
      *
      * Configuring it is the opt-in, which is why there is no separate enable flag to disagree with it. The
-     * command runs in the workspace root through `sh -c`, exactly as a terminal would run it (see gate/gate.ts
-     * for why this is NOT an automation guard: a suite outlives GUARD_TIMEOUT_MS, and a timed-out guard reads
-     * as "skipped" — a silent green over a suite that never finished). */
-    gateCommand: z.string().max(500).default(""),
-    /* How long after a land the gate waits before running. A landing burst is the case this exists for: five
-     * agents finishing within a minute of each other are five lands, and a gate that ran per land would spend
-     * five suites to answer about four trees nobody will ever push. Every land re-arms the timer, so the run
-     * happens once, on the tree the user is about to review.
+     * command runs in the workspace root through `sh -c`, exactly as a terminal would run it. */
+    prepushCommand: z.string().max(500).default(""),
+    // Ceiling on one run, after which the child's whole process group is killed and the result is `failed` with
+    // `timedOut`. Never a pass: a suite that did not finish has said nothing about the tree, and the one thing
+    // this check exists to prevent is a green light nobody earned.
+    prepushTimeoutMs: z.number().min(60_000).max(3_600_000).default(900_000),
+    /* WHAT THE SUGGESTED FIX SESSION RUNS ON when the check fails — `${provider}:${model}` (quickModelKey), and
+     * the reasoning effort beside it. Both empty ⇒ whatever the chat composer would have started with, which is
+     * the right default precisely because it is the model the user already chose to work with.
      *
-     * It counts from the last LAND and nothing else — explicitly not "until the fleet is idle". Agents here run
-     * for hours, so a fleet of twenty with one long runner would never present a quiet moment, and a gate that
-     * waited for one would only ever fire when clicked (gate/gate.ts). */
-    gateQuietMs: z.number().min(0).max(600_000).default(20_000),
-    // Ceiling on one gate run, after which the child is killed and the verdict is `failed` with `timedOut`.
-    // Never a pass: a suite that did not finish has not said anything about the tree, and the one thing this
-    // gate exists to prevent is a green light nobody earned.
-    gateTimeoutMs: z.number().min(60_000).max(3_600_000).default(900_000),
-    /* Wake a fixer automatically when the gate goes red, instead of only lighting the badge. ON with a
-     * configured command, and the difference from the unattended spend a usage limit refuses is
-     * that the spend here is the POINT: a red gate whose fix waits for the user to notice has moved the CI
-     * round-trip into the workspace without removing it from the user's day. One attempt per verdict, so a
-     * command that fails for a reason no agent can fix costs one turn, not a loop (gate/gate.ts). */
-    gateAutoFix: z.boolean().default(true),
+     * Pinned here rather than resolved cheapest-first like `quickModel`: this is not a one-click helper, it is a
+     * turn that has to read a failing suite and repair it, so the choice is the user's and worth stating. The
+     * suggestion dialog seeds from these and stays editable — the setting decides where the dialog OPENS. */
+    prepushFixModel: z.string().default(""),
+    prepushFixEffort: z.string().default(""),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 
@@ -2243,95 +2235,51 @@ export type CiRunParam = z.infer<typeof CiRunParamSchema>;
 export const CiFixResponseSchema = z.object({ conversationId: z.string() });
 export type CiFixResponse = z.infer<typeof CiFixResponseSchema>;
 
-/* ---- the landing gate: the workspace's own verdict on the composite of landed work ----
+/* ---- the pre-push check: the workspace's own answer to "would this push go red" ----
  *
- * WHERE THIS SITS, and why it is not one of the four other places it could:
+ * WHERE THIS SITS. A fleet of 5-20 agents lands work into the main tree, the user reviews and commits it by
+ * parts, pushes, and CI answers minutes later. The check front-runs that answer at the push itself — the last
+ * moment before the work leaves the machine, and the first moment at which what will be pushed is finally
+ * settled.
  *
- * A fleet of 5-20 agents lands work into the main tree as UNCOMMITTED changes (agents/land.ts), the user
- * reviews and commits it by parts, pushes, and CI answers minutes later. This gate front-runs that answer by
- * asking the same question of the same artifact, before the push.
+ * WHY THE PUSH AND NOT THE LAND, which is where this used to run. A post-land verdict is about a tree that
+ * keeps moving: the user commits by parts, another agent lands, an edit arrives — so the verdict spent its life
+ * either stale or being recomputed, and needed a content fingerprint, a staleness rule and a badge to say which.
+ * All of that machinery existed to answer a question the push asks for free, because at the push there is
+ * exactly one artifact and the user is standing in front of it waiting.
  *
- * NOT inside an agent's turn. An isolated worktree's `node_modules` reads as the MAIN checkout's, so a
- * monorepo's workspace links resolve cross-package imports to /work's sources rather than the worktree's edited
- * ones (agents/worktrees.ts). A suite run in a worktree therefore tests the agent's edits against everyone
- * else's UNEDITED siblings: it invents failures that don't exist and passes changes that break on the
- * composite, and two agents editing one contract each go green alone and red together. The composite is the
- * only honest artifact, and it exists in exactly one place — the main working tree.
- *
- * NOT at commit. The user commits BY PARTS, and a suite reads the worktree, not the index — so a verdict taken
- * at a partial commit describes a tree that never gets pushed as such. Commit is where a verdict is DISPLAYED
- * (ReviewPanel's badge), computed earlier.
- *
- * NOT at push. By then HEAD has moved, per-path attribution has expired (agents/origins.ts), and the agents may
- * be archived with their worktrees reclaimed — so the fix starts cold, in the same position `/ci/fix` is in.
- * That saves the CI round-trip and none of the context switch.
- *
- * So: after the land, before the staging — the one window where the artifact is what CI will see, attribution
- * is still live, and nobody is waiting on it. */
+ * SO THERE IS NO STORED VERDICT AND NOTHING IS POLLED AT REST. A run exists while it runs, reports to the
+ * dialog that started it, and is gone. Nothing survives a daemon restart because nothing needs to: the next
+ * push asks again. */
 
-/* What the gate has to say about the tree right now.
+/* Where a run is.
  *
- *   idle      — no command configured, or nothing has run yet.
- *   armed     — work landed; the quiet period is counting down (see gateQuietMs).
+ *   idle      — nothing has run in this daemon's life, or the last run was cleared.
  *   running   — the check is live. `output` grows as it streams.
- *   passed    — exited 0 over `fingerprint`.
- *   failed    — exited non-zero, or was killed by gateTimeoutMs (`timedOut`). The state a fix answers.
- *   error     — the gate itself could not run: the command was not spawnable. NOT a fix-able failure, because
- *               there is nothing wrong with the code — the gate is misconfigured, and saying "tests failed"
+ *   passed    — exited 0. The push goes.
+ *   failed    — exited non-zero, or was killed by prepushTimeoutMs (`timedOut`). The state a fix answers.
+ *   error     — the check could not run at all: the command was not spawnable. NOT a fix-able failure, because
+ *               there is nothing wrong with the code — the command is misconfigured, and saying "tests failed"
  *               would send an agent hunting a bug that isn't there.
- *   cancelled — the user stopped the run, or the tree moved under it.
+ *   cancelled — the user stopped the run.
  */
-export const GateStatusSchema = z.enum(["idle", "armed", "running", "passed", "failed", "error", "cancelled"]);
-export type GateStatus = z.infer<typeof GateStatusSchema>;
+export const PrepushStatusSchema = z.enum(["idle", "running", "passed", "failed", "error", "cancelled"]);
+export type PrepushStatus = z.infer<typeof PrepushStatusSchema>;
 
-// An agent whose landed work the failure implicates. `paths` are its attributed files that the check's own
-// output NAMED — empty when the output named none of them, which is the honest shape for a failure that could
-// not be pinpointed (an integration break between two deltas, a suite that prints no paths at all): the agent
-// is listed because its work is in the tree under test, not because anything accused it.
-export const GateAgentSchema = z.object({
-    agentId: z.string(),
-    title: z.string().optional(),
-    provider: AgentProviderSchema.optional(),
-    paths: z.array(z.string()),
-});
-export type GateAgent = z.infer<typeof GateAgentSchema>;
-
-// The fix turn one red verdict got. It is a workspace conversation because the composite it must reproduce
-// lives as uncommitted content in the main working tree; it still has the same stable registry identity as any
-// other conversation.
-export const GateFixSchema = z.object({
-    startedAt: z.number(),
-    conversationId: z.string(),
-    // `running` while the turn streams; `done` when it ended cleanly, whatever the re-check then said;
-    // `error` when the turn itself failed (a provider outage, no credential), which is worth distinguishing
-    // because it is the one case where re-running the fix could still help.
-    outcome: z.enum(["running", "done", "error"]),
-    detail: z.string().optional(),
-});
-export type GateFix = z.infer<typeof GateFixSchema>;
-
-export const GateVerdictSchema = z.object({
-    status: GateStatusSchema,
-    // The command this verdict ran, echoed rather than read back from settings: a verdict read after the
+export const PrepushRunSchema = z.object({
+    status: PrepushStatusSchema,
+    // The command this run executed, echoed rather than read back from settings: a result read after the
     // setting changed still has to say what produced it.
     command: z.string(),
     startedAt: z.number().optional(),
     finishedAt: z.number().optional(),
     exitCode: z.number().optional(),
     timedOut: z.boolean().optional(),
-    // The check's own output, tail-capped (GATE_OUTPUT_BYTES). The tail, not the head: a suite's verdict and
+    // The check's own output, tail-capped (PREPUSH_OUTPUT_BYTES). The TAIL, not the head: a suite's verdict and
     // its failure summary are at the end, and a head-capped buffer of a chatty build is all progress lines.
     output: z.string(),
-    /* WHICH TREE this verdict is about — HEAD plus the shape of every repo's uncommitted content. Recomputed
-     * on read: when it no longer matches, the verdict is `stale` and the badge says so instead of asserting a
-     * green light over a tree that has since moved. This is what keeps a passed verdict from outliving its
-     * subject when the user edits, discards, or commits half of it. */
-    fingerprint: z.string(),
-    stale: z.boolean(),
-    implicated: z.array(GateAgentSchema),
-    fix: GateFixSchema.optional(),
 });
-export type GateVerdict = z.infer<typeof GateVerdictSchema>;
+export type PrepushRun = z.infer<typeof PrepushRunSchema>;
 
 // ---- drafts: agent-proposed posts awaiting owner approval (.intentic/drafts/<id>.json) ----
 // One JSON file per draft. The AGENT creates drafts with its normal file tools — it can't call daemon routes,

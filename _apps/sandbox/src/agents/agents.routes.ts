@@ -4,7 +4,6 @@ import { streamAgent } from "../agent/agent.routes.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { landingGate } from "../gate/gate.js";
 import { conversationPrompts, matchPrompts } from "../sessions/prompt-index.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { agentRepoChanges, anchorOf } from "./agent-changes.js";
@@ -259,10 +258,6 @@ export const createAgentsRoutes = (services: Services) => {
                     },
                     streamAgent,
                 );
-                // The composite the user is about to review just changed — restart the gate's quiet countdown
-                // (gate/gate.ts). A deliberate land from the review panel counts exactly as much as an
-                // auto-land: it is the same delta arriving in the same tree by the user's own hand.
-                landingGate(services, streamAgent).arm();
             }
             return {
                 landed: result.landed,

@@ -1,6 +1,7 @@
 import type { AgentChangesResponse } from "@intentic-app/api-contract";
 import type { LandMode, LandResult } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic-app/ui";
+import type { Conversation } from "../chat/conversation";
 import { focusComposer, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { router } from "../../router";
@@ -32,14 +33,21 @@ import { useAgents } from "./useAgents";
 // Templates must therefore write `@click="startAgent()"`, not `@click="startAgent"`: Vue hands a bare handler
 // reference the MouseEvent, which would arrive here as the prompt and be sent to the agent as its first turn.
 export const startAgent = (prompt?: string): void => {
-    const { newChat } = useChat();
-    const conversation = newChat();
+    const conversation = useChat().newChat();
+    revealConversation(conversation);
+    if (prompt !== undefined) {
+        void conversation.enqueue(prompt);
+    }
+};
+
+// The two steps that turn a conversation the user cannot see into the one they are now looking at. Shared with
+// the suggested-session dialog (sessionSuggestion.ts), which mints and configures its conversation before any
+// tab exists for it and so cannot go through `newChat` — but must land in exactly the same place once accepted,
+// or "start a fix agent" and "New agent" would leave the user in two different states.
+export const revealConversation = (conversation: Conversation): void => {
     focusComposer();
     if (useDevice().mobile.value) {
         void router.push(`/agents/${encodeURIComponent(conversation.conversationId)}`);
-    }
-    if (prompt !== undefined) {
-        void conversation.enqueue(prompt);
     }
 };
 

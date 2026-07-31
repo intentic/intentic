@@ -37,8 +37,10 @@ export interface QuickModelChoice {
 // for its entries (PickerEntry.key). Empty ⇒ Auto.
 export const quickModelKey = (choice: QuickModelChoice): string => `${choice.provider}:${choice.model}`;
 
-// Split on the FIRST colon only: a provider id never contains one and a model id might.
-const parsePinned = (pinned: string): QuickModelChoice | undefined => {
+// Split on the FIRST colon only: a provider id never contains one and a model id might. Exported because the
+// key shape is shared: `prepushFixModel` pins the suggested fix session's model the same way, and the dialog
+// that seeds from it has to read one back.
+export const parsePinned = (pinned: string): QuickModelChoice | undefined => {
     const separator = pinned.indexOf(`:`);
     if (separator <= 0 || separator === pinned.length - 1) {
         return undefined;

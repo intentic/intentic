@@ -28,18 +28,13 @@ const IGNORE_SEGMENTS = new Set(IGNORED_DIRS);
 //   long as the rebuild took. The engine already excludes the dir from its own views (isIqDenied).
 // - the agent session transcripts (.intentic/claude/...) are rewritten on every streamed token, so the same
 //   storm ran through every turn.
-// - the landing gate's index and verdict (gate/gate.ts). Its fingerprint is a `git add -A` into an index of its
-//   own PER REPO, and the panel polls the verdict every 2s for as long as a check runs — so each poll rewrote a
-//   file in the watched tree, which came back as a workspace change, which refetched the tree AND the review
-//   set (the daemon's most expensive read). Clicking "Re-run" flickered "Loading changes…" for the length of
-//   the suite. The badge is polled, deliberately (useGate.ts), so nothing downstream needs the push.
 // None of it is source and nothing derives from watching it. The .intentic/ MANIFESTS (capabilities,
 // automations, settings, the environment Dockerfiles, approvals, drafts) stay watched — those changes are
 // exactly how another member's write reaches this browser.
 //
-// Entries are the first TWO segments of a .intentic/ path, so a file (gate.json) names itself and a directory
-// covers everything beneath it.
-const DAEMON_STATE_PATHS = new Set([IQ_DIR, ".intentic/claude", ".intentic/gate-index", ".intentic/gate.json"]);
+// Entries are the first TWO segments of a .intentic/ path, so a file names itself and a directory covers
+// everything beneath it.
+const DAEMON_STATE_PATHS = new Set([IQ_DIR, ".intentic/claude"]);
 const isDaemonStatePath = (abs: string): boolean => {
     const segments = abs.split(sep);
     const index = segments.indexOf(".intentic");

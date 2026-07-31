@@ -10,7 +10,6 @@ import { createCodexRoutes } from "./codex/codex.routes.js";
 import type { Services } from "./composition.js";
 import { createDraftsRoutes } from "./drafts/drafts.routes.js";
 import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
-import { createGateRoutes } from "./gate/gate.routes.js";
 import { createGeminiRoutes } from "./gemini/gemini.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
 import { createGrokRoutes } from "./grok/grok.routes.js";
@@ -22,6 +21,7 @@ import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createMemoryRoutes } from "./memory/memory.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
 import { createPortsRoutes } from "./ports/ports.routes.js";
+import { createPrepushRoutes } from "./prepush/prepush.routes.js";
 import { createPushRoutes } from "./push/push.routes.js";
 import { createSecretsRoutes } from "./secrets/secrets.routes.js";
 import { createSessionsRoutes } from "./sessions/sessions.routes.js";
@@ -48,7 +48,6 @@ export const createRouter = (services: Services) => ({
     settings: createSettingsRoutes(services),
     intentic: createIntenticRoutes(services),
     gemini: createGeminiRoutes(services),
-    gate: createGateRoutes(services),
     git: createGitRoutes(services),
     grok: createGrokRoutes(services),
     kimi: createKimiRoutes(services),
@@ -59,6 +58,7 @@ export const createRouter = (services: Services) => ({
     memory: createMemoryRoutes(services),
     panels: createPanelsRoutes(services),
     ports: createPortsRoutes(services),
+    prepush: createPrepushRoutes(services),
     push: createPushRoutes(services),
     translator: createTranslatorRoutes(services),
     secrets: createSecretsRoutes(services),

@@ -31,10 +31,10 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
         autoLand: true,
         resumeAfterOutage: true,
         autoResumeOnRestart: true,
-        gateCommand: "",
-        gateQuietMs: 20_000,
-        gateTimeoutMs: 900_000,
-        gateAutoFix: true,
+        prepushCommand: "",
+        prepushTimeoutMs: 900_000,
+        prepushFixModel: "",
+        prepushFixEffort: "",
     });
 });
 
@@ -73,12 +73,13 @@ test("an empty object is the full default settings object", () => {
         // On: a daemon restart is usually intentic's own doing (an image update, an approved environment
         // change), not the user's decision, so the turn it interrupted resumes rather than staying stuck.
         autoResumeOnRestart: true,
-        // Empty disables the landing gate until the owner supplies this workspace's verification command.
-        gateCommand: "",
-        gateQuietMs: 20_000,
-        gateTimeoutMs: 900_000,
-        // Once a gate is configured, a red verdict wakes one fixer by default.
-        gateAutoFix: true,
+        // Empty disables the pre-push check until the owner supplies this workspace's verification command.
+        prepushCommand: "",
+        prepushTimeoutMs: 900_000,
+        // Empty ⇒ the suggested fix session opens on whatever the chat composer would have started with, which
+        // is the model the user already chose to work with.
+        prepushFixModel: "",
+        prepushFixEffort: "",
     });
 });
 

@@ -5,16 +5,21 @@ import { useRouter } from "vue-router";
 import { type AgentHarness, type AgentProvider, limitationsOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady } from "../composables/chat/access";
 import { BADGE_META, relativeTime } from "../composables/chat/catalog";
-import { acpProviders, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
+import { acpProviders, type Conversation, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
 import { customEntryFor, filterEntries, type PickerEntry, pickerBlocks, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
 import { formatUtilization, isStale, usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
-import { loadAllProviderModels, loadProviderModels, useChat } from "../composables/chat/useChat";
+import { accountsOf, loadAllProviderModels, loadProviderModels } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
 
 /* The unified model picker (search + provider rail + one grouped list + session-control footer) — width-
  * agnostic so the desktop panel hosts it in a Popover and the mobile panel in a BottomSheet. Rows span every
- * provider and are MODELS ONLY: picking one applies provider+model (useChat.selectModel), keeping the current
- * harness.
+ * provider and are MODELS ONLY: picking one applies provider+model (Conversation.selectModel), keeping the
+ * current harness.
+ *
+ * IT EDITS THE CONVERSATION IT IS GIVEN, not "the active tab". The composer hands it the active one; the
+ * suggested-session dialog hands it a DRAFT that has no tab yet (SuggestedSessionBox.vue), so that a session
+ * being proposed can be re-pointed at a different model before it is ever started. Binding to the active tab
+ * instead would have made the dialog's picker silently edit whatever chat happened to be open behind it.
  *
  * ACCESS IS THE FIRST THING A ROW STATES. Every provider's catalog is non-empty whether or not its credential is
  * connected (the daemon serves a seed floor so a turn always resolves a model), so the list used to offer models
@@ -30,9 +35,16 @@ import ProviderLogo from "./ProviderLogo.vue";
  * hosts remount the body per open, so the query/rail reset and the catalogs refresh on every open. */
 
 const emit = defineEmits<{ selected: [] }>();
+const { conversation } = defineProps<{ conversation: Conversation }>();
 
-const { provider, harness, selectHarness, model, thinking, streaming, messages, account, selectAccount, accounts, selectModel, capabilities } =
-    useChat();
+/* Destructured ONCE, which is sound only because every host remounts this body per open — AnchoredOverlay
+ * teleports behind a `v-if="open"` and BottomSheet does the same, in both ChatPanel and SuggestedSessionBox.
+ * These are the refs of the conversation as it was at mount, so a host that swapped the prop in place would go
+ * on editing the previous one. Remount, don't rebind. */
+const { provider, harness, model, thinking, streaming, messages, account, capabilities } = conversation;
+// The active provider's connected accounts. Module state rather than the conversation's, because an account
+// list belongs to the sandbox — the conversation only picks WHICH of them its next turn runs on.
+const accounts = computed(() => accountsOf(provider.value));
 const { mobile } = useDevice();
 const router = useRouter();
 
@@ -149,7 +161,7 @@ const pick = (entry: PickerEntry): void => {
     if (isDisabled(entry)) {
         return;
     }
-    selectModel(entry);
+    conversation.selectModel(entry);
     emit(`selected`);
 };
 
@@ -510,7 +522,7 @@ onMounted(() => {
                         class="qopt flex min-h-8 min-w-0 items-center gap-2 rounded-lg border px-2 py-1 text-xs max-md:min-h-11"
                         :class="{ 'qopt-on': activeAccountId === a.id }"
                         :disabled="streaming"
-                        @click="selectAccount(a.id)"
+                        @click="conversation.selectAccount(a.id)"
                     >
                         <!-- Name over identity, both truncating: the row grows by a line only for accounts that
                              need one, so the common single-account case is the same 8-high row it always was. -->
@@ -552,7 +564,7 @@ onMounted(() => {
                         :class="{ 'composer-active': harness === h.value }"
                         :disabled="streaming"
                         :aria-pressed="harness === h.value"
-                        @click="selectHarness(h.value)"
+                        @click="conversation.selectHarness(h.value)"
                     >
                         {{ h.label }}
                     </button>
@@ -566,7 +578,7 @@ onMounted(() => {
                     type="button"
                     class="composer-ghost h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
                     :class="{ 'composer-active': thinking }"
-                    @click="thinking = !thinking"
+                    @click="conversation.setThinking(!thinking)"
                     :aria-pressed="thinking"
                     aria-label="Toggle extended thinking"
                 >

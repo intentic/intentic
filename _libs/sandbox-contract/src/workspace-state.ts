@@ -89,16 +89,6 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
     },
 
     // ---- daemon-owned, nothing derives from watching them ----
-    {
-        path: ".intentic/gate.json",
-        invalidates: [],
-        why: "The landing gate's verdict is POLLED on purpose (web's useGate). Its fingerprint pass rewrites this file every couple of seconds while a check runs, and pushing that back would refetch the review set — the daemon's most expensive read — on every poll.",
-    },
-    {
-        path: ".intentic/gate-index/",
-        invalidates: [],
-        why: "The gate's per-repo git index. Machine state, rewritten continuously by the fingerprint pass.",
-    },
     /* Agent session transcripts, rewritten on every streamed token.
      *
      * The memory notes under it (`projects/<slug>/memory/**`) ARE user-facing and the /memory view polls them

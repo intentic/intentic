@@ -24,8 +24,8 @@ import { writeCodexConfig } from "./codex/codex-config.js";
 import { createServices } from "./composition.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
-import { landingGate } from "./gate/gate.js";
 import { runGitMaintenance } from "./git/maintenance.js";
+import { prepushCheck } from "./prepush/prepush.js";
 import { ensureRepoGitDirs } from "./git/repo-git-dirs.js";
 import { commitRootBaseline, ensureRootRepo } from "./git/root-repo.js";
 import { reconcileSkills } from "./settings/skills.js";
@@ -553,9 +553,9 @@ const main = async (): Promise<void> => {
         clearInterval(logsSweep);
         clearInterval(sessionSweep);
         scheduler.stop();
-        // A gate run is a child process on the main tree — a daemon that exits without killing it leaves a
-        // suite burning CPU with nothing left to report the verdict to.
-        landingGate(services, streamAgent).stop();
+        // A pre-push check is a child process on the main tree — a daemon that exits without killing it leaves
+        // a suite burning CPU with nothing left to report the result to.
+        prepushCheck(services).stop();
         workloadPriority.stop();
         services.ciHooks.stop();
         turnResume.stop();

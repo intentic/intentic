@@ -10,7 +10,6 @@ import { claudeContract } from "./contracts/claude.contract.js";
 import { codexContract } from "./contracts/codex.contract.js";
 import { draftsContract } from "./contracts/drafts.contract.js";
 import { extensionsContract } from "./contracts/extensions.contract.js";
-import { gateContract } from "./contracts/gate.contract.js";
 import { geminiContract } from "./contracts/gemini.contract.js";
 import { gitContract } from "./contracts/git.contract.js";
 import { grokContract } from "./contracts/grok.contract.js";
@@ -22,6 +21,7 @@ import { logsContract } from "./contracts/logs.contract.js";
 import { memoryContract } from "./contracts/memory.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
+import { prepushContract } from "./contracts/prepush.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
@@ -42,7 +42,6 @@ export { claudeContract } from "./contracts/claude.contract.js";
 export { codexContract } from "./contracts/codex.contract.js";
 export { draftsContract } from "./contracts/drafts.contract.js";
 export { extensionsContract } from "./contracts/extensions.contract.js";
-export { gateContract } from "./contracts/gate.contract.js";
 export { geminiContract } from "./contracts/gemini.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
 export { grokContract } from "./contracts/grok.contract.js";
@@ -54,6 +53,7 @@ export { logsContract } from "./contracts/logs.contract.js";
 export { memoryContract } from "./contracts/memory.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
+export { prepushContract } from "./contracts/prepush.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";
 export { sessionsContract } from "./contracts/sessions.contract.js";
@@ -95,7 +95,6 @@ export const sandboxContract = {
     settings: settingsContract,
     intentic: intenticContract,
     gemini: geminiContract,
-    gate: gateContract,
     git: gitContract,
     grok: grokContract,
     kimi: kimiContract,
@@ -106,6 +105,7 @@ export const sandboxContract = {
     memory: memoryContract,
     panels: panelsContract,
     ports: portsContract,
+    prepush: prepushContract,
     push: pushContract,
     secrets: secretsContract,
     system: systemContract,

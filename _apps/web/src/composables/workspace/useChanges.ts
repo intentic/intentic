@@ -192,8 +192,9 @@ const afterPull = async (): Promise<void> => {
 // credential failure surfaces as git's own reason on the action line instead of a generic request error.
 //
 // INCOMING ONLY. Pushing is not offered here even though the route would serve it: every push in the panel has
-// to pass the landing gate's guardrail first, and a second door into the same verb is a door around it. A
-// one-repo push is `syncAll` with one target — the same request, the same failure line — so nothing is lost.
+// to go through the pre-push check first (ReviewPanel's askSync), and a second door into the same verb is a
+// door around it. A one-repo push is `syncAll` with one target — the same request, the same failure line — so
+// nothing is lost.
 const syncRepo = (repo: string, action: "fetch" | "pull", label: string): Promise<void> =>
     runBatch(
         [

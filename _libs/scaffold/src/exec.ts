@@ -48,8 +48,9 @@ const isLockContention = (error: unknown): boolean => {
 // Shared between the sandbox's git module and the CLI's adopt.
 //
 // `env` is MERGED over the daemon's own, for the handful of git behaviours that have no command-line spelling —
-// GIT_INDEX_FILE above all, which is how the landing gate hashes a worktree without touching the index the user
-// stages into. Optional, so every existing runner and every test double stays assignable unchanged.
+// GIT_INDEX_FILE above all, which is how the checkpoint snapshot stages a worktree into an index of its own
+// (history/history.ts) without touching the one the user stages into. Optional, so every existing runner and
+// every test double stays assignable unchanged.
 export type GitRunner = (
     dir: string,
     args: readonly string[],

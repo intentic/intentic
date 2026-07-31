@@ -368,46 +368,25 @@ const harness = computed<AgentHarness>(() => active.value.harness.value);
 const selectHarness = (next: AgentHarness): void => active.value.selectHarness(next);
 const model = computed<string>({
     get: () => active.value.model.value,
-    set: (value) => {
-        active.value.model.value = value;
-        // Remember this model for the active conversation's provider, so switching provider away and back
-        // restores it — per-provider memory, not one global model.
-        turnDefaults.models.value = { ...turnDefaults.models.value, [active.value.provider.value]: value };
-    },
+    set: (value) => active.value.selectModel({ provider: active.value.provider.value, value }),
 });
-// One picker row = provider + model; the harness is a separate axis (the footer chips), so a model pick keeps
-// the current harness. A cross-provider pick re-points the selection (the fresh session starts lazily at the
-// next send). Mid-stream, only a same-provider model swap is allowed — a provider switch is not.
+// Conversation.selectModel is the whole rule (provider re-point, per-provider memory, the mid-stream guard);
+// what this adds is the catalog refetch, which only a surface that did not open the picker needs — the picker
+// warms every catalog on mount and so drives the conversation directly.
 const selectModel = (pick: { provider: AgentProvider; value: string }): void => {
-    if (streaming.value && pick.provider !== provider.value) {
-        return;
-    }
-    if (pick.provider !== provider.value) {
-        selectProvider(pick.provider);
-    }
-    active.value.model.value = pick.value;
-    // Per-provider memory, so switching provider away and back restores the pick (catalog is harness-independent).
-    turnDefaults.models.value = { ...turnDefaults.models.value, [pick.provider]: pick.value };
+    active.value.selectModel(pick);
+    void loadProviderModels(pick.provider);
 };
 
 // The effort the composer shows is the EFFECTIVE one (the pick clamped to the current model's scale); setting
 // it records a new pick, on this conversation and as the seed for the next new chat.
 const effort = computed<string>({
     get: () => active.value.effort.value,
-    set: (value) => {
-        active.value.effortPick.value = value;
-        turnDefaults.effort.value = value;
-    },
+    set: (value) => active.value.setEffort(value),
 });
 const thinking = computed<boolean>({
     get: () => active.value.thinking.value,
-    set: (value) => {
-        active.value.thinking.value = value;
-        turnDefaults.thinking.value = value;
-        // No effort clamp here: turning thinking OFF invalidates a 'max' pick (the API rejects the pair), and
-        // Conversation.effort already answers for it — thinking is one of the three inputs it clamps against, so
-        // the composer's segments and the next turn both follow this flip on their own.
-    },
+    set: (value) => active.value.setThinking(value),
 });
 // Account facades: the active conversation's account selection + its picker. `accounts` lists the active
 // provider's connected accounts for the composer switcher; `managedAccounts` the manage card's.
@@ -415,7 +394,7 @@ const account = computed<string | undefined>(() => active.value.account.value);
 const selectAccount = (id: string): void => active.value.selectAccount(id);
 // Providers are an open string vocabulary — an unseeded key (an ACP agent, which owns its own credentials)
 // simply has no daemon account list.
-const accountsOf = (target: AgentProvider): readonly OauthAccount[] => providerAccounts.value[target] ?? [];
+export const accountsOf = (target: AgentProvider): readonly OauthAccount[] => providerAccounts.value[target] ?? [];
 const accounts = computed<readonly OauthAccount[]>(() => accountsOf(active.value.provider.value));
 const managedAccounts = computed<readonly OauthAccount[]>(() => accountsOf(managedProvider.value));
 
@@ -951,6 +930,18 @@ const newChat = (): Conversation => {
     const conversation = new Conversation();
     setConversations([...conversations.value, conversation], conversation.conversationId);
     return conversation;
+};
+
+/* Put an already-built conversation into the strip and focus it. `newChat` cannot serve this and the difference
+ * is the point: it MINTS the conversation, whereas a suggested session has to exist — configured with a model,
+ * an effort and a first message the user can still edit — for as long as the dialog is open, and may be
+ * dismissed without ever becoming a tab (agents/sessionSuggestion.ts).
+ *
+ * Safe against the one-untouched-draft rule because a suggestion always arrives carrying its prompt in `draft`,
+ * which is exactly what `untouchedDraft` reads as touched: this conversation is kept, and any empty draft the
+ * strip was holding is reaped by the same write, which is the correct outcome either way. */
+export const adoptConversation = (conversation: Conversation): void => {
+    setConversations([...conversations.value, conversation], conversation.conversationId);
 };
 
 // "Put the caret in the composer", as a signal rather than a call: the conversation list is store state, but

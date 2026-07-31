@@ -1370,7 +1370,7 @@ watch(
         <!-- The pickers: anchored popovers on desktop, bottom sheets on mobile — same menu bodies. -->
         <template v-if="mobile">
             <BottomSheet v-model="modelSheetOpen" header="Model">
-                <ChatModelPicker @selected="modelSheetOpen = false" />
+                <ChatModelPicker :conversation="active" @selected="modelSheetOpen = false" />
             </BottomSheet>
             <BottomSheet v-model="modeSheetOpen" header="Agent mode">
                 <ChatModeMenu @selected="modeSheetOpen = false" />
@@ -1383,7 +1383,7 @@ watch(
                  passes that cap down to the picker's scrolling list (see ChatModelPicker). -->
             <AnchoredOverlay v-model="modelOpen" :anchor="modelPill">
                 <div class="flex min-h-0 w-[26rem] flex-col">
-                    <ChatModelPicker @selected="modelOpen = false" />
+                    <ChatModelPicker :conversation="active" @selected="modelOpen = false" />
                 </div>
             </AnchoredOverlay>
             <AnchoredOverlay v-model="modeOpen" :anchor="modePill" cross="end">

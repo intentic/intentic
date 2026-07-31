@@ -87,8 +87,8 @@ test.skipIf(!existsSync(built))("the forker passes git's output, env and failure
         const { defaultGit } = await import(${JSON.stringify(built.href)});
         const dir = ${JSON.stringify(dir)};
         const head = (await defaultGit(dir, ["rev-parse", "HEAD"])).stdout.trim();
-        // GIT_INDEX_FILE is the env the landing gate hashes a worktree with — it has no command-line spelling,
-        // so a forker that dropped \`env\` would silently hash the user's own index instead.
+        // GIT_INDEX_FILE is the env a checkpoint snapshot stages with — it has no command-line spelling, so a
+        // forker that dropped \`env\` would silently stage into the user's own index instead.
         const gitDir = (await defaultGit(dir, ["rev-parse", "--git-dir"], { GIT_INDEX_FILE: "/tmp/forker-probe-index" })).stdout.trim();
         let failure;
         try {

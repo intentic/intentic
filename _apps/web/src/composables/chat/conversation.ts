@@ -760,6 +760,45 @@ export class Conversation {
         this.refreshSwitchNotice();
     }
 
+    /* THE THREE TURN-SETTING WRITES, all shaped the same way: apply to THIS conversation, and remember the pick
+     * as the seed for the next new chat. They live here rather than in useChat because a conversation is not
+     * always the active tab — the suggested-session dialog drives a draft that has no tab at all yet, through
+     * the same model picker and the same effort segments (SuggestedSessionBox.vue). useChat's identically-named
+     * facades are these, bound to the active tab.
+     *
+     * One picker row = provider + model; the harness is a separate axis (the picker's footer chips), so a model
+     * pick keeps the current harness. A cross-provider pick re-points the selection and the fresh session starts
+     * lazily at the next send. Mid-stream, only a same-provider model swap is allowed — a provider switch is not,
+     * because it retires the session the stream is running on. */
+    selectModel(pick: { provider: AgentProvider; value: string }): void {
+        if (this.streaming.value && pick.provider !== this.provider.value) {
+            return;
+        }
+        if (pick.provider !== this.provider.value) {
+            this.selectProvider(pick.provider);
+        }
+        this.model.value = pick.value;
+        // Per-provider memory, so switching provider away and back restores the pick (the catalog is
+        // harness-independent, so it rides across a harness switch too).
+        turnDefaults.models.value = { ...turnDefaults.models.value, [pick.provider]: pick.value };
+    }
+
+    // The effort PICK, which is not always the effort in force: Conversation.effort clamps it to whatever scale
+    // the current model and thinking flag actually offer, so a `max` pick survives a trip through a model that
+    // tops out at `high` rather than being silently rewritten to it.
+    setEffort(value: string): void {
+        this.effortPick.value = value;
+        turnDefaults.effort.value = value;
+    }
+
+    // No effort clamp here: turning thinking OFF invalidates a `max` pick (the API rejects the pair), and
+    // `effort` already answers for it — thinking is one of the three inputs it clamps against, so the segments
+    // and the next turn both follow this flip on their own.
+    setThinking(value: boolean): void {
+        this.thinking.value = value;
+        turnDefaults.thinking.value = value;
+    }
+
     // Point the conversation's next turn at a specific account of its current provider (the account switcher).
     // Mid-chat, an account change — like a provider change — retires the session at the next send.
     selectAccount(id: string): void {

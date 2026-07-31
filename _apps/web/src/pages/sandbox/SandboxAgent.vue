@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { type AgentProvider, type BuiltinPromptText, quickModelKey, type SandboxSettings, type SystemPromptMode } from "@intentic/sandbox-contract";
+import {
+    type AgentProvider,
+    type BuiltinPromptText,
+    parsePinned,
+    quickModelKey,
+    type SandboxSettings,
+    type SystemPromptMode,
+} from "@intentic/sandbox-contract";
 import { Card, cmp, CopyButton, formatTokens, Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
+import { providerReady } from "../../composables/chat/access";
 import { relativeTime } from "../../composables/chat/catalog";
+import { effortsFor, providerDisplayLabel } from "../../composables/chat/conversation";
+import { pickerEntries } from "../../composables/chat/modelPicker";
 import { quickModelGroups, useQuickModel } from "../../composables/chat/quickModel";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { errorMessage, useAsyncAction } from "../../composables/useAsyncAction";
@@ -245,36 +255,86 @@ const toggleAutoLand = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, autoLand: value });
 };
 
-/* --- The landing gate ----------------------------------------------------------------------------------------
- * The check command run over the COMPOSITE of every agent's landed work, once the fleet goes quiet and before
- * the user starts staging (the daemon's gate/gate.ts argues that moment against the four alternatives). It
- * belongs on this tab and not in personal Settings for the same reason the quick model does: it names something
- * that only exists inside this sandbox — a command that has to run in THIS workspace's toolchain.
+/* --- The pre-push check ---------------------------------------------------------------------------------------
+ * The command the workspace runs when a push is about to go out, and the model the fix session it proposes
+ * opens on. Both belong on this tab and not in personal Settings for the same reason the quick model does: they
+ * name things that only exist inside this sandbox — a command that has to run in THIS workspace's toolchain,
+ * and a provider account that lives in THIS container.
  *
  * Empty is the default and it means OFF, which is why there is no separate enable switch to disagree with it:
- * only the owner knows what verifies their workspace, and a guessed `pnpm test` would read as the gate finding a
- * bug on its first run. Committed on change rather than per keystroke — every save is a daemon round-trip, and
- * a half-typed command is a command. */
-const setGateCommand = (event: Event): void => {
+ * only the owner knows what verifies their workspace, and a guessed `pnpm test` would read as the check finding
+ * a bug on its first run. Committed on change rather than per keystroke — every save is a daemon round-trip,
+ * and a half-typed command is a command. */
+const setPrepushCommand = (event: Event): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
         return;
     }
-    const gateCommand = (event.target as HTMLInputElement).value.trim();
-    if (gateCommand !== current.gateCommand) {
-        saveSandboxSettings.mutate({ ...current, gateCommand });
+    const prepushCommand = (event.target as HTMLInputElement).value.trim();
+    if (prepushCommand !== current.prepushCommand) {
+        saveSandboxSettings.mutate({ ...current, prepushCommand });
     }
 };
 
-// Whether a red gate wakes a fixer by itself. On by default WITH a command configured, unlike the other
-// unattended-spend toggles, because the spend is the point: a red verdict nobody acts on has moved the CI
-// round-trip into the workspace without taking it out of the user's day.
-const toggleGateAutoFix = (value: boolean): void => {
+/* WHICH MODEL THE PROPOSED FIX OPENS ON. Every connected provider's full catalog in CATALOG order — pointedly
+ * not cheapest-first like the quick model's list, because these are opposite jobs: the quick model exists to
+ * keep a one-click helper off the frontier tier, while this one has to read a failing suite and repair it. The
+ * empty row means "whatever the composer is set to", which is the honest floor — it is the model the user
+ * already chose to work with, and it keeps following them as they change it. */
+const fixModelOptions = computed<PickerOptions>(() => {
+    const byProvider = new Map<AgentProvider, { value: string; label: string }[]>();
+    for (const entry of pickerEntries.value) {
+        // A provider with no credential is not offered: pinning a model this sandbox cannot send to would leave
+        // the dialog opening on a locked row every time, which is a setting that only ever costs a correction.
+        // ACP agents own their own model (empty id), so there is nothing here to pin.
+        if (!providerReady(entry.provider) || entry.value === ``) {
+            continue;
+        }
+        const options = byProvider.get(entry.provider) ?? [];
+        byProvider.set(entry.provider, options);
+        options.push({ value: entry.key, label: entry.label });
+    }
+    return [
+        { options: [{ value: ``, label: `Composer default`, description: `Whatever your chat is set to` }] },
+        ...[...byProvider].map(([provider, options]) => ({ label: providerDisplayLabel(provider), options })),
+    ];
+});
+
+// The pinned choice, parsed — the effort scale below is a property of the MODEL, so there is nothing to offer
+// until one is named.
+const fixModel = computed(() => parsePinned(sandboxSettings.value?.prepushFixModel ?? ``));
+/* `thinking: false` because the setting pins a starting effort, not a turn: extended thinking is a per-turn
+ * Claude knob the suggestion dialog still owns, and Conversation.effort re-clamps this pick against whatever it
+ * is when the session actually opens.
+ *
+ * "Default" leads with the empty value, matching the model row above it, and is not decoration: an unpinned
+ * effort really does mean "whatever the composer is set to", and rendering the scale's lowest segment as
+ * selected instead would claim this sandbox had pinned `low` when it had pinned nothing. */
+const fixEffortOptions = computed(() =>
+    fixModel.value === undefined
+        ? []
+        : [
+              { label: `Default`, value: `` },
+              ...effortsFor(fixModel.value.provider, fixModel.value.model, false).map((e) => ({ label: e.label, value: e.value })),
+          ],
+);
+
+const setPrepushFixModel = (value: string): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
         return;
     }
-    saveSandboxSettings.mutate({ ...current, gateAutoFix: value });
+    // The effort scale belongs to the model, so a new model drops the old pick rather than carrying one its
+    // scale may not contain. Empty re-seeds from the composer — the same floor the model row itself defaults to.
+    saveSandboxSettings.mutate({ ...current, prepushFixModel: value, prepushFixEffort: `` });
+};
+
+const setPrepushFixEffort = (value: string): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, prepushFixEffort: value });
 };
 
 /* --- Quick model ---------------------------------------------------------------------------------------------
@@ -932,42 +992,72 @@ const importMemory = async (): Promise<void> => {
                 </template>
             </Row>
 
-            <!-- The landing gate — the check run over the composite of everything that has landed, once the
-                 fleet goes quiet. This is the shift-left of the CI round-trip: the same question CI asks, asked
-                 of the same artifact (the uncommitted main tree), while the agents that wrote it are still warm
-                 and their per-file attribution is still live. The verdict surfaces on the Changes panel. -->
+            <!-- The pre-push check — the shift-left of the CI round-trip: the same question CI asks, asked of
+                 the same artifact, at the last moment before it leaves the machine and while the user is still
+                 standing there. The command gets the row's full width rather than a 14rem control slot: it is a
+                 shell line, it is read left-to-right, and truncating `pnpm -w turbo run test --filter=…` at the
+                 tenth character made a configured check indistinguishable from a mistyped one. -->
             <Row
                 icon="shield"
-                title="Check landed work before you commit"
-                description="Run this command over your workspace after landed changes settle, and show the result on the Changes panel. It runs in the workspace root, exactly as a terminal would. Empty turns the gate off."
+                title="Check before you push"
+                description="Run this command over your workspace when you push. It runs in the workspace root, exactly as a terminal would — pass and the push goes, fail and you get the output. Empty turns the check off."
             >
-                <template #control>
-                    <input
-                        type="text"
-                        placeholder="pnpm test"
-                        spellcheck="false"
-                        :value="sandboxSettings?.gateCommand ?? ``"
-                        :disabled="sandboxSettings === undefined"
-                        :class="cmp.input(`w-56 font-mono text-xs`)"
-                        @change="setGateCommand"
-                    />
+                <template #below>
+                    <div
+                        class="flex items-center gap-2 rounded-lg border border-line bg-canvas px-2.5 py-1.5 focus-within:border-line-strong"
+                        :class="{ 'opacity-50': sandboxSettings === undefined }"
+                    >
+                        <span class="select-none font-mono text-xs text-subtle" aria-hidden="true">$</span>
+                        <input
+                            type="text"
+                            placeholder="pnpm test"
+                            spellcheck="false"
+                            autocapitalize="off"
+                            autocorrect="off"
+                            aria-label="Pre-push check command"
+                            :value="sandboxSettings?.prepushCommand ?? ``"
+                            :disabled="sandboxSettings === undefined"
+                            class="min-w-0 flex-1 bg-transparent font-mono text-xs text-content placeholder:text-subtle focus:outline-none"
+                            @change="setPrepushCommand"
+                        />
+                    </div>
                 </template>
             </Row>
 
             <!-- Only meaningful with a command configured, so it hides without one rather than sitting there
                  governing nothing — the same reason the terse-holdout row appears only once the steer is on. -->
             <Row
-                v-if="(sandboxSettings?.gateCommand ?? ``) !== ``"
+                v-if="(sandboxSettings?.prepushCommand ?? ``) !== ``"
                 icon="bolt"
-                title="Fix a failed check with an agent"
-                description="When the check fails, wake an agent on your workspace with the failing output and the files' agent attribution, to fix it in place before you commit. One attempt per result — a check that fails for a reason no agent can fix costs one turn, not a loop."
+                title="Model for fixing a failed check"
+                description="Where the suggested fix session opens when the check fails. Nothing runs on its own — the prompt, this model and its effort are all editable in the dialog before you start it."
             >
                 <template #control>
-                    <ToggleSwitch
-                        :model-value="sandboxSettings?.gateAutoFix ?? true"
+                    <Picker
+                        :model-value="sandboxSettings?.prepushFixModel ?? ``"
+                        :options="fixModelOptions"
                         :disabled="sandboxSettings === undefined"
-                        @update:model-value="toggleGateAutoFix"
-                    />
+                        class="w-56 py-1.5 text-xs"
+                        aria-label="Model for fixing a failed check"
+                        @update:model-value="(value: string | undefined) => setPrepushFixModel(value ?? ``)"
+                    >
+                        <template #icon="{ option }">
+                            <Icon v-if="option.value === ``" name="comments" class="shrink-0 text-xs text-muted" aria-hidden="true" />
+                            <ProviderLogo v-else :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
+                        </template>
+                    </Picker>
+                </template>
+                <!-- The effort scale belongs to the model, so it appears only once one is pinned — and a model
+                     whose runtime forwards no effort at all publishes none, which correctly draws nothing. -->
+                <template v-if="fixEffortOptions.length > 0" #below>
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="text-xs text-muted">Reasoning effort</span>
+                        <Segmented
+                            :model-value="sandboxSettings?.prepushFixEffort ?? ``"
+                            :options="fixEffortOptions"
+                            @update:model-value="setPrepushFixEffort"
+                        />
+                    </div>
                 </template>
             </Row>
 
