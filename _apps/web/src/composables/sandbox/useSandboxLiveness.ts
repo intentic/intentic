@@ -3,7 +3,7 @@ import { desyncAgents } from "../agents/useAgents";
 import { queryClient } from "../queryPersistence";
 import { presenceStreamOpened, resetPresence } from "../usePresence";
 import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
-import { classifyFailure, type ConnectionFailure } from "./connection";
+import { classifyFailure, type ConnectionFailure, watchdogRecoveryDelay } from "./connection";
 import { daemonErrorMessage, daemonErrorStatus, sandboxRpc, SandboxUnaddressedError } from "./sandboxRpc";
 import { useSandboxSession } from "./sandboxSession";
 import { applySystemEvent } from "./systemEvents";
@@ -65,12 +65,20 @@ const clearWatchdog = (): void => {
     }
 };
 
-const armWatchdog = (): void => {
+const armWatchdog = (delayMs = WATCHDOG_MS): void => {
     clearWatchdog();
+    const dueAt = performance.now() + delayMs;
     watchdog = setTimeout(() => {
+        const recoveryDelay = watchdogRecoveryDelay(performance.now() - dueAt);
+        if (recoveryDelay > 0) {
+            // The browser main thread, not the stream, went silent. A queued frame gets to re-arm the ordinary
+            // watchdog before this grace fires; if none arrives, this callback is on-time and trips normally.
+            armWatchdog(recoveryDelay);
+            return;
+        }
         watchdogTripped = true;
         controller?.abort();
-    }, WATCHDOG_MS);
+    }, delayMs);
 };
 
 const failureOf = (error: unknown): ConnectionFailure => {

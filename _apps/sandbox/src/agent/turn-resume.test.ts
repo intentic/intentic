@@ -11,6 +11,7 @@ import { fileTranscriptRecord } from "../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../settings/settings-store.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
 import { fileTurnJournal, type JournalledTurn } from "./turn-journal.js";
+import { turnRunOf } from "./turn-runs.js";
 import {
     accountLimitReset,
     clearPendingResume,
@@ -37,7 +38,10 @@ const fakeServices = (root: string, usage: Record<string, AccountUsage> = {}): S
         pushSender: { notifyIfAway: async () => {} },
         logger: { info: () => {}, warn: () => {}, error: () => {} },
         workspace: { root },
-        transcripts: { append: (agent, messages) => record.append(agent.id, messages, async () => []) },
+        transcripts: {
+            open: (agent) => record.open(agent.id, async () => []),
+            append: (agent, messages) => record.append(agent.id, messages),
+        },
     } as unknown as Services;
 };
 
@@ -46,6 +50,15 @@ const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]):
         prompts.push(input.prompt);
         yield* events;
     };
+
+/* A fire starts a DETACHED run, and startConversationTurn opens the conversation's transcript record before it
+ * lets the provider start (turn-runs' `before`), so the wake is reached one I/O round-trip after tick() returns
+ * and the run stays live until the turn unwinds. Settling on it is what the minutes between real outage windows
+ * do, and it makes every assertion below exact in both directions: a fire that happened is counted, and one that
+ * should never have happened is caught here rather than raced past and mistaken for a later window's. */
+const settle = async (conversationId: string): Promise<void> => {
+    await turnRunOf(conversationId)?.waitUntilFinished();
+};
 
 const hit = (conversationId: string, extra: Partial<LimitHit> = {}): LimitHit => ({
     input: { prompt: "finish the report", conversationId, isolated: true },
@@ -208,6 +221,7 @@ test("a turn the API refused mid-flight is re-minted and re-run on the next pass
     const prompts: string[] = [];
     recordAuthFailure({ input: { prompt: "finish the report", conversationId: "auth-1", isolated: true }, account: "acct", refusedToken: "tok-1" });
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
+    await settle("auth-1");
     expect(prompts).toHaveLength(1);
     // The original request rides again in full, behind a note saying why — a bare "continue" would lose it.
     expect(prompts[0]).toContain("finish the report");
@@ -278,9 +292,11 @@ test("a stranded turn resumes once the provider's wait elapses, under a note say
 
     // Nothing while the wait runs — this is the anti-spam contract, and it is the default state of an outage.
     await scheduler.tick(retryAt - 1);
+    await settle("out-1");
     expect(prompts).toEqual([]);
 
     await scheduler.tick(retryAt);
+    await settle("out-1");
     expect(prompts).toHaveLength(1);
     // The original request rides again IN FULL behind the note: a bare "continue" would lose it, and the note is
     // what stops the model from starting over on work its session already holds.
@@ -297,6 +313,7 @@ test("an outage costs ONE turn per window however many conversations are strande
     }
     const prompts: string[] = [];
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick(retryAt);
+    await settle("herd-1");
 
     // Firing moves the breaker's clock, so the other three are refused inside this same pass. Four stranded
     // agents cost exactly what one costs — the whole reason the wait lives per provider and not per conversation.
@@ -317,6 +334,7 @@ test("evidence that the provider is back releases the stranded set without waiti
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
     await scheduler.tick(OUT_NOW);
+    await settle("back-1");
     expect(prompts).toEqual([]);
 
     // Any turn's first content clears the outage (agent.routes.ts calls this) — a user's own message going
@@ -324,6 +342,7 @@ test("evidence that the provider is back releases the stranded set without waiti
     // than sitting out a wait the provider has already disproved.
     recordProviderSuccess("out-back");
     await scheduler.tick(OUT_NOW + 1);
+    await settle("back-1");
     expect(prompts).toHaveLength(1);
 });
 
@@ -334,12 +353,14 @@ test("with the toggle off the turn is remembered, not resumed — turning it on 
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
     await scheduler.tick(retryAt);
+    await settle("toggle-1");
     expect(prompts).toEqual([]);
     expect(pendingOutageFailure("toggle-1")).toBeDefined();
 
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, resumeAfterOutage: true });
     await scheduler.tick(retryAt);
+    await settle("toggle-1");
     expect(prompts).toHaveLength(1);
 });
 
@@ -364,6 +385,10 @@ test("once the attempt budget is spent the failure stands — the retrying is fi
         recordOutageFailure(outage("spent-1", "out-spent"), now);
         now = retryAt;
         await scheduler.tick(now);
+        // The windows are half an hour apart in the world this simulates, so the probe they released is long
+        // over by the next one. Settling here says that; without it the loop would race its own last resume and
+        // lose a window to turn-runs' one-live-turn-per-conversation rule, which is not what is being measured.
+        await settle("spent-1");
     }
     expect(prompts).toHaveLength(OUTAGE_MAX_ATTEMPTS);
     clearPendingResume("spent-1");
@@ -386,6 +411,7 @@ test("one provider's outage never gates a conversation on another", async () => 
     recordOutageFailure(outage("iso-codex", "out-codex"), OUT_NOW);
     const prompts: string[] = [];
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick(OUT_NOW);
+    await settle("iso-codex");
     // The Codex conversation has nothing to wait for: its provider never failed.
     expect(prompts).toHaveLength(1);
     expect(pendingOutageFailure("iso-codex")).toBeUndefined();

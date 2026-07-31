@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, stat } from "node:fs/promises";
+import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type RestoredMessage, RestoredMessageSchema } from "@intentic/sandbox-contract";
 
@@ -26,16 +26,14 @@ import { type RestoredMessage, RestoredMessageSchema } from "@intentic/sandbox-c
 const FILE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 export interface TranscriptRecord {
-    /* Add one settled turn. `adopt` supplies the conversation's history so far and is called ONLY when this is
-     * the record's first write for the conversation — that is the record OPENING, and a record that opened
-     * halfway through a conversation would answer with a transcript missing everything before it. It is how a
-     * conversation that ran before this store existed, and one resumed from a session id minted elsewhere, both
-     * end up whole. */
-    readonly append: (
-        conversationId: string,
-        messages: readonly RestoredMessage[],
-        adopt: () => Promise<readonly RestoredMessage[]>,
-    ) => Promise<void>;
+    /* Open the record BEFORE its next turn starts. `adopt` supplies history from before this record existed.
+     * This boundary is load-bearing: opening at settlement re-reads the provider store AFTER it has recorded
+     * the new turn, then appends the live frames for that same turn — duplicating every first turn and doing a
+     * provider-store parse on the daemon's hottest completion path. An empty file is a real open record: it
+     * says there was no older history, so settlement can only append what just streamed. */
+    readonly open: (conversationId: string, adopt: () => Promise<readonly RestoredMessage[]>) => Promise<void>;
+    // Add one settled turn. Callers open first; append never consults a provider store.
+    readonly append: (conversationId: string, messages: readonly RestoredMessage[]) => Promise<void>;
     // The whole conversation, oldest first. Empty ⇒ this conversation has no record (never written, or written
     // under a daemon whose history volume is gone) — the caller decides what that means.
     readonly read: (conversationId: string) => Promise<RestoredMessage[]>;
@@ -58,7 +56,7 @@ const row = (line: string): RestoredMessage[] => {
 };
 
 export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
-    append: async (conversationId, messages, adopt) => {
+    open: async (conversationId, adopt) => {
         if (!FILE_ID.test(conversationId)) {
             return;
         }
@@ -67,12 +65,26 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
             () => true,
             () => false,
         );
-        const opening = opened ? [] : await adopt();
-        if (opening.length === 0 && messages.length === 0) {
+        if (opened) {
+            return;
+        }
+        // Adoption finishes before the provider starts (startConversationTurn awaits this promise), so the
+        // provider store still contains only older turns. `wx` makes two accidental openers converge without
+        // either overwriting the other; the conversation mutex normally means there is only one.
+        const opening = await adopt();
+        await mkdir(dir, { recursive: true });
+        await writeFile(path, lines(opening), { flag: "wx" }).catch((error: unknown) => {
+            if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+                throw error;
+            }
+        });
+    },
+    append: async (conversationId, messages) => {
+        if (!FILE_ID.test(conversationId) || messages.length === 0) {
             return;
         }
         await mkdir(dir, { recursive: true });
-        await appendFile(path, `${lines(opening)}${lines(messages)}`);
+        await appendFile(join(dir, `${conversationId}.jsonl`), lines(messages));
     },
     read: async (conversationId) => {
         if (!FILE_ID.test(conversationId)) {

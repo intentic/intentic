@@ -162,6 +162,13 @@ const SUSTAINED_FAILURES = 2;
 export const showOutageGate = (state: ConnectionState): boolean =>
     state.failure !== undefined && (isBlocked(state.failure) || state.attempt >= SUSTAINED_FAILURES);
 
+/* A watchdog callback that itself arrived late proves the browser's scheduler was paused (a huge transcript
+ * render, background throttling, machine sleep). Aborting the SSE as the FIRST task after that pause turns a
+ * healthy buffered connection into a synthetic outage. Give network/iterator tasks one second to drain; a
+ * genuinely silent stream still trips immediately after that bounded grace. */
+const WATCHDOG_SCHEDULER_LATE_MS = 1_000;
+export const watchdogRecoveryDelay = (latenessMs: number): number => (latenessMs >= WATCHDOG_SCHEDULER_LATE_MS ? 1_000 : 0);
+
 // What the driver observed, mapped onto a failure. Kept here (not in the driver) so the mapping is covered by
 // the same tests as the transitions it feeds — this is exactly the step that used to be a message sniff.
 export const classifyFailure = (observation: {

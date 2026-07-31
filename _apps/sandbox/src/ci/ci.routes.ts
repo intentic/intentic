@@ -1,6 +1,7 @@
 import { type AgentTurn, ciContract, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
+import { startConversationTurn } from "../agent/turn-resume.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -125,15 +126,16 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 isolated: true,
                 title: `Fix CI: ${run?.title ?? input.repo}`.slice(0, TITLE_MAX),
             };
-            // Detached, the /fire pattern: the turn outlives this request — the fleet card and the chat tab
-            // named by conversationId are where the user follows it.
-            void (async () => {
-                for await (const event of wake(services, turn, undefined)) {
-                    if (event.kind === "error") {
-                        services.logger.warn({ conversation: conversationId, error: event.message }, "ci: fix turn errored");
-                    }
-                }
-            })().catch((error: unknown) => services.logger.error({ err: error, conversation: conversationId }, "ci: fix turn failed"));
+            /* Use the SAME detached-run boundary as POST /agent. The old fire-and-forget generator bypassed the
+             * run map, turn journal, transcript record, and push observer. The UI navigated to the returned id,
+             * found no attachable run and no persisted transcript, and quite correctly opened an empty chat
+             * while the work happened invisibly. This call returns synchronously with the run registered; its
+             * provider work still outlives the request. */
+            const started = startConversationTurn(services, wake, { ...turn, conversationId });
+            if (started === undefined) {
+                // Minted ids are unique, so this is an invariant breach rather than a user-level busy state.
+                throw new ORPCError("CONFLICT", { message: "the CI fix conversation is already running" });
+            }
             return { conversationId };
         }),
     };

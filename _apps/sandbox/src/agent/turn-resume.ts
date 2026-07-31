@@ -233,15 +233,17 @@ export const startConversationTurn = (
     attempts = 0,
 ): TurnRun | undefined => {
     const { conversationId, prompt } = turn;
+    const transcriptAgent = { id: conversationId, provider: turn.agent ?? "claude", harness: turn.harness ?? "native" } as const;
+    // Start adoption now, then make the pump wait for it before invoking the provider. A first turn opens an
+    // empty record; a legacy conversation adopts only its OLD turns. Guarded because transcript persistence is
+    // a side channel — a disk failure must never manufacture an agent failure.
+    const transcriptOpen = services.transcripts.open(transcriptAgent).catch(() => undefined);
     return startTurnRun((input, signal) => wake(services, input, signal), turn, {
         journal: services.turnJournal,
+        before: transcriptOpen,
         // The provider/harness normalization is the same one streamAgent applies (absent ⇒ claude/native), so a
         // turn records against the identity it actually ran under.
-        transcript: (events) =>
-            services.transcripts.append(
-                { id: conversationId, provider: turn.agent ?? "claude", harness: turn.harness ?? "native" },
-                restoredTurn(turn, events, services.workspace.root),
-            ),
+        transcript: (events) => services.transcripts.append(transcriptAgent, restoredTurn(turn, events, services.workspace.root)),
         attempts,
         observer: {
             awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),

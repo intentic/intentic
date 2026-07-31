@@ -7,7 +7,7 @@ import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchem
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
-import { discoverRepos, hasGitEntry } from "../workspace/repo-discovery.js";
+import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 
 // Daemon-owned workspace history: every scope (the /work root plus each discovered repo under it) gets a
@@ -274,6 +274,13 @@ export const createWorkspaceHistory = (
         for (const entry of await readdir(join(historyRoot, "gits")).catch(() => [])) {
             const id = decodeURIComponent(entry);
             if (id === "root") {
+                continue;
+            }
+            // This directory is intended for git dirs, but tools can place ordinary hidden state beside them
+            // (Turbo has repeatedly resolved its cache as /history/gits/.turbo). Never interpret arbitrary
+            // filesystem entries as a deleted repo and move them to trash every minute. The same validated repo
+            // id shape guards every route that creates a real entry here.
+            if (!isValidRepoId(id)) {
                 continue;
             }
             const worktree = join(workspace.root, id);

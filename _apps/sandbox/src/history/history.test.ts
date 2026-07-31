@@ -288,6 +288,8 @@ test("integration: heal rewrites an accidentally deleted pointer; deletions reap
     const gone = await makeRepo("gone");
     const emptied = await makeRepo("emptied");
     const lingering = await makeRepo("lingering");
+    // Ordinary hidden tool state beside the git dirs is not a repo and must not enter the reap loop.
+    await mkdir(join(historyRoot, "gits", ".turbo", "cache"), { recursive: true });
     const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger });
 
     // keep: only the pointer went missing, the tracked file is still on disk — an accident, healed.
@@ -321,10 +323,12 @@ test("integration: heal rewrites an accidentally deleted pointer; deletions reap
     }
     expect(existsSync(repoGitDir(historyRoot, "lingering"))).toBe(false);
     expect(existsSync(join(lingering, ".git"))).toBe(false);
+    expect(existsSync(join(historyRoot, "gits", ".turbo", "cache"))).toBe(true);
 
     // Every reaped git dir is parked under trash, recoverable — never erased.
     const trash = await readdir(join(historyRoot, "trash"));
     expect(trash.some((entry) => entry.startsWith("gone-"))).toBe(true);
     expect(trash.some((entry) => entry.startsWith("emptied-"))).toBe(true);
     expect(trash.some((entry) => entry.startsWith("lingering-"))).toBe(true);
+    expect(trash.some((entry) => entry.startsWith(".turbo-"))).toBe(false);
 });

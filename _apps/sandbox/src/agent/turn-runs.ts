@@ -35,7 +35,9 @@ export interface TurnObserver {
     readonly settled: (outcome: { readonly ok: boolean; readonly error?: string }) => void;
 }
 
-const RETAIN_MS = 5 * 60_000;
+// A reconnect retries within seconds. A full five minutes retained several multi-megabyte raw frame logs at
+// once and let the daemon climb toward a gigabyte; one minute covers the reconnect ladder with ample margin.
+const RETAIN_MS = 60_000;
 
 export class TurnRun {
     readonly id = crypto.randomUUID();
@@ -137,6 +139,9 @@ export interface RunOptions {
     // gets whether or not it keeps a session store of its own (sessions/transcript-record.ts). Handed the raw
     // frame log: what a turn READS BACK as is the caller's shape to decide, not this pump's.
     readonly transcript?: (events: readonly AgentEvent[]) => Promise<void>;
+    // Side-channel preparation that must precede the provider (the transcript record's legacy adoption). A
+    // caller passes a guarded promise: its failure may cost persistence, never the turn itself.
+    readonly before?: Promise<unknown>;
     // How many boots have already re-run this turn — carried through so a resume that dies again is not resumed
     // a third time (see turn-resume's boot pass). A first-hand turn starts at 0.
     readonly attempts?: number;
@@ -149,7 +154,7 @@ export interface RunOptions {
 export function startTurnRun(
     turnFn: TurnFn,
     input: AgentTurn & { conversationId: string },
-    { observer, journal, transcript, attempts = 0 }: RunOptions = {},
+    { observer, journal, transcript, before, attempts = 0 }: RunOptions = {},
 ): TurnRun | undefined {
     sweep();
     const existing = runs.get(input.conversationId);
@@ -194,6 +199,7 @@ export function startTurnRun(
         // Set by the error frame below (or by a provider emitting one mid-stream), read once at settle.
         let failure: string | undefined;
         try {
+            await before;
             for await (const event of turnFn(input, undefined)) {
                 // Every provider republishes its slash commands each turn; cache the latest so a conversation
                 // that hasn't run one yet still has a populated `/` popover (see agent-commands.ts).
@@ -228,6 +234,14 @@ export function startTurnRun(
             run.push({ kind: "done" });
         } finally {
             run.finish();
+            // Expiry is proactive, not opportunistic on the next route call. Otherwise the last completed run
+            // in a quiet sandbox holds its entire raw frame log forever.
+            const expiry = setTimeout(() => {
+                if (runs.get(input.conversationId) === run) {
+                    runs.delete(input.conversationId);
+                }
+            }, RETAIN_MS);
+            expiry.unref();
             /* The conversation's durable transcript, written once the turn is WHOLE — a settled failure and an
              * abort included, because both are things the user watched happen and will look for when they come
              * back. Guarded on both sides like `tell`: a sink that throws where it stands and one whose write

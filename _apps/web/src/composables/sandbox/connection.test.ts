@@ -7,6 +7,7 @@ import {
     initialConnection,
     isBlocked,
     showOutageGate,
+    watchdogRecoveryDelay,
 } from "./connection";
 
 // Drive the machine the way the loop does, so a test reads as a sequence of observations rather than a
@@ -65,6 +66,17 @@ describe(`showOutageGate`, () => {
         expect(showOutageGate(drive({ kind: `connect` }, { kind: `opened` }))).toBe(false);
         // Recovery clears the gate even after a long run of failures.
         expect(showOutageGate(drive({ kind: `failed`, failure: network() }, { kind: `failed`, failure: network() }, { kind: `frame` }))).toBe(false);
+    });
+});
+
+describe(`watchdogRecoveryDelay`, () => {
+    it(`an on-time silence trips without grace`, () => {
+        expect(watchdogRecoveryDelay(999)).toBe(0);
+    });
+
+    it(`a callback delayed by the browser scheduler gets a bounded drain window`, () => {
+        expect(watchdogRecoveryDelay(1_000)).toBe(1_000);
+        expect(watchdogRecoveryDelay(60_000)).toBe(1_000);
     });
 });
 

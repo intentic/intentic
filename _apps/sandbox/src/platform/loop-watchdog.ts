@@ -111,12 +111,15 @@ export interface LoopWatchdog {
 
 export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
     let last = process.hrtime.bigint();
+    let lastCpu = process.cpuUsage();
     let suppressedSince: number | undefined;
     let suppressedCount = 0;
     const timer = setInterval(() => {
         const now = process.hrtime.bigint();
         const lagMs = Number(now - last) / 1e6 - TICK_MS;
         last = now;
+        const cpu = process.cpuUsage(lastCpu);
+        lastCpu = process.cpuUsage();
         if (lagMs < STALL_THRESHOLD_MS) {
             return;
         }
@@ -125,6 +128,10 @@ export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
             return;
         }
         const memory = process.memoryUsage();
+        const resources = process.getActiveResourcesInfo().reduce<Record<string, number>>((counts, resource) => {
+            counts[resource] = (counts[resource] ?? 0) + 1;
+            return counts;
+        }, {});
         logger.warn(
             {
                 lagMs: Math.round(lagMs),
@@ -133,7 +140,14 @@ export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
                 // Nonzero means the loop was parked in getaddrinfo: a forwarded lookup that goes unanswered
                 // costs ~8s per attempt, and the stall is a whole multiple of that.
                 dnsInFlight: dnsQueriesInFlight(),
+                // CPU consumed by this process during the delayed tick. Quiet PSI + high CPU identifies JS/GC;
+                // quiet PSI + near-zero CPU points at a blocking native call. Active-resource counts make a
+                // leaked watcher/process/timer population visible without attaching an inspector mid-incident.
+                processCpuMs: Math.round((cpu.user + cpu.system) / 1000),
+                resources,
                 heapUsedMb: Math.round(memory.heapUsed / 1048576),
+                heapTotalMb: Math.round(memory.heapTotal / 1048576),
+                externalMb: Math.round(memory.external / 1048576),
                 rssMb: Math.round(memory.rss / 1048576),
                 ...(suppressedCount > 0 ? { earlierStallsSuppressed: suppressedCount } : {}),
             },

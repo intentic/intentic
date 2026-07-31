@@ -14,14 +14,16 @@ const nothing = (): Promise<RestoredMessage[]> => Promise.resolve([]);
 describe("fileTranscriptRecord", () => {
     it("reads back the turns it was given, oldest first", async () => {
         const record = fileTranscriptRecord(await dir());
-        await record.append("c1", [{ role: "user", text: "one" }, said("first")], nothing);
-        await record.append("c1", [{ role: "user", text: "two" }, said("second")], nothing);
+        await record.open("c1", nothing);
+        await record.append("c1", [{ role: "user", text: "one" }, said("first")]);
+        await record.append("c1", [{ role: "user", text: "two" }, said("second")]);
         expect((await record.read("c1")).map((message) => message.text)).toEqual(["one", "first", "two", "second"]);
     });
 
     it("keeps conversations apart, and answers empty for one it has never seen", async () => {
         const record = fileTranscriptRecord(await dir());
-        await record.append("c1", [said("mine")], nothing);
+        await record.open("c1", nothing);
+        await record.append("c1", [said("mine")]);
         expect(await record.read("c2")).toEqual([]);
     });
 
@@ -35,8 +37,10 @@ describe("fileTranscriptRecord", () => {
             adoptions += 1;
             return Promise.resolve([said("from before")]);
         };
-        await record.append("c1", [said("first recorded")], adopt);
-        await record.append("c1", [said("second recorded")], adopt);
+        await record.open("c1", adopt);
+        await record.append("c1", [said("first recorded")]);
+        await record.open("c1", adopt);
+        await record.append("c1", [said("second recorded")]);
         expect((await record.read("c1")).map((message) => message.text)).toEqual(["from before", "first recorded", "second recorded"]);
         expect(adoptions).toBe(1);
     });
@@ -44,7 +48,8 @@ describe("fileTranscriptRecord", () => {
     it("costs a torn final line its own row, not the conversation above it", async () => {
         const root = await dir();
         const record = fileTranscriptRecord(root);
-        await record.append("c1", [said("whole")], nothing);
+        await record.open("c1", nothing);
+        await record.append("c1", [said("whole")]);
         // A write the daemon was killed in the middle of.
         await writeFile(join(root, "c1.jsonl"), `${await readFile(join(root, "c1.jsonl"), "utf8")}{"role":"assistant","te`);
         expect((await record.read("c1")).map((message) => message.text)).toEqual(["whole"]);
@@ -52,7 +57,8 @@ describe("fileTranscriptRecord", () => {
 
     it("ignores an id that is not filename-safe rather than letting it reach a path", async () => {
         const record = fileTranscriptRecord(await dir());
-        await record.append("../escape", [said("nope")], nothing);
+        await record.open("../escape", nothing);
+        await record.append("../escape", [said("nope")]);
         expect(await record.read("../escape")).toEqual([]);
     });
 });
@@ -84,7 +90,8 @@ describe("every provider records a readable transcript", () => {
     it.each(pairs)("$provider on the $harness harness", async ({ provider, harness }) => {
         const record = fileTranscriptRecord(await dir());
         const id = `${provider}-${harness}`;
-        await record.append(id, restoredTurn(turn, events, "/work"), nothing);
+        await record.open(id, nothing);
+        await record.append(id, restoredTurn(turn, events, "/work"));
         const restored = await record.read(id);
         expect(restored[0]).toEqual({ role: "user", text: "do the thing" });
         expect(restored.map((message) => message.text)).toContain("on it");

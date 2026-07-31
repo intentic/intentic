@@ -1,4 +1,5 @@
 import { sep } from "node:path";
+import { Worker } from "node:worker_threads";
 import { watch } from "chokidar";
 import type { Logger } from "pino";
 import { IQ_DIR } from "@intentic/iq-engine";
@@ -65,6 +66,45 @@ export interface WorkspaceWatch {
     close(): Promise<void>;
 }
 
+interface WorkerMessage {
+    readonly kind: "paths" | "error";
+    readonly paths?: string[];
+    readonly message?: string;
+}
+
+/* Production isolation for the recursive watcher. Chokidar implements ignored-directory descent correctly,
+ * but it represents every watched directory as one libuv FSEvent handle. The live workspace had 3,321 of
+ * them on the daemon isolate: its initial walk, burst bookkeeping, and GC all ran beside /events heartbeats.
+ * One watcher instance was therefore still thousands of control-plane handles.
+ *
+ * Keep chokidar's precise descent filter, but own it in another isolate. It also owns debounce + path
+ * coalescing (createWorkspaceWatch below), so a checkout/build storm crosses this MessagePort as one bounded
+ * batch every 250ms — never as thousands of filesystem callbacks. */
+export const createIsolatedWorkspaceWatch = (root: string, logger: Logger): WorkspaceWatch => {
+    const listeners = new Set<(paths: string[]) => void>();
+    const worker = new Worker(new URL("./workspace-watch-worker.js", import.meta.url), { workerData: { root } });
+    worker.on("message", (message: WorkerMessage) => {
+        if (message.kind === "error") {
+            logger.warn({ err: new Error(message.message ?? "workspace watcher failed") }, "workspace watcher error");
+            return;
+        }
+        const paths = message.paths ?? [];
+        for (const listener of listeners) {
+            listener(paths);
+        }
+    });
+    worker.on("error", (err) => logger.warn({ err }, "workspace watcher worker error"));
+    return {
+        subscribe(listener) {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+        },
+        close: async () => {
+            await worker.terminate();
+        },
+    };
+};
+
 export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWatch => {
     const listeners = new Set<(paths: string[]) => void>();
     const pending = new Set<string>();
@@ -112,7 +152,7 @@ const subscribers = new Set<(paths: string[]) => void>();
 let instance: WorkspaceWatch | undefined;
 export const startWorkspaceWatch = (root: string, logger: Logger): void => {
     if (instance === undefined) {
-        instance = createWorkspaceWatch(root, logger);
+        instance = createIsolatedWorkspaceWatch(root, logger);
         instance.subscribe((paths) => {
             for (const listener of subscribers) {
                 listener(paths);

@@ -370,6 +370,9 @@ export interface Services {
      * See sessions/transcript-record.ts for why this stopped being the provider's job. */
     readonly transcripts: {
         readonly read: (agent: TranscriptAgent) => Promise<RestoredMessage[]>;
+        // Opens/adopts the durable record before the provider starts the next turn. Settlement must never be
+        // the first time a provider store is read (see transcript-record.ts).
+        readonly open: (agent: TranscriptAgent) => Promise<void>;
         readonly append: (agent: TranscriptAgent, messages: readonly RestoredMessage[]) => Promise<void>;
     };
     // platformHostTunnel relays to the platform (connect-token auth) to mint an intentic-provided host tunnel,
@@ -618,8 +621,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
             read: (agent) => agentTranscript(transcriptDeps, agent),
             // storedTranscript, not agentTranscript, as the opening adoption: the record is empty by definition
             // at the moment it opens, and what a conversation had before it is exactly what the provider store
-            // holds. See TranscriptRecord.append.
-            append: (agent, messages) => transcriptDeps.record.append(agent.id, messages, () => storedTranscript(transcriptDeps, agent)),
+            // holds. This runs before the new turn, so that turn cannot be adopted and appended twice.
+            open: (agent) => transcriptDeps.record.open(agent.id, () => storedTranscript(transcriptDeps, agent)),
+            append: (agent, messages) => transcriptDeps.record.append(agent.id, messages),
         },
         platformHostTunnel: (hostName) => postToPlatform(config, "/sandbox/host-tunnel", { hostName }),
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),

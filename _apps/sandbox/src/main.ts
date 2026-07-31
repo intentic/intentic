@@ -42,6 +42,7 @@ import { linkClaudeState } from "./sessions/session-store.js";
 import { createAnnouncer } from "./platform/announce.js";
 import { claimBootMarker } from "./platform/boot-marker.js";
 import { startLoopWatchdog } from "./platform/loop-watchdog.js";
+import { startWorkloadPriorityGovernor } from "./platform/workload-priority.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { reapFinishedSessions } from "./terminal/terminal-session.js";
@@ -103,6 +104,9 @@ const main = async (): Promise<void> => {
     // The stall detector: any future freeze — a synchronous path in here, or the whole VM thrashing under a
     // fleet of builds — leaves a log line with the lag and the machine's pressure numbers attributing it.
     startLoopWatchdog(logger);
+    // Provider SDKs spawn their CLIs internally, outside the polite Bash/git wrappers. Keep every direct child
+    // below the control plane so a newly introduced workload cannot compete equally with /events heartbeats.
+    const workloadPriority = startWorkloadPriorityGovernor();
     const services = createServices(config, logger);
 
     // The sandbox-wide CODEX_HOME's config.toml: privacy hardening plus, when a translator is baked, the
@@ -473,6 +477,7 @@ const main = async (): Promise<void> => {
         // A gate run is a child process on the main tree — a daemon that exits without killing it leaves a
         // suite burning CPU with nothing left to report the verdict to.
         landingGate(services, streamAgent).stop();
+        workloadPriority.stop();
         services.ciHooks.stop();
         limitResume.stop();
         versionCheck.stop();

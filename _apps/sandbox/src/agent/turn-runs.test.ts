@@ -150,13 +150,35 @@ describe(`turn runs`, () => {
             close();
             await vi.waitFor(() => expect(turnRunOf(`c-retain`)!.done).toBe(true));
 
-            vi.advanceTimersByTime(4 * 60_000);
+            vi.advanceTimersByTime(45_000);
             expect(turnRunOf(`c-retain`)).toBeDefined();
-            vi.advanceTimersByTime(2 * 60_000);
+            vi.advanceTimersByTime(20_000);
             expect(turnRunOf(`c-retain`)).toBeUndefined();
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it(`finishes transcript preparation before invoking the provider`, async () => {
+        let release!: () => void;
+        const before = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        let invoked = false;
+        const run = startTurnRun(
+            async function* () {
+                invoked = true;
+                yield { kind: `done` };
+            },
+            turn(`c-before`),
+            { before },
+        )!;
+
+        await Promise.resolve();
+        expect(invoked).toBe(false);
+        release();
+        await vi.waitFor(() => expect(run.done).toBe(true));
+        expect(invoked).toBe(true);
     });
 
     /* THE JOURNAL — one entry per in-flight turn, so a daemon death leaves behind exactly what to re-run.
