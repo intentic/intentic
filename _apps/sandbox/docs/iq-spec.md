@@ -257,7 +257,9 @@ iq: multi — 3 queries · budget 3000 shared
 ## Retrieval pipeline & feature toggles
 
 Hybrid retrieval: ripgrep (exact), FTS5 **BM25** (ranked sparse) + **RM3 pseudo-relevance feedback** expansion,
-dense **embeddings**, RRF fusion with def/path/recency **boosts** and a **srcfirst** class prior (implementation
+dense **embeddings**, RRF fusion with the **defboost** / **pathboost** / **recency** multipliers (pathboost fires
+when a path WORD starts with a query word — `indexer.ts` answers "index", `_textwrap.py` does not answer "wrap")
+and a **srcfirst** class prior (implementation
 ranks above its tests and docs, natural-language answers only), **cross-encoder rerank** that votes rather than
 vetoes, and **confidence** stated on the answer line (`confident` / `ambiguous`). Hits carry their enclosing
 symbol (**symctx**, `⟨in createWidget (fn)⟩`); natural-language answers append **graph** neighbors (`related:`
@@ -266,7 +268,7 @@ groups only, because a packed test body spends the budget that would have shown 
 For hard questions the AGENT is the query rewriter: 2–3 phrasings through one `iq multi` spawn (HyDE inverted).
 
 Every stage toggles for benchmarking via `--features` / `IQ_FEATURES`:
-`bm25, semantic, rerank, prf, confidence, symctx, graph, boosts, srcfirst, pack` — `--features bm25` = only BM25;
+`bm25, semantic, rerank, prf, confidence, symctx, graph, defboost, pathboost, recency, srcfirst, pack` — `--features bm25` = only BM25;
 `--features -rerank,-prf` = everything except those. The disabled set is echoed in the header
 (`features -rerank`) and recorded in `--json` as `features` for run provenance.
 

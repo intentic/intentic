@@ -14,7 +14,8 @@ import { embedPending, semanticSearch } from "../engines/semantic.js";
 import { defOf, refsOf, symSearch } from "../engines/symbols.js";
 import { disabledOf, type Feature } from "../features.js";
 import { classify } from "../plan/classify.js";
-import { fuse, type FuseContext, queryTokens } from "../plan/fuse.js";
+import { fuse, type FuseContext } from "../plan/fuse.js";
+import { queryTokens } from "../plan/tokens.js";
 import { estimateTokens } from "../render/budget.js";
 import { cursorId, decodeCursor, readSpool, writeSpool } from "../render/cursor.js";
 import { renderText, type Rendered } from "../render/text.js";
@@ -62,14 +63,16 @@ const toGroups = (
     results: EngineResult[],
     query: string,
     entries: readonly FileEntry[],
-    boosts: boolean,
+    features: ReadonlySet<Feature>,
     sourceFirst: boolean = false,
 ): RankedGroup[] => {
     const context: FuseContext = {
         queryTokens: queryTokens(query),
         mtimes: new Map(entries.map((entry) => [entry.path, entry.mtimeMs])),
         now: Date.now(),
-        boosts,
+        defBoost: features.has("defboost"),
+        pathBoost: features.has("pathboost"),
+        recency: features.has("recency"),
         sourceFirst,
     };
     return fuse(results, context);
@@ -431,7 +434,7 @@ const naturalPlan = async (
             notes.push(`embeddings ${Math.floor(((total - remaining) / Math.max(1, total)) * 100)}%`);
         }
     }
-    let groups = toGroups(results, request.query, entries, on("boosts"), on("srcfirst"));
+    let groups = toGroups(results, request.query, entries, context.features, on("srcfirst"));
     let confidence: VerbPlan["confidence"];
     const reranker = on("rerank") ? await context.getReranker() : undefined;
     if (reranker !== undefined && groups.length > 0) {
@@ -467,7 +470,6 @@ const naturalPlan = async (
 
 const runVerb = async (context: DispatchContext, request: QueryRequest, entries: readonly FileEntry[]): Promise<VerbPlan> => {
     const on = (feature: Feature): boolean => context.features.has(feature);
-    const boosts = on("boosts");
     const allowed = new Set(entries.map((entry) => entry.path));
     const paths = entries.map((entry) => entry.path);
     const rgBase = {
@@ -511,7 +513,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             note = GREP_DIALECT_NOTE;
         }
         return {
-            groups: toGroups([{ engine: "lexical", hits }], request.query, entries, boosts),
+            groups: toGroups([{ engine: "lexical", hits }], request.query, entries, context.features),
             unit: "matches",
             style: "hits",
             showTags: false,
@@ -530,7 +532,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
     if (request.verb === "def") {
         const hits = defOf(context.db, request.query, allowed);
         if (hits.length > 0) {
-            const groups = toGroups([{ engine: "symbols", hits }], request.query, entries, boosts);
+            const groups = toGroups([{ engine: "symbols", hits }], request.query, entries, context.features);
             return { groups, unit: "definitions", style: "hits", showTags: true, lead: true, hint: `refs: iq refs ${request.query}` };
         }
         // No exact definition — fall back to a fuzzy symbol match instead of a dead end (the query is often a
@@ -555,7 +557,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
     if (request.verb === "refs") {
         const { hits, hint } = await refsOf(context.db, request.query, request.options.refKind, rgBase);
         return {
-            groups: toGroups([{ engine: "refs", hits }], request.query, entries, boosts),
+            groups: toGroups([{ engine: "refs", hits }], request.query, entries, context.features),
             unit: "refs",
             style: "hits",
             showTags: true,
@@ -570,7 +572,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         }
         const hits = await astSearch(request.query, request.options.astLang, entries);
         return {
-            groups: toGroups([{ engine: "ast", hits }], request.query, entries, boosts),
+            groups: toGroups([{ engine: "ast", hits }], request.query, entries, context.features),
             unit: "matches",
             style: "hits",
             showTags: false,
@@ -666,7 +668,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             });
             results.push({ engine: "lexical", hits });
         }
-        const groups = toGroups(results, request.query, entries, boosts);
+        const groups = toGroups(results, request.query, entries, context.features);
         if (groups.length > 0) {
             return { groups, unit: "hits", style: "hits", showTags: true, lead: true };
         }

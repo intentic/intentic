@@ -61,13 +61,19 @@ test("graph: a natural-language query returns related definition anchors; off dr
     expect(off.result.related).toBeUndefined();
 });
 
-test("boosts off changes ranking deterministically (pure RRF)", async () => {
-    const withBoosts = await engineWith().run(request("q", "createWidget"));
-    const withoutBoosts = await engineWith("-boosts").run(request("q", "createWidget"));
-    // Both deterministic; the def-boosted run puts the definition file first.
-    expect(withBoosts.result.groups[0]?.path).toBe("alpha/src/widget.ts");
-    const again = await engineWith("-boosts").run(request("q", "createWidget"));
-    expect(JSON.stringify(withoutBoosts.result.groups)).toBe(JSON.stringify(again.result.groups));
+test("the fusion multipliers toggle one at a time; all three off is deterministic pure RRF", async () => {
+    const boosted = await engineWith().run(request("q", "createWidget"));
+    // The def-boosted run puts the definition file first.
+    expect(boosted.result.groups[0]?.path).toBe("alpha/src/widget.ts");
+
+    // Each multiplier is its own name, so a spec can drop one and keep the others — what `-boosts` could not do.
+    const defOff = await engineWith("-defboost").run(request("q", "createWidget"));
+    expect(defOff.result.features).toEqual(expect.arrayContaining(["defboost"]));
+    expect(defOff.result.features).not.toContain("pathboost");
+
+    const pureRrf = await engineWith("-defboost,-pathboost,-recency").run(request("q", "createWidget"));
+    const again = await engineWith("-defboost,-pathboost,-recency").run(request("q", "createWidget"));
+    expect(JSON.stringify(pureRrf.result.groups)).toBe(JSON.stringify(again.result.groups));
 });
 
 test("pack: top natural-language groups carry the enclosing symbol body as contiguous lines; off keeps sparse hits", async () => {

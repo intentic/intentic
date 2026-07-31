@@ -37,19 +37,19 @@
             "id": "def-parse-features",
             "verb": "def",
             "query": "parseFeatures",
-            "expected": [{ "file": "_libs/iq-engine/src/features.ts", "line": 9, "tolerance": 3 }]
+            "expected": [{ "file": "_libs/iq-engine/src/features.ts", "line": 24, "tolerance": 3 }]
         },
         {
             "id": "def-create-engine",
             "verb": "def",
             "query": "createEngine",
-            "expected": [{ "file": "_libs/iq-engine/src/index.ts", "line": 65, "tolerance": 5 }]
+            "expected": [{ "file": "_libs/iq-engine/src/index.ts", "line": 99, "tolerance": 5 }]
         },
         {
             "id": "sym-related-of",
             "verb": "sym",
             "query": "relatedOf",
-            "expected": [{ "file": "_libs/iq-engine/src/verbs/dispatch.ts", "line": 98, "tolerance": 10 }]
+            "expected": [{ "file": "_libs/iq-engine/src/verbs/dispatch.ts", "line": 149, "tolerance": 10 }]
         },
         {
             "id": "refs-prf-terms",
@@ -166,7 +166,7 @@
             "id": "def-revalidate",
             "verb": "def",
             "query": "revalidate",
-            "expected": [{ "file": "_libs/iq-engine/src/indexer/indexer.ts", "line": 28, "tolerance": 5 }]
+            "expected": [{ "file": "_libs/iq-engine/src/indexer/indexer.ts", "line": 84, "tolerance": 5 }]
         },
         {
             "id": "sym-load-embedder",
@@ -185,6 +185,13 @@
             "verb": "find",
             "query": "MODEL_ID",
             "expected": [{ "file": "_libs/iq-engine/src/embed/embedder.ts", "line": 3, "tolerance": 10 }]
+        },
+        {
+            "id": "q-identifier-render",
+            "verb": "q",
+            "query": "renderText",
+            "expected": [{ "file": "_libs/iq-engine/src/render/text.ts", "line": 119, "tolerance": 5 }],
+            "notes": "bare identifier through `q`: classified as an identifier, so the symbols engine joins the fusion — the only path where the def multiplier can reorder anything"
         }
     ]
 }

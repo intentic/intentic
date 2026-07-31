@@ -1,6 +1,7 @@
 import type { WorkspaceSearchTag } from "@intentic/sandbox-contract";
 import type { FileClass, EngineResult, RankedGroup, RankedHit } from "../types.js";
 import { classOf } from "../workspace/scan.js";
+import { pathTokens } from "./tokens.js";
 
 const RRF_K = 60;
 const DEF_BOOST = 1.5;
@@ -9,17 +10,19 @@ const RECENCY_HALF_LIFE_DAYS = 14;
 
 // Class prior for natural-language answers only. "How does X work" is answered by the implementation; its test
 // file names the same vocabulary more densely and used to outrank it, which cost the reading agent a second
-// query. Exact verbs (find/refs/def) never apply this — there, a hit in a test IS a hit. Independent of `boosts`
-// so the bench can attribute the prior's contribution on its own (`-srcfirst`).
+// query. Exact verbs (find/refs/def) never apply this — there, a hit in a test IS a hit. Its own feature
+// (`-srcfirst`), like every other multiplier below, so the bench can attribute its contribution on its own.
 const CLASS_PRIOR: Record<FileClass, number> = { src: 1, config: 0.9, tests: 0.75, docs: 0.7 };
 
 export interface FuseContext {
-    // Lowercased tokens from the query — hits in paths containing one get a boost.
+    // The query's content words — a hit whose path is NAMED after one of them gets a boost.
     readonly queryTokens: readonly string[];
     readonly mtimes: ReadonlyMap<string, number>;
     readonly now: number;
-    // The `boosts` feature toggle: false = pure RRF, no def/path/recency multipliers (benchmark baseline).
-    readonly boosts: boolean;
+    // The three fusion multipliers, each its own feature toggle: all off = pure RRF (benchmark baseline).
+    readonly defBoost: boolean;
+    readonly pathBoost: boolean;
+    readonly recency: boolean;
     // Prefer implementation over tests/docs/config — natural-language queries only.
     readonly sourceFirst: boolean;
 }
@@ -72,22 +75,31 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
             }
         });
     }
+    // A path names the query when one of its word tokens starts with a query token — `indexer/indexer.ts` answers
+    // "index", `_textwrap.py` does not answer "wrap". Memoized: one file can carry an unbounded number of hits.
+    const named = new Map<string, boolean>();
+    const namesQuery = (path: string): boolean => {
+        const cached = named.get(path);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const match = pathTokens(path).some((part) => context.queryTokens.some((token) => part.startsWith(token)));
+        named.set(path, match);
+        return match;
+    };
     const hits: RankedHit[] = [];
     for (const hit of byKey.values()) {
         let score = hit.score;
-        if (context.boosts) {
-            if (hit.tags.some((tag) => tag.kind === "def")) {
-                score *= DEF_BOOST;
-            }
-            const pathLower = hit.path.toLowerCase();
-            if (context.queryTokens.some((token) => pathLower.includes(token))) {
-                score *= PATH_BOOST;
-            }
-            const mtime = context.mtimes.get(hit.path);
-            if (mtime !== undefined) {
-                const ageDays = Math.max(0, (context.now - mtime) / 86_400_000);
-                score *= 1 + 0.2 * 2 ** (-ageDays / RECENCY_HALF_LIFE_DAYS);
-            }
+        if (context.defBoost && hit.tags.some((tag) => tag.kind === "def")) {
+            score *= DEF_BOOST;
+        }
+        if (context.pathBoost && namesQuery(hit.path)) {
+            score *= PATH_BOOST;
+        }
+        const mtime = context.recency ? context.mtimes.get(hit.path) : undefined;
+        if (mtime !== undefined) {
+            const ageDays = Math.max(0, (context.now - mtime) / 86_400_000);
+            score *= 1 + 0.2 * 2 ** (-ageDays / RECENCY_HALF_LIFE_DAYS);
         }
         if (context.sourceFirst) {
             score *= CLASS_PRIOR[classOf(hit.path)];
@@ -117,5 +129,3 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
     }
     return groups.toSorted((a, b) => b.score - a.score || (a.path < b.path ? -1 : 1));
 };
-
-export const queryTokens = (query: string): string[] => [...new Set(query.toLowerCase().match(/[a-z0-9_$]{3,}/g) ?? [])];

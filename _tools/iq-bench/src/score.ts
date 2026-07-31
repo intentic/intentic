@@ -1,7 +1,7 @@
 import type { WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import type { Anchor, CaseScore } from "./schema.js";
 
-const DEFAULT_TOLERANCE = 10;
+export const DEFAULT_TOLERANCE = 10;
 const CUTOFF = 10;
 
 // One ranked retrieval unit as the agent consumes it: a file group with the lines iq surfaced in it.

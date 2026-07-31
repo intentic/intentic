@@ -75,11 +75,11 @@ Regex is **rust syntax**: alternation is `a|b` (not `a\|b`); for literal text us
 
 A bare query is classified (identifier / regex / path / natural-language) and routed through a fused pipeline:
 
-**ripgrep** (exact) + **FTS5 BM25** (sparse relevance) + **RM3 pseudo-relevance feedback** (query expansion) + **dense embeddings** (semantic) → **reciprocal-rank fusion** with def/path/recency boosts and a **source-first** class prior (implementation over its tests and docs, natural-language answers only) → **cross-encoder rerank** (blended into the fused order via RRF — it *votes*, it doesn't veto) → **enclosing-symbol context** + **graph** neighbor anchors + **pack** (the top groups arrive as the actual code slice, not just a pointer, so the reader usually needs no follow-up open).
+**ripgrep** (exact) + **FTS5 BM25** (sparse relevance) + **RM3 pseudo-relevance feedback** (query expansion) + **dense embeddings** (semantic) → **reciprocal-rank fusion** with **defboost** / **pathboost** / **recency** multipliers (one toggle each; pathboost matches path *words*, so `indexer.ts` answers "index" while `_textwrap.py` does not answer "wrap") and a **source-first** class prior (implementation over its tests and docs, natural-language answers only) → **cross-encoder rerank** (blended into the fused order via RRF — it *votes*, it doesn't veto) → **enclosing-symbol context** + **graph** neighbor anchors + **pack** (the top groups arrive as the actual code slice, not just a pointer, so the reader usually needs no follow-up open).
 
-All ten stages are independently toggleable for benchmarking and deployment tuning, via `--features` or `IQ_FEATURES` (allow-list `bm25` = only BM25; default-minus `-rerank,-prf` = all except those):
+All twelve stages are independently toggleable for benchmarking and deployment tuning, via `--features` or `IQ_FEATURES` (allow-list `bm25` = only BM25; default-minus `-rerank,-prf` = all except those):
 
-`bm25`, `semantic`, `rerank`, `prf`, `confidence`, `symctx`, `graph`, `boosts`, `srcfirst`, `pack`.
+`bm25`, `semantic`, `rerank`, `prf`, `confidence`, `symctx`, `graph`, `defboost`, `pathboost`, `recency`, `srcfirst`, `pack`.
 
 Structural search (`ast`) uses ast-grep; history verbs (`log`, `who`, `recent`) use git.
 

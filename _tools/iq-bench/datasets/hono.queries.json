@@ -183,6 +183,13 @@
             "verb": "files",
             "query": "trailing slash",
             "expected": [{ "file": "src/middleware/trailing-slash/index.ts" }]
+        },
+        {
+            "id": "q-identifier-bearer",
+            "verb": "q",
+            "query": "bearerAuth",
+            "expected": [{ "file": "src/middleware/bearer-auth/index.ts", "line": 104, "tolerance": 5 }],
+            "notes": "bare identifier through `q`: classified as an identifier, so the symbols engine joins the fusion — the only path where the def multiplier can reorder anything"
         }
     ]
 }

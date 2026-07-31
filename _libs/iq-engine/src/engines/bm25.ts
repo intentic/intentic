@@ -1,13 +1,8 @@
+import { STOPWORDS } from "../plan/tokens.js";
 import type { IndexDb } from "../store/db.js";
 import type { EngineHit } from "../types.js";
 
 const TOP_K = 50;
-
-const STOPWORDS = new Set(
-    "a an and are as at be but by do does for from has have how i in is it of on or that the this to was we what when where which who why with you".split(
-        " ",
-    ),
-);
 
 // Query text → FTS5 MATCH expression: identifier-friendly terms, stopword-stripped, each double-quoted (so user
 // input can never be parsed as MATCH syntax), OR'd — BM25 does the term weighting.

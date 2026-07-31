@@ -2,7 +2,15 @@ import { expect, test } from "vitest";
 import type { EngineResult } from "../types.js";
 import { fuse, type FuseContext } from "./fuse.js";
 
-const context: FuseContext = { queryTokens: ["widget"], mtimes: new Map(), now: 0, boosts: true };
+const context: FuseContext = {
+    queryTokens: ["widget"],
+    mtimes: new Map(),
+    now: 0,
+    defBoost: true,
+    pathBoost: true,
+    recency: true,
+    sourceFirst: false,
+};
 
 const lexical: EngineResult = {
     engine: "lexical",
@@ -53,6 +61,63 @@ test("def boost outranks equal-rank text hits", () => {
     );
     expect(withDef[0]?.path).toBe("x.ts");
     expect(reversed[0]?.path).toBe("x.ts");
+});
+
+// The three multipliers are separate features: each one alone must be able to reorder, and turning it off must
+// leave pure RRF order. Benchmarking depends on that independence — a bundled toggle could not attribute a delta.
+const alone = (multiplier: "defBoost" | "pathBoost" | "recency"): FuseContext => ({
+    ...context,
+    defBoost: multiplier === "defBoost",
+    pathBoost: multiplier === "pathBoost",
+    recency: multiplier === "recency",
+});
+
+const rrfOrder: EngineResult = {
+    engine: "symbols",
+    hits: [
+        { path: "plain.ts", line: 1, text: "w()", tags: [{ kind: "text" }] },
+        { path: "widget.ts", line: 1, text: "const w", tags: [{ kind: "def" }] },
+    ],
+};
+
+test("def boost alone reorders; off leaves RRF order", () => {
+    expect(fuse([rrfOrder], { ...alone("defBoost"), queryTokens: [] })[0]?.path).toBe("widget.ts");
+    expect(fuse([rrfOrder], { ...context, defBoost: false, pathBoost: false, recency: false })[0]?.path).toBe("plain.ts");
+});
+
+test("path boost alone reorders on a query token in the path", () => {
+    expect(fuse([rrfOrder], alone("pathBoost"))[0]?.path).toBe("widget.ts");
+    expect(fuse([rrfOrder], { ...alone("pathBoost"), queryTokens: ["nothing"] })[0]?.path).toBe("plain.ts");
+});
+
+test("path boost matches path words, not substrings of them", () => {
+    const infix: EngineResult = {
+        engine: "lexical",
+        hits: [
+            { path: "src/formatting.py", line: 1, text: "wrap()", tags: [{ kind: "text" }] },
+            { path: "src/_textwrap.py", line: 1, text: "wrap()", tags: [{ kind: "text" }] },
+        ],
+    };
+    // "wrap" is inside "textwrap" but names nothing in that path — the file that wraps help output keeps rank 1.
+    expect(fuse([infix], { ...alone("pathBoost"), queryTokens: ["wrap"] })[0]?.path).toBe("src/formatting.py");
+    // A query token that starts a path word still boosts: "index" is what `indexer.ts` is named after.
+    const stem: EngineResult = {
+        engine: "lexical",
+        hits: [
+            { path: "src/schemas.ts", line: 1, text: "changed", tags: [{ kind: "text" }] },
+            { path: "src/indexer/indexer.ts", line: 1, text: "changed", tags: [{ kind: "text" }] },
+        ],
+    };
+    expect(fuse([stem], { ...alone("pathBoost"), queryTokens: ["index"] })[0]?.path).toBe("src/indexer/indexer.ts");
+});
+
+test("recency alone reorders toward the newer file", () => {
+    const mtimes = new Map([
+        ["plain.ts", -30 * 86_400_000],
+        ["widget.ts", 0],
+    ]);
+    expect(fuse([rrfOrder], { ...alone("recency"), queryTokens: [], mtimes })[0]?.path).toBe("widget.ts");
+    expect(fuse([rrfOrder], { ...context, defBoost: false, pathBoost: false, recency: false, queryTokens: [], mtimes })[0]?.path).toBe("plain.ts");
 });
 
 test("a file with a huge number of hits fuses instead of overflowing the stack", () => {

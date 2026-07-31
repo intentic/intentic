@@ -1,6 +1,21 @@
 // Every retrieval stage is independently toggleable so pipeline configurations can be benchmarked against each
 // other. Default = everything on; the disabled set travels into WorkspaceSearchResult.features as run provenance.
-export const FEATURES = ["bm25", "semantic", "rerank", "prf", "confidence", "symctx", "graph", "boosts", "srcfirst", "pack"] as const;
+// The three fusion multipliers are separate names, not one "boosts" bundle: benchmarking showed them pulling in
+// opposite directions on the same corpus, which a bundled toggle cannot express.
+export const FEATURES = [
+    "bm25",
+    "semantic",
+    "rerank",
+    "prf",
+    "confidence",
+    "symctx",
+    "graph",
+    "defboost",
+    "pathboost",
+    "recency",
+    "srcfirst",
+    "pack",
+] as const;
 
 export type Feature = (typeof FEATURES)[number];
 
