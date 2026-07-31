@@ -353,6 +353,11 @@ export const LandConflictSchema = z.object({
     repo: z.string(),
     paths: z.array(LandConflictPathSchema),
     clean: z.number(),
+    // The branch the user's checkout is on — the thing the agent has to rebase onto. Carried because only the
+    // daemon can see it: an isolated turn's worktree is mounted over the agent's whole view, so the resolution
+    // errand could otherwise only tell it to go and read the name off `git worktree list`. Absent on a detached
+    // HEAD or a vanished checkout, where there is no name to give.
+    mainBranch: z.string().optional(),
 });
 export type LandConflict = z.infer<typeof LandConflictSchema>;
 

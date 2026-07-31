@@ -6,7 +6,7 @@ import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import { changedFiles, headSha, parseNameStatusZ } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { agentRepoChanges, anchorOf } from "./agent-changes.js";
-import { branchSha } from "./agent-refs.js";
+import { branchSha, mainBranchOf } from "./agent-refs.js";
 import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
@@ -256,7 +256,13 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
                 }
                 const report = await classifyDelta(main, from, tip, patchDir, repo, git);
                 if (report.blocked.length > 0) {
-                    conflicts.push({ repo, paths: report.blocked, clean: report.clean.length });
+                    const mainBranch = await mainBranchOf(main, git);
+                    conflicts.push({
+                        repo,
+                        paths: report.blocked,
+                        clean: report.clean.length,
+                        ...(mainBranch !== undefined ? { mainBranch } : {}),
+                    });
                 }
             });
         }
@@ -413,7 +419,13 @@ export const landAgent = async (
                         // What `check` promises is that a refusal leaves the workspace byte-identical. Report
                         // and stop: the worktree keeps everything, and "Land now" recovers once the user acts.
                         // Only `blocked` is reported: an already-in-main path is not something to resolve.
-                        conflicts.push({ repo, paths: report.blocked, clean: report.clean.length });
+                        const mainBranch = await mainBranchOf(main, git);
+                        conflicts.push({
+                            repo,
+                            paths: report.blocked,
+                            clean: report.clean.length,
+                            ...(mainBranch !== undefined ? { mainBranch } : {}),
+                        });
                         return;
                     }
                     /* `merge`: the user has read the report and asked for the three-way anyway. Every clean

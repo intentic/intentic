@@ -18,7 +18,15 @@ import {
     tool,
 } from "@anthropic-ai/claude-agent-sdk";
 import { spawn } from "node:child_process";
-import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, SystemPromptMode, UsageWindow } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    type AgentReply,
+    type AskQuestion,
+    type PermissionMode,
+    sendableEffort,
+    type SystemPromptMode,
+    type UsageWindow,
+} from "@intentic/sandbox-contract";
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { relative, sep } from "node:path";
 import { z } from "zod";
@@ -937,6 +945,16 @@ export type OauthRecoveryOptions = Options & {
     getOAuthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
 };
 
+// The two reasoning knobs, together — because the API refuses one combination of them and the picker's filter
+// (effortAllowed) only covers turns that came from the picker. sendableEffort holds the rule and the reason.
+const reasoningOptions = (request: AgentRequest): { effort?: EffortLevel; thinking?: { type: "adaptive" | "disabled" } } => {
+    const effort = sendableEffort(request.effort, request.thinking);
+    return {
+        ...(effort !== undefined ? { effort: effort as EffortLevel } : {}),
+        ...(request.thinking !== undefined ? { thinking: { type: request.thinking ? "adaptive" : "disabled" } } : {}),
+    };
+};
+
 // Base SDK options for the turn.
 const baseOptions = (
     request: AgentRequest,
@@ -1029,8 +1047,7 @@ const baseOptions = (
     ...(request.model !== undefined ? { model: request.model } : {}),
     ...(request.sessionId !== undefined ? { resume: request.sessionId } : {}),
     ...(request.plugins !== undefined ? { plugins: request.plugins.map((path) => ({ type: "local" as const, path })) } : {}),
-    ...(request.effort !== undefined ? { effort: request.effort as EffortLevel } : {}),
-    ...(request.thinking !== undefined ? { thinking: request.thinking ? { type: "adaptive" } : { type: "disabled" } } : {}),
+    ...reasoningOptions(request),
     ...(disallowedToolsOf(request).length > 0 ? { disallowedTools: disallowedToolsOf(request) } : {}),
 });
 

@@ -47,7 +47,7 @@ export interface Recall {
     forkPoint(sessionId: string, prompt?: string): ForkPoint | undefined;
     // `at` is a turn uuid or a turn ordinal (digits); omitted = fork the whole session.
     fork(sessionId: string, options?: { at?: string; dryRun?: boolean }): Promise<ForkResult>;
-    sessions(options?: { query?: string; days?: number }): SessionSummary[];
+    sessions(options?: { query?: string; days?: number; limit?: number }): SessionSummary[];
     transcriptPathOf(sessionId: string): string;
     close(): void;
 }
@@ -100,20 +100,25 @@ export const createRecall = (options: RecallOptions): Recall => {
                               .all("SELECT s.id AS id FROM sessions_fts JOIN sessions s ON s.id = sessions_fts.rowid WHERE sessions_fts MATCH ?", fts)
                               .map((row) => Number(row["id"])),
                       ]);
-            return db()
-                .all(
-                    `SELECT s.id AS id, s.session_id AS sid, s.title AS title, s.last_ts AS last_ts, COUNT(t.id) AS prompts
+            return (
+                db()
+                    .all(
+                        `SELECT s.id AS id, s.session_id AS sid, s.title AS title, s.last_ts AS last_ts, COUNT(t.id) AS prompts
                      FROM sessions s LEFT JOIN turns t ON t.session_id = s.id
                      WHERE s.last_ts >= ? GROUP BY s.id HAVING COUNT(t.id) > 0 ORDER BY s.last_ts DESC`,
-                    sinceTs,
-                )
-                .filter((row) => filter === undefined || filter.has(Number(row["id"])))
-                .map((row): SessionSummary => ({
-                    sessionId: row["sid"] as string,
-                    title: typeof row["title"] === "string" ? row["title"] : undefined,
-                    lastTs: Number(row["last_ts"]),
-                    promptCount: Number(row["prompts"]),
-                }));
+                        sinceTs,
+                    )
+                    .filter((row) => filter === undefined || filter.has(Number(row["id"])))
+                    // Sliced after the FTS filter, not in SQL: the filter is applied in JS, so a SQL LIMIT would
+                    // cut the candidates rather than the answers.
+                    .slice(0, listOptions.limit ?? Number.POSITIVE_INFINITY)
+                    .map((row): SessionSummary => ({
+                        sessionId: row["sid"] as string,
+                        title: typeof row["title"] === "string" ? row["title"] : undefined,
+                        lastTs: Number(row["last_ts"]),
+                        promptCount: Number(row["prompts"]),
+                    }))
+            );
         },
         transcriptPathOf: (sessionId) => join(projectsDir, `${sessionId}.jsonl`),
         close: () => opened?.close(),

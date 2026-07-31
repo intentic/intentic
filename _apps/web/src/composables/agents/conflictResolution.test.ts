@@ -58,11 +58,31 @@ describe(`resolvePrompt`, () => {
         expect(prompt).toContain(`refuses to start on a dirty tree`);
     });
 
-    it(`has the agent discover the main-line branch instead of baking in a name the daemon owns`, () => {
+    it(`falls back to self-discovery when the report carries no branch — a detached main checkout has no name`, () => {
         expect(prompt).toContain(`git worktree list`);
         expect(prompt).toContain(`git rebase <branch>`);
         // The escape hatch, so a rebase that goes badly has somewhere to go other than improvisation.
         expect(prompt).toContain(`git rebase --abort`);
+    });
+
+    // `git worktree list` is one line per live agent — 65 of them in this workspace — and every conflicted
+    // session spent its opening calls on it. When the daemon read the name, the prompt says it.
+    it(`names the main line when the report carries it, and drops the listing the agent would have to read`, () => {
+        const named = resolvePrompt([
+            { repo: `root`, clean: 1, paths: [{ path: `a.ts`, reason: `diverged` }], mainBranch: `main` },
+            { repo: `docs`, clean: 0, paths: [{ path: `b.md`, reason: `diverged` }], mainBranch: `main` },
+        ]);
+        expect(named).toContain(`git rebase main`);
+        expect(named).toContain(`git merge main`);
+        expect(named).not.toContain(`git worktree list`);
+    });
+
+    it(`goes back to self-discovery when the repos disagree — one instruction is the point`, () => {
+        const mixed = resolvePrompt([
+            { repo: `root`, clean: 1, paths: [{ path: `a.ts`, reason: `diverged` }], mainBranch: `main` },
+            { repo: `docs`, clean: 0, paths: [{ path: `b.md`, reason: `diverged` }], mainBranch: `trunk` },
+        ]);
+        expect(mixed).toContain(`git rebase <branch>`);
     });
 
     it(`refuses the cheap resolution — taking one side is how a change silently disappears`, () => {

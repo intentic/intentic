@@ -286,3 +286,18 @@ export const modelsFor = (provider: AgentProvider): CatalogOption[] => {
 // (effortsFor, web-side) filters through here, and the clamp over that scale makes the pair unreachable.
 export const effortAllowed = (effort: string, provider: AgentProvider, thinking: boolean): boolean =>
     effort !== "max" || (provider === "claude" && thinking);
+
+/* The tier to actually SEND, which is the same rule applied as a repair rather than as a filter.
+ *
+ * effortAllowed makes the pair unreachable in the picker, and the picker is not the only way a turn is
+ * assembled: a route, an extension, a restored tab or a settings-pinned model can all name an effort that no
+ * live scale filtered. One did — a session ran `max` with thinking off, and every server-side tool call in it
+ * came back `400 output_config.effort 'max' is not supported when thinking is disabled`, which reads to the
+ * model as "web search is broken" and cost it the answer it was sent to find.
+ *
+ * So the daemon repairs the pair at the last gate before the API, taking the API's own advice ("use effort
+ * 'high' or below, or enable thinking") rather than reporting it. The TIER is the half that moves: thinking is
+ * a deliberate per-turn choice that changes what the turn costs, and silently switching it on would answer a
+ * 400 by spending the user's money. */
+export const sendableEffort = (effort: string | undefined, thinking: boolean | undefined): string | undefined =>
+    effort === "max" && thinking !== true ? "high" : effort;

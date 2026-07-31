@@ -134,7 +134,7 @@ test("a user edit on the same lines conflicts: nothing applies, main is untouche
     expect(result.landed).toBe(false);
     expect(result.changed).toBe(true);
     // `workspace` is the one cause where the copy at risk is the USER'S, which is what the report has to say.
-    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0 }]);
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one USER\nline two\nline three\n");
     // The agent's work is intact in the worktree for Land-now recovery.
     expect(await readFile(join(conversation.cwd, "app.ts"), "utf8")).toBe("line one AGENT\nline two\nline three\n");
@@ -151,7 +151,7 @@ test("names only the paths that actually refuse, and counts what would land anyw
 
     // `git apply` is atomic, so BOTH files are held back — but only one of them is the reason, and saying so
     // is the difference between "resolve this file" and a wall of every path the agent ever touched.
-    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 1 }]);
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 1, mainBranch: "main" }]);
     expect(existsSync(join(work, "added.ts"))).toBe(false);
 });
 
@@ -165,7 +165,7 @@ test("a workspace refusal re-derives as diverged once the user commits their edi
     await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
     const entry = entryFor(conversation.repos);
     const refusal = await landAgent(worktrees, entry);
-    expect(refusal.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0 }]);
+    expect(refusal.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
 
     // While the user's copy is still dirty, the re-derivation agrees with the stored report.
     expect(await outstandingConflicts(worktrees, entry)).toEqual(refusal.conflicts);
@@ -174,7 +174,9 @@ test("a workspace refusal re-derives as diverged once the user commits their edi
     // `workspace`; the re-derivation moves with the world: the same blocker is now a committed divergence.
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "user commits their half");
-    expect(await outstandingConflicts(worktrees, entry)).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0 }]);
+    expect(await outstandingConflicts(worktrees, entry)).toEqual([
+        { repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0, mainBranch: "main" },
+    ]);
 });
 
 test("a refusal whose cause has evaporated re-derives to no conflicts at all", async () => {
@@ -201,7 +203,7 @@ test("blames the moved main line, not the workspace, when the conflict is a comm
     const result = await landAgent(worktrees, entryFor(conversation.repos));
 
     // Nothing of the user's is at risk here, and the report has to say which of the two situations this is.
-    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0 }]);
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0, mainBranch: "main" }]);
 });
 
 test("re-anchors on the merge-base, so an agent rebased onto the moved main line still lands its own work", async () => {
@@ -335,7 +337,7 @@ test("merge mode declines when the clash is with uncommitted work, because git c
     // `--3way` goes through the index and refuses on an unstaged path, applying NOTHING — so the honest
     // outcome is the same report `check` gives, and the user commits or stashes their copy first.
     expect(result.resolving).toBeUndefined();
-    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0 }]);
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one USER\nline two\nline three\n");
 });
 
@@ -644,7 +646,7 @@ test("a user edit under a rename-with-edits is a conflict, not a clean change", 
 
     expect(result.landed).toBe(false);
     // Reported at the destination — the path the user will go looking for — with their own copy as the cause.
-    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "moved.ts", reason: "workspace" }], clean: 0 }]);
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "moved.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
     // `check` promises a refusal changes nothing: the user's edit stands and no half-rename was written.
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one USER\nline two\nline three\n");
     expect(existsSync(join(work, "moved.ts"))).toBe(false);

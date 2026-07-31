@@ -59,6 +59,30 @@ test("cleanLines: cap disabled keeps all lines", () => {
     expect(cleanLines(lines, { command: "echo", exitCode: "0", enabled: parseCleaners("-cap") }).lines).toHaveLength(200);
 });
 
+// A read is the one shape where the middle is the point. Capping it at 100 made `cat` strictly worse than the
+// Read tool, and the model paid for the file twice.
+test("cleanLines: a deliberate read is not capped at MAX, even behind a `cd … &&` prefix", () => {
+    const lines = Array.from({ length: 400 }, (_, i) => `line ${i}`);
+    for (const command of ["cd /work/intentic && cat src/app.ts", "sed -n '40,600p' src/app.ts", "git diff src/app.ts"]) {
+        expect(cleanLines(lines, { command, exitCode: "0", enabled: new Set(CLEANERS) }).lines).toHaveLength(400);
+    }
+});
+
+test("cleanLines: a read past READ_MAX is trimmed from the end, not the middle", () => {
+    const lines = Array.from({ length: 2400 }, (_, i) => `line ${i}`);
+    const out = cleanLines(lines, { command: "cat big.ts", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
+    expect(out).toHaveLength(2001);
+    expect(out[1999]).toBe("line 1999");
+    expect(out.at(-1)).toContain("400 more lines elided");
+});
+
+test("cleanLines: a log-shaped command is still capped at MAX", () => {
+    const lines = Array.from({ length: 400 }, (_, i) => `line ${i}`);
+    for (const command of ["pnpm install", "git log --oneline -400", "cd /work && ls -R"]) {
+        expect(cleanLines(lines, { command, exitCode: "0", enabled: new Set(CLEANERS) }).lines.length).toBeLessThan(100);
+    }
+});
+
 test("filterOutput: strips ANSI and appends a footer when the trim outweighs the pointer", () => {
     const raw = `${[...Array.from({ length: 8 }, (_, i) => `Progress: resolved ${i}00, reused ${i}00, downloaded 0, added 0`), "\x1b[32mdone\x1b[0m"].join("\n")}\n`;
     const out = filterOutput(raw, "pnpm install", "0", "1", "/logs/x.log").out;
@@ -112,16 +136,34 @@ test("dedup: leaves distinct lines and short runs untouched", () => {
     expect(cleanLines(lines, { command: "echo", exitCode: "0", enabled: parseCleaners("dedup") }).lines).toEqual(lines);
 });
 
+const redacted = (lines, exitCode = "0") => cleanLines(lines, { command: "env", exitCode, enabled: parseCleaners("redact") }).lines;
+
 test("redact: masks secret-named assignments, AWS keys, and bearer tokens on success and failure", () => {
     const lines = ["export GITHUB_TOKEN=ghp_abcd1234", "key AKIAIOSFODNN7EXAMPLE end", "Authorization: Bearer sk-xyz.123"];
-    expect(cleanLines(lines, { command: "env", exitCode: "0", enabled: parseCleaners("redact") }).lines).toEqual([
-        "export GITHUB_TOKEN=***",
-        "key *** end",
-        "Authorization: Bearer ***",
-    ]);
-    expect(cleanLines(["boom TOKEN=secretval"], { command: "env", exitCode: "1", enabled: parseCleaners("redact") }).lines).toEqual([
-        "boom TOKEN=***",
-    ]);
+    expect(redacted(lines)).toEqual(["export GITHUB_TOKEN=***", "key *** end", "Authorization: Bearer ***"]);
+    expect(redacted(["boom TOKEN=sk-ant-api03-9f2"], "1")).toEqual(["boom TOKEN=***"]);
+});
+
+test("redact: a quoted value is masked whole, and the quotes survive so the line still parses", () => {
+    expect(redacted([`const key = { apiKey: "sk-ant-api03-9f2Kd" };`])).toEqual([`const key = { apiKey: "***" };`]);
+    expect(redacted(["password: 'hunter2hunter2'"])).toEqual(["password: '***'"]);
+});
+
+// The regression this rule exists for: source code says "token" constantly, and every one of these reached a
+// model corrupted — `=***` is indistinguishable from `!==`, and a masked type annotation loses the type.
+test("redact: leaves source code alone — comparisons, type annotations, property access and calls", () => {
+    const code = [
+        `if (oauthToken === undefined && services.config.claudeCodeOauthToken === "") {`,
+        `let oauthToken: string | undefined;`,
+        `oauthToken = await ensureFreshToken(services.claudeStore, accountId);`,
+        `const token = (await rl.question("Bridge token (ibt_…): ")).trim();`,
+        `inputTokens: usage.inputTokens ?? 0,`,
+        `const tokensDelta = computed(() => deltaPercent(totalTokens(totals.value)));`,
+        `const rankFor = (entry: PickerEntry, tokens: readonly string[]): number => {`,
+        `export const CapabilitySecretInputSchema = z.object({ id: z.string() });`,
+        `// An auth stub that refuses every bearer token, proving the route's gate`,
+    ];
+    expect(redacted(code)).toEqual(code);
 });
 
 // --- shape cleaners: gated by the OUTPUT, so `cd x && …` (four out of five agent commands) still reaches them.

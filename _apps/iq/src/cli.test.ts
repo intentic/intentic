@@ -111,12 +111,26 @@ test("normalizeArgv absorbs the grep dialect: search verb and --include/--path/-
     expect(normalizeArgv(["search", "auth flow", "--max-results", "20"])).toEqual({
         argv: ["q", "auth flow", "--limit", "20"],
         notes: ["search → q", "--max-results → --limit"],
+        hints: [],
     });
     expect(normalizeArgv(["find", "x", "--include", "*.ts", "--path", "src"]).argv).toEqual(["find", "x", "--glob", "*.ts", "--in", "src"]);
     expect(normalizeArgv(["find", "x", "--include=*.ts"]).argv).toEqual(["find", "x", "--glob=*.ts"]);
     // log's --path is a real git pathspec — never rewritten.
     expect(normalizeArgv(["log", "MAX", "--path", "src"]).argv).toEqual(["log", "MAX", "--path", "src"]);
     expect(normalizeArgv(["find", "createWidget"]).notes).toEqual([]);
+});
+
+// Shell `find` means filenames, iq `find` means content — the collision cost a session a turn.
+test("normalizeArgv hints at `files` when `find` is handed a bare filename, without rewriting the verb", () => {
+    expect(normalizeArgv(["find", "Row.vue"])).toEqual({
+        argv: ["find", "Row.vue"],
+        notes: [],
+        hints: [expect.stringContaining("iq files Row.vue")],
+    });
+    // A pattern, a path, or another verb is not a filename — no hint.
+    expect(normalizeArgv(["find", "createServer\\("]).hints).toEqual([]);
+    expect(normalizeArgv(["find", "src/Row.vue"]).hints).toEqual([]);
+    expect(normalizeArgv(["files", "Row.vue"]).hints).toEqual([]);
 });
 
 test("grep-dialect argv reaches the engine: iq search works end to end", async () => {

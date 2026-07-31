@@ -35,8 +35,8 @@ const PER_TOOL_CLEANERS = [
 ];
 const GLOBAL_CLEANERS = [
     [`dedupe repeats`, `3 or more identical lines in a row become one, plus a count`],
-    [`head/tail cap`, `Over 100 lines keeps the first 30 and the last 50`],
-    [`redact secrets`, `Masks tokens, passwords, API keys and credentials in URLs`],
+    [`head/tail cap`, `Over 100 lines keeps the first 30 and the last 50 — a file read (cat, sed -n, git diff) keeps 2000`],
+    [`redact secrets`, `Masks credential-shaped values after a token/password/key name, and credentials in URLs`],
     [`collapse repeats`, `Output identical to an earlier run this session isn't shown twice`],
 ];
 

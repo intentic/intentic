@@ -51,23 +51,33 @@ export const syncModel = (db: IndexDb, modelDir: string | undefined): void => {
     }
 };
 
-// The cheap "already indexed" test — mtime+size, no read. One definition, two callers: revalidate partitions on
-// it, and indexLag answers freshness with it. They must not drift, or a read-only engine would report an index
-// fresh that the writer would still rewrite.
+// The cheap "already indexed" test — mtime+size, no read. The WRITER's test: a file it rejects is re-hashed on
+// the next pass, and a hash match makes that pass a no-op, so being too eager here costs a read, never an error.
 const indexed = (entry: FileEntry, previous: StoredFile | undefined): boolean =>
     previous !== undefined && Math.round(entry.mtimeMs) === previous.mtimeMs && entry.size === previous.size;
 
+// What a READER may honestly call stale, and deliberately not the writer's test. One index serves every agent
+// worktree of a repo — they share `.intentic/iq` — and `git worktree add` stamps a fresh mtime on every file it
+// checks out. Under the writer's test that reads as "nothing is indexed" in a tree that is byte-identical to
+// the indexed one, so every answer an agent ever saw opened with "index 2253 files behind": a permanent alarm
+// about a correct result, which is the thing that sends a model back to grep. Size is the half of the cheap
+// test a checkout does not disturb.
+//
+// The asymmetry is deliberate and one-directional: an edit that keeps the byte count is missed HERE and still
+// caught by the writer, so the index is rebuilt exactly as before and only the banner is optimistic — beside
+// which it already says text matches are live.
+const knownStale = (entry: FileEntry, previous: StoredFile | undefined): boolean => previous === undefined || entry.size !== previous.size;
+
 // How many files the index does not match — new, changed, or gone. The freshness signal for an engine that does
 // NOT own writing the index (see indexer-lock.ts): it cannot ask the writer how far behind it is, but it can
-// compare the sweep it just did against the rows that are there, which is the same comparison the writer's next
-// pass will make. Pure reads, so a read-only handle answers it.
+// compare the sweep it just did against the rows that are there. Pure reads, so a read-only handle answers it.
 export const indexLag = (db: IndexDb, entries: readonly FileEntry[]): number => {
     const stored = listFiles(db);
     const seen = new Set<string>();
     let lag = 0;
     for (const entry of entries) {
         seen.add(entry.path);
-        if (!indexed(entry, stored.get(entry.path))) {
+        if (knownStale(entry, stored.get(entry.path))) {
             lag += 1;
         }
     }

@@ -44,6 +44,19 @@ export const branchSha = async (main: string, branch: string, git: GitRunner): P
     return stdout.split("\n").find((line) => line !== "");
 };
 
+/* The name of the user's main line in a repo — the branch their checkout is on. The one fact an agent needs to
+ * rebase onto it, and one the daemon already holds: without it the conflict errand has to say "read it off the
+ * FIRST line of `git worktree list`", which in this workspace is a 65-line listing of every live agent's
+ * worktree, and every conflicted session spent its opening calls re-deriving it.
+ *
+ * Undefined on a detached HEAD, which is honest rather than a guess: `rev-parse --abbrev-ref` answers "HEAD"
+ * there, and rebasing onto a branch called HEAD is not a thing. The errand's own fallback covers it. */
+export const mainBranchOf = async (main: string, git: GitRunner): Promise<string | undefined> => {
+    const { stdout } = await git(main, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    const branch = stdout.trim();
+    return branch === "" || branch === "HEAD" ? undefined : branch;
+};
+
 /* Park every branch in this repo belonging to an agent that is off the board — one agent when a retire calls
  * it, the whole archive when the boot sweep does. Returns the ids it parked.
  *

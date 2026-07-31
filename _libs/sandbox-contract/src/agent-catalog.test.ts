@@ -1,5 +1,15 @@
 import { describe, expect, it, test } from "vitest";
-import { type AgentCapabilities, capabilitiesOf, clampMode, HARNESSES, limitationsOf, modesFor, PROVIDERS } from "./agent-catalog.js";
+import {
+    type AgentCapabilities,
+    capabilitiesOf,
+    clampMode,
+    effortAllowed,
+    HARNESSES,
+    limitationsOf,
+    modesFor,
+    PROVIDERS,
+    sendableEffort,
+} from "./agent-catalog.js";
 import type { AgentHarness, AgentProvider, PermissionMode } from "./schemas.js";
 
 /* THE MATRIX GUARD.
@@ -115,4 +125,25 @@ test("the Claude Code loop offers every PermissionMode the wire has", () => {
     const wire: PermissionMode[] = ["default", "acceptEdits", "plan", "bypassPermissions"];
 
     expect([...modesFor(capabilitiesOf("claude", "native"))].toSorted()).toEqual(wire.toSorted());
+});
+
+/* `max` + thinking-off is a 400 that kills the turn before the model sees it, and a session met it as "every
+ * web search fails". The picker cannot be the only guard: a route, an extension or a restored tab assembles a
+ * turn without ever passing through it. */
+describe("the max-effort rule", () => {
+    it("is unreachable in a picker: only Claude with extended thinking may offer it", () => {
+        expect(effortAllowed("max", "claude", true)).toBe(true);
+        expect(effortAllowed("max", "claude", false)).toBe(false);
+        expect(effortAllowed("max", "codex", true)).toBe(false);
+        // Every other tier is a property of the model's own scale, and nothing here constrains it.
+        expect(effortAllowed("high", "kimi", false)).toBe(true);
+    });
+
+    it("is repaired, not refused, on the way to the API — the tier drops, the user's thinking choice does not", () => {
+        expect(sendableEffort("max", false)).toBe("high");
+        expect(sendableEffort("max", undefined)).toBe("high");
+        expect(sendableEffort("max", true)).toBe("max");
+        expect(sendableEffort("high", false)).toBe("high");
+        expect(sendableEffort(undefined, false)).toBeUndefined();
+    });
 });

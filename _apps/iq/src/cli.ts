@@ -25,9 +25,15 @@ const FLAG_REDIRECTS: Record<string, string> = {
     p: "a value starting with '-' needs the equals form, e.g. --features=-rerank",
 };
 
-// Annotate stricli's terse alias errors in place — wrap the real stream's write (process.stderr itself is a
-// getter-only property, so it can't be shadowed on a wrapper object; the write method is what stricli calls).
-const originalWrite = process.stderr.write.bind(process.stderr);
+// Annotate stricli's terse alias errors in place, and put them on STDOUT — wrap the real stream's write
+// (process.stderr itself is a getter-only property, so it can't be shadowed on a wrapper object; the write
+// method is what stricli calls).
+//
+// Stdout because the reader is an agent: `iq … 2>/dev/null` is the reflex, and under it a mistyped flag came
+// back as an empty result rather than an error. A transcript audit found `--max-hits` doing exactly that —
+// the session read "no results", believed it, and fell back to grep. The exit code still says 2, so a script
+// can still tell the difference.
+const emit = process.stdout.write.bind(process.stdout);
 process.stderr.write = ((chunk: string | Uint8Array, ...rest: unknown[]): boolean => {
     const text = typeof chunk === "string" ? chunk : chunk.toString();
     const alias = /No alias registered for -(\w)/.exec(text)?.[1];
@@ -36,16 +42,23 @@ process.stderr.write = ((chunk: string | Uint8Array, ...rest: unknown[]): boolea
             ? FLAG_REDIRECTS[alias]
             : /Too many arguments/.test(text)
               ? 'each verb takes ONE query — quote multi-word queries (iq q "…") and scope with --in <dir>'
-              : undefined;
-    return (originalWrite as (value: string | Uint8Array, ...args: unknown[]) => boolean)(
+              : /No flag registered for --([\w-]+)/.test(text)
+                ? "the flags a verb takes are in `iq <verb> --help`; scope with --in/--glob/--only and size with --limit/--budget"
+                : undefined;
+    return (emit as (value: string | Uint8Array, ...args: unknown[]) => boolean)(
         redirect === undefined ? chunk : `${text.trimEnd()} — ${redirect}\n`,
         ...rest,
     );
 }) as typeof process.stderr.write;
 
-const { argv, notes } = normalizeArgv(process.argv.slice(2));
+const { argv, notes, hints } = normalizeArgv(process.argv.slice(2));
 if (notes.length > 0) {
-    process.stderr.write(`iq: grep dialect absorbed: ${notes.join(", ")}\n`);
+    // Also stdout: this is how a verb like `search` or `ask` learns its real name, and it was being dropped by
+    // the same `2>/dev/null`.
+    process.stdout.write(`iq: grep dialect absorbed: ${notes.join(", ")}\n`);
+}
+for (const hint of hints) {
+    process.stdout.write(`iq: ${hint}\n`);
 }
 await run(app, argv, { process: process as StricliProcess });
 // Grep convention: 0 hits, 1 none, 2 anything else — clamp stricli's negative scanner/routing codes.

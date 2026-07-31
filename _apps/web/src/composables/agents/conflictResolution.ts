@@ -120,11 +120,14 @@ const listing = (blockers: readonly Blocker[], reasons: boolean): string => {
  *   · COMMIT FIRST. The agent's worktree is dirty between lands — land's own gitCommitAll runs at land time,
  *     not before — and `git rebase` refuses to start on a dirty tree. Without this step the agent's first
  *     command errors and it improvises from there.
- *   · `git worktree list` rather than a branch we bake in: the refs are shared, so git will simply tell the
- *     agent what the main line is; a hardcoded name would be a second copy of a fact the daemon owns. But
- *     ONLY the branch name — an isolated turn has its worktree mounted over /work (agents/isolation.ts), so
- *     the first entry's PATH resolves to the agent's own checkout, and "go find the user's checkout" would
- *     send it somewhere that is not what the words claim.
+ *   · THE MAIN LINE BY NAME, from the report (LandConflictSchema.mainBranch) — the daemon read it off the
+ *     user's checkout, which is the only place it is visible. Telling the agent to read it off the FIRST line
+ *     of `git worktree list` instead was correct and expensive: that listing is one line per live agent — 65
+ *     of them here — and a transcript audit found all seven conflicted sessions opening with it and the
+ *     orientation calls around it. The instruction survives as the fallback for a detached HEAD, which is the
+ *     one case with no name to give. Still ONLY the branch name: an isolated turn has its worktree mounted
+ *     over /work (agents/isolation.ts), so the listing's PATHS resolve to the agent's own checkout, and "go
+ *     find the user's checkout" would send it somewhere that is not what the words claim.
  *   · KEEP BOTH SIDES. Left to itself a model will happily make the markers go away by taking one side, which
  *     is how "resolved" ends up meaning "silently dropped the change that moved underneath me".
  *
@@ -133,14 +136,27 @@ const listing = (blockers: readonly Blocker[], reasons: boolean): string => {
  *
  * Kept TERSE on purpose: the reader is a model mid-conversation, and every sentence past the load-bearing
  * ones dilutes them. The rationale lives here, not in the prompt. */
+/* The main line, named, when every conflicted repo agrees on it — which is the whole composition in practice,
+ * since the repos of one workspace are branched together. Repos on different branches, or any repo whose name
+ * the daemon could not read, fall back to the derivation: one instruction is the point, and a per-repo table of
+ * branches in a four-step recipe would cost more than the lookup it saves. */
+const sharedMainBranch = (conflicts: readonly LandConflict[] | undefined): string | undefined => {
+    const names = new Set((conflicts ?? []).map((conflict) => conflict.mainBranch));
+    const only = names.size === 1 ? [...names][0] : undefined;
+    return only === undefined || only === `` ? undefined : only;
+};
+
 export const resolvePrompt = (conflicts: readonly LandConflict[] | undefined): string => {
     const blockers = blockersOf(conflicts);
     const mine = agentBlockers(blockers);
     const theirs = userBlockers(blockers);
+    const main = sharedMainBranch(conflicts);
     return errandPrompt(ERRANDS.landConflict, [
         [
             `1. \`git add -A && git commit\` — a rebase refuses to start on a dirty tree.`,
-            `2. \`git rebase <branch>\`, where \`<branch>\` is the one in brackets on the FIRST line of \`git worktree list\` — the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge <branch>\` instead.`,
+            main === undefined
+                ? `2. \`git rebase <branch>\`, where \`<branch>\` is the one in brackets on the FIRST line of \`git worktree list\` — the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge <branch>\` instead.`
+                : `2. \`git rebase ${main}\` — that is the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge ${main}\` instead.`,
             `3. Resolve each conflict keeping the intent of BOTH sides — your change and whatever moved underneath it. Do not take one side wholesale.`,
             `4. Check the result still builds and tests, where this project makes that cheap.`,
         ].join(`\n`),

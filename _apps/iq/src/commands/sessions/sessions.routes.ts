@@ -37,21 +37,29 @@ const ingestCommand = buildCommand({
 const list = buildCommand({
     docs: { brief: "Recent sessions of this workspace, newest first" },
     parameters: {
-        flags: { days: { kind: "parsed", parse: numberParser, default: "45", brief: "Only sessions active in the last N days" } },
+        flags: {
+            days: { kind: "parsed", parse: numberParser, default: "45", brief: "Only sessions active in the last N days" },
+            limit: { kind: "parsed", parse: numberParser, default: "50", brief: "Max sessions" },
+            json: { kind: "boolean", default: false, brief: "One JSON array" },
+        },
         positional: {
             kind: "tuple",
             parameters: [{ parse: String, brief: "Filter by prompt/response/title words", placeholder: "query", optional: true }],
         },
     },
-    async func(this: CommandContext, flags: { days: number }, query?: string) {
+    async func(this: CommandContext, flags: { days: number; limit: number; json: boolean }, query?: string) {
         const recall = recallFor(rootFromEnv());
         try {
             await recall.ingest();
-            const sessions = recall.sessions({ days: flags.days, ...(query !== undefined ? { query } : {}) });
-            for (const session of sessions) {
-                this.process.stdout.write(
-                    `${session.sessionId}  ${dateOf(session.lastTs)}  ${session.promptCount} prompts  ${session.title ?? "(untitled)"}\n`,
-                );
+            const sessions = recall.sessions({ days: flags.days, limit: flags.limit, ...(query !== undefined ? { query } : {}) });
+            if (flags.json) {
+                this.process.stdout.write(`${JSON.stringify(sessions, undefined, 4)}\n`);
+            } else {
+                for (const session of sessions) {
+                    this.process.stdout.write(
+                        `${session.sessionId}  ${dateOf(session.lastTs)}  ${session.promptCount} prompts  ${session.title ?? "(untitled)"}\n`,
+                    );
+                }
             }
             (this.process as { exitCode?: number | string | null }).exitCode = sessions.length > 0 ? 0 : 1;
         } finally {

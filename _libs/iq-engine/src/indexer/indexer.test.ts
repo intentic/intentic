@@ -6,7 +6,7 @@ import { openIndex, type IndexDb } from "../store/db.js";
 import { listFiles } from "../store/index-store.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import { sweep } from "../workspace/scan.js";
-import { revalidate } from "./indexer.js";
+import { indexLag, revalidate } from "./indexer.js";
 
 let root: string;
 let cleanup: () => Promise<void>;
@@ -51,6 +51,29 @@ test("revalidate: initial build, touch-only skip, content change, delete", async
     await rm(join(root, "notes.md"));
     await revalidate(db, await sweep(root, false));
     expect(listFiles(db).has("notes.md")).toBe(false);
+});
+
+// One index serves every agent worktree of a repo, and `git worktree add` stamps a fresh mtime on every file it
+// checks out. The reported lag has to survive that, or every answer in a worktree opens with a false alarm.
+test("indexLag: a checkout's fresh mtimes are not lag; a real edit and a new file are", async () => {
+    await revalidate(db, await sweep(root, false));
+    expect(indexLag(db, await sweep(root, false))).toBe(0);
+
+    // The worktree signature: every mtime moved, no content did.
+    const future = new Date(Date.now() + 60_000);
+    for (const entry of await sweep(root, false)) {
+        await utimes(entry.abs, future, future);
+    }
+    expect(indexLag(db, await sweep(root, false))).toBe(0);
+
+    await writeFile(join(root, "alpha/src/widget.ts"), `export const createWidget = (): string => \`grown\`;\n${"// filler\n".repeat(20)}`);
+    await writeFile(join(root, "alpha/src/fresh.ts"), "export const fresh = 1;\n");
+    expect(indexLag(db, await sweep(root, false))).toBe(2);
+
+    await revalidate(db, await sweep(root, false));
+    await rm(join(root, "alpha/src/fresh.ts"));
+    expect(indexLag(db, await sweep(root, false))).toBe(1);
+    await revalidate(db, await sweep(root, false));
 });
 
 test("binary files get a bare marker row, not derived data", async () => {

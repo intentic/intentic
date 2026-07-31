@@ -246,11 +246,30 @@ const dedupeRuns = (lines) => {
 };
 
 // Mask common secret shapes before output reaches the model — defense-in-depth for an autonomous agent that
-// might echo env/config. Conservative: only secret-named assignments, AWS access keys, bearer tokens, URL creds.
+// might echo env/config. Only secret-named assignments, AWS access keys, bearer tokens, URL creds.
+//
+// A secret-shaped NAME is not enough, because source code says "token" constantly. Matching on the name alone
+// masked `oauthToken === undefined` as `oauthToken =*** undefined` (a model cannot tell that from `!==`),
+// `let oauthToken: string` as `oauthToken: ***`, and `usage.inputTokens ?? 0` as `*** ?? 0` — silently, on
+// every read of the file through the shell. So the VALUE has to look like a credential too.
+const SECRET_NAME = String.raw`[A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY)[A-Za-z0-9_]*`;
+// A single `=` or `:`, never `===`/`!==`/`=>` — that alone rules out every comparison and arrow function. The
+// optional closing quote is what covers a JSON config dump, where the key itself is quoted.
+const ASSIGN = String.raw`["']?\s*[:=](?![=>])\s*`;
+// A quoted literal is data rather than an expression, so it is masked whole from 8 characters up. (`\x60` is a
+// backtick: template-literal values are quoted too.)
+const QUOTED_VALUE = String.raw`(["'\x60])[^"'\x60\n]{8,}\2`;
+// A bare value must carry a digit or credential punctuation, hold no `.` (property access), and not be a call.
+// `ghp_abcd1234` and `sk-ant-api03-…` qualify; `string`, `undefined`, `readonly`, `computed(`, `await`,
+// `usage.inputTokens` and `endpoint.authToken` do not. The deliberate gap is a bare lowercase word with no
+// digit — `TOKEN=secretval` reads exactly like `token = identifier` and nothing in the text separates them.
+const BARE_VALUE = String.raw`(?=[\w+/=~-]*[\d_+/=~-])[\w+/=~-]{6,}(?![\w+/=~(-])`;
 const SECRET_PATTERNS = [
-    [/\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY)[A-Z0-9_]*\s*[:=]\s*)(\S+)/gi, "$1***"],
+    [new RegExp(`\\b(${SECRET_NAME}${ASSIGN})(?:${QUOTED_VALUE}|${BARE_VALUE})`, "gi"), "$1$2***$2"],
     [/\bAKIA[0-9A-Z]{16}\b/g, "***"],
-    [/\b(Bearer\s+)[\w.-]+/gi, "$1***"],
+    // Same rule for the bearer value: prose ("refuses every bearer token", "the bearer is valid") carries no
+    // digit, every real bearer does.
+    [/\b(Bearer\s+)(?=[\w.-]*\d)[\w.-]{8,}/gi, "$1***"],
     [/\b(https?:\/\/[^:@\s/]+:)[^@\s]+@/gi, "$1***@"],
 ];
 const redactLine = (line) => SECRET_PATTERNS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), line);
@@ -285,6 +304,17 @@ const TAIL = 50;
 const MAX = 100;
 const FAIL_TAIL = 500;
 
+// A deliberate read is not a log. `cat`, `sed -n 40,80p`, `awk NR>=…`, `git diff/show` on a path: the agent
+// named the exact bytes it wants, and a build log's shape (noise at both ends, signal at the end) does not
+// apply. Capping those at 100 lines is what makes reading a file through the shell WORSE than the Read tool,
+// and the transcripts show the loop it creates — a 248-line file arrives as 81 lines with its middle gone, and
+// the very next call re-reads the whole file through Read, paying for it twice. So a read gets the Read tool's
+// own ceiling, and overshoot is trimmed from the END (where a file read naturally stops) rather than the middle.
+const READ_MAX = 2000;
+// Anchored at a segment start so `cd /work/intentic && cat src/app.ts` is recognised, and deliberately narrow:
+// `git log` without `-p` is history (a log, correctly capped), `git log -p` is a read.
+const READ_COMMAND = /(?:^|[;&|]\s*)(?:cat|bat|sed\s+-n|awk|git\s+(?:diff|show)\b|git\s+log\s+(?:[^;&|]*\s)?-p)\b/;
+
 // The gated cleaning pipeline over already-split, ANSI/\r-cleaned lines. Exit-code-asymmetric: on success run the
 // matching command cleaners then the cap; on failure keep everything but a generous tail. `enabled` gates each id.
 //
@@ -316,8 +346,14 @@ export const cleanLines = (lines, { command, exitCode, enabled }) => {
         if (enabled.has("dedup")) {
             ran("dedup", dedupeRuns(out));
         }
-        if (enabled.has("cap") && out.length > MAX) {
-            ran("cap", [...out.slice(0, HEAD), `… ${out.length - HEAD - TAIL} lines elided …`, ...out.slice(-TAIL)]);
+        if (enabled.has("cap")) {
+            if (READ_COMMAND.test(command)) {
+                if (out.length > READ_MAX) {
+                    ran("cap", [...out.slice(0, READ_MAX), `… ${out.length - READ_MAX} more lines elided — narrow the range or use the Read tool …`]);
+                }
+            } else if (out.length > MAX) {
+                ran("cap", [...out.slice(0, HEAD), `… ${out.length - HEAD - TAIL} lines elided …`, ...out.slice(-TAIL)]);
+            }
         }
     } else {
         // Failures keep detail verbatim — only collapse long identical runs (lossless) and cap at a generous tail.

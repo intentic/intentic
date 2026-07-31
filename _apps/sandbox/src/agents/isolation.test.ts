@@ -49,6 +49,18 @@ test("shared state is re-bound from the aside mount, not from the shadowed path"
     expect(script).toContain(`mkdir -p '/work/.intentic'`);
 });
 
+test("the reference shelf comes back into the worktree, read-only, and only when the workspace has one", () => {
+    const script = isolationScript(plan);
+    // Without this a turn asked to "compare against refs/nimbalyst" finds no /work/refs at all and spends a
+    // call rediscovering that the shelf only exists at MAIN_MOUNT.
+    expect(script).toContain(`if [ -d '${MAIN_MOUNT}/refs' ]; then`);
+    expect(script).toContain(`mount --bind '${MAIN_MOUNT}/refs' '/work/refs'`);
+    // `ro` is ignored on the bind itself — it takes only on the remount, and the shelf is read-only by contract.
+    expect(script).toContain(`mount -o remount,bind,ro '/work/refs'`);
+    // Guarded, because most workspaces have no shelf and `set -e` would kill the namespace over its absence.
+    expect(script).toContain(`fi`);
+});
+
 test("a mirrored tree is an overlay over the main checkout, never a writable bind onto it", () => {
     const script = isolationScript(plan);
     // The whole point: pnpm hardlinks workspace sources into node_modules, so a WRITABLE bind here let a

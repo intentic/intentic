@@ -46,6 +46,17 @@ export const MAIN_MOUNT = "/mnt/intentic-main";
 // The workspace subdir that must stay SHARED rather than per-worktree — daemon state, not repo content.
 const SHARED_STATE = ".intentic";
 
+/* The reference shelf: repos cloned purely to be read against (`refs/eve`, `refs/t3code`). It is workspace
+ * content but not repo content, so a worktree does not carry it, and until now an isolated turn simply had no
+ * `refs/` — the user says "compare it to refs/nimbalyst", the agent runs `ls /work/refs`, gets ENOENT, and
+ * spends a call rediscovering that the shelf is only reachable at MAIN_MOUNT. It happened even to sessions
+ * that had just read the README paragraph warning about it.
+ *
+ * Bound READ-ONLY, which is not belt-and-braces but the shelf's actual contract: it is consultation material,
+ * never edited, and an EROFS is a better answer to a stray write than a change nobody will land. Two steps
+ * because a bind ignores `ro` in the same breath — the flag only takes on the remount. */
+const SHELF = "refs";
+
 /* WHAT A CHECKOUT CANNOT CARRY, and so has to come from the main tree.
  *
  * A worktree is TRACKED files only, and the two things a package's dependents resolve THROUGH are both
@@ -176,6 +187,12 @@ export const isolationScript = (plan: IsolationPlan, trailer: string = ANCHOR_TR
     ];
     const shared = join(plan.root, SHARED_STATE);
     lines.push(`mkdir -p ${quote(shared)}`, `mount --bind ${quote(join(MAIN_MOUNT, SHARED_STATE))} ${quote(shared)}`);
+    // Conditional rather than plan-driven: the shelf is optional by nature (most workspaces have none), and a
+    // `set -e` script must not die over a directory whose absence means nothing. The `if` is the whole guard.
+    const shelf = join(plan.root, SHELF);
+    lines.push(
+        `if [ -d ${quote(join(MAIN_MOUNT, SHELF))} ]; then mkdir -p ${quote(shelf)}; mount --bind ${quote(join(MAIN_MOUNT, SHELF))} ${quote(shelf)}; mount -o remount,bind,ro ${quote(shelf)}; fi`,
+    );
     for (const rel of plan.mirrors) {
         const target = join(plan.root, rel);
         // One layer dir per mount: upperdir and workdir must be siblings on one filesystem, and workdir must
