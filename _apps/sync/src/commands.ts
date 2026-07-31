@@ -8,7 +8,7 @@ import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { registerAutostart, unregisterAutostart } from "./autostart.js";
 import { knownHostsPath, type Log, readConfig, type SyncConfig, type SyncMode, sshKeyPath, writeConfig } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
-import { type CliLauncher, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
+import { type CliLauncher, retireMirror, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
 import { ensureCloudflared, ensureMutagen, ensureSyncSession, runMutagen, sessionName } from "./mutagen.js";
 import {
     assertSshConfigVisible,
@@ -168,6 +168,21 @@ const setup = buildCommand<SetupFlags>({
             ...(localDir === undefined ? {} : { localDir }),
             ...(syncToken === undefined ? {} : { syncToken }),
         };
+
+        // Retire the PREVIOUS pairing before this one replaces it on disk. A watcher left resident from an
+        // earlier sandbox keeps serving whatever the config says, so it quietly adopts this pairing while
+        // still running the agent binary this very run just replaced — every fix shipped since the day it
+        // started stays inert until the machine reboots, and `setup` reports "already running (pid …)" as if
+        // that were the same thing. Its forwards are worse: they are named for the OLD sandbox, the config
+        // written below names none of them, and Mutagen holds their localhost ports for good — so every port
+        // the old sandbox used greets the new one as "busy on this machine" and never mirrors again.
+        const retired = await retireMirror(mutagen);
+        if (retired.pid !== undefined) {
+            out(`stopped the previous pairing's mirror watcher (pid ${retired.pid}) — it was running the agent binary this run replaced.`);
+        }
+        if (retired.forwards > 0) {
+            out(`released ${retired.forwards} port forward(s) the previous pairing had left holding localhost.`);
+        }
         await writeConfig(config);
 
         // Start the file sync — or, when re-running setup found the same session already running on this

@@ -12,8 +12,23 @@ const CLOUDFLARED_VERSION = "2026.7.2";
 export const sessionName = (sandboxId: string): string => `intentic-${sanitizeId(sandboxId)}`;
 
 // One port-mirror forward session per port, deterministically named so `mirror` can reconcile (terminate a
-// vanished port's session, recreate a live one) without querying Mutagen's session list.
-export const forwardSessionName = (sandboxId: string, port: number): string => `intentic-fwd-${sanitizeId(sandboxId)}-${port}`;
+// vanished port's session, recreate a live one) without querying Mutagen's session list. The shared prefix is
+// what makes every forward this agent has EVER created findable again, whichever pairing created it — the name
+// carries the sandbox id, so a session outlives the config that could name it (see ourForwardSessions).
+const FORWARD_PREFIX = "intentic-fwd-";
+export const forwardSessionName = (sandboxId: string, port: number): string => `${FORWARD_PREFIX}${sanitizeId(sandboxId)}-${port}`;
+
+// Session names split out of `forward list`'s output. Whitespace-separated is unambiguous because a name is a
+// sanitized id plus a port number, and anything outside our prefix belongs to the user's own Mutagen — never
+// ours to terminate.
+export const parseForwardNames = (listed: string): string[] => listed.split(/\s+/).filter((name) => name.startsWith(FORWARD_PREFIX));
+
+// Every forward session in the daemon that is ours, whichever sandbox created it. A daemon that isn't running
+// (or a list that fails) has no sessions of ours to report — and nothing to tear down either.
+export const ourForwardSessions = (mutagen: string): string[] => {
+    const result = spawnSync(mutagen, ["forward", "list", "--template", "{{range .}}{{.Name}} {{end}}"], { encoding: "utf8" });
+    return result.status === 0 ? parseForwardNames(result.stdout) : [];
+};
 
 // `mutagen forward create` args: bind the SAME port on the local loopback and pipe it to the sandbox listener
 // at its recorded loopback address — `host` is the daemon-reported dial host, because a `localhost` bind inside

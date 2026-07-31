@@ -7,7 +7,7 @@ import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import { unregisterAutostart } from "./autostart.js";
 import { type Log, type MirroredPort, mirrorLogPath, mirrorPidPath, readConfig, type SyncConfig, writeConfig } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
-import { ensureMutagen, ensureSyncSession, forwardSessionName, mutagenForwardArgs, runMutagen } from "./mutagen.js";
+import { ensureMutagen, ensureSyncSession, forwardSessionName, mutagenForwardArgs, ourForwardSessions, runMutagen } from "./mutagen.js";
 import { sshAlias } from "./ssh.js";
 
 // Port mirroring: every WORKSPACE port listening in the sandbox is bound to the SAME port on this machine's
@@ -39,6 +39,11 @@ const PORTS_TIMEOUT_MS = 10_000;
 // The sandbox's repo SET, though, changes only when a repo is added or removed — so it is cached between passes
 // and re-listed only this often, sparing a round trip on every tick in between.
 const REPO_LIST_EVERY_TICKS = 12;
+
+// How long to wait for a signalled watcher to actually exit, and how often to look. A watcher spends its life
+// asleep between polls, so it answers a signal in milliseconds; this bound only covers one wedged in a fetch.
+const WATCHER_EXIT_TIMEOUT_MS = 2000;
+const WATCHER_EXIT_POLL_MS = 50;
 
 // Consecutive definitive token rejections before the watcher treats the enrollment as revoked ("Disable sync"
 // in the browser, or a recreated sandbox that lost the enrollment) and tears itself down. Revocation never
@@ -154,20 +159,25 @@ const sameMirrorSet = (a: readonly MirroredPort[], b: readonly MirroredPort[]): 
     return b.every((mirrored) => seen.has(mirrorKey(mirrored)));
 };
 
-// The pidfile is how `mirror`/`--stop`/`uninstall` find the resident watcher across processes. A stale pidfile
-// (the watcher crashed) reads as "not running": `process.kill(pid, 0)` throws ESRCH for a dead pid; EPERM means
-// the pid exists but belongs to another user, which still counts as alive.
+// Whether a pid is a live process: `process.kill(pid, 0)` throws ESRCH for a dead one, while EPERM means it
+// exists but belongs to another user — which still counts as alive.
+const alive = (pid: number): boolean => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "EPERM";
+    }
+};
+
+// The pidfile is how `mirror`/`--stop`/`uninstall`/`setup` find the resident watcher across processes. A stale
+// pidfile (the watcher crashed) reads as "not running".
 export const readLiveWatcherPid = async (): Promise<number | undefined> => {
     const pid = Number((await readFile(mirrorPidPath, "utf8").catch(() => "")).trim());
     if (!Number.isInteger(pid) || pid <= 0) {
         return undefined;
     }
-    try {
-        process.kill(pid, 0);
-        return pid;
-    } catch (error) {
-        return (error as NodeJS.ErrnoException).code === "EPERM" ? pid : undefined;
-    }
+    return alive(pid) ? pid : undefined;
 };
 
 // On SIGTERM/SIGINT the watcher drops its pidfile and exits, leaving the forwards up (Mutagen's daemon holds
@@ -220,7 +230,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                 if (error instanceof SyncAuthError && ++rejectedPolls >= REVOKED_POLLS) {
                     log(`the sandbox rejected the sync token ${REVOKED_POLLS} polls in a row — this machine's enrollment was revoked.`);
                     await unregisterAutostart(log);
-                    await teardownForwards(log);
+                    log(stopped(await teardownForwards(mutagen)));
                     await rm(mirrorPidPath, { force: true });
                     log("re-enable from the Desktop sync card, or run `intentic-sync uninstall` to remove the agent entirely.");
                     return;
@@ -262,23 +272,42 @@ export const startMirrorWatcher = async (launcher: CliLauncher, log: Log): Promi
     log(`mirroring the sandbox's workspace ports onto localhost (pid ${child.pid}). Details: ${mirrorLogPath}`);
 };
 
-// Tear down every forward the last reconcile left alive and clear the recorded baseline. Shared by
-// `--stop`/`uninstall` (via stopMirror) and the watcher's own revocation teardown.
-const teardownForwards = async (log: Log): Promise<void> => {
-    const config = await readConfig();
-    const mirrored = config.mirroredPorts ?? [];
-    if (mirrored.length > 0) {
-        const executor = mutagenExecutor(await ensureMutagen(), config);
-        for (const entry of mirrored) {
-            executor.terminate(entry.port);
-        }
+// Tear down every forward session this agent owns — read from the DAEMON, not from the config's baseline. A
+// setup that pairs a new sandbox writes a config with no baseline at all, so everything the previous pairing
+// left running was nameable by nobody and terminated by no one, while Mutagen kept its localhost listener
+// bound for good (verified against 0.18.1: a session whose sandbox has been destroyed still reports
+// ForwardingConnections and still holds the port). Every port the old sandbox used then read as "busy on this
+// machine" to the next pairing and silently stopped mirroring, for as long as the machine stayed up.
+const teardownForwards = async (mutagen: string): Promise<number> => {
+    const names = ourForwardSessions(mutagen);
+    if (names.length > 0) {
+        spawnSync(mutagen, ["forward", "terminate", ...names], { stdio: "ignore" });
+    }
+    // A baseline naming forwards that no longer exist would make the next reconcile treat those ports as
+    // already mirrored and never recreate them. No config yet (a first-ever setup) means no baseline to clear.
+    const config = await readConfig().catch(() => undefined);
+    if (config !== undefined && (config.mirroredPorts ?? []).length > 0) {
         await writeConfig({ ...config, mirroredPorts: [] });
     }
-    log(mirrored.length === 0 ? "port mirroring stopped." : `port mirroring stopped; tore down ${mirrored.length} forward(s).`);
+    return names.length;
 };
 
-// Stop mirroring: kill the watcher, then tear down every forward it left up.
-export const stopMirror = async (log: Log): Promise<void> => {
+const stopped = (forwards: number): string =>
+    forwards === 0 ? "port mirroring stopped." : `port mirroring stopped; tore down ${forwards} forward(s).`;
+
+// What retiring found to retire, so the caller can phrase it: a deliberate `--stop` reports that it stopped,
+// while a setup reports what the PREVIOUS pairing had left behind.
+export interface RetiredMirror {
+    readonly pid?: number;
+    readonly forwards: number;
+}
+
+// Retire this machine's port mirroring completely: stop the resident watcher, then tear down its forwards.
+// Waits for the watcher to be gone rather than merely signalled — it re-reads the config every tick and writes
+// the mirror baseline back into it, so a caller that replaces the config while it is still alive can have the
+// OLD pairing written back over the new one; on Windows it also holds the agent binary open. Bounded, because
+// a watcher that won't die is not a reason to fail the command that asked for this.
+export const retireMirror = async (mutagen: string): Promise<RetiredMirror> => {
     const pid = await readLiveWatcherPid();
     if (pid !== undefined) {
         try {
@@ -286,7 +315,16 @@ export const stopMirror = async (log: Log): Promise<void> => {
         } catch {
             // already gone between the read and the kill — nothing to stop
         }
+        for (let waited = 0; waited < WATCHER_EXIT_TIMEOUT_MS && alive(pid); waited += WATCHER_EXIT_POLL_MS) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded wait for one pid, by definition serial
+            await sleep(WATCHER_EXIT_POLL_MS);
+        }
     }
     await rm(mirrorPidPath, { force: true });
-    await teardownForwards(log);
+    return { ...(pid === undefined ? {} : { pid }), forwards: await teardownForwards(mutagen) };
+};
+
+// Stop mirroring on purpose (`mirror --stop`, `uninstall`) and say what went.
+export const stopMirror = async (log: Log): Promise<void> => {
+    log(stopped((await retireMirror(await ensureMutagen())).forwards));
 };

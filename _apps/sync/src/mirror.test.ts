@@ -1,5 +1,6 @@
+import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { PortSummary } from "@intentic/sandbox-contract";
@@ -12,7 +13,7 @@ import type { ForwardExecutor } from "./mirror.js";
 process.env.HOME = mkdtempSync(join(tmpdir(), "sync-mirror-"));
 process.env.USERPROFILE = process.env.HOME;
 const { mirrorPidPath } = await import("./config.js");
-const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, SyncAuthError } = await import("./mirror.js");
+const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, retireMirror, SyncAuthError } = await import("./mirror.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
 // setup() creates ~/.intentic/sync via writeConfig; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(mirrorPidPath), { recursive: true });
@@ -139,6 +140,56 @@ describe("readLiveWatcherPid", () => {
         await expect(readLiveWatcherPid()).resolves.toBe(process.pid);
         await writeFile(mirrorPidPath, "not-a-pid");
         await expect(readLiveWatcherPid()).resolves.toBeUndefined();
+    });
+});
+
+describe("retireMirror", () => {
+    it("stops the resident watcher before returning and terminates only the forwards that are ours", async () => {
+        // A stand-in mutagen: reports three live forward sessions — one of them a stranger's — and records what
+        // it was asked to terminate. Real mutagen was checked separately; what matters here is which names go.
+        const record = join(dirname(mirrorPidPath), "terminated.txt");
+        const fakeMutagen = join(dirname(mirrorPidPath), "fake-mutagen.sh");
+        await writeFile(
+            fakeMutagen,
+            `#!/bin/sh
+if [ "$2" = "list" ]; then echo "intentic-fwd-sandbox-old-5173 someone-elses-forward intentic-fwd-sandbox-old-6480"; exit 0; fi
+if [ "$2" = "terminate" ]; then shift 2; echo "$@" > ${record}; exit 0; fi
+exit 0
+`,
+            { mode: 0o755 },
+        );
+        // A watcher shaped like the real one: it handles SIGTERM and takes a moment to wind down (the real one
+        // removes its pidfile first). An instantly-dying stand-in cannot tell "waited for it" from "signalled
+        // it and moved on" — which is the whole property under test.
+        const watcher = spawn(
+            process.execPath,
+            ["-e", 'process.on("SIGTERM", () => setTimeout(() => process.exit(0), 300)); setInterval(() => {}, 1000); console.log("ready")'],
+            { detached: true, stdio: ["ignore", "pipe", "ignore"] },
+        );
+        const pid = watcher.pid;
+        if (pid === undefined || watcher.stdout === null) {
+            throw new Error("the stand-in watcher didn't start");
+        }
+        // Wait for its handler to be INSTALLED. Signalling a node process still booting kills it outright, which
+        // silently turns this into a test of an instantly-dying watcher — one that passes either way.
+        await new Promise((ready) => watcher.stdout?.once("data", ready));
+        await writeFile(mirrorPidPath, String(pid));
+
+        const retired = await retireMirror(fakeMutagen);
+
+        expect(retired).toEqual({ pid, forwards: 2 });
+        // The stranger's session is untouched: this agent owns a name prefix, not the user's whole daemon.
+        expect((await readFile(record, "utf8")).trim()).toBe("intentic-fwd-sandbox-old-5173 intentic-fwd-sandbox-old-6480");
+        // GONE by the time this resolves, not merely signalled — setup overwrites the config the watcher was
+        // serving in the very next statement, and a watcher still alive writes its own baseline back over it.
+        expect(() => process.kill(pid, 0)).toThrow();
+        await expect(readFile(mirrorPidPath, "utf8")).rejects.toThrow();
+    });
+
+    it("is a no-op when nothing is running", async () => {
+        const quiet = join(dirname(mirrorPidPath), "quiet-mutagen.sh");
+        await writeFile(quiet, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+        await expect(retireMirror(quiet)).resolves.toEqual({ forwards: 0 });
     });
 });
 
