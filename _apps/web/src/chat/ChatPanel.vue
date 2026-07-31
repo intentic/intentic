@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { BottomSheet, useDevice } from "@intentic-app/ui";
-import Popover from "primevue/popover";
+import { AnchoredOverlay, BottomSheet, useDevice } from "@intentic-app/ui";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { type AgentCommand, providerLabel } from "@intentic/sandbox-contract";
@@ -90,7 +89,7 @@ const {
 } = useChat();
 const router = useRouter();
 const layout = useLayout();
-const { overlayTarget, poppedOut } = useChatPopout();
+const { poppedOut } = useChatPopout();
 const { activeSandboxId, reachable, connection } = useSandbox();
 // The daemon refused this Google account outright — a different sentence than "not connected yet", because
 // waiting will not fix it.
@@ -121,15 +120,21 @@ const modelHint = computed(() =>
 // nothing. Either way the segments hide.
 const efforts = computed(() => (capabilities.value.effort ? effortsFor(provider.value, model.value, thinking.value) : []));
 
-// The mobile pickers: pill taps open bottom sheets instead of anchored popovers.
+// The mobile pickers: pill taps open bottom sheets instead of anchored panels.
 const modelSheetOpen = ref(false);
 const modeSheetOpen = ref(false);
 
 const scroller = ref<HTMLElement>();
 const content = ref<HTMLElement>();
 const input = ref<HTMLTextAreaElement>();
-const providerModel = ref<InstanceType<typeof Popover> | null>(null);
-const modeMenu = ref<InstanceType<typeof Popover> | null>(null);
+// The desktop pickers: open state plus the pill each one hangs off. The PILL is what says which window the
+// panel opens in — it is the anchor, and AnchoredOverlay derives the document, the viewport it measures against
+// and the dismissal listeners from it. That is the whole reason this panel can be popped out into a real
+// window and still have overlays that land in the right place and close when clicked away from.
+const modelOpen = ref(false);
+const modeOpen = ref(false);
+const modelPill = ref<HTMLElement>();
+const modePill = ref<HTMLElement>();
 
 // Auto-follow: the transcript stays at its newest content unless the user has scrolled up to read. The rule
 // and every geometry change it has to survive live in the composable; the panel only says when a NEW
@@ -232,11 +237,14 @@ const contextRing = computed(() => {
     };
 });
 
-// The model popup is anchored to the composer pill, which lives behind `v-if="connected"`. Switching to a
-// disconnected provider unmounts that anchor while the popup is still open, stranding it in the top-left
-// corner — close it when the composer goes away.
+// The pickers are anchored to the composer pills, which live behind `v-if="connected"`. Switching to a
+// disconnected provider unmounts those anchors while a picker is still open — an open panel with nothing to
+// hang off. Close them with the composer that owns them.
 watch(connected, (isConnected) => {
-    if (!isConnected) providerModel.value?.hide();
+    if (!isConnected) {
+        modelOpen.value = false;
+        modeOpen.value = false;
+    }
 });
 
 // True for the assistant turn currently being streamed: the last assistant bubble while streaming. Not
@@ -1201,10 +1209,12 @@ watch(
 
                                     <div class="flex items-center gap-1 px-2.5 pb-2.5">
                                         <button
+                                            ref="modelPill"
                                             type="button"
                                             class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            @click="mobile ? (modelSheetOpen = true) : providerModel?.toggle($event)"
+                                            @click="mobile ? (modelSheetOpen = true) : (modelOpen = !modelOpen)"
                                             v-tooltip.top="modelHint"
+                                            :aria-expanded="modelOpen"
                                             :aria-label="`Provider and model: ${providerName} · ${modelLabelText}`"
                                         >
                                             <ProviderLogo :provider="provider" class="shrink-0 text-2xs text-link" />
@@ -1234,10 +1244,12 @@ watch(
                                         </div>
 
                                         <button
+                                            ref="modePill"
                                             type="button"
                                             class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            @click="mobile ? (modeSheetOpen = true) : modeMenu?.toggle($event)"
+                                            @click="mobile ? (modeSheetOpen = true) : (modeOpen = !modeOpen)"
                                             v-tooltip.top="modeDescription"
+                                            :aria-expanded="modeOpen"
                                             aria-label="Agent mode"
                                         >
                                             <Icon :name="modeIcon" class="text-2xs text-link" />
@@ -1358,28 +1370,20 @@ watch(
             </BottomSheet>
         </template>
         <template v-else>
-            <!-- Flush content (no composer-pop-content padding): the picker's search bar and rail sit
-                     edge-to-edge against the popover chrome.
-
-                     CAPPED TO THE ROOM ABOVE THE PILL, because the pill is a few rows off the bottom of the
-                     window and everything the picker has is above it. PrimeVue positions an overlay that does
-                     not fit by pinning it to the top of the viewport — so a picker taller than that gap opened
-                     ON TOP OF the pill that owns it, and a panel covering its own trigger cannot be closed:
-                     every click meant for the pill lands inside the overlay, which is exactly the click the
-                     dismiss logic ignores (and the search box was clipped off the top of the screen at the same
-                     time). The cap is static rather than measured so it is in force on the very first layout —
-                     the pill's distance from the bottom edge is fixed by the composer's own rows, so the slack
-                     here only has to clear those. The list inside shrinks to fit (see ChatModelPicker). -->
-            <Popover ref="providerModel" :append-to="overlayTarget" :pt="{ content: { class: '!p-0' } }">
-                <div class="flex max-h-[calc(100dvh-10rem)] w-[26rem] flex-col overflow-hidden">
-                    <ChatModelPicker @selected="providerModel?.hide()" />
+            <!-- No height cap here any more: AnchoredOverlay measures the room its side of the pill actually has
+                 IN THE PILL'S OWN WINDOW and caps itself to it, so the picker fits whether the panel is docked in
+                 a column or floating in a window the user has since made short. The `min-h-0` column is what
+                 passes that cap down to the picker's scrolling list (see ChatModelPicker). -->
+            <AnchoredOverlay v-model="modelOpen" :anchor="modelPill">
+                <div class="flex min-h-0 w-[26rem] flex-col">
+                    <ChatModelPicker @selected="modelOpen = false" />
                 </div>
-            </Popover>
-            <Popover ref="modeMenu" :append-to="overlayTarget" :pt="{ content: { class: 'composer-pop-content' } }">
-                <div class="w-56">
-                    <ChatModeMenu @selected="modeMenu?.hide()" />
+            </AnchoredOverlay>
+            <AnchoredOverlay v-model="modeOpen" :anchor="modePill" cross="end">
+                <div class="w-56 p-1">
+                    <ChatModeMenu @selected="modeOpen = false" />
                 </div>
-            </Popover>
+            </AnchoredOverlay>
         </template>
     </div>
 </template>

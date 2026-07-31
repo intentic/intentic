@@ -1,0 +1,95 @@
+/* The panel raised by AnchoredOverlay. Plain CSS rather than a PrimeVue preset because the component is ours —
+ * the box is built in whichever document its anchor lives in, and a pop-out window gets these rules through the
+ * stylesheet clone usePopout does (the same deal as tooltip.css).
+ *
+ * TWO ELEMENTS, one panel: the outer box is the positioned frame the arrow hangs off (so it must not clip), and
+ * the surface inside is what paints, rounds and CLIPS the content. Height is capped on the frame — the room its
+ * side of the anchor actually has, measured in the anchor's own window (anchorPlacement.ts) — and the surface
+ * passes that cap down as a flex column with `min-height: 0`, which is what lets a picker's list scroll inside
+ * a panel that never hangs off the window's edge. */
+@layer components {
+    .ui-anchored {
+        position: fixed;
+        z-index: 1000; /* PrimeVue's own overlay tier; tooltips (1200) still win, which is right */
+        display: flex;
+        flex-direction: column;
+        animation: ui-fade-in 0.12s ease-out both;
+    }
+
+    .ui-anchored-surface {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+        border: 1px solid var(--color-line);
+        border-radius: var(--ui-radius);
+        background: var(--color-card);
+        box-shadow: 0 10px 30px rgb(0 0 0 / 0.32);
+    }
+
+    /* The arrow: two stacked triangles, the back one a pixel behind the front, so it reads as the surface's own
+     * border turning a corner. --ui-anchored-arrow is the anchor's centre in the box's coordinates (set by the
+     * component), so a panel clamped sideways to stay on screen still points at the control that opened it. */
+    .ui-anchored::before,
+    .ui-anchored::after {
+        content: "";
+        position: absolute;
+        border: 6px solid transparent;
+    }
+
+    .ui-anchored-top::before,
+    .ui-anchored-top::after {
+        top: 100%;
+        left: var(--ui-anchored-arrow);
+        margin-left: -6px;
+    }
+    .ui-anchored-top::before {
+        border-top-color: var(--color-line);
+    }
+    .ui-anchored-top::after {
+        margin-top: -1px;
+        border-top-color: var(--color-card);
+    }
+
+    .ui-anchored-bottom::before,
+    .ui-anchored-bottom::after {
+        bottom: 100%;
+        left: var(--ui-anchored-arrow);
+        margin-left: -6px;
+    }
+    .ui-anchored-bottom::before {
+        border-bottom-color: var(--color-line);
+    }
+    .ui-anchored-bottom::after {
+        margin-bottom: -1px;
+        border-bottom-color: var(--color-card);
+    }
+
+    .ui-anchored-left::before,
+    .ui-anchored-left::after {
+        left: 100%;
+        top: var(--ui-anchored-arrow);
+        margin-top: -6px;
+    }
+    .ui-anchored-left::before {
+        border-left-color: var(--color-line);
+    }
+    .ui-anchored-left::after {
+        margin-left: -1px;
+        border-left-color: var(--color-card);
+    }
+
+    .ui-anchored-right::before,
+    .ui-anchored-right::after {
+        right: 100%;
+        top: var(--ui-anchored-arrow);
+        margin-top: -6px;
+    }
+    .ui-anchored-right::before {
+        border-right-color: var(--color-line);
+    }
+    .ui-anchored-right::after {
+        margin-right: -1px;
+        border-right-color: var(--color-card);
+    }
+}

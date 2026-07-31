@@ -170,26 +170,30 @@ const onSomeScreen = (frame: Frame): boolean =>
 const adopters = new Map<string, (win: Window) => boolean>();
 window.__intentic = { adoptPopout: (name, win) => adopters.get(name)?.(win) === true };
 
-/* DISMISSAL, IN THE WINDOW THE USER ACTUALLY CLICKED IN.
+/* DISMISSAL, IN THE WINDOW THE USER ACTUALLY CLICKED IN — FOR THE OVERLAYS WE DON'T OWN.
  *
- * Every overlay in the app arms itself the same way while it is open: ONE listener on `document`, watching for
- * the click that landed outside it (Escape is the same trick with a keydown). `document` in this realm is the
- * MAIN window's — and a popped-out panel's overlays are open in ANOTHER document, where a click on empty space
- * dispatches and dies without ever reaching that listener. So out there nothing dismissed: the model picker,
- * the mode menu, the tab context menu and the past-chats panel all stayed up until something else closed them.
- * One line inside PrimeVue, multiplied by every overlay type the panels use (Popover, ContextMenu, Select,
- * Dialog…) and by the app's own.
+ * A PrimeVue overlay arms itself the same way while it is open: ONE listener on `document`, watching for the
+ * click that landed outside it (Escape is the same trick with a keydown). `document` in this realm is the MAIN
+ * window's — and a popped-out panel's overlays are open in ANOTHER document, where a click on empty space
+ * dispatches and dies without ever reaching that listener. So out there nothing dismissed: the tab context menu
+ * and the terminal's dialogs stayed up until something else closed them. One line inside PrimeVue, multiplied by
+ * every overlay type the panels use.
  *
- * So the fix is at the registration rather than at the call sites — the same choice the tooltip directive makes
- * by deriving its window from the anchor: a document-level interaction listener armed in this realm is armed on
- * every document the app is currently rendering into, and disarmed from them together. Nothing has to know it
- * is in a pop-out, and an overlay added later inherits this for free.
+ * Mirroring the LISTENER, not forwarding the event, is what makes this safe. Each overlay receives the real
+ * click, with its real target, so its own guards still decide the outcome — PrimeVue reads that target to tell
+ * "truly outside" from "the trigger I was just opened by" and from "my own content". A synthetic click
+ * re-dispatched into the main document would carry the main document as its target, and every overlay would
+ * close on the very click that opened it.
  *
- * Mirroring the LISTENER, not forwarding the event, is the whole point. Each overlay receives the real click,
- * with its real target, so its own guards still decide the outcome — PrimeVue reads that target to tell "truly
- * outside" from "the trigger I was just opened by" and from "my own content". A synthetic click re-dispatched
- * into the main document would carry the main document as its target, and every popover would close on the very
- * click that opened it. */
+ * WHAT THIS IS NOT. It is not the answer for an overlay we write, and it was never the whole answer for one we
+ * don't: dismissal is only one of the four things a library overlay does against the module-scope realm, and
+ * PrimeVue also MEASURES its room and re-aligns on resize against the opener's viewport — which is how the
+ * model picker came to open off the bottom of a short pop-out window, on top of the pill that owns it, where no
+ * click could reach it. The dismissal it swallowed there was its own. So the composer's pickers and the
+ * past-chats panel are AnchoredOverlay now (`@intentic-app/ui`), which derives document, viewport and listeners
+ * from the ANCHOR and is therefore right in either window by construction. New overlays inside a poppable panel
+ * belong there too; this stays for the PrimeVue components still in use (ContextMenu, Dialog), where it is the
+ * only seam short of reimplementing them. */
 
 // What an overlay dismisses on: a press, a click, a context menu, a key. Deliberately not every document event
 // — the rest (`visibilitychange`, `DOMContentLoaded`, …) describe the document that owns the listener rather

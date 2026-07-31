@@ -724,7 +724,12 @@ const adoptStranded = (target: AgentProvider, added: OauthAccount): void => {
  * conversation and no "switched to…" divider is raised. Nothing to move to (the provider has no accounts left)
  * leaves the pin alone: the composer's connect gate is what has something to say then, not the account axis. */
 const repointStranded = (target: AgentProvider, live: readonly OauthAccount[]): void => {
-    const next = selectedAccountId.value[target];
+    const picked = selectedAccountId.value[target];
+    // Where a stranded chat lands: the remembered pick when the list that just arrived still holds it, else the
+    // provider's first account. Resolved against THAT list rather than through rememberedAccountFor, which
+    // deliberately returns the pick unvalidated until every provider's first read has landed — moving a chat
+    // onto an id this very list says is gone is the failure this function exists to prevent.
+    const next = live.some((entry) => entry.id === picked) ? picked : live[0]?.id;
     if (next === undefined) {
         return;
     }
@@ -755,12 +760,20 @@ const refreshAccounts = async (target: AgentProvider): Promise<OauthAccount[]> =
         }
     }
     usageStatusByAccount.value = seeded;
-    // The remembered pick, against the list that just landed — the only authority on whether it still exists.
-    const picked = selectedAccountId.value[target];
-    const valid = list.some((entry) => entry.id === picked) ? picked : list[0]?.id;
-    if (valid !== picked) {
-        selectedAccountId.value = { ...selectedAccountId.value, [target]: valid };
-    }
+    /* THE REMEMBERED PICK IS NOT REWRITTEN FROM A LIST. It used to be — a pick this answer didn't contain was
+     * replaced by `list[0]`, and the watch above then PERSISTED that. Which made every list a verdict on the
+     * user's choice, including the ones that are not: a 200 carrying an empty array is what a daemon serves
+     * while its credential store is still coming up (the dir read fails soft, by design), and one of those was
+     * enough to forget a deliberate choice for good — from then on every new session opened on the first
+     * account, with nothing left anywhere to say otherwise. That is the "the account randomly switches back"
+     * report.
+     *
+     * A stale pick costs nothing, because forgetting was never what made the app correct: every reader already
+     * resolves it against the live list (rememberedAccountFor for a new conversation, repointStranded for the
+     * open ones), so an id that is genuinely gone is stepped over on the way to the first account and a pick
+     * that is merely unreadable this second survives to be honoured when the real list lands. It is dropped
+     * only where the user actually said so — a disconnect of that exact account (disconnectAccount), or a new
+     * pick (selectAccount / a connect). */
     repointStranded(target, list);
     return list;
 };

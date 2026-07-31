@@ -356,9 +356,6 @@
 .qopt-on {
     background: color-mix(in srgb, var(--color-primary-500) 14%, transparent);
 }
-.p-popover-content.composer-pop-content {
-    padding: 0.25rem;
-}
 .qopt-on:hover {
     background: color-mix(in srgb, var(--color-primary-500) 18%, transparent);
 }

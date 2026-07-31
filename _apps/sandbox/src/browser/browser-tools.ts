@@ -150,6 +150,7 @@ export const browserServerSpec = (
         "1280,800",
     ],
     env: { ...process.env, DISPLAY: display },
+    timeout: BROWSER_CALL_TIMEOUT_MS,
     alwaysLoad: true,
 });
 
@@ -179,10 +180,31 @@ export const isolatedBrowserSpec = (cli: string, executablePath: string, outputD
     // DISPLAY is stripped, not merely unset: a headless Chromium that inherits one from the daemon's own
     // environment will try to talk to that X server and fail on a display it was never meant to touch.
     env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "DISPLAY")) as Record<string, string>,
+    timeout: BROWSER_CALL_TIMEOUT_MS,
     // NOT alwaysLoad: @playwright/mcp carries ~20 tools, and pinning them into every turn's prompt taxes the
     // turns that never browse. Deferred, they cost nothing until ToolSearch pulls them in — the system append
     // names the server so the model knows it is there to look for.
 });
+
+/* WHY A BROWSER TOOL CALL HAS A DEADLINE.
+ *
+ * @playwright/mcp bounds its own ACTIONS — a click waits 5s for the element, a navigation 60s for the load, and
+ * both come back as errors the agent can read and work around. One tool escapes that entirely: `browser_evaluate`
+ * hands the page an expression and AWAITS whatever promise it returns, and `page.evaluate` has no timeout in
+ * Playwright's API at all (verified: setDefaultTimeout does not reach it). So an in-page wait that never settles
+ * is a tool call that never returns, and the turn stops there — no error, no frame, nothing to retry. It is not a
+ * hypothetical: a session diagnosing THIS repo's pop-out overlays wrote `while (document.querySelector('.p-popover'))
+ * { click(pill); await sleep(150) }` to close a picker before the next probe, against the very bug that stopped
+ * the picker from closing. The loop could not terminate, and the turn sat there until the owner killed the
+ * browser from /browsers — the one thing that ends it, because destroying the page rejects the pending evaluate.
+ *
+ * The SDK's per-server `timeout` is the fix at the right level: a hard wall-clock ceiling per tool call, applied
+ * to the browser servers alone. It has to be per-server rather than the MCP_TOOL_TIMEOUT env var, because the
+ * same agent process holds MCP tools that are SUPPOSED to wait indefinitely — the ones that ask the owner a
+ * question and wait for a human to answer. Two minutes clears every legitimate browser call by a wide margin
+ * (the slowest bounded thing in there is a 60s navigation) and turns an unbounded stall into an error the agent
+ * reads and moves on from. */
+const BROWSER_CALL_TIMEOUT_MS = 120_000;
 
 // What both server kinds need before either can run.
 interface BrowserRuntime {

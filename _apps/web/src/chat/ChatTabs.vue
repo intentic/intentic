@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { cmp, type IconName } from "@intentic-app/ui";
+import { AnchoredOverlay, cmp, type IconName } from "@intentic-app/ui";
 import type { Disposable } from "@intentic/extension-api";
 import { type AgentOrigin, providerLabel } from "@intentic/sandbox-contract";
 import ContextMenu from "primevue/contextmenu";
 import type { MenuItem } from "primevue/menuitem";
-import Popover from "primevue/popover";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { markSegments, useAgentFilter } from "../composables/agents/useAgentFilter";
@@ -280,7 +279,12 @@ const originOf = (conversation: Conversation): AgentOrigin | undefined => agentB
 // one, and a tab that looks identical to a live agent is how "didn't I just archive that?" starts.
 const isArchived = (conversation: Conversation): boolean => agentById(conversation.conversationId)?.archivedAt !== undefined;
 
-const history = ref<InstanceType<typeof Popover> | null>(null);
+/* The history panel and WHICH button it is hanging off — the docked strip's glyph or the rail's "Past chats…"
+ * row, whichever was pressed. The anchor is also what decides the window it opens in (AnchoredOverlay derives
+ * document, viewport and dismissal from it), and those two buttons live in different ones: the rail's is in the
+ * pop-out window, the strip's in the app. */
+const historyOpen = ref(false);
+const historyAnchor = ref<HTMLElement>();
 const searchInput = ref<HTMLInputElement | null>(null);
 
 // The history search box. Filters the list by chat title or content (content scanned server-side over recent
@@ -563,7 +567,11 @@ const onStripContextMenu = (event: MouseEvent): void => {
 const openHistory = (event: Event): void => {
     query.value = ``;
     void loadSessions();
-    history.value?.toggle(event);
+    historyAnchor.value = event.currentTarget instanceof HTMLElement ? event.currentTarget : undefined;
+    historyOpen.value = !historyOpen.value;
+    if (historyOpen.value) {
+        void nextTick(() => searchInput.value?.focus());
+    }
 };
 </script>
 
@@ -986,12 +994,11 @@ const openHistory = (event: Event): void => {
                 <Icon name="plus" class="text-2xs" />New agent
             </button>
         </div>
-        <!-- Capped to the room above the trigger, which sits at the foot of the rail: an overlay that does not
-             fit gets pinned to the top of the viewport by PrimeVue, landing on top of the button that owns it —
-             and a panel covering its own trigger swallows every click meant to close it (same reasoning as the
-             model picker's cap in ChatPanel). The session list gives way; the search box holds its size. -->
-        <Popover ref="history" :append-to="overlayTarget" @show="searchInput?.focus()">
-            <div class="flex max-h-[calc(100dvh-10rem)] w-72 flex-col overflow-hidden">
+        <!-- Anchored to whichever button was pressed, and capped by AnchoredOverlay to the room that button's
+             own window has — the rail's trigger sits at the foot of the pop-out window, where the room above is
+             whatever the user has dragged it to. The session list gives way; the search box holds its size. -->
+        <AnchoredOverlay v-model="historyOpen" :anchor="historyAnchor" side="bottom">
+            <div class="flex min-h-0 w-72 flex-col">
                 <div class="relative shrink-0 p-1">
                     <Icon
                         name="search"
@@ -1026,7 +1033,7 @@ const openHistory = (event: Event): void => {
                             class="flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-content/5"
                             @click="
                                 emit('open', session.id);
-                                history?.hide();
+                                historyOpen = false;
                             "
                         >
                             <span class="flex items-center gap-1.5">
@@ -1044,7 +1051,7 @@ const openHistory = (event: Event): void => {
                     <p v-else class="px-2 py-3 text-center text-2xs text-subtle">{{ query ? "No matching chats." : "No previous chats." }}</p>
                 </div>
             </div>
-        </Popover>
+        </AnchoredOverlay>
     </component>
     <!-- Full title (+ first message) on tab hover. Mounted at the overlay target so it clears the strip's
          overflow-auto clipping, and into the pop-out window while the chat floats there. -->

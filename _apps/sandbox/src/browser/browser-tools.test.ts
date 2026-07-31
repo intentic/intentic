@@ -42,6 +42,21 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
     expect(spec.env.DISPLAY).toBe(":99");
 });
 
+/* The deadline, on both server kinds. Without it a browser tool call is unbounded — and one of these tools
+ * genuinely never returns on its own: `browser_evaluate` awaits an in-page promise, which Playwright does not
+ * time out, so a page that never reaches the awaited state ends the turn there. It is a PER-SERVER timeout
+ * rather than MCP_TOOL_TIMEOUT because the same process serves tools that must wait for a human. */
+test("every browser server bounds a single tool call", () => {
+    const specs = [
+        browserServerSpec("cli.js", "/ms/chrome", "/profile", "/stealth.js", ":99", "/tmp/cfg.json"),
+        isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", "/tmp/cfg.json"),
+    ] as { timeout?: number }[];
+    for (const spec of specs) {
+        expect(spec.timeout).toBeGreaterThan(60_000); // clears @playwright/mcp's own 60s navigation timeout
+        expect(spec.timeout).toBeLessThanOrEqual(180_000); // …and still ends a wedged call inside a turn
+    }
+});
+
 // The credential-free browser carries no identity at all — that is what lets it exist without a login, and
 // what lets two turns run one at once.
 test("isolatedBrowserSpec keeps the profile in memory and needs no display", () => {

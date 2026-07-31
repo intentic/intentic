@@ -69,7 +69,9 @@ const browserGuidance = (outputDir: string | undefined): string =>
     "`mcp__web__browser_take_screenshot` and the rest — use it to read pages that need JavaScript, to check a " +
     "docs site, and to LOOK at web UI you have changed rather than reasoning about it from the source alone. " +
     `Screenshots land in ${outputDir ?? ".intentic/browser/output"} whatever you name them, never in the repo ` +
-    "you are working in; the result tells you the path — Read it back from there.";
+    "you are working in; the result tells you the path — Read it back from there. Clicks and navigations time " +
+    "themselves out and come back as errors, but `browser_evaluate` awaits whatever the page hands it: give any " +
+    "in-page wait a deadline of its own rather than looping until a condition you are debugging comes true.";
 
 // The concise-response steer (terseOutput): cuts the model's OWN output tokens without dropping substance.
 // Kept short so it barely costs tokens itself each turn.

@@ -282,6 +282,57 @@ describe(`the remembered account`, () => {
         await reload();
         expect(chat.account.value).toBe(`second`);
     });
+
+    it(`survives an account read that comes back EMPTY — a list is not a verdict on the user's choice`, async () => {
+        const chat = useChat();
+        chat.selectAccount(`second`);
+        await nextTick();
+
+        /* A 200 carrying no accounts, which is what a daemon serves while its credential store is still coming
+         * up. Resolving the pick against that answer (and persisting the result, as the preference watch does)
+         * is how a deliberate choice was lost for good: every session after it opened on the first account. */
+        mockConnections({ accounts: () => [] });
+        resetChat();
+        await loadAccountStatus();
+        // The open chat keeps its pin: there is nothing to move it TO, and a provider with no accounts is the
+        // composer's connect gate to talk about, not the account axis.
+        expect(chat.account.value).toBe(`second`);
+
+        // The real list lands. The pick was never overwritten, so it is still in force — including for the next
+        // new chat, which is where the loss used to show up (and where it stayed, because it was persisted).
+        mockConnections({ accounts: TWO });
+        resetChat();
+        await loadAccountStatus();
+        expect(chat.account.value).toBe(`second`);
+        // The draft is what makes the next tab real — newChat hands back an untouched one rather than minting a
+        // second, and a restored empty tab carries its own pin, which would answer for the preference.
+        chat.draft.value = `this tab is in use`;
+        chat.newChat();
+        expect(chat.account.value).toBe(`second`);
+    });
+
+    it(`moves an open chat off a pick the list no longer has, and still remembers the pick`, async () => {
+        const chat = useChat();
+        chat.selectAccount(`second`);
+        await nextTick();
+
+        // `second` is gone (disconnected elsewhere): the open chat cannot keep sending against it, so it moves —
+        // and, being what that chat now runs on, `first` is what its own tab comes back wearing after this.
+        mockConnections({ accounts: (path) => (path.startsWith(`/claude`) ? [{ id: `first`, label: `Claude`, connectedAt: 1 }] : []) });
+        resetChat();
+        await loadAccountStatus();
+        expect(chat.account.value).toBe(`first`);
+
+        // The preference behind it is untouched, so once `second` is connected again a FRESH chat opens on it.
+        // (The draft is what makes the new tab real — newChat hands back an untouched one rather than minting a
+        // second, so a restored empty tab would answer for it.)
+        mockConnections({ accounts: TWO });
+        resetChat();
+        await loadAccountStatus();
+        chat.draft.value = `this tab is in use`;
+        chat.newChat();
+        expect(chat.account.value).toBe(`second`);
+    });
 });
 
 describe(`per-tab drafts`, () => {
