@@ -26,7 +26,7 @@ export { installUi } from "./plugin.js";
 // The markdown ENGINE is not re-exported here — it ships as `@intentic-app/ui/markdown` so plain .ts modules
 // and unit tests can use it without dragging in this barrel's component graph. See markdown/index.ts.
 export { vTw } from "./composables/tw.js";
-export { useHighlighter } from "./composables/useHighlighter.js";
+export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js";
 export { formatBytes, formatTokens, timeAgo } from "./format.js";
 export { type IconName, type IconSet, iconSets } from "./icons/iconSets.js";
 export { type ExplorerStyle, explorerStyles } from "./icons/explorerStyle.js";

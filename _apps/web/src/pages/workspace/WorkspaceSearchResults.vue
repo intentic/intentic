@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import type { WorkspaceSearchGroup, WorkspaceSearchHit } from "@intentic-app/api-contract";
+import type { WorkspaceSearchGroup } from "@intentic-app/api-contract";
 import { computed, nextTick, ref } from "vue";
 import { iconForEntry } from "@intentic-app/ui";
+import { codeLangForPath } from "./fileType";
+import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "./searchSnippet";
 
 /* Workspace search results for the explorer sidebar: relevance-ranked file header rows + indented hit rows (line
- * number + snippet with the hit <mark>ed via the daemon's start/end offsets when present — semantic hits carry
- * none and render unmarked; no client-side re-matching, no v-html). Clicking a hit (or a header, which stands
- * in for its first hit) opens the file at that line. Same dense row styling and roving-tabindex keyboard nav
- * as WorkspaceTree, minus the tree logic — the list is flat. */
+ * number + snippet, syntax-coloured, with the hit <mark>ed via the daemon's start/end offsets when present —
+ * semantic hits carry none and render unmarked; no client-side re-matching, no v-html). Clicking a hit (or a
+ * header, which stands in for its first hit) opens the file at that line. Same dense row styling and
+ * roving-tabindex keyboard nav as WorkspaceTree, minus the tree logic — the list is flat.
+ *
+ * A snippet's colour comes from the file's own grammar — the same extension→language resolution the editor
+ * uses (codeLangForPath), so a row reads the way the file it points at will. The pieces, and why they are
+ * pieces rather than Shiki's HTML, are searchSnippet.ts. */
 
 const { groups, truncated, searching, pending, error, query } = defineProps<{
     groups: readonly WorkspaceSearchGroup[];
@@ -21,32 +27,24 @@ const emit = defineEmits<{ openMatch: [path: string, line: number] }>();
 
 type ResultRow =
     | { key: string; kind: "file"; group: WorkspaceSearchGroup }
-    | { key: string; kind: "match"; path: string; line: number; before: string; hit: string; after: string };
-
-// Snippet split around the daemon's match offsets (absent on semantic/def hits → whole line, no <mark>), with
-// the leading indentation dropped for a dense row.
-const toMatchRow = (path: string, hit: WorkspaceSearchHit): ResultRow => {
-    const cut = hit.text.length - hit.text.trimStart().length;
-    const text = hit.text.slice(cut);
-    const start = hit.start === undefined ? text.length : Math.max(0, hit.start - cut);
-    const end = hit.end === undefined ? start : Math.max(start, hit.end - cut);
-    return {
-        key: `${path}:${hit.line}`,
-        kind: `match`,
-        path,
-        line: hit.line,
-        before: text.slice(0, start),
-        hit: text.slice(start, end),
-        after: text.slice(end),
-    };
-};
+    | { key: string; kind: "match"; path: string; line: number; elided: boolean; pieces: readonly SnippetPiece[] };
 
 const rows = computed<ResultRow[]>(() => {
     const list: ResultRow[] = [];
     for (const group of groups) {
+        // One resolution per file, not per hit — every hit in a group is a line of the same file.
+        const lang = codeLangForPath(group.path);
         list.push({ key: group.path, kind: `file`, group });
         for (const hit of group.hits) {
-            list.push(toMatchRow(group.path, hit));
+            const snippet = snippetWindow(hit);
+            list.push({
+                key: `${group.path}:${hit.line}`,
+                kind: `match`,
+                path: group.path,
+                line: hit.line,
+                elided: snippet.elided,
+                pieces: snippetPieces(snippet, snippetTokens(snippet.text, lang)),
+            });
         }
     }
     return list;
@@ -142,9 +140,14 @@ const onKeydown = (event: KeyboardEvent): void => {
                 @focus="lead = row.key"
             >
                 <span class="w-7 shrink-0 text-right font-mono text-2xs text-subtle">{{ row.line }}</span>
-                <span class="min-w-0 flex-1 truncate font-mono text-xs text-content/90"
-                    >{{ row.before }}<mark>{{ row.hit }}</mark
-                    >{{ row.after }}</span
+                <!-- One <span> per colour token, with the matched run as a <mark> — see searchSnippet.ts. The
+                     leading ellipsis says the line was cut to bring a far-right match into view. -->
+                <span class="ws-snippet min-w-0 flex-1 truncate font-mono text-xs text-content/90"
+                    ><span v-if="row.elided" class="text-subtle">…</span
+                    ><template v-for="(piece, index) in row.pieces" :key="index"
+                        ><mark v-if="piece.hit" :style="piece.style">{{ piece.text }}</mark
+                        ><span v-else :style="piece.style">{{ piece.text }}</span></template
+                    ></span
                 >
             </button>
         </template>
@@ -171,9 +174,22 @@ const onKeydown = (event: KeyboardEvent): void => {
     outline: none;
     box-shadow: inset 0 0 0 1px var(--color-primary-500);
 }
+/* Shiki hands each token an inline light colour plus a `--shiki-dark` custom property, so dark mode is a pure
+ * CSS flip keyed off the app's [data-mode] — no re-tokenizing on theme toggle. !important because the light
+ * colour it overrides is an inline style. Identical to how the app's code blocks do it (ui styles/code.css);
+ * on an uncoloured piece the var is unset, which leaves `color` inheriting the row's own. */
+[data-mode="dark"] .ws-snippet span,
+[data-mode="dark"] .ws-snippet mark {
+    color: var(--shiki-dark) !important;
+}
+/* The match keeps its syntax colour and takes a tinted plate behind it — recolouring the text would cost the
+ * one signal the colour just bought. The negative margin pays for the padding, so marking a run doesn't shift
+ * the characters after it. */
 mark {
-    background: color-mix(in srgb, var(--color-primary-500) 30%, transparent);
+    background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);
     color: inherit;
     border-radius: 2px;
+    padding-inline: 1px;
+    margin-inline: -1px;
 }
 </style>
