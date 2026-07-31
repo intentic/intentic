@@ -173,7 +173,31 @@ export type AttachTurn = z.infer<typeof AttachTurnSchema>;
 // unlabelled: without it such a turn rehydrates as `idle`, which is the resting status of a turn that finished
 // CLEANLY, so the board files a killed agent under Finished and the question it was holding disappears with the
 // process that asked it. See agents-store.ts — this is the status a live turn leaves on disk.
-export const AgentStatusSchema = z.enum(["idle", "running", "awaiting", "ready", "landed", "conflict", "error", "interrupted"]);
+//
+/* `stopping` and `stopped` are the two halves of a user's Stop, and they exist because a hard-cancel is NOT
+ * instant: /agent/stop aborts the provider and then waits for the turn's generator to unwind (worktree and
+ * registry cleanup), which is seconds of real time. For that whole window the runtime half still said
+ * `running`, so every surface kept its spinner turning on a turn the user had already killed — and then the
+ * card jumped to a settled state out of nowhere. `stopping` is what the daemon knows the instant the abort
+ * lands, published immediately so the press has a visible result; `stopped` is where the turn comes to rest.
+ *
+ * `stopped` is deliberately its own value rather than `interrupted` or `error`. Not `error`, which is what a
+ * stopped turn used to report (every provider adapter surfaces the abort's unwind as an error frame) — a card
+ * accusing the user's own deliberate press of being a failure. Not `interrupted` either: that one means the
+ * daemon died under the turn, and a boot pass may re-run it, which is precisely what must never happen to a
+ * turn a person chose to end. */
+export const AgentStatusSchema = z.enum([
+    "idle",
+    "running",
+    "awaiting",
+    "stopping",
+    "stopped",
+    "ready",
+    "landed",
+    "conflict",
+    "error",
+    "interrupted",
+]);
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 // The card's live activity snippet: the last tool the agent used (with its target) and the in-progress todo.
 export const AgentActivitySchema = z.object({

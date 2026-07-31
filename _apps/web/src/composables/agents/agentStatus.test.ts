@@ -30,6 +30,15 @@ describe("laneOf", () => {
         expect(laneOf({ status: `draft`, attention: none })).toBe(`active`);
     });
 
+    /* THE STOP, IN ITS TWO HALVES. `stopping` is the seconds between the press and the turn's last breath — the
+     * turn is still live and the card stays exactly where it is, so the stop costs one lane change rather than
+     * two. `stopped` then lands beside `interrupted`: an ending that came before the work was done, whose
+     * worktree only a message from the user carries forward. */
+    it("holds a stopping turn in active and files the stopped one under attention", () => {
+        expect(laneOf({ status: `stopping`, attention: none })).toBe(`active`);
+        expect(laneOf({ status: `stopped`, attention: none })).toBe(`attention`);
+    });
+
     it("routes landed and idle agents to finished — the auto-finish rule", () => {
         expect(laneOf({ status: `landed`, attention: none })).toBe(`finished`);
         expect(laneOf({ status: `idle`, attention: none })).toBe(`finished`);
@@ -56,6 +65,8 @@ describe("unfinishedMark", () => {
         `conflict`,
         `error`,
         `interrupted`,
+        `stopping`,
+        `stopped`,
         `draft`,
     ];
     const FLAGS: readonly AgentStanding[`attention`][] = [
@@ -85,6 +96,9 @@ describe("unfinishedMark", () => {
         expect(unfinishedMark({ status: `conflict`, attention: none })?.label).toBe(`Land conflict`);
         expect(unfinishedMark({ status: `error`, attention: none })?.label).toBe(`Error`);
         expect(unfinishedMark({ status: `interrupted`, attention: none })?.label).toBe(`Interrupted`);
+        expect(unfinishedMark({ status: `stopped`, attention: none })?.label).toBe(`Stopped`);
+        // Still the active-lane mark: the turn IS still working — on its own way out.
+        expect(unfinishedMark({ status: `stopping`, attention: none })?.label).toBe(`Still working`);
         // A turn parked before any flag went up has nothing more specific to say than that it stopped.
         expect(unfinishedMark({ status: `awaiting`, attention: none })?.label).toBe(`Waiting on you`);
     });

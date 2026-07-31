@@ -34,6 +34,16 @@ interface RuntimeState {
     // one of those as "the user answered" is what kept an agent asking a question out of the Attention lane.
     pauses: Map<string, "plan" | "question" | "permission">;
     errored: boolean;
+    /* The user pressed Stop and the abort has landed — this turn is on its way out but not out yet.
+     *
+     * It is runtime state rather than a status write because the turn is still LIVE: aborting the provider only
+     * asks it to unwind, and the generator keeps the conversation (its worktree, its mutex) until it has walked
+     * its own cleanup — seconds, on a turn with a big tool call in flight. That window used to be published as
+     * plain `running`, so a stopped agent kept its spinner turning on every surface until it settled.
+     *
+     * Read twice: `summaryOf` publishes it as `stopping` the moment it is set, and `finish` reads it to write
+     * the terminal `stopped` — the one thing that tells a turn a person ended from one the daemon died under. */
+    stopping: boolean;
     activity: { tool?: string; target?: string; todo?: string } | undefined;
     contextTokens: number | undefined;
     contextWindow: number | undefined;
@@ -56,6 +66,7 @@ const freshRuntime = (): RuntimeState => ({
     running: false,
     pauses: new Map(),
     errored: false,
+    stopping: false,
     activity: undefined,
     contextTokens: undefined,
     contextWindow: undefined,
@@ -128,9 +139,19 @@ export interface AgentsRegistry {
     readonly recordLanded: (id: string, outcome: LandOutcome) => Promise<void>;
     // Fold one turn frame into runtime state; broadcasts only on card-visible changes.
     readonly observe: (id: string, event: AgentEvent) => void;
+    /* The user's Stop has aborted this turn — publish it as `stopping` NOW, ahead of the unwind.
+     *
+     * The whole point is the gap it closes. /agent/stop aborts the provider and then waits for the generator to
+     * walk its cleanup, and until finish() runs the roster still reads `running`: the press had no visible
+     * result anywhere, so every surface kept a spinner turning on a turn that was already dead. Called by the
+     * stop route rather than inferred from a frame, because an abort's defining feature is that no frame
+     * follows it. A no-op when nothing is running — a stop that raced the turn's own ending changes nothing.
+     */
+    readonly stopping: (id: string) => void;
     // End of turn (aborted included): flush pending usage/session into the entry, release the mutex, and write
-    // how the turn ENDED — error on an observed error frame, else idle. Deliberately says nothing about where
-    // the work now stands: that is standing.ts's question, re-derived here before the roster goes out.
+    // how the turn ENDED — error on an observed error frame, `stopped` when the user cut it short, else idle.
+    // Deliberately says nothing about where the work now stands: that is standing.ts's question, re-derived
+    // here before the roster goes out.
     readonly finish: (id: string, now: number) => Promise<void>;
     /* Re-derive every live agent's land standing and publish the roster if any of them moved. Called wherever
      * the answer can have changed without this daemon doing it — most of all the roster READ, which is what
@@ -182,9 +203,22 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
          * the work stands. The middle rung is why `idle` is the only persisted value that yields — it is the
          * one that means "the turn ended cleanly", i.e. that the entry has nothing more to say and the
          * question passes to git. `error` and `interrupted` outrank precisely because nothing else remembers
-         * them: a turn that died is not made fine by a branch that happens to be empty. */
+         * them: a turn that died is not made fine by a branch that happens to be empty.
+         *
+         * Within the live rung, a stop outranks a park: a turn aborted while holding a question is on its way
+         * out, and publishing it as `awaiting` would keep asking the user to answer a card the abort has
+         * already settled. */
         const landing = entry.branch === undefined ? "idle" : standings.of(entry.id);
-        const status = state?.running === true ? (parked.length > 0 ? "awaiting" : "running") : entry.status === "idle" ? landing : entry.status;
+        const status =
+            state?.running === true
+                ? state.stopping
+                    ? "stopping"
+                    : parked.length > 0
+                      ? "awaiting"
+                      : "running"
+                : entry.status === "idle"
+                  ? landing
+                  : entry.status;
         const base = (entry.repos.find((repo) => repo.repo === "root") ?? entry.repos[0])?.base.slice(0, 7);
         // Live totals: persisted totals plus the running turn's not-yet-flushed usage.
         const costUsd = entry.costUsd + (state?.pendingCostUsd ?? 0);
@@ -520,6 +554,12 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 case "plan":
                 case "question":
                 case "permission":
+                    // A turn being torn down cannot park on anything: the abort settles every waiter, so a card
+                    // raised by a frame still in flight behind the stop would ask the user a question whose
+                    // answer has nowhere to go — and would put the card back in Attention as it leaves.
+                    if (state.stopping) {
+                        return;
+                    }
                     state.pauses.set(event.requestId, event.kind);
                     break;
                 case "resolved":
@@ -562,14 +602,32 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             }
             broadcast();
         },
+        stopping: (id) => {
+            const state = runtime.get(id);
+            // Nothing running ⇒ nothing to say. A stop that raced the turn's own last frame is not news, and
+            // marking a settled conversation would leave `stopping` on the entry for the NEXT turn to inherit.
+            if (state === undefined || !state.running || state.stopping) {
+                return;
+            }
+            state.stopping = true;
+            // The abort settles every card this turn was parked on (agent-requests.ts) — including the ones
+            // whose `resolved` frame will never make it out of the dying stream. Cleared here rather than at
+            // finish so the card stops asking for an answer it can no longer take the moment the stop lands.
+            state.pauses.clear();
+            broadcast();
+        },
         finish: async (id, now) => {
             const entry = entryOf(id);
             const state = runtime.get(id);
             // Captured BEFORE the reset: only a finish that ends a LIVE turn counts toward `turns` — the
             // manual land route finishes with an outcome outside any turn and must not inflate the counter.
             const ranTurn = state?.running === true;
+            // Same reason, for the value this writes below: the reset clears it, and a manual land's finish
+            // (no runtime state at all) must not read as a stop.
+            const wasStopped = state?.stopping === true;
             if (state !== undefined) {
                 state.running = false;
+                state.stopping = false;
                 // A turn that ended holds nobody up any more, however it ended: an aborted card's waiter is
                 // settled by the same abort, and its `resolved` frame may never make it out of the stream.
                 state.pauses.clear();
@@ -581,9 +639,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 const sessionId = state?.pendingSessionId ?? entry.sessionId;
                 replace({
                     ...entry,
-                    // How the turn ENDED, which is all this field says now: an observed error frame, else the
-                    // clean ending that hands the question to standing.ts.
-                    status: state?.errored === true ? "error" : "idle",
+                    // How the turn ENDED, which is all this field says now: an observed error frame, the user's
+                    // own Stop, else the clean ending that hands the question to standing.ts. A stop outranks
+                    // nothing — the abort's own unwind no longer reaches here as an error (see agent.routes'
+                    // frame loop), so an errored stop means the turn had already failed when it was stopped.
+                    status: state?.errored === true ? "error" : wasStopped ? "stopped" : "idle",
                     costUsd: entry.costUsd + (state?.pendingCostUsd ?? 0),
                     inputTokens: entry.inputTokens + (state?.pendingInputTokens ?? 0),
                     outputTokens: entry.outputTokens + (state?.pendingOutputTokens ?? 0),

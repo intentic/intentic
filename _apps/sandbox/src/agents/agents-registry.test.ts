@@ -371,6 +371,88 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.attention.question).toBe(false);
     });
 
+    /* THE WINDOW A STOP OPENS, which is the whole reason `stopping` exists. /agent/stop aborts the provider and
+     * then waits for the generator to unwind — worktree and registry cleanup, seconds of it on a turn holding a
+     * long tool call — and every surface watching this agent reads the roster in the meantime. Publishing
+     * `running` across that window is what kept a spinner turning on a turn the user had already killed. */
+    it("publishes the stop the instant it lands, ahead of the unwind", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        const frames: (string | undefined)[] = [];
+        const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.status));
+        registry.stopping("c1");
+        expect(registry.get("c1")?.status).toBe("stopping");
+        expect(frames.at(-1)).toBe("stopping"); // the press has a visible result before anything unwinds
+        // Still the conversation's live turn: the mutex is held until finish, so a message sent now would
+        // still collide with it rather than start a second one.
+        expect(registry.running("c1")).toBe(true);
+        unsubscribe();
+    });
+
+    // Where it comes to rest. NOT `error` (the abort's own unwind is not a failure — see agent.routes' frame
+    // loop) and NOT `interrupted`, which is the daemon dying and is a candidate for the boot resume pass: a
+    // turn a person chose to end must never come back on its own.
+    it("settles a stopped turn as stopped, on the entry the next boot reads", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.stopping("c1");
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("stopped");
+        expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("stopped");
+        // And it does not leak into the next turn on the same conversation.
+        await registry.begin(turn(), 3_000);
+        expect(registry.get("c1")?.status).toBe("running");
+        await registry.finish("c1", 4_000);
+        expect(registry.get("c1")?.status).toBe("idle");
+    });
+
+    // The abort settles every waiter, so a card raised by a frame still in flight behind the stop would ask a
+    // question whose answer has nowhere to go — and would drag the card back into Attention on its way out.
+    it("drops the cards a stopping turn was parked on, and refuses to raise new ones", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "question", requestId: "q1", questions: [] });
+        expect(registry.get("c1")?.status).toBe("awaiting");
+        registry.stopping("c1");
+        expect(registry.get("c1")?.status).toBe("stopping");
+        expect(registry.get("c1")?.attention.question).toBe(false);
+        registry.observe("c1", { kind: "permission", requestId: "perm1", toolName: "Bash" });
+        expect(registry.get("c1")?.status).toBe("stopping");
+        expect(registry.get("c1")?.attention.permission).toBe(false);
+    });
+
+    // A stop that raced the turn's own last frame is not news. Marking a settled conversation would leave the
+    // flag on it for the NEXT turn to inherit, and publish a state nobody is in.
+    it("says nothing for a stop with no live turn under it", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.finish("c1", 2_000);
+        const frames: number[] = [];
+        const unsubscribe = registry.subscribe(() => frames.push(1));
+        registry.stopping("c1");
+        registry.stopping("never-heard-of-it");
+        expect(registry.get("c1")?.status).toBe("idle");
+        expect(frames.length).toBe(1); // the subscribe snapshot, and nothing after it
+        unsubscribe();
+    });
+
+    // A turn that had ALREADY failed when the user stopped it keeps its failure: the error frame is a fact
+    // about the turn, where the stop is only how it ended.
+    it("keeps an error that preceded the stop", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "error", message: "boom" });
+        registry.stopping("c1");
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("error");
+    });
+
     /* THE DAEMON DYING UNDER A PARKED TURN — a container rebuild (`docker rm -f`, so not even a SIGTERM), a
      * crash, an OOM kill. The next boot is a fresh registry over the same store, and everything that said the
      * agent was mid-task — running, the question's park, the attention flag it raised — was runtime state that

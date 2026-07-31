@@ -1,6 +1,6 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
-import { awaitingUser, blocked, type FleetLane, laneOf } from "./agentStatus";
+import { awaitingUser, blocked, type FleetLane, laneOf, turnInFlight } from "./agentStatus";
 import { openAgentConversation, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -148,7 +148,8 @@ export const resetAgents = (): void => desync(false);
 // The disconnect flavor: stale-while-reconnecting.
 export const desyncAgents = (): void => desync(true);
 
-// Unread tracking: an agent whose updatedAt outruns the last time it was OPENED, while it isn't running, "has
+// Unread tracking: an agent whose updatedAt outruns the last time it was OPENED, while no turn of its own is
+// in flight, "has
 // something for you". The read marker itself lives on the daemon entry (AgentSummary.seenAt), not in this
 // browser — read state is a fact about the work, so clearing site data, opening an incognito window, or
 // switching to the phone must not resurrect a board full of "New" badges.
@@ -193,9 +194,9 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
 // board and a TransitionGroup running FLIP over several hundred cards.
 export const FINISHED_WINDOW = 6;
 
-// Attention first, then running + fresh drafts, then most recently active.
+// Attention first, then live turns + fresh drafts, then most recently active.
 const weight = (entry: FleetAgent): number =>
-    blocked(entry) ? 0 : entry.status === `running` || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
+    blocked(entry) ? 0 : turnInFlight(entry) || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
 
 const fleet = computed<FleetAgent[]>(() => {
     const { conversations } = useChat();
@@ -228,7 +229,7 @@ const fleet = computed<FleetAgent[]>(() => {
         ...registry.value.map((agent) => ({
             ...agent,
             open: openIds.has(agent.id),
-            unread: agent.status !== `running` && agent.updatedAt > (agent.seenAt ?? 0),
+            unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
         })),
         ...drafts,
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
@@ -308,13 +309,14 @@ watch(
  * UNATTENDED retention sweep, which is properly conservative; the named-id archive this button calls takes
  * anything that exists and isn't mid-turn. So the real question is a product one — would archiving DISCARD
  * something the agent is still waiting on? — and that is `awaitingUser`:
- *   · running       — no (the worktree is the live turn's working state; the daemon refuses it too)
+ *   · running/stopping — no (the worktree is the live turn's working state, right through the unwind of a
+ *                       Stop; the daemon refuses it too)
  *   · draft         — no registry entry to archive
  *   · awaiting/plan/question/permission — archiving would bury the question instead of answering it
- *   · error/conflict — YES: a dead end is exactly what wants taking off the board
+ *   · error/conflict/stopped — YES: a dead end is exactly what wants taking off the board
  *   · landed/idle   — yes, the routine case */
 export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt">): boolean =>
-    agent.archivedAt === undefined && agent.status !== `draft` && agent.status !== `running` && !awaitingUser(agent);
+    agent.archivedAt === undefined && agent.status !== `draft` && !turnInFlight(agent) && !awaitingUser(agent);
 
 const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     const grouped: Record<FleetLane, FleetAgent[]> = { attention: [], active: [], finished: [] };

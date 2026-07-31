@@ -26,12 +26,16 @@ import { z } from "zod";
  * turn that ended CLEANLY, so an agent whose turn was parked on a question, and whose park died with the
  * process holding it, came back indistinguishable from one that had nothing left to do.
  *
+ * `stopped` is the same class of fact for the turn a PERSON ended, and it is separate from `interrupted` for a
+ * reason that outlives the label: only `interrupted` is a candidate for the boot resume pass. A turn somebody
+ * chose to stop must never come back on its own.
+ *
  * `.catch` rather than a bare enum, and the only field here that carries one: agents.json is user data on a
  * volume that outlives every image, so this field's vocabulary shrinking must cost the VALUE, not the row. The
  * per-entry parse below already treats losing a row as a cost to be minimised; a status that no longer exists
  * reads as the resting one, which is what every retired value meant — the turn ended and the land question is
  * now asked of git. */
-const PersistedAgentStatusSchema = z.enum(["idle", "interrupted", "error"]).catch("idle");
+const PersistedAgentStatusSchema = z.enum(["idle", "interrupted", "stopped", "error"]).catch("idle");
 
 /* Where a title came from, which is the whole of what decides whether a better one may replace it.
  *

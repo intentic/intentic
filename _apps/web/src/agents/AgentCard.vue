@@ -15,6 +15,7 @@ import {
     formatTokens,
     laneOf,
     reviewAction,
+    turnInFlight,
 } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { markSegments } from "../composables/agents/useAgentFilter";
@@ -315,7 +316,7 @@ const grab = (event: PointerEvent): void => {
             <!-- The live line and the footer both claim the row's leftovers, so a wide board splits them and a
                  narrow one wraps the footer onto its own line rather than shaving the activity to an ellipsis. -->
             <p
-                v-if="agent.status === 'running' && agent.activity !== undefined"
+                v-if="turnInFlight(agent) && agent.activity !== undefined"
                 class="flex min-w-0 items-center gap-1.5 text-2xs text-link"
                 :class="dense ? 'min-w-32 flex-1' : ''"
             >

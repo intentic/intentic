@@ -14,7 +14,16 @@ import FilterField from "../components/FilterField.vue";
 import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
 import ProviderLogo from "./ProviderLogo.vue";
-import { activityIcon, agentStatusMeta, attentionReason, type FleetLane, formatCost, formatElapsed, laneOf } from "../composables/agents/agentStatus";
+import {
+    activityIcon,
+    agentStatusMeta,
+    attentionReason,
+    type FleetLane,
+    formatCost,
+    formatElapsed,
+    laneOf,
+    turnInFlight,
+} from "../composables/agents/agentStatus";
 import { relativeTime, statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
 import { type Conversation, modelLabelFor } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
@@ -807,15 +816,20 @@ const openHistory = (event: Event): void => {
                                             <span class="text-danger"> −{{ agent.diff.deletions }}</span>
                                         </span>
                                         <!-- The now-column, right-aligned: what it is doing (the tool's glyph,
-                                             its command on hover) and how long it has been at it. -->
+                                             its command on hover) and how long it has been at it. Both are held
+                                             through a stop's UNWIND (turnInFlight, not `running`): the turn is
+                                             still live there, the elapsed keeps its meaning, and the glyph
+                                             freezes on what it was doing when the user stopped it. Blinking the
+                                             whole column off a beat before the card settles is the same flicker
+                                             the stopping state exists to remove. -->
                                         <span class="ml-auto flex shrink-0 items-center gap-1.5">
                                             <Icon
-                                                v-if="agent.status === 'running' && agent.activity !== undefined"
+                                                v-if="turnInFlight(agent) && agent.activity !== undefined"
                                                 :name="activityIcon(agent.activity.tool)"
                                                 class="text-2xs text-subtle"
                                                 v-tooltip.right="activityTooltip(agent.activity)"
                                             />
-                                            <span v-if="agent.status === 'running' && agent.startedAt !== undefined">{{
+                                            <span v-if="turnInFlight(agent) && agent.startedAt !== undefined">{{
                                                 formatElapsed(agent.startedAt, now)
                                             }}</span>
                                             <span v-else-if="agent.updatedAt > 0">{{ relativeTime(agent.updatedAt) }}</span>

@@ -39,6 +39,21 @@ describe("dropActionFor", () => {
         expect(dropActionFor(agent({ status: `interrupted` }), `finished`)).toBe(`land`);
     });
 
+    // And once more for the turn the USER cut off: the auto-land is skipped for an aborted turn precisely so
+    // half-finished work doesn't land itself, which leaves this drop as the way to say "actually, keep it".
+    it("lands work whose turn the user stopped", () => {
+        expect(dropActionFor(agent({ status: `stopped` }), `finished`)).toBe(`land`);
+    });
+
+    // While it is still going out, though, there is nothing to offer: the stop it would send has been sent,
+    // and the worktree is a live turn's until the unwind finishes.
+    it("offers nothing for a turn that is already stopping", () => {
+        expect(dropActionFor(agent({ status: `stopping` }), `finished`)).toBeUndefined();
+        expect(dropActionFor(agent({ status: `stopping` }), `discard`)).toBeUndefined();
+        expect(dropRejection(agent({ status: `stopping` }), `finished`)).toBe(`This turn is already stopping`);
+        expect(dropRejection(agent({ status: `stopping` }), `discard`)).toBe(`This turn is already stopping`);
+    });
+
     it("hands a conflict back to the agent instead of re-running the land that just refused", () => {
         expect(dropActionFor(agent({ status: `conflict` }), `finished`)).toBe(`resolve`);
         expect(dropActionFor(agent({ status: `idle`, attention: { ...none, conflict: true } }), `finished`)).toBe(`resolve`);
@@ -92,6 +107,8 @@ describe("dropActionFor", () => {
             agent({ status: `conflict` }),
             agent({ status: `error` }),
             agent({ status: `interrupted` }),
+            agent({ status: `stopping` }),
+            agent({ status: `stopped` }),
             agent({ status: `landed` }),
             agent({ status: `idle` }),
             agent({ status: `idle`, attention: { ...none, plan: true } }),

@@ -1,4 +1,4 @@
-import { laneOf, type FleetLane } from "./agentStatus";
+import { laneOf, type FleetLane, turnInFlight } from "./agentStatus";
 import type { FleetAgent } from "./useAgents";
 
 /* What dragging a card across the board actually DOES. The lanes are pure projections of the daemon's status
@@ -28,11 +28,17 @@ export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction
         return undefined;
     }
     if (target === `discard`) {
-        // The daemon refuses to tear down a worktree that is a running turn's live working state.
-        return agent.branch === undefined || agent.status === `running` ? undefined : `discard`;
+        // A workspace conversation has no worktree to tear down at all; and the daemon refuses one that is a
+        // live turn's working state — including the seconds a stopped turn spends unwinding, which is exactly
+        // when a user is most likely to try.
+        return agent.branch === undefined || turnInFlight(agent) ? undefined : `discard`;
     }
     // Only Finished has actions behind it, and a card already sitting there has nothing left to do.
     if (target !== `finished` || laneOf(agent) === `finished`) {
+        return undefined;
+    }
+    // A turn already stopping has nothing to offer this gesture: the stop it would send has been sent.
+    if (agent.status === `stopping`) {
         return undefined;
     }
     if (agent.status === `running`) {
@@ -59,9 +65,10 @@ export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction
         return `resolve`;
     }
     // An ERRORED turn never reached its auto-land at all, so there is a first land to try here, not a repeat.
-    // Nor did an INTERRUPTED one — its daemon died before the land ran — and whatever it had written by then
-    // is sitting in its worktree with nothing else offering to take it.
-    if (agent.status === `error` || agent.status === `interrupted`) {
+    // Nor did an INTERRUPTED one — its daemon died before the land ran — nor a STOPPED one, whose land is
+    // skipped precisely because half-finished work must not land itself. Whatever each had written by then is
+    // sitting in its worktree with nothing else offering to take it.
+    if (agent.status === `error` || agent.status === `interrupted` || agent.status === `stopped`) {
         return `land`;
     }
     return undefined;
@@ -75,6 +82,11 @@ export const dropRejection = (agent: FleetAgent, target: DropTarget): string | u
     }
     if (agent.status === `draft`) {
         return `This agent hasn't run yet`;
+    }
+    // Ahead of every target, because it is the true answer for all of them — and because the discard line
+    // below would otherwise tell a user who has just stopped this turn to stop it.
+    if (agent.status === `stopping`) {
+        return `This turn is already stopping`;
     }
     if (target === `discard`) {
         return agent.branch === undefined ? `Workspace conversations have no isolated branch to discard` : `Stop the turn first`;

@@ -529,6 +529,24 @@ async function* runTurn(
     const releaseAccount = resolvedAccount !== undefined ? holdAccount(resolvedAccount) : undefined;
     try {
         for await (const event of run(request)) {
+            /* AN ABORT IS NOT A FAILURE, and this is the one place that can say so for every provider.
+             *
+             * Each of the four adapters reports the unwind of a hard-cancel as an error frame — a thrown
+             * AbortError from the SDK, a subprocess killed mid-stream, an ACP connection torn down — because
+             * from inside the adapter that is indistinguishable from the provider dying. So a user pressing
+             * Stop got the full failure treatment: `turn.error` in the activity log, an error line frozen into
+             * the durable transcript, the frame relayed to a client that had already said "Stopped.", and — the
+             * one that showed — `errored` on the registry entry, which finish() writes through as status
+             * `error`. Every deliberately stopped agent landed on a red card in the Attention lane.
+             *
+             * Gated on the turn's own signal, which /agent/stop is the only thing that trips (the request
+             * signal is deliberately not wired in — see the run route), so a genuine failure is never swallowed
+             * by it. Dropped whole rather than downgraded: everything below this line is a reaction to a
+             * failure — the outage breaker, the usage-limit resume, the client's error card — and none of them
+             * has anything to do for a turn the user chose to end. */
+            if (event.kind === "error" && signal?.aborted === true) {
+                continue;
+            }
             sniffer.observe(event);
             /* The provider spoke. Whatever this turn is — a resume, a fresh message, an automation wake — it has
              * just proved the outage is over for every conversation stranded on this provider, so the whole
@@ -800,6 +818,11 @@ export const createAgentRoutes = (services: Services) => {
             if (!stopped && (run === undefined || run.done)) {
                 throw new ORPCError("NOT_FOUND", { message: "no running turn for that conversation" });
             }
+            // The press, published. Everything below this line is the unwind — seconds of it, on a turn holding
+            // a long tool call — and until it lands the roster would still be saying `running` to every surface
+            // watching this agent, spinner and all. Marked before the join, not after, because the whole point
+            // is to fill exactly the window the join waits out.
+            services.agents.stopping(input.conversationId);
             // abort() is only a request. The detached pump remains the conversation's live run until its
             // generator unwinds (including worktree/registry cleanup), so acknowledging before then lets an
             // immediate next message collide with the old run and get a bogus "another window" conflict.

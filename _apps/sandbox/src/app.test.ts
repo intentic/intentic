@@ -371,7 +371,10 @@ const services = (overrides: Partial<Services> = {}): Services => {
                 return sessionId === undefined ? [] : merged.sessions.read(merged.workspace.root, sessionId);
             },
             // Inert: `read` above already synthesizes from the SDK session that production's adoption would have
-            // copied in, so there is nothing for an open to carry over here.
+            // copied in, so there is nothing for an open to carry over here. Present all the same, because it is
+            // on the turn path — leaving it off this fake made every agent.run test in this file fail with a bare
+            // "Internal server error", and nothing catches that from the types: tsconfig excludes *.test.ts, so
+            // the fake rots in silence.
             open: async () => {},
             append: async () => {},
         },
@@ -2214,6 +2217,49 @@ test("a second concurrent turn for the same conversation is refused with CONFLIC
 test("a chat turn without a conversationId is refused — the run registry has nothing to key it on", async () => {
     const client = clientFor(createApp(services()));
     expect(await errorCode(client.agent.run({ prompt: "hi" }))).toBe("BAD_REQUEST");
+});
+
+/* STOPPING A TURN IS NOT A FAILURE — end to end, because the failure was assembled from three files agreeing
+ * with each other. Every provider adapter reports the unwind of a hard-cancel as an error frame (from inside
+ * one, an abort is indistinguishable from the provider dying), the registry reads any error frame as how the
+ * turn ended, and the card draws that as `error` in the Attention lane. So the user pressed Stop and watched
+ * their own deliberate press come back accusing them of a crash — after a wait, since the roster went on
+ * saying `running` for the whole unwind. The fake agent below is that adapter behaviour, exactly. */
+test("a stopped turn settles as stopped, with no error frame reaching the client, the log, or the card", async () => {
+    let started: (() => void) | undefined;
+    let abort: (() => void) | undefined;
+    const running = new Promise<void>((resolve) => (started = resolve));
+    const aborted = new Promise<void>((resolve) => (abort = resolve));
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* (request) {
+                    request.signal.addEventListener("abort", () => abort?.(), { once: true });
+                    started?.();
+                    await aborted;
+                    yield { kind: "error", message: "Claude Code process exited with code 143" };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    await client.agent.run({ prompt: "long task", conversationId: "conv1", isolated: true });
+    // The run is DETACHED — the route acks the id and the pump walks the generator chain after it. The
+    // adapter's first line is the barrier that says the chain got as far as registering the turn's abort
+    // handle; stopping before that finds nothing to cancel, and the turn would sit here forever.
+    await running;
+    // Resolves only once the run has unwound, which is the same barrier the browser's Stop waits on.
+    expect(await client.agent.stop({ conversationId: "conv1" })).toEqual({ ok: true });
+
+    const { agents } = await client.agents.list();
+    expect(agents[0]).toMatchObject({ id: "conv1", status: "stopped" });
+    // And nothing in the transcript a window replaying this run would draw as a failure.
+    const frames = await collect(await client.agent.attach({ conversationId: "conv1" }));
+    const events = frames.flatMap((frame) => (frame.kind === "frame" ? [frame.event] : []));
+    expect(events.filter((event) => event.kind === "error")).toEqual([]);
+
+    // A stop with nothing running is still NOT_FOUND: the client retires its own control on that answer.
+    expect(await errorCode(client.agent.stop({ conversationId: "conv1" }))).toBe("NOT_FOUND");
 });
 
 test("an isolated turn that dies on a provider gate still releases the conversation mutex", async () => {

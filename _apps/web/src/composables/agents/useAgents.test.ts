@@ -52,6 +52,15 @@ describe("canArchive", () => {
     it("refuses a live turn (the worktree is its working state) and a draft (no registry entry to archive)", () => {
         expect(canArchive({ status: `running`, attention: none })).toBe(false);
         expect(canArchive({ status: `draft`, attention: none })).toBe(false);
+        // A stopped turn is still a live turn until its generator unwinds — the daemon holds the worktree for
+        // the whole of it, and that window is exactly when a user reaches for the next control.
+        expect(canArchive({ status: `stopping`, attention: none })).toBe(false);
+    });
+
+    // Once it HAS stopped it is a dead end like any other: half-written work, nothing outstanding on the
+    // user's side, and archiving buries no question.
+    it("takes a turn the user stopped", () => {
+        expect(canArchive({ status: `stopped`, attention: none })).toBe(true);
     });
 
     it("refuses one that is already archived, so the card offers Restore instead of a second Archive", () => {

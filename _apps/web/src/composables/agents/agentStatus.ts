@@ -34,6 +34,13 @@ export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName
     if (status === `running`) {
         return { icon: `spinner`, spin: true, label: `Running`, class: `text-link` };
     }
+    // The Stop landed and the turn is walking itself out. STILL, deliberately — a spinner here is the exact
+    // thing the user complained about: it says "working on your request" for the seconds between the press and
+    // the turn's last breath, which is precisely when they want to be told it is over. Muted for the same
+    // reason: this state is the tail of something ending, not an event of its own.
+    if (status === `stopping`) {
+        return { icon: `stop`, label: `Stopping…`, class: `text-subtle` };
+    }
     if (status === `awaiting`) {
         return { icon: `exclamation-circle`, label: `Needs you`, class: `text-primary-500` };
     }
@@ -58,19 +65,42 @@ export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName
     if (status === `interrupted`) {
         return { icon: `stop`, label: `Interrupted`, class: `text-warning` };
     }
+    // The same shape of ending, by the user's own hand — which is why it is quieter than `interrupted` and much
+    // quieter than the `error` it used to be filed as. Nothing here is news to the person reading it: they are
+    // the one who pressed Stop. The card's job now is only to say where the turn got to.
+    if (status === `stopped`) {
+        return { icon: `stop`, label: `Stopped`, class: `text-subtle` };
+    }
     return { icon: `circle-fill`, label: `Idle`, class: `text-subtle` };
 };
+
+/* A TURN IS IN FLIGHT — running, or unwinding after a Stop. The one question every "hands off this agent"
+ * guard is really asking (its worktree is a live turn's working state, so it cannot be archived, discarded or
+ * landed), and the one the live readouts are drawn for: the ticking elapsed and the activity line keep their
+ * meaning while the daemon walks a stopped turn out, and blinking them off a beat before the card settles is
+ * the same flicker this whole state exists to remove.
+ *
+ * `awaiting` is deliberately not here. Its turn is live too, but it is live and PARKED — the guards that read
+ * this either want it excluded (a parked turn is exactly what awaitingUser answers for) or answer it in their
+ * own terms. */
+export const turnInFlight = (agent: AgentStanding): boolean => agent.status === `running` || agent.status === `stopping`;
 
 // "Blocked on you" — the agent literally cannot go on (or has failed) until you act. Deliberately NOT the same
 // thing as unread, which only says you haven't looked at it yet: a board that tells the user seven finished
 // agents "need you" teaches them to ignore the word.
+//
+// `stopped` sits here beside `interrupted` for the reason the two share: a turn that ended before its work did,
+// leaving a half-written worktree that only a message from the user can carry forward. Nothing is OUTSTANDING
+// on their side (see awaitingUser, which excludes both) — the lane is where the card goes to be picked up again
+// rather than lost among the landed ones.
 export const blocked = (agent: AgentStanding): boolean =>
     agent.attention.plan ||
     agent.attention.question ||
     agent.attention.permission ||
     agent.attention.conflict ||
     agent.status === `error` ||
-    agent.status === `interrupted`;
+    agent.status === `interrupted` ||
+    agent.status === `stopped`;
 
 // The half of "blocked" that is literally WAITING TO BE TOLD SOMETHING — a plan to approve, a question, a
 // permission, a paused turn. Deliberately narrower than `blocked`, which also covers the DEAD ENDS (a failed
@@ -100,6 +130,11 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     if (agent.status === `interrupted`) {
         return `Interrupted`;
     }
+    // Same unfinished ending, one word of difference that matters: this one was the user's decision, so the chip
+    // reports it rather than reporting it AT them. No "by you" — they know.
+    if (agent.status === `stopped`) {
+        return `Stopped`;
+    }
     return undefined;
 };
 
@@ -114,7 +149,10 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     if (blocked(agent) || agent.status === `awaiting` || agent.status === `conflict`) {
         return `attention`;
     }
-    if (agent.status === `running` || agent.status === `draft`) {
+    // `stopping` stays ACTIVE, where the card already is: the turn is still live (the daemon holds its worktree
+    // until the unwind finishes), and moving it now would spend a lane change on a state that lasts seconds —
+    // then spend another one the moment it settles. The card says "Stopping…" where it stands, and moves once.
+    if (turnInFlight(agent) || agent.status === `draft`) {
         return `active`;
     }
     // landed | idle — the work is in the workspace (or there was none) — and `ready`, work HELD on the branch
@@ -188,7 +226,9 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     }
     // The destination is the transcript, where the cut-off tool call is the last thing in it — that IS the
     // report for this state, so the label names the place rather than promising a fix the board cannot do.
-    if (agent.status === `interrupted`) {
+    // One label for both endings: whether the daemon died or the user pressed Stop, the question the card is
+    // answering is the same one — how far did it get?
+    if (agent.status === `interrupted` || agent.status === `stopped`) {
         return `See where it stopped`;
     }
     // Ready names both halves of what its destination offers: the review panel is where the held work is read
