@@ -63,15 +63,20 @@ const setValue = (extension: ExtensionSummary, setting: SettingContribution, val
 const secretIsSet = (extension: ExtensionSummary, setting: SettingContribution): boolean =>
     extensionSettingsStore(extension.id).secretsSet.value.includes(setting.key);
 
-// Contribution counts for the summary line — the same declarations the install approval showed.
+/* Contribution counts for the summary line — the same declarations the install approval showed.
+ *
+ * DERIVED by walking the manifest's `contributes`, not by naming the kinds: the enumerated version listed four
+ * of them and silently omitted viewers, settings, connectors, listener, environment and bin, so every kind added
+ * since had to be remembered here and none was. Walking makes the line complete by construction — a new
+ * contribution point in the schema shows up the moment an extension declares it. Arrays carry their count,
+ * singletons (agent, environment, listener, bin) just their name. */
 const contributionSummary = (extension: ExtensionSummary): string => {
-    const contributes = extension.manifest.contributes;
-    const parts = [
-        ...((contributes?.views ?? []).length > 0 ? [`${contributes?.views?.length} view(s)`] : []),
-        ...((contributes?.commands ?? []).length > 0 ? [`${contributes?.commands?.length} command(s)`] : []),
-        ...((contributes?.processes ?? []).length > 0 ? [`${contributes?.processes?.length} process(es)`] : []),
-        ...(contributes?.agent !== undefined ? [`agent skills`] : []),
-    ];
+    const parts = Object.entries(extension.manifest.contributes ?? {}).flatMap(([kind, value]) => {
+        if (Array.isArray(value)) {
+            return value.length > 0 ? [`${kind} (${value.length})`] : [];
+        }
+        return [kind];
+    });
     return parts.length > 0 ? parts.join(` · `) : `no contributions`;
 };
 </script>

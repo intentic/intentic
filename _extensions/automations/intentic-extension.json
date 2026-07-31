@@ -16,6 +16,10 @@
         ]
     },
     "contributes": {
-        "views": [{ "id": "automations", "label": "Automations", "surface": "rail" }]
+        "views": [{ "id": "automations", "label": "Automations", "surface": "rail" }],
+        "files": [
+            { "path": ".intentic/automations.json", "invalidates": ["automations"] },
+            { "path": ".intentic/approvals/", "invalidates": ["automation-approvals"] }
+        ]
     }
 }

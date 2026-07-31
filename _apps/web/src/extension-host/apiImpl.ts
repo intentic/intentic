@@ -13,6 +13,7 @@ import { sandboxKey, useSandbox } from "../composables/sandbox/useSandbox";
 import { registerView } from "../core-views/registry";
 import { registerViewer } from "../core-views/viewerRegistry";
 import { router } from "../router";
+import { registerFileBindings } from "./fileBindings";
 
 /* The host's fulfillment of IntenticApi, one instance per activated extension. Every registration is gated on
  * the APPROVED manifest's declarations (views/commands/settings/processes) — the manifest the owner saw at
@@ -55,6 +56,14 @@ export const createExtensionApi = (
     const declaredCommands = new Map((contributes?.commands ?? []).map((command) => [command.command, command]));
     const declaredSettings = contributes?.settings ?? [];
     const declaredProcesses = new Set((contributes?.processes ?? []).map((process) => process.name));
+
+    // The file→view bindings are DECLARATIVE — like settings and processes, there is no runtime register() call
+    // for the extension to make. Registering them here means they go live exactly when the host accepts the
+    // extension and unwind with its other subscriptions, so the daemon's change push reaches precisely the
+    // extensions that are actually running. See fileBindings.ts.
+    if (contributes?.files !== undefined) {
+        track(registerFileBindings(extensionId, contributes.files));
+    }
 
     // Manifest defaults under the persisted values; the shared store keeps this api and the Sandbox hub's
     // Extensions tab looking at the same record.

@@ -1,4 +1,5 @@
 import { staleQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
+import { contributedFileBindings } from "../../extension-host/fileBindings";
 import { setAgents } from "../agents/useAgents";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
@@ -70,7 +71,10 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             return;
         case `workspaceChanged`: {
             markWorkspaceChanged(event.paths);
-            for (const key of staleQueryKeys(event.paths)) {
+            // Core's table unioned with what the ACTIVATED extensions declared — one push, both halves. An
+            // extension that isn't running contributes nothing, which is the point of asking the host rather
+            // than the installed list.
+            for (const key of staleQueryKeys(event.paths, contributedFileBindings())) {
                 void queryClient.invalidateQueries({ queryKey: [key] });
             }
             // Any worktree write surfaces in the Changes review — but not during a streaming turn, whose

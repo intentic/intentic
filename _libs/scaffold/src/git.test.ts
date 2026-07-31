@@ -88,7 +88,9 @@ test("gitCommitAll stages, commits with the author identity, and reports a commi
     const committed = await gitCommitAll("/work/app", "agent edit", { name: "intentic", email: "agent@intentic.dev" }, git);
     expect(committed).toBe(true);
     expect(calls).toContainEqual(["/work/app", "add", "-A"]);
-    expect(calls).toContainEqual(["/work/app", "-c", "user.name=intentic", "-c", "user.email=agent@intentic.dev", "commit", "-m", "agent edit"]);
+    // `--no-verify` is deliberate: this commit is provenance, and the repo's own hooks must not make an agent's
+    // work unlandable — see gitCommitAll.
+    expect(calls).toContainEqual(["/work/app", "-c", "user.name=intentic", "-c", "user.email=agent@intentic.dev", "commit", "--no-verify", "-m", "agent edit"]);
 });
 
 // The INDEX decides, so both "clean tree" and "dirty but nothing `add -A` can stage" (modified content inside
