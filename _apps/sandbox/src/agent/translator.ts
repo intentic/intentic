@@ -31,8 +31,18 @@ export const cliProxyConfigPath = (config: Config): string => join(config.histor
 // The Management API base (localhost-only) on the same port that serves the Anthropic endpoint.
 export const cliProxyManagementUrl = (config: Config): string => `${config.translator.url.replace(/\/$/, "")}/v0/management`;
 
-// A localhost-bound CLIProxyAPI serving the Anthropic endpoint (api-keys) + the Management API (secret-key). Both
-// accept the same fixed local bearer — the port is loopback-only.
+/* A localhost-bound CLIProxyAPI serving the Anthropic endpoint (api-keys) + the Management API (secret-key). Both
+ * accept the same fixed local bearer — the port is loopback-only.
+ *
+ * EVERY KEY THIS OMITS IS A GO ZERO VALUE, not CLIProxyAPI's documented default. The two are not the same, and
+ * the difference is invisible: its config.example.yaml documents `quota-exceeded` as three `true`s, a missing
+ * YAML bool unmarshals to `false`, and nothing anywhere says which one is in force. So the whole block is written
+ * out — a routed provider's quota failover is exactly the behaviour a translator config exists to pin, and
+ * leaving it to the encoding of an absent key is how all three came to be off here without a decision.
+ *
+ * `antigravity-credits` is the one that is off ON PURPOSE. It is the last-resort fallback to PAID AI credits once
+ * every free-tier Google auth is spent on Claude models — real money, drawn per turn, with nobody asked. A routed
+ * turn must not be able to reach for it; hitting the weekly wall and saying so is the correct outcome. */
 const renderConfig = (opts: { port: number; authDir: string; token: string }): string =>
     [
         `host: "127.0.0.1"`,
@@ -43,6 +53,10 @@ const renderConfig = (opts: { port: number; authDir: string; token: string }): s
         `remote-management:`,
         `  allow-remote: false`,
         `  secret-key: ${JSON.stringify(opts.token)}`,
+        `quota-exceeded:`,
+        `  switch-project: true`,
+        `  switch-preview-model: true`,
+        `  antigravity-credits: false`,
         ``,
     ].join("\n");
 
@@ -154,6 +168,9 @@ export interface CliProxyClient {
     // Pull every readable account's quota now and record it. The daemon calls this once at boot so the first
     // person to open the Agent tab already has rings to look at.
     readonly refreshUsage: () => Promise<void>;
+    // When this provider's spent allowance next reopens, for the turn that was just refused by it. Reads the
+    // recorded snapshots only — see the implementation for why the refusal itself cannot answer this.
+    readonly reopensAt: (provider: KeyedProvider) => Promise<number | undefined>;
     readonly connect: (provider: KeyedProvider) => Promise<TranslatorLogin>;
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
@@ -364,6 +381,30 @@ export const createCliProxyClient = (params: {
             });
     };
 
+    /* WHEN THIS PROVIDER CAN SERVE AGAIN after every one of its accounts has refused — read from the snapshots
+     * above rather than from the refusal, because the refusal does not carry it. CLIProxyAPI walks the whole
+     * credential set on a quota 429 and answers with the LAST word on it ("All credentials for model X are
+     * cooling down"); the per-account "Resets in 138h26m8s" is spent inside that walk and never reaches the
+     * caller. The quota reads do carry it, for every account, and cost nothing here — they are already on file.
+     *
+     * The earliest exhausted window across the provider's accounts, because any ONE account reopening unblocks
+     * the turn. Two deliberate imprecisions, both erring early: a snapshot up to REFRESH_AFTER_MS stale can miss
+     * an account that has since hit its wall, and an account whose pools are exhausted on different clocks is
+     * read at its earliest rather than at the pool that did the refusing. Early costs one retry that fails the
+     * same way; late leaves someone waiting past a window that already reopened. Undefined when nothing on file
+     * is exhausted — the caller then says nothing about a reset, which beats naming an instant we don't have. */
+    const reopensAt = async (provider: KeyedProvider): Promise<number | undefined> => {
+        const [files, stored] = await Promise.all([listFiles(), usageStore.read()]);
+        const resets = files.flatMap((file) =>
+            file.provider !== CLIPROXY_PROVIDER[provider] || file.name === undefined
+                ? []
+                : (stored[usageKey(provider, file.name)]?.windows ?? []).flatMap((window) =>
+                      window.utilization >= 100 && window.resetsAt !== undefined ? [window.resetsAt] : [],
+                  ),
+        );
+        return resets.length === 0 ? undefined : Math.min(...resets);
+    };
+
     return {
         accounts: async () => {
             const [files, stored] = await Promise.all([listFiles(), usageStore.read()]);
@@ -379,6 +420,7 @@ export const createCliProxyClient = (params: {
             return { codex: of("codex"), grok: of("grok"), kimi: of("kimi"), gemini: of("gemini") };
         },
         refreshUsage,
+        reopensAt,
         connect: (provider) =>
             provider === "grok" || provider === "kimi" ? connectDevice(provider) : provider === "gemini" ? connectGemini() : connectCodex(),
         complete,

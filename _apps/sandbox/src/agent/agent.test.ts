@@ -549,6 +549,64 @@ test("a usage-limit retry parks the turn at its reset instead of masquerading as
     }
 });
 
+/* THE ROUTED HALF OF THE SAME FRAME, and the reason `allowance` exists at all.
+ *
+ * A Google turn runs Claude Opus through Antigravity on the Claude Code harness, so everything the harness says
+ * about the 429 is about the wrong vendor: it names Anthropic, and CLIProxyAPI sends no Retry-After, leaving
+ * `retry_delay_ms` as the SDK's own 620ms-and-doubling backoff. Reading that as an instant is what put "Resets
+ * 5:32 PM" — the moment of the failure — under a Google weekly quota that was five days out. Both halves are
+ * asserted here: the delay is IGNORED (the reopen instant wins) and the vendor is the one that refused. */
+test("a routed usage-limit retry names the vendor that refused and takes its reset from that vendor's quota, not the harness backoff", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-31T15:32:33.000Z"));
+    const reopensAt = Date.parse("2026-08-06T09:57:46.000Z") / 1000;
+    try {
+        const events = await collect(
+            { ...request, allowance: { vendor: "Google", reopensAt: async () => reopensAt } },
+            fakeQuery({
+                type: "system",
+                subtype: "api_retry",
+                session_id: "s",
+                attempt: 1,
+                max_retries: 300,
+                retry_delay_ms: 620,
+                error_status: 429,
+                error: "rate_limit",
+            }),
+        );
+        expect(events).toEqual([
+            { kind: "session", sessionId: "s" },
+            { kind: "error", code: "rate_limit", message: expect.stringContaining("Google usage limit reached"), resetsAt: reopensAt },
+            { kind: "done" },
+        ]);
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+// Nothing on file beats a number we made up: the client renders a limit with no reset as a plain notice, which
+// is honest, where `now + backoff` reads as "already reset" and invites an immediate retry into a closed window.
+test("a routed usage-limit retry with no quota reading on file carries no reset at all", async () => {
+    const events = await collect(
+        { ...request, allowance: { vendor: "Google", reopensAt: async () => undefined } },
+        fakeQuery({
+            type: "system",
+            subtype: "api_retry",
+            session_id: "s",
+            attempt: 1,
+            max_retries: 300,
+            retry_delay_ms: 620,
+            error_status: 429,
+            error: "rate_limit",
+        }),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "rate_limit", message: expect.stringContaining("Google usage limit reached") },
+        { kind: "done" },
+    ]);
+});
+
 // The CLI files a mid-session limit hit under a non-rate_limit category, with only the sentence saying what
 // happened ("You've hit your session limit · resets …"). The sentence is kept — it names the reset, our canned
 // line doesn't — but the code makes it the same condition as the assistant-error rate_limit above.

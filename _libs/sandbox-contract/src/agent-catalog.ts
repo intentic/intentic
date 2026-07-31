@@ -46,6 +46,23 @@ export const PROVIDER_ACCESS: Record<NativeProvider, ProviderAccess> = {
     gemini: { kind: "free", requirement: "Google sign-in", runs: "Gemini, Claude and GPT-OSS under Claude Code" },
 };
 
+/* WHOSE ALLOWANCE A TURN ON THIS PROVIDER SPENDS, as the subject of a sentence — a third naming of the same
+ * five ids, and the third is not redundancy. PROVIDERS names the RUNTIME the user picks ("Claude Code", "Kimi
+ * Code") and PROVIDER_ACCESS.requirement names the thing they CONNECT ("Claude subscription", "Google sign-in");
+ * neither reads as English in "… usage limit reached", and neither is what a spent quota belongs to.
+ *
+ * The routed providers are why this can't be inferred from the harness: a `gemini` turn drives Claude Opus 4.6
+ * through Google's Antigravity channel on a plain Google sign-in, so the quota that refuses it is Google's and
+ * Anthropic has no part in it. Saying "Claude usage limit reached" there sends the user to check the wrong
+ * account — and to a reset that is days out on a pool they never touched. */
+export const PROVIDER_VENDOR: Record<NativeProvider, string> = {
+    claude: "Claude",
+    codex: "ChatGPT",
+    grok: "xAI",
+    kimi: "Kimi Code",
+    gemini: "Google",
+};
+
 // What a turn on this provider costs at the MARGIN, ordering the same three kinds by the only question a
 // helper spending the user's money on their behalf has to answer: free is free; a subscription is already paid
 // but has a quota the user watches; a key is metered, so every call is real money. Deliberately not folded into

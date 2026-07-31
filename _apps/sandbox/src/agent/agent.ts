@@ -34,7 +34,7 @@ import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { bashTmuxHooks, type FilterBackend, tmuxRunEnabled } from "./agent-terminals.js";
 import { EventQueue } from "./event-queue.js";
-import { harnessEnv } from "./harness-credentials.js";
+import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
@@ -74,6 +74,10 @@ export interface AgentRequest {
     // a foreign endpoint. Absent ⇒ native Anthropic endpoint with the OAuth token above.
     readonly baseUrl?: string;
     readonly authToken?: string;
+    // Whose allowance a routed turn spends, and when a spent one reopens — neither readable from the harness,
+    // which sees only that a 429 came back. Set alongside `baseUrl` by harness-credentials; absent on a native
+    // Claude turn. See TurnAllowance.
+    readonly allowance?: TurnAllowance;
     // The selected Codex account's CODEX_HOME for this turn (Codex path only). Absent ⇒ the adapter's default
     // base dir, which resolves the container's OPENAI_API_KEY fallback.
     readonly codexHome?: string;
@@ -322,12 +326,12 @@ const apiErrorMessage = (message: SDKAssistantMessage): string => {
 // One explanation for both ways a spent subscription allowance reaches us: an assistant refusal after the
 // harness gives up, and the earlier api_retry frame whose long delay says it intends to wait for the reset.
 // Keeping the wording here prevents the live-retry path from drifting back into calling the same condition an
-// outage while the terminal path calls it a limit.
-const rateLimitFrame = (resetsAt?: number): Extract<AgentEvent, { kind: "error" }> => ({
+// outage while the terminal path calls it a limit. `vendor` because the harness is not the vendor on a routed
+// turn — see TurnAllowance; naming Anthropic for a Google quota sends the user to the wrong account.
+const rateLimitFrame = (vendor: string, resetsAt?: number): Extract<AgentEvent, { kind: "error" }> => ({
     kind: "error",
     code: "rate_limit",
-    message:
-        "Claude usage limit reached — this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.",
+    message: `${vendor} usage limit reached — this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.`,
     ...(resetsAt !== undefined ? { resetsAt } : {}),
 });
 
@@ -343,14 +347,14 @@ const rateLimitFrame = (resetsAt?: number): Extract<AgentEvent, { kind: "error" 
  *
  * Everything else stays uncoded and reads as the red line it is: 4xx all land in the SDK's `unknown` bucket, and
  * a malformed request re-sent on a timer is a loop, not a recovery. */
-const errorFrame = (message: SDKAssistantMessage): Extract<AgentEvent, { kind: "error" }> => {
-    // rate_limit is Claude's subscription usage cap, not a workspace fault — tag it so the UI can render it as a
+const errorFrame = (message: SDKAssistantMessage, vendor: string): Extract<AgentEvent, { kind: "error" }> => {
+    // rate_limit is the subscription usage cap, not a workspace fault — tag it so the UI can render it as a
     // "wait and retry" notice instead of a red crash line (see conversation.ts). A limit hit the SDK filed under
     // another category keeps its own sentence (the CLI's "You've hit your session limit · resets …" names the
     // reset; our canned line doesn't) but carries the same code, so every spent-allowance failure reaches the
     // client as one condition.
     if (message.error === "rate_limit") {
-        return rateLimitFrame();
+        return rateLimitFrame(vendor);
     }
     if (message.error === "server_error" || message.error === "overloaded") {
         return { kind: "error", code: "provider-outage", message: apiErrorMessage(message) };
@@ -384,7 +388,19 @@ async function* streamSdk(
     // Reads the credential's plan-limit pools at turn settle; absent when the turn ran on a credential with no
     // pools to read (an API endpoint, the container env) — no read, no frame.
     readUsage: (() => Promise<UsageWindow[]>) | undefined,
+    // Whose allowance this turn spends and when it reopens; absent on a native Claude turn, whose harness
+    // answers both by itself. See TurnAllowance.
+    allowance: TurnAllowance | undefined,
 ): AsyncGenerator<AgentEvent> {
+    const vendor = allowance?.vendor ?? "Claude";
+    /* WHEN THE SPENT WINDOW REOPENS, from the only party that knows. On a NATIVE Claude turn the harness sets
+     * its retry delay to the closed window's remaining lifetime, so the delay IS the reset and arithmetic on it
+     * is exact. On a routed turn it is nothing of the sort: CLIProxyAPI answers 429 with no Retry-After, so the
+     * delay is the SDK's own 620ms-and-doubling backoff, and turning that into an instant is what produced
+     * "Resets 5:32 PM" for a Google weekly quota five days out. Ask the provider's quota reporting instead, and
+     * accept `undefined` — the client renders a limit with no reset as a plain notice, which is the truth. */
+    const limitReset = (retryDelayMs: number): Promise<number | undefined> =>
+        allowance === undefined ? Promise.resolve(Math.ceil((Date.now() + retryDelayMs) / 1000)) : allowance.reopensAt();
     let sessionSent = false;
     let terminalSent = false;
     // The agent's live tmux terminal is surfaced twice: once at the first Bash tool_use (so a long command is
@@ -476,7 +492,7 @@ async function* streamSdk(
             // Text/thinking already streamed as deltas above; here we only surface tool calls (and the
             // TodoWrite checklist, which is a tool call we render as its own live list).
             if (message.error !== undefined) {
-                yield errorFrame(message);
+                yield errorFrame(message, vendor);
             } else {
                 const content = message.message.content as ReadonlyArray<{ type: string; id?: string; name?: string; input?: unknown }>;
                 for (const block of content) {
@@ -681,7 +697,7 @@ async function* streamSdk(
                  * spinner attached to it for minutes or hours. Returning closes the SDK iterator in sdkTurns'
                  * finally; runAgent then supplies the ordinary terminal done frame. */
                 if (message.error === "rate_limit") {
-                    yield rateLimitFrame(Math.ceil((Date.now() + message.retry_delay_ms) / 1000));
+                    yield rateLimitFrame(vendor, await limitReset(message.retry_delay_ms));
                     return;
                 }
                 /* Every other retry is still happening INSIDE this turn, so nothing has failed yet and there is
@@ -1170,6 +1186,7 @@ export async function* runAgent(
                 request.browserOutputDir,
                 request.steering,
                 readUsage,
+                request.allowance,
             )) {
                 push(event);
             }

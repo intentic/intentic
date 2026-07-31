@@ -1,4 +1,4 @@
-import { type AgentProvider, type KeyedProvider, NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract";
+import { type AgentProvider, type KeyedProvider, NATIVE_PROVIDERS, type NativeProvider, PROVIDER_VENDOR } from "@intentic/sandbox-contract";
 import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 
@@ -30,6 +30,22 @@ export interface HarnessEndpoint {
     readonly model: string;
 }
 
+/* WHOSE ALLOWANCE THIS TURN SPENDS, and when a spent one reopens — the two things the harness cannot tell us
+ * about its own 429, and the reason they are attached to the CREDENTIAL rather than derived downstream.
+ *
+ * A routed turn runs the Claude Code harness against the translator but spends a Google (or ChatGPT, or Kimi)
+ * subscription, and the harness knows only that a 429 came back. So it says "Claude", and it sets its retry
+ * delay from its OWN backoff curve — 620ms, then 1072ms, then 2281ms — because CLIProxyAPI answers with no
+ * Retry-After. Reading that delay as a reset instant is what put "Resets 5:32 PM" under a Google weekly quota
+ * that was five days out, on a turn that never touched Anthropic.
+ *
+ * Absent ⇒ a native Claude turn, whose harness reports both correctly by itself: it names its own vendor, and
+ * on a subscription limit it sets the retry delay to the closed window's remaining lifetime. */
+export interface TurnAllowance {
+    readonly vendor: string;
+    readonly reopensAt: () => Promise<number | undefined>;
+}
+
 export interface HarnessCredentials {
     readonly oauthToken?: string;
     // Re-mints `oauthToken` mid-turn. The CLI calls this when the API refuses the token it was given — expired
@@ -42,6 +58,9 @@ export interface HarnessCredentials {
     // the credential came from the container env or from the translator's own subscription rather than an
     // account this sandbox stores.
     readonly account?: string;
+    // Set on a routed turn only: see TurnAllowance. A native Claude turn leaves it absent and the harness's own
+    // reporting stands.
+    readonly allowance?: TurnAllowance;
 }
 
 /* ONE ENDPOINT, ONE MODEL — the rule that makes everything a harness turn can spawn reachable.
@@ -204,6 +223,9 @@ export const resolveHarnessCredentials = async (
             };
         }
         const catalog = await routedCatalog(services, input.agent);
+        // Narrowed here rather than read off `input` inside the closure: the reopen lookup outlives this call by
+        // a whole turn, and `input.agent` is an open provider vocabulary everywhere else in the file.
+        const routed = input.agent;
         return {
             ok: true,
             credentials: {
@@ -212,6 +234,7 @@ export const resolveHarnessCredentials = async (
                     authToken: services.config.translator.token,
                     model: routedModel(catalog, input.model),
                 },
+                allowance: { vendor: PROVIDER_VENDOR[routed], reopensAt: () => services.cliProxy.reopensAt(routed) },
             },
         };
     }

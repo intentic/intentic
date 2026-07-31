@@ -227,6 +227,59 @@ describe("translator subscription usage", () => {
         expect((await client.accounts()).codex[0]).toHaveProperty("usage");
     });
 
+    /* WHEN A SPENT PROVIDER REOPENS — the question a routed 429 leaves unanswered, because CLIProxyAPI walks
+     * its whole credential set and reports only the last word on it ("All credentials … are cooling down"). The
+     * per-account "Resets in 138h26m8s" is spent inside that walk. These snapshots are the only place the
+     * instant survives, so the lookup is pinned on both the ordering and the abstention. */
+    const geminiFiles = (windows: Record<string, { utilization: number; resetsAt?: number }>) =>
+        (async (input: string | URL): Promise<Response> =>
+            String(input).endsWith("/auth-files")
+                ? Response.json({
+                      files: Object.keys(windows).map((name) => ({ name, provider: "antigravity", auth_index: name })),
+                  })
+                : Response.json({ status_code: 500 })) as typeof fetch;
+
+    // Exhausted only, and the earliest of them: any ONE account reopening unblocks the turn, so the soonest is
+    // the answer. An account with headroom left contributes nothing — it did not refuse.
+    test("reports the earliest reset among a provider's exhausted accounts", async () => {
+        const { store } = memoryStore();
+        const windows = {
+            "spent-late.json": { utilization: 100, resetsAt: 3_000 },
+            "spent-early.json": { utilization: 100, resetsAt: 2_000 },
+            "has-room.json": { utilization: 40, resetsAt: 1_000 },
+        };
+        for (const [name, window] of Object.entries(windows)) {
+            await store.record(`gemini:${name}`, { windows: [{ kind: "google:3p-weekly", ...window }], measuredAt: 0 });
+        }
+        const client = createCliProxyClient({
+            managementUrl: "http://cliproxy.test",
+            token: "management-secret",
+            configPath: "/tmp/config",
+            usageStore: store,
+            fetchFn: geminiFiles(windows),
+        });
+
+        await expect(client.reopensAt("gemini")).resolves.toBe(2_000);
+        // Another provider's accounts are not this provider's headroom, however spent they are.
+        await expect(client.reopensAt("codex")).resolves.toBeUndefined();
+    });
+
+    // Nothing measured ⇒ no claim. The caller emits a limit with no reset rather than an invented instant.
+    test("reports no reset when nothing on file is exhausted", async () => {
+        const { store } = memoryStore();
+        const windows = { "has-room.json": { utilization: 40, resetsAt: 1_000 } };
+        await store.record("gemini:has-room.json", { windows: [{ kind: "google:3p-weekly", utilization: 40, resetsAt: 1_000 }], measuredAt: 0 });
+        const client = createCliProxyClient({
+            managementUrl: "http://cliproxy.test",
+            token: "management-secret",
+            configPath: "/tmp/config",
+            usageStore: store,
+            fetchFn: geminiFiles(windows),
+        });
+
+        await expect(client.reopensAt("gemini")).resolves.toBeUndefined();
+    });
+
     // Dropping an account drops its snapshot with it: leaving one behind would hand its headroom to whatever
     // account is next given the same auth-file name.
     test("clears an account's snapshot when it is disconnected", async () => {

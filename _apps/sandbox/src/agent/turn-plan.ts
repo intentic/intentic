@@ -251,7 +251,7 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
     if (!resolved.ok) {
         return { ok: false, ...(resolved.code !== undefined ? { code: resolved.code } : {}), message: resolved.message };
     }
-    const { oauthToken, refreshOauthToken, endpoint } = resolved.credentials;
+    const { oauthToken, refreshOauthToken, endpoint, allowance } = resolved.credentials;
     // Pre-flight the resume target: a session id that outlived its transcript (deleted, or minted before the
     // store persisted across rebuilds) would otherwise spawn the CLI just to fail opaquely — on every retry. The
     // coded refusal lets the UI drop the dead id so the next send starts fresh.
@@ -381,7 +381,7 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
             // daemon-wide default model when the turn didn't pin one (a per-automation `model` already rode into
             // `base` above and wins; empty ⇒ subscription default).
             ...(endpoint !== undefined
-                ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model }
+                ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model, ...(allowance !== undefined ? { allowance } : {}) }
                 : {
                       ...(input.model === undefined && services.config.intenticAgentModel !== ""
                           ? { model: services.config.intenticAgentModel }
