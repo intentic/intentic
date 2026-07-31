@@ -1,5 +1,5 @@
 import { mkdir, rm } from "node:fs/promises";
-import { createServer as createSecureServer } from "node:https";
+import { createSecureServer } from "node:http2";
 import { join } from "node:path";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
@@ -170,7 +170,22 @@ const main = async (): Promise<void> => {
      * should wait, so it happens in the background and lands at the next restart. Without one the listener
      * serves plain HTTP, which Chrome and Firefox still accept for loopback; the browser probes both and the
      * daemon's identity decides. Its own WebSocket server: `ws` in noServer mode is bound to one HTTP server,
-     * so sharing the instance above would leave terminals on this port unupgradeable. */
+     * so sharing the instance above would leave terminals on this port unupgradeable.
+     *
+     * HTTP/2, and that is not a performance nicety — it is what stops the workspace freezing. A browser allows
+     * SIX concurrent HTTP/1.1 connections per origin, and this app holds LONG-LIVED ones: `/events` forever,
+     * plus an `/agent/attach` for every conversation with a live turn (plus `/intentic/apply/events`, plus any
+     * popped-out window, all sharing the one origin). Four or five running agents therefore consume every slot,
+     * and the next request — any ordinary read — has nowhere to go and simply queues in the browser until a
+     * stream ends. Nothing is wrong daemon-side, which is exactly why it presents as "the sandbox froze" with a
+     * silent, healthy log; only dropping the sockets (a reload of every tab, or clearing site data) frees it.
+     * One h2 connection carries ~100 concurrent streams instead, so the cap stops binding at any realistic
+     * number of agents.
+     *
+     * `allowHTTP1` is required rather than tidy: WebSocket has no h2 form here (Node does not advertise the
+     * extended-CONNECT setting RFC 8441 needs), so the browser opens a SEPARATE http/1.1 connection for the
+     * terminal — which this accepts, and whose `upgrade` event still reaches the `ws` server above. It is also
+     * the fallback for any client that does not do ALPN at all. */
     const localCertificate = readLocalCertificate(config);
     const localSockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
     const localServer = serve({
@@ -180,7 +195,19 @@ const main = async (): Promise<void> => {
         websocket: { server: localSockets },
         ...(localCertificate === undefined
             ? {}
-            : { createServer: createSecureServer, serverOptions: { cert: localCertificate.certificate, key: localCertificate.privateKey } }),
+            : {
+                  createServer: createSecureServer,
+                  serverOptions: {
+                      cert: localCertificate.certificate,
+                      key: localCertificate.privateKey,
+                      allowHTTP1: true,
+                      // Node's default session memory (10MB) is a budget shared by every stream on the
+                      // connection — which is now ALL of them, including transcript replays that arrive in
+                      // multi-megabyte bursts. Exceeding it kills the session, i.e. the whole workspace's
+                      // connection at once, so the ceiling has to be sized for the multiplexing this enables.
+                      maxSessionMemory: 128,
+                  },
+              }),
     });
     logger.info({ port: config.local.port, tls: localCertificate !== undefined, hostname: localCertificate?.hostname }, "loopback listener ready");
     // Obtain/renew in the background. Never rejects: a sandbox with no certificate is a working sandbox.

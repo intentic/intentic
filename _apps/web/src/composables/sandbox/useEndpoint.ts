@@ -1,5 +1,6 @@
 import { computed, ref } from "vue";
 import { type Endpoint, selectEndpoint } from "./endpoint";
+import { setStreamCapacity, streamCapacity } from "./streamBudget";
 import { useSandbox } from "./useSandbox";
 
 /* THE TRANSPORT half of "where is the sandbox", as a module-level singleton — the counterpart to
@@ -46,6 +47,15 @@ const usingLocal = computed(() => {
     // Either loopback form — what makes a failure worth demoting is that a known-good address remains, and
     // that is equally true whichever of the two we happened to qualify.
     return kind === `local` || kind === `local-insecure`;
+});
+
+/* How many long-lived streams this tab may hold at once, which only the TRANSPORT can answer — h2 multiplexes
+ * them onto one connection, plain http/1.1 spends a whole connection each and a browser has six per origin.
+ * Read live (not snapshotted) because the endpoint resolves in the background and can change under a stream
+ * that is already open, which is this module's whole design. See streamBudget.ts for what happens without it. */
+setStreamCapacity(() => {
+    const id = activeSandboxId.value;
+    return streamCapacity(id === undefined ? undefined : endpoints.value[id]?.kind);
 });
 
 /* Qualify the active sandbox's fastest working address. Safe to call on every reconnect: it returns

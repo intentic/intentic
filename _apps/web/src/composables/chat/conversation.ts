@@ -27,6 +27,7 @@ import {
 import { computed, ref, shallowRef, watch } from "vue";
 import { recordPerf, trackPerf } from "../perf";
 import { sandboxRequest } from "../sandbox/sandboxClient";
+import { acquireStreamSlot } from "../sandbox/streamBudget";
 import { errorMessage } from "../useAsyncAction";
 import { mentionPaths } from "./useMentions";
 import { type CardKind, type ChatAttachment, type ChatMessage, isAwaitingDecision, transcriptOf, withCancelledCards } from "./transcript";
@@ -1529,6 +1530,24 @@ export class Conversation {
             if (controller.signal.aborted) {
                 return attached;
             }
+            /* A slot for this attach, because it is about to hold a whole CONNECTION open for as long as the
+             * turn runs. A browser allows six per origin on http/1.1, so without a budget four or five
+             * streaming agents leave the tab unable to make an ordinary request at all — see streamBudget.ts.
+             * Unbounded (so this resolves on the spot) wherever the transport multiplexes, which is h2 on the
+             * certified loopback and on the tunnel. Undefined means this conversation was aborted while
+             * queued. */
+            const slot = await acquireStreamSlot(controller.signal);
+            if (slot === undefined) {
+                return attached;
+            }
+            /* Re-checked because the acquire above is a suspension point, and a stop landing inside it must not
+             * be overtaken. Attaching on a signal that has ALREADY aborted parks forever rather than failing:
+             * the body's producer wires its teardown to that signal, so it has missed the only event that would
+             * ever have ended the stream, and this read waits on it for the life of the tab. */
+            if (controller.signal.aborted) {
+                slot();
+                return attached;
+            }
             let response: Response;
             try {
                 response = await sandboxRequest(`/agent/attach`, {
@@ -1544,7 +1563,9 @@ export class Conversation {
             } catch {
                 // Network drop between attaches. A probe that never engaged gives up (its caller retries on
                 // the next reachability flip); an engaged stream backs off and retries — the turn may well
-                // still be running, and the cursor resumes it exactly where this tab left off.
+                // still be running, and the cursor resumes it exactly where this tab left off. The slot goes
+                // back first either way: a stream that is not open must not hold one across the backoff.
+                slot();
                 if (controller.signal.aborted || !attached) {
                     return attached;
                 }
@@ -1553,6 +1574,7 @@ export class Conversation {
                 continue;
             }
             if (!response.ok || !response.body) {
+                slot();
                 return attached;
             }
             retryMs = 500;
@@ -1598,6 +1620,10 @@ export class Conversation {
                 }
             } catch {
                 // The stream broke mid-read — fall through and re-attach from the cursor.
+            } finally {
+                // However this attach ended — settled, superseded, torn, or returned from inside the loop —
+                // the connection is done and the next stream may have it.
+                slot();
             }
             // Reached only when the stream ENDED WITHOUT an `end` frame (a clean `end` returns above). If it also
             // delivered nothing new (cursor unmoved), the run has no more for us — a done run whose tail we
