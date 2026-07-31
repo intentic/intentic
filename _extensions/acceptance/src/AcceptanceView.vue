@@ -126,6 +126,18 @@ const statuses = computed<Readonly<Record<string, { readonly label: string; read
     return Object.fromEntries(found);
 });
 
+/* LOADING KEEPS THE SHAPE. Both lists here are a request away, and an area that paints blank and then pops a
+ * list in reads as broken on a slow sandbox. So the rows that are coming stand in for themselves — the app's
+ * skeleton idiom (see the Sandbox hub's connections list): a pulsing bar wherever text will land, in the row's
+ * own geometry, inside the real surface.
+ *
+ * Only the ROWS are placeholders. The repo groups around them are already known — `byRepo` is built from
+ * workspace facts, not from this query — so the headings, and the composer that ends each group, are the real
+ * ones from the first paint. */
+const skeletonBar = `animate-pulse rounded bg-content/10`;
+// Varied so the block reads as text rather than as a bar chart.
+const skeletonTitles = [`w-56`, `w-72`, `w-44`];
+
 /* A run's headline: verdicts once they exist, live progress until then. Deliberately NOT a percentage — a run of
  * four stories where one failed is "1 failed", not "75%", and a bar that reads 75% while three tests are still
  * walking a page would be inventing a number nobody can act on.
@@ -270,7 +282,20 @@ const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
                         No repository here runs an app yet. Give one a panel (an <span class="font-mono">operator/</span> directory it can serve) and
                         its stories become testable.
                     </div>
-                    <RowGroup v-for="entry in byRepo" :key="entry.repo" :label="entry.repo" :count="entry.count">
+                    <!-- The count is withheld while the stories are still being read: "0" beside a loading group
+                         is a wrong answer, not a pending one. -->
+                    <RowGroup v-for="entry in byRepo" :key="entry.repo" :label="entry.repo" :count="storiesLoading ? undefined : entry.count">
+                        <!-- `py-2.5` and the `h-5` line box are StoryRow's own geometry, so the rows that arrive
+                             land exactly where their placeholders were. -->
+                        <template v-if="storiesLoading">
+                            <div v-for="row in 3" :key="row" class="flex w-full items-center gap-3 px-4 py-2.5">
+                                <span :class="[skeletonBar, `h-3.5 w-3.5 shrink-0`]" />
+                                <span class="flex h-5 min-w-0 flex-1 items-center">
+                                    <span :class="[skeletonBar, `block h-3`, skeletonTitles[row - 1]]" />
+                                </span>
+                                <span :class="[skeletonBar, `h-2.5 w-14 shrink-0`]" />
+                            </div>
+                        </template>
                         <template v-for="[group, entries] in entry.groups" :key="group || 'root'">
                             <div v-if="group !== ``" class="bg-canvas px-4 py-1 font-mono text-2xs text-subtle">{{ group }}/</div>
                             <StoryRow
@@ -296,8 +321,22 @@ const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
                     </p>
                 </section>
 
-                <RowGroup label="Runs" :count="runs.length">
-                    <div v-if="runs.length === 0 && !runsLoading" :class="cmp.emptyState('m-3')">
+                <!-- The count is withheld while the list is unknown: "0" next to a loading list is a wrong
+                     answer, not a pending one. -->
+                <RowGroup label="Runs" :count="runsLoading ? undefined : runs.length">
+                    <template v-if="runsLoading">
+                        <div v-for="row in 2" :key="row" class="flex w-full items-center gap-3 px-4 py-2.5">
+                            <span :class="[skeletonBar, `h-3.5 w-3.5 shrink-0`]" />
+                            <!-- The two line boxes a run row stacks: text-sm over text-2xs. -->
+                            <span class="min-w-0 flex-1">
+                                <span class="flex h-5 items-center"><span :class="[skeletonBar, `block h-3 w-24`]" /></span>
+                                <span class="flex h-4 items-center"><span :class="[skeletonBar, `block h-2.5 w-40`]" /></span>
+                            </span>
+                            <span :class="[skeletonBar, `h-4 w-16 shrink-0 rounded-full`]" />
+                            <span :class="[skeletonBar, `h-2.5 w-20 shrink-0`]" />
+                        </div>
+                    </template>
+                    <div v-else-if="runs.length === 0" :class="cmp.emptyState('m-3')">
                         Nothing has been tested yet. Pick some stories and run them — reports land in
                         <span class="font-mono">{{ RUNS_DIR }}/</span>, outside every repository.
                     </div>

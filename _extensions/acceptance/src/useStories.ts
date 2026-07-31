@@ -43,6 +43,41 @@ export function useStories() {
             .map((repo) => repo.repo),
     );
 
+    /* THE READERS ARE DECLARED BEFORE THE QUERY, and must stay that way. vue-query subscribes its observer
+     * synchronously inside `useQuery`, so a query that is enabled and has nothing cached calls `queryFn` during
+     * setup — before any `const` further down this function has been initialized. Declaring these below the
+     * query typechecks fine and dies at runtime with `Cannot access 'walk' before initialization`, surfacing as
+     * the view's error banner until a retry (by which time the closure is live) quietly succeeds. */
+
+    const children = async (path: string): Promise<WorkspaceTreeEntry[]> => {
+        try {
+            return WorkspaceChildrenSchema.parse(await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(path)}`)).entries;
+        } catch {
+            return [];
+        }
+    };
+    const text = async (path: string): Promise<string | undefined> => {
+        try {
+            return WorkspaceFileSchema.parse(await api.sandbox.json(`/workspace/file?path=${encodeURIComponent(path)}`)).content;
+        } catch {
+            return undefined;
+        }
+    };
+
+    // Breadth-first to MAX_DEPTH. A directory that does not exist (or was removed under us) is an empty level,
+    // not an error — the stories dir is a convention, and the daemon's facts may be a poll stale.
+    const walk = async (root: string): Promise<WorkspaceTreeEntry[]> => {
+        const listed: WorkspaceTreeEntry[] = [];
+        let frontier = [root];
+        for (let depth = 0; depth < MAX_DEPTH && frontier.length > 0; depth += 1) {
+            const levels = await Promise.all(frontier.map(async (path) => await children(path)));
+            const entries = levels.flat();
+            listed.push(...entries);
+            frontier = entries.filter((entry) => entry.type === `dir` && !entry.name.startsWith(`.`)).map((entry) => entry.path);
+        }
+        return listed;
+    };
+
     const query = useQuery({
         queryKey: computed(() => [...key.value, repos.value.join(`,`)]),
         enabled: computed(() => api.sandbox.reachable()),
@@ -63,35 +98,6 @@ export function useStories() {
             };
         },
     });
-
-    // Breadth-first to MAX_DEPTH. A directory that does not exist (or was removed under us) is an empty level,
-    // not an error — the stories dir is a convention, and the daemon's facts may be a poll stale.
-    const walk = async (root: string): Promise<WorkspaceTreeEntry[]> => {
-        const listed: WorkspaceTreeEntry[] = [];
-        let frontier = [root];
-        for (let depth = 0; depth < MAX_DEPTH && frontier.length > 0; depth += 1) {
-            const levels = await Promise.all(frontier.map(async (path) => await children(path)));
-            const entries = levels.flat();
-            listed.push(...entries);
-            frontier = entries.filter((entry) => entry.type === `dir` && !entry.name.startsWith(`.`)).map((entry) => entry.path);
-        }
-        return listed;
-    };
-
-    const children = async (path: string): Promise<WorkspaceTreeEntry[]> => {
-        try {
-            return WorkspaceChildrenSchema.parse(await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(path)}`)).entries;
-        } catch {
-            return [];
-        }
-    };
-    const text = async (path: string): Promise<string | undefined> => {
-        try {
-            return WorkspaceFileSchema.parse(await api.sandbox.json(`/workspace/file?path=${encodeURIComponent(path)}`)).content;
-        } catch {
-            return undefined;
-        }
-    };
 
     const invalidate = async (): Promise<void> => {
         await queryClient.invalidateQueries({ queryKey: key.value });
