@@ -110,6 +110,14 @@ export interface AgentRequest {
     // How tool calls are gated this turn. Defaults to the autonomous sandbox posture (bypassPermissions) —
     // the container's isolation is what makes that safe. The agent can move itself out of it mid-turn.
     readonly permissionMode?: PermissionMode;
+    /* Narrows the turn to these tool NAMES (the SDK option of the same name) — not to be confused with `tools`
+     * below, which are MCP servers. Absent ⇒ the runtime's full toolbox.
+     *
+     * This is the only real bound on a turn nobody is watching. bypassPermissions above is the default posture
+     * because the container is the isolation — but a Doorbell turn is driven by an anonymous website visitor,
+     * where "the container is disposable" is not the whole answer: the automation's allowlist is what stops an
+     * instruction smuggled into a support question from reaching Bash. */
+    readonly allowedTools?: readonly string[];
     // Reasoning controls forwarded to the SDK (effort level / extended thinking).
     readonly effort?: string;
     readonly thinking?: boolean;
@@ -975,6 +983,7 @@ const baseOptions = (
     // result anyway) and nowhere near enough for the Subagents area, which renders the child as a conversation.
     forwardSubagentText: true,
     permissionMode,
+    ...(request.allowedTools !== undefined ? { allowedTools: [...request.allowedTools] } : {}),
     abortController,
     // Claude Code's coding-tuned preset plus this harness's own guidance — or, when the owner has written a
     // system prompt of their own, that text alone (system-prompt.ts owns the choice and everything it drops).

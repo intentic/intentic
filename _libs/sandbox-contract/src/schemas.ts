@@ -122,6 +122,12 @@ export const AgentTurnSchema = z
         // 'acceptEdits' auto-accepts file edits; 'bypassPermissions' runs everything. The agent can move
         // itself between modes mid-turn (EnterPlanMode/ExitPlanMode), which rides back as a `mode` frame.
         permissionMode: PermissionModeSchema.optional(),
+        /* Narrows the turn to these tool names (the SDK option of the same name — not to be confused with the
+         * daemon's MCP `tools`, which are servers). Absent ⇒ every tool the runtime has, which is what an
+         * owner-driven chat wants. Set by the automation dispatchers from Automation.allowedTools: a wake driven
+         * by an OUTSIDE message runs bypassPermissions like any other automation turn, so for a public Doorbell
+         * this list is the actual boundary — prompt wording is advice, an empty toolbox is not. */
+        allowedTools: z.array(z.string().min(1)).optional(),
         effort: z.string().optional(),
         thinking: z.boolean().optional(),
         // The opt-in editor context chip: what the user is looking at, folded into the prompt daemon-side.
@@ -2108,12 +2114,113 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
 ]);
 export type Trigger = z.infer<typeof TriggerSchema>;
 
+/* The Doorbell widget's settings — everything about the embeddable chat that isn't the automation's prompt.
+ * Present only on `webchat` listener automations; the trigger keeps `allowedOrigins` because that one is the
+ * admission gate the message route reads, not a rendering choice.
+ *
+ * Split deliberately into what the WIDGET may read (title/greeting/accent/position/access/googleClientId/
+ * turnstileSiteKey — all public by construction, they ship to a stranger's browser) and what only the daemon
+ * may read (turnstileSecret). GET /webchat/<id>/config serves the first group by naming it, never by omitting
+ * the second: a field added here is invisible to the widget until it is listed there. */
+export const WebchatConfigSchema = z.object({
+    // `public` admits anyone; `google` refuses a message that carries no verifiable Google ID token. Absent ⇒
+    // public — a Doorbell with no access setting is the anonymous support box it looks like.
+    access: z.enum(["public", "google"]).optional(),
+    // Ask an anonymous visitor for a display name before the first message. Cosmetic: the name is typed, so it
+    // reaches the model as untrusted `displayName`, never as identity.
+    requireName: z.boolean().optional(),
+    /* The bot ceiling. `turnstile` is Cloudflare's (invisible, needs the site's own keys); `pow` is a
+     * hashcash-style challenge the daemon issues and the widget solves in a worker, so a site with no
+     * Cloudflare account still has something. Absent ⇒ off: the origin allowlist and the rate limit are then
+     * the whole boundary, which is the right default for an internal or invite-only page. */
+    antiBot: z.enum(["turnstile", "pow"]).optional(),
+    turnstileSiteKey: z.string().optional(),
+    turnstileSecret: z.string().optional(),
+    // The site's OWN Google OAuth web client id. It cannot be intentic's: Google Identity Services only issues
+    // a token to an authorized JavaScript origin, and intentic's client can't list every customer domain.
+    googleClientId: z.string().optional(),
+    // Widget chrome. `accent` is any CSS colour the host page can render; `position` picks the launcher corner.
+    title: z.string().max(80).optional(),
+    greeting: z.string().max(500).optional(),
+    accent: z.string().max(40).optional(),
+    position: z.enum(["top-right", "top-left", "bottom-right", "bottom-left"]).optional(),
+    /* Two ceilings on top of the route's fixed per-minute window, because a public endpoint's real exposure is
+     * cost, not request rate: `dailyMessageMax` caps the whole automation per UTC day, `conversationMessageMax`
+     * caps one visitor thread for its lifetime. Absent ⇒ uncapped, so an existing automation is unchanged. */
+    dailyMessageMax: z.number().int().positive().optional(),
+    conversationMessageMax: z.number().int().positive().optional(),
+    // How long a visitor thread keeps resuming the same conversation before the next message starts a fresh
+    // one. Absent ⇒ WEBCHAT_SESSION_TTL_MS (the daemon's default).
+    sessionTtlMinutes: z.number().int().positive().optional(),
+});
+export type WebchatConfig = z.infer<typeof WebchatConfigSchema>;
+
+/* ---- the widget wire: three shapes GET /webchat/<id>/config, GET …/challenge and POST …/message speak ----
+ *
+ * They live here, beside the stored config they derive from, because the Doorbell widget is a SECOND client of
+ * this daemon — a bundle running on a stranger's page — and the reason this package exists is that both ends of
+ * a wire read one definition. The widget imports these as types only (`import type`), so zod never reaches a
+ * visitor's browser. */
+
+// What the widget is told about itself. Fully RESOLVED — every default is applied daemon-side, so the widget
+// carries no fallback logic and one place decides what an unset field means. Everything here is public by
+// construction: it ships to any browser that can reach the endpoint from an allowed origin.
+export const WebchatPublicConfigSchema = z.object({
+    automationId: z.string(),
+    title: z.string(),
+    greeting: z.string(),
+    accent: z.string(),
+    position: z.enum(["top-right", "top-left", "bottom-right", "bottom-left"]),
+    access: z.enum(["public", "google"]),
+    requireName: z.boolean(),
+    // "off" is spelled out rather than left absent: the widget branches on this, and a missing field that means
+    // "no challenge" is the kind of default that turns one serialization bug into an open door.
+    antiBot: z.enum(["turnstile", "pow", "off"]),
+    turnstileSiteKey: z.string().optional(),
+    googleClientId: z.string().optional(),
+});
+export type WebchatPublicConfig = z.infer<typeof WebchatPublicConfigSchema>;
+
+// A proof-of-work challenge: find a nonce whose SHA-256 of `${salt}:${nonce}` starts with `difficulty` zero
+// bits. Issued per visitor conversation, spent on its first message.
+export const WebchatChallengeSchema = z.object({ salt: z.string(), difficulty: z.number().int().positive() });
+export type WebchatChallenge = z.infer<typeof WebchatChallengeSchema>;
+
+// One visitor message. `conversationId` is the widget's own localStorage id — it threads the visitor's messages
+// into ONE sandbox conversation, so it is the thread key, not a secret (anyone can mint one; the origin
+// allowlist, the challenge and the rate limit are the gate).
+export const WebchatMessageSchema = z.object({
+    conversationId: z.string().min(1).max(200),
+    content: z.string().min(1),
+    // What the visitor TYPED as their name. Never identity — it reaches the model tagged as unverified, and a
+    // signed-in visitor's verified name comes from the ID token instead.
+    displayName: z.string().max(200).optional(),
+    // A Google ID token from the site's own client id, verified daemon-side against Google's JWKS.
+    idToken: z.string().optional(),
+    // The anti-bot answer, whichever kind the config asked for. Checked once per conversation, not per message.
+    turnstileToken: z.string().optional(),
+    powNonce: z.string().optional(),
+    // The widget's own transcript, sent ONLY on the first message of a thread — after that the sandbox
+    // conversation resumes and carries its own context.
+    history: z
+        .array(z.object({ author: z.string().optional(), content: z.string() }))
+        .max(50)
+        .optional(),
+});
+export type WebchatMessage = z.infer<typeof WebchatMessageSchema>;
+
 export const AutomationSchema = z.object({
     id: entryId,
     trigger: TriggerSchema,
     // Shell command run in the workspace root before waking; exit 0 ⇒ wake, non-zero ⇒ the run is "skipped".
     guard: z.string().min(1).optional(),
     prompt: z.string().min(1),
+    // The Doorbell widget's settings — `webchat` listener automations only, ignored on every other trigger.
+    webchat: WebchatConfigSchema.optional(),
+    // The tool names this automation's wake may call (AgentTurnSchema.allowedTools). The reason it exists: a
+    // webchat automation is driven by strangers, and an automation turn runs bypassPermissions by default — so
+    // the allowlist, not the prompt's wording, is what bounds what an injected instruction can reach.
+    allowedTools: z.array(z.string().min(1)).optional(),
     // Which provider adapter serves the wake; absent ⇒ claude. Same dispatch as a chat turn (AgentTurnSchema.agent).
     agent: AgentProviderSchema.optional(),
     // Which harness (agentic loop) runs the wake; absent ⇒ native. Same semantics as AgentTurnSchema.harness.

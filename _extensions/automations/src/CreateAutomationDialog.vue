@@ -17,7 +17,7 @@ import { cronOf, defaultSchedule, formatAt, parseCron } from "./cronSchedule";
 import { host } from "./host";
 import { type ListenerEventType, LISTENER_SOURCES } from "./listenerSources";
 import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
-import { useAutomations, webhookUrl } from "./useAutomations";
+import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
 
 /* The New-automation dialog: recipe templates → name → trigger (cron builder / webhook / live listener) →
  * prompt → Advanced (guard, provider+harness, model, approval). An event automation keeps the dialog open
@@ -75,7 +75,31 @@ const form = reactive({
     // to one repo of the change span.
     workspaceEvent: `turn.settled` as WorkspaceEventKind,
     repo: ``,
+    // Doorbell (webchat) — the widget's settings. `origins` is edited as one line per site because that is how
+    // people hold a short allowlist in their head; it is split on save.
+    origins: ``,
+    access: `public` as `public` | `google`,
+    googleClientId: ``,
+    antiBot: `pow` as `off` | `pow` | `turnstile`,
+    turnstileSiteKey: ``,
+    turnstileSecret: ``,
+    greeting: ``,
 });
+
+// What a Doorbell may do while a stranger drives it. Deliberately read-only: an automation turn runs
+// bypassPermissions, so without an allowlist a support question is a shell on the sandbox. Widening it is a
+// deliberate edit of the automation, not a default.
+const DOORBELL_TOOLS = [`Read`, `Grep`, `Glob`, `WebFetch`] as const;
+
+const ACCESS_OPTIONS = [
+    { value: `public`, label: `Anyone` },
+    { value: `google`, label: `Google sign-in` },
+] as const;
+const ANTI_BOT_OPTIONS = [
+    { value: `pow`, label: `Built-in check` },
+    { value: `turnstile`, label: `Cloudflare Turnstile` },
+    { value: `off`, label: `Off` },
+] as const;
 
 // The moments a chore can wake on. Worded as the moment rather than the event id — the id is wire vocabulary,
 // and the two overlap enough (a clean turn auto-lands, firing both) that the difference has to read plainly.
@@ -158,8 +182,36 @@ const recipeGroups = computed(() => {
 const liveSources = computed(() => {
     const connected = new Set(capabilities.value.map((capability) => capability.config[`provider`]));
     return (Object.keys(LISTENER_SOURCES) as (keyof typeof LISTENER_SOURCES)[])
-        .filter((provider) => (LISTENER_SOURCES[provider].providers ?? [provider]).some((capability) => connected.has(capability)))
+        .filter(
+            (provider) =>
+                // A core source has nothing to connect (the Doorbell's "connection" is a script tag on the
+                // customer's site), so it is always offered; the rest wait for their capability.
+                LISTENER_SOURCES[provider].core === true ||
+                (LISTENER_SOURCES[provider].providers ?? [provider]).some((capability) => connected.has(capability)),
+        )
         .map((provider) => Object.assign({ provider }, LISTENER_SOURCES[provider]));
+});
+
+// The Doorbell's own fields replace the shared listener ones (channel/events/mention say nothing about a
+// widget), and its done-state shows an embed snippet instead of a webhook URL.
+const isDoorbell = computed(() => form.kind === `listener` && form.provider === `webchat`);
+const originList = computed(() =>
+    form.origins
+        .split(/[\n,]/)
+        .map((origin) => origin.trim().replace(/\/$/, ``))
+        .filter((origin) => origin !== ``),
+);
+// An origin must be exactly what a browser puts in the Origin header — scheme + host, no path — because that
+// is what the daemon compares against. Saying so at the point of typing beats a 403 the visitor sees.
+const originsError = computed<string | undefined>(() => {
+    if (!isDoorbell.value) {
+        return undefined;
+    }
+    if (originList.value.length === 0) {
+        return `Add at least one site — a Doorbell with no allowed sites admits nobody.`;
+    }
+    const bad = originList.value.find((origin) => !/^https?:\/\/[^/]+$/.test(origin));
+    return bad === undefined ? undefined : `"${bad}" isn't an origin — use scheme + host only, e.g. https://example.com`;
 });
 
 const effectiveCron = computed(() => cronOf(schedule));
@@ -183,6 +235,7 @@ const canSubmit = computed(
     () =>
         NAME_RE.test(form.id) &&
         (form.kind !== `schedule` || (cronPreview.value !== undefined && `runs` in cronPreview.value)) &&
+        originsError.value === undefined &&
         form.prompt.trim() !== ``,
 );
 const savedAutomation = computed(() => automations.value.find((automation) => automation.id === savedId.value));
@@ -293,6 +346,13 @@ const resetForm = (): void => {
     form.mentioned = false;
     form.workspaceEvent = `turn.settled`;
     form.repo = ``;
+    form.origins = ``;
+    form.access = `public`;
+    form.googleClientId = ``;
+    form.antiBot = `pow`;
+    form.turnstileSiteKey = ``;
+    form.turnstileSecret = ``;
+    form.greeting = ``;
     Object.assign(schedule, defaultSchedule());
     submitError.value = undefined;
     pickedRecipe.value = undefined;
@@ -345,6 +405,8 @@ const submit = async (): Promise<void> => {
                               ...(form.eventType !== undefined ? { eventType: form.eventType } : {}),
                               ...(form.eventType === `message` && form.mentioned ? { mentioned: true } : {}),
                               ...(form.channelId.trim() !== `` ? { channelId: form.channelId.trim() } : {}),
+                              // The Doorbell's admission list lives on the trigger, beside the provider it gates.
+                              ...(isDoorbell.value ? { allowedOrigins: originList.value } : {}),
                           },
             ...(form.guard.trim() !== `` ? { guard: form.guard.trim() } : {}),
             prompt: form.prompt,
@@ -358,11 +420,25 @@ const submit = async (): Promise<void> => {
             // clock can't be told from an external poll by its trigger, so that one is carried from the recipe
             // it was started from.
             ...(form.kind === `workspace` || pickedRecipe.value?.chore === true ? { chore: true } : {}),
+            // A Doorbell's widget settings, and the toolbox a stranger's message is allowed to drive.
+            ...(isDoorbell.value
+                ? {
+                      webchat: {
+                          access: form.access,
+                          antiBot: form.antiBot === `off` ? undefined : form.antiBot,
+                          ...(form.googleClientId.trim() !== `` ? { googleClientId: form.googleClientId.trim() } : {}),
+                          ...(form.turnstileSiteKey.trim() !== `` ? { turnstileSiteKey: form.turnstileSiteKey.trim() } : {}),
+                          ...(form.turnstileSecret.trim() !== `` ? { turnstileSecret: form.turnstileSecret.trim() } : {}),
+                          ...(form.greeting.trim() !== `` ? { greeting: form.greeting.trim() } : {}),
+                      },
+                      allowedTools: [...DOORBELL_TOOLS],
+                  }
+                : {}),
             enabled: true,
         });
-        // Event automations keep the dialog open: the refreshed list now carries the daemon-minted token, so the
-        // done-state can show the webhook URL + where to paste it. Scheduled ones just close.
-        if (form.kind === `event`) {
+        // Event and Doorbell automations keep the dialog open: the thing the owner still has to DO lives in the
+        // done-state — paste the webhook URL into the sending system, paste the embed snippet into the site.
+        if (form.kind === `event` || isDoorbell.value) {
             savedId.value = form.id;
             return;
         }
@@ -557,7 +633,98 @@ const submit = async (): Promise<void> => {
                         </button>
                     </div>
                 </div>
-                <div class="ui-field">
+                <!-- A Doorbell is configured by WHERE it may be embedded and WHO may talk to it — the shared
+                     listener fields (events, mention, channel) say nothing about a widget, so they fold away. -->
+                <template v-if="isDoorbell">
+                    <label class="ui-field">
+                        <span class="ui-field-label">Allowed sites</span>
+                        <textarea
+                            v-model="form.origins"
+                            rows="2"
+                            placeholder="https://example.com&#10;https://www.example.com"
+                            class="font-mono"
+                            :class="[cmp.input(), touched.has('origins') && originsError ? 'ui-field-input-error' : '']"
+                            @blur="markTouched('origins')"
+                        ></textarea>
+                        <span v-if="touched.has('origins') && originsError" class="ui-field-error">
+                            <Icon name="exclamation-triangle" class="text-2xs" />
+                            {{ originsError }}
+                        </span>
+                        <p v-else class="text-2xs text-subtle">
+                            One per line. Only these sites may embed the chat — scheme and host, no path. www and the bare domain are different
+                            origins.
+                        </p>
+                    </label>
+                    <div class="ui-field">
+                        <span class="ui-field-label">Who can chat</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button
+                                v-for="option in ACCESS_OPTIONS"
+                                :key="option.value"
+                                type="button"
+                                :class="[CHIP_BASE, form.access === option.value ? CHIP_SELECTED : CHIP_IDLE]"
+                                :aria-pressed="form.access === option.value"
+                                @click="form.access = option.value"
+                            >
+                                {{ option.label }}
+                            </button>
+                        </div>
+                    </div>
+                    <label v-if="form.access === 'google'" class="ui-field">
+                        <span class="ui-field-label">Google client ID</span>
+                        <input
+                            v-model="form.googleClientId"
+                            placeholder="1234-abc.apps.googleusercontent.com"
+                            class="font-mono"
+                            :class="cmp.input()"
+                        />
+                        <p class="text-2xs text-subtle">
+                            Your site's own OAuth client — Google only issues a token to an origin you've authorized on it, so it can't be ours. Add
+                            each allowed site above as an authorized JavaScript origin.
+                        </p>
+                    </label>
+                    <div class="ui-field">
+                        <span class="ui-field-label">Bot check</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button
+                                v-for="option in ANTI_BOT_OPTIONS"
+                                :key="option.value"
+                                type="button"
+                                :class="[CHIP_BASE, form.antiBot === option.value ? CHIP_SELECTED : CHIP_IDLE]"
+                                :aria-pressed="form.antiBot === option.value"
+                                @click="form.antiBot = option.value"
+                            >
+                                {{ option.label }}
+                            </button>
+                        </div>
+                        <p class="text-2xs text-subtle">
+                            <template v-if="form.antiBot === 'pow'">
+                                Costs each new visitor about a second of their browser's time, and costs a bot the same per conversation. No accounts,
+                                no keys.
+                            </template>
+                            <template v-else-if="form.antiBot === 'turnstile'"
+                                >Invisible for most visitors. Needs a Cloudflare Turnstile widget.</template
+                            >
+                            <template v-else>The allowed-sites list and the rate limit are then the only gate.</template>
+                        </p>
+                    </div>
+                    <template v-if="form.antiBot === 'turnstile'">
+                        <label class="ui-field">
+                            <span class="ui-field-label">Turnstile site key</span>
+                            <input v-model="form.turnstileSiteKey" placeholder="0x4AAA…" class="font-mono" :class="cmp.input()" />
+                        </label>
+                        <label class="ui-field">
+                            <span class="ui-field-label">Turnstile secret key</span>
+                            <input v-model="form.turnstileSecret" type="password" placeholder="0x4AAA…" class="font-mono" :class="cmp.input()" />
+                            <p class="text-2xs text-subtle">Stays in your sandbox — only the site key is ever sent to a visitor's browser.</p>
+                        </label>
+                    </template>
+                    <label class="ui-field">
+                        <span class="ui-field-label">Greeting (optional)</span>
+                        <input v-model="form.greeting" placeholder="Hi! Ask me anything." :class="cmp.input()" />
+                    </label>
+                </template>
+                <div v-if="!isDoorbell" class="ui-field">
                     <span class="ui-field-label">Events</span>
                     <div class="flex flex-wrap gap-1.5">
                         <button
@@ -584,7 +751,7 @@ const submit = async (): Promise<void> => {
                         {{ LISTENER_SOURCES[form.provider].mentionLabel }}
                     </label>
                 </div>
-                <label class="ui-field">
+                <label v-if="!isDoorbell" class="ui-field">
                     <span class="ui-field-label">{{ LISTENER_SOURCES[form.provider].channel.label }}</span>
                     <input
                         v-model="form.channelId"
@@ -643,6 +810,10 @@ const submit = async (): Promise<void> => {
             </div>
             <p v-if="form.kind === 'event'" class="text-xs text-muted">
                 Wakes when an external system POSTs its webhook URL — shown after you create it.
+            </p>
+            <p v-else-if="isDoorbell" class="text-xs text-muted">
+                Wakes when a visitor writes in the chat widget on your site. Each visitor's messages continue one conversation you can watch live and
+                take over. The agent answers with a read-only toolbox — it can look things up, not change them.
             </p>
             <p v-else-if="form.kind === 'listener'" class="text-xs text-muted">
                 Fires instantly over {{ LISTENER_SOURCES[form.provider].label }}'s live connection when the selected events happen — "Any" wakes on
@@ -754,6 +925,19 @@ const submit = async (): Promise<void> => {
                 </template>
             </div>
         </form>
+        <!-- The done-state exists for the one thing creating an automation does NOT finish: something still has
+             to be pasted elsewhere. Same shape for both — a copyable line and what to do with it. -->
+        <div v-else-if="savedAutomation && embedSnippet(savedAutomation)" class="flex flex-col gap-3">
+            <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Doorbell created — drop this into your site:</p>
+            <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
+                <code class="min-w-0 flex-1 break-all font-mono text-2xs text-content">{{ embedSnippet(savedAutomation) }}</code>
+                <CopyButton :text="embedSnippet(savedAutomation) ?? ''" :aria-label="`Copy the embed snippet for ${savedAutomation.id}`" />
+            </div>
+            <p class="text-xs text-muted">
+                Paste it before <span class="font-mono">&lt;/body&gt;</span> on any page you listed above. The launcher appears in the corner; visitor
+                conversations show up on your agents board, where you can watch and take over.
+            </p>
+        </div>
         <div v-else class="flex flex-col gap-3">
             <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Automation created — wire up the webhook:</p>
             <div v-if="savedAutomation" class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">

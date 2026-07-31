@@ -256,7 +256,7 @@ export const effectiveAutoLand = (agent: { readonly autoLand?: boolean } | undef
 const ORIGIN_SOURCES: Record<string, { icon: IconName; label: string }> = {
     discord: { icon: `comments`, label: `Discord` },
     imap: { icon: `envelope`, label: `Email` },
-    webchat: { icon: `globe`, label: `Web chat` },
+    webchat: { icon: `globe`, label: `Doorbell` },
     webhook: { icon: `bolt`, label: `Webhook` },
 };
 

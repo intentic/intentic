@@ -35,6 +35,7 @@
         "@intentic/sandbox-run": "workspace:*",
         "@intentic/scaffold": "workspace:*",
         "@intentic/sdk": "workspace:*",
+        "@intentic/webchat-widget": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
         "@intentic/workspace-setup": "workspace:*",
         "@openai/codex-sdk": "catalog:",

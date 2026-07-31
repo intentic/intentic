@@ -149,6 +149,22 @@ survive reconnects. Its subsystems:
   automation fires too: trying a prompt before switching it on is the main reason to press it. Every run records
   the session it ran in, so the row's run history opens the transcript — the answer to "it failed overnight and
   I can't see why".
+- **Doorbell** — a chat bubble a customer embeds on their own website, talking to a `webchat` listener
+  automation ([webchat/](_apps/sandbox/src/webchat/), widget in
+  [\_libs/webchat-widget](_libs/webchat-widget)). It is the inbound-HTTP mirror of the gateway-process pattern:
+  no extension holds a connection, because the connection is a `<script>` tag on someone else's page. Four
+  routes are exempt from the bearer middleware — `widget.js`, and per-automation `config` / `challenge` /
+  `message` — and that set, written as **one predicate** in [app.ts](_apps/sandbox/src/app.ts), is the whole of
+  what an anonymous internet user can reach on a daemon. The visitor holds no credential in any mode: even
+  with Google sign-in on, the ID token is verified daemon-side against the *site's own* client id (intentic's
+  cannot list every customer domain) and becomes a claim in the prompt, never a grant. Admission is the
+  trigger's `allowedOrigins` plus a per-conversation rate limit and an optional bot check — Cloudflare
+  Turnstile, or a built-in proof of work for sites with no Cloudflare account, spent once per visitor thread.
+  Each thread maps to ONE sandbox conversation, resumed by session id
+  ([webchat-sessions.ts](_apps/sandbox/src/webchat/webchat-sessions.ts)), so a five-message support chat is one
+  fleet card the owner can watch live and take over — not five worktrees with amnesia. And because an
+  automation turn runs `bypassPermissions` by default, a Doorbell's real boundary is `Automation.allowedTools`,
+  carried into the SDK's own allowlist: prompt wording is advice, an empty toolbox is not.
 - **CI pipelines** — the workspace repos' GitHub Actions / GitLab pipelines, as both an automation source and a
   UI surface ([ci/](_apps/sandbox/src/ci/)). A repo participates when its remote's hostname matches a connected
   github/gitlab capability (`projects.ts` — self-hosted GitLab included, via the capability's instance url). A

@@ -91,8 +91,17 @@ export interface FireOptions {
     // How many times a boot has already re-fired this wake, carried through the journal so an interrupted fire
     // that dies the same way again is not re-fired forever (see turn-resume's boot pass). A first fire is 0.
     readonly attempts?: number;
-    // Reused only by the restart path. A first fire mints its identity after the guard/approval gates clear.
+    /* Set by the restart path, and by any dispatcher that owns a CONTINUING thread rather than a one-off wake:
+     * the Doorbell hands the same id every time a visitor writes, so their whole chat is one conversation —
+     * one fleet card, one worktree, one agent that remembers the last message. A first fire mints its own
+     * identity after the guard/approval gates clear. */
     readonly conversationId?: string;
+    // The provider session that conversation last ran on, resumed so the turn continues rather than restarts.
+    // Only meaningful alongside conversationId, and only for a thread that has already completed a turn.
+    readonly sessionId?: string;
+    // Narrows the wake's toolbox (AgentTurn.allowedTools) — the automation's own allowlist, carried in by the
+    // dispatcher so the turn a stranger's message drives can be smaller than the one the owner's own is.
+    readonly allowedTools?: readonly string[];
     // When set, the agent's text deltas stream here live and it's told (via STREAM_NOTE) not to send the reply itself.
     readonly stream?: TurnStream;
     // Set by dispatchers that receive an OUTSIDE message (listener sources, the web-chat widget, the event
@@ -105,16 +114,33 @@ export interface FireOptions {
     readonly title?: string;
 }
 
+// What a fire leaves behind for a caller that has to run ANOTHER one on the same conversation: the provider
+// session the turn ran on, so the next fire resumes it instead of starting over. Absent whenever no turn ran
+// (dropped as overlapping, skipped by the guard, held for approval) or the provider minted no session.
+export interface FireOutcome {
+    readonly sessionId?: string;
+}
+
 // Fire one automation now: guard (payload visible) → wake the agent (payload appended to the prompt) → record
 // the run. Callers run it detached from their tick/request lifecycles; tests await it directly.
 export const fireAutomation = async (
     services: Services,
     automation: AutomationRecord,
     wake: WakeFn,
-    { payload, cleared, attempts = 0, conversationId: resumedConversationId, stream, origin, title }: FireOptions = {},
-): Promise<void> => {
+    {
+        payload,
+        cleared,
+        attempts = 0,
+        conversationId: resumedConversationId,
+        sessionId: resumedSessionId,
+        allowedTools,
+        stream,
+        origin,
+        title,
+    }: FireOptions = {},
+): Promise<FireOutcome> => {
     if (inFlight.has(automation.id)) {
-        return;
+        return {};
     }
     inFlight.add(automation.id);
     try {
@@ -128,7 +154,7 @@ export const fireAutomation = async (
                         outcome: "skipped",
                         ...(guard.detail !== undefined ? { detail: guard.detail } : {}),
                     });
-                    return;
+                    return {};
                 }
             }
             // Approval gate: hold the wake (payload snapshotted) instead of running. inFlight releases in the
@@ -155,7 +181,7 @@ export const fireAutomation = async (
                 // A held wake goes nowhere until the owner acts, and nothing else will tell them — an
                 // automation fires precisely when they are not looking. notifyIfAway keeps it quiet if they are.
                 void services.pushSender.notifyIfAway(automationPending(automation.id, automation.prompt));
-                return;
+                return {};
             }
         }
         /* This fire is now in flight — written down so a daemon death doesn't erase it. Its TRIGGER inputs, not
@@ -194,6 +220,10 @@ export const fireAutomation = async (
             // is exactly what an unstreamed wake does.
             prompt: stream !== undefined ? `${STREAM_NOTE}\n\n${body}` : body,
             conversationId,
+            // A continuing thread resumes its provider session, so the agent answers the follow-up rather than
+            // meeting the visitor again. Absent on a first turn and on every one-off wake.
+            ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
+            ...(allowedTools !== undefined ? { allowedTools: [...allowedTools] } : {}),
             ...(origin !== undefined
                 ? {
                       isolated: true,
@@ -248,6 +278,9 @@ export const fireAutomation = async (
                 ...(failure !== undefined ? { error: failure } : {}),
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
+        // Handed back so a dispatcher owning a continuing thread (the Doorbell) can resume this exact session
+        // on the visitor's next message. Everyone else ignores it.
+        return runtimeSessionId !== undefined ? { sessionId: runtimeSessionId } : {};
     } finally {
         // Flush the final buffered text (the deltas after the last rate-limited edit). No-op if nothing streamed.
         stream?.end();

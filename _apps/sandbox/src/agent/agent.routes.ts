@@ -405,6 +405,7 @@ async function* runTurn(
         ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
         ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
+        ...(input.allowedTools !== undefined ? { allowedTools: input.allowedTools } : {}),
         ...(input.effort !== undefined ? { effort: input.effort } : {}),
     };
     /* WHICH RUNTIME SERVES THIS TURN AND WHAT IT IS HANDED — resolved as a value (turn-plan.ts), so the four

@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { formatAt, nextIn, scheduleLabel, since } from "./cronSchedule";
 import { host } from "./host";
 import { LISTENER_SOURCES } from "./listenerSources";
-import { webhookUrl } from "./useAutomations";
+import { embedSnippet, webhookUrl } from "./useAutomations";
 
 /* One automation as ONE line: a health dot, its name, what fires it, when it last ran, when it fires next, and
  * the switch. Everything that is prose rather than state — the prompt, the guard, which agent and model the
@@ -86,6 +86,34 @@ const openRun = (run: AutomationRun): void => {
 };
 
 const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !== undefined ? nextIn(props.automation.nextRun) : undefined));
+
+/* The Doorbell summary the expanded row shows: the snippet to paste, and the two settings that decide whether
+ * it works at all. Undefined for every other automation, which is what keeps the block out of their rows.
+ * `snippet` is undefined only before the sandbox's own origin is known, and then there is nothing to copy. */
+const doorbell = computed(() => {
+    const fires = props.automation.trigger;
+    const snippet = embedSnippet(props.automation);
+    if (fires.kind !== `listener` || fires.provider !== `webchat` || snippet === undefined) {
+        return undefined;
+    }
+    const config = props.automation.webchat ?? {};
+    // Mirrors the daemon's own resolution (webchat-config.ts): a mechanism whose keys are missing is reported
+    // as off, because that is what will actually be enforced — the row must not claim a check nobody runs.
+    const turnstileReady = config.turnstileSiteKey !== undefined && config.turnstileSecret !== undefined;
+    return {
+        snippet,
+        origins: fires.allowedOrigins ?? [],
+        access: config.access === `google` ? `Google sign-in required` : `open to anyone`,
+        botCheck:
+            config.antiBot === `turnstile` && turnstileReady
+                ? `Turnstile`
+                : config.antiBot === `turnstile`
+                  ? `Turnstile not finished — no bot check`
+                  : config.antiBot === `pow`
+                    ? `built-in bot check`
+                    : `no bot check`,
+    };
+});
 </script>
 
 <template>
@@ -184,6 +212,23 @@ const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !
                 <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
                 <CopyButton :text="webhookUrl(automation) ?? ``" :aria-label="`Copy webhook URL for ${automation.id}`" v-tooltip.top="`Copy URL`" />
             </div>
+
+            <!-- A Doorbell's embed snippet, where the owner will actually look for it: on the row, months after
+                 the create dialog that first showed it. Beside it, the two things that decide whether the widget
+                 works at all — which sites may load it, and who it lets in. -->
+            <template v-if="doorbell">
+                <div class="flex items-center gap-1.5">
+                    <Icon name="globe" class="shrink-0 text-2xs text-subtle" />
+                    <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ doorbell.snippet }}</code>
+                    <CopyButton :text="doorbell.snippet" :aria-label="`Copy the embed snippet for ${automation.id}`" v-tooltip.top="`Copy snippet`" />
+                </div>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+                    <span v-if="doorbell.origins.length > 0">on {{ doorbell.origins.join(`, `) }}</span>
+                    <span v-else class="text-danger">no sites allowed — nobody can chat</span>
+                    <span>{{ doorbell.access }}</span>
+                    <span>{{ doorbell.botCheck }}</span>
+                </div>
+            </template>
 
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
                 <span>wakes {{ automation.agent ?? `claude` }}{{ automation.model ? ` · ${automation.model}` : `` }}</span>

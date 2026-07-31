@@ -37,7 +37,8 @@ import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserLoginRoute } from "./browser/browser-login.js";
 import { createBrowserViewRoute } from "./browser/browser-view.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
-import { createWebchatRoute } from "./webchat/webchat.routes.js";
+import { createWebchatRoutes } from "./webchat/webchat.routes.js";
+import { createWidgetRoute } from "./webchat/webchat-widget.js";
 import { extractTarToWorkspace, PathEscapeError } from "./workspace/workspace-archive.js";
 import { computeUploadSkip, type UploadManifestEntry } from "./workspace/workspace-diff.js";
 import {
@@ -63,9 +64,14 @@ const logUnexpectedError = (services: Services, error: unknown): void => {
 // bearer middleware and authenticated by the automation's own token instead (see the route).
 const eventFirePath = /^\/automations\/[^/]+\/fire$/;
 
-// The web-chat widget ingest — its callers are anonymous website visitors (no Google token), so it's exempt
-// from the bearer middleware and gated by the automation's origin allowlist + rate limit instead (see the route).
-const webchatPath = /^\/webchat\/[^/]+\/message$/;
+/* The Doorbell's public surface — its callers are anonymous website visitors (no Google token), so these are
+ * exempt from the bearer middleware and gated by the automation's origin allowlist + rate limit + bot check
+ * instead (see webchat/webchat.routes.ts).
+ *
+ * This is the WHOLE list of what a stranger can reach on this daemon, so it is one predicate rather than a
+ * constant per route: the set IS the boundary, and a boundary spread across four names is one somebody widens
+ * by accident. `widget.js` is the only fixed path — the rest are per-automation. */
+const webchatPublicPath = (path: string): boolean => path === "/webchat/widget.js" || /^\/webchat\/[^/]+\/(message|config|challenge)$/.test(path);
 
 // The CI pipeline webhook receiver — its callers are github/gitlab delivery agents (no Google token), so it's
 // exempt from the bearer middleware and gated by the per-sandbox webhook secret instead (github signs the
@@ -190,7 +196,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 // arbitrary third-party sites. Reflect the caller's origin for /webchat so a legit widget isn't
                 // browser-blocked; the route's own allowedOrigins check is the real gate (CORS isn't a security
                 // boundary — a non-browser client ignores it).
-                origin: (origin, c) => (webchatPath.test(c.req.path) ? (origin ?? "*") : allowOrigin),
+                origin: (origin, c) => (webchatPublicPath(c.req.path) ? (origin ?? "*") : allowOrigin),
                 allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
                 allowHeaders: ["authorization", "content-type", "x-intentic-connect", "x-intentic-base-hash"],
                 maxAge: 600,
@@ -212,7 +218,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 c.req.path === "/enroll" ||
                 c.req.path === "/system/authorized-key" ||
                 eventFirePath.test(c.req.path) ||
-                webchatPath.test(c.req.path) ||
+                webchatPublicPath(c.req.path) ||
                 ciWebhookPath.test(c.req.path)
             ) {
                 return next();
@@ -497,10 +503,16 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return c.json({ ok: true });
     });
 
-    // Web-chat widget ingest: an anonymous visitor POSTs a message and the agent's reply streams back as SSE.
-    // Exempt from the bearer middleware (visitors have no Google token), gated by the automation's origin
-    // allowlist + a per-conversation rate limit. Registered before the oRPC catch-all, like /automations/:id/fire.
-    app.post("/webchat/:id/message", createWebchatRoute(services));
+    /* The Doorbell: the embeddable widget bundle, the per-automation config it renders itself from, its bot
+     * challenge, and the message ingest whose reply streams back as SSE. All four are exempt from the bearer
+     * middleware (visitors have no Google token) and gated instead by the automation's origin allowlist, a
+     * per-conversation rate limit and the configured bot check. Registered before the oRPC catch-all, like
+     * /automations/:id/fire. `widget.js` is declared first so it can't be shadowed by the :id routes. */
+    const webchat = createWebchatRoutes(services);
+    app.get("/webchat/widget.js", createWidgetRoute());
+    app.get("/webchat/:id/config", webchat.config);
+    app.get("/webchat/:id/challenge", webchat.challenge);
+    app.post("/webchat/:id/message", webchat.message);
 
     // Owner-only management of the sandbox's shared-access list — the emails the auth check above admits besides
     // the owner. The owner's browser calls these when inviting/removing collaborators; the platform mirrors the

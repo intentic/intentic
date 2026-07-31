@@ -22,6 +22,7 @@
         "_libs/sandbox-contract",
         "_libs/sandbox-run",
         "_libs/scaffold",
+        "_libs/webchat-widget",
         "_libs/workspace-ignore",
         "_libs/workspace-setup"
       ]

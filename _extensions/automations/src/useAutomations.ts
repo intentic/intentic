@@ -29,6 +29,17 @@ export const webhookUrl = (automation: AutomationSummary): string | undefined =>
     return `${base}/automations/${encodeURIComponent(automation.id)}/fire?token=${automation.trigger.token ?? ``}`;
 };
 
+/* The one line a customer pastes into their site to put a Doorbell on it. The daemon's own origin serves both
+ * the bundle and the routes it talks to, so the snippet needs no second address and no key — the automation id
+ * is the whole address, and the origin allowlist below it is what decides who may use it. */
+export const embedSnippet = (automation: AutomationSummary): string | undefined => {
+    const base = host().sandbox.origin();
+    if (automation.trigger.kind !== `listener` || automation.trigger.provider !== `webchat` || base === undefined) {
+        return undefined;
+    }
+    return `<script src="${base}/webchat/widget.js" data-automation="${automation.id}" defer></script>`;
+};
+
 export function useAutomations() {
     const api = host();
     const queryClient = useQueryClient();
