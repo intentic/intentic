@@ -146,8 +146,11 @@ watch(
 const listing = computed<readonly WorkspaceTreeEntry[]>(() => {
     // A walked dir carries its children inline; an unlisted one's arrive via loadChildren (keyed by path).
     const children = dir.value === `` ? tree.value : (entriesByPath.value.get(dir.value)?.children ?? lazyChildren.value.get(dir.value) ?? []);
+    // The explorer's ignored-entry switch is shared with desktop (one browser, one preference), so a phone
+    // drilling into a folder shows the same set of entries the tree would.
+    const shown = layout.hideIgnored.value ? children.filter((node) => node.ignored !== true) : children;
     const query = filter.value.trim().toLowerCase();
-    return query === `` ? children : children.filter((node) => node.name.toLowerCase().includes(query));
+    return query === `` ? shown : shown.filter((node) => node.name.toLowerCase().includes(query));
 });
 const dirLoading = computed(() => dir.value !== `` && lazyLoading.value.has(dir.value));
 // How many entries the daemon's cap cut from the open dir's listing — 0 (the common case) shows nothing.
@@ -275,6 +278,20 @@ const onPick = (event: Event): void => {
             <div class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1.5">
                 <Segmented v-model="segment" size="sm" :options="segmentOptions" />
                 <span class="flex-1"></span>
+                <!-- Ignored entries in or out of the listing (node_modules, dist, gitignored paths, refs/) — the
+                     desktop toolbar's chip, thumb-sized. Files segment only, since that's all it changes; no
+                     tooltip to lean on here, so the icon carries the state and the label spells it out. -->
+                <button
+                    v-if="segment === 'files'"
+                    type="button"
+                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors active:bg-overlay"
+                    :class="layout.hideIgnored.value ? 'text-link' : 'text-muted'"
+                    :aria-pressed="layout.hideIgnored.value"
+                    :aria-label="layout.hideIgnored.value ? 'Show ignored files' : 'Hide ignored files'"
+                    @click="layout.toggleHideIgnored()"
+                >
+                    <Icon :name="layout.hideIgnored.value ? `eye-slash` : `eye`" class="text-base" />
+                </button>
                 <!-- One refresh for the row, refetching whichever segment is showing — the Changes panel below
                      no longer carries a header row (and its own refresh) of its own. -->
                 <button

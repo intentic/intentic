@@ -283,8 +283,8 @@ const openTabMenu = (id: string | undefined, event: Event): void => {
 // terminal (terminalSession's key hook), so a bare-Ctrl chord would steal a readline/tmux key; Mod+B (VSCode's
 // sidebar toggle) IS the tmux prefix so the explorer toggles on Ctrl+Shift+B instead, and everything else
 // stays in the Ctrl+Shift family the terminal panel's commands established. Changes opens on Ctrl+Shift+D
-// (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Checkpoints / Refresh ship
-// unbound (palette-only), as VSCode leaves rarely-chorded views.
+// (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Checkpoints / Refresh / Toggle
+// Ignored Files ship unbound (palette-only), as VSCode leaves rarely-chorded views.
 const closeActiveTab = (): void => {
     if (activeId.value !== null) {
         closeTab(activeId.value);
@@ -360,6 +360,9 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     // Same story for the root repo's health report — the palette route to what a nested repo opens from its row.
     { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
+    // The explorer toolbar's Ignored chip, reachable from the palette — and from anywhere the sidebar is
+    // collapsed, where the chip isn't on screen to click.
+    { command: `workspace.toggleIgnored`, title: `Toggle Ignored Files`, icon: `eye-slash`, handler: () => layout.toggleHideIgnored() },
     // The tab family is shared with the chat and terminal strips and resolved by focus (tabSurface.ts). The
     // workspace is the FALLBACK surface, so its gate is "the keystroke came from neither of the other two" —
     // a chord pressed with focus on the shell chrome, the explorer or the editor still closes an editor tab,
@@ -665,6 +668,26 @@ const endResize = (event: PointerEvent): void => {
                             @click="layout.toggleIncludeIgnored()"
                         >
                             <Icon class="text-2xs" :name="layout.includeIgnored.value ? `eye` : `eye-slash`" />
+                            Ignored
+                        </button>
+                        <!-- The tree's own take on the same set. Shown (grayed) by default — the explorer's job is
+                             "what the LLM sees" — so this is the way out when the project itself is what you want
+                             to read: node_modules/dist/.turbo go away and the folders you work in close up. The
+                             icon says which way it stands, the highlight that it's the non-default one. -->
+                        <button
+                            v-else
+                            type="button"
+                            class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-muted transition-colors hover:text-content"
+                            :class="{ 'bg-primary-600/15 text-link': layout.hideIgnored.value }"
+                            :aria-pressed="layout.hideIgnored.value"
+                            v-tooltip.bottom="
+                                layout.hideIgnored.value
+                                    ? 'Hiding ignored files — node_modules, gitignored paths, the refs/ reference shelf'
+                                    : 'Showing ignored files — node_modules, gitignored paths, the refs/ reference shelf'
+                            "
+                            @click="layout.toggleHideIgnored()"
+                        >
+                            <Icon class="text-2xs" :name="layout.hideIgnored.value ? `eye-slash` : `eye`" />
                             Ignored
                         </button>
                         <!-- The /work repo's git history. Root IS a repo (ensureRootRepo versions the whole

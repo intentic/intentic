@@ -4,6 +4,7 @@ import { explorerTreatment } from "@intentic-app/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { showWorkTerminals } from "../../composables/terminal/useWorkTerminals";
+import { useLayout } from "../../composables/useLayout";
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 import { useIconRailSize } from "../../composables/useIconRailSize";
@@ -20,6 +21,9 @@ const { iconSet, iconSets } = useIconSet();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
+// The explorer's ignored-entry switch — the same preference the workspace toolbar's Ignored chip flips, which is
+// where someone already staring at node_modules will reach for it; this is where they'll look for it afterwards.
+const { hideIgnored, toggleHideIgnored } = useLayout();
 
 // Import a VSCode theme JSON → recolor the app's chrome tokens live (the biggest "familiar for developers" lever).
 const { active: importedTheme, importThemeJson, clearImportedTheme } = useImportedTheme();
@@ -102,6 +106,16 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
             <Row as="label" icon="folder-open" title="File nesting" description="Fold a folder's files under its package.json in the explorer.">
                 <template #control><ToggleSwitch v-model="fileNesting" /></template>
+            </Row>
+            <Row
+                as="label"
+                icon="eye-slash"
+                title="Hide ignored files"
+                description="Leave node_modules, build output and .gitignore'd paths out of the explorer. Off by default — the tree shows the whole filesystem the agent sees, graying what's ignored."
+            >
+                <template #control>
+                    <ToggleSwitch :model-value="hideIgnored" @update:model-value="toggleHideIgnored()" />
+                </template>
             </Row>
         </RowGroup>
 

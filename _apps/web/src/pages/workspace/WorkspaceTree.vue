@@ -176,9 +176,13 @@ const targetDir = (path: string | null): string => {
 const visibleRows = computed<(Row | MoreRow)[]>(() => {
     const needle = filter.trim().toLowerCase();
     const open = expanded.value;
+    // Every level passes through here, so dropping the ignored entries once covers the root, every lazily-loaded
+    // subtree, and the name filter's matches — and with them the selection/keyboard axis built off these rows.
     // Nesting only applies unfiltered — a filter flattens every level so it can match folded names directly.
-    const level = (nodes: readonly WorkspaceTreeEntry[]): readonly NestedEntry[] =>
-        fileNesting.value && needle === `` ? nestSiblings(nodes) : nodes.map((entry) => ({ entry }));
+    const level = (nodes: readonly WorkspaceTreeEntry[]): readonly NestedEntry[] => {
+        const shown = layout.hideIgnored.value ? nodes.filter((entry) => entry.ignored !== true) : nodes;
+        return fileNesting.value && needle === `` ? nestSiblings(shown) : shown.map((entry) => ({ entry }));
+    };
 
     const walk = (nodes: readonly WorkspaceTreeEntry[], depth: number): (Row | MoreRow)[] => {
         const out: (Row | MoreRow)[] = [];

@@ -47,6 +47,9 @@ localStorage.setItem(`intentic.activeSandboxId`, SANDBOX);
 const { default: WorkspaceTree } = await import("./WorkspaceTree.vue");
 const { resetWorkspaceTreeState } = await import("../../composables/workspace/useWorkspaceTree");
 const { queryClient } = await import("../../composables/queryPersistence");
+const { useLayout } = await import("../../composables/useLayout");
+
+const layout = useLayout();
 
 const dir = (path: string, children: WorkspaceTreeEntry[]): WorkspaceTreeEntry => ({
     name: path.slice(path.lastIndexOf(`/`) + 1),
@@ -58,6 +61,13 @@ const file = (path: string): WorkspaceTreeEntry => ({ name: path.slice(path.last
 
 // A tree deep enough that a collapsed root hides the interesting file two levels down.
 const TREE: WorkspaceTreeEntry[] = [dir(`src`, [dir(`src/api`, [file(`src/api/routes.ts`)]), file(`src/main.ts`)]), file(`README.md`)];
+// The same shape with what the daemon marks `ignored` in it — a junk dir at the root (listed, never descended)
+// and a .gitignore'd build artifact sitting next to its source.
+const IGNORED_TREE: WorkspaceTreeEntry[] = [
+    dir(`src`, [file(`src/main.ts`), { ...file(`src/main.js`), ignored: true }]),
+    { name: `dist`, path: `dist`, type: `dir`, ignored: true },
+    file(`README.md`),
+];
 
 let app: App | undefined;
 
@@ -101,6 +111,10 @@ beforeEach(() => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
+    // useLayout is a module-level singleton — put the ignored-entry switch back to its default for the next test.
+    if (layout.hideIgnored.value) {
+        layout.toggleHideIgnored();
+    }
 });
 
 describe(`the explorer after a reload`, () => {
@@ -150,5 +164,27 @@ describe(`the explorer after a reload`, () => {
         await nextTick();
 
         expect(rows(el)).toEqual([`src`, `README.md`]);
+    });
+});
+
+// The explorer shows "what the LLM sees", so ignored entries are listed (grayed) by default; the toolbar's
+// Ignored toggle is the way out for someone reading the project itself. It has to reach every level — a root
+// junk dir and a .gitignore'd artifact buried beside its source are both what makes the tree noisy.
+describe(`the ignored-entry toggle`, () => {
+    it(`lists ignored entries by default`, async () => {
+        restoreFrom([`src`]);
+
+        const el = await mount({ tree: IGNORED_TREE });
+
+        expect(rows(el)).toEqual([`src`, `main.ts`, `main.js`, `dist`, `README.md`]);
+    });
+
+    it(`drops them at every level once it is on`, async () => {
+        restoreFrom([`src`]);
+        layout.toggleHideIgnored();
+
+        const el = await mount({ tree: IGNORED_TREE });
+
+        expect(rows(el)).toEqual([`src`, `main.ts`, `README.md`]);
     });
 });

@@ -39,9 +39,15 @@ const TERMINAL_OPEN_KEY = `ui-workspace-terminal-open`;
 const SIDEBAR_PANEL_KEY = `ui-workspace-sidebar-panel`;
 
 // Workspace content-search scope — when on, content search descends into ignored files (node_modules,
-// .gitignore'd paths); off by default. The file tree is unaffected: it always lists everything, graying the
-// ignored entries. Persists.
+// .gitignore'd paths); off by default. Persists.
 const INCLUDE_IGNORED_KEY = `ui-workspace-include-ignored`;
+
+// The file tree's own take on the same set: off by default (the tree lists everything, graying the ignored
+// entries — that IS the point of "what the LLM sees"), on when the user would rather browse the project alone
+// and not have node_modules/dist/.turbo between them and it. Separate from the search scope above because the
+// two answer different questions and want opposite defaults — a tree that hid them by default would be lying
+// about the filesystem the agent works on. Persists.
+const HIDE_IGNORED_KEY = `ui-workspace-hide-ignored`;
 
 // Workspace edit mode — a single global switch (not per file): when on, every editable file opens directly in the
 // CodeMirror editor instead of the read-only viewer. Persists like the panels above.
@@ -123,6 +129,7 @@ const sidebarCollapsed = ref<boolean>(readBool(SIDEBAR_COLLAPSED_KEY));
 const terminalOpen = ref<boolean>(readBool(TERMINAL_OPEN_KEY));
 const sidebarPanel = ref<SidebarPanel>(readEnum(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`));
 const includeIgnored = ref<boolean>(readBool(INCLUDE_IGNORED_KEY));
+const hideIgnored = ref<boolean>(readBool(HIDE_IGNORED_KEY));
 const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
 const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
 const diffLayout = ref<DiffLayout>(readEnum(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`));
@@ -200,6 +207,11 @@ const toggleIncludeIgnored = (): void => {
     write(INCLUDE_IGNORED_KEY, includeIgnored.value ? `1` : `0`);
 };
 
+const toggleHideIgnored = (): void => {
+    hideIgnored.value = !hideIgnored.value;
+    write(HIDE_IGNORED_KEY, hideIgnored.value ? `1` : `0`);
+};
+
 const setEditMode = (on: boolean): void => {
     editMode.value = on;
     write(EDIT_MODE_KEY, on ? `1` : `0`);
@@ -225,6 +237,7 @@ export function useLayout() {
         terminalOpen,
         sidebarPanel,
         includeIgnored,
+        hideIgnored,
         editMode,
         showComments,
         diffLayout,
@@ -242,6 +255,7 @@ export function useLayout() {
         toggleTerminalVisibility,
         setSidebarPanel,
         toggleIncludeIgnored,
+        toggleHideIgnored,
         setEditMode,
         toggleShowComments,
         setDiffLayout,
