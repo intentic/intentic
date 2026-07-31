@@ -8,13 +8,7 @@ import {
     SANDBOX_ROUTE_NAMES,
     systemContract,
 } from "@intentic/sandbox-contract";
-import {
-    AGENT_SESSION_PREFIX,
-    agentSessionName,
-    BROWSER_SESSION_PREFIX,
-    JOB_SESSION_PREFIX,
-    WEB_SESSION_PREFIX,
-} from "@intentic/sandbox-contract/session-names";
+import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { implement, ORPCError } from "@orpc/server";
 import type { VerifiedIdentity } from "../auth/auth.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/browser-sessions.js";
@@ -32,10 +26,6 @@ import { buildId } from "../version.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 
 const execFileAsync = promisify(execFile);
-
-// The agent's browsers, in the shape the tmux rows use. They carry no exit code — a browser doesn't exit with a
-// status, it is simply connected or gone — so `running` is the whole liveness story here.
-const browserSessions = (): TerminalsList["sessions"] => listBrowserSessions().map((session) => ({ ...session, kind: "browser" as const }));
 
 // Fold `tmux list-panes -a` output into one row per SESSION: the last pane's foreground command and exit
 // status, the session's last-activity stamp, plus whether any pane in it is still alive. Liveness has to be
@@ -355,11 +345,18 @@ export const createSystemRoutes = (services: Services) => {
                     }
                     return [];
                 });
-                return { sessions: [...sessions, ...browserSessions()] };
+                return { sessions };
             } catch {
-                // No tmux server yet — the agent's browser is still a live surface worth listing.
-                return { sessions: browserSessions() };
+                // No tmux server yet — nothing has opened a shell in this sandbox.
+                return { sessions: [] };
             }
+        }),
+        // The agent's Chromiums and the pages each holds open. Nothing to shell out to: these are records this
+        // daemon keeps itself, from the hooks that see the browser tool calls (browser/browser-sessions.ts).
+        browsers: i.browsers.handler(() => ({ sessions: listBrowserSessions() })),
+        closeBrowser: i.closeBrowser.handler(async ({ input }) => {
+            await closeBrowserSession(input.name);
+            return { ok: true };
         }),
         // Destroy one session (its tab's close button). Validate the name before it reaches the `kill-session`
         // argv — the security guard against a name like `-C` being read as a flag. Killing a session that already
@@ -367,13 +364,6 @@ export const createSystemRoutes = (services: Services) => {
         killTerminal: i.killTerminal.handler(async ({ input }) => {
             if (!isValidSessionName(input.name)) {
                 throw new ORPCError("BAD_REQUEST", { message: `invalid session name: ${input.name}` });
-            }
-            // A browser session has no tmux behind it — closing its Chromium IS the kill, and the agent's next
-            // browser tool call fails the way it would if the browser had crashed, which is the honest account
-            // of the owner having pulled the plug.
-            if (input.name.startsWith(BROWSER_SESSION_PREFIX)) {
-                await closeBrowserSession(input.name);
-                return { ok: true };
             }
             // A panel session belongs to the process manager — stop through it so `current` unmaps NOW (a Start
             // right after × must not no-op for the sweep interval). stop() kills lingering sessions too.

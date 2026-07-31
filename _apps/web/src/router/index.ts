@@ -92,6 +92,9 @@ const routes: RouteRecordRaw[] = [
                 component: () => import(`../pages/workspace/Workspace.vue`),
             },
             { path: `drafts`, name: `drafts`, meta: { title: `Drafts` }, component: () => import(`../pages/Drafts.vue`) },
+            // The session is in the URL so a reload reopens the same browser; optional, because the rail tile
+            // links to the bare path and the view picks the most recently active one.
+            { path: `browsers/:session?`, name: `browsers`, meta: { title: `Browsers` }, component: () => import(`../pages/Browsers.vue`) },
             { path: `ext/:ext/:key?`, name: `extension`, component: () => import(`../pages/ExtensionHost.vue`) },
             { path: `settings/:tab?`, name: `settings`, meta: { title: `Settings` }, component: () => import(`../pages/SettingsHub.vue`) },
         ],

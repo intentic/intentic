@@ -2,9 +2,9 @@ import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { refreshTerminals, removeTerminal, type TerminalSession, useTerminalsQuery } from "./terminalsQuery";
 
-/* The surfaces WORK runs on — the agent's shells (`agent-<sdk session>`), the agent's browser
- * (`browser-<sdk session>`), and the daemon's job sessions (`job-<flow>`: a capability add, the infra check) —
- * as a surface of their own, and the preference that decides whether they also tab in the terminal panel.
+/* The surfaces WORK runs on — the agent's shells (`agent-<sdk session>`) and the daemon's job sessions
+ * (`job-<flow>`: a capability add, the infra check) — as a surface of their own, and the preference that
+ * decides whether they also tab in the terminal panel.
  *
  * A work terminal is EVIDENCE about something that ran, not a workspace the user keeps: the transcript already
  * narrates every Bash command and the Capabilities page narrates every install, so the tab earns its place only
@@ -12,9 +12,9 @@ import { refreshTerminals, removeTerminal, type TerminalSession, useTerminalsQue
  * cost the panel its own strip: every turn minted a pill labelled with eight hex characters, every capability
  * left one behind for good, the user's real shells were pushed toward the wrap cap, and what remained was a row
  * of corpses that only a broom cleared. So they are hidden by default and stay one click away instead: the
- * chat's Bash card reveals the turn's own shell, its browser cards reveal the turn's own browser, the
- * Capabilities page opens the install it just started, and the panel's Recent-terminals popover lists whatever
- * has run lately. `showWorkTerminals` turns the old behaviour back on for whoever wants it.
+ * chat's Bash card reveals the turn's own shell, the Capabilities page opens the install it just started, and
+ * the panel's Recent-terminals popover lists whatever has run lately. `showWorkTerminals` turns the old
+ * behaviour back on for whoever wants it.
  *
  * Per-browser (localStorage), like every other panel preference (terminalMeta, the panel height): which tabs
  * you want in front of you is a property of the seat you are sitting at, not of the sandbox. */
@@ -60,7 +60,7 @@ export interface WorkTerminalRow {
     readonly session: string;
     // The owning conversation's title when it noted one, else the session's own label.
     readonly name: string;
-    readonly kind: "agent" | "job" | "browser";
+    readonly kind: "agent" | "job";
     // False for a finished turn's (or flow's) lingering shell, its output still in scrollback.
     readonly running: boolean;
     // The last command's exit status. Undefined while it runs, and on a session tmux reported none for.
@@ -118,8 +118,7 @@ export function useWorkTerminals(): { rows: ComputedRef<WorkTerminalRow[]>; show
     const rows = computed<WorkTerminalRow[]>(() =>
         sessions.value
             .filter(
-                (session): session is TerminalSession & { kind: "agent" | "job" | "browser" } =>
-                    session.kind === `agent` || session.kind === `job` || session.kind === `browser`,
+                (session): session is TerminalSession & { kind: "agent" | "job" } => session.kind === `agent` || session.kind === `job`,
             )
             // Live work first — it's what someone opening this is looking for — then the most recently finished,
             // because a record is read newest-first and the tail of the list is the part nobody wants.

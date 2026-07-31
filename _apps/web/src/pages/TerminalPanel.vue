@@ -128,11 +128,6 @@ const segmentTooltip = (name: string): string | undefined => {
     if (tab.kind === `job`) {
         return `Job terminal`;
     }
-    if (tab.kind === `browser`) {
-        // The URL, not the label: the pill already shows the page's title, so the tooltip's job is to say
-        // WHICH page that title belongs to — the one thing a screencast can't be trusted to make legible.
-        return tab.running === false ? `AI browser — closed${tab.url === undefined ? `` : ` · ${tab.url}`}` : (tab.url ?? `AI browser`);
-    }
     if (tab.kind === `process`) {
         return `Background process — read-only logs`;
     }

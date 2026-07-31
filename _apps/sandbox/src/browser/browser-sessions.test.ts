@@ -10,6 +10,7 @@ import {
     browserServerOfTool,
     closeBrowserSession,
     browserSessionContext,
+    browserSessionPage,
     listBrowserSessions,
 } from "./browser-sessions.js";
 import { browserServersOf } from "./browser-tools.js";
@@ -107,14 +108,62 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
 
         const listed = listBrowserSessions().find((session) => session.name === SESSION);
         expect(listed?.running).toBe(true);
-        // The page's own account of itself, which is what the tab pill and its tooltip say.
+        // The page's own account of itself, which is what the session's pill says.
         expect(listed?.label).toBe("Probe Page");
-        expect(listed?.url).toBe(url);
+        expect(listed?.server).toBe("web");
         expect(frames).toBeGreaterThan(0);
 
-        // The kill route's half: closing the browser ends the session, and the row stays readable afterwards.
+        // ONE page so far, and it is the active one — the tab strip's first tab.
+        expect(listed?.pages).toHaveLength(1);
+        const first = listed?.pages[0];
+        expect(first?.url).toBe(url);
+        expect(first?.title).toBe("Probe Page");
+        expect(first?.active).toBe(true);
+
+        // A second tab, opened the way the agent opens one. Both list, the NEW one is active (it is what the
+        // agent just drove), and the ids are distinct — which is what lets the strip tell them apart across a
+        // relist even though they are the same url.
+        const opened = await call("tools/call", { name: "browser_tabs", arguments: { action: "new" } });
+        expect(opened.result?.isError ?? false).toBe(false);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const twoTabs = listBrowserSessions().find((session) => session.name === SESSION);
+        expect(twoTabs?.pages.length).toBeGreaterThanOrEqual(2);
+        expect(new Set(twoTabs?.pages.map((page) => page.id)).size).toBe(twoTabs?.pages.length);
+        expect(twoTabs?.pages.filter((page) => page.active)).toHaveLength(1);
+
+        // Every listed page can be bound — that round trip (list an id → get a Page back) is the whole
+        // contract the view's tab strip rests on.
+        for (const page of twoTabs?.pages ?? []) {
+            expect(browserSessionPage(SESSION, page.id)).toBeDefined();
+        }
+        expect(browserSessionPage(SESSION, "p-nope")).toBeUndefined();
+
+        /* PINNING: once the user picks a tab, a tab the agent opens next must not steal the picture. Without
+         * this the strip would be a lie — you would click a page, the agent would open another, and you would
+         * silently be watching something you never chose. */
+        const pinTarget = browserSessionPage(SESSION, twoTabs?.pages[0]?.id ?? "");
+        expect(pinTarget).toBeDefined();
+        const pinnedCast = await startScreencast(context!, () => {});
+        try {
+            await pinnedCast.bind(pinTarget!, true);
+            const boundToFirst = pinnedCast.attached();
+            const third = await call("tools/call", { name: "browser_tabs", arguments: { action: "new" } });
+            expect(third.result?.isError ?? false).toBe(false);
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Same CDP session as before the new tab: the stream never moved.
+            expect(pinnedCast.attached()).toBe(boundToFirst);
+        } finally {
+            await pinnedCast.stop();
+        }
+
+        // The kill route's half: closing the browser ends the session, and the row stays readable afterwards —
+        // including where the agent went, which is the point of keeping a finished session listable at all.
         await closeBrowserSession(SESSION);
-        expect(listBrowserSessions().find((session) => session.name === SESSION)?.running).toBe(false);
+        const dead = listBrowserSessions().find((session) => session.name === SESSION);
+        expect(dead?.running).toBe(false);
+        expect(dead?.pages.length).toBeGreaterThanOrEqual(2);
+        // Nothing to bind once the Chromium is gone; the handles it still lists are dead.
+        expect(browserSessionPage(SESSION, dead?.pages[0]?.id ?? "")).toBeUndefined();
     } finally {
         child.kill();
         site.close();

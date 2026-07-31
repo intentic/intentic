@@ -2410,11 +2410,9 @@ export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 // process (a lingering shell after a crash reads false). A process row that maps to an installed extension's
 // declared process carries extensionId+processName, the address for its /extensions start/stop routes. The
 // `{name}` kill-route param is a bare string validated in the handler (a bad name is a BAD_REQUEST) since the
-// same charset gates a `tmux kill-session -t` shell-out. `browser` = a `browser-<sdk session>` Chromium the
-// agent is driving through its @playwright/mcp tools (browser/browser-sessions.ts) — watchable live over the
-// /system/browser-view WebSocket, `running` while that Chromium is connected, and hidden from the strip by
-// the same rule as `agent`: it is a record of work, not a place. Its `label` is the page's own title and
-// `url` the page it is on, which is the one thing a browser pill has to say that a terminal pill does not.
+// same charset gates a `tmux kill-session -t` shell-out. The agent's BROWSER is deliberately NOT one of these
+// kinds: a Chromium with its own tab strip is a surface in its own right, not a pane in the terminal panel, so
+// it lists from /system/browsers with the pages it has open (BrowserSessionSchema below).
 //
 // `activityAt` (epoch ms of the session's last output) and `exitCode` (the LAST window's exit status, absent
 // while that pane still lives) are what let a finished session be READ rather than merely listed: the panel's
@@ -2424,18 +2422,55 @@ export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 export const TerminalSessionSchema = z.object({
     name: z.string(),
     label: z.string().optional(),
-    kind: z.enum(["shell", "panel", "agent", "job", "process", "browser"]),
+    kind: z.enum(["shell", "panel", "agent", "job", "process"]),
     running: z.boolean(),
     activityAt: z.number(),
     exitCode: z.number().optional(),
     extensionId: z.string().optional(),
     processName: z.string().optional(),
-    // Browser sessions only: the page the agent is on right now.
-    url: z.string().optional(),
 });
 export const TerminalsListSchema = z.object({ sessions: z.array(TerminalSessionSchema) });
 export type TerminalsList = z.infer<typeof TerminalsListSchema>;
 export const TerminalNameParamSchema = z.object({ name: z.string() });
+
+/* ---- browsers: the Chromium the agent drives through its @playwright/mcp tools ----
+ *
+ * A `browser-<sdk session>` Chromium (browser/browser-sessions.ts), watchable live over the
+ * /system/browser-view WebSocket. It lists apart from the terminals because it is shaped differently in the one
+ * way that decides a UI: a terminal is ONE stream of bytes, while a browser holds SEVERAL pages at once and the
+ * question "what is the agent looking at?" only has an answer if the wire carries all of them. So `pages` is the
+ * point of this schema — the view renders them as a tab strip and binds the screencast to whichever the user
+ * picks, and `active` is the one the agent itself last touched (what the view follows until the user says
+ * otherwise).
+ *
+ * `id` is opaque and minted per session, and it is what makes a tab survive a relist: it is stable for the life
+ * of the page, unlike its url (the agent navigates away) or its position (a closed tab renumbers the rest). */
+export const BrowserPageSchema = z.object({
+    id: z.string(),
+    // The page's own title. Absent mid-navigation, which is exactly when a tab still needs to render.
+    title: z.string().optional(),
+    url: z.string(),
+    // The page the agent last drove. Exactly one page per running session has it.
+    active: z.boolean(),
+});
+export const BrowserSessionSchema = z.object({
+    name: z.string(),
+    // The pill's text: the active page's title, else its host, else which browser this is.
+    label: z.string(),
+    // Which MCP server drives it: `web` (the credential-free browser) or a logged-in capability's id — the
+    // difference between a throwaway page and one signed in as the user, which is worth saying out loud.
+    server: z.string(),
+    // False once that Chromium is gone (the turn ended, the agent closed it, it crashed). A finished session
+    // still lists for a while, with the pages it had — the record of where the agent went.
+    running: z.boolean(),
+    activityAt: z.number(),
+    pages: z.array(BrowserPageSchema),
+});
+export type BrowserPage = z.infer<typeof BrowserPageSchema>;
+export type BrowserSession = z.infer<typeof BrowserSessionSchema>;
+export const BrowsersListSchema = z.object({ sessions: z.array(BrowserSessionSchema) });
+export type BrowsersList = z.infer<typeof BrowsersListSchema>;
+export const BrowserNameParamSchema = z.object({ name: z.string() });
 
 // ---- environment: the overlay Dockerfile extending the sandbox image ----
 // The approved file is DAEMON-COMPOSED: pinned FROM + capability fragments + the owner-approved custom section.

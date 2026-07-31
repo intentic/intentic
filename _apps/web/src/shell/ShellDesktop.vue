@@ -4,6 +4,7 @@ import type { IconName } from "@intentic-app/ui";
 import { computed, onUnmounted, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
+import { useBrowsersQuery } from "../composables/browser/browsersQuery";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
@@ -59,6 +60,9 @@ const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 // Drafts is agent-driven and usually empty — its rail tile appears only once there's something to act on.
 const { drafts, invalid: invalidDrafts } = useDrafts();
+// The agent's browsers, on the same appear-on-content terms. Polled loosely: this is the always-on read that
+// makes the tile show up mid-turn, and the view itself polls tighter once it is on screen.
+const { sessions: browsers } = useBrowsersQuery(10_000);
 const { reachable } = useSandbox();
 // Uncommitted workspace changes surface as a count badge on the Workspace rail tile, visible from any area.
 const changes = useChanges();
@@ -130,6 +134,23 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
 // empty queue keeps the rail uncluttered, mirroring the extension tiles that appear on content. Drafts stays a
 // core shell surface (the mobile bottom-bar "Review" tab depends on it too), so its tile is not an extension.
 const draftsTile: AreaTile = { to: `/drafts`, label: `Drafts`, icon: `send` };
+/* Browsers appears the moment a turn opens one and stays while the daemon still lists it — a rail tile that
+ * tracks live work rather than a permanent surface, which is the same appear-on-content rule Drafts and the
+ * extension tiles follow. The badge counts RUNNING browsers only: a finished one is still readable in the view
+ * (its pages are the record of where the agent went) but it is not something happening now, and a rail count
+ * that never drops to zero stops meaning anything. */
+const browserTile = computed<AreaTile | undefined>(() => {
+    if (browsers.value.length === 0) {
+        return undefined;
+    }
+    const live = browsers.value.filter((session) => session.running).length;
+    return {
+        to: `/browsers`,
+        label: `Browsers`,
+        icon: `globe`,
+        ...(live > 0 ? { badge: { count: live, tooltip: `${live} agent browser${live === 1 ? `` : `s`} open` } } : {}),
+    };
+});
 // Activation.icon is an open string in the public extension API; the rail trusts it names one of the app's
 // icons (an unknown name renders the icon set's fallback).
 const extensionTile = (active: ActiveExtension): AreaTile => {
@@ -146,6 +167,7 @@ const tiles = computed<readonly AreaTile[]>(() => {
     const base = drafts.value.length > 0 || invalidDrafts.value.length > 0 ? fixedTiles.value.toSpliced(1, 0, draftsTile) : fixedTiles.value;
     return [
         ...base,
+        ...(browserTile.value === undefined ? [] : [browserTile.value]),
         ...detectActivations(panels.value, capabilities.value)
             // Only rail-surface extensions get a tile; per-repo directory panels (Apps, UI, preview) open from
             // the Workspace tree instead, so the rail stays a short, capability-first list.

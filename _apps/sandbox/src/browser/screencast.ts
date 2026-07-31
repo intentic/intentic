@@ -24,6 +24,9 @@ export type ScreencastClientMessage =
     | { readonly type: "text"; readonly text: string }
     | { readonly type: "key"; readonly key: string }
     | { readonly type: "resize"; readonly width: number; readonly height: number }
+    // Stream a specific page instead of whichever the agent opened last — the browser view's tab strip. Pins,
+    // so the agent opening a tab no longer moves the picture out from under the user (see `pinned` below).
+    | { readonly type: "bind"; readonly pageId: string }
     | { readonly type: "done" }
     | { readonly type: "ping" };
 
@@ -101,25 +104,36 @@ export const dispatchInput = async (session: CDPSession, message: ScreencastClie
 // `attached` is what an input frame is dispatched to, so mouse/keyboard follow the page on screen automatically.
 export interface Screencast {
     readonly attached: () => CDPSession | undefined;
-    // Point the stream at another page (the route's own popup/tab handling calls this).
-    readonly bind: (page: Page) => Promise<void>;
+    // Point the stream at another page. `pin` marks the choice as the USER's, which stops the auto-follow below
+    // from overriding it; the route passes it for a `bind` frame and omits it for its own popup handling.
+    readonly bind: (page: Page, pin?: boolean) => Promise<void>;
     readonly stop: () => Promise<void>;
 }
 
-/* Stream one context's newest page as JPEG frames.
+/* Stream one of a context's pages as JPEG frames, following the agent by default.
  *
- * The rebind exists because OAuth buttons ("Continue with Google") open a POPUP window; without following it
- * the popup renders off-screen and the view looks dead. We attach to the newest page and, when it closes, fall
- * back to the opener. The agent's browser needs the same rule for a different reason — a tool call that opens
- * a tab moves the work there — so the follow-the-newest-page policy lives here with the stream. */
+ * The auto-rebind exists because OAuth buttons ("Continue with Google") open a POPUP window; without following
+ * it the popup renders off-screen and the view looks dead. We attach to the newest page and, when it closes,
+ * fall back to the opener. The agent's browser wants the same rule for a different reason — a tool call that
+ * opens a tab moves the work there — so following the newest page is the default for both surfaces.
+ *
+ * PINNING is what makes a tab strip possible on top of that. Once the user picks a page, following the agent
+ * would be the bug rather than the feature: the picture would jump away from what they chose the moment the
+ * agent opened anything. So an explicit bind pins, and only a page CLOSING can move a pinned stream — at which
+ * point there is nothing left to be pinned to and falling back beats a frozen last frame. */
 export const startScreencast = async (context: BrowserContext, onFrame: (data: string) => void): Promise<Screencast> => {
     let attached: CDPSession | undefined;
     let stopped = false;
+    let pinned = false;
+    // The page `attached` is streaming — only needed to tell whether a closing page is the pinned one.
+    let boundTo: Page | undefined;
 
-    const bind = async (target: Page): Promise<void> => {
+    const bind = async (target: Page, pin = false): Promise<void> => {
         if (stopped) {
             return;
         }
+        pinned ||= pin;
+        boundTo = target;
         try {
             await attached?.detach();
         } catch {
@@ -144,6 +158,10 @@ export const startScreencast = async (context: BrowserContext, onFrame: (data: s
 
     const follow = (page: Page): void => {
         page.on("close", () => {
+            // The pin dies with the page it pointed at, so the fallback below is free to move the stream.
+            if (page === boundTo) {
+                pinned = false;
+            }
             const back = context.pages().at(-1);
             if (back !== undefined && !stopped) {
                 void bind(back).catch(() => {
@@ -151,6 +169,10 @@ export const startScreencast = async (context: BrowserContext, onFrame: (data: s
                 });
             }
         });
+        if (pinned) {
+            // The user is watching a page they chose; a tab the agent just opened does not get to steal it.
+            return;
+        }
         void bind(page).catch(() => {
             // a page that vanished mid-attach; the next one rebinds
         });

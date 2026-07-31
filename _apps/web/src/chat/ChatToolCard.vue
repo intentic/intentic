@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic-app/ui";
 import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
 import type { ChatTool } from "../composables/chat/transcript";
 import { useChat } from "../composables/chat/useChat";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
@@ -76,11 +77,13 @@ const location = computed(() => props.tool.locations?.[0]);
 const { active } = useChat();
 const agentTerminal = computed(() => (view.value.body?.kind === `command` ? active.value.agentTerminal.value : undefined));
 
-/* The BROWSER behind a browser card, on exactly the same terms. Its Chromium is a real session the panel can
- * screencast, and it no longer tabs itself into the strip either — so the card that made the user wonder "what
- * is it looking at?" is where the answer is offered. Every browser tool gets the button, not just the ones
- * that returned a picture: a click or a form fill is precisely when watching is worth more than reading. */
+/* The BROWSER behind a browser card, on the same terms but through a different door: its Chromium is not a
+ * pane in the terminal panel but a surface of its own, so this jumps to the Browsers area with that session
+ * already selected. Every browser tool gets the button, not just the ones that returned a picture — a click or
+ * a form fill is precisely when watching is worth more than reading. */
 const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`browser `) ? active.value.agentBrowser.value : undefined));
+const router = useRouter();
+const watchBrowser = (session: string): void => void router.push(`/browsers/${session}`);
 </script>
 
 <template>
@@ -151,7 +154,7 @@ const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`b
                 :class="[running && live ? '' : 'opacity-0 group-hover/tool:opacity-100', { 'ml-auto': !unfinished && !view.summary }]"
                 v-tooltip.top="'Watch the browser'"
                 aria-label="Watch the browser"
-                @click="openWorkTerminal(agentBrowser)"
+                @click="watchBrowser(agentBrowser)"
             >
                 <Icon name="globe" class="text-2xs" />
             </button>

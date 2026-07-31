@@ -2,7 +2,7 @@ import {
     type AgentSummary,
     AgentsListSchema,
     StartedTurnSchema,
-    TerminalsListSchema,
+    BrowsersListSchema,
     WorkspaceChildrenSchema,
     WorkspaceFileSchema,
 } from "@intentic/sandbox-contract";
@@ -139,31 +139,32 @@ export function useRuns() {
     const live = computed<boolean>(() => runs.value.some((run) => run.running));
 
     /* THE SUPERVISION SEAM. A test session drives a real Chromium that the daemon already attaches to over CDP
-     * and streams as a pane in the terminal panel — the same surface a tmux session gets, with a Take control
-     * button. Nothing had to be built here for that; what was missing was the pointer.
+     * and streams into the Browsers area, with a tab per page and a Take control button. Nothing had to be
+     * built here for that; what was missing was the pointer.
      *
      * The join is two hops and neither may be guessed: the fleet roster gives a conversation's `sessionId`, and
      * `browserSessionName` (the contract's, shared with the daemon that NAMES the session) turns that into the
      * listed name. It is checked against the live listing rather than derived and offered blind — a browser
-     * session exists only once the agent has made its first browser call, and a button that opens an empty pane
+     * session exists only once the agent has made its first browser call, and a button that opens an empty view
      * teaches the user the feature is broken.
      *
      * Polled only while a run is live: a finished run's Chromium is gone, and this is the third request in a
      * three-request view. */
-    const terminalsQuery = useQuery({
-        queryKey: computed(() => api.sandbox.key(`acceptance`, `terminals`)),
+    const browsersQuery = useQuery({
+        queryKey: computed(() => api.sandbox.key(`acceptance`, `browsers`)),
         enabled: computed(() => api.sandbox.reachable() && live.value),
         refetchInterval: () => (live.value ? POLL_MS : false),
         queryFn: async (): Promise<Readonly<Record<string, string | undefined>>> =>
             Object.fromEntries(
-                TerminalsListSchema.parse(await api.sandbox.json(`/system/terminals`))
-                    .sessions.filter((session) => session.kind === `browser` && session.running)
-                    .map((session) => [session.name, session.url] as const),
+                BrowsersListSchema.parse(await api.sandbox.json(`/system/browsers`))
+                    .sessions.filter((session) => session.running)
+                    // The page the agent is on right now — the same one its view opens onto.
+                    .map((session) => [session.name, session.pages.find((page) => page.active)?.url] as const),
             ),
     });
 
     const browsers = computed<Readonly<Record<string, LiveBrowser>>>(() => {
-        const listed = terminalsQuery.data.value ?? {};
+        const listed = browsersQuery.data.value ?? {};
         return Object.fromEntries(
             (agentsQuery.data.value ?? []).flatMap((agent) => {
                 const session = agent.sessionId === undefined ? undefined : browserSessionName(agent.sessionId);

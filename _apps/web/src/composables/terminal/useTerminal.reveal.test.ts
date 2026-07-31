@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 //
-// The rule that keeps the strip clean: the surfaces WORK runs on (an agent's Bash shell, its browser, a daemon
-// job) are records, not places. They tab only while someone is watching, and they let go of that tab when they
-// finish — which is why a panel reopened after a night of agent turns has nothing in it to tidy up.
+// The rule that keeps the strip clean: the surfaces WORK runs on (an agent's Bash shell, a daemon job) are
+// records, not places. They tab only while someone is watching, and they let go of that tab when they finish —
+// which is why a panel reopened after a night of agent turns has nothing in it to tidy up.
 //
-// Both pane kinds are mocked wholesale: every case here is about which names reach `order`/`groups` and which
-// one is mounted, and none of it needs a real terminal (or a canvas jsdom doesn't have) or a live screencast.
+// The pane is mocked wholesale: every case here is about which names reach `order`/`groups` and which one is
+// mounted, and none of it needs a real terminal (or a canvas jsdom doesn't have).
 import { beforeEach, expect, test, vi } from "vitest";
 import { ref } from "vue";
 
@@ -27,29 +27,15 @@ vi.mock("./terminalSession", () => ({
     disposeTerminalSession: vi.fn(),
     persistScrollback: vi.fn(),
 }));
-vi.mock("./browserSession", () => ({
-    createBrowserSession: (name: string) => ({ kind: `browser`, name }),
-    mountBrowserSession: vi.fn(),
-    parkBrowserSession: vi.fn(),
-    disposeBrowserSession: vi.fn(),
-    noteBrowserUrl: vi.fn(),
-}));
 
 const { createTerminalTabs } = await import("./useTerminal");
 const { showWorkTerminals } = await import("./useWorkTerminals");
 const { clearPendingTerminals } = await import("./terminalsQuery");
 
-type Listed = { name: string; label?: string; kind: "shell" | "panel" | "agent" | "job" | "browser"; running: boolean; url?: string };
+type Listed = { name: string; label?: string; kind: "shell" | "panel" | "agent" | "job"; running: boolean };
 const shell = (name: string, running = true): Listed => ({ name, kind: `shell`, running });
 const job = (key: string, running: boolean): Listed => ({ name: `job-${key}`, label: key, kind: `job`, running });
 const agent = (id: string, running: boolean): Listed => ({ name: `agent-${id}`, label: id, kind: `agent`, running });
-const browser = (id: string, running: boolean, label = `Example Domain`): Listed => ({
-    name: `browser-${id}`,
-    label,
-    kind: `browser`,
-    running,
-    url: `https://example.com/`,
-});
 
 // One panel instance over a mutable session list, standing in for the daemon.
 const panel = (initial: Listed[]) => {
@@ -88,27 +74,6 @@ test("a panel opened after a night of finished work shows the user's shells and 
     await attach();
 
     expect(names()).toEqual([`web-1`]);
-});
-
-// The agent's browser is work in exactly the sense its Bash shell is, so it earns its tab the same way: not by
-// existing, but by being asked for — and it gives the tab back when the browsing is over and the user looks away.
-test("the agent's browser tabs only once asked for, and lets go when it closes and you look away", async () => {
-    const { tabs, daemonLists, attach, names } = panel([shell(`web-1`), browser(`aaaa1111`, true)]);
-    await attach();
-    expect(names()).toEqual([`web-1`]);
-
-    // The chat's browser card offers to watch it (openWorkTerminal → focus).
-    await tabs.focus(`browser-aaaa1111`);
-    expect(names()).toEqual([`web-1`, `browser-aaaa1111`]);
-    expect(tabs.activeName.value).toBe(`browser-aaaa1111`);
-
-    // The turn ends and Chromium goes with it — but not out from under someone still reading the last frame.
-    daemonLists([shell(`web-1`), browser(`aaaa1111`, false)]);
-    await tabs.refresh();
-    expect(names()).toEqual([`web-1`, `browser-aaaa1111`]);
-
-    tabs.switchTab(`web-1`);
-    await vi.waitFor(() => expect(names()).toEqual([`web-1`]));
 });
 
 test("a job tabs while it is being watched and lets go once it has finished and you look away", async () => {

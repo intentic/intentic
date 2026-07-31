@@ -7,9 +7,9 @@ import { KIND_ICONS } from "../composables/terminal/terminalMeta";
 import { clearFinishedWorkTerminals, openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "../composables/terminal/useWorkTerminals";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 
-/* The terminal panel's RECORD of work: the shells the agent's Bash commands ran in, the browser it drove
- * through its Playwright tools, and the sessions the daemon ran its jobs in (capability adds, the infra check),
- * listed HERE instead of tabbing themselves into the strip (see useWorkTerminals for why). Mounted in the panel
+/* The terminal panel's RECORD of work: the shells the agent's Bash commands ran in and the sessions the daemon
+ * ran its jobs in (capability adds, the infra check), listed HERE instead of tabbing themselves into the strip
+ * (see useWorkTerminals for why). Mounted in the panel
  * toolbar beside the background-processes popover it is modelled on, and hidden until there is anything to
  * show — so a fresh sandbox never grows a button for it.
  *
@@ -45,8 +45,7 @@ const outcome = (row: WorkTerminalRow): string => {
     if (row.running) {
         return `running`;
     }
-    // A browser doesn't exit with a status — it is simply closed — so it never reaches the exit-code branch.
-    const ended = row.kind === `browser` ? `closed` : row.exitCode === undefined ? `finished` : `exit ${row.exitCode}`;
+    const ended = row.exitCode === undefined ? `finished` : `exit ${row.exitCode}`;
     return row.activityAt > 0 ? `${ended} · ${relativeTime(row.activityAt)}` : ended;
 };
 // Failure is the one thing worth colouring: a non-zero exit is the row someone came here to find.
@@ -88,8 +87,8 @@ const failed = (row: WorkTerminalRow): boolean => !row.running && row.exitCode !
                 class="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-overlay"
                 @click="open(row)"
             >
-                <!-- Dot for state (live / failed / done), then the kind glyph — sparkles for an agent's shell,
-                     bolt for a daemon job, globe for its browser: literally the table their pills read from. -->
+                <!-- Dot for state (live / failed / done), then the kind glyph — sparkles for an agent's
+                     shell, bolt for a daemon job: literally the table their pills read from. -->
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="row.running ? 'bg-link' : failed(row) ? 'bg-danger' : 'bg-content/25'"></span>
                 <Icon :name="KIND_ICONS[row.kind]" class="shrink-0 text-2xs text-muted" />
                 <div class="min-w-0 flex-1">
@@ -102,7 +101,7 @@ const failed = (row: WorkTerminalRow): boolean => !row.running && row.exitCode !
             <label class="mt-1 flex cursor-pointer items-center gap-2.5 border-t border-line px-2 pb-1 pt-2">
                 <div class="min-w-0 flex-1">
                     <div class="text-xs text-content">Always show as tabs</div>
-                    <div class="text-2xs text-muted">Give every agent shell, job and AI browser its own tab in this panel.</div>
+                    <div class="text-2xs text-muted">Give every agent shell and job its own tab in this panel.</div>
                 </div>
                 <ToggleSwitch v-model="showWorkTerminals" />
             </label>

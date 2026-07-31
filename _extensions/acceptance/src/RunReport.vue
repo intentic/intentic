@@ -9,11 +9,11 @@ import type { LiveBrowser, RunRow, StoryOutcome } from "./useRuns";
  * step. A story with no result yet shows the live session instead — the fleet already knows what it is doing,
  * and "still walking the page" is a truer answer than a blank row.
  *
- * WATCHING. While a session is live, its Chromium is a pane the daemon already streams (browser-sessions.ts
- * attaches over CDP on the agent's first browser call; the terminal panel renders the screencast beside the tmux
- * sessions, with a Take control button). This row is the pointer at it — the reason a run is supervisable rather
- * than merely reportable. The button appears only for a session the daemon has actually listed; see useRuns'
- * `browsers` for why it is never derived and offered blind.
+ * WATCHING. While a session is live, its Chromium is streamed by the daemon (browser-sessions.ts attaches over
+ * CDP on the agent's first browser call) into the shell's Browsers area, a tab per open page and a Take control
+ * button. This row is the pointer at it — the reason a run is supervisable rather than merely reportable. The
+ * button appears only for a session the daemon has actually listed; see useRuns' `browsers` for why it is never
+ * derived and offered blind.
  *
  * SCREENSHOTS are the fiddly part. A report references them relatively (`![](shots/03-error.png)`) because that
  * is what makes the file readable on its own, in an editor or a terminal. The browser cannot load those: they
@@ -182,15 +182,15 @@ const addresses = computed(() => reposOf(run.manifest).map((repo) => ({ repo, ur
                         </span>
                     </button>
                     <StatusBadge :variant="verdictBadge(story.slug).variant" :label="verdictBadge(story.slug).label" size="xs" />
-                    <!-- The supervision button. Only while the daemon lists this session's Chromium: it opens the
-                         terminal panel on the live screencast, where the pane's own control offers the keyboard
-                         and mouse if the user wants to intervene. -->
+                    <!-- The supervision button. Only while the daemon lists this session's Chromium: it opens
+                         the Browsers area on the live screencast, where the view's own control offers the
+                         keyboard and mouse if the user wants to intervene. -->
                     <Button
                         v-if="browserOf(story.slug)"
                         label="Watch"
                         size="small"
                         severity="secondary"
-                        @click="api.terminal.open(browserOf(story.slug)?.session ?? ``)"
+                        @click="api.navigate(`/browsers/${browserOf(story.slug)?.session ?? ``}`)"
                     >
                         <template #icon><Icon name="eye" /></template>
                     </Button>

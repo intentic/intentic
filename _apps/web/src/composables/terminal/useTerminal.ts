@@ -3,14 +3,6 @@ import { showWorkTerminals } from "./useWorkTerminals";
 import { addPendingTerminal, dropPendingTerminal } from "./terminalsQuery";
 import { pruneTerminalMeta } from "./terminalMeta";
 import {
-    createBrowserSession,
-    disposeBrowserSession,
-    mountBrowserSession,
-    noteBrowserUrl,
-    parkBrowserSession,
-    type BrowserSession,
-} from "./browserSession";
-import {
     createTerminalSession,
     disposeTerminalSession,
     mountTerminalSession,
@@ -46,21 +38,17 @@ export interface TerminalTab {
     // AI-managed agent session (labeled, sparkles icon) the Claude agent's Bash commands run in vs a job
     // session (labeled) the daemon runs user-triggered flows in (capability adds, infra check) vs a managed
     // background process (an extension's declared processes, dockerd — read-only log views).
-    // …vs the agent's BROWSER (labeled by the page's title, a live screencast rather than a PTY).
-    readonly kind: "shell" | "panel" | "agent" | "job" | "process" | "browser";
+    readonly kind: "shell" | "panel" | "agent" | "job" | "process";
     // A process row that maps to an installed extension's declared process — the address for its
     // /extensions start/stop routes (absent on docker and orphaned sessions).
     readonly extensionId?: string;
     readonly processName?: string;
-    // Browser tabs only: the page the agent is on, shown in the pane's own header.
-    readonly url?: string;
 }
 
-// The surfaces WORK runs on, as opposed to the PLACES the user keeps: an agent's Bash shell, the daemon's job
-// sessions, and the agent's browser are all records of something that ran, and the strip treats them
-// accordingly (hiddenFromStrip, retireFinished). A browser belongs here for exactly the reason a Bash shell
-// does — it is the agent's, it lasts as long as the turn, and the transcript already narrates what it did.
-const isWork = (tab: TerminalTab): boolean => tab.kind === `agent` || tab.kind === `job` || tab.kind === `browser`;
+// The surfaces WORK runs on, as opposed to the PLACES the user keeps: an agent's Bash shell and the daemon's
+// job sessions are records of something that ran, and the strip treats them accordingly (hiddenFromStrip,
+// retireFinished).
+const isWork = (tab: TerminalTab): boolean => tab.kind === `agent` || tab.kind === `job`;
 
 export interface TerminalTabsSource {
     readonly list: () => Promise<TerminalTab[]>;
@@ -73,48 +61,34 @@ export interface TerminalTabsSource {
     readonly kill?: (name: string) => Promise<void>;
 }
 
-/* PANES ARE POLYMORPHIC, TABS ARE NOT. A pane is either an xterm over a tmux PTY or an <img> over a browser
- * screencast; the strip, the grouping, the reveal rules and the sweep know nothing about which. The four verbs
- * below are the whole seam — everything else in this file works in tab names. */
-type PaneSession = TerminalSession | BrowserSession;
-
-const mountPane = (session: PaneSession, container: HTMLElement, focus: boolean): void =>
-    session.kind === `browser` ? mountBrowserSession(session, container, focus) : mountTerminalSession(session, container, focus);
-const parkPane = (session: PaneSession): void => (session.kind === `browser` ? parkBrowserSession(session) : parkTerminalSession(session));
-const disposePane = (session: PaneSession): void => (session.kind === `browser` ? disposeBrowserSession(session) : disposeTerminalSession(session));
-const createPane = (tab: TerminalTab, onExit: (name: string) => void, spawnWithin: HTMLElement | undefined): PaneSession =>
-    tab.kind === `browser`
-        ? createBrowserSession(tab.name, onExit)
-        : // A background process's tab is a LOG VIEW: stdin off, keystrokes never reach the PTY. The container
-          // sizes the PTY at birth (even for a tab that stays hidden — it would mount here).
-          createTerminalSession(tab.name, onExit, tab.kind === `process`, spawnWithin);
+// A background process's tab is a LOG VIEW: stdin off, keystrokes never reach the PTY. The container sizes the
+// PTY at birth (even for a tab that stays hidden — it would mount here).
+const createPane = (tab: TerminalTab, onExit: (name: string) => void, spawnWithin: HTMLElement | undefined): TerminalSession =>
+    createTerminalSession(tab.name, onExit, tab.kind === `process`, spawnWithin);
 
 // Sandbox switch: every cached socket points at the OLD daemon — drop them all and bump the epoch so a
 // mounted surface resets its tab state and relists against the new daemon.
 export const disposeAllSessions = (): void => {
     for (const session of cache.values()) {
-        disposePane(session);
+        disposeTerminalSession(session);
     }
     cache.clear();
     epoch.value += 1;
 };
 
-// The shared session cache — one pane (xterm or browser view) + socket per session name, owned by no surface.
-// An entry is disposed only when its session deliberately ends (tab ×, restart, or the daemon's exit frame); a
-// mere unmount detaches the DOM host and keeps streaming. sessionOf rebinds a cached session's exit handler to
-// the instance that touched it last, so an exit always updates a LIVE surface's tab state.
-const cache = new Map<string, PaneSession>();
+// The shared session cache — one xterm + socket per session name, owned by no surface. An entry is disposed
+// only when its session deliberately ends (tab ×, restart, or the daemon's exit frame); a mere unmount detaches
+// the DOM host and keeps streaming. sessionOf rebinds a cached session's exit handler to the instance that
+// touched it last, so an exit always updates a LIVE surface's tab state.
+const cache = new Map<string, TerminalSession>();
 
 // Bumped whenever the cache is wiped wholesale (sandbox switch) — mounted surfaces watch it.
 const epoch = ref(0);
 
-// Snapshot every live terminal's scrollback on reload/navigation — createTerminalSession restores it. A
-// browser view has nothing to snapshot: its content is the live page, and a reload reconnects to it.
+// Snapshot every live terminal's scrollback on reload/navigation — createTerminalSession restores it.
 window.addEventListener(`pagehide`, () => {
     for (const session of cache.values()) {
-        if (session.kind === `terminal`) {
-            persistScrollback(session);
-        }
+        persistScrollback(session);
     }
 });
 
@@ -229,7 +203,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
 
     // Takes the TAB, not just a name: what kind of pane a session needs is the daemon's answer, and a name
     // alone can't say. Cache hits ignore the kind entirely — a session's medium never changes under it.
-    const sessionOf = (tab: TerminalTab): PaneSession => {
+    const sessionOf = (tab: TerminalTab): TerminalSession => {
         const cached = cache.get(tab.name);
         if (cached !== undefined) {
             // Sessions outlive the instance that created them (the panel remounts across v-if / mobile route) —
@@ -255,7 +229,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         for (const mounted of mountedNames) {
             const session = cache.get(mounted);
             if (session !== undefined) {
-                parkPane(session);
+                parkTerminalSession(session);
             }
         }
         container.replaceChildren();
@@ -272,7 +246,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
                 window.localStorage.setItem(activeKey, member);
             });
             container.append(cell);
-            mountPane(sessionOf(tab), cell, member === name);
+            mountTerminalSession(sessionOf(tab), cell, member === name);
         }
         mountedNames = group;
         activeName.value = name;
@@ -319,12 +293,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         order.value = tabs;
         reconcileGroups(tabs);
         for (const tab of tabs) {
-            const session = sessionOf(tab);
-            // The daemon's list is the only place the browser's current page is known — hand it to the pane so
-            // its header tracks the agent's navigation without a second stream just for the URL.
-            if (session.kind === `browser`) {
-                noteBrowserUrl(session, tab.url);
-            }
+            sessionOf(tab);
         }
         const tabbed = new Set(tabs.map((tab) => tab.name));
         if (activeName.value === undefined || !tabbed.has(activeName.value)) {
@@ -396,7 +365,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         for (const mounted of mountedNames) {
             const session = cache.get(mounted);
             if (session !== undefined) {
-                parkPane(session);
+                parkTerminalSession(session);
             }
         }
         mountedNames = [];
@@ -413,7 +382,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         dropPendingTerminal(name);
         const session = cache.get(name);
         if (session !== undefined) {
-            disposePane(session);
+            disposeTerminalSession(session);
             cache.delete(name);
         }
         const group = groups.value.find((members) => members.includes(name));
@@ -504,12 +473,11 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     };
 
     // Programmatic input into the active session, routed through xterm's input handler (fires the same onData
-    // that a keystroke does), so the touch extra-keys row reuses the existing socket wiring. The row is
-    // Esc/Tab/Ctrl/arrows — control codes for a shell — so it simply has nothing to say to a browser pane.
+    // that a keystroke does), so the touch extra-keys row reuses the existing socket wiring.
     const sendInput = (data: string): void => {
         const name = activeName.value;
         const session = name === undefined ? undefined : cache.get(name);
-        if (session?.kind === `terminal`) {
+        if (session !== undefined) {
             session.term.input(data, true);
         }
     };
@@ -637,7 +605,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         void kill(name);
         const session = cache.get(name);
         if (session !== undefined) {
-            disposePane(session);
+            disposeTerminalSession(session);
             cache.delete(name);
         }
         const tab = claim(create());

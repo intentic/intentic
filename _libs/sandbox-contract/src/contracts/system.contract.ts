@@ -2,6 +2,8 @@ import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
 import { SystemEventSchema } from "../events.js";
 import {
+    BrowserNameParamSchema,
+    BrowsersListSchema,
     DaemonSessionSchema,
     HostTunnelInputSchema,
     HostTunnelSchema,
@@ -38,4 +40,11 @@ export const systemContract = {
     // (browser fetch sends the header), unlike the header-less WS route which app.ts exempts.
     terminals: oc.route({ method: "GET", path: "/system/terminals" }).output(TerminalsListSchema),
     killTerminal: oc.route({ method: "DELETE", path: "/system/terminals/{name}" }).input(TerminalNameParamSchema).output(OkSchema),
+    // The agent's live Chromiums and the pages each has open — the Browsers view's roster, polled while it is on
+    // screen and by the rail so its tile can appear the moment a turn starts browsing. The frames are the
+    // separate /system/browser-view WebSocket; this is the control plane, exactly as `terminals` is for tmux.
+    // `closeBrowser` shuts one Chromium down: the agent's next browser tool call then fails as if it had crashed,
+    // which is the honest account of the owner pulling the plug.
+    browsers: oc.route({ method: "GET", path: "/system/browsers" }).output(BrowsersListSchema),
+    closeBrowser: oc.route({ method: "DELETE", path: "/system/browsers/{name}" }).input(BrowserNameParamSchema).output(OkSchema),
 };

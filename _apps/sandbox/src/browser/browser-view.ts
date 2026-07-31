@@ -1,5 +1,5 @@
 import { upgradeWebSocket } from "@hono/node-server";
-import { browserSessionContext } from "./browser-sessions.js";
+import { browserSessionContext, browserSessionPage } from "./browser-sessions.js";
 import { dispatchInput, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type Screencast, type ScreencastClientMessage } from "./screencast.js";
 import type { Services } from "../composition.js";
 
@@ -23,6 +23,8 @@ export const createBrowserViewRoute = (services: Services) =>
     upgradeWebSocket((c) => {
         let screencast: Screencast | undefined;
         let closed = false;
+        // The session this socket watches, read once in onOpen and needed again by every `bind` frame.
+        let session = "";
 
         const cleanup = async (): Promise<void> => {
             if (closed) {
@@ -45,7 +47,7 @@ export const createBrowserViewRoute = (services: Services) =>
                         return;
                     }
                 }
-                const session = url.searchParams.get("session") ?? "";
+                session = url.searchParams.get("session") ?? "";
                 // Awaited, not polled: the user clicks Watch the instant the first tool card appears, which can
                 // be ahead of Chromium's first paint — browserSessionContext resolves when the attach lands.
                 const context = await browserSessionContext(session);
@@ -83,6 +85,18 @@ export const createBrowserViewRoute = (services: Services) =>
                     // signal, exactly as on the terminal socket (a screencast of a STILL page sends no frames,
                     // so silence here would otherwise be indistinguishable from a half-open connection).
                     ws.send(JSON.stringify({ type: "pong" }));
+                    return;
+                }
+                if (message.type === "bind") {
+                    // The tab strip: stream the page the user clicked, and PIN it so the agent opening another
+                    // tab no longer moves the picture. A page id the session doesn't know is a tab that closed
+                    // between the relist and the click — say so rather than leaving the strip lying about it.
+                    const page = browserSessionPage(session, message.pageId);
+                    if (page === undefined) {
+                        ws.send(JSON.stringify({ type: "gone", pageId: message.pageId }));
+                        return;
+                    }
+                    await screencast?.bind(page, true);
                     return;
                 }
                 try {

@@ -1,4 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Page } from "playwright";
 
@@ -18,12 +19,13 @@ import type { Browser, BrowserContext, Page } from "playwright";
  * That inversion is the whole reason this is cheap: no daemon-owned process to leak, no lifecycle to babysit,
  * no behaviour change for a turn nobody watches.
  *
- * A session is therefore shaped exactly like an `agent-*` tmux session, and for the same reason — it is a
- * RECORD OF WORK, not a place the user keeps. It is named per SDK session (`browser-<id8>`, the same
- * derivation agent-terminals.ts uses), it is `running` while its Chromium is connected, and the web app hides
- * it from the tab strip until someone explicitly asks to watch. See system.routes.ts, where it lists beside
- * the tmux sessions, because from the panel's side there is one question ("what is happening right now?") and
- * it should have one answer. */
+ * A session is named per SDK session (`browser-<id8>`, the same derivation agent-terminals.ts uses) and is
+ * `running` while its Chromium is connected. What it is NOT is a terminal: it lists from its own route
+ * (/system/browsers) rather than beside the tmux sessions, because a browser holds SEVERAL pages at once and a
+ * surface that can only show one stream has no way to ask which. So this module tracks every page the context
+ * opens, not merely the newest, and the web app renders them as the tab strip of a browser in its own rail
+ * area. `browserSessionPage` is the other half of that: the view route's `bind` frame names a page id, and
+ * this is what turns it back into something the screencast can point at. */
 
 // How long to keep asking Chromium's DevTools endpoint to answer. The first browser tool call is what triggers
 // the attach, and Chromium is coming up underneath it — a cold launch plus the first navigation is seconds, not
@@ -35,6 +37,24 @@ const ATTACH_POLL_MS = 250;
 // seen) after the turn that ran it ended — the same window tmux sessions get (terminal-session.ts).
 const RETAIN_FINISHED_MS = 2 * 3_600_000;
 
+/* One page the browser has open — a tab in the view's tab strip, and the thing a `bind` frame names.
+ *
+ * The `page` handle is held so that binding is a lookup rather than a search: the view route says "stream id
+ * p3" and there is a Playwright Page to point the screencast at, with no re-derivation from a url that may have
+ * changed since. The id is minted per session (`p1`, `p2`, …) — opaque to the client, stable for the page's
+ * life, and never reused, so a tab the user has selected cannot silently become a different page. */
+interface PageRecord {
+    readonly id: string;
+    readonly page: Page;
+    url: string;
+    title: string | undefined;
+    // Marked rather than deleted, because Chromium going away closes every page at once and the ORDER of that
+    // against the browser's own `disconnected` is not guaranteed. Deleting here would therefore empty a
+    // finished session's strip in a race we don't control — and where the agent went is the whole value of a
+    // session that has ended. So a closed page merely stops being listed while the session is still running.
+    closed: boolean;
+}
+
 // What the daemon knows about one agent browser. `context` arrives only once the CDP attach lands; everything
 // before that is what the hook could say without looking.
 interface BrowserSessionRecord {
@@ -44,8 +64,11 @@ interface BrowserSessionRecord {
     readonly port: number;
     readonly startedAt: number;
     activityAt: number;
-    url: string | undefined;
-    title: string | undefined;
+    // Every page currently open, in the order they were opened — which is the order a browser shows its tabs.
+    readonly pages: Map<string, PageRecord>;
+    nextPageId: number;
+    // The page the agent last drove. Undefined before the first page, and after the last one closes.
+    activePageId: string | undefined;
     // Set when the browser went away (turn ended, agent called browser_close, Chromium crashed).
     finishedAt: number | undefined;
     browser: Browser | undefined;
@@ -72,26 +95,46 @@ export const browserServerOfTool = (tool: string): string | undefined => {
     return match?.[1];
 };
 
-// A page's own account of itself, for the pill and its tooltip. Title first (that is what a tab says), and the
-// URL as the second line — a page mid-navigation has one and not the other, so both are optional.
-const notePage = async (record: BrowserSessionRecord, page: Page): Promise<void> => {
+/* A page's own account of itself, for its tab and the session's label. Title first (that is what a tab says),
+ * and the URL beside it — a page mid-navigation has one and not the other, so the title stays optional.
+ *
+ * Noting a page also makes it the ACTIVE one, which is this module's whole definition of "what the agent is
+ * looking at": the page it most recently opened, navigated, or loaded. There is no CDP signal for which tab is
+ * foreground that survives a headless browser, and this stands in for it exactly where it matters — the agent
+ * drives one page at a time, and the one it just touched is the one worth watching. */
+const notePage = async (record: BrowserSessionRecord, entry: PageRecord): Promise<void> => {
     record.activityAt = Date.now();
-    record.url = page.url();
+    record.activePageId = entry.id;
+    entry.url = entry.page.url();
     // A page that navigated out from under us throws here; the next event carries the new title.
-    record.title = await page.title().catch(() => undefined);
+    entry.title = await entry.page.title().catch(() => undefined);
 };
 
 const watchPage = (record: BrowserSessionRecord, page: Page): void => {
-    void notePage(record, page);
+    const entry: PageRecord = { id: `p${record.nextPageId}`, page, url: page.url(), title: undefined, closed: false };
+    record.nextPageId += 1;
+    record.pages.set(entry.id, entry);
+    void notePage(record, entry);
     page.on("framenavigated", (frame) => {
         if (frame.parentFrame() === null) {
-            void notePage(record, page);
+            void notePage(record, entry);
         }
     });
     // A title set by script after load (SPAs do this on every route change) — the DOM event is the only signal.
-    page.on("domcontentloaded", () => void notePage(record, page));
+    page.on("domcontentloaded", () => void notePage(record, entry));
+    // A closed tab leaves the strip. The active slot falls back to the last page still open — the same
+    // follow-the-newest rule the screencast uses when the page it was bound to goes away.
+    page.on("close", () => {
+        entry.closed = true;
+        if (record.activePageId === entry.id) {
+            record.activePageId = [...record.pages.values()].findLast((other) => !other.closed)?.id;
+        }
+    });
 };
 
+// The page records are deliberately left alone: a finished session's value is the record of where the agent
+// went (summarize switches to listing all of them). The Page handles they hold are dead along with their
+// Chromium, which is why browserSessionPage refuses a finished session outright.
 const finish = (record: BrowserSessionRecord): void => {
     record.finishedAt ??= Date.now();
     record.browser = undefined;
@@ -154,8 +197,9 @@ export const openBrowserSession = (input: { readonly sessionId: string; readonly
         port: input.port,
         startedAt: Date.now(),
         activityAt: Date.now(),
-        url: undefined,
-        title: undefined,
+        pages: new Map(),
+        nextPageId: 1,
+        activePageId: undefined,
         finishedAt: undefined,
         browser: undefined,
         context: undefined,
@@ -186,16 +230,17 @@ export const browserSessionContext = async (name: string): Promise<BrowserContex
     return record.context ?? (await record.attaching);
 };
 
-// One listable session. Mirrors the fields TerminalSessionSchema carries for a tmux session, because that is
-// the list this joins (system.routes.ts).
-export interface BrowserSessionSummary {
-    readonly name: string;
-    // The pill's text: the page's own title, else its host, else which browser this is.
-    readonly label: string;
-    readonly running: boolean;
-    readonly activityAt: number;
-    readonly url?: string;
-}
+// The Playwright Page one `bind` frame names, for the view route to point its screencast at. Undefined once
+// the browser is gone: the handles a finished session still lists are dead, and binding one would throw deep
+// inside CDP rather than telling the client what actually happened.
+export const browserSessionPage = (name: string, pageId: string): Page | undefined => {
+    const record = sessions.get(name);
+    if (record === undefined || record.finishedAt !== undefined) {
+        return undefined;
+    }
+    const entry = record.pages.get(pageId);
+    return entry === undefined || entry.closed ? undefined : entry.page;
+};
 
 const hostOf = (url: string | undefined): string | undefined => {
     if (url === undefined || url === "" || url === "about:blank") {
@@ -208,15 +253,35 @@ const hostOf = (url: string | undefined): string | undefined => {
     }
 };
 
-const summarize = (record: BrowserSessionRecord): BrowserSessionSummary => ({
-    name: record.name,
-    label: record.title ?? hostOf(record.url) ?? record.server,
-    running: record.finishedAt === undefined,
-    activityAt: record.activityAt,
-    ...(record.url !== undefined ? { url: record.url } : {}),
-});
+/* A live session lists the tabs it has OPEN; a finished one lists every tab it ever had.
+ *
+ * That asymmetry is the point rather than an accident of bookkeeping. While the browser runs, a closed tab is
+ * noise — it cannot be watched and the agent has moved on. Once it is gone, nothing here can be watched at all
+ * and the only question left is where it went, which the full list answers and a live-only list answers with a
+ * blank strip. */
+// A page mid-navigation has no title yet, and `title` is optional rather than nullable — so it is omitted
+// rather than set to undefined (the repo's exactOptionalPropertyTypes rule).
+const summarizePage = (entry: PageRecord, activeId: string | undefined): BrowserPage => {
+    const page: BrowserPage = { id: entry.id, url: entry.url, active: entry.id === activeId };
+    return entry.title === undefined ? page : { ...page, title: entry.title };
+};
 
-export const listBrowserSessions = (): BrowserSessionSummary[] => {
+const summarize = (record: BrowserSessionRecord): BrowserSession => {
+    const running = record.finishedAt === undefined;
+    const active = record.activePageId === undefined ? undefined : record.pages.get(record.activePageId);
+    return {
+        name: record.name,
+        label: active?.title ?? hostOf(active?.url) ?? record.server,
+        server: record.server,
+        running,
+        activityAt: record.activityAt,
+        pages: [...record.pages.values()]
+            .filter((entry) => !running || !entry.closed)
+            .map((entry) => summarizePage(entry, record.activePageId)),
+    };
+};
+
+export const listBrowserSessions = (): BrowserSession[] => {
     prune(Date.now());
     return [...sessions.values()].map(summarize);
 };
