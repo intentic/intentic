@@ -37,11 +37,10 @@ test("the compose file mirrors connect.sh: slugged names, origin alias, .env gua
     expect(yaml).toContain(`name: intentic-history-sandbox-0f00ba4dd12b`);
     expect(yaml).toContain(`name: intentic-docker-sandbox-0f00ba4dd12b`);
     expect(yaml).toContain(`aliases: [intentic-sandbox-workspace]`);
-    // The one capability connect.sh's run carries: without it the daemon cannot give an isolated turn its own
-    // mount namespace, and agents' absolute workspace paths reach the shared checkout. This drifted once
-    // already — the flag was added to the platform provider's run and to none of the other creation paths, so
-    // every ordinarily-created sandbox lost isolation silently.
-    expect(yaml).toContain(`cap_add: [SYS_ADMIN]`);
+    // The capabilities connect.sh's run carries: SYS_ADMIN gives isolated turns their own mount namespace,
+    // while SYS_PTRACE lets production diagnostics inspect a wedged daemon. This drifted once already — a
+    // capability reached one creation path but not the others, leaving ordinarily-created sandboxes weaker.
+    expect(yaml).toContain(`cap_add: [SYS_ADMIN, SYS_PTRACE]`);
     // Secrets come from the claimed .env, with a clear error when the bootstrap was skipped.
     expect(yaml).toContain(`CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`);
     expect(yaml).toContain(`--token \${TUNNEL_TOKEN:?run the .env bootstrap first}`);

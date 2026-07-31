@@ -317,8 +317,9 @@ const depsTask: BenchTask = {
 
 // Four deliberate defects planted into the copied tree. Each is syntactically valid, semantically wrong, and
 // contradicted by intent that is visible right where it sits — a comment, a name, or the obvious purpose of the
-// function. None is findable by pattern: no regex knows that slicing 6 characters contradicts a comment saying
-// 8, so an agent has to READ and UNDERSTAND, across a tree far too large to hold at once.
+// function. None is findable by pattern: no regex knows that truncating a descriptive window slug to zero
+// characters contradicts the function's purpose, so an agent has to READ and UNDERSTAND, across a tree far
+// too large to hold at once.
 //
 // Anchors are exact source strings, and prepare() THROWS if one no longer matches, so an edit upstream breaks
 // the benchmark loudly instead of silently planting three defects and grading against four.
@@ -333,9 +334,9 @@ interface Defect {
 const DEFECTS: readonly Defect[] = [
     {
         file: "src/agent/agent-terminals.ts",
-        find: 'const id = sessionId.replaceAll(/[^A-Za-z0-9_-]/g, "").slice(0, 8);',
-        replace: 'const id = sessionId.replaceAll(/[^A-Za-z0-9_-]/g, "").slice(0, 6);',
-        why: "the comment directly above promises 8 characters of the session id; this takes 6",
+        find: "        .slice(0, 24);",
+        replace: "        .slice(0, 0);",
+        why: "windowSlug is meant to derive a meaningful tmux window name from the description; taking zero characters makes every description fall back to `run`",
     },
     {
         file: "src/agent/turn-usage.ts",

@@ -146,10 +146,10 @@ test("defects plants every anchor it grades against, and padding the answer is p
         expect(prepared.prompt).toContain(`daemon/src/agent/`);
         expect(prepared.prompt).toMatch(/(?:1[5-9]|[23][0-9]) source files/);
         // The mutations really are in the copy the agent reads.
-        expect(await readFile(join(dir, `daemon`, `src`, `agent`, `agent-terminals.ts`), `utf8`)).toContain(`slice(0, 6)`);
+        expect(await readFile(join(dir, `daemon`, `src`, `agent`, `agent-terminals.ts`), `utf8`)).toContain(`slice(0, 0)`);
 
         const found = [
-            { file: `daemon/src/agent/agent-terminals.ts`, line: 19 },
+            { file: `daemon/src/agent/agent-terminals.ts`, line: 26 },
             { file: `daemon/src/agent/turn-usage.ts`, line: 8 },
         ];
         await writeFile(join(dir, `answer.json`), JSON.stringify({ defects: found }));
