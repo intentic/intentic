@@ -2,6 +2,7 @@
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { ERRANDS, errandPrompt } from "../composables/chat/errands";
 import type { ChatMessage } from "../composables/chat/transcript";
 
 const clock = vi.hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
@@ -28,14 +29,22 @@ vi.mock("@intentic-app/ui", async () => {
     return { useDevice: () => ({ mobile: ref(false) }) };
 });
 vi.mock("@intentic-app/ui/markdown", () => ({ copyCodeFromEvent: vi.fn() }));
-vi.mock("@intentic/sandbox-contract", () => ({ planParts: (text: string) => ({ body: text }) }));
+// withoutResumeNote is the real behaviour, not a stub: the errand row depends on it to recognise an errand a
+// resumed turn re-sent (errands.ts), and a mock that returned the text unchanged would hide that.
+vi.mock("@intentic/sandbox-contract", async () => {
+    const { withoutResumeNote } = await vi.importActual<typeof import("@intentic/sandbox-contract")>("@intentic/sandbox-contract");
+    return { planParts: (text: string) => ({ body: text }), withoutResumeNote };
+});
 vi.mock("../composables/chat/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
 // formatElapsed is the real one — the loader's readout IS that format, so mocking it would test nothing.
 vi.mock("../composables/agents/agentStatus", async () => {
     const { formatElapsed } = await vi.importActual<typeof import("../composables/agents/agentStatus")>("../composables/agents/agentStatus");
     return { effectiveAutoLand: () => false, formatElapsed };
 });
-vi.mock("../composables/chat/transcript", () => ({ isAcknowledgment: () => false }));
+vi.mock("../composables/chat/transcript", async () => {
+    const { errandOf } = await vi.importActual<typeof import("../composables/chat/errands")>("../composables/chat/errands");
+    return { foldsIntoTurn: (message: ChatMessage) => errandOf(message) !== undefined };
+});
 vi.mock("../composables/useMarkdown", async () => {
     const { computed } = await import("vue");
     return { useMarkdown: () => computed(() => ({ settled: ``, tail: `` })) };
@@ -91,10 +100,10 @@ const { default: ChatMessageView } = await import("./ChatMessageView.vue");
 const message: ChatMessage = { id: 1, role: `assistant`, text: `` };
 let app: App | undefined;
 
-const mount = (): HTMLElement => {
+const mount = (subject: ChatMessage = message): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(ChatMessageView, { message, streaming: true }) });
+    app = createApp({ render: () => h(ChatMessageView, { message: subject, streaming: true }) });
     app.use(VueQueryPlugin, { queryClient: new QueryClient() });
     app.component(
         `Icon`,
@@ -156,5 +165,26 @@ describe(`ChatMessageView loader`, () => {
         app = undefined;
         clock.turnStartedAt = undefined;
         expect(mount().textContent).not.toContain(`(`);
+    });
+});
+
+/* An errand is the app's prompt, not the user's (errands.ts): the row says what was asked for, and the words
+ * the agent actually got are behind one press rather than gone — the audit trail is the whole reason this is a
+ * fold rather than a suppression. */
+describe(`ChatMessageView errand row`, () => {
+    const errand = ERRANDS.landConflict;
+    const prompt = errandPrompt(errand, [`What blocked the land:\nroot\n  - src/auth/session.ts`]);
+
+    it(`names the errand and keeps its prompt one press away rather than on screen`, async () => {
+        const element = mount({ id: 2, role: `user`, text: prompt });
+        expect(element.textContent).toContain(errand.label);
+        expect(element.textContent).toContain(errand.detail);
+        expect(element.textContent).not.toContain(`src/auth/session.ts`);
+        // Never sticky: the pin belongs to the question this errand serves, one turn up.
+        expect(element.querySelector(`.chat-prompt`)).toBeNull();
+
+        element.querySelector(`button`)?.click();
+        await nextTick();
+        expect(element.textContent).toContain(`src/auth/session.ts`);
     });
 });

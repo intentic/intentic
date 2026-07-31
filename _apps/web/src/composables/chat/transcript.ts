@@ -9,6 +9,7 @@ import type {
     ToolCallStatus,
     ToolKind,
 } from "@intentic/sandbox-contract";
+import { errandOf } from "./errands";
 
 /* The transcript VOCABULARY — what a chat is made of, with no notion of how it is produced.
  *
@@ -210,16 +211,16 @@ export const withCancelledCards = (message: ChatMessage): ChatMessage => {
 export interface ChatTurn {
     readonly id: number;
     readonly messages: ChatMessage[];
-    /* The nudges turnsOf folded into this turn — every user message after the opener. Rendered by the
-     * opener's bubble as its "↳ continue ×N" trailer, so a pinned prompt still admits it has been nudged
-     * since.
+    /* What turnsOf folded into this turn — every user message after the opener, whether the user's own nudge
+     * or an errand the app sent (see foldsIntoTurn). Rendered by the opener's bubble as its "↳ … ×N" trailer,
+     * so a pinned prompt still admits what has happened to it since.
      *
      * Derived here rather than per render, because the transcript reads it for the head bubble of EVERY turn
      * on every paint of a streaming answer, and a freshly filtered array each time is a changed prop: it
      * defeated Vue's identity bailout and re-rendered one bubble per turn per frame to hand it the same
-     * messages back. Turns with no nudges — nearly all of them — share NO_ACKS, so the prop holds still
-     * across the rebuild `turnsOf` does on each frame. */
-    readonly acks: readonly ChatMessage[];
+     * messages back. Turns that folded nothing — nearly all of them — share NOTHING_FOLDED, so the prop holds
+     * still across the rebuild `turnsOf` does on each frame. */
+    readonly folded: readonly ChatMessage[];
 }
 
 // The client transcript as a daemon-seed history: user/assistant text turns only. Notices, tool runs, todos,
@@ -284,28 +285,35 @@ export const isAcknowledgment = (message: ChatMessage): boolean => {
     );
 };
 
+/* A USER MESSAGE THAT DOES NOT OPEN A TURN. It folds into the one above it instead, so the prompt that
+ * actually defines the work keeps its pin through everything done in service of it.
+ *
+ * Two populations, deferring for two different reasons, and the split is worth stating because only one of
+ * them is about the user at all: a bare acknowledgment is their own contentless "keep going", while an errand
+ * is a prompt the APP composed and sent on their behalf (errands.ts) — a rebase, a review, a test pass. Both
+ * point at the prompt above rather than carrying intent of their own, and pinning either would cover the
+ * question it defers to. */
+export const foldsIntoTurn = (message: ChatMessage): boolean => isAcknowledgment(message) || errandOf(message) !== undefined;
+
 // A conversation can open with frames that answer no prompt of this session — a restored history's assistant
 // text, a provider-switch notice — so the first group may have no user message to pin.
-// A bare acknowledgment does not open a turn either: it folds into the one it nudges, so the prompt that
-// actually defines the work keeps its pin through the continued answer (ChatMessageView renders the folded
-// ack as an ordinary, non-sticky bubble).
-// Shared by every turn that folded no nudges, so the overwhelmingly common case hands the renderer the same
-// array on each rebuild rather than an equal one (see ChatTurn.acks).
-const NO_ACKS: readonly ChatMessage[] = [];
+// Shared by every turn that folded nothing, so the overwhelmingly common case hands the renderer the same
+// array on each rebuild rather than an equal one (see ChatTurn.folded).
+const NOTHING_FOLDED: readonly ChatMessage[] = [];
 
 export const turnsOf = (messages: readonly ChatMessage[]): ChatTurn[] => {
-    const turns: { id: number; messages: ChatMessage[]; acks: readonly ChatMessage[] }[] = [];
+    const turns: { id: number; messages: ChatMessage[]; folded: readonly ChatMessage[] }[] = [];
     for (const message of messages) {
         const open = turns.at(-1);
-        if (open === undefined || (message.role === `user` && !isAcknowledgment(message))) {
-            turns.push({ id: message.id, messages: [message], acks: NO_ACKS });
+        if (open === undefined || (message.role === `user` && !foldsIntoTurn(message))) {
+            turns.push({ id: message.id, messages: [message], folded: NOTHING_FOLDED });
             continue;
         }
         open.messages.push(message);
-        // Every user message past the opener is a nudge this turn folded in. Assigned only when there is one,
-        // so a turn without nudges keeps the shared empty array.
+        // Every user message past the opener is one this turn folded in. Assigned only when there is one, so a
+        // turn that folded nothing keeps the shared empty array.
         if (message.role === `user`) {
-            open.acks = open.acks === NO_ACKS ? [message] : [...open.acks, message];
+            open.folded = open.folded === NOTHING_FOLDED ? [message] : [...open.folded, message];
         }
     }
     return turns;

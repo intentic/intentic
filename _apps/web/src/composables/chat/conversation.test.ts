@@ -2,7 +2,8 @@ import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox
 import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clampEffort, Conversation, effortsFor, providerAccounts, providerModels, turnDefaults, turnRequestBody } from "./conversation";
-import { type ChatMessage, isAcknowledgment, transcriptOf, turnsOf } from "./transcript";
+import { resolvePrompt } from "../agents/conflictResolution";
+import { type ChatMessage, foldsIntoTurn, isAcknowledgment, transcriptOf, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
@@ -148,10 +149,13 @@ describe(`Conversation`, () => {
             const stop = watch(conversation.messages, () => (writes += 1), { flush: `sync` });
             sandboxRequestMock.mockImplementation(
                 sseResponse([
-                    ...Array.from(
-                        { length: calls },
-                        (_, index): AgentEvent => ({ kind: `tool_call`, id: `t${index}`, name: `Read`, category: `read`, status: `completed` }),
-                    ),
+                    ...Array.from({ length: calls }, (_, index): AgentEvent => ({
+                        kind: `tool_call`,
+                        id: `t${index}`,
+                        name: `Read`,
+                        category: `read`,
+                        status: `completed`,
+                    })),
                     { kind: `done` },
                 ]),
             );
@@ -292,11 +296,31 @@ describe(`Conversation`, () => {
             { id: 1, ids: [1, 2, 3, 4] },
             { id: 5, ids: [5] },
         ]);
-        expect(turns[0]!.acks.map((message) => message.id)).toEqual([3]);
-        expect(turns[1]!.acks).toEqual([]);
-        // A turn that folded no nudges shares the empty array rather than allocating one, which is what keeps
-        // the head bubble's `acks` prop stable across the rebuild `turnsOf` does on every frame.
-        expect(turnsOf([{ id: 9, role: `user`, text: `hi` }])[0]!.acks).toBe(turns[1]!.acks);
+        expect(turns[0]!.folded.map((message) => message.id)).toEqual([3]);
+        expect(turns[1]!.folded).toEqual([]);
+        // A turn that folded nothing shares the empty array rather than allocating one, which is what keeps
+        // the head bubble's `folded` prop stable across the rebuild `turnsOf` does on every frame.
+        expect(turnsOf([{ id: 9, role: `user`, text: `hi` }])[0]!.folded).toBe(turns[1]!.folded);
+    });
+
+    /* An errand is the app's own prompt, sent on the user's behalf (errands.ts) — it must reach the agent as a
+     * real turn and must NOT take the pin off the request it serves. Written against the composed prompt
+     * rather than a hand-made string, so a reworded opening fails here instead of silently going back to
+     * pinning a paragraph of machine prose over the user's question. */
+    it(`turnsOf folds an app errand into the turn it serves, whatever the daemon wrapped it in`, () => {
+        const errand = resolvePrompt([{ repo: `root`, clean: 1, paths: [{ path: `a.ts`, reason: `diverged` }] }]);
+        const messages: ChatMessage[] = [
+            { id: 1, role: `user`, text: `implement the extension host split` },
+            { id: 2, role: `assistant`, text: `done` },
+            { id: 3, role: `user`, text: errand },
+            { id: 4, role: `assistant`, text: `rebased` },
+            // The same errand as a turn the daemon restarted carries it behind a resume note.
+            { id: 5, role: `user`, text: withResumeNote(errand, RESUME_NOTES.restart) },
+        ];
+        const turns = turnsOf(messages);
+        expect(turns.map((turn) => ({ id: turn.id, ids: turn.messages.map((message) => message.id) }))).toEqual([{ id: 1, ids: [1, 2, 3, 4, 5] }]);
+        expect(turns[0]!.folded.map((message) => message.id)).toEqual([3, 5]);
+        expect(foldsIntoTurn(messages[3]!)).toBe(false);
     });
 
     it(`isAcknowledgment matches whole-message lexicon entries through trailing punctuation, nothing more`, () => {

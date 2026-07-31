@@ -987,22 +987,23 @@ watch(
                     <div class="chat-turns flex flex-1 flex-col gap-1 pt-4">
                         <template v-if="messages.length > 0">
                             <!-- One section per turn, purely so each prompt's sticky range ends where its answer
-                                 does. A bare "continue" folds into the turn it nudges (see turnsOf), so the
-                                 question that defines the work stays pinned through the continued answer. -->
+                                 does. A bare "continue" and an app errand both fold into the turn they serve
+                                 (see foldsIntoTurn), so the question that defines the work stays pinned through
+                                 the continued answer. -->
                             <section v-for="turn in turns" :key="turn.id" class="flex flex-col gap-1">
                                 <!-- v-memo skips the vnode entirely for a row whose inputs are unchanged, which
                                      during a streaming turn is every row but the one being written: `turns` is
                                      rebuilt on each paint, so without it the whole transcript is re-created to
                                      redraw one bubble. The key lists exactly what the row renders from — a
                                      message keeps its identity through the reducer unless that message changed,
-                                     and `acks` holds still per turn (see ChatTurn.acks). -->
+                                     and `folded` holds still per turn (see ChatTurn.folded). -->
                                 <ChatMessageView
                                     v-for="message in turn.messages"
                                     :key="message.id"
-                                    v-memo="[message, isStreaming(message), turn.acks]"
+                                    v-memo="[message, isStreaming(message), turn.folded]"
                                     :message="message"
                                     :streaming="isStreaming(message)"
-                                    :acks="message.id === turn.id ? turn.acks : undefined"
+                                    :folded="message.id === turn.id ? turn.folded : undefined"
                                 />
                             </section>
                         </template>

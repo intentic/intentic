@@ -1,5 +1,6 @@
 import type { IconName } from "@intentic-app/ui";
 import type { LandConflict, LandConflictReason } from "@intentic/sandbox-contract";
+import { ERRANDS, errandPrompt } from "../chat/errands";
 
 /* WHO CAN ACTUALLY CLEAR A LAND CONFLICT — and what we say to them.
  *
@@ -107,8 +108,13 @@ const listing = (blockers: readonly Blocker[], reasons: boolean): string => {
         .join(`\n`);
 };
 
-/* WHAT WE ASK THE AGENT TO DO. One composed message, sent as an ordinary turn — so it sits in the transcript
- * as a user message the human can read, and Stop, steering and the queue all work on it unchanged.
+/* WHAT WE ASK THE AGENT TO DO. One composed message, sent as an ordinary turn — so Stop, steering and the
+ * queue all work on it unchanged, and the human can read exactly what their agent was told.
+ *
+ * It is an ERRAND (errands.ts): the app's words, not the user's. That is why the opening paragraph comes from
+ * the registry rather than being written here — the transcript recognises this prompt by that paragraph, and a
+ * copy of it in two files is a copy that drifts, at which point the message silently goes back to pinning
+ * itself over the user's own question.
  *
  * Three things in here are load-bearing, and each is a way the turn fails without them:
  *   · COMMIT FIRST. The agent's worktree is dirty between lands — land's own gitCommitAll runs at land time,
@@ -131,8 +137,7 @@ export const resolvePrompt = (conflicts: readonly LandConflict[] | undefined): s
     const blockers = blockersOf(conflicts);
     const mine = agentBlockers(blockers);
     const theirs = userBlockers(blockers);
-    return [
-        `Landing your work hit a merge conflict — none of it reached the user's workspace; it is all still on your branch. Rebase onto the main line and resolve the conflicts yourself. In each repo below (\`root\` is your working directory, any other name that subdirectory of it):`,
+    return errandPrompt(ERRANDS.landConflict, [
         [
             `1. \`git add -A && git commit\` — a rebase refuses to start on a dirty tree.`,
             `2. \`git rebase <branch>\`, where \`<branch>\` is the one in brackets on the FIRST line of \`git worktree list\` — the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge <branch>\` instead.`,
@@ -146,5 +151,5 @@ export const resolvePrompt = (conflicts: readonly LandConflict[] | undefined): s
                   `Leave these alone — the user has uncommitted edits on them, which only they can clear; rebasing will not unblock them:\n${listing(theirs, false)}`,
               ]),
         `Stay inside your own worktree: never edit, stage or commit in the user's checkout. The app re-lands automatically when your turn ends — stop once the rebase is clean.`,
-    ].join(`\n\n`);
+    ]);
 };

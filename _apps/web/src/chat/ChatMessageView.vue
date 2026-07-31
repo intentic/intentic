@@ -8,7 +8,8 @@ import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
 import { effectiveAutoLand, formatElapsed } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
-import { type ChatMessage, isAcknowledgment, type PlanRequest } from "../composables/chat/transcript";
+import { errandOf } from "../composables/chat/errands";
+import { type ChatMessage, foldsIntoTurn, type PlanRequest } from "../composables/chat/transcript";
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
@@ -28,9 +29,9 @@ const props = defineProps<{
     message: ChatMessage;
     // True while this message is the turn currently being streamed.
     streaming: boolean;
-    // The bare "continue"-style nudges turnsOf folded into this turn — set only on the turn's opening
-    // message, which renders them as its "↳ continue ×N" trailer (see ChatTurn.acks).
-    acks?: readonly ChatMessage[];
+    // What turnsOf folded into this turn — the user's "continue"-style nudges and the app's errands. Set only
+    // on the turn's opening message, which renders them as its "↳ … ×N" trailer (see ChatTurn.folded).
+    folded?: readonly ChatMessage[];
 }>();
 
 const {
@@ -387,10 +388,34 @@ watch(
     { immediate: true },
 );
 
-// A bare "keep going" never pins: sticking it would cover the very prompt it defers to (two sticky siblings
-// in one turn section share the same top edge, and the later one wins). It stays an ordinary bubble that
-// slides beneath the pinned question like the rest of the turn.
-const ack = computed(() => isAcknowledgment(props.message));
+// A message that folded into the turn above never pins: sticking it would cover the very prompt it defers to
+// (two sticky siblings in one turn section share the same top edge, and the later one wins). A bare "keep
+// going" stays an ordinary bubble sliding beneath the pinned question; an errand gets the row below.
+const defers = computed(() => foldsIntoTurn(props.message));
+
+/* AN ERRAND — a prompt the app composed and sent on the user's behalf (errands.ts). It is rendered by its
+ * label, at the meta tier where the tool cards answering it will appear, because its text is a paragraph of
+ * OUR prose: shown as a user bubble it read as something they had typed, and cost the panel six clamped lines
+ * of it. The words themselves stay one click away — a message nobody typed must still be auditable, and "what
+ * exactly did you tell my agent to do?" is a fair question with a conflict half-resolved. */
+const errand = computed(() => errandOf(props.message));
+const errandOpen = ref(false);
+
+/* THE PINNED PROMPT'S TRAILER: things have happened to this turn since it was asked, and the pin must not
+ * pretend otherwise. One line, so it names the LAST of them and counts how many said the same thing — in the
+ * user's own words for a nudge (the lexicon keeps those short) and by label for an errand. In flow whenever
+ * there is something to say rather than only while pinned: an element appearing at the pin threshold would
+ * change the row's height there, which yanks the transcript (the same rule .chat-prompt-text's clamp obeys). */
+const foldedLabel = (message: ChatMessage): string => errandOf(message)?.label ?? message.text.trim();
+const trailer = computed(() => {
+    const folded = props.folded ?? [];
+    const last = folded.at(-1);
+    if (last === undefined) {
+        return undefined;
+    }
+    const label = foldedLabel(last);
+    return { label, count: folded.filter((message) => foldedLabel(message) === label).length };
+});
 
 // Consecutive same-name+same-target tool calls collapsed into summary rows (see toolGrouping.ts).
 const groupedTools = computed((): readonly ToolEntry[] => groupConsecutiveTools(props.message.tools ?? []));
@@ -408,7 +433,7 @@ watch(
     row,
     (element, _previous, onCleanup) => {
         pinned.value = false;
-        if (element === undefined || props.message.role !== `user` || ack.value) {
+        if (element === undefined || props.message.role !== `user` || defers.value) {
             return;
         }
         const observer = new IntersectionObserver(([entry]) => (pinned.value = entry !== undefined && entry.intersectionRatio < 1), {
@@ -554,21 +579,42 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 <template>
     <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
          live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
-    <!-- An acknowledgment bubble keeps the prompt's alignment and breathing room (pt-3 pb-2 mirrors
-         .chat-prompt's padding) but not its stickiness — see `ack`. -->
+    <!-- A folded message keeps the prompt's breathing room (pt-3 pb-2 mirrors .chat-prompt's padding) but not
+         its stickiness — see `defers`. An acknowledgment keeps its alignment too, because it is still the user
+         talking; an errand is the app talking, so it sits at the left edge with the machinery. -->
     <div
         ref="row"
         class="chat-message flex flex-col gap-1"
         :class="{
-            'chat-prompt': message.role === 'user' && !ack,
-            'items-end': message.role === 'user',
-            'pt-3 pb-2': ack,
+            'chat-prompt': message.role === 'user' && !defers,
+            'items-end': message.role === 'user' && errand === undefined,
+            'pt-3 pb-2': defers,
             'chat-prompt-open': expanded,
             'chat-prompt-pinned': pinned,
         }"
         @click="onMarkdownClick"
     >
-        <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
+        <!-- The errand row: one line naming what the app asked for, opening to the exact words it sent. -->
+        <template v-if="errand">
+            <button
+                type="button"
+                class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-1.5 text-2xs"
+                :aria-expanded="errandOpen"
+                @click="errandOpen = !errandOpen"
+            >
+                <Icon :name="errand.icon" class="shrink-0 text-2xs text-link" />
+                <span class="shrink-0 font-medium text-content">{{ errand.label }}</span>
+                <span class="truncate text-subtle">{{ errand.detail }}</span>
+                <Icon :name="errandOpen ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs text-subtle" />
+            </button>
+            <div
+                v-if="errandOpen"
+                class="scrollbar-thin max-h-64 w-full overflow-auto whitespace-pre-wrap rounded-lg bg-overlay/60 px-3 py-2 text-xs leading-relaxed text-muted"
+            >
+                {{ message.text }}
+            </div>
+        </template>
+        <div v-else-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
             <!-- Stacked: a row of attachments above the prompt. The arrangement for a narrow panel, for edit
                  mode (a thumbnail beside the textarea would come out of the width of the narrowest thing in
                  the panel), and for every attachment set that can't go beside the bubble — see
@@ -685,14 +731,6 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     </button>
                 </div>
             </div>
-            <!-- The nudge trailer: this turn was kept going by folded acknowledgments the pin skipped, and the
-                 pinned prompt must not pretend otherwise. In the user's own words (the last nudge) — the acks
-                 are lexicon entries, so the line stays short. In flow whenever nudges exist rather than only
-                 while pinned: an element appearing at the pin threshold would change the row's height there,
-                 which yanks the transcript (the same rule .chat-prompt-text's clamp obeys). -->
-            <span v-if="acks?.length" class="text-2xs text-subtle"
-                >↳ {{ acks.at(-1)?.text.trim() }}<template v-if="acks.length > 1"> ×{{ acks.length }}</template></span
-            >
         </div>
         <div v-else-if="message.role === 'notice'" class="flex items-center gap-2 self-center py-0.5 text-2xs text-subtle">
             <!-- A notice whose wait is still running spins instead of showing the info glyph, and says how long
@@ -998,5 +1036,13 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 >
             </div>
         </template>
+
+        <!-- What this turn has been kept going by since it was asked (see `trailer`). Outside the branches
+             above because it belongs to the turn's OPENER whatever that opener turned out to be — a prompt, an
+             errand, or the assistant text a restored history opens on — and it inherits the row's alignment,
+             so it reads under the bubble it qualifies on either side. -->
+        <span v-if="trailer" class="text-2xs text-subtle"
+            >↳ {{ trailer.label }}<template v-if="trailer.count > 1"> ×{{ trailer.count }}</template></span
+        >
     </div>
 </template>

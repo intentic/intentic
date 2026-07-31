@@ -1,5 +1,6 @@
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
+import { ERRANDS, errandOf } from "../chat/errands";
 import { agentBlockers, blockerLabel, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
 
 /* The prompt is a UI artifact — it is what the panel's primary button DOES — so the parts of it that decide
@@ -90,5 +91,13 @@ describe(`resolvePrompt`, () => {
     it(`keeps the agent out of the user's checkout and tells it the land is automatic`, () => {
         expect(prompt).toContain(`never edit, stage or commit in the user's checkout`);
         expect(prompt).toContain(`re-lands automatically when your turn ends`);
+    });
+
+    /* The transcript recognises this prompt as an ERRAND — the app's words, not the user's — by its opening
+     * paragraph, which is the only marker that survives a hydrate (errands.ts). Asserted on the composed
+     * prompt, so rewording the opening fails here rather than silently restoring the behaviour this replaced:
+     * a paragraph of machine prose pinned over the question the agent was actually asked. */
+    it(`reads back as the land-conflict errand, which is what keeps it from stealing the sticky prompt`, () => {
+        expect(errandOf({ id: 1, role: `user`, text: prompt })).toBe(ERRANDS.landConflict);
     });
 });
