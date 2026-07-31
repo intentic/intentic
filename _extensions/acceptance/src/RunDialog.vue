@@ -10,11 +10,20 @@ import type { useTargets } from "./useTargets";
  *
  * The addresses are the part that earns the dialog. A test pointed at nothing produces N sessions that each
  * discover the app is down and write the same blocked report — expensive, and the user learns it four minutes
- * later. So each URL is filled in from that repo's running dev server, the "start it" button is right here when
- * it is stopped, and the run cannot be submitted while any selected repo has no address.
+ * later. So the run cannot be submitted until every selected repo resolves to something actually serving.
  *
- * ONE URL FIELD PER REPO, driven by the selection. The area is workspace-wide, so a run may carry the web app's
- * stories and the API's together — two servers, two ports. Fields appear and disappear as stories are ticked,
+ * THE DEFAULT IS THE APP, NOT ITS URL. Testing the local dev server is the overwhelmingly common case, and a
+ * prefilled text box asked the user to verify a string when the honest question is "is it up?". So each repo
+ * shows its dev server's STATE — stopped, starting, ready — and typing an address is a disclosure you open when
+ * you genuinely mean a different environment (a staging deployment, an app you started by hand). A repo the
+ * daemon runs nothing for has no state to show, so that one opens on the field: there, free text is the answer.
+ *
+ * THE CONTROL NEVER DISAPPEARS. `Start` used to be gated on `!running` and vanished the instant the process
+ * spawned — leaving a dialog that looked like nothing had happened, pointed at an address that was still a 502.
+ * Start now BECOMES "Starting…" and then "Ready", because those are the three things that can be true.
+ *
+ * ONE ROW PER REPO, driven by the selection. The area is workspace-wide, so a run may carry the web app's
+ * stories and the API's together — two servers, two ports. Rows appear and disappear as stories are ticked,
  * which is also what makes the cross-repo cost visible before it is paid. */
 
 const { stories, contents, criteria, notes, targets, preselect } = defineProps<{
@@ -33,9 +42,10 @@ const emit = defineEmits<{ submit: [StartRunInput] }>();
 const selected = ref(new Set<string>());
 const provider = ref(`claude`);
 const model = ref(DEFAULT_MODEL_VALUE);
-// Keyed by repo. Kept for repos no longer selected too, so unticking a story and re-ticking it does not lose a
-// URL that was typed by hand.
+/* Both keyed by repo, and both kept for repos no longer selected: unticking a story and re-ticking it must not
+ * lose an address that was typed by hand, nor silently drop you back onto the dev server you had overridden. */
 const urls = ref<Record<string, string>>({});
+const modes = ref<Record<string, `panel` | `custom`>>({});
 const startingPanel = ref<string | undefined>(undefined);
 const panelError = ref<string | undefined>(undefined);
 
@@ -49,13 +59,17 @@ const chosen = computed(() => stories.filter((story) => selected.value.has(story
 // map is built from.
 const repos = computed<readonly string[]>(() => [...new Set(chosen.value.map((story) => story.repo))]);
 
-// Fill any address that is still blank from the daemon's own account of that repo's dev server. Runs on open (a
-// panel may have been started since last time) and whenever the suggestion or the selection changes, so "Start
-// it" fills the field without a second click. Never overwrites something typed.
-const prefill = (): void => {
-    urls.value = Object.fromEntries(
-        repos.value.map((repo) => [repo, urls.value[repo] === undefined || urls.value[repo] === `` ? targets.suggestedFor(repo) : urls.value[repo]]),
-    );
+/* DERIVED, not stored: a repo is on its dev server unless the user said otherwise, and one the daemon runs
+ * nothing for has only the field. Deriving it means a repo that gains a panel (started from Preview while this
+ * was open) stops being stranded in custom mode, with no watcher to keep in sync. */
+const modeOf = (repo: string): `panel` | `custom` => modes.value[repo] ?? (targets.stateOf(repo) === `none` ? `custom` : `panel`);
+const setMode = (repo: string, mode: `panel` | `custom`): void => {
+    modes.value = { ...modes.value, [repo]: mode };
+    // Opening the field on a ready server hands over the address it resolved to — the starting point for "same
+    // app, different port" — rather than an empty box. Nothing is prefilled from a server that isn't serving.
+    if (mode === `custom` && (urls.value[repo] ?? ``) === ``) {
+        urls.value = { ...urls.value, [repo]: targets.localUrl(repo) ?? `` };
+    }
 };
 
 watch(visible, (open) => {
@@ -67,12 +81,34 @@ watch(visible, (open) => {
      * picking. Opened FROM a story it is that story alone: iterating on one promise is the other gesture this
      * dialog serves, and it would be a strange one that started by unticking nine other stories. */
     selected.value = new Set(preselect ?? stories.map((story) => story.path));
-    prefill();
+    // A panel may have been started from Preview since this list was last read, and the poll only runs while
+    // something is mid-start — so without this the dialog can open believing a running server is stopped.
+    void targets.refresh();
 });
-watch([repos, () => repos.value.map((repo) => targets.suggestedFor(repo)).join(`|`)], () => prefill());
 
-const missing = computed<readonly string[]>(() => repos.value.filter((repo) => (urls.value[repo] ?? ``).trim() === ``));
-const canRun = computed(() => chosen.value.length > 0 && missing.value.length === 0);
+/* THE ADDRESS EACH REPO RESOLVES TO, or undefined when there is none yet. Undefined is the gate: `Run` stays
+ * disabled while any selected repo is stopped, still starting, or has an empty field. This is the whole point of
+ * the section — a run costs one agent session per story, and every one of them would spend minutes rediscovering
+ * that the app is down. */
+const targetFor = (repo: string): string | undefined =>
+    modeOf(repo) === `custom` ? (urls.value[repo] ?? ``).trim() || undefined : targets.localUrl(repo);
+
+const blocked = computed<readonly string[]>(() => repos.value.filter((repo) => targetFor(repo) === undefined));
+const canRun = computed(() => chosen.value.length > 0 && blocked.value.length === 0);
+
+// Named for the reason, not just the repo: "is still starting" and "needs an address" call for different moves,
+// and a footer that only said which repo was wrong made the user hunt for which of the two it was.
+const blockedNote = computed<string | undefined>(() => {
+    const repo = blocked.value[0];
+    if (repo === undefined) {
+        return undefined;
+    }
+    const more = blocked.value.length > 1 ? ` (+${blocked.value.length - 1} more)` : ``;
+    if (modeOf(repo) === `custom`) {
+        return `${repo} needs an address${more}`;
+    }
+    return targets.stateOf(repo) === `starting` ? `${repo} is still starting${more}` : `${repo}'s dev server isn't running${more}`;
+});
 
 const toggle = (path: string): void => {
     const next = new Set(selected.value);
@@ -100,7 +136,7 @@ const submit = (): void => {
         contents,
         criteria,
         notes,
-        targets: Object.fromEntries(repos.value.map((repo) => [repo, (urls.value[repo] ?? ``).trim()])),
+        targets: Object.fromEntries(repos.value.map((repo) => [repo, targetFor(repo) ?? ``])),
         provider: provider.value,
         model: modelForTurn(model.value),
     });
@@ -147,31 +183,60 @@ const submit = (): void => {
             <section class="flex flex-col gap-2">
                 <span :class="cmp.sectionLabel()">Applications under test</span>
                 <div v-if="repos.length === 0" :class="cmp.emptyState()">Pick at least one story.</div>
-                <div v-for="repo in repos" :key="repo" class="flex flex-col gap-1">
+                <div v-for="repo in repos" :key="repo" class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
                     <div class="flex items-center gap-2">
-                        <span class="w-32 shrink-0 truncate font-mono text-xs text-muted">{{ repo }}</span>
+                        <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted">{{ repo }}</span>
+                        <!-- The escape hatch, and only that: it is a link rather than a field because a different
+                             environment is the exception, and the exception should cost a click, not a reading. -->
+                        <button
+                            v-if="targets.stateOf(repo) !== `none`"
+                            type="button"
+                            class="shrink-0 cursor-pointer text-2xs text-muted hover:text-content"
+                            @click="setMode(repo, modeOf(repo) === `custom` ? `panel` : `custom`)"
+                        >
+                            {{ modeOf(repo) === `custom` ? `Use the dev server` : `Different address` }}
+                        </button>
+                    </div>
+
+                    <template v-if="modeOf(repo) === `panel`">
+                        <!-- READY. The address is shown because it is the one fact worth checking at a glance,
+                             not because anyone has to approve it. -->
+                        <div v-if="targets.stateOf(repo) === `ready`" class="flex min-w-0 items-center gap-2">
+                            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+                            <span class="shrink-0 text-xs text-content">Dev server ready</span>
+                            <span class="min-w-0 truncate font-mono text-2xs text-subtle">{{ targets.localUrl(repo) }}</span>
+                        </div>
+                        <!-- STARTING. Where Start used to vanish. The caveat is here because the command behind
+                             it installs dependencies on a first run, and a silent minute reads as a hang. -->
+                        <div v-else-if="targets.stateOf(repo) === `starting`" class="flex flex-col gap-0.5">
+                            <span class="flex items-center gap-2 text-xs text-content">
+                                <Icon name="spinner" class="shrink-0 animate-spin text-subtle" />
+                                Starting…
+                            </span>
+                            <span class="text-2xs text-subtle">
+                                A first start installs dependencies, which can take a minute. Terminals shows it live.
+                            </span>
+                        </div>
+                        <div v-else class="flex items-center gap-2">
+                            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-content/25" />
+                            <span class="min-w-0 flex-1 text-xs text-muted">Dev server isn't running</span>
+                            <Button label="Start" size="small" severity="secondary" :disabled="startingPanel === repo" @click="startPanel(repo)">
+                                <template #icon><Icon name="play" /></template>
+                            </Button>
+                        </div>
+                    </template>
+
+                    <template v-else>
                         <InputText
                             :model-value="urls[repo] ?? ``"
                             placeholder="http://localhost:5173"
-                            class="min-w-0 flex-1"
+                            class="w-full"
                             @update:model-value="urls = { ...urls, [repo]: $event ?? `` }"
                         />
-                        <!-- The dev server exists but is stopped: offer it here rather than sending the user to
-                             the Preview tab and back. -->
-                        <Button
-                            v-if="targets.hasPanel(repo) && !targets.running(repo)"
-                            label="Start"
-                            size="small"
-                            severity="secondary"
-                            :disabled="startingPanel === repo"
-                            @click="startPanel(repo)"
-                        >
-                            <template #icon><Icon name="play" /></template>
-                        </Button>
-                    </div>
-                    <p v-if="!targets.hasPanel(repo) && (urls[repo] ?? ``) === ``" class="pl-34 text-2xs text-subtle">
-                        No dev server the daemon can start — give it a staging URL, or start the app yourself in a terminal.
-                    </p>
+                        <span v-if="targets.stateOf(repo) === `none`" class="text-2xs text-subtle">
+                            The daemon runs no dev server for this repo — start the app yourself in a terminal, or point at a deployment.
+                        </span>
+                    </template>
                 </div>
                 <div v-if="panelError" :class="cmp.alertDanger()">{{ panelError }}</div>
                 <p v-else-if="repos.length > 0" class="text-2xs text-subtle">
@@ -197,7 +262,7 @@ const submit = (): void => {
         </div>
 
         <template #footer>
-            <span v-if="missing.length > 0" class="mr-auto text-2xs text-warning">{{ missing.join(`, `) }} needs an address</span>
+            <span v-if="blockedNote" class="mr-auto text-2xs text-warning">{{ blockedNote }}</span>
             <Button label="Cancel" severity="secondary" size="small" @click="visible = false" />
             <Button
                 :label="`Run ${chosen.length || ``} ${chosen.length === 1 ? `story` : `stories`}`.replace(/\s+/g, ` `)"
