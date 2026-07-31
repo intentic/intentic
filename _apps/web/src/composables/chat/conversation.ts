@@ -709,10 +709,30 @@ export class Conversation {
     // drain — the settle hook, a fresh submit — can't send the same messages twice.
     private flushing = false;
 
-    // The typewriter's CLOCK. What a tick means (how much to reveal, into which bubble) is the reducer's
-    // revealPending; all this owns is when one happens, so the animation can be driven off a test's own calls
-    // instead of a browser frame.
-    private rafId: number | null = null;
+    /* The transcript's CLOCK, shared by the two jobs that animate it: applying the frames that arrived since
+     * the last paint, and revealing the typewriter's buffered text. What either one MEANS is the reducer's
+     * (applyTurnFrame, revealPending); all this owns is when they happen, so both can be driven off a test's
+     * own calls instead of a browser frame.
+     *
+     * One clock rather than two because both write `state.value`, and the write is the expensive half: a
+     * shallowRef assignment re-renders the whole transcript, so two clocks in one paint would cost two
+     * renders to show one. Sharing it holds a streaming turn at ONE render per displayed frame.
+     *
+     * Armed-or-not, with no frame handle and no cancellation: a tick that finds nothing to do returns, so
+     * draining the work out from under an armed tick (catchUp, settle) needs no cancel and costs one empty
+     * callback. Holding a handle instead is what a synchronous test clock breaks — it runs the callback
+     * during `requestAnimationFrame` itself, so the id lands in the field AFTER the tick that should have
+     * cleared it and every later cancel aims at a frame that already came. */
+    private clockArmed = false;
+
+    /* Frames waiting for the next tick, with the turn each arrived under (a stream holds one turn, but the
+     * buffer outlives any single `follow` call, so the pairing has to be explicit).
+     *
+     * Buffering is what stops a burst from costing a render apiece. The daemon emits a frame per SDK message
+     * — hundreds over an answer, and a REPLAY delivers a whole run's log as fast as the socket can carry it —
+     * while the screen can only show 60 a second. Applied on arrival, every one of those paid a full
+     * transcript rebuild plus a Vue render to draw a state nobody ever saw. */
+    private readonly inbox: { readonly event: AgentEvent; readonly turn: TurnContext }[] = [];
 
     // `conversationId` is the conversation's whole identity — the key the daemon puts on the fleet registry
     // entry and the worktree, the strip puts on the tab, and the transcript mirror puts on the cache entry. It
@@ -1033,7 +1053,7 @@ export class Conversation {
     // Settle it: drain whatever the typewriter still holds, drop the streaming affordances, mirror the finished
     // transcript, and let anything queued behind the turn go.
     private endTurn(): void {
-        this.flushType();
+        this.settle();
         this.inflight = null;
         this.streaming.value = false;
         // An in-turn retry belongs to the turn that was retrying. Whatever it settled as, the wait is over.
@@ -1287,7 +1307,7 @@ export class Conversation {
         if (!this.awaitingDecision.value) {
             return;
         }
-        this.state.value = { ...this.state.value, messages: this.state.value.messages.map(withCancelledCards) };
+        this.write((state) => ({ ...state, messages: state.messages.map(withCancelledCards) }));
     }
 
     // Aborts this tab's attach stream; whatever streamed so far stays in the transcript. The run itself is
@@ -1298,7 +1318,7 @@ export class Conversation {
         // The turn is ending on someone's say-so, not its own — hold the queue back from the settle flush
         // (a closed tab must not fire a turn; a stopped agent must not be immediately restarted).
         this.interrupted = true;
-        this.flushType();
+        this.settle();
         this.probe?.abort();
         this.inflight?.abort();
         // A closed tab (or a sandbox switch) takes its resume probe with it — the daemon still fires the
@@ -1596,10 +1616,19 @@ export class Conversation {
                         if (turn !== undefined) {
                             this.handleEvent(parsed.event, turn);
                         }
-                        // The boundary frame is applied, so from the next one on the run is happening live. The
-                        // flag drops in the SAME tick the frame landed in, which is what lets a card that is
-                        // still pending here read as one genuinely awaiting the user.
-                        if (parsed.seq >= replayUntil) {
+                        /* The boundary frame is applied, so from the next one on the run is happening live. The
+                         * flag drops in the SAME tick the frame landed in, which is what lets a card that is
+                         * still pending here read as one genuinely awaiting the user.
+                         *
+                         * Frames are buffered for the next paint, so being right about THIS one means catching
+                         * the transcript up before the flag drops — a replayed card that landed in the buffer
+                         * would otherwise be applied after `replaying` went false, and the plan preview's
+                         * auto-open (which gates on exactly that) would fire on an answer given long ago.
+                         * Guarded on the flag rather than the seq alone because the seq test holds for every
+                         * live frame after the boundary, and catching up on each of them is just the
+                         * unbuffered write back again. */
+                        if (this.replaying.value && parsed.seq >= replayUntil) {
+                            this.catchUp();
                             this.replaying.value = false;
                         }
                     } else if (parsed.kind === `end`) {
@@ -1631,48 +1660,108 @@ export class Conversation {
         }
     }
 
-    // One frame in: the transcript transition is the reducer's, and whatever the frame ALSO does — set a
-    // conversation ref, touch a cross-conversation store, open a file — comes back as effects this applies.
+    // One frame in: buffered for the next tick rather than applied on the spot, so a burst costs one render
+    // instead of one apiece (see `inbox`). Nothing is decided here — the ordering between a frame's transition
+    // and its effects is `tick`'s, and it has to stay exact.
     private handleEvent(event: AgentEvent, turn: TurnContext): void {
-        // Any other frame means the wait this described is over — the request went through, or the turn moved on
-        // to a different problem. Retired here rather than on specific frames because "still waiting" is only
-        // true until literally anything else happens, and a replayed transcript must not restore a countdown that
-        // finished minutes ago.
-        if (event.kind !== `provider_retry`) {
-            this.providerRetry.value = undefined;
+        this.inbox.push({ event, turn });
+        this.schedule();
+    }
+
+    // Run a tick on the next paint, unless one is already owed. The clock only runs while there is something
+    // for it to do — buffered frames, or text still being revealed — so an idle conversation holds no timer.
+    private schedule(): void {
+        if (this.clockArmed) {
+            return;
         }
-        /* Measured by hand rather than through `trackPerf`: this is synchronous and runs hundreds of times per
-         * answer, so it cannot afford a closure and a promise per frame.
-         *
-         * This span is where a laggy chat gets diagnosed. The reducer rebuilds the message list on most frames,
-         * so its cost scales with TRANSCRIPT LENGTH while the frame rate is set by the model — which is why a
-         * chat feels fine for the first few exchanges and turns to treacle in a long one. `messages` rides
-         * along precisely so that correlation is visible in one line instead of inferred.
-         *
-         * `kind` separates the frame types, which have genuinely different costs: a `delta` touches one bubble,
-         * a `tool_call_update` scans every bubble's tool tree to find its card. */
-        const from = performance.now();
-        const { state, effects } = applyTurnFrame(this.state.value, event, { userMessageId: turn.userMessageId });
-        this.state.value = state;
-        recordPerf(`chat.frame`, performance.now() - from, { kind: event.kind, messages: state.messages.length });
-        this.syncTypewriter();
-        for (const effect of effects) {
-            this.applyEffect(effect, turn);
+        this.clockArmed = true;
+        requestAnimationFrame(() => this.tick());
+    }
+
+    /* Fold every buffered frame into `from`, returning the state they produce and the effects they raised in
+     * arrival order. Pure over the buffer — the caller owns the write and whatever else rides on it — because
+     * the two callers want different endings: a tick reveals text and keeps the clock, a settle drains it.
+     *
+     * The fold runs the reducer per frame; each frame's transition genuinely depends on the one before it, so
+     * they cannot be merged. What it does NOT do is write per frame, and that is the whole saving: the
+     * reducer's cost is a transcript rebuild, Vue's is a render of one, and only the latter was being paid N
+     * times over to display a single state.
+     *
+     * Effects come back rather than being applied here, and are never recomputed from the folded state — a
+     * frame's effects depend on the state it was applied TO, so a second pass against the batch's final state
+     * would raise a different (wrong) set, and pay for the whole fold again to do it. */
+    private foldInbox(from: TurnState): {
+        readonly state: TurnState;
+        readonly applied: readonly { readonly event: AgentEvent; readonly turn: TurnContext; readonly effects: readonly TurnEffect[] }[];
+    } {
+        const batch = this.inbox.splice(0, this.inbox.length);
+        const applied: { readonly event: AgentEvent; readonly turn: TurnContext; readonly effects: readonly TurnEffect[] }[] = [];
+        let state = from;
+        for (const { event, turn } of batch) {
+            const result = applyTurnFrame(state, event, { userMessageId: turn.userMessageId });
+            state = result.state;
+            applied.push({ event, turn, effects: result.effects });
+        }
+        return { state, applied };
+    }
+
+    /* Run the effects a fold raised, in arrival order, interleaved with the provider_retry retirement that
+     * used to sit at frame arrival. Both orderings matter and neither can be hoisted: `providerRetry` is
+     * cleared by any other frame here and SET by an effect below, so a batch holding a retry and the frame
+     * that answers it would otherwise settle on whichever won the reshuffle. */
+    private runApplied(applied: ReturnType<Conversation[`foldInbox`]>[`applied`]): void {
+        for (const { event, turn, effects } of applied) {
+            // Any other frame means the wait a provider_retry described is over — the request went through, or
+            // the turn moved on to a different problem. Retired against any frame rather than specific ones
+            // because "still waiting" is only true until literally anything else happens, and a replayed
+            // transcript must not restore a countdown that finished minutes ago.
+            if (event.kind !== `provider_retry`) {
+                this.providerRetry.value = undefined;
+            }
+            for (const effect of effects) {
+                this.applyEffect(effect, turn);
+            }
         }
     }
 
-    // Keep the animation clock in step with the buffer the reducer produced: start a loop when a frame left
-    // text unrevealed, stop one whose buffer a flush (a card, an end-of-turn) already emptied.
-    private syncTypewriter(): void {
-        if (this.state.value.pending !== undefined) {
-            if (this.rafId === null) {
-                this.rafId = requestAnimationFrame(() => this.drainType());
-            }
+    // One paint's worth of transcript work: apply the frames that arrived since the last tick, then reveal the
+    // typewriter's next slice, in ONE write to `state.value`.
+    private tick(): void {
+        this.clockArmed = false;
+        // The work may have been taken out from under this tick by a catchUp or a settle — that is the trade
+        // for holding no frame handle, and an empty tick is cheaper than the cancellation bookkeeping was.
+        if (this.inbox.length === 0 && this.state.value.pending === undefined) {
             return;
         }
-        if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
+        /* Measured by hand rather than through `trackPerf`: this is synchronous and runs on every paint of a
+         * streaming turn, so it cannot afford a closure and a promise per tick.
+         *
+         * Two spans, not one, because the tick's two jobs fail differently and the fix for each is elsewhere.
+         * `chat.frame` is the fold: the reducer rebuilds the message list on most frames, so its cost scales
+         * with TRANSCRIPT LENGTH while the frame rate is set by the model — which is why a chat feels fine for
+         * the first few exchanges and turns to treacle in a long one. `chat.type` is the typewriter's reveal,
+         * which pays that same rebuild to append a few characters to one bubble and runs on EVERY paint of an
+         * answer, buffered frames or not.
+         *
+         * `messages` rides along so that correlation is visible in one line instead of inferred, and `frames`
+         * says how many the fold carried: the same total work in fewer, fatter ticks is the buffer doing its
+         * job, and a fold that stays slow at `frames: 1` is a reducer problem rather than a clock one. */
+        const from = performance.now();
+        const { state, applied } = this.foldInbox(this.state.value);
+        const folded = performance.now();
+        // Reveal against the state the fold just produced, so the tick's single write carries both jobs.
+        const next = state.pending !== undefined ? revealPending(state) : state;
+        this.state.value = next;
+        if (applied.length > 0) {
+            recordPerf(`chat.frame`, folded - from, { frames: applied.length, messages: next.messages.length });
+        }
+        if (next !== state) {
+            recordPerf(`chat.type`, performance.now() - folded, { messages: next.messages.length });
+        }
+        this.runApplied(applied);
+        // Text still buffered keeps the clock running; so do frames that landed during the tick itself.
+        if (this.state.value.pending !== undefined || this.inbox.length > 0) {
+            this.schedule();
         }
     }
 
@@ -2040,43 +2129,64 @@ export class Conversation {
 
     // A small muted system line marking a control action (dismissed / kept planning / approved / stopped).
     // `extra` is the follow-up offer or unfinished wait a notice can carry — see turnReducer's appendNotice.
+    /* A transcript write the conversation makes on the USER'S clock rather than the stream's — a control
+     * action's notice, a card freezing into its answer, a Stop cancelling what was open.
+     *
+     * Folds the buffered frames before applying `next`, and that ordering is the whole point: a Stop pressed
+     * mid-answer would otherwise append "Stopped." above frames that had already reached this tab, and the
+     * transcript would read as though the agent kept working after being stopped. Applying frames on arrival
+     * used to make this automatic; buffering them for the next paint (see `inbox`) made it something the
+     * writes on the other clock have to say out loud.
+     *
+     * Free when the buffer is empty — which is every call from inside runApplied, where the fold already ran. */
+    private write(next: (state: TurnState) => TurnState): void {
+        this.catchUp();
+        this.state.value = next(this.state.value);
+    }
+
     private appendNotice(text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): void {
-        this.state.value = appendNotice(this.state.value, text, extra);
+        this.write((state) => appendNotice(state, text, extra));
     }
 
     // Hang an interactive card (plan / question / permission) on a bubble — and, with the answered card, freeze
     // that answer into the transcript. One writer for all three: they differ in what they ask, not in how they
     // attach.
     private attachCard(id: number, card: Pick<ChatMessage, CardKind>): void {
-        this.state.value = {
-            ...this.state.value,
-            messages: this.state.value.messages.map((message) => (message.id === id ? { ...message, ...card } : message)),
-        };
+        this.write((state) => ({
+            ...state,
+            messages: state.messages.map((message) => (message.id === id ? { ...message, ...card } : message)),
+        }));
     }
 
-    // One typewriter tick: reveal a slice and schedule the next frame while text remains.
-    //
-    // Timed for the same reason as handleEvent, and it is the more punishing of the two: this runs off
-    // requestAnimationFrame — up to 60 times a second for the whole length of an answer — and each tick
-    // rebuilds the message list to append a few characters to one bubble. Its budget IS a frame, so if this
-    // op's mean creeps toward 8ms the typewriter alone is what is dropping them.
-    private drainType(): void {
-        this.rafId = null;
-        const from = performance.now();
-        this.state.value = revealPending(this.state.value);
-        recordPerf(`chat.type`, performance.now() - from, { messages: this.state.value.messages.length });
+    /* Bring the transcript up to date NOW, off the clock, without disturbing the typewriter: text still being
+     * revealed goes on revealing (the clock is re-armed for it). For the one caller that needs the transcript
+     * exact at an instant the buffer would otherwise straddle — the replay/live boundary in `follow`.
+     *
+     * Buffering is invisible to everything that reads the transcript on its own schedule; it is only visible
+     * to a reader that has to be right about a PARTICULAR frame. That is this, and there is one of them. */
+    private catchUp(): void {
+        const { state, applied } = this.foldInbox(this.state.value);
+        this.state.value = state;
+        this.runApplied(applied);
         if (this.state.value.pending !== undefined) {
-            this.rafId = requestAnimationFrame(() => this.drainType());
+            this.schedule();
         }
     }
 
-    // Drain the whole buffer at once and stop the loop — called when a turn ends or is stopped, so no text is
-    // left mid-type. (A card taking the bubble over flushes inside the reducer, where the rule belongs.)
-    private flushType(): void {
-        if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
-        }
-        this.state.value = flushPending(this.state.value);
+    /* Leave the transcript FINISHED: every buffered frame applied, and the typewriter's buffer drained rather
+     * than animated, in one write. For a turn that is over — ended of its own accord, or stopped — where what
+     * comes next (persist, the queue drain) must not read a torn transcript or a half-typed bubble.
+     *
+     * The clock is left to expire on its own; an armed tick finds the inbox empty and no pending text, and
+     * returns.
+     *
+     * Buffered frames are applied rather than dropped even on an abort: they arrived, so they are part of the
+     * run's story, and a Stop that swallowed the last frames before it would leave a transcript the daemon's
+     * own log disagrees with. (A card taking the bubble over flushes inside the reducer, where the rule
+     * belongs.) */
+    private settle(): void {
+        const { state, applied } = this.foldInbox(this.state.value);
+        this.state.value = flushPending(state);
+        this.runApplied(applied);
     }
 }

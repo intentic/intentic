@@ -2,7 +2,7 @@ import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox
 import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clampEffort, Conversation, effortsFor, providerAccounts, providerModels, turnDefaults, turnRequestBody } from "./conversation";
-import { acksOf, type ChatMessage, isAcknowledgment, transcriptOf, turnsOf } from "./transcript";
+import { type ChatMessage, isAcknowledgment, transcriptOf, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
@@ -127,6 +127,49 @@ describe(`Conversation`, () => {
         expect(conversation.streaming.value).toBe(false);
     });
 
+    /* The buffer's whole reason for existing: a turn's render cost is set by how many times the transcript is
+     * WRITTEN, not by how many frames the daemon sent, so a burst has to cost what a single frame costs.
+     *
+     * Driven off a clock that never fires rather than the file's synchronous one, because a synchronous
+     * requestAnimationFrame applies each frame the instant it arrives — precisely the behaviour the buffer
+     * replaces — and would let this pass while measuring nothing.
+     *
+     * Tool calls rather than deltas, because a delta lands in the typewriter's buffer rather than in
+     * `messages`, so a stopped clock hides the very difference under test: text only reaches a bubble when
+     * the clock ticks, whether frames are buffered or not. A tool call changes the transcript on the spot,
+     * which is what makes the per-frame write visible. */
+    it(`applies a burst of frames in one write, so render cost does not scale with frame count`, async () => {
+        const runWith = async (calls: number): Promise<{ writes: number; tools: number }> => {
+            vi.stubGlobal(`requestAnimationFrame`, (): number => 0);
+            const conversation = new Conversation(`c1`);
+            let writes = 0;
+            // Counted on `messages` because that is what the renderer reads: every fire is a transcript
+            // re-render. `flush: sync` so the count is of writes, not of scheduler passes that batch them.
+            const stop = watch(conversation.messages, () => (writes += 1), { flush: `sync` });
+            sandboxRequestMock.mockImplementation(
+                sseResponse([
+                    ...Array.from(
+                        { length: calls },
+                        (_, index): AgentEvent => ({ kind: `tool_call`, id: `t${index}`, name: `Read`, category: `read`, status: `completed` }),
+                    ),
+                    { kind: `done` },
+                ]),
+            );
+            await conversation.send(`Hi`, settings);
+            stop();
+            return { writes, tools: conversation.messages.value.reduce((total, message) => total + (message.tools?.length ?? 0), 0) };
+        };
+
+        const few = await runWith(4);
+        const many = await runWith(16);
+
+        // Four times the frames, the same number of renders — and every call still landed, so the fold that
+        // bought this is applying them rather than collapsing them.
+        expect(many.writes).toBe(few.writes);
+        expect(few.tools).toBe(4);
+        expect(many.tools).toBe(16);
+    });
+
     it(`replays the captured session id on the next turn and omits it on the first`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
@@ -249,8 +292,11 @@ describe(`Conversation`, () => {
             { id: 1, ids: [1, 2, 3, 4] },
             { id: 5, ids: [5] },
         ]);
-        expect(acksOf(turns[0]!).map((message) => message.id)).toEqual([3]);
-        expect(acksOf(turns[1]!)).toEqual([]);
+        expect(turns[0]!.acks.map((message) => message.id)).toEqual([3]);
+        expect(turns[1]!.acks).toEqual([]);
+        // A turn that folded no nudges shares the empty array rather than allocating one, which is what keeps
+        // the head bubble's `acks` prop stable across the rebuild `turnsOf` does on every frame.
+        expect(turnsOf([{ id: 9, role: `user`, text: `hi` }])[0]!.acks).toBe(turns[1]!.acks);
     });
 
     it(`isAcknowledgment matches whole-message lexicon entries through trailing punctuation, nothing more`, () => {

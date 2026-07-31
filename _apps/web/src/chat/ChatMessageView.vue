@@ -29,7 +29,7 @@ const props = defineProps<{
     // True while this message is the turn currently being streamed.
     streaming: boolean;
     // The bare "continue"-style nudges turnsOf folded into this turn — set only on the turn's opening
-    // message, which renders them as its "↳ continue ×N" trailer (see acksOf).
+    // message, which renders them as its "↳ continue ×N" trailer (see ChatTurn.acks).
     acks?: readonly ChatMessage[];
 }>();
 

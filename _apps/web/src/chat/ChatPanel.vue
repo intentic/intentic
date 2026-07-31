@@ -6,7 +6,7 @@ import { type AgentCommand, providerLabel } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
 import { modeMeta } from "../composables/chat/catalog";
 import { effectiveAccount, effortsFor, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
-import { acksOf, type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
+import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import {
     bindingWindow,
     formatReset,
@@ -990,12 +990,19 @@ watch(
                                  does. A bare "continue" folds into the turn it nudges (see turnsOf), so the
                                  question that defines the work stays pinned through the continued answer. -->
                             <section v-for="turn in turns" :key="turn.id" class="flex flex-col gap-1">
+                                <!-- v-memo skips the vnode entirely for a row whose inputs are unchanged, which
+                                     during a streaming turn is every row but the one being written: `turns` is
+                                     rebuilt on each paint, so without it the whole transcript is re-created to
+                                     redraw one bubble. The key lists exactly what the row renders from — a
+                                     message keeps its identity through the reducer unless that message changed,
+                                     and `acks` holds still per turn (see ChatTurn.acks). -->
                                 <ChatMessageView
                                     v-for="message in turn.messages"
                                     :key="message.id"
+                                    v-memo="[message, isStreaming(message), turn.acks]"
                                     :message="message"
                                     :streaming="isStreaming(message)"
-                                    :acks="message.id === turn.id ? acksOf(turn) : undefined"
+                                    :acks="message.id === turn.id ? turn.acks : undefined"
                                 />
                             </section>
                         </template>

@@ -34,10 +34,12 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     // One vue-query fetch, including its queryFn — so the gap between this and rpc.request is the cache/query
     // machinery's own cost.
     "query.fetch": 1_500,
-    // Applying ONE agent frame to the transcript. Main thread, per frame, hundreds per answer — this must stay
-    // in single-digit milliseconds or a streaming turn cannot hold 60fps.
+    // Folding the agent frames that arrived since the last paint into the transcript. Main thread, once per
+    // paint rather than once per frame (Conversation buffers them), so its `frames` field says how many it
+    // carried. Its budget IS a frame: past this a streaming turn cannot hold 60fps.
     "chat.frame": 16,
-    // One typewriter tick. Runs from requestAnimationFrame, so its budget IS the frame.
+    // The typewriter's reveal, on the same tick as the fold above. Runs on every paint of an answer whether
+    // frames arrived or not, and pays a whole transcript rebuild to append a few characters to one bubble.
     "chat.type": 8,
     // Mirroring a transcript to IndexedDB.
     "chat.persist": 300,
