@@ -3,7 +3,7 @@ import { fireAutomation, type WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
-import { restoredTurn } from "../sessions/turn-transcript.js";
+import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import { outageRetryDue, outageRetryFired } from "./provider-health.js";
 import type { JournalEntry, JournalledTurn } from "./turn-journal.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
@@ -233,17 +233,13 @@ export const startConversationTurn = (
     attempts = 0,
 ): TurnRun | undefined => {
     const { conversationId, prompt } = turn;
-    const transcriptAgent = { id: conversationId, provider: turn.agent ?? "claude", harness: turn.harness ?? "native" } as const;
     // Start adoption now, then make the pump wait for it before invoking the provider. A first turn opens an
-    // empty record; a legacy conversation adopts only its OLD turns. Guarded because transcript persistence is
-    // a side channel — a disk failure must never manufacture an agent failure.
-    const transcriptOpen = services.transcripts.open(transcriptAgent).catch(() => undefined);
+    // empty record; a legacy conversation adopts only its OLD turns.
+    const transcriptOpen = openTurnTranscript(services, turn);
     return startTurnRun((input, signal) => wake(services, input, signal), turn, {
         journal: services.turnJournal,
         before: transcriptOpen,
-        // The provider/harness normalization is the same one streamAgent applies (absent ⇒ claude/native), so a
-        // turn records against the identity it actually ran under.
-        transcript: (events) => services.transcripts.append(transcriptAgent, restoredTurn(turn, events, services.workspace.root)),
+        transcript: (events) => recordTurnTranscript(services, turn, events),
         attempts,
         observer: {
             awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),
@@ -407,7 +403,12 @@ export const resumeInterruptedTurns = async (services: Services, wake: WakeFn, n
         // turn needs no equivalent — registry.begin already left `interrupted` on its entry.
         if (entry.kind === "automation") {
             await services.automations
-                .recordRun(entry.automationId, { at: now, outcome: "interrupted", detail: "the sandbox restarted while this run was in flight" })
+                .recordRun(entry.automationId, {
+                    at: now,
+                    outcome: "interrupted",
+                    detail: "the sandbox restarted while this run was in flight",
+                    conversationId: entry.conversationId,
+                })
                 .catch((error: unknown) => services.logger.warn({ err: error, automation: entry.automationId }, "interrupted run not recorded"));
         }
         const spent = entry.attempts >= MAX_RESUME_ATTEMPTS;
@@ -451,6 +452,7 @@ export const resumeInterruptedTurns = async (services: Services, wake: WakeFn, n
         void fireAutomation(services, automation, wake, {
             cleared: "approval",
             attempts: entry.attempts + 1,
+            conversationId: entry.conversationId,
             ...(entry.payload !== undefined ? { payload: entry.payload } : {}),
             ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),

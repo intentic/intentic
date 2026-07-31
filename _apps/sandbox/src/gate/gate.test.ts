@@ -53,6 +53,7 @@ const fakeServices = (over: Partial<typeof SETTINGS> & { ending?: string } = {})
             identify: (ids: Iterable<string>) =>
                 Object.fromEntries([...ids].map((id) => [id, { title: `agent ${id}`, provider: "claude" } as OriginAgent])),
         },
+        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
         logger: { info: () => {}, warn: () => {}, debug: () => {}, error: () => {} },
     } as unknown as Services;
     const log = join(root, "runs.log");
@@ -85,9 +86,14 @@ const fakeGit = (state: { value: string }, calls: string[][] = []): GitRunner =>
         return { stdout: "", stderr: "" };
     }) as unknown as GitRunner;
 
-const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
+const fakeWake = (
+    prompts: string[],
+    events: AgentEvent[] = [{ kind: "done" }],
+    turns: { conversationId?: string; isolated?: boolean }[] = [],
+): WakeFn =>
     async function* (_services, input) {
         prompts.push(input.prompt);
+        turns.push(input);
         yield* events;
     };
 
@@ -359,17 +365,21 @@ test("a cleared command reads as idle whatever is on disk, so the badge disappea
 
 /* ---- the fix, and the loop it must not become ---- */
 
-test("a red verdict with autoFix on wakes a main-tree fix turn seeded with the failure", async () => {
+test("a red verdict wakes one surfaced workspace fix conversation seeded with the failure", async () => {
     const prompts: string[] = [];
+    const turns: { conversationId?: string; isolated?: boolean }[] = [];
     const { services, origins } = fakeServices({ gateCommand: "echo 'FAIL src/a.ts' ; exit 1", gateAutoFix: true });
     // Landed work in the tree, so the prompt has an attribution roster to carry as well as the output.
     origins.paths = { "src/a.ts": ["agent-1"] };
-    const gate = createLandingGate(services, fakeWake(prompts), fakeGit({ value: "clean" }));
+    const gate = createLandingGate(services, fakeWake(prompts, [{ kind: "done" }], turns), fakeGit({ value: "clean" }));
     gate.run();
     await vi.waitFor(() => expect(prompts).toHaveLength(1), { timeout: 10_000 });
     expect(prompts[0]).toContain("FAIL src/a.ts");
     expect(prompts[0]).toContain("Do NOT commit");
     expect(prompts[0]).toContain("agent agent-1");
+    expect(turns[0]?.conversationId).toMatch(/^gate-/u);
+    expect(turns[0]?.isolated).toBeUndefined();
+    expect((await gate.verdict()).fix?.conversationId).toBe(turns[0]?.conversationId);
 }, 20_000);
 
 // The loop guard. The fix's own re-check inherits the fix record, so a fix that did not work cannot ask for a
@@ -404,8 +414,9 @@ test("autoFix off leaves the red verdict alone for the panel's button", async ()
     gate.run();
     await vi.waitFor(async () => expect((await gate.verdict()).status).toBe("failed"), { timeout: 10_000 });
     expect(prompts).toHaveLength(0);
-    // The same fix the auto path would have run, on the user's click instead.
-    await gate.fix();
+    // The same fix the auto path would have run, on the user's click instead. Concurrent presses still mint
+    // exactly one conversation for this invocation.
+    await Promise.all([gate.fix(), gate.fix(), gate.fix()]);
     expect(prompts).toHaveLength(1);
 }, 20_000);
 

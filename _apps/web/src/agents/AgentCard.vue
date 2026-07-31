@@ -210,7 +210,9 @@ const grab = (event: PointerEvent): void => {
                     v-if="archivable"
                     type="button"
                     aria-label="Archive agent"
-                    v-tooltip.top="'Archive — the branch, diff and conversation are kept'"
+                    v-tooltip.top="
+                        agent.branch === undefined ? 'Archive — the conversation is kept' : 'Archive — the branch, diff and conversation are kept'
+                    "
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`archive`)"
                 >

@@ -12,12 +12,17 @@ vi.mock("../sandbox/useSandbox", async () => {
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     };
 });
-// Answering NOT FOUND rather than `undefined`: these cases run on fake timers, so useChat's hydrate watch —
-// which the sibling suites never advance far enough to reach — actually runs here, and a bare vi.fn() sends it
-// into `response.ok` on nothing. What it hydrates is irrelevant to the filter; that it fails quietly is not.
+// These cases run on fake timers, so useChat's hydrate watch — which the sibling suites never advance far
+// enough to reach — actually runs here. The registered placeholder has an empty transcript; other requests
+// answer NOT FOUND. What it hydrates is irrelevant to the filter, but a named transcript 404 would correctly
+// unlatch `registered` and turn the placeholder into the workspace draft this suite is trying to exclude.
 vi.mock("../sandbox/sandboxClient", () => ({
     sandboxJson: vi.fn(async () => ({})),
-    sandboxRequest: vi.fn(async () => ({ ok: false, status: 404, body: null })),
+    sandboxRequest: vi.fn(async (path: string) =>
+        path === `/agents/blank/transcript`
+            ? { ok: true, status: 200, body: null, json: async () => ({ messages: [] }) }
+            : { ok: false, status: 404, body: null },
+    ),
 }));
 
 /* The daemon tier, stubbed at the useQuery seam.
@@ -76,6 +81,7 @@ const settle = async (): Promise<void> => {
 const placeholder = (): Conversation => {
     const blank = new Conversation(`blank`);
     blank.isolated.value = false;
+    blank.registered.value = true;
     return blank;
 };
 

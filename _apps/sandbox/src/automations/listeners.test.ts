@@ -16,6 +16,7 @@ const fakeServices = (root: string): Services =>
         automations: fileAutomationsStore(join(root, "automations.json")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
+        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
         activity: { append: async () => {}, list: async () => [] },
         workspace: { root },
         logger: { error: () => {}, warn: () => {} },

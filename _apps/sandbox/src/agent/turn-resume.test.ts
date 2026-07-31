@@ -521,7 +521,13 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
 
     await services.turnJournal.recordTurn(journalled("rs-off"));
     await services.automations.upsert({ id: "nightly", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", enabled: true });
-    await services.turnJournal.recordFire({ kind: "automation", automationId: "nightly", startedAt: 10_000, attempts: 0 });
+    await services.turnJournal.recordFire({
+        kind: "automation",
+        automationId: "nightly",
+        conversationId: "a-nightly-1",
+        startedAt: 10_000,
+        attempts: 0,
+    });
 
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
@@ -542,7 +548,15 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
         enabled: true,
     });
     const origin = { automationId: "hook", provider: "webhook" };
-    await services.turnJournal.recordFire({ kind: "automation", automationId: "hook", payload: "ping", origin, startedAt: 10_000, attempts: 0 });
+    await services.turnJournal.recordFire({
+        kind: "automation",
+        automationId: "hook",
+        conversationId: "a-hook-1",
+        payload: "ping",
+        origin,
+        startedAt: 10_000,
+        attempts: 0,
+    });
 
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
@@ -552,6 +566,7 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
     // Newest first: the completed re-fire sits above the interrupted record of the fire it replaced.
     expect(runs[0]?.outcome).toBe("completed");
     expect(runs[1]?.outcome).toBe("interrupted");
+    expect(runs.map((run) => run.conversationId)).toEqual(["a-hook-1", "a-hook-1"]);
     // The re-fire re-reads the automation's own prompt and carries the payload the entry snapshotted.
     expect(prompts).toEqual(["handle it\n\n--- Event payload ---\nping"]);
 });
@@ -565,7 +580,7 @@ test("a re-fire skips the approval gate — the wake was already past it when th
         requireApproval: true,
         enabled: true,
     });
-    await services.turnJournal.recordFire({ kind: "automation", automationId: "gated", startedAt: 10_000, attempts: 0 });
+    await services.turnJournal.recordFire({ kind: "automation", automationId: "gated", conversationId: "a-gated-1", startedAt: 10_000, attempts: 0 });
 
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
@@ -577,8 +592,14 @@ test("a re-fire skips the approval gate — the wake was already past it when th
 test("an entry for an automation since deleted or disabled is consumed, not left to invent a run on every boot", async () => {
     const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     await services.automations.upsert({ id: "off", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", enabled: false });
-    await services.turnJournal.recordFire({ kind: "automation", automationId: "off", startedAt: 10_000, attempts: 0 });
-    await services.turnJournal.recordFire({ kind: "automation", automationId: "deleted", startedAt: 10_000, attempts: 0 });
+    await services.turnJournal.recordFire({ kind: "automation", automationId: "off", conversationId: "a-off-1", startedAt: 10_000, attempts: 0 });
+    await services.turnJournal.recordFire({
+        kind: "automation",
+        automationId: "deleted",
+        conversationId: "a-deleted-1",
+        startedAt: 10_000,
+        attempts: 0,
+    });
 
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);

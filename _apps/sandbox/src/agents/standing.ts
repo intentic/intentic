@@ -1,6 +1,6 @@
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../git/changes.js";
-import type { PersistedAgent } from "./agents-store.js";
+import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
 import { branchSha } from "./agent-refs.js";
 import { anchorOf } from "./land.js";
 import type { AgentWorktrees } from "./worktrees.js";
@@ -41,8 +41,11 @@ export interface LandStandings {
      *
      * Callers pass the LIVE roster. An archived agent keeps whatever it was probed at while live — its checkout
      * is retired, its card is a record rather than a control, and `idle` and `landed` place it in the same lane
-     * — so a fleet with a thousand of them still refreshes in the size of the work in flight. */
-    readonly refresh: (entries: readonly PersistedAgent[]) => Promise<boolean>;
+     * — so a fleet with a thousand of them still refreshes in the size of the work in flight.
+     *
+     * BRANCH-BACKED only, by type: a standing is a question about two shas, and a workspace conversation owns no
+     * ref to ask it of. Its clean resting state is `idle`, projected in agents-registry.ts. */
+    readonly refresh: (entries: readonly IsolatedAgent[]) => Promise<boolean>;
     readonly forget: (ids: readonly string[]) => void;
 }
 

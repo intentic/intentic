@@ -92,8 +92,9 @@ const plural = (count: number, noun: string): string => `${count} ${noun}${count
  *     the wrong one: a file two agents landed would have to be duplicated or arbitrarily assigned, and the
  *     repo → conflicted/staged/unstaged hierarchy underneath is not decoration — it is what staging means.
  *     Filtering keeps one row per file and still answers "show me only this agent's work".
- * Nothing is drawn for a file with no agent origin. A "you" badge on nine rows in ten is noise, and the daemon
- * cannot see terminal edits or main-tree turns anyway — the legend states that once, for all of them. */
+ * Nothing is drawn for a file with no agent origin. A "you" badge on nine rows in ten is noise, and terminal
+ * edits plus workspace conversations do not pass through the land-attribution path — the legend states that
+ * once, for all of them. */
 const { fleet } = useAgents();
 // The open tabs — read here for the first message behind an origin chip's title, and below for which repos a
 // main-tree turn is writing while you commit.

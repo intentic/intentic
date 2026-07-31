@@ -370,6 +370,9 @@ const services = (overrides: Partial<Services> = {}): Services => {
                 const sessionId = runsClaudeCode(agent.provider, agent.harness) ? merged.agents.sessionIdOf(agent.id) : undefined;
                 return sessionId === undefined ? [] : merged.sessions.read(merged.workspace.root, sessionId);
             },
+            // Inert: `read` above already synthesizes from the SDK session that production's adoption would have
+            // copied in, so there is nothing for an open to carry over here.
+            open: async () => {},
             append: async () => {},
         },
         ...overrides,
@@ -2105,6 +2108,84 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
     expect(agents[0]).toMatchObject({ id: "conv1", status: "idle", branch: "agent/conv1", costUsd: 0.5, sessionId: "sess-iso" });
 });
 
+test("a workspace turn follows the same registry lifecycle without inventing a branch", async () => {
+    let cwd: string | undefined;
+    const snapshots: string[] = [];
+    const spend: { conversationId?: string }[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* (request) {
+                    cwd = request.cwd;
+                    yield { kind: "session", sessionId: "sess-workspace" };
+                    yield { kind: "usage", costUsd: 0.25, inputTokens: 8, outputTokens: 3 };
+                    yield { kind: "done" };
+                },
+                history: fakeHistory({
+                    snapshot: async (trigger) => {
+                        snapshots.push(trigger);
+                        return undefined;
+                    },
+                }),
+                usage: { record: async (entry) => void spend.push(entry), rollup: async () => [] },
+            }),
+        ),
+    );
+
+    const events = await runAgentTurn(client, { prompt: "fix tests in intentic", conversationId: "workspace-conv" });
+    expect(events.some((event) => event.kind === "worktree")).toBe(false);
+    expect(cwd).toBe("/work");
+    expect(snapshots).toEqual(["user", "turn"]);
+    expect((await client.agents.list()).agents).toMatchObject([{ id: "workspace-conv", status: "idle", sessionId: "sess-workspace", costUsd: 0.25 }]);
+    expect((await client.agents.list()).agents[0]).not.toHaveProperty("branch");
+    await vi.waitFor(() => expect(spend).toMatchObject([{ conversationId: "workspace-conv" }]));
+    // Registry actions remain unified; branch actions are placement-specific and fail explicitly.
+    expect(await errorCode(client.agents.diff({ id: "workspace-conv" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.agents.autoLand({ id: "workspace-conv", autoLand: false }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.agents.land({ id: "workspace-conv" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.agents.discard({ id: "workspace-conv" }))).toBe("BAD_REQUEST");
+});
+
+test("a thrown workspace turn settles its surfaced card as an error", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                // The adapter dies on the first pull, before any frame — a provider outage, a missing binary.
+                agent: async function* () {
+                    yield await Promise.reject(new Error("adapter crashed"));
+                },
+            }),
+        ),
+    );
+
+    expect(await runAgentTurn(client, { prompt: "do it", conversationId: "workspace-error" })).toEqual([
+        { kind: "error", message: "adapter crashed" },
+        { kind: "done" },
+    ]);
+    expect((await client.agents.list()).agents[0]).toMatchObject({ id: "workspace-error", status: "error" });
+    expect((await client.agents.list()).agents[0]).not.toHaveProperty("branch");
+});
+
+test("an existing conversation keeps its registered placement when a later client sends stale isolation", async () => {
+    const cwds: string[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* (request) {
+                    cwds.push(request.cwd);
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    await runAgentTurn(client, { prompt: "first", conversationId: "placed" });
+    const second = await runAgentTurn(client, { prompt: "second", conversationId: "placed", isolated: true });
+    expect(second.some((event) => event.kind === "worktree")).toBe(false);
+    expect(cwds).toEqual(["/work", "/work"]);
+    expect((await client.agents.list()).agents[0]).not.toHaveProperty("branch");
+});
+
 test("a second concurrent turn for the same conversation is refused with CONFLICT until the run settles", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -2244,6 +2325,48 @@ test("agents.search matches titles and later prompts, across the archive, and ne
     expect(await client.agents.search({ query: "login" })).toEqual({ matches: [{ id: "conv1" }], scanned: 2 });
 
     expect(await client.agents.search({ query: "nothing here" })).toEqual({ matches: [], scanned: 2 });
+});
+
+test("agents.search reads the daemon transcript for a provider with no SDK prompt store", async () => {
+    const app = createApp(
+        services({
+            config: withTranslator,
+            cliProxy: codexConnectedProxy,
+            codexAgent: async function* () {
+                yield { kind: "done" };
+            },
+            // Native Codex has no Claude SDK session to search. The daemon transcript is the provider-neutral
+            // source, and includes a later prompt that is deliberately absent from the card title.
+            transcripts: {
+                read: async (agent) =>
+                    agent.id === "codex-search"
+                        ? [
+                              { role: "user" as const, text: "open the codex task" },
+                              { role: "assistant" as const, text: "I mentioned forbidden-assistant-needle" },
+                              { role: "user" as const, text: "find durable-transcript-needle" },
+                          ]
+                        : [],
+                open: async () => {},
+                append: async () => {},
+            },
+            sessions: {
+                list: async () => [],
+                read: async () => [],
+                search: async () => [],
+                prompts: async () => {
+                    throw new Error("provider store must not be consulted");
+                },
+                exists: async () => true,
+            },
+        }),
+    );
+    const client = clientFor(app);
+    await runAgentTurn(client, { prompt: "open the codex task", title: "Codex task", agent: "codex", conversationId: "codex-search" });
+
+    expect(await client.agents.search({ query: "durable-transcript-needle" })).toMatchObject({
+        matches: [{ id: "codex-search", snippet: "find durable-transcript-needle" }],
+    });
+    expect(await client.agents.search({ query: "forbidden-assistant-needle" })).toMatchObject({ matches: [] });
 });
 
 test("git.status resolves the repo dir, and rejects an unknown repo", async () => {

@@ -19,7 +19,14 @@ test("both kinds round-trip, are filed under their own id, and clear independent
         startedAt: 10,
         attempts: 0,
     });
-    await journal.recordFire({ kind: "automation", automationId: "nightly", payload: "ping", startedAt: 20, attempts: 0 });
+    await journal.recordFire({
+        kind: "automation",
+        automationId: "nightly",
+        conversationId: "a-nightly-1",
+        payload: "ping",
+        startedAt: 20,
+        attempts: 0,
+    });
 
     expect((await journal.list()).map((entry) => entry.kind).toSorted()).toEqual(["automation", "turn"]);
 
@@ -54,7 +61,7 @@ test("an unreadable entry is skipped and LEFT, never deleted; a foreign filename
     writeFileSync(join(dir, "notes.txt"), "hello");
     // One good entry alongside them: a bad neighbour must not cost a resumable turn.
     const journal = fileTurnJournal(dir);
-    await journal.recordFire({ kind: "automation", automationId: "fine", startedAt: 1, attempts: 0 });
+    await journal.recordFire({ kind: "automation", automationId: "fine", conversationId: "a-fine-1", startedAt: 1, attempts: 0 });
 
     expect((await journal.list()).map((entry) => entry.kind)).toEqual(["automation"]);
 

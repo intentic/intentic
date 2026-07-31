@@ -50,8 +50,8 @@ export const EditorContextSchema = z.object({
 });
 export type EditorContext = z.infer<typeof EditorContextSchema>;
 
-// The client-minted stable conversation identity. Constrained because it lands in branch names (agent/<id>)
-// and filesystem paths — the regex is the injection guard. Shared by the turn input and the attach input.
+// The client-minted stable conversation identity. Constrained because isolated conversations also use it in
+// branch names (agent/<id>) and filesystem paths — the regex is the injection guard. Shared by turn + attach.
 const ConversationIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 
 // Where a conversation came from when nobody typed it into the browser: an automation wake carrying a message
@@ -102,7 +102,7 @@ export const AgentTurnSchema = z
         account: z.string().optional(),
         sessionId: z.string().optional(),
         // The client-minted stable conversation identity (survives provider/account/harness switches, which
-        // retire sessions). Keys the fleet registry entry, the conversation's worktree, and the turn run.
+        // retire sessions). Keys the fleet registry entry and turn run, plus the worktree when isolated.
         conversationId: ConversationIdSchema.optional(),
         // When true, the turn runs in the conversation's isolated git worktree (created lazily on first use)
         // instead of the shared /work tree — the parallel-agents mode. Requires conversationId.
@@ -157,10 +157,10 @@ export const AttachTurnSchema = z.object({
 });
 export type AttachTurn = z.infer<typeof AttachTurnSchema>;
 
-// ---- agents: the parallel-conversation fleet ----
-// A "fleet agent" is a conversation with a registry entry — every isolated conversation, keyed by its
-// conversationId. Isolated ones own a git worktree (branch agent/<id> in every workspace repo); the fleet
-// surface shows all of them with live status/activity/cost so the user can drive N agents in parallel.
+// ---- agents: the conversation fleet ----
+// A "fleet agent" is any conversation with a registry entry, keyed by its conversationId. Isolated ones own a
+// git worktree (branch agent/<id> in every workspace repo); workspace conversations have no branch. The fleet
+// surface shows both through the same status/activity/cost lifecycle.
 
 // idle/running/awaiting are the turn lifecycle (awaiting = paused on a plan approval or question); ready /
 // landed / conflict are outcomes of the land flow — `ready` is a clean completion whose delta stayed on the
@@ -750,7 +750,7 @@ export const SandboxSettingsSchema = z.object({
      * OFF still records the interruption: the fleet card reads `interrupted` (see AgentStatusSchema) and an
      * automation's row shows an `interrupted` run — nothing is re-run, but nothing is silently lost either. */
     autoResumeOnRestart: z.boolean().default(true),
-    /* THE LANDING GATE — the check command run over the COMPOSITE of landed work, once the fleet goes quiet.
+    /* THE LANDING GATE — the check command run over the COMPOSITE of landed work after a landing debounce.
      * Empty ⇒ no gate at all, which is the default: only the owner knows what verifies this workspace, and a
      * guessed command that fails on a fresh clone would read as the gate finding a bug on its first run.
      *
@@ -1037,9 +1037,9 @@ export const RepoChangesSchema = z.object({
     remote: GitRemoteStateSchema.optional(),
     // WHICH AGENT PUT IT THERE: repo-relative path → the agent ids that landed it, newest land first. Keyed by
     // PATH rather than carried on each GitChange because a path can be listed on two sides at once (staged and
-    // edited again) and its origin is the same fact for both. Only agents can appear here — a main-tree turn,
-    // a terminal edit and your own typing never pass through land, so they are simply absent (see
-    // agents/origins.ts), which is why the panel badges an agent and says nothing at all for anyone else.
+    // edited again) and its origin is the same fact for both. Only branch-backed agents whose work passed
+    // through land can appear here; workspace conversations, terminal edits and the user's typing are absent
+    // (see agents/origins.ts), so the panel badges an attributable agent and says nothing for anyone else.
     // Ids, not titles: the identity for every id named here rides the response once, in `originAgents`.
     origins: z.record(z.string(), z.array(z.string())).optional(),
     // Why the repo could not be scanned at all, condensed to git's own one-line reason ("fatal: bad object HEAD").
@@ -2090,9 +2090,9 @@ export const AutomationRunSchema = z.object({
     // as "it never fired" — the one reading a 3 a.m. automation must not be given.
     outcome: z.enum(["completed", "skipped", "error", "interrupted"]),
     detail: z.string().optional(),
-    // The runtime session the wake ran in, so the row can open the transcript. Absent for a run that never
-    // reached a provider (skipped by its guard) or whose provider minted no session before it died.
-    sessionId: z.string().optional(),
+    // The stable conversation opened by the wake, so the row can open the provider-neutral agent transcript.
+    // Absent only for a run skipped before a conversation was needed.
+    conversationId: z.string().optional(),
 });
 export type AutomationRun = z.infer<typeof AutomationRunSchema>;
 
@@ -2265,13 +2265,12 @@ export const GateAgentSchema = z.object({
 });
 export type GateAgent = z.infer<typeof GateAgentSchema>;
 
-// The fix turn one red verdict got. A MAIN-TREE turn, not an isolated conversation, so there is no
-// conversationId and no fleet card to open — the composite it must reproduce lives in the main working tree and
-// a fresh worktree branches from HEAD without it. `sessionId` is what makes the run readable after the fact,
-// the same thing an automation's run record carries for the same reason.
+// The fix turn one red verdict got. It is a workspace conversation because the composite it must reproduce
+// lives as uncommitted content in the main working tree; it still has the same stable registry identity as any
+// other conversation.
 export const GateFixSchema = z.object({
     startedAt: z.number(),
-    sessionId: z.string().optional(),
+    conversationId: z.string(),
     // `running` while the turn streams; `done` when it ended cleanly, whatever the re-check then said;
     // `error` when the turn itself failed (a provider outage, no credential), which is worth distinguishing
     // because it is the one case where re-running the fix could still help.
@@ -2671,7 +2670,8 @@ export const UsageTurnSchema = z.object({
     // when the provider's own subscription default served it without the daemon naming one.
     model: z.string().optional(),
     harness: z.string(),
-    // The conversation this turn belonged to, so spend can join to a fleet agent. Absent on a main-tree turn.
+    // The conversation this turn belonged to, so spend can join to a fleet agent. Absent only for an internal
+    // one-shot turn that has no conversation identity.
     conversationId: z.string().optional(),
     // The provider's own turn count for the request (a Claude "turn" can be several under the hood), so turns
     // and cost stay comparable across providers. 1 when the provider reported none.

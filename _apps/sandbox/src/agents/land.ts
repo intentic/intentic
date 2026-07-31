@@ -6,7 +6,7 @@ import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import { changedFiles, headSha, parseNameStatusZ } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { branchSha } from "./agent-refs.js";
-import type { PersistedAgent } from "./agents-store.js";
+import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
 // Land a conversation's work into the main tree as UNCOMMITTED changes — the Claude Code review model: the
@@ -287,11 +287,7 @@ const applyChanges = async (
  * uncommitted remainder is not in the span — the recorded refusal's span exactly, since the land that wrote
  * it committed everything first; newer work reshapes the report the way it reshapes everything else: at the
  * next land. */
-export const outstandingConflicts = async (
-    worktrees: AgentWorktrees,
-    entry: PersistedAgent,
-    git: GitRunner = defaultGit,
-): Promise<LandConflict[]> => {
+export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: IsolatedAgent, git: GitRunner = defaultGit): Promise<LandConflict[]> => {
     const conflicts: LandConflict[] = [];
     const patchDir = await mkdtemp(join(tmpdir(), "intentic-classify-"));
     try {
@@ -338,7 +334,7 @@ export const outstandingConflicts = async (
 
 export const landAgent = async (
     worktrees: AgentWorktrees,
-    entry: PersistedAgent,
+    entry: IsolatedAgent,
     mode: LandMode = "check",
     git: GitRunner = defaultGit,
 ): Promise<LandOutcome> => {

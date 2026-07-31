@@ -1,4 +1,5 @@
 import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
+import type { RestoredMessage } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { stripTurnPreamble } from "../agent/turn-preamble.js";
@@ -35,6 +36,9 @@ const stored = new Map<string, string[]>();
 // invalidated by it. Bounded per session because a long-lived conversation is otherwise unbounded, and the
 // oldest prompts are the ones the file read is certain to have.
 const routed = new Map<string, string[]>();
+// conversationId → prompts routed since boot. Unlike the session-keyed map above, this survives provider and
+// runtime switches and is therefore what the unified fleet search joins against while a turn is still live.
+const conversations = new Map<string, string[]>();
 const ROUTED_PER_SESSION = 200;
 
 // Stored prompts without daemon protocol. A runtime handoff carries earlier roles inside one SDK user message;
@@ -61,6 +65,23 @@ export const recordPrompt = (sessionId: string, prompt: string): void => {
     held.push(...cleaned);
     routed.set(sessionId, held.slice(-ROUTED_PER_SESSION));
 };
+
+export const recordConversationPrompt = (conversationId: string, prompt: string): void => {
+    const cleaned = cleanPrompts(prompt);
+    if (cleaned.length === 0) {
+        return;
+    }
+    const held = conversations.get(conversationId) ?? [];
+    held.push(...cleaned);
+    conversations.set(conversationId, held.slice(-ROUTED_PER_SESSION));
+};
+
+// Provider-neutral prompt input for the fleet filter: the durable daemon transcript plus prompts routed by
+// this process but not yet appended to that transcript. Assistant prose and tool output never enter the list.
+export const conversationPrompts = (conversationId: string, messages: readonly RestoredMessage[]): readonly string[] => [
+    ...messages.filter((message) => message.role === "user").flatMap((message) => cleanPrompts(message.text)),
+    ...(conversations.get(conversationId) ?? []),
+];
 
 // The `message` field of a stored turn is an Anthropic message: a bare string for a plain user prompt, or a
 // block array whose text blocks carry the prose. Everything else on a user message (tool_result blocks) is

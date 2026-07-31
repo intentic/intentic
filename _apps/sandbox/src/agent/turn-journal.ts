@@ -56,6 +56,9 @@ const JournalledFireSchema = z.object({
     ...inFlightSince,
     kind: z.literal("automation"),
     automationId: z.string(),
+    // The stable conversation opened by this fire. Reused by the restart path so an interrupted wake resumes
+    // the same fleet card instead of minting a second identity for one logical run.
+    conversationId: z.string(),
     // The trigger inputs of the fire, snapshotted exactly as the approvals queue snapshots a held wake — a
     // webhook body or a Discord mention exists nowhere else, and a re-fire without it would run blind.
     payload: z.string().optional(),

@@ -737,6 +737,17 @@ describe(`opening a fleet agent`, () => {
         expect(conversation.session.value?.id).toBe(`current-sdk-session`);
     });
 
+    it(`reconciles an already-open tab to a workspace conversation's registered placement`, () => {
+        const existing = useChat().active.value;
+        expect(existing.isolated.value).toBe(true);
+
+        const opened = openAgentConversation({ id: existing.conversationId, provider: `claude`, harness: `native` });
+
+        expect(opened).toBe(existing);
+        expect(opened.registered.value).toBe(true);
+        expect(opened.isolated.value).toBe(false);
+    });
+
     // The registry records what each turn ran under, and that is what the tab opens on. Seeding it from the
     // browser's remembered picks instead is the reported bug: every agent you opened claimed the model you had
     // last chosen somewhere else, however long ago its own session had run on another one.

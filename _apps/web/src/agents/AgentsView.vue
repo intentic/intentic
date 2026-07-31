@@ -470,8 +470,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         <div v-if="total === 0 && !archiveOpen" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
             <Icon name="sparkles" class="text-3xl text-subtle" />
             <p class="max-w-sm text-xs text-muted">
-                No agents yet. Each agent works on its own isolated branch — run several in parallel and their finished work lands in your workspace
-                automatically.
+                No agents yet. Start a conversation here or in the workspace; both appear on this board, and isolated work remains reviewable on its
+                own branch.
             </p>
             <button type="button" :class="cmp.buttonPrimary()" @click="startAgent()">Start an agent</button>
             <!-- Clearing the last lane lands the user here, so the empty state carries the pulse too — it is

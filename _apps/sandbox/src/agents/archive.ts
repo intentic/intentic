@@ -93,6 +93,12 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
         if (id === undefined || entry === undefined) {
             return;
         }
+        // A workspace conversation has no checkout or ref to retire. Archiving it is purely the registry
+        // presentation change below, while its transcript and counters remain exactly like an isolated one's.
+        if (entry.branch === undefined) {
+            done[index] = id;
+            return;
+        }
         try {
             await deps.agentWorktrees.retire(id, entry.repos, entry.title);
             done[index] = id;
@@ -130,6 +136,10 @@ export const purgeArchived = async (deps: AgentArchiveDeps): Promise<string[]> =
     await pooled(targets.length, async (index) => {
         const entry = targets[index];
         if (entry === undefined) {
+            return;
+        }
+        if (entry.branch === undefined) {
+            done[index] = entry.id;
             return;
         }
         try {

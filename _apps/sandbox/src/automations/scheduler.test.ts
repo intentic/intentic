@@ -17,15 +17,17 @@ const fakeServices = (root: string): Services =>
         approvals: fileApprovalsStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async () => {}, list: async () => [] },
+        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
         pushSender: { notifyIfAway: async () => {} },
         workspace: { root },
         logger: { error: () => {}, warn: () => {} },
     }) as unknown as Services;
 
-// A fake wake that records the prompts it was called with; `events` lets a test surface an agent error.
-const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
+// A fake wake that records complete turn identities; `events` lets a test surface an agent error.
+const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }], turns: AgentTurn[] = []): WakeFn =>
     async function* (_services, input) {
         prompts.push(input.prompt);
+        turns.push(input);
         yield* events;
     };
 
@@ -106,11 +108,12 @@ test("an automation's agent/harness/model ride the wake; unset fields leave the 
     };
     await fireAutomation(services, (await services.automations.get("pinned")) as AutomationRecord, capture);
     await fireAutomation(services, (await services.automations.get("plain")) as AutomationRecord, capture);
-    expect(inputs[0]).toEqual({ prompt: "wake:pinned", agent: "codex", harness: "claude-code", model: "gpt-5-codex" });
-    expect(inputs[1]).toEqual({ prompt: "wake:plain" });
+    expect(inputs[0]).toMatchObject({ prompt: "wake:pinned", agent: "codex", harness: "claude-code", model: "gpt-5-codex" });
+    expect(inputs[1]).toMatchObject({ prompt: "wake:plain" });
+    expect(inputs.every((turn) => turn.conversationId !== undefined)).toBe(true);
 });
 
-test("an outside message opens a surfaced conversation; a schedule wake stays headless", async () => {
+test("outside and scheduled fires both open surfaced conversations with placement kept separate", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automation("support"));
     const inputs: AgentTurn[] = [];
@@ -121,7 +124,7 @@ test("an outside message opens a surfaced conversation; a schedule wake stays he
     const record = (await services.automations.get("support")) as AutomationRecord;
     const origin = { automationId: "support", provider: "discord", channelId: "c1", author: "ada" };
     await fireAutomation(services, record, capture, { payload: "hi", origin, title: "ada: hi" });
-    // A schedule fire of the SAME automation carries no origin, so it stays an anonymous main-tree turn.
+    // A schedule fire of the SAME automation carries no origin, so it is a workspace conversation.
     await fireAutomation(services, record, capture);
 
     const surfaced = inputs[0] as AgentTurn;
@@ -131,7 +134,8 @@ test("an outside message opens a surfaced conversation; a schedule wake stays he
     // The id is a legal conversation id (it becomes a branch name and a worktree dir) and names its automation.
     expect(surfaced.conversationId).toMatch(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
     expect(surfaced.conversationId).toContain("support");
-    expect(inputs[1]).toEqual({ prompt: "wake:support" });
+    expect(inputs[1]).toMatchObject({ prompt: "wake:support", conversationId: expect.any(String) });
+    expect(inputs[1]).not.toHaveProperty("isolated");
 
     // One conversation per FIRE — a second message is a second agent, never a resumed one.
     await fireAutomation(services, record, capture, { payload: "again", origin, title: "ada: again" });
@@ -222,6 +226,7 @@ test("a wake journals itself while in flight and clears the entry when it settle
     expect(inFlightEntry).toEqual({
         kind: "automation",
         automationId: "nightly",
+        conversationId: expect.any(String),
         payload: "ping",
         origin,
         title: "Webhook: nightly",
@@ -287,15 +292,17 @@ test(`cleared: "approval" skips the approval gate but still runs the guard — t
     expect((await services.automations.get("gated-guard"))?.runs[0]).toMatchObject({ outcome: "skipped", detail: "not today" });
 });
 
-test("a run record carries the session its wake ran in, so the row can open the transcript", async () => {
+test("a run record carries the stable conversation even when the provider mints no runtime session", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automation("traced"));
     await services.automations.upsert(automation("sessionless"));
     const withSession = fakeWake([], [{ kind: "session", sessionId: "sess-42" }, { kind: "done" }]);
     await fireAutomation(services, (await services.automations.get("traced")) as AutomationRecord, withSession);
-    expect((await services.automations.get("traced"))?.runs[0]).toMatchObject({ outcome: "completed", sessionId: "sess-42" });
+    const traced = (await services.automations.get("traced"))?.runs[0];
+    expect(traced).toMatchObject({ outcome: "completed", conversationId: expect.stringContaining("a-traced-") });
+    expect(traced?.conversationId).not.toBe("sess-42");
 
-    // A provider that minted none leaves the field off rather than recording an unopenable id.
+    // A provider that minted none is still openable through the daemon's conversation transcript.
     await fireAutomation(services, (await services.automations.get("sessionless")) as AutomationRecord, fakeWake([]));
-    expect((await services.automations.get("sessionless"))?.runs[0]?.sessionId).toBeUndefined();
+    expect((await services.automations.get("sessionless"))?.runs[0]?.conversationId).toContain("a-sessionless-");
 });

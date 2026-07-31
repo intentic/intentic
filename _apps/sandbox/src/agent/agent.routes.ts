@@ -21,8 +21,9 @@ import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
 import { holdAccount } from "../claude/claude-credentials.js";
+import { isIsolated } from "../agents/agents-store.js";
 import { landAgent } from "../agents/land.js";
-import { recordPrompt } from "../sessions/prompt-index.js";
+import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
 import type { AgentRequest } from "./agent.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { resolveRequest } from "./agent-requests.js";
@@ -80,7 +81,7 @@ const ANSWERED_FRAMES = new Set<AgentEvent["kind"]>(["delta", "thinking", "tool_
 // Owns the turn's control surface: the AbortController /agent/stop hard-cancels (closing the /agent fetch
 // sends no cancel frame, so the browser alone can't) and, on the Claude Code harness, the SteeringQueue
 // /agent/steer injects mid-turn user messages into. Both are registered under the conversationId for the
-// life of the turn; a headless wake without one runs unregistered (nothing to steer or stop it by).
+// life of the turn; the remaining no-id path is reserved for internal one-shot calls that are not conversations.
 export async function* streamAgent(services: Services, input: AgentTurn, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
     const controller = new AbortController();
     if (signal?.aborted === true) {
@@ -104,26 +105,28 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     }
 }
 
-// The fleet-registry lifecycle around a turn. An ISOLATED turn (isolated + conversationId) is wrapped here —
-// mutex acquire + worktree ensure before the turn, finish (usage flush + mutex release) in a finally — so
-// EVERY exit of the turn body (provider gates, stream errors, aborts) releases the conversation. A wake
-// carrying an OUTSIDE message comes through here too — automations/scheduler.ts mints its conversation, which
-// is what puts a Discord mention on the fleet board as an ordinary agent. Schedule and chore wakes have no
-// conversation and run the main-tree body unchanged.
+// The fleet-registry lifecycle around every conversation turn. `conversationId` is the boundary: workspace and
+// isolated conversations both acquire the mutex, publish every frame and finish in a finally. `isolated` only
+// chooses the placement-specific worktree/land flow inside that shared lifecycle.
 async function* runConversationTurn(
     services: Services,
     input: AgentTurn,
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
-    if (input.isolated !== true || input.conversationId === undefined) {
+    if (input.conversationId === undefined) {
         yield* runTurn(services, input, signal, undefined, steering);
         return;
     }
     const conversationId = input.conversationId;
+    // Placement is a property of the conversation, not of whichever client happens to send this turn. A fresh
+    // conversation takes the request's choice; every later turn follows the registry entry it already owns.
+    const existing = services.agents.entry(conversationId);
+    const isolated = existing === undefined ? input.isolated === true : existing.branch !== undefined;
     const began = await services.agents.begin(
         {
             conversationId,
+            isolated,
             prompt: input.prompt,
             provider: input.agent ?? "claude",
             harness: input.harness ?? "native",
@@ -139,6 +142,25 @@ async function* runConversationTurn(
     if (!began) {
         yield { kind: "error", code: "agent-busy", message: "This agent is already running a turn — wait for it to finish." };
         yield { kind: "done" };
+        return;
+    }
+    if (!isolated) {
+        try {
+            for await (const event of runTurn(services, input, signal, undefined, steering)) {
+                services.agents.observe(conversationId, event);
+                yield event;
+            }
+        } catch (error) {
+            if (!(typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError")) {
+                services.agents.observe(conversationId, {
+                    kind: "error",
+                    message: error instanceof Error ? error.message : "agent turn failed",
+                });
+            }
+            throw error;
+        } finally {
+            await services.agents.finish(conversationId, Date.now());
+        }
         return;
     }
     // What THIS turn's land did, for the `turn.settled` chore event below — a historical record of one turn,
@@ -176,6 +198,7 @@ async function* runConversationTurn(
         let textBlock = "";
         let closing = "";
         for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd }, steering)) {
+            services.agents.observe(conversationId, event);
             if (event.kind === "error") {
                 failed = true;
             }
@@ -198,7 +221,7 @@ async function* runConversationTurn(
         // mode instead: provenance and diffstat happen, the main tree is not touched, and the held delta
         // waits on the branch as a "Ready to land" card until the user lands it deliberately.
         const finished = services.agents.entry(conversationId);
-        if (!failed && signal?.aborted !== true && finished !== undefined) {
+        if (!failed && signal?.aborted !== true && finished !== undefined && isIsolated(finished)) {
             const { autoLand } = await services.sandboxSettings.get();
             const landed = await landAgent(services.agentWorktrees, finished, (finished.autoLand ?? autoLand) ? "check" : "measure");
             if (!landed.changed && landed.diff.files > 0) {
@@ -249,6 +272,15 @@ async function* runConversationTurn(
                 services.logger.debug({ err: error }, "agents: title summary failed"),
             );
         }
+    } catch (error) {
+        if (!(typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError")) {
+            failed = true;
+            services.agents.observe(conversationId, {
+                kind: "error",
+                message: error instanceof Error ? error.message : "agent turn failed",
+            });
+        }
+        throw error;
     } finally {
         await services.agents.finish(conversationId, Date.now());
         // Once per turn, whatever the outcome — the errored and conflicted ones are the ones most worth a
@@ -276,14 +308,14 @@ async function* runConversationTurn(
 // already shown the user a "connecting" flash.
 const SLOW_PREFLIGHT_MS = 5_000;
 
-// One agent turn's body, on the main tree (`conversation` undefined) or inside an isolated conversation's
+// One agent turn's body, on the main tree (`worktree` undefined) or inside an isolated conversation's
 // worktree — the cwd override is the single binding point every provider adapter, the tmux Bash path, and the
 // SDK session store follow.
 async function* runTurn(
     services: Services,
     input: AgentTurn,
     signal: AbortSignal | undefined,
-    conversation: { readonly id: string; readonly cwd: string } | undefined,
+    worktree: { readonly id: string; readonly cwd: string } | undefined,
     steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
     // Whatever turn runs on this conversation supersedes a pending usage-limit resume — the user retrying by
@@ -337,7 +369,7 @@ async function* runTurn(
      * `effectiveCwd` is the workspace root as the AGENT sees it. Isolated, that is /work — which inside the
      * namespace resolves to `localCwd` — so the agent's own space is at the path every absolute path it
      * inherits already names, and nothing has to be remembered or forbidden. */
-    const localCwd = conversation?.cwd ?? services.workspace.root;
+    const localCwd = worktree?.cwd ?? services.workspace.root;
     /* Built before anything else needs it, and torn down in this turn's finally. Undefined for a main-tree
      * turn, which means the shared checkout and says so.
      *
@@ -352,7 +384,7 @@ async function* runTurn(
      * (agents/worktree-redirect.ts). That fallback used to be nothing at all, which is how three agents spent
      * a morning writing into the shared tree while their worktrees stayed empty. */
     const isolation: TurnPlacement | undefined =
-        conversation === undefined || !runsClaudeCode(input.agent ?? "claude", input.harness ?? "native")
+        worktree === undefined || !runsClaudeCode(input.agent ?? "claude", input.harness ?? "native")
             ? undefined
             : await services.turnIsolation.planFor(localCwd).then(async (plan) => {
                   if (!(await services.turnIsolation.available())) {
@@ -369,7 +401,7 @@ async function* runTurn(
     // Isolated turns skip it entirely: the worktree pins a stable base by design, and fast-forwarding the main
     // checkout mid-conversation would only manufacture land conflicts.
     const syncPromise =
-        conversation !== undefined
+        worktree !== undefined
             ? undefined
             : syncWorkspaceRepos(services, 60_000).catch((error: unknown) => {
                   services.logger.warn({ err: error }, "repo sync failed");
@@ -424,7 +456,7 @@ async function* runTurn(
     // A no-op skip when the tree is clean; a history failure never blocks a turn. Isolated turns skip BOTH
     // snapshots: history captures the MAIN tree, which an isolated turn never touches — the worktree branch's
     // diff-vs-base is that conversation's review and rollback surface.
-    if (conversation === undefined) {
+    if (worktree === undefined) {
         // The turn-start state's checkpoint id: the fence capture when it recorded something, else the newest
         // visible checkpoint (a clean tree at turn start IS that checkpoint's state — the common case). The
         // client hangs "restore to before this message" on the frame; no id (fresh workspace) ⇒ no button.
@@ -483,7 +515,10 @@ async function* runTurn(
     };
     const preflightMs = Date.now() - preflightStart;
     if (preflightMs >= SLOW_PREFLIGHT_MS) {
-        services.logger.warn({ preflightMs, stages: preflightStages }, "turn preflight slow — the stage marks say which step, and a stalled event loop inflates all of them at once");
+        services.logger.warn(
+            { preflightMs, stages: preflightStages },
+            "turn preflight slow — the stage marks say which step, and a stalled event loop inflates all of them at once",
+        );
     }
     record({ type: "turn.started", content: input.prompt.slice(0, 2_000) });
     /* Claim that account for as long as this turn holds its token. The token rode into the agent subprocess env
@@ -495,10 +530,6 @@ async function* runTurn(
     try {
         for await (const event of run(request)) {
             sniffer.observe(event);
-            // Fold every frame into the fleet registry so the card shows live status/activity/cost.
-            if (conversation !== undefined) {
-                services.agents.observe(conversation.id, event);
-            }
             /* The provider spoke. Whatever this turn is — a resume, a fresh message, an automation wake — it has
              * just proved the outage is over for every conversation stranded on this provider, so the whole
              * stranded set is released instead of each waiting out its own backoff (provider-health.ts).
@@ -651,7 +682,7 @@ async function* runTurn(
                     ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
                     ...(request.model !== undefined ? { model: request.model } : {}),
                     harness: input.harness ?? "native",
-                    ...(conversation !== undefined ? { conversationId: conversation.id } : {}),
+                    ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
                     turns: usage.numTurns ?? 1,
                     inputTokens: usage.inputTokens ?? 0,
                     outputTokens: usage.outputTokens ?? 0,
@@ -671,7 +702,7 @@ async function* runTurn(
         // Fire-and-forget workspace snapshot at turn end (aborted turns included) — history must never delay
         // or fail a turn. The raw prompt (not the enriched request) labels the checkpoint in the user's words.
         // Isolated turns skip it (main tree untouched); their registry finish lives in streamAgent's finally.
-        if (conversation === undefined) {
+        if (worktree === undefined) {
             services.history
                 .snapshot("turn", input.prompt)
                 .catch((error: unknown) => services.logger.warn({ err: error }, "history: turn snapshot failed"));
@@ -753,6 +784,7 @@ export const createAgentRoutes = (services: Services) => {
             // every search until the daemon restarted. `input.text`, not the composed prompt: the editor-context
             // note and the attachment note are protocol, and matching them would hit every steered turn at once.
             const sessionId = services.agents.sessionIdOf(input.conversationId);
+            recordConversationPrompt(input.conversationId, input.text);
             if (sessionId !== undefined) {
                 recordPrompt(sessionId, input.text);
             }

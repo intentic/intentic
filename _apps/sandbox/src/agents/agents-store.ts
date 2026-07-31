@@ -4,7 +4,7 @@ import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, LandConflic
 import { z } from "zod";
 
 // The persisted half of the fleet registry (<historyRoot>/agents.json — on the /history volume so a
-// conversation's identity survives container rebuilds alongside its worktree). One entry per ISOLATED
+// conversation's identity survives container rebuilds alongside any worktree it owns). One entry per
 // conversation. Runtime-only state (running/awaiting, attention, activity, context fill) lives in the
 // registry's memory and is rebuilt from turn frames; only what must survive a restart is here.
 
@@ -44,9 +44,10 @@ const AgentTitleSourceSchema = z.enum(["derived", "summary", "plan", "user"]);
 export type AgentTitleSource = z.infer<typeof AgentTitleSourceSchema>;
 
 export const PersistedAgentSchema = z.object({
-    // The conversationId — also the worktree dir name and the agent/<id> branch suffix.
+    // The conversationId. `branch` is the placement discriminator: present for an isolated conversation,
+    // absent for one that works directly in the shared workspace.
     id: z.string(),
-    branch: z.string(),
+    branch: z.string().optional(),
     // The display name, sanitized to one bounded line — derived from the opening prompt, promoted to a plan's
     // heading, or chosen outright by a rename. `titleSource` says which, and gates the next promotion.
     title: z.string().optional(),
@@ -113,6 +114,13 @@ export const PersistedAgentSchema = z.object({
     archivedAt: z.number().optional(),
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
+
+/* A conversation that owns a worktree, as a TYPE rather than a runtime re-test. `branch` is the placement
+ * discriminator, so every branch-only path (the diff/land/discard routes, land.ts, the land standings) takes
+ * this and the compiler carries the guarantee — rather than each of them re-checking `branch !== undefined` and
+ * inventing its own answer for a workspace conversation that could never reach it. */
+export type IsolatedAgent = PersistedAgent & { branch: string };
+export const isIsolated = (entry: PersistedAgent): entry is IsolatedAgent => entry.branch !== undefined;
 
 export interface AgentsStore {
     readonly load: () => Promise<PersistedAgent[]>;

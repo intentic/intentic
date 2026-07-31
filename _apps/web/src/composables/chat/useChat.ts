@@ -86,7 +86,6 @@ const activeId = ref<string>(``);
  * a queued message, a transcript, a session, a running turn, a rename, an unread error, or a fleet
  * registration. */
 const untouchedDraft = (conversation: Conversation): boolean =>
-    conversation.isolated.value &&
     !conversation.registered.value &&
     !conversation.streaming.value &&
     conversation.messages.value.length === 0 &&
@@ -1203,16 +1202,18 @@ const hydrateOnce = (conversation: Conversation): void => {
     });
 };
 
-// Open (or focus) the tab bound to a fleet agent's conversationId, seeding identity from its registry
-// summary. An isolated conversation's transcript is readable through /sessions after all — the SDK's store
-// spans a repo's worktrees rather than one checkout — so the tab hydrates like any other instead of starting
-// visually empty. Exported for useAgents.open.
+// Open (or focus) the tab bound to a fleet agent's conversationId, seeding identity from its registry summary.
+// The daemon's provider-neutral transcript record hydrates workspace and isolated conversations alike, so no
+// provider store or placement gets a separate open path. Exported for useAgents.open.
 export const openAgentConversation = (agent: {
     id: string;
     sessionId?: string;
     title?: string;
     provider: AgentProvider;
     harness: AgentHarness;
+    // Present exactly when this conversation owns an isolated worktree. A registry-opened workspace
+    // conversation must explicitly clear Conversation's isolated-by-default posture before its next turn.
+    branch?: string;
     account?: string;
     // What the agent's turns actually ran with, as the registry recorded them. Absent only for an agent that
     // has never run one (the board's draft card) — a real agent's settings are facts about it, and seeding the
@@ -1234,6 +1235,7 @@ export const openAgentConversation = (agent: {
         // agent" card back onto the Active lane it had just left.
         if (registered) {
             existing.registered.value = true;
+            existing.isolated.value = agent.branch !== undefined;
         }
         // An earlier probe may legitimately have found no transcript yet (the external runtime had not minted
         // its replacement SDK session). Opening the card is an explicit request to look again, not merely focus
@@ -1245,6 +1247,7 @@ export const openAgentConversation = (agent: {
     }
     const conversation = new Conversation(agent.id);
     conversation.registered.value = registered;
+    conversation.isolated.value = agent.branch !== undefined;
     conversation.provider.value = agent.provider;
     conversation.harness.value = agent.harness;
     conversation.account.value = agent.account ?? rememberedAccountFor(agent.provider);

@@ -970,7 +970,7 @@ const importMemory = async (): Promise<void> => {
             <Row
                 icon="shield"
                 title="Check landed work before you commit"
-                description="Run this command over your workspace once the fleet goes quiet, and show the result on the Changes panel. It runs in the workspace root, exactly as a terminal would. Empty turns the gate off."
+                description="Run this command over your workspace after landed changes settle, and show the result on the Changes panel. It runs in the workspace root, exactly as a terminal would. Empty turns the gate off."
             >
                 <template #control>
                     <input

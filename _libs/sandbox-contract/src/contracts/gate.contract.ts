@@ -9,8 +9,8 @@ import { GateVerdictSchema, OkSchema } from "../schemas.js";
 // claiming a green light the moment the tree moves under it. The three writes answer `ok` and nothing else —
 // each starts work that outlives the request, so there is no result to return and the poll is what reports.
 // `run` arms nothing and waits for nothing: it starts the check now, the user's own "I'm about to commit, check
-// this". `fix` opens the seeded main-tree turn for a red verdict, the same shape /ci/fix opens for a red
-// pipeline, minus the worktree it must not have.
+// this". `fix` opens a seeded workspace conversation for a red verdict; it has the same registry lifecycle as
+// /ci/fix, minus the isolated worktree it must not have.
 export const gateContract = {
     verdict: oc.route({ method: "GET", path: "/gate/verdict" }).output(GateVerdictSchema),
     run: oc.route({ method: "POST", path: "/gate/run" }).output(OkSchema),

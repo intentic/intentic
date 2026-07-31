@@ -238,6 +238,7 @@ it(`closes every finished tab and leaves the working ones, disabled when nothing
     // the fleet cards as `draft`) and a tab mid-turn.
     for (const at of [0, 2]) {
         chat.conversations.value[at]!.isolated.value = false;
+        chat.conversations.value[at]!.registered.value = true;
         chat.conversations.value[at]!.restoreMessages([
             { role: `user`, text: `do the thing` },
             { role: `assistant`, text: `done` },

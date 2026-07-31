@@ -142,6 +142,9 @@ export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
         if (entry === undefined) {
             throw new DiffRawError(404, "unknown agent");
         }
+        if (entry.branch === undefined) {
+            throw new DiffRawError(400, "workspace conversation has no isolated diff");
+        }
         const composed = entry.repos.find((candidate) => candidate.repo === repo);
         if (composed === undefined) {
             throw new DiffRawError(404, "repo not in this agent's composition");

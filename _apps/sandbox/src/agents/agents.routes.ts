@@ -5,9 +5,9 @@ import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { landingGate } from "../gate/gate.js";
-import { matchPrompts } from "../sessions/prompt-index.js";
+import { conversationPrompts, matchPrompts } from "../sessions/prompt-index.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
-import type { PersistedAgent } from "./agents-store.js";
+import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents, purgeArchived } from "./archive.js";
 import { anchorOf, landAgent, outstandingConflicts } from "./land.js";
 
@@ -21,6 +21,15 @@ export const createAgentsRoutes = (services: Services) => {
         const entry = services.agents.entry(id);
         if (entry === undefined) {
             throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+        }
+        return entry;
+    };
+    // The branch-backed half of the registry, for the routes that act on a worktree. A workspace conversation is
+    // a legitimate agent that simply cannot answer these, so it is BAD_REQUEST rather than NOT_FOUND.
+    const isolatedEntryOf = (id: string): IsolatedAgent => {
+        const entry = entryOf(id);
+        if (!isIsolated(entry)) {
+            throw new ORPCError("BAD_REQUEST", { message: "this conversation works in the shared workspace and has no isolated branch" });
         }
         return entry;
     };
@@ -81,11 +90,11 @@ export const createAgentsRoutes = (services: Services) => {
                     if (agent.title?.toLowerCase().includes(needle) === true) {
                         return { id: agent.id };
                     }
-                    const sessionId = sdkSessionIdOf(agent);
-                    if (sessionId === undefined) {
+                    const entry = services.agents.entry(agent.id);
+                    if (entry === undefined) {
                         return undefined;
                     }
-                    const snippet = matchPrompts(await services.sessions.prompts(services.workspace.root, sessionId), needle);
+                    const snippet = matchPrompts(conversationPrompts(agent.id, await services.transcripts.read(entry)), needle);
                     return snippet === undefined ? undefined : { id: agent.id, snippet };
                 }),
             );
@@ -129,7 +138,7 @@ export const createAgentsRoutes = (services: Services) => {
         // Legal mid-turn too (no notRunning): the override is read at turn COMPLETION, so flipping it while
         // the agent works is exactly "hold THIS turn's work for review" — the press that matters most.
         autoLand: i.autoLand.handler(async ({ input }) => {
-            entryOf(input.id);
+            isolatedEntryOf(input.id);
             const summary = await services.agents.setAutoLand(input.id, input.autoLand);
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
@@ -154,7 +163,7 @@ export const createAgentsRoutes = (services: Services) => {
         // What landing changes is per-file: a second pass from `landedTip` names the remainder still waiting
         // for "Land now" (everything, when nothing has landed yet), and every other file is flagged `landed`.
         diff: i.diff.handler(async ({ input }) => {
-            const entry = entryOf(input.id);
+            const entry = isolatedEntryOf(input.id);
             const repos: AgentRepoChanges[] = [];
             for (const { repo, base, landedTip } of entry.repos) {
                 try {
@@ -206,7 +215,7 @@ export const createAgentsRoutes = (services: Services) => {
         // `landedTip` would silently empty out every already-landed row; diffing from the frozen base would
         // show other agents' synced-in work, disagreeing with the list.)
         fileDiff: i.fileDiff.handler(async ({ input }) => {
-            const entry = entryOf(input.id);
+            const entry = isolatedEntryOf(input.id);
             const composed = entry.repos.find((repo) => repo.repo === input.repo);
             if (composed === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
@@ -230,7 +239,7 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Manual land — the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input }) => {
-            const entry = entryOf(input.id);
+            const entry = isolatedEntryOf(input.id);
             notRunning(input.id);
             // Snapshotted before the land advances every landedTip — the span a chore diffs from, exactly as
             // the auto-land path captures it before its own land (see streamIsolatedTurn).
@@ -276,7 +285,7 @@ export const createAgentsRoutes = (services: Services) => {
             };
         }),
         discard: i.discard.handler(async ({ input }) => {
-            const entry = entryOf(input.id);
+            const entry = isolatedEntryOf(input.id);
             notRunning(input.id);
             await services.agentWorktrees.remove(entry.id, entry.repos);
             await services.agents.remove([entry.id]);

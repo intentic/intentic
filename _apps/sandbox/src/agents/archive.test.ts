@@ -16,6 +16,7 @@ const memoryStore = (initial: PersistedAgent[] = []): AgentsStore => {
 
 const turn = (overrides: Partial<AgentTurnIdentity> = {}): AgentTurnIdentity => ({
     conversationId: "c1",
+    isolated: true,
     prompt: "Fix the login bug",
     provider: "claude",
     harness: "native",
@@ -98,6 +99,18 @@ describe("archiveAgents", () => {
         expect(agents.get("c1")?.archivedAt).toBe(9_000);
     });
 
+    it("archives a workspace conversation without calling worktree teardown", async () => {
+        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        await agents.init();
+        await agents.begin(turn({ isolated: false }), 1_000);
+        await agents.finish("c1", 2_000);
+        const { worktrees, retire } = stubWorktrees();
+
+        expect(await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1"], 9_000)).toEqual(["c1"]);
+        expect(retire).not.toHaveBeenCalled();
+        expect(agents.get("c1")?.archivedAt).toBe(9_000);
+    });
+
     it("leaves an agent ON the board when its checkout could not be retired", async () => {
         const agents = createAgentsRegistry(memoryStore(), noStandings);
         await agents.init();
@@ -150,6 +163,19 @@ describe("purgeArchived", () => {
         expect(agents.get("filed")).toBeUndefined();
         expect(agents.listArchived()).toEqual([]);
         expect(agents.list().map((agent) => agent.id)).toEqual(["onboard"]);
+    });
+
+    it("purges a workspace conversation without attempting branch removal", async () => {
+        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        await agents.init();
+        await agents.begin(turn({ isolated: false }), 1_000);
+        await agents.finish("c1", 2_000);
+        const { worktrees, remove } = stubWorktrees();
+        await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1"], 9_000);
+
+        expect(await purgeArchived({ agents, agentWorktrees: worktrees, logger })).toEqual(["c1"]);
+        expect(remove).not.toHaveBeenCalled();
+        expect(agents.get("c1")).toBeUndefined();
     });
 
     it("keeps the agents whose teardown failed, and deletes the rest", async () => {

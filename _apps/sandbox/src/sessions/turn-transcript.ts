@@ -1,7 +1,9 @@
-import type { AgentEvent, RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn, RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { stripTurnPreamble } from "../agent/turn-preamble.js";
+import type { Services } from "../composition.js";
+import type { TranscriptAgent } from "./agent-transcript.js";
 
 /* ONE SETTLED TURN, in the flat shape a reopened chat redraws — built from the frames the daemon itself
  * streamed rather than re-read out of whatever store the provider happened to keep.
@@ -110,4 +112,47 @@ export const restoredTurn = (
     }
     flush();
     return out;
+};
+
+/* WHICH conversation a turn records against — one derivation, because the record's two halves (open, append)
+ * must agree on it or a turn adopts into one file and settles into another. The provider/harness defaults are
+ * the ones streamAgent resolves the turn under (absent ⇒ claude/native), so the record is keyed by what the
+ * turn actually ran as. */
+const transcriptAgentOf = (turn: AgentTurn & { readonly conversationId: string }): TranscriptAgent => ({
+    id: turn.conversationId,
+    provider: turn.agent ?? "claude",
+    harness: turn.harness ?? "native",
+});
+
+/* OPEN the conversation's record before its turn reaches the provider — the boundary transcript-record.ts
+ * argues for: adopting at settlement would re-read the provider store AFTER it recorded this very turn, and
+ * duplicate it. Every road that starts a conversation turn opens here first (the /agent pump awaits this, an
+ * automation wake and a gate fix call it ahead of their own loops), so no path can append into a record that
+ * was never adopted.
+ *
+ * Never rejects, like the append below: a disk failure in a side channel must not manufacture an agent failure. */
+export const openTurnTranscript = async (
+    services: Pick<Services, "transcripts" | "logger">,
+    turn: AgentTurn & { readonly conversationId: string },
+): Promise<void> => {
+    await services.transcripts
+        .open(transcriptAgentOf(turn))
+        .catch((error: unknown) => services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript open failed"));
+};
+
+/* WRITE one settled turn to that record — the single spelling of that, because every road a turn can be started
+ * down ends here: the /agent pump (turn-runs' settle hook), an automation wake, a landing-gate fix. Each used to
+ * repeat the same two normalizations, and one of them had drifted to hardcoded literals. The paths are relative
+ * to the workspace root the turn actually saw.
+ *
+ * Never rejects. A transcript is a side-channel of a turn that has already finished — the cost of a failed
+ * write is one turn missing from a history, which must not become the cost of the turn itself. */
+export const recordTurnTranscript = async (
+    services: Pick<Services, "transcripts" | "workspace" | "logger">,
+    turn: AgentTurn & { readonly conversationId: string },
+    events: readonly AgentEvent[],
+): Promise<void> => {
+    await services.transcripts
+        .append(transcriptAgentOf(turn), restoredTurn(turn, events, services.workspace.root))
+        .catch((error: unknown) => services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript append failed"));
 };

@@ -33,6 +33,7 @@ const memoryStore = (initial: PersistedAgent[] = []): AgentsStore & { saved: () 
 
 const turn = (overrides: Partial<AgentTurnIdentity> = {}): AgentTurnIdentity => ({
     conversationId: "c1",
+    isolated: true,
     prompt: "Fix the login bug",
     provider: "claude",
     harness: "native",
@@ -49,6 +50,35 @@ describe("agents registry", () => {
         expect(summary?.branch).toBe("agent/c1");
         expect(summary?.title).toBe("Fix the login bug");
         expect(summary?.startedAt).toBe(1_000);
+    });
+
+    it("registers a workspace conversation without inventing a branch and projects its clean completion as idle", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn({ isolated: false }), 1_000);
+
+        expect(registry.get("c1")).toMatchObject({ id: "c1", status: "running", title: "Fix the login bug" });
+        expect(registry.get("c1")).not.toHaveProperty("branch");
+
+        registry.observe("c1", { kind: "question", requestId: "q1", questions: [] });
+        expect(registry.get("c1")?.status).toBe("awaiting");
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("idle");
+    });
+
+    it("latches placement to the conversation instead of accepting a later request's stale posture", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+
+        await registry.begin(turn({ conversationId: "workspace", isolated: false }), 1_000);
+        await registry.finish("workspace", 1_100);
+        await registry.begin(turn({ conversationId: "workspace", isolated: true }), 1_200);
+        expect(registry.get("workspace")).not.toHaveProperty("branch");
+
+        await registry.begin(turn({ conversationId: "isolated", isolated: true }), 2_000);
+        await registry.finish("isolated", 2_100);
+        await registry.begin(turn({ conversationId: "isolated", isolated: false }), 2_200);
+        expect(registry.get("isolated")?.branch).toBe("agent/isolated");
     });
 
     it("records where an outside message came from and keeps it across the user's own follow-up turns", async () => {

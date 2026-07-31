@@ -2,12 +2,12 @@
 import type { GateVerdict } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic-app/ui";
 import { computed, ref } from "vue";
-import { useChat } from "../../composables/chat/useChat";
+import { useAgents } from "../../composables/agents/useAgents";
 import { useGate } from "../../composables/workspace/useGate";
 
 /* THE LANDING GATE'S BADGE — one strip above the commit box saying whether this tree would survive CI.
  *
- * The verdict is computed long before it is read (the daemon runs the check once the fleet goes quiet, see
+ * The verdict is computed long before it is read (the daemon runs the check after the landing debounce, see
  * gate/gate.ts), which is the whole point of the placement: the user arrives at the commit box and the answer is
  * already there. Nothing here blocks the commit. The panel states what it knows and the user decides — a gate
  * that disabled Commit would be a gate that stops the user shipping a fix for the gate itself.
@@ -87,7 +87,21 @@ const durationLabel = computed((): string | undefined => {
     return seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}m`;
 });
 
-const fixSession = computed((): string | undefined => gate.verdict.value.fix?.sessionId);
+const fixConversation = computed((): string | undefined => gate.verdict.value.fix?.conversationId);
+const openFix = async (): Promise<void> => {
+    const id = fixConversation.value;
+    if (id === undefined) {
+        return;
+    }
+    const agents = useAgents();
+    if (agents.agentById(id) === undefined) {
+        await agents.loadArchived();
+    }
+    const agent = agents.agentById(id);
+    if (agent !== undefined) {
+        agents.open(agent);
+    }
+};
 </script>
 
 <template>
@@ -140,15 +154,15 @@ const fixSession = computed((): string | undefined => gate.verdict.value.fix?.se
                     >
                         {{ gate.verdict.value.status === `idle` ? `Run checks` : `Re-run` }}
                     </button>
-                    <!-- The fix turn has no fleet card to open (it runs on the main tree, by necessity — see
-                         gate/gate.ts), so its transcript is the only way to see what it did. -->
+                    <!-- The fix is a workspace conversation: open its fleet-backed transcript, whether the card
+                         is still live or has already moved into the archive. -->
                     <button
-                        v-if="fixSession"
+                        v-if="fixConversation"
                         type="button"
                         class="rounded p-0.5 text-subtle transition-colors hover:bg-overlay hover:text-content"
                         v-tooltip.right="`Open the fix transcript`"
                         aria-label="Open the fix transcript"
-                        @click="void useChat().openConversation(fixSession)"
+                        @click="void openFix()"
                     >
                         <Icon name="comments" class="text-2xs" />
                     </button>

@@ -311,9 +311,15 @@ const main = async (): Promise<void> => {
         const vanished: string[] = [];
         const archived: string[] = [];
         for (const id of services.agents.ids()) {
+            const entry = services.agents.entry(id);
+            // Workspace conversations deliberately own no checkout. They participate in the roster, not in
+            // worktree repair or pruning, so absence on disk is not a vanished isolated agent.
+            if (entry?.branch === undefined) {
+                continue;
+            }
             // An ARCHIVED entry is *supposed* to have no worktree — that is what archiving reclaimed. It is
             // held by its commits instead, so it must never look like the vanished-worktree case below.
-            if (services.agents.entry(id)?.archivedAt !== undefined) {
+            if (entry.archivedAt !== undefined) {
                 archived.push(id);
                 continue;
             }
@@ -334,8 +340,11 @@ const main = async (): Promise<void> => {
         // Membership is re-read per decision inside prune (the callbacks), so a conversation the user opens
         // mid-sweep is never judged by this pre-sweep snapshot.
         await services.agentWorktrees.prune(
-            () => services.agents.ids(),
-            () => services.agents.ids().filter((id) => services.agents.entry(id)?.archivedAt !== undefined),
+            () => services.agents.ids().filter((id) => services.agents.entry(id)?.branch !== undefined),
+            () =>
+                services.agents
+                    .ids()
+                    .filter((id) => services.agents.entry(id)?.branch !== undefined && services.agents.entry(id)?.archivedAt !== undefined),
         );
     })().catch((error: unknown) => logger.warn({ err: error }, "agents: boot worktree sweep failed"));
 

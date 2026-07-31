@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { GateAgent, GateFix, GateVerdict, OriginAgent } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn, GateAgent, GateFix, GateVerdict, OriginAgent } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
+import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { StoredVerdict } from "./gate-store.js";
 
@@ -495,49 +496,61 @@ export const createLandingGate = (services: Services, wake: WakeFn, git: GitRunn
     };
 
     const fix = async (): Promise<void> => {
-        const stored = await load();
-        if (stored === undefined || stored.status !== "failed" || fixing) {
+        // Acquire before the first await: two clicks (or auto-fix and a click) can enter in the same tick, and
+        // checking after load() lets both pass the guard and mint two conversations for one red tree.
+        if (fixing) {
             return;
         }
-        const { gateTimeoutMs } = await settings();
         fixing = true;
-        const record: GateFix = { startedAt: Date.now(), outcome: "running" };
-        await persist({ ...stored, fix: record });
-        const prompt = fixPrompt(stored, gateTimeoutMs);
-        /* A MAIN-TREE turn: no conversationId, no `isolated` — so runConversationTurn passes it straight through
-         * to the main-tree body (agent/agent.routes.ts). That is not a limitation worked around, it is the
-         * requirement: the composite this must reproduce is uncommitted content in /work, and an isolated
-         * worktree branches from HEAD without it. The cost is that the turn gets no fleet card, so `sessionId`
-         * below is what makes it readable — the same thing an automation's run record carries. */
-        let sessionId: string | undefined;
-        let failure: string | undefined;
         try {
-            for await (const event of wake(services, { prompt }, undefined)) {
-                if (event.kind === "session") {
-                    sessionId = event.sessionId;
-                }
-                if (event.kind === "error") {
-                    failure = event.message;
-                }
+            const stored = await load();
+            if (stored === undefined || stored.status !== "failed") {
+                return;
             }
+            const { gateTimeoutMs } = await settings();
+            const conversationId = `gate-${randomUUID()}`;
+            const record: GateFix = { startedAt: Date.now(), conversationId, outcome: "running" };
+            await persist({ ...stored, fix: record });
+            const prompt = fixPrompt(stored, gateTimeoutMs);
+            /* A workspace conversation: it must work directly on the uncommitted composite in /work, but placement
+             * no longer opts it out of the registry. The stable id above gives the fixer one fleet card and one
+             * provider-neutral transcript while the provider's runtime session remains only a resume cursor. */
+            const turn: AgentTurn & { conversationId: string } = { prompt, conversationId };
+            const events: AgentEvent[] = [];
+            let failure: string | undefined;
+            // Opened before the provider runs, like every other conversation turn — a fresh gate id has nothing
+            // to adopt, but the record must exist before settlement appends into it (sessions/transcript-record.ts).
+            await openTurnTranscript(services, turn);
+            try {
+                for await (const event of wake(services, turn, undefined)) {
+                    events.push(event);
+                    if (event.kind === "error") {
+                        failure = event.message;
+                    }
+                }
+            } catch (error) {
+                failure = error instanceof Error ? error.message : "gate fix turn failed";
+                logger.warn({ err: error, conversationId }, "gate: fix turn failed");
+            } finally {
+                await recordTurnTranscript(services, turn, events);
+            }
+            const settled: GateFix = {
+                ...record,
+                ...(failure === undefined ? { outcome: "done" as const } : { outcome: "error" as const, detail: failure }),
+            };
+            logger.info({ conversationId, failed: failure !== undefined }, "gate: fix turn settled");
+            // A fix turn that errored gets no re-check: nothing was changed, and the red verdict already says so —
+            // re-running the suite would only spend the time to be told the same thing.
+            if (failure !== undefined) {
+                await persist({ ...stored, fix: settled });
+                return;
+            }
+            // Re-verify on the tree the fix left behind, carrying the fix record so this run cannot ask for another.
+            fingerprintCache = undefined;
+            await start(settled);
         } finally {
             fixing = false;
         }
-        const settled: GateFix = {
-            ...record,
-            ...(sessionId !== undefined ? { sessionId } : {}),
-            ...(failure === undefined ? { outcome: "done" as const } : { outcome: "error" as const, detail: failure }),
-        };
-        logger.info({ sessionId, failed: failure !== undefined }, "gate: fix turn settled");
-        // A fix turn that errored gets no re-check: nothing was changed, and the red verdict already says so —
-        // re-running the suite would only spend the time to be told the same thing.
-        if (failure !== undefined) {
-            await persist({ ...stored, fix: settled });
-            return;
-        }
-        // Re-verify on the tree the fix left behind, carrying the fix record so this run cannot ask for another.
-        fingerprintCache = undefined;
-        await start(settled);
     };
 
     return {

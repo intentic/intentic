@@ -189,10 +189,11 @@ describe("draft cards", () => {
         resetAgents();
         useAgents().archived.value = [];
         // One open tab per case, installed by the case itself. The list is never emptied — useChat guarantees
-        // an active conversation at all times — so it starts on a MAIN-TREE chat, which is not fleet work at
-        // all and cards nothing either way.
+        // an active conversation at all times — so this registered placeholder keeps that invariant without
+        // posing as another draft under test.
         const other = new Conversation();
         other.isolated.value = false;
+        other.registered.value = true;
         useChat().conversations.value = [other];
     });
 
@@ -200,6 +201,14 @@ describe("draft cards", () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`fresh`)];
 
         expect(activeIds()).toEqual([`fresh`]);
+    });
+
+    it("cards a workspace conversation by the same rule", () => {
+        const conversation = new Conversation(`workspace-fresh`);
+        conversation.isolated.value = false;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(activeIds()).toEqual([`workspace-fresh`]);
     });
 
     it("stops carding a conversation once the roster registers it — one card, from the registry", () => {

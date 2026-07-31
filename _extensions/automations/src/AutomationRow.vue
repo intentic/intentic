@@ -77,11 +77,11 @@ const OUTCOME_CLASS: Record<AutomationRun[`outcome`], string> = {
 };
 const runTooltip = (run: AutomationRun): string => `${formatAt(run.at)}${run.detail !== undefined ? ` — ${run.detail}` : ``}`;
 
-// A run's transcript, on the host's one chat surface. Only runs that reached a provider have a session: a
-// guard-skip never woke anything, and an interrupted wake may have died before minting one.
+// A run's transcript, on the host's one chat surface. Runs that reached a turn carry the stable conversation;
+// a guard-skip never needed one.
 const openRun = (run: AutomationRun): void => {
-    if (run.sessionId !== undefined) {
-        host().chat.openSession(run.sessionId);
+    if (run.conversationId !== undefined) {
+        host().chat.openSession(run.conversationId);
     }
 };
 
@@ -191,25 +191,25 @@ const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !
                 <span v-if="automation.requireApproval">holds for approval</span>
             </div>
 
-            <!-- The run history, and — where the run reached a provider — a way INTO it. "It failed at 3am and I
-                 can't see why" is answered by a transcript, so a run that has a session is a button that opens
+            <!-- The run history, and — where the run reached a turn — a way INTO it. "It failed at 3am and I
+                 can't see why" is answered by a transcript, so a run with a conversation is a button that opens
                  one; a guard-skip has nothing behind it and stays plain text. -->
             <div class="flex flex-col gap-1 border-t border-line pt-2">
                 <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">No runs yet.</p>
                 <component
-                    :is="run.sessionId ? `button` : `div`"
+                    :is="run.conversationId ? `button` : `div`"
                     v-for="run in automation.runs"
                     :key="run.at"
-                    :type="run.sessionId ? `button` : undefined"
+                    :type="run.conversationId ? `button` : undefined"
                     class="flex items-baseline gap-2 rounded text-left text-2xs"
-                    :class="run.sessionId ? `cursor-pointer hover:bg-content/5` : undefined"
-                    :aria-label="run.sessionId ? `Open the transcript of the run from ${formatAt(run.at)}` : undefined"
+                    :class="run.conversationId ? `cursor-pointer hover:bg-content/5` : undefined"
+                    :aria-label="run.conversationId ? `Open the transcript of the run from ${formatAt(run.at)}` : undefined"
                     @click="openRun(run)"
                 >
                     <span class="w-20 shrink-0 text-subtle" v-tooltip.top="formatAt(run.at)">{{ since(run.at) }}</span>
                     <span class="w-14 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ OUTCOME_VERB[run.outcome] }}</span>
                     <span v-if="run.detail" class="min-w-0 truncate text-subtle" v-tooltip.top="run.detail">{{ run.detail }}</span>
-                    <Icon v-if="run.sessionId" name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                    <Icon v-if="run.conversationId" name="chevron-right" class="shrink-0 text-2xs text-subtle" />
                 </component>
             </div>
         </div>

@@ -35,6 +35,7 @@ const harness = async (automationId: string) => {
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
         ciRuns: createRunsCache(60_000),
         turnJournal: fileTurnJournal(join(root, "turns")),
+        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
         activity: { append: async () => {}, list: async () => [] },
         logger: { error: () => {}, warn: () => {} },
     } as unknown as Services;
@@ -149,6 +150,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
         ciRuns: createRunsCache(60_000),
         turnJournal: fileTurnJournal(join(root, "turns")),
+        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
         activity: { append: async () => {}, list: async () => [] },
         logger: { error: () => {}, warn: () => {} },
     } as unknown as Services;

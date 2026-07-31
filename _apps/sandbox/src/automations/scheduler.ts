@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Cron } from "croner";
 import type { AgentEvent, AgentOrigin, AgentTurn } from "@intentic/sandbox-contract";
+import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
 import { automationPending } from "../push/notifications.js";
 import type { AutomationRecord } from "./automations-store.js";
@@ -90,13 +91,14 @@ export interface FireOptions {
     // How many times a boot has already re-fired this wake, carried through the journal so an interrupted fire
     // that dies the same way again is not re-fired forever (see turn-resume's boot pass). A first fire is 0.
     readonly attempts?: number;
+    // Reused only by the restart path. A first fire mints its identity after the guard/approval gates clear.
+    readonly conversationId?: string;
     // When set, the agent's text deltas stream here live and it's told (via STREAM_NOTE) not to send the reply itself.
     readonly stream?: TurnStream;
-    // Set by the dispatchers that receive an OUTSIDE message (listener sources, the web-chat widget, the event
-    // webhook). Its presence is what makes the wake a first-class conversation instead of an anonymous headless
-    // turn: it gets its own conversation id, its own worktree, a fleet card, and a chat tab the user can take
-    // over in — the wake is the conversation's first turn, with the automation's configured prompt and the
-    // message as its context. Absent (schedules, chores) ⇒ the main-tree headless turn, as before.
+    // Set by dispatchers that receive an OUTSIDE message (listener sources, the web-chat widget, the event
+    // webhook). Every fire is a first-class surfaced conversation; origin changes only its placement and
+    // provenance. Present ⇒ an isolated worktree conversation. Absent (schedules, chores) ⇒ a shared-workspace
+    // conversation.
     readonly origin?: AgentOrigin;
     // The card/tab title for a surfaced wake — the inbound message's first line, which is the only thing that
     // tells two fires of one automation apart (the prompt is identical every time). Absent ⇒ derived below.
@@ -109,7 +111,7 @@ export const fireAutomation = async (
     services: Services,
     automation: AutomationRecord,
     wake: WakeFn,
-    { payload, cleared, attempts = 0, stream, origin, title }: FireOptions = {},
+    { payload, cleared, attempts = 0, conversationId: resumedConversationId, stream, origin, title }: FireOptions = {},
 ): Promise<void> => {
     if (inFlight.has(automation.id)) {
         return;
@@ -161,10 +163,12 @@ export const fireAutomation = async (
          * is what keeps the overlap guard, the run record and the activity append, and re-reads a prompt the
          * owner may have fixed in the meantime. Awaited, unlike the chat-turn journal: nothing is waiting on a
          * response here, and a wake that outlives the write by a millisecond is worth nothing. */
+        const conversationId = resumedConversationId ?? mintConversationId(automation.id, Date.now());
         await services.turnJournal
             .recordFire({
                 kind: "automation",
                 automationId: automation.id,
+                conversationId,
                 ...(capped !== undefined ? { payload: capped } : {}),
                 ...(origin !== undefined ? { origin } : {}),
                 ...(title !== undefined ? { title } : {}),
@@ -176,24 +180,22 @@ export const fireAutomation = async (
         // exactly a chat's opening message, written by the configuration instead of by a person.
         const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- Event payload ---\n${capped}` : automation.prompt;
         let failure: string | undefined;
-        let sessionId: string | undefined;
-        // An outside message opens a CONVERSATION: its own id, its own worktree, a card on the fleet and a tab
-        // the user can open, follow live, and keep talking in after the wake ends. One per FIRE, not per channel
+        let runtimeSessionId: string | undefined;
+        // Every fire opens a CONVERSATION and therefore a fleet card. Outside messages are isolated so the user
+        // can open, follow live, and keep talking in after the wake ends. One per FIRE, not per channel
         // — each mention is its own agent with its own branch, which is what makes two of them reviewable
-        // separately. (Fires of one automation are still serialized by inFlight and the listener batcher; the
-        // worktree keeps them from colliding in the tree, the queue keeps a flood from becoming N turns of
-        // spend.) A schedule or chore wake stays a headless main-tree turn — its transcript still lands in the
-        // workspace sessions like a chat turn.
-        const turn: AgentTurn = {
+        // separately. Schedule and chore wakes work in the shared workspace but keep the same registry,
+        // transcript and restart lifecycle; placement no longer decides whether a conversation exists.
+        const turn: AgentTurn & { conversationId: string } = {
             // STREAM_NOTE is applied here rather than folded into `body`, so it belongs to THIS fire and not to
             // the journal entry above. A re-fire has no live sink to write into — the Discord message the deltas
             // were being edited into died with the daemon — and a wake still told "your reply is delivered live,
             // don't send it yourself" would answer into nothing. Without the note it sends its own reply, which
             // is exactly what an unstreamed wake does.
             prompt: stream !== undefined ? `${STREAM_NOTE}\n\n${body}` : body,
+            conversationId,
             ...(origin !== undefined
                 ? {
-                      conversationId: mintConversationId(automation.id, Date.now()),
                       isolated: true,
                       origin,
                       title: (title ?? `${origin.provider}: ${automation.id}`).slice(0, TITLE_MAX),
@@ -203,26 +205,37 @@ export const fireAutomation = async (
             ...(automation.harness !== undefined ? { harness: automation.harness } : {}),
             ...(automation.model !== undefined ? { model: automation.model } : {}),
         };
-        for await (const event of wake(services, turn, undefined)) {
-            if (event.kind === "session") {
-                sessionId = event.sessionId;
+        const events: AgentEvent[] = [];
+        // Opened before the provider runs, like every other conversation turn. A first fire has nothing to adopt;
+        // a RE-fire reuses its interrupted run's id, so its record is already open and this is a no-op.
+        await openTurnTranscript(services, turn);
+        try {
+            for await (const event of wake(services, turn, undefined)) {
+                events.push(event);
+                if (event.kind === "session") {
+                    runtimeSessionId = event.sessionId;
+                }
+                if (event.kind === "error") {
+                    failure = event.message;
+                }
+                if (event.kind === "delta") {
+                    stream?.delta(event.text);
+                }
             }
-            if (event.kind === "error") {
-                failure = event.message;
-            }
-            if (event.kind === "delta") {
-                stream?.delta(event.text);
-            }
+        } catch (error) {
+            failure = error instanceof Error ? error.message : "automation turn failed";
+            services.logger.warn({ err: error, automation: automation.id, conversationId }, "automation turn failed");
+        } finally {
+            await recordTurnTranscript(services, turn, events);
         }
-        // The session rides onto the run record, which is what makes a run in the row's history OPENABLE — the
-        // answer to "it failed at 3 a.m. and I can't see why" is a transcript, and this is the only thing that
-        // says which one. Same value the activity join key uses below.
+        // The stable conversation rides onto the run record, which makes every wake that reached a turn
+        // openable from its row — even when the provider never minted a runtime session.
         await services.automations.recordRun(automation.id, {
             at: Date.now(),
             ...(failure === undefined ? { outcome: "completed" as const } : { outcome: "error" as const, detail: failure }),
-            ...(sessionId !== undefined ? { sessionId } : {}),
+            conversationId,
         });
-        // sessionId is the activity feed's join key between an inbound trigger and the outbound calls its
+        // The runtime session is the activity feed's join key between an inbound trigger and the outbound calls its
         // wake produced (the sniffer stamps the same id on them).
         void services.activity
             .append({
@@ -230,7 +243,7 @@ export const fireAutomation = async (
                 type: "automation.run",
                 automationIds: [automation.id],
                 ...(automation.trigger.kind === "listener" ? { provider: automation.trigger.provider } : {}),
-                ...(sessionId !== undefined ? { sessionId } : {}),
+                ...(runtimeSessionId !== undefined ? { sessionId: runtimeSessionId } : {}),
                 outcome: failure === undefined ? "ok" : "error",
                 ...(failure !== undefined ? { error: failure } : {}),
             })

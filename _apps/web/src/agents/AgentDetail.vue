@@ -32,8 +32,9 @@ const fleetAgent = computed(() => agentById(agentId.value));
 if (archived.value.length === 0) {
     void loadArchived();
 }
-// Registered = has run a turn (a worktree + diff exist). Drafts are fleet-only client cards.
+// Registered = has run a turn. Only a branch-backed registered conversation has a Changes review.
 const registered = computed(() => fleetAgent.value !== undefined && fleetAgent.value.status !== `draft`);
+const reviewable = computed(() => registered.value && fleetAgent.value?.branch !== undefined);
 const conversation = computed(() => conversations.value.find((candidate) => candidate.conversationId === agentId.value));
 
 // Bind the shared chat singleton to this agent's tab: open/create from the fleet entry, else focus the
@@ -46,15 +47,14 @@ const conversation = computed(() => conversations.value.find((candidate) => cand
 watch(
     [agentId, () => fleet.value.length + archived.value.length],
     ([id], [previousId] = [undefined, 0]) => {
-        if (id === `` || (id === previousId && conversation.value !== undefined && (mobile.value || registered.value))) {
-            return;
-        }
-        if (!mobile.value && !registered.value) {
-            void router.replace(`/agents`);
+        if (id === `` || (id === previousId && conversation.value !== undefined && (mobile.value || reviewable.value))) {
             return;
         }
         if (fleetAgent.value !== undefined) {
             open(fleetAgent.value);
+            if (!mobile.value && !reviewable.value) {
+                void router.replace(`/agents`);
+            }
             return;
         }
         // No fleet entry means no registry entry, so there is no read marker to stamp — just focus the tab.
@@ -133,13 +133,13 @@ const status = computed(() => (fleetAgent.value === undefined ? undefined : agen
             <span v-if="status !== undefined" class="inline-flex shrink-0 items-center gap-1 text-2xs" :class="status.class">
                 <Icon :name="status.icon" :spin="status.spin" class="text-2xs" />{{ status.label }}
             </span>
-            <Segmented v-if="mobile" v-model="view" :options="viewOptions" />
+            <Segmented v-if="mobile && reviewable" v-model="view" :options="viewOptions" />
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
-        <ChatPanel v-if="mobile && view === 'chat'" class="min-h-0 flex-1" />
+        <ChatPanel v-if="mobile && (view === 'chat' || !reviewable)" class="min-h-0 flex-1" />
         <!-- `chat` is the review asking to be swapped for the conversation — raised when it hands a land
              conflict back to the agent and offers to show the turn. Desktop never sees it: the docked chat is
              already on screen there, so the review has nothing to swap itself for. -->
-        <AgentReviewPanel v-else-if="agentId !== ''" :agent-id="agentId" class="min-h-0 flex-1" @chat="view = 'chat'" />
+        <AgentReviewPanel v-else-if="agentId !== '' && reviewable" :agent-id="agentId" class="min-h-0 flex-1" @chat="view = 'chat'" />
     </div>
 </template>

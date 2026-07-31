@@ -177,9 +177,10 @@ const markAllSeen = (): void => {
 };
 
 // One fleet entry. Two sources merged by conversationId: the registry (authoritative once a turn has run) and
-// the open tabs — an open ISOLATED conversation the fleet has NEVER registered is a DRAFT card, so "New agent"
-// has a visible result on the board the instant it's pressed. `status` widens the wire enum with that
-// client-only draft state; the registry wins the merge the moment the first turn registers the conversation.
+// the open tabs — an open conversation the fleet has NEVER registered is a DRAFT card, so a newly created
+// workspace or isolated conversation appears immediately and is replaced by its registry row at begin.
+// `status` widens the wire enum with that client-only draft state; the registry wins the merge the moment the
+// first turn registers the conversation.
 export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly status: AgentSummary["status"] | "draft";
     readonly open: boolean;
@@ -205,7 +206,7 @@ const fleet = computed<FleetAgent[]>(() => {
     // events stream is down. `carded` is the join's own guard: an id the registry half already rendered must
     // not be rendered a second time by this one, whatever the latch says.
     const drafts = conversations.value
-        .filter((conversation) => conversation.isolated.value && !conversation.registered.value && !carded.has(conversation.conversationId))
+        .filter((conversation) => !conversation.registered.value && !carded.has(conversation.conversationId))
         .map((conversation): FleetAgent => {
             const draft: FleetAgent = {
                 id: conversation.conversationId,
@@ -682,12 +683,16 @@ const setAutoLand = async (id: string, autoLand: boolean | null): Promise<void> 
 // Open (or focus) an agent's conversation tab and mark it seen. Takes just the identity fields so registry
 // cards and client-only draft cards both route through it.
 const open = (
-    agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId" | "title" | "account" | "model" | "effort" | "thinking" | "status">,
+    agent: Pick<
+        FleetAgent,
+        "id" | "provider" | "harness" | "sessionId" | "title" | "account" | "model" | "effort" | "thinking" | "status" | "branch"
+    >,
 ): void => {
     openAgentConversation({
         id: agent.id,
         provider: agent.provider,
         harness: agent.harness,
+        ...(agent.branch !== undefined ? { branch: agent.branch } : {}),
         // A draft card is client-only — the fleet has NOT registered its conversation, and claiming so here
         // would erase the card under the click and pin the empty tab open past the focus-leave sweep.
         registered: agent.status !== `draft`,

@@ -161,8 +161,8 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
 // no review detail (returns undefined): its click only focuses the docked chat. Everything registered has a
 // destination; the label leads with why-you'd-go — pending approval/question first, then a land conflict or
 // error, then a diff to look over, falling back to a plain "Review" for a running agent with nothing yet.
-export const reviewAction = (agent: AgentStanding & { readonly diff?: { files: number } }): string | undefined => {
-    if (agent.status === `draft`) {
+export const reviewAction = (agent: AgentStanding & { readonly branch?: string; readonly diff?: { files: number } }): string | undefined => {
+    if (agent.status === `draft` || agent.branch === undefined) {
         return undefined;
     }
     if (agent.attention.plan) {

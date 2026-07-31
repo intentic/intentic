@@ -120,7 +120,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 ...(logs !== "" ? [`--- failed job logs (tails) ---\n${logs}`] : []),
             ].join("\n\n");
             const conversationId = mintFixConversationId(input.runId, Date.now());
-            const turn: AgentTurn = {
+            const turn: AgentTurn & { conversationId: string } = {
                 prompt,
                 conversationId,
                 isolated: true,
@@ -130,8 +130,9 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
              * run map, turn journal, transcript record, and push observer. The UI navigated to the returned id,
              * found no attachable run and no persisted transcript, and quite correctly opened an empty chat
              * while the work happened invisibly. This call returns synchronously with the run registered; its
-             * provider work still outlives the request. */
-            const started = startConversationTurn(services, wake, { ...turn, conversationId });
+             * provider work still outlives the request. It is also what gives the fix its ordinary fleet card:
+             * `conversationId` is what streamAgent registers on, whatever placement the turn asked for. */
+            const started = startConversationTurn(services, wake, turn);
             if (started === undefined) {
                 // Minted ids are unique, so this is an invariant breach rather than a user-level busy state.
                 throw new ORPCError("CONFLICT", { message: "the CI fix conversation is already running" });

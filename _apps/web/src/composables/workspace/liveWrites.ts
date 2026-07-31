@@ -6,10 +6,9 @@ import { ref } from "vue";
  * business here; a MAIN-TREE conversation writes the very files the Changes panel is about to commit, and
  * that is the one overlap worth a word to the user.
  *
- * The daemon cannot help: only isolated turns get a fleet-registry entry (agent.routes.ts returns early
- * without `isolated`), so a main-tree turn exists nowhere but the stream that is carrying it. What it does
- * carry is `locations` on every tool_call — already workspace-root-relative — so the paths ARE the signal,
- * and they arrive as the writes happen rather than after them.
+ * The registry knows the turn exists, but deliberately does not persist its per-tool write locations. The live
+ * stream does carry `locations` on every tool_call — already workspace-root-relative — so the paths are the
+ * signal, and they arrive as the writes happen rather than after them.
  *
  * Deliberately BEST-EFFORT: a turn a different browser started and this one never
  * attached to leaves no trace here. That is affordable because nothing gates on this — it decorates a commit

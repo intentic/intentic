@@ -14,6 +14,7 @@ describe("dropActionFor", () => {
         status: `idle`,
         provider: `claude`,
         harness: `claude-code`,
+        branch: `agent/a1`,
         updatedAt: 1,
         attention: none,
         open: false,
@@ -70,6 +71,14 @@ describe("dropActionFor", () => {
     it("refuses every target for a draft — no registry entry, no worktree, no turn", () => {
         for (const target of [`attention`, `active`, `finished`, `discard`] as const) {
             expect(dropActionFor(agent({ status: `draft` }), target)).toBeUndefined();
+        }
+    });
+
+    it("refuses branch actions for workspace conversations, regardless of their lifecycle state", () => {
+        for (const status of [`idle`, `awaiting`, `error`, `interrupted`, `conflict`, `landed`] as const) {
+            const workspace = agent({ status, branch: undefined });
+            expect(dropActionFor(workspace, `finished`)).toBeUndefined();
+            expect(dropActionFor(workspace, `discard`)).toBeUndefined();
         }
     });
 

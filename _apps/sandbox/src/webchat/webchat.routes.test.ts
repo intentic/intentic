@@ -18,6 +18,7 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
+        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
         activity: { append: async (e: Omit<ActivityEvent, "id" | "at">) => void appends.push(e as ActivityEvent), list: async () => [] },
         workspace: { root },
         logger: { error: () => {}, warn: () => {} },

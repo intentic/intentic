@@ -4,6 +4,7 @@ import { useTheme } from "@intentic-app/ui";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { useChat } from "../composables/chat/useChat";
+import { useAgents } from "../composables/agents/useAgents";
 import { registerCommand, executeCommand } from "../composables/commands/useCommands";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
 import { sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
@@ -206,9 +207,21 @@ export const createExtensionApi = (
             setOpen: (open) => useTerminalPanel().setOpen(open),
         },
         chat: {
-            // The History menu's own open path (useChat.openConversation): it focuses the tab already showing
-            // that session, or loads its transcript into a new one.
-            openSession: (sessionId) => void useChat().openConversation(sessionId),
+            // Automation runs now carry stable conversation ids. Prefer the unified registry transcript and
+            // retain the history-session fallback for extension callers opening an actual provider session.
+            openSession: (id) =>
+                void (async () => {
+                    const agents = useAgents();
+                    if (agents.agentById(id) === undefined) {
+                        await agents.loadArchived();
+                    }
+                    const agent = agents.agentById(id);
+                    if (agent !== undefined) {
+                        agents.open(agent);
+                    } else {
+                        await useChat().openConversation(id);
+                    }
+                })(),
         },
         navigate: (path) => {
             void router.push(path);

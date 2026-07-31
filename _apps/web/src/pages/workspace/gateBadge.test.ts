@@ -38,9 +38,11 @@ vi.mock(`../../composables/sandbox/sandboxClient`, () => ({
         return Promise.resolve(verdict.value);
     },
 }));
-// The fix transcript's opener. Stubbed because the real chat state pulls the endpoint/auth chain, which has
-// nothing to do with what this file pins.
-vi.mock(`../../composables/chat/useChat`, () => ({ useChat: () => ({ openConversation: () => Promise.resolve() }) }));
+// The fix transcript's opener. Stubbed because the real fleet state pulls the chat/endpoint/auth chain, which
+// has nothing to do with what this file pins.
+vi.mock(`../../composables/agents/useAgents`, () => ({
+    useAgents: () => ({ agentById: () => undefined, loadArchived: () => Promise.resolve(), open: () => undefined }),
+}));
 vi.mock(`../../composables/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ reachable: ref(true) }),
     sandboxKey: (...parts: unknown[]) => [...parts, `sandbox-1`],

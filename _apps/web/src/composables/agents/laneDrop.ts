@@ -29,7 +29,7 @@ export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction
     }
     if (target === `discard`) {
         // The daemon refuses to tear down a worktree that is a running turn's live working state.
-        return agent.status === `running` ? undefined : `discard`;
+        return agent.branch === undefined || agent.status === `running` ? undefined : `discard`;
     }
     // Only Finished has actions behind it, and a card already sitting there has nothing left to do.
     if (target !== `finished` || laneOf(agent) === `finished`) {
@@ -37,6 +37,10 @@ export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction
     }
     if (agent.status === `running`) {
         return `stop`;
+    }
+    // Workspace conversations can be stopped and archived, but have no branch to resolve, land or discard.
+    if (agent.branch === undefined) {
+        return undefined;
     }
     // Blocked ON THE USER: the agent is mid-task and its work isn't ready to land. Answer it instead.
     if (agent.attention.plan || agent.attention.question || agent.attention.permission || agent.status === `awaiting`) {
@@ -73,7 +77,7 @@ export const dropRejection = (agent: FleetAgent, target: DropTarget): string | u
         return `This agent hasn't run yet`;
     }
     if (target === `discard`) {
-        return `Stop the turn first`;
+        return agent.branch === undefined ? `Workspace conversations have no isolated branch to discard` : `Stop the turn first`;
     }
     if (target === `attention`) {
         return `Agents raise their own attention flags`;

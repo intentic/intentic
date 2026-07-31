@@ -1,7 +1,7 @@
 import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
 import { isUsageLimitText } from "../agent/usage-limit-text.js";
-import { recordPrompt } from "../sessions/prompt-index.js";
-import type { AgentsStore, AgentTitleSource, PersistedAgent } from "./agents-store.js";
+import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
+import { type AgentsStore, type AgentTitleSource, isIsolated, type PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
 import type { LandStandings } from "./standing.js";
 
@@ -69,12 +69,16 @@ const freshRuntime = (): RuntimeState => ({
     pendingToolUses: 0,
 });
 
-// The registry input of an isolated turn — the fields begin() records onto the entry.
-export type AgentTurnIdentity = Pick<AgentTurn, "prompt" | "title" | "model" | "effort" | "thinking" | "account" | "origin"> & {
-    readonly conversationId: string;
-    readonly provider: NonNullable<AgentTurn["agent"]>;
-    readonly harness: NonNullable<AgentTurn["harness"]>;
-};
+// The registry input of any conversation turn — the fields begin() records onto the entry. Placement is kept
+// here rather than inferred from the provider: isolated conversations own a branch; workspace conversations do
+// not, while both share the same identity, status and transcript lifecycle.
+export type AgentTurnIdentity = Pick<AgentTurn, "prompt"> &
+    Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "account" | "origin">> & {
+        readonly conversationId: string;
+        readonly isolated: boolean;
+        readonly provider: NonNullable<AgentTurn["agent"]>;
+        readonly harness: NonNullable<AgentTurn["harness"]>;
+    };
 
 export interface AgentsRegistry {
     readonly init: () => Promise<void>;
@@ -179,7 +183,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
          * one that means "the turn ended cleanly", i.e. that the entry has nothing more to say and the
          * question passes to git. `error` and `interrupted` outrank precisely because nothing else remembers
          * them: a turn that died is not made fine by a branch that happens to be empty. */
-        const landing = standings.of(entry.id);
+        const landing = entry.branch === undefined ? "idle" : standings.of(entry.id);
         const status = state?.running === true ? (parked.length > 0 ? "awaiting" : "running") : entry.status === "idle" ? landing : entry.status;
         const base = (entry.repos.find((repo) => repo.repo === "root") ?? entry.repos[0])?.base.slice(0, 7);
         // Live totals: persisted totals plus the running turn's not-yet-flushed usage.
@@ -191,7 +195,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             status,
             provider: entry.provider,
             harness: entry.harness,
-            branch: entry.branch,
+            ...(entry.branch !== undefined ? { branch: entry.branch } : {}),
             updatedAt: Math.max(entry.updatedAt, state?.lastAt ?? 0),
             attention: {
                 plan: parked.includes("plan"),
@@ -240,8 +244,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         }
     };
 
-    // Only the live roster is probed — see LandStandings.refresh on why an archived agent keeps its last answer.
-    const reprobe = (): Promise<boolean> => standings.refresh(entries.filter((entry) => entry.archivedAt === undefined));
+    // Only the live, branch-backed roster is probed — see LandStandings.refresh on why an archived agent keeps
+    // its last answer, and why a workspace conversation has no standing to probe at all.
+    const reprobe = (): Promise<boolean> => standings.refresh(entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined));
 
     // Chained, not fire-and-forget: `entries` is REPLACED (not mutated) by every write path, so two overlapping
     // persists would each serialize the array they captured — and the one that finishes last would write back a
@@ -348,6 +353,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 return false;
             }
             const existing = entryOf(turn.conversationId);
+            // Placement is latched with the identity. A stale tab may send its old `isolated` posture, but an
+            // existing workspace conversation stays in /work and an existing worktree conversation keeps its
+            // branch. Only a conversation the registry has never seen takes the request's placement choice.
+            const isolated = existing === undefined ? turn.isolated : existing.branch !== undefined;
             // An authored title — the browser's own derivation, or a rename that landed mid-turn — is taken as
             // written. A turn that arrived WITHOUT one (an automation, a Discord mention, a webchat visitor)
             // is named by the same rule the browser runs, so one prompt opens under one name wherever it
@@ -366,7 +375,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             const origin = existing?.origin ?? turn.origin;
             replace({
                 id: turn.conversationId,
-                branch: `agent/${turn.conversationId}`,
+                ...(isolated ? { branch: existing?.branch ?? `agent/${turn.conversationId}` } : {}),
                 provider: turn.provider,
                 harness: turn.harness,
                 repos: existing?.repos ?? [],
@@ -420,6 +429,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 state.pendingPrompt = turn.prompt;
             }
             runtime.set(turn.conversationId, state);
+            recordConversationPrompt(turn.conversationId, turn.prompt);
             await persist();
             broadcast();
             return true;
