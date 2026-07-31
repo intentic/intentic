@@ -71,12 +71,16 @@ export const usagePercent = (usage: AccountUsage | undefined): number | undefine
 
 /* Severity, shared by every surface that draws one of these numbers, so a percentage never means one thing in
  * the composer and another on the Usage tab. Danger is reserved for a pool that is effectively spent. */
-export const usageTone = (percent: number): string => (percent >= SPENT_PERCENT ? `text-danger` : percent >= 75 ? `text-warning` : `text-link`);
+export const usageTone = (percent: number): string =>
+    percent >= SPENT_PERCENT ? `text-danger` : percent >= TIGHT_PERCENT ? `text-warning` : `text-link`;
 
 /* Where "effectively spent" is defined, once. The account list dims a spent row and sinks it below the ones
  * with headroom, and the ring above it turns red — three decisions that have to agree, and did not while each
- * surface carried its own 90. */
+ * surface carried its own 90. TIGHT is the same idea one step earlier: the point at which an account stops
+ * being one you'd start a long turn on. Named rather than left as the bare 75 this tone scale used to carry,
+ * because the capacity counts below have to draw their bands on the SAME two thresholds. */
 export const SPENT_PERCENT = 90;
+export const TIGHT_PERCENT = 75;
 export const isSpent = (usage: AccountUsage | undefined): boolean => {
     const percent = usagePercent(usage);
     return percent !== undefined && percent >= SPENT_PERCENT;
@@ -208,30 +212,51 @@ export interface PlanLimitRow {
     // Undefined ⇒ no reading at all; `readable` then says whether one is even obtainable.
     readonly percent: number | undefined;
     readonly pools: readonly PlanLimitPool[];
+    // The pool the percentage came from — the one that will gate this account's next turn. Carried rather than
+    // re-derived, so a summary line naming a pool and the meter under it can't pick different ones.
+    readonly binding: PlanLimitPool | undefined;
     readonly measuredAt: number | undefined;
     readonly stale: boolean;
     readonly readable: boolean;
+    // A credential that can no longer be refreshed. Nothing to do with headroom, everything to do with whether
+    // this account can serve a turn — so it rides the same row and surfaces in the same attention list.
+    readonly needsReauth: boolean;
 }
 
-const planLimitRow = (provider: AgentProvider, key: string, label: string, attached: AccountUsage | undefined): PlanLimitRow => {
+const planLimitRow = (
+    provider: AgentProvider,
+    key: string,
+    label: string,
+    attached: AccountUsage | undefined,
+    needsReauth: boolean,
+): PlanLimitRow => {
     const usage = liveUsage(key, attached);
+    const pools =
+        usage === undefined
+            ? []
+            : orderedWindows(usage).map((pool) => ({
+                  kind: pool.kind,
+                  label: usageWindowLabel(pool),
+                  percent: Math.round(pool.utilization),
+                  resetsAt: pool.resetsAt,
+              }));
+    // The fullest pool, off the rounded values the meters draw — an account is as constrained as its tightest
+    // allowance, and reading that off `pools` is what keeps the headline number and its named pool the same one.
+    const binding = pools.reduce<PlanLimitPool | undefined>(
+        (worst, pool) => (worst === undefined || pool.percent > worst.percent ? pool : worst),
+        undefined,
+    );
     return {
         id: `${provider}:${key}`,
         provider,
         label,
-        percent: usagePercent(usage),
-        pools:
-            usage === undefined
-                ? []
-                : orderedWindows(usage).map((pool) => ({
-                      kind: pool.kind,
-                      label: usageWindowLabel(pool),
-                      percent: Math.round(pool.utilization),
-                      resetsAt: pool.resetsAt,
-                  })),
+        percent: binding?.percent,
+        pools,
+        binding,
         measuredAt: usage?.measuredAt,
         stale: usage !== undefined && isStale(usage),
         readable: reportsPlanLimits(provider),
+        needsReauth,
     };
 };
 
@@ -240,10 +265,12 @@ const planLimitRow = (provider: AgentProvider, key: string, label: string, attac
 export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, routed: TranslatorAccounts): PlanLimitRow[] =>
     [
         ...Object.entries(native).flatMap(([provider, accounts]) =>
-            accounts.map((account) => planLimitRow(provider, account.id, account.label, account.usage)),
+            accounts.map((account) => planLimitRow(provider, account.id, account.label, account.usage, account.needsReauth === true)),
         ),
+        // A routed subscription has no reauth flag of its own: CLIProxyAPI drops an auth file it can no longer
+        // refresh, so a broken one leaves the list rather than sitting in it.
         ...Object.entries(routed).flatMap(([provider, accounts]) =>
-            accounts.map((account) => planLimitRow(provider, account.name, account.label, account.usage)),
+            accounts.map((account) => planLimitRow(provider, account.name, account.label, account.usage, false)),
         ),
     ].toSorted((left, right) => {
         if (left.percent === undefined || right.percent === undefined) {
@@ -251,3 +278,105 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
         }
         return right.percent - left.percent || left.label.localeCompare(right.label);
     });
+
+/* ---- plan limits, aggregated ------------------------------------------------------------------------------
+ * What a row list cannot answer once there are dozens of accounts. This sandbox holds 36 connections, 31 of
+ * them Google, and a row each is 36 restatements of a question nobody asked: the operator picks a PROVIDER, and
+ * the translator balances turns across that provider's accounts. So the unit of the screen is the provider, and
+ * the unit of the fleet's capacity is a COUNT of accounts by band.
+ *
+ * Counts, never a mean utilization. Averaging 31 separate pools produces a number that describes no account and
+ * hides the only one that matters — 30 idle accounts and one spent one is not "3% used", it is "one account you
+ * can't use". Each band is a decision: run on it, avoid a long turn on it, don't route to it, or don't know. */
+
+// Ordered worst-first: the same order the segments are drawn and the counts are read in, so the bar, the legend
+// and the sentence can't disagree about which end is bad.
+export const PLAN_LIMIT_BANDS = [`spent`, `tight`, `room`, `unread`, `none`] as const;
+export type PlanLimitBand = (typeof PLAN_LIMIT_BANDS)[number];
+
+// `none` is not a degree of fullness — it is a plan that publishes no limits at all (Kimi, SuperGrok), and it
+// stays out of the capacity bar for that reason: an account whose headroom is unknowable is not headroom.
+export const planLimitBand = (row: PlanLimitRow): PlanLimitBand => {
+    if (row.percent === undefined) {
+        return row.readable ? `unread` : `none`;
+    }
+    return row.percent >= SPENT_PERCENT ? `spent` : row.percent >= TIGHT_PERCENT ? `tight` : `room`;
+};
+
+// The words a count is read with. Sentence fragments, not headings: they are consumed as "3 with room · 1 tight".
+export const PLAN_LIMIT_BAND_LABEL: Record<PlanLimitBand, string> = {
+    spent: `spent`,
+    tight: `tight`,
+    room: `with room`,
+    unread: `unread`,
+    none: `no published limits`,
+};
+
+/* Severity for a band, on the same three tones a percentage wears everywhere else — so the capacity bar and the
+ * meters under it mean the same thing by the same colour. `unread` and `none` take the achromatic slot on
+ * purpose: they are the absence of a reading, and giving them a hue would seat them on the severity scale. */
+export const planLimitBandTone = (band: PlanLimitBand): string =>
+    band === `spent` ? `text-danger` : band === `tight` ? `text-warning` : band === `room` ? `text-link` : `text-muted`;
+
+export type PlanLimitCounts = Record<PlanLimitBand, number>;
+
+const countBands = (rows: readonly PlanLimitRow[]): PlanLimitCounts => {
+    const counts: PlanLimitCounts = { spent: 0, tight: 0, room: 0, unread: 0, none: 0 };
+    for (const row of rows) {
+        counts[planLimitBand(row)] += 1;
+    }
+    return counts;
+};
+
+// The soonest pool to reopen, in epoch seconds — the one number that answers "when does capacity come back".
+// Past resets are ignored rather than reported: a window whose instant has passed describes a pool that has
+// already reopened, and naming it would send a reader to wait for something that already happened.
+const nextReset = (rows: readonly PlanLimitRow[], now: number): number | undefined => {
+    const upcoming = rows.flatMap((row) =>
+        row.pools.flatMap((pool) => (pool.resetsAt !== undefined && pool.resetsAt * 1000 > now ? [pool.resetsAt] : [])),
+    );
+    return upcoming.length === 0 ? undefined : Math.min(...upcoming);
+};
+
+export interface PlanLimitGroup {
+    readonly provider: AgentProvider;
+    readonly rows: readonly PlanLimitRow[];
+    readonly counts: PlanLimitCounts;
+    // The account that gates this provider first — what the group row states instead of a percentage of its own.
+    readonly tightest: PlanLimitRow | undefined;
+    readonly nextResetAt: number | undefined;
+}
+
+// One group per provider, each group's most-constrained account first, and the groups themselves ordered by how
+// close they are to gating a turn. A provider with no reading at all sinks below every provider that has one —
+// the same rule the rows follow, one level up.
+export const planLimitGroups = (rows: readonly PlanLimitRow[], now: number = Date.now()): PlanLimitGroup[] => {
+    const byProvider = new Map<AgentProvider, PlanLimitRow[]>();
+    for (const row of rows) {
+        const group = byProvider.get(row.provider) ?? [];
+        group.push(row);
+        byProvider.set(row.provider, group);
+    }
+    return [...byProvider.entries()]
+        .map(([provider, groupRows]): PlanLimitGroup => {
+            const tightest = groupRows.find((row) => row.percent !== undefined);
+            return { provider, rows: groupRows, counts: countBands(groupRows), tightest, nextResetAt: nextReset(groupRows, now) };
+        })
+        .toSorted((left, right) => (right.tightest?.percent ?? -1) - (left.tightest?.percent ?? -1) || left.provider.localeCompare(right.provider));
+};
+
+export interface PlanLimitSummary {
+    readonly accounts: number;
+    readonly counts: PlanLimitCounts;
+    readonly nextResetAt: number | undefined;
+    // Only what a person has to act on: an account that can't serve a turn, or one that can't be authenticated.
+    // Never the healthy ones — a list of everything is what this section is trying to stop being.
+    readonly attention: readonly PlanLimitRow[];
+}
+
+export const planLimitSummary = (rows: readonly PlanLimitRow[], now: number = Date.now()): PlanLimitSummary => ({
+    accounts: rows.length,
+    counts: countBands(rows),
+    nextResetAt: nextReset(rows, now),
+    attention: rows.filter((row) => row.needsReauth || planLimitBand(row) === `spent`),
+});

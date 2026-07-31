@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { Card, cmp, RowGroup, Segmented } from "@intentic-app/ui";
+import { Card, cmp, Segmented } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { useAgents } from "../../composables/agents/useAgents";
 import { relativeTime } from "../../composables/chat/catalog";
-import { accountsLoaded, providerAccounts, translatorAccounts } from "../../composables/chat/conversation";
-import { formatAge, formatReset, formatUtilization, planLimitRows, usageTone } from "../../composables/chat/usageStatus";
 import { useSavings } from "../../composables/sandbox/useSavings";
 import { useUsage } from "../../composables/sandbox/useUsage";
+import PlanLimitsPanel from "./PlanLimitsPanel.vue";
 import { compositionOf } from "./savingsChart";
 import SavingsArmsChart from "./SavingsArmsChart.vue";
 import SavingsStackBar from "./SavingsStackBar.vue";
@@ -154,13 +152,6 @@ const savingsPeriod = computed(() =>
     savings.value?.input.windowed === false ? `all time — rtk's ledger reports no dates` : preset.value === `all` ? `all time` : `this range`,
 );
 
-// ---- plan limits --------------------------------------------------------------------------------------------
-
-// Every connection this sandbox holds — the provider's own accounts AND the translator's subscriptions — as one
-// list of meters. The projection (which lists, which snapshot, what order) lives in usageStatus.ts with the rest
-// of the headroom vocabulary, so this tab and the Agent tab's rings can't come to disagree about an account.
-const headroom = computed(() => planLimitRows(providerAccounts.value, translatorAccounts.value));
-
 // ---- the table and the export -------------------------------------------------------------------------------
 
 const tableOpen = ref(false);
@@ -278,85 +269,9 @@ const hasSpend = computed(() => current.value.length > 0);
 
                 <!-- Plan limits. Its own section, and deliberately NOT phrased like the tiles above it: "$36
                      spent here" and "98% of my plan's week is gone" are different questions with different
-                     subjects, and the tab used to invite reading the second as a share of the first.
-                     Every pool gets its own meter — one row per window, never a single "usage" number — because
-                     these are separate allowances that fill at different rates, and folding them is how a
-                     screen ends up saying 1% about an account that is actually out of room. -->
-                <RowGroup
-                    v-if="headroom.length > 0"
-                    id="accounts"
-                    label="Plan limits"
-                    caption="your whole plan, not this sandbox — every device on the account spends the same pools"
-                >
-                    <div v-for="entry in headroom" :key="entry.id" class="flex flex-col gap-2.5 px-4 py-3">
-                        <div class="flex items-baseline gap-2">
-                            <ProviderLogo :provider="entry.provider" class="shrink-0 self-center text-sm text-muted" />
-                            <span class="min-w-0 truncate text-sm text-content">{{ entry.label }}</span>
-                            <!-- Freshness belongs on the ACCOUNT, not on each meter: one read produced all of
-                                 these, and it is the single caveat that governs every number below it. -->
-                            <span
-                                v-if="entry.measuredAt !== undefined"
-                                class="ml-auto shrink-0 text-2xs"
-                                :class="entry.stale ? `text-muted` : `text-subtle`"
-                            >
-                                read {{ formatAge(entry.measuredAt) }}
-                            </span>
-                        </div>
-
-                        <!-- An account with no meters says WHICH kind of nothing it is. A blank row reads as
-                             "plenty of room", and for a plan that publishes no limits at all — or one nothing has
-                             measured yet — that is the opposite of what is known about it. -->
-                        <p v-if="entry.pools.length === 0" class="text-2xs text-subtle">
-                            {{ entry.readable ? `No reading yet.` : `This plan publishes no limits — spend is all this sandbox can tell you.` }}
-                        </p>
-
-                        <!-- Narrow screens keep the reset instead of dropping it — "when does this reopen" is
-                             the number a phone is pulled out for — by wrapping the meter onto its own full-width
-                             line; from sm up everything sits on one line in fixed columns so rows align. -->
-                        <div v-for="pool in entry.pools" :key="pool.kind" class="flex flex-wrap items-center gap-x-3 gap-y-1 sm:flex-nowrap">
-                            <span class="min-w-0 flex-1 truncate text-2xs text-muted sm:w-40 sm:flex-none">{{ pool.label }}</span>
-                            <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a
-                                 pool this screen has no reading for, and those mean opposite things. -->
-                            <div
-                                class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 sm:order-none sm:basis-0"
-                            >
-                                <div
-                                    class="h-full rounded-full bg-current"
-                                    :class="usageTone(pool.percent)"
-                                    :style="{ width: `${Math.max(pool.percent, 1)}%` }"
-                                />
-                            </div>
-                            <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
-                                {{ formatUtilization(pool.percent, entry.stale) }}
-                            </span>
-                            <span class="shrink-0 truncate text-right text-2xs text-subtle sm:w-32">
-                                {{ pool.resetsAt === undefined ? `` : `resets ${formatReset(pool.resetsAt)}` }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- The caveat sits INSIDE the surface, as the last row: a footnote floating below the border
-                         is read after the numbers it qualifies, if at all. Two readers, one caveat: Claude's pools
-                         come off the turn that just ended, so an idle sandbox's reading is as old as its last turn,
-                         and the routed subscriptions' are pulled on the daemon's own cadence. Either way the pools
-                         keep draining elsewhere — which is the entire distance between "1%" here and 98% in a
-                         terminal on the same account. -->
-                    <p class="px-4 py-2.5 text-2xs text-subtle">
-                        Read from your plan — Claude's when a turn finishes, ChatGPT's and Google's pulled in the background — so a number here can
-                        only ever be a floor: usage never falls inside a window, and other clients on the account spend the same pools without telling
-                        this sandbox.
-                    </p>
-                </RowGroup>
-
-                <!-- An unread state is not an empty one: until the connection read lands, this says nothing rather
-                     than claiming the sandbox has no accounts and taking it back a moment later. -->
-                <p v-else :class="cmp.emptyState()">
-                    {{
-                        accountsLoaded
-                            ? `No AI account is connected yet — connect one on the Agent tab and its plan limits appear here.`
-                            : `Reading your connections…`
-                    }}
-                </p>
+                     subjects, and the tab used to invite reading the second as a share of the first. Its whole
+                     hierarchy lives in the panel — this tab only says where it goes. -->
+                <PlanLimitsPanel />
 
                 <Card>
                     <div class="mb-3 flex items-baseline justify-between gap-3">

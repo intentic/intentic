@@ -10,7 +10,11 @@ import {
     isStale,
     liveUsage,
     orderedWindows,
+    planLimitBand,
+    planLimitGroups,
+    type PlanLimitRow,
     planLimitRows,
+    planLimitSummary,
     usageDetail,
     usagePercent,
     usageRing,
@@ -284,5 +288,66 @@ describe(`planLimitRows`, () => {
         const rows = planLimitRows({ claude: [account({ usage: usage({ measuredAt: 500 }) })] }, noRouted);
         expect(rows[0]?.percent).toBe(96);
         usageStatusByAccount.value = {};
+    });
+});
+
+/* The aggregate the panel is built on. A row list stops answering anything at 36 accounts — these are the three
+ * questions that replace it: how much of the fleet can serve a turn, where, and what is broken. */
+describe(`plan-limit aggregates`, () => {
+    const at = (percent: number | undefined, over: Partial<PlanLimitRow> = {}): PlanLimitRow => ({
+        id: `claude:${percent ?? `none`}`,
+        provider: `claude`,
+        label: `account`,
+        percent,
+        pools: percent === undefined ? [] : [{ kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000 }],
+        binding: percent === undefined ? undefined : { kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000 },
+        measuredAt: percent === undefined ? undefined : 0,
+        stale: false,
+        readable: true,
+        needsReauth: false,
+        ...over,
+    });
+
+    it(`bands on the same two thresholds the meters wear, and keeps the two kinds of "no reading" apart`, () => {
+        expect(at(89).percent).toBe(89);
+        expect([planLimitBand(at(90)), planLimitBand(at(89)), planLimitBand(at(75)), planLimitBand(at(74))]).toEqual([
+            `spent`,
+            `tight`,
+            `tight`,
+            `room`,
+        ]);
+        expect(planLimitBand(at(undefined))).toBe(`unread`);
+        expect(planLimitBand(at(undefined, { readable: false }))).toBe(`none`);
+    });
+
+    it(`groups by provider, most-constrained provider first, with an unread provider last`, () => {
+        const groups = planLimitGroups([
+            at(20, { id: `a`, provider: `gemini` }),
+            at(undefined, { id: `b`, provider: `kimi`, readable: false }),
+            at(95, { id: `c`, provider: `claude` }),
+        ]);
+        expect(groups.map((group) => group.provider)).toEqual([`claude`, `gemini`, `kimi`]);
+        expect(groups[0]?.tightest?.id).toBe(`c`);
+        expect(groups[2]?.counts.none).toBe(1);
+    });
+
+    it(`names the soonest pool still ahead of us, never one that has already reopened`, () => {
+        const past = at(30, { id: `past`, pools: [{ kind: `five_hour`, label: `5-hour`, percent: 30, resetsAt: 1_000 }] });
+        const future = at(40, { id: `future`, pools: [{ kind: `seven_day`, label: `Weekly`, percent: 40, resetsAt: 9_000 }] });
+        // now = 5s in epoch ms ⇒ the 1,000s reset is behind us and the 9,000s one is not.
+        expect(planLimitSummary([past, future], 5_000_000).nextResetAt).toBe(9_000);
+        expect(planLimitSummary([past], 5_000_000).nextResetAt).toBeUndefined();
+    });
+
+    it(`raises only what someone has to act on — a spent pool or a dead credential`, () => {
+        const summary = planLimitSummary([
+            at(95, { id: `spent` }),
+            at(10, { id: `fine` }),
+            at(undefined, { id: `broken`, needsReauth: true }),
+            at(undefined, { id: `unread` }),
+        ]);
+        expect(summary.attention.map((row) => row.id)).toEqual([`spent`, `broken`]);
+        expect(summary.counts).toEqual({ spent: 1, tight: 0, room: 1, unread: 2, none: 0 });
+        expect(summary.accounts).toBe(4);
     });
 });
