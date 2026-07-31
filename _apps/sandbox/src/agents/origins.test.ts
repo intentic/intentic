@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { createLogger } from "../logger.js";
@@ -186,6 +187,59 @@ test("a path the user committed BEFORE the land stays credited — only commits 
     // uncommitted work gets handed to the user.
     const origins = createAgentOrigins({ agents: registryOf(entryFor(landed.repos)), logger });
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
+});
+
+// Records every git command a scan issues, so the two tests below can assert what a scan does NOT read. Both
+// are about cost, and cost is the whole reason this file caches: a fleet accumulates landings forever, and
+// re-deriving each of them on every scan is what made the Changes panel take 10-20s to answer after a commit.
+const countingGit =
+    (calls: string[][]): GitRunner =>
+    (dir, args, env) => {
+        calls.push([...args]);
+        return defaultGit(dir, args, env);
+    };
+
+test("a spent claim is never re-derived — the scan after it reads no git for that landing at all", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const landed = await landAgent(worktrees, entryFor(conversation.repos));
+
+    const calls: string[][] = [];
+    const origins = createAgentOrigins({ agents: registryOf(entryFor(landed.repos)), logger }, countingGit(calls));
+    expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
+
+    // The user reviews and commits it. The scan that discovers the claim is over is the LAST one to spend
+    // anything on it — history absorbing every landed path is a one-way door.
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed");
+    expect(await origins.forRepo("root", work)).toEqual({});
+
+    calls.length = 0;
+    expect(await origins.forRepo("root", work)).toEqual({});
+    // Not one command — the landing is dropped before the HEAD read, so a fleet of archived agents whose work
+    // shipped months ago costs the panel nothing. It used to cost two diffs each, on every commit, forever.
+    expect(calls).toEqual([]);
+});
+
+test("advancing HEAD does not re-read a merge-base — the branch point cannot move under a landing", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const landed = await landAgent(worktrees, entryFor(conversation.repos));
+
+    const calls: string[][] = [];
+    const origins = createAgentOrigins({ agents: registryOf(entryFor(landed.repos)), logger }, countingGit(calls));
+    expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
+    expect(calls.filter((args) => args[0] === "merge-base")).toHaveLength(1);
+
+    // The user commits a file of their own. HEAD moves, so the claim is re-measured against it — but where the
+    // agent's branch left the main line has not moved, and asking git again could only ever get the same sha.
+    await writeFile(join(work, "unrelated.ts"), "user work\n");
+    await sh(work, "add", "unrelated.ts");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "user commits their own file");
+
+    calls.length = 0;
+    expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
+    expect(calls.filter((args) => args[0] === "merge-base")).toEqual([]);
 });
 
 test("the claim expires when the user commits — a file that goes dirty again is theirs, not the agent's", async () => {

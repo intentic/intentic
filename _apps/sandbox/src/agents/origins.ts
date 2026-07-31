@@ -41,6 +41,10 @@ import type { AgentsRegistry } from "./agents-registry.js";
 // pass through land, so none of them can be attributed — which is exactly why the panel shows a chip for an
 // agent and NOTHING for everyone else, rather than badging most rows "you".
 
+// One landing, identified by what it did rather than by who did it: the same agent landing twice is two
+// claims, and the second must be measured even when the first is spent.
+const landingKey = (repo: string, head: string, tip: string): string => `${repo} ${head} ${tip}`;
+
 export interface AgentOrigins {
     // path → agent ids that landed it, newest land first. Empty when nothing in this repo is attributable.
     readonly forRepo: (repo: string, dir: string) => Promise<Record<string, string[]>>;
@@ -55,9 +59,24 @@ export const createAgentOrigins = (
 ): AgentOrigins => {
     const { agents, logger } = options;
     // Every span this reads is immutable — both ends are shas — so one diff per span is all this ever costs,
-    // however often the panel polls. Keyed by the span, dropped when the agent set changes.
+    // however often the panel polls. Keyed by the span, and kept for the life of the process: a span nothing
+    // asks about again simply stops being read, and `spent` below is what stops the set growing with the fleet.
     const cache = new Map<string, readonly string[]>();
     const anchors = new Map<string, string>();
+    /* LANDINGS WHOSE CLAIM IS OVER, so the panel never pays for them again.
+     *
+     * A landing is spent once history has absorbed every path it put in the tree — the per-path expiry in the
+     * header, reached for all of its paths at once. That is a one-way door, and the reason this can be
+     * remembered rather than re-derived: the header's own answer to a path that goes dirty again after the
+     * commit is "the user's own work, and naming the agent would be a confident lie".
+     *
+     * Without it, every agent that ever landed was re-measured on every scan, because the two reads below are
+     * keyed on the CURRENT head and a commit moves it — 2 git spawns per landing, per commit, forever. On this
+     * workspace that was 161 landings (165 of the 203 agents long archived) re-deriving 322 diffs to conclude
+     * what the previous scan already knew, which is what made the Changes panel take 10-20s to answer while
+     * the user was committing. It is memo, not ledger: nothing is written down, and a restart re-derives it.
+     */
+    const spent = new Set<string>();
 
     const pathsBetween = async (dir: string, key: string, args: readonly string[]): Promise<readonly string[]> => {
         const hit = cache.get(key);
@@ -74,12 +93,20 @@ export const createAgentOrigins = (
     const landedPaths = (dir: string, repo: string, anchor: string, tip: string): Promise<readonly string[]> =>
         pathsBetween(dir, `landed ${repo} ${anchor} ${tip}`, ["-M", anchor, tip]);
 
-    // Where the branch left the main line, so the claim is the agent's own work and not the main-line commits a
-    // rebase pulled into its branch (see the header). Both ends are shas, so this caches like the diffs do.
-    // Falls back to the recorded base when there is no common ancestor at all — unrelated histories, the one
-    // question a merge-base cannot answer, and the same fallback land.ts makes.
+    /* Where the branch left the main line, so the claim is the agent's own work and not the main-line commits a
+     * rebase pulled into its branch (see the header). Falls back to the recorded base when there is no common
+     * ancestor at all — unrelated histories, the one question a merge-base cannot answer, and the same fallback
+     * land.ts makes.
+     *
+     * Keyed on the TIP alone, deliberately not on `head` as well. A merge-base does not move as HEAD advances:
+     * the branch left the main line at one commit, and that commit goes on being the best common ancestor
+     * however far main runs past it. What moves it is a REBASE, which is a new tip and so already a new key —
+     * exactly the case the header says the anchor exists for. Keying on head too meant every commit re-ran a
+     * merge-base per landing to be told the same sha, which was half the cost this file used to impose on the
+     * Changes panel. (A main tree reset BEHIND the branch point would invalidate this; nothing else does, and
+     * that tree has bigger problems than an attribution chip.) */
     const anchorOf = async (dir: string, repo: string, head: string, tip: string, base: string): Promise<string> => {
-        const key = `anchor ${repo} ${head} ${tip}`;
+        const key = `anchor ${repo} ${tip}`;
         const hit = anchors.get(key);
         if (hit !== undefined) {
             return hit;
@@ -128,6 +155,12 @@ export const createAgentOrigins = (
                     if (composed?.landedTip === undefined || composed.landedHead === undefined) {
                         return [];
                     }
+                    // A spent landing is skipped BEFORE the head read below, which is the point: it costs
+                    // nothing at all, rather than two diffs that conclude it is still spent. A further land by
+                    // the same agent advances both shas, so it arrives as a new key and is measured afresh.
+                    if (spent.has(landingKey(repo, composed.landedHead, composed.landedTip))) {
+                        return [];
+                    }
                     return [{ id, base: composed.base, tip: composed.landedTip, head: composed.landedHead, at: composed.landedAt ?? 0 }];
                 })
                 .toSorted((a, b) => b.at - a.at);
@@ -145,11 +178,19 @@ export const createAgentOrigins = (
                     // the second diff is empty and every landed path still counts, which is the common case.
                     const retired = new Set(await committedSince(dir, repo, landing.head, head));
                     const anchor = await anchorOf(dir, repo, head, landing.tip, landing.base);
+                    let claimed = 0;
                     for (const path of await landedPaths(dir, repo, anchor, landing.tip)) {
                         if (retired.has(path)) {
                             continue;
                         }
+                        claimed += 1;
                         (origins[path] ??= []).push(landing.id);
+                    }
+                    // Nothing left to claim — history has taken every path this land put in the tree (or it
+                    // put none there at all). That is the end of the claim, not a quiet scan: retire it so no
+                    // later scan spends a spawn rediscovering it.
+                    if (claimed === 0) {
+                        spent.add(landingKey(repo, landing.head, landing.tip));
                     }
                 } catch (error) {
                     // A pruned branch or a rewritten history leaves the shas unresolvable — that agent simply

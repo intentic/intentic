@@ -1,5 +1,7 @@
-import { execFile } from "node:child_process";
+import { type ChildProcess, execFile, fork } from "node:child_process";
+import { existsSync } from "node:fs";
 import { promisify } from "node:util";
+import type { ForkRequest, ForkResponse } from "./git-forker.js";
 
 // Shared promisified execFile — the most repeated one-liner across both apps (12+ files). Centralised here so
 // consumers import one symbol instead of repeating the import + promisify dance.
@@ -60,23 +62,141 @@ export type GitRunner = (
 // unreadable. `maxBytes` is the caller's own cap (the route 413s above it), not this module's policy.
 //
 // No lock retry, unlike defaultGit: the object store is append-only and a worktree file read takes no lock, so
-// there is no index.lock contention to lose.
+// there is no index.lock contention to lose. Nor does it go through the resident forker below — bytes would
+// have to be base64'd across the IPC channel, and this read serves an interactive file open (one spawn), never
+// the per-poll storm the forker exists for.
 export const gitBytes = async (dir: string, args: readonly string[], maxBytes: number): Promise<Buffer> => {
     const { stdout } = await exec("git", [...GIT_GLOBAL_ARGS, "-C", dir, ...args], { maxBuffer: maxBytes, encoding: "buffer" });
     return stdout;
 };
+
+/* THE RESIDENT FORKER — why this module does not call execFile directly any more.
+ *
+ * fork() copies the page tables of whoever calls it, so what a spawn COSTS is set by the resident size of the
+ * process doing the spawning, and the parent pays it synchronously, on its event loop. Measured in this
+ * daemon, forking the same `git`: 1.5 ms from a 55 MB process, 9.6 ms at 476 MB, 26.9 ms at the 1.8 GB it
+ * actually runs at (the iq engine's worker, chokidar's worker and the provider SDK streams all share that
+ * address space). The Changes review fires hundreds of git reads per scan, so the multiplier was whole seconds
+ * of frozen control plane per poll — every one of them showing up as a loop-watchdog stall with quiet PSI and
+ * no DNS in flight, which is the signature that means "this process".
+ *
+ * So the daemon stops forking git. One child starts on the first git call and stays; it holds nothing but
+ * node's own baseline (git-forker.ts is deliberately import-free), and every git after that forks from ~50 MB.
+ * The expensive fork is paid exactly once, at startup.
+ *
+ * It is a transparent optimisation and never a dependency. A child that cannot start (no dist beside this
+ * file, a sandbox that forbids the fork) or that dies mid-flight leaves this module exec'ing git directly —
+ * which is exactly what it did before the forker existed.
+ */
+type GitOutput = { readonly stdout: string; readonly stderr: string };
+const inFlight = new Map<number, { readonly resolve: (value: GitOutput) => void; readonly reject: (error: unknown) => void }>();
+let forker: ChildProcess | undefined;
+let forkerUnavailable = false;
+let nextRequestId = 0;
+
+// The IPC channel is the only handle keeping the loop alive for an outstanding read, so it is referenced
+// exactly while one is in flight: a CLI whose last act is a git call still waits for it, and an idle daemon (or
+// a finished test) is never held open by a forker with nothing left to do.
+const settle = (id: number): void => {
+    inFlight.delete(id);
+    if (inFlight.size === 0) {
+        forker?.channel?.unref();
+    }
+};
+
+// execFile's rejection, rebuilt from the wire — callers read `stderr` (isLockContention below, the daemon's
+// gitFailureReason) and `code` (politeGit's ENOENT fallback) off the error object itself.
+const forkerFailure = (response: ForkResponse, failure: NonNullable<ForkResponse["failure"]>): Error =>
+    Object.assign(new Error(failure.message), {
+        ...(failure.code !== undefined ? { code: failure.code } : {}),
+        stdout: response.stdout,
+        stderr: response.stderr,
+    });
+
+/* The compiled child, beside this file — and the one case where it legitimately is not there. Packages here
+ * expose an `@intentic/src` export condition, so a test or a dev run imports THIS file as `src/exec.ts`, where
+ * the sibling `git-forker.js` does not exist (only its .ts source does, which node cannot fork). Forking it
+ * anyway would spawn a child that dies of ERR_MODULE_NOT_FOUND, per git call, forever. One sync stat answers
+ * "am I running from dist" once, and every caller in a src-condition run simply execs git directly. */
+const forkerModule = new URL("./git-forker.js", import.meta.url);
+
+const gitForker = (): ChildProcess | undefined => {
+    if (forker !== undefined || forkerUnavailable) {
+        return forker;
+    }
+    if (!existsSync(forkerModule)) {
+        forkerUnavailable = true;
+        return undefined;
+    }
+    // `execArgv: []` so the child inherits none of the daemon's own node flags — it is a forking stub, and
+    // anything that grows its heap is paid back on every git call the workspace makes. Its stderr is inherited
+    // so a child that dies says why; its stdout would only ever be node's, and git's rides the channel.
+    const started = fork(forkerModule, { execArgv: [], stdio: ["ignore", "ignore", "inherit", "ipc"] });
+    started.on("message", (message) => {
+        const response = message as ForkResponse;
+        const waiting = inFlight.get(response.id);
+        if (waiting === undefined) {
+            return;
+        }
+        settle(response.id);
+        if (response.failure !== undefined) {
+            waiting.reject(forkerFailure(response, response.failure));
+            return;
+        }
+        waiting.resolve({ stdout: response.stdout, stderr: response.stderr });
+    });
+    // A dead forker takes its in-flight reads with it — fail them rather than leave callers hanging forever,
+    // and drop the handle so the next call starts a fresh one.
+    started.on("exit", () => {
+        forker = undefined;
+        const orphaned = [...inFlight.values()];
+        inFlight.clear();
+        for (const waiting of orphaned) {
+            waiting.reject(new Error("git forker exited"));
+        }
+    });
+    // A fork that cannot even start is not a git failure — stop trying and let every call exec directly.
+    started.on("error", () => {
+        forkerUnavailable = true;
+    });
+    started.unref();
+    started.channel?.unref();
+    forker = started;
+    return forker;
+};
+
+const runGit = (command: string, args: readonly string[], env: Readonly<Record<string, string>> | undefined): Promise<GitOutput> => {
+    // Merged, never replaced: execFile's `env` REPLACES the child's whole environment, and git without
+    // PATH/HOME finds neither its helpers nor its config.
+    const resolved = env === undefined ? undefined : { ...process.env, ...env };
+    const channel = gitForker();
+    if (channel === undefined) {
+        return exec(command, [...args], { maxBuffer: MAX_GIT_OUTPUT, ...(resolved !== undefined ? { env: resolved } : {}) });
+    }
+    const id = nextRequestId;
+    nextRequestId += 1;
+    const request: ForkRequest = { id, command, args, maxBuffer: MAX_GIT_OUTPUT, ...(resolved !== undefined ? { env: resolved } : {}) };
+    return new Promise<GitOutput>((resolve, reject) => {
+        inFlight.set(id, { resolve, reject });
+        channel.channel?.ref();
+        channel.send(request, (error) => {
+            // The channel closed between the check above and the write — the exit handler may already have
+            // rejected this id, and settle/reject are both no-ops once it has.
+            if (error !== null) {
+                settle(id);
+                reject(error);
+            }
+        });
+    });
+};
+
 const gitRunnerVia =
     (argv: readonly string[]): GitRunner =>
     async (dir, args, env) => {
         const [command, ...rest] = argv;
         for (let attempt = 1; ; attempt += 1) {
             try {
-                return await exec(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...args], {
-                    maxBuffer: MAX_GIT_OUTPUT,
-                    // Merged, never replaced: execFile's `env` REPLACES the child's whole environment, and git
-                    // without PATH/HOME finds neither its helpers nor its config.
-                    ...(env !== undefined ? { env: { ...process.env, ...env } } : {}),
-                });
+                return await runGit(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...args], env);
             } catch (error) {
                 if (attempt >= RETRY_ATTEMPTS || !isLockContention(error)) {
                     throw error;

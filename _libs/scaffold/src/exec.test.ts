@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -62,4 +63,49 @@ test("defaultGit never gives up forever: a lock that is never released still rej
     // Six attempts with quadratic backoff, then git's own error — an abandoned lock file is a real condition
     // (a killed process) and the user needs to be told, not left with a spinner.
     await expect(defaultGit(dir, ["add", "a.txt"])).rejects.toThrow(/index\.lock/);
+});
+
+/* THE RESIDENT FORKER'S OWN PATH, which none of the tests above can reach. Vitest resolves this package
+ * through its `@intentic/src` export condition, so `defaultGit` there finds no compiled `git-forker.js` beside
+ * it and execs git directly — the fallback. The daemon always runs from dist, so the branch that actually
+ * ships is the other one, and the only honest way to exercise it is to drive the BUILT module.
+ *
+ * Skipped when the package has not been built: turbo's `test` depends on `^build`, which builds this package's
+ * DEPENDENCIES, not this package. Every developer machine and the release pipeline have a dist; a clean
+ * checkout that runs only this suite does not.
+ *
+ * That the child process exits at all is half the assertion: a forker left referenced would hold the loop open
+ * and hang this call rather than fail it. */
+const built = new URL("../dist/exec.js", import.meta.url);
+test.skipIf(!existsSync(built))("the forker passes git's output, env and failures through unchanged", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "x\n");
+    await defaultGit(dir, ["add", "a.txt"]);
+    await defaultGit(dir, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "one"]);
+
+    const probe = `
+        const { defaultGit } = await import(${JSON.stringify(built.href)});
+        const dir = ${JSON.stringify(dir)};
+        const head = (await defaultGit(dir, ["rev-parse", "HEAD"])).stdout.trim();
+        // GIT_INDEX_FILE is the env the landing gate hashes a worktree with — it has no command-line spelling,
+        // so a forker that dropped \`env\` would silently hash the user's own index instead.
+        const gitDir = (await defaultGit(dir, ["rev-parse", "--git-dir"], { GIT_INDEX_FILE: "/tmp/forker-probe-index" })).stdout.trim();
+        let failure;
+        try {
+            await defaultGit(dir, ["rev-parse", "--verify", "refs/heads/nope"]);
+        } catch (error) {
+            failure = { code: error.code, stderr: String(error.stderr), message: typeof error.message };
+        }
+        process.stdout.write(JSON.stringify({ head, gitDir, failure }));
+    `;
+    const { stdout } = await exec(process.execPath, ["--input-type=module", "-e", probe]);
+    const result = JSON.parse(stdout) as { head: string; gitDir: string; failure: { code: number; stderr: string; message: string } };
+
+    expect(result.head).toMatch(/^[0-9a-f]{40}$/);
+    expect(result.gitDir).not.toBe("");
+    // The rejection has to arrive shaped like execFile's, because that is what the daemon reads: `stderr` for
+    // the user-facing reason (gitFailureReason) and `code` for politeGit's ENOENT fallback to plain git.
+    expect(result.failure.code).toBe(128);
+    expect(result.failure.stderr).toMatch(/fatal/);
+    expect(result.failure.message).toBe("string");
 });
