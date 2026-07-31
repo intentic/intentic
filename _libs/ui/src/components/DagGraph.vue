@@ -8,7 +8,7 @@ import { VueFlow, Handle, Position } from "@vue-flow/core";
 import type { Edge, Node, VueFlowStore } from "@vue-flow/core";
 import "@vue-flow/core/dist/style.css";
 import { computed, nextTick, ref, useId, watch } from "vue";
-import { type DagEdge, type DagNode, layoutDag } from "./dagLayout.js";
+import { type DagEdge, type DagNode, layoutDag, layoutSignature } from "./dagLayout.js";
 
 const {
     nodes,
@@ -65,10 +65,18 @@ const flowEdges = computed<Edge[]>(() => {
 const sourcePosition = computed(() => (direction === `LR` ? Position.Right : Position.Bottom));
 const targetPosition = computed(() => (direction === `LR` ? Position.Left : Position.Top));
 
-// Refit when the graph's shape changes (e.g. a filter toggles nodes) — fit-view-on-init only covers mount.
+/* Refit whenever a DIFFERENT graph arrives — `fit-view-on-init` only covers mount, and mount is not when this
+ * usually happens. A caller that renders one DagGraph per page (a document's figures, keyed by position) has
+ * Vue patch the same instance with new props rather than remount it, so the viewport transform survives from
+ * the graph before it while the nodes underneath are replaced.
+ *
+ * Keyed on the layout SIGNATURE, not the node count: a count cannot tell two different graphs of the same size
+ * apart, which is how a page could inherit the previous page's zoom. See layoutSignature for the failure that
+ * produced. `nextTick` first because the container is often sized from the same render (a frame whose height
+ * scales with node count), and fitView measures the container. */
 const flow = ref<VueFlowStore>();
 watch(
-    () => flowNodes.value.length,
+    () => layoutSignature(nodes as readonly DagNode<never>[], edges, { direction, nodeWidth, nodeHeight }),
     async () => {
         await nextTick();
         void flow.value?.fitView();

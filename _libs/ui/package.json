@@ -14,6 +14,10 @@
             "types": "./src/markdown/index.ts",
             "default": "./src/markdown/index.ts"
         },
+        "./dag": {
+            "types": "./src/components/dagLayout.ts",
+            "default": "./src/components/dagLayout.ts"
+        },
         "./styles/*": "./src/styles/*"
     },
     "scripts": {

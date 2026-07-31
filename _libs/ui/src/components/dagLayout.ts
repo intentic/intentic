@@ -36,6 +36,27 @@ export interface DagLayoutOptions {
     readonly nodeHeight: number;
 }
 
+/* WHICH GRAPH IS ON SCREEN — everything that decides where the nodes end up, as one comparable string.
+ *
+ * DagGraph refits its viewport when this changes. It used to watch the node COUNT instead, which is not an
+ * identity: two different six-node graphs share a count, so navigating between them left the previous graph's
+ * pan and zoom applied to the new one. Where that bit hardest was a small graph followed by a large one — the
+ * small one's fit had clamped to maxZoom, and the large one then rendered at 2×, which reads as "zoomed in way
+ * too much" rather than as a stale transform.
+ *
+ * It stays a string rather than a structural compare because a watcher needs a cheap, stable value, and it
+ * covers exactly the layout inputs: ids and their order, the edges between them, the direction, and the fixed
+ * node box. Node LABELS are deliberately absent — re-rendering the same shape with new text must not throw
+ * away a pan the user chose. */
+export const layoutSignature = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[], options: DagLayoutOptions): string =>
+    [
+        options.direction,
+        options.nodeWidth,
+        options.nodeHeight,
+        nodes.map((node) => node.id).join(`,`),
+        edges.map((edge) => `${edge.from}>${edge.to}`).join(`,`),
+    ].join(`|`);
+
 // Position every node with dagre (fixed sizes; edges to unknown ids are dropped so a dangling ref can't skew
 // ranks). Returns top-left coordinates per node id — dagre yields centers.
 export const layoutDag = (

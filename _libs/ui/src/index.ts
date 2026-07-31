@@ -7,6 +7,9 @@ export { default as Card } from "./components/Card.vue";
 export { default as Code } from "./components/Code.vue";
 export { default as CopyButton } from "./components/CopyButton.vue";
 export { default as DagGraph } from "./components/DagGraph.vue";
+// Types only. The DAG layout FUNCTIONS ship as `@intentic-app/ui/dag` for the same reason the markdown engine
+// does: they are plain TypeScript, and a unit test should not have to boot this barrel's component graph (and a
+// DOM with it) to call one. See the note above renderMarkdown's subpath.
 export { type DagEdge, type DagNode } from "./components/dagLayout.js";
 export { default as Icon } from "./components/Icon.vue";
 export { default as InfoDialog } from "./components/InfoDialog.vue";
@@ -33,7 +36,10 @@ export { installUi } from "./plugin.js";
 export { vTw } from "./composables/tw.js";
 export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js";
 export { formatBytes, formatTokens, timeAgo } from "./format.js";
-export { type IconName, type IconSet, iconSets } from "./icons/iconSets.js";
+// ICON_SETS is exported for its KEYS, not its values: `Activation.icon` in the public extension API is an open
+// string, so the only way to check a first-party extension actually names a real icon is to compare against the
+// vocabulary at runtime (see builtins.test.ts). Renderers should keep using <Icon name="…">.
+export { ICON_SETS, type IconName, type IconSet, iconSets } from "./icons/iconSets.js";
 export { type ExplorerStyle, explorerStyles } from "./icons/explorerStyle.js";
 export {
     categoryForEntry,

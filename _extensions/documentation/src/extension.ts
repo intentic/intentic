@@ -31,7 +31,11 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             id: `documentation`,
             label: `Documentation`,
             surface: `rail`,
-            detect: (repos) => (repos.length > 0 ? [{ key: `documentation`, title: `Documentation`, icon: `book` }] : []),
+            // `align-left` because the icon set has no `book` — and `Activation.icon` is a deliberately OPEN
+            // string (a third-party bundle may name an icon this package has never heard of), so a name that is
+            // not in the set is not a compile error: the rail silently renders its fallback. builtins.test.ts
+            // now checks every compiled-in extension's icons against the real set for exactly that reason.
+            detect: (repos) => (repos.length > 0 ? [{ key: `documentation`, title: `Documentation`, icon: `align-left` }] : []),
             // Newly generated sets nobody has read yet — see attention.ts for why that is the bar rather than a
             // count of what is undocumented or stale.
             badge: () => documentationBadge(),

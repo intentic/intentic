@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { CapabilityFacts, ExtensionContext, IntenticApi, RepoFacts, ViewRegistration } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-api";
+import { ICON_SETS } from "@intentic-app/ui";
 import * as activity from "@intentic/ext-activity";
 import * as logs from "@intentic/ext-logs";
 import { describe, expect, it, vi } from "vitest";
@@ -43,6 +44,18 @@ const activateAndCapture = (module: { activate: (api: IntenticApi, ctx: Extensio
 
 const noRepos: readonly RepoFacts[] = [];
 const discordCap: CapabilityFacts = { id: `bot`, kind: `cli`, config: { provider: `discord` } };
+// Every fact true, so a detect() that gates on evidence still yields its activations and its icons can be checked.
+const richRepo: RepoFacts = {
+    repo: `demo`,
+    role: `app`,
+    hasPanel: true,
+    deployConfig: true,
+    desiredState: true,
+    directoryUi: true,
+    monorepo: true,
+    vitest: true,
+    userStories: true,
+};
 
 /* The whole-fleet guard. createExtensionApi refuses a view whose id AND surface the manifest doesn't declare,
  * and loadBuiltins swallows the throw into a console.error — so a registration that drifts from its manifest (a
@@ -68,6 +81,24 @@ describe(`every builtin`, () => {
         // key that drifts from the manifest silently turns the extension into "missing" in the Extensions tab.
         it(`is keyed by its own manifest id — ${id}`, () => {
             expect(extensionIdOf(module.manifest)).toBe(id);
+        });
+        /* Every icon an activation names must exist. `Activation.icon` is an OPEN string in the public API — a
+         * third-party bundle may name an icon this app has never heard of, and the rail renders its fallback
+         * rather than failing — so a typo in a FIRST-PARTY extension is not a compile error and not a runtime
+         * error either: the tile just comes up blank. That shipped once (`book`, which is not in the set), and
+         * a blank tile is invisible in every test that only checks structure. */
+        it(`names icons that exist — ${id}`, () => {
+            const registered: ViewRegistration[] = [];
+            const api = {
+                views: { register: (view: ViewRegistration) => (registered.push(view), { dispose: () => {} }) },
+                viewers: { register: () => ({ dispose: () => {} }) },
+                commands: { register: () => ({ dispose: () => {} }) },
+            } as unknown as IntenticApi;
+            module.activate(api, { extensionId: id, subscriptions: [] });
+            const known = new Set(Object.keys(ICON_SETS.phosphor));
+            // Facts generous enough that a detect() gated on evidence still produces its activations.
+            const icons = registered.flatMap((view) => view.detect([richRepo], [discordCap]).flatMap((a) => (a.icon === undefined ? [] : [a.icon])));
+            expect(icons.filter((icon) => !known.has(icon))).toEqual([]);
         });
     }
 });

@@ -29,6 +29,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // the lookup. It exists so plain .ts (and its unit tests) can reach the markdown engine without loading
     // the design system's component graph — see _libs/ui/src/markdown/index.ts.
     "@intentic-app/ui/markdown": here("../../_libs/ui/src/markdown/index.ts"),
+    // Same reason and the same ordering requirement: the DAG layout is plain TypeScript that DagGraph and its
+    // unit tests both call, and a test for a pure function must not have to boot the component graph (and a DOM
+    // with it) to reach it.
+    "@intentic-app/ui/dag": here("../../_libs/ui/src/components/dagLayout.ts"),
     "@intentic-app/ui": here("../../_libs/ui/src/index.ts"),
     "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
     // Same reason as the markdown subpath above, and the same ordering requirement: the session-name derivation
