@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { cmp, type IconName } from "@intentic-app/ui";
 import type { Disposable } from "@intentic/extension-api";
-import type { AgentOrigin } from "@intentic/sandbox-contract";
+import { type AgentOrigin, providerLabel } from "@intentic/sandbox-contract";
 import ContextMenu from "primevue/contextmenu";
 import type { MenuItem } from "primevue/menuitem";
 import Popover from "primevue/popover";
@@ -153,6 +153,16 @@ const railStatus = (entry: RailEntry): { icon: IconName; spin?: boolean; label: 
     const icon = statusIcon(status);
     return { icon: icon.name, spin: icon.spin, label: statusLabel(status), class: icon.class };
 };
+
+/* TWO FACTS THE RAIL CARD SHOWS AS A MARK RATHER THAN A LINE — their words live in these tooltips.
+ * The model: the provider glyph already carries it, and a fleet is usually one model deep, so the name was a
+ * column of identical text down the rail. What the turn is doing right now: the glyph says "it is working",
+ * which is the actionable half — the command itself was the noisiest, least stable line on a card (a path that
+ * changes every few seconds), and it cost a whole row of a rail whose cards are read as a stack. */
+const modelTooltip = (agent: FleetAgent): string =>
+    agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : providerLabel(agent.provider);
+const activityTooltip = (activity: NonNullable<FleetAgent["activity"]>): string =>
+    activity.todo ?? [activity.tool, activity.target].filter(Boolean).join(` · `);
 
 /* What the query found that ISN'T open in this window — the whole point of the rail's filter reaching past its
  * own list. Live fleet agents first (the likeliest thing to want), then the archive, each as a row that opens
@@ -772,21 +782,21 @@ const openHistory = (event: Event): void => {
                                     </span>
                                 </span>
                                 <template v-if="agent !== undefined">
-                                    <!-- The crucial numbers, one wrapping line: model (with its provider mark —
-                                         they are one fact), cost, diff, and — right-aligned — the running
-                                         elapsed (ticking) or the last-activity age. All quiet: these are
-                                         reference numbers, not events. -->
+                                    <!-- The crucial numbers, one wrapping line: cost, diff, and — right-aligned —
+                                         the running elapsed (ticking) or the last-activity age. All quiet:
+                                         these are reference numbers, not events.
+                                         The MODEL is a mark, not a word: in a rail this narrow "Claude Opus 5"
+                                         costs a quarter of the line to repeat what the provider glyph beside it
+                                         already says, and it is the same on every card in a fleet run on one
+                                         model. The name stays one hover away, on the glyph that stands for it. -->
                                     <span class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
                                         <span
                                             v-if="attentionReason(agent) !== undefined"
                                             class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
                                             >{{ attentionReason(agent) }}</span
                                         >
-                                        <span class="flex min-w-0 items-center gap-1">
-                                            <ProviderLogo :provider="agent.provider" class="shrink-0 text-2xs" />
-                                            <span v-if="agent.model !== undefined" class="max-w-28 truncate">{{
-                                                modelLabelFor(agent.provider, agent.model)
-                                            }}</span>
+                                        <span class="flex shrink-0 items-center" v-tooltip.right="modelTooltip(agent)">
+                                            <ProviderLogo :provider="agent.provider" class="text-2xs" />
                                         </span>
                                         <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
                                         <span
@@ -796,23 +806,20 @@ const openHistory = (event: Event): void => {
                                             <span class="text-success">+{{ agent.diff.insertions }}</span>
                                             <span class="text-danger"> −{{ agent.diff.deletions }}</span>
                                         </span>
-                                        <span v-if="agent.status === 'running' && agent.startedAt !== undefined" class="ml-auto shrink-0">{{
-                                            formatElapsed(agent.startedAt, now)
-                                        }}</span>
-                                        <span v-else-if="agent.updatedAt > 0" class="ml-auto shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
-                                    </span>
-                                    <!-- What it is doing RIGHT NOW — the board card's live line, one truncated
-                                         row. Muted, not accent-coloured: the spinner already says "working",
-                                         and this line changes every few seconds — painting the noisiest line
-                                         on the card in the loudest colour inverts the hierarchy. -->
-                                    <span
-                                        v-if="agent.status === 'running' && agent.activity !== undefined"
-                                        class="flex w-full min-w-0 items-center gap-1 text-2xs text-muted"
-                                    >
-                                        <Icon :name="activityIcon(agent.activity.tool)" class="shrink-0 text-2xs text-subtle" />
-                                        <span class="min-w-0 flex-1 truncate">{{
-                                            agent.activity.todo ?? [agent.activity.tool, agent.activity.target].filter(Boolean).join(" · ")
-                                        }}</span>
+                                        <!-- The now-column, right-aligned: what it is doing (the tool's glyph,
+                                             its command on hover) and how long it has been at it. -->
+                                        <span class="ml-auto flex shrink-0 items-center gap-1.5">
+                                            <Icon
+                                                v-if="agent.status === 'running' && agent.activity !== undefined"
+                                                :name="activityIcon(agent.activity.tool)"
+                                                class="text-2xs text-subtle"
+                                                v-tooltip.right="activityTooltip(agent.activity)"
+                                            />
+                                            <span v-if="agent.status === 'running' && agent.startedAt !== undefined">{{
+                                                formatElapsed(agent.startedAt, now)
+                                            }}</span>
+                                            <span v-else-if="agent.updatedAt > 0">{{ relativeTime(agent.updatedAt) }}</span>
+                                        </span>
                                     </span>
                                     <!-- WHY this tab survived the filter, when the reason isn't its title (that
                                          one is marked in place above). The board's cards carry the same line for
@@ -1048,19 +1055,29 @@ const openHistory = (event: Event): void => {
 .rail-card {
     border-color: var(--color-line);
     background: color-mix(in srgb, var(--color-canvas) 45%, transparent);
+    /* Two independent marks on one box-shadow: the attention bar (inset, left edge) and the active ring
+       (outset, all round). Held as variables because a second box-shadow rule would REPLACE the first, which
+       is what forced the old either/or below. */
+    --rail-accent: 0 0 #0000;
+    --rail-ring: 0 0 #0000;
+    box-shadow: var(--rail-accent), var(--rail-ring);
 }
 .rail-card:hover {
     border-color: var(--color-line-strong);
 }
-/* The active card is the one the transcript beside the rail is showing — the board marks its focused card
- * with a primary border, and this is the same fact on the same design. */
+/* THE SAME TWO CHANNELS THE BOARD USES (see AgentCard): the card the transcript beside the rail is showing
+ * gets a ring and a lifted fill, an agent that needs the user gets a bar down its left edge. Drawn in
+ * different places, so the rail no longer has to choose between them — the old rule dropped the warning the
+ * moment you opened the card, on the theory that "you are here" outranks "this needs you", which quietly cost
+ * the one card most likely to be read the only mark saying why it was in that lane. An inset shadow rather
+ * than a wider left border: no layout shift, so a stacked lane's cards keep their text on one axis. */
 .rail-card.chat-tab-on {
-    border-color: color-mix(in srgb, var(--color-primary-500) 70%, transparent);
+    border-color: var(--color-primary-500);
+    background: var(--color-overlay);
+    --rail-ring: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 50%, transparent);
 }
-/* Attention wears a warning border (the board's lane treatment), unless the card is also the active one —
- * "you are here" outranks "this needs you", since being here is how it gets dealt with. */
-.rail-card-attention:not(.chat-tab-on) {
-    border-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
+.rail-card-attention {
+    --rail-accent: inset 3px 0 0 0 var(--color-warning);
 }
 
 /* Drag-to-resize handle on the rail's right edge (pointer-capture, mirrors the panel's .resize-handle). */
