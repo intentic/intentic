@@ -9,7 +9,7 @@ import { type QuickModelSource, quickModelKey, resolveQuickModel } from "./quick
 const CLAUDE: QuickModelSource = { provider: `claude`, ready: true, models: [`claude-opus-5`, `claude-sonnet-5`, `claude-haiku-4-5-20251001`] };
 const GOOGLE: QuickModelSource = { provider: `gemini`, ready: true, models: [`gemini-3-flash`, `gemini-3-flash-lite`, `gemini-3-pro`] };
 const CODEX: QuickModelSource = { provider: `codex`, ready: true, models: [`gpt-5.4-mini`, `gpt-5.6`] };
-const KIMI: QuickModelSource = { provider: `kimi`, ready: true, models: [`kimi-k2-0711-preview`, `kimi-k2-0905-preview`] };
+const KIMI: QuickModelSource = { provider: `kimi`, ready: true, models: [`kimi-k2.6`, `kimi-k2.7-code`, `kimi-k3`] };
 
 const offline = (source: QuickModelSource): QuickModelSource => ({ ...source, ready: false });
 
@@ -72,7 +72,7 @@ test("ignores a malformed pin instead of running an empty model id", () => {
 
 test("serves the newest of a catalog that publishes no cheap tier at all", () => {
     // Kimi names no tier word anywhere. There is no cheaper rung to find, so the newest row is the honest answer.
-    expect(resolveQuickModel([KIMI], ``)).toEqual({ provider: `kimi`, model: `kimi-k2-0905-preview` });
+    expect(resolveQuickModel([KIMI], ``)).toEqual({ provider: `kimi`, model: `kimi-k3` });
 });
 
 test("reports nothing when no account is connected, so the button can say so instead of failing on click", () => {

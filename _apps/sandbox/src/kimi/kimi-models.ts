@@ -11,18 +11,19 @@ const MOONSHOT_API_BASE = "https://api.moonshot.ai/v1";
 const MOONSHOT_MODELS_URL = `${MOONSHOT_API_BASE}/models`;
 
 // The never-empty floor for the catalog: served only when live discovery yields nothing AND no last-known-good
-// catalog was persisted (a fresh, offline, or non-enumerating key). Stable Kimi K2 family ids; if the account
-// wants a dated/renamed variant, discovery records the real catalog, so a stale seed costs at most one refresh.
-export const SEED_KIMI_MODELS: readonly string[] = ["kimi-k2-0711-preview", "kimi-k2-turbo-preview"];
+// catalog was persisted (a fresh, offline, or non-enumerating key). These are the current globally available
+// Kimi lines; the previous K2-preview floor was discontinued in May 2026 and left a fresh picker offering only
+// retired models. Discovery still records the account's real catalog, so account-specific availability wins.
+export const SEED_KIMI_MODELS: readonly string[] = ["kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
 
 const authHeader = (apiKey: string): Record<string, string> => ({ authorization: `Bearer ${apiKey}` });
 
-// A raw Kimi model id → a display label matching the other providers' polish (kimi-k2-turbo-preview → "Kimi K2
-// Turbo Preview"). Title-cases the hyphen-split tokens; the "k2" family tag uppercases to "K2".
+// A raw Kimi model id → a display label matching the other providers' polish (kimi-k2.7-code → "Kimi K2.7
+// Code"). Title-cases the hyphen-split tokens; the K-prefixed family tag is uppercased.
 export const humanizeModelId = (id: string): string =>
     id
         .split("-")
-        .map((token) => (token === "" ? token : /^k\d+$/i.test(token) ? token.toUpperCase() : token[0]!.toUpperCase() + token.slice(1)))
+        .map((token) => (token === "" ? token : /^k[\d.]+$/i.test(token) ? token.toUpperCase() : token[0]!.toUpperCase() + token.slice(1)))
         .join(" ");
 
 // Moonshot's /v1/models lists only chat models today, but guard anyway: keep the kimi/moonshot chat families and

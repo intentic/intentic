@@ -14,9 +14,11 @@
  * every vendor names its models the same way — which is what lets the daemon's four catalog services and the
  * web's picker share one rule instead of each inventing a local one. */
 
-// A version-ish segment: digits and dots, optionally v-prefixed (`4`, `5.1`, `v2`, `20251001`). Everything else
-// is a NAME segment and belongs to the family — which is what makes the split below exhaustive.
-const VERSION_SEGMENT = /^v?[\d.]+$/;
+// A version-ish segment: digits and dots, optionally prefixed by the vendor's version marker (`4`, `5.1`, `v2`,
+// `k3`, `k2.7`, `20251001`). Kimi is the one provider that fuses the marker with the generation; treating `k3`
+// as a name made the current flagship look unversioned, so K2.x sorted above it. Everything else is a NAME
+// segment and belongs to the family — which is what makes the split below exhaustive.
+const VERSION_SEGMENT = /^(?:v|k)?[\d.]+$/i;
 
 // A date stamp rather than a version component: six digits or more (20251001, 250514). The distinction is not
 // cosmetic — claude-opus-4-1-20250805 (Opus 4.1) and claude-opus-4-20250514 (Opus 4.0) compare as (4,1) vs (4)
@@ -48,7 +50,7 @@ export interface ModelRelease {
 export const releaseOf = (id: string): ModelRelease => {
     const numeric = segmentsOf(id)
         .filter((segment) => VERSION_SEGMENT.test(segment))
-        .map((segment) => segment.replace(/^v/, ""));
+        .map((segment) => segment.replace(/^[vk]/i, ""));
     const stamps = numeric.filter((segment) => DATE_SEGMENT.test(segment)).map(Number);
     return {
         version: numeric

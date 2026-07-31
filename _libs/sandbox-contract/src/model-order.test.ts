@@ -73,6 +73,14 @@ test("reads each vendor's tier vocabulary, not just Claude's", () => {
     ]);
 });
 
+test("reads Kimi's k-prefixed generation so K3 leads the K2.x catalog", () => {
+    const catalog = ["kimi-k2.6", "kimi-k2.7-code-highspeed", "kimi-k3", "kimi-k2.7-code"];
+
+    expect(releaseOf("kimi-k3")).toEqual({ version: [3], date: 0 });
+    expect(familyOf("kimi-k3")).toBe(familyOf("kimi-k2.6"));
+    expect(catalog.toSorted(compareUnrankedModelIds)).toEqual(["kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6"]);
+});
+
 test("the rightmost tier word wins, because tier words compose", () => {
     // flash-lite is the cheap end of Flash, codex-max the frontier end of Codex — reading the leftmost word
     // instead would file both under the tier they modify.

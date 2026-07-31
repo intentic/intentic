@@ -159,6 +159,12 @@ test("ranks each vendor's own tier words, so no provider is left in registry ord
     expect(familyGroups(grok).map((group) => group.latest.label)).toEqual([`Grok 4`, `Grok 4 Fast`]);
 });
 
+test("opens Kimi on K3 when its live catalog also contains K2.x releases", () => {
+    const kimi = [entry(`kimi`, `kimi-k2.6`, `Kimi K2.6`), entry(`kimi`, `kimi-k2.7-code`, `Kimi K2.7 Code`), entry(`kimi`, `kimi-k3`, `Kimi K3`)];
+
+    expect(pickerBlocks(familyGroups(kimi), undefined, false)[0]?.entries.map((row) => row.value)).toEqual([`kimi-k3`, `kimi-k2.7-code`]);
+});
+
 test("opens a group at one row per family — every tier visible, no version history", () => {
     expect(pickerBlocks(familyGroups(CLAUDE), `claude-opus-5`, false)).toEqual([
         { key: `latest`, entries: [CLAUDE[0], CLAUDE[2], CLAUDE[1], CLAUDE[6]] },
@@ -200,7 +206,7 @@ test("gives a single-version provider no older blocks, so a short group never gr
 const MIXED: readonly PickerEntry[] = [
     entry(`claude`, `claude-opus-5`, `Claude Opus 5`),
     entry(`codex`, `gpt-5.6`, `GPT 5.6`),
-    entry(`kimi`, `kimi-k2-turbo-preview`, `Kimi K2 Turbo Preview`),
+    entry(`kimi`, `kimi-k3`, `Kimi K3`),
     entry(`gemini`, `gemini-pro-agent`, `Gemini 3.1 Pro (High)`),
 ];
 const readyOnly =
@@ -222,7 +228,7 @@ test("keeps the ACTIVE provider first even when it is the locked one", () => {
 });
 
 test("ranks a runnable match above a locked one, however well the locked id matched", () => {
-    // "k2" hits the Kimi id head-on and nothing else; "5" hits both. Match quality still decides WITHIN a band.
+    // A model-specific query can hit Kimi head-on; "5" hits both rows below. Match quality still decides WITHIN a band.
     const matched = filterEntries(MIXED, `5`, undefined, readyOnly(`codex`));
 
     expect(matched.map((row) => row.provider)).toEqual([`codex`, `claude`]);

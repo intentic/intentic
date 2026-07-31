@@ -1325,7 +1325,7 @@ watch([reachable, conversations], ([isReachable]) => {
 // start the poll loop — the user signs in at ChatGPT and the account connects on its own. Surfaces the server's
 // reason (sandbox offline / daemon still starting) inline on failure rather than as a silently-blocked popup.
 // Moonshot's API-key page, surfaced as the "get your key" link in the Kimi connect card.
-const KIMI_KEY_URL = `https://platform.moonshot.ai/console/api-keys`;
+const KIMI_KEY_URL = `https://platform.kimi.ai/console/api-keys`;
 
 // Started by the row's own Connect button (never by a provider switch — see setManagedProvider), so the whole
 // handshake is a thing the user asked for. `accountBusy` holds the provider for the length of the round-trip:
