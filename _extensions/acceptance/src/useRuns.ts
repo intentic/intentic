@@ -21,7 +21,9 @@ import {
     runManifestOf,
     runManifestPath,
     RUNS_DIR,
+    SCAN_RUNS,
     type StoryResult,
+    type Verdict,
 } from "./runs";
 import type { Story } from "./stories";
 
@@ -173,6 +175,39 @@ export function useRuns() {
         );
     });
 
+    /* WHAT EVERY RECENT RUN FOUND — the verdict of each story of the newest SCAN_RUNS runs, and nothing else.
+     *
+     * The list needs this, and so does every story row: "3 stories, 2 hours ago" does not say whether anything is
+     * broken, and a stories list that cannot show where each promise currently stands is a list of intentions.
+     * Reading only the verdict (not the report, not the steps) is what makes that affordable — one small file per
+     * story — and the SCAN_RUNS bound is the same one the rail badge scans under, so the tile and the list can
+     * never disagree. Runs older than that carry no verdict here until one is opened, which is a read of exactly
+     * the run someone is looking at. */
+    const scanned = computed<readonly RunManifest[]>(() => (runsQuery.data.value ?? []).slice(0, SCAN_RUNS));
+    const verdictsQuery = useQuery({
+        queryKey: computed(() => api.sandbox.key(`acceptance`, `verdicts`, scanned.value.map((run) => run.runId).join(`,`))),
+        enabled: computed(() => api.sandbox.reachable() && scanned.value.length > 0),
+        refetchInterval: () => (live.value ? POLL_MS : false),
+        queryFn: async (): Promise<Record<string, Record<string, Verdict>>> =>
+            Object.fromEntries(
+                await Promise.all(
+                    scanned.value.map(async (run) => {
+                        const results = await Promise.all(
+                            run.stories.map(
+                                async (story) => [story.slug, parseResult((await file(resultPath(run.runId, story.slug))) ?? ``)?.verdict] as const,
+                            ),
+                        );
+                        // The run's own key exists even when every story is still walking: "scanned, nothing
+                        // written yet" and "too old to have been read" are different answers to the list.
+                        return [
+                            run.runId,
+                            Object.fromEntries(results.flatMap(([slug, verdict]) => (verdict === undefined ? [] : [[slug, verdict] as const]))),
+                        ] as const;
+                    }),
+                ),
+            ),
+    });
+
     /* One run's per-story artifacts. Separate from the run list on purpose: results and reports are only read
      * for the run being LOOKED at, so a workspace with fifty runs costs fifty reads to list and none to browse.
      * Re-read on the same interval as the roster while the run is live, so a report appears as it is written. */
@@ -266,6 +301,9 @@ export function useRuns() {
         // Keyed by conversationId — the row asks `browsers[story.conversationId]` and shows a Watch button when
         // there is something to watch.
         browsers,
+        // runId → slug → verdict, for the newest SCAN_RUNS runs. A runId that is absent was never read; a runId
+        // present with no entry for a slug has no result written yet.
+        verdicts: computed<Readonly<Record<string, Readonly<Record<string, Verdict>>>>>(() => verdictsQuery.data.value ?? {}),
         error: computed(() => runsQuery.error.value?.message),
         isLoading: runsQuery.isLoading,
         refresh: async (): Promise<void> => {

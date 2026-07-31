@@ -15,6 +15,12 @@ import type { Story } from "./stories";
 
 export const RUNS_DIR = ".intentic/acceptance";
 
+/* How many runs deep anything that READS RESULTS goes. A bound on the walk, not on what can be tested: only the
+ * newest runs carry news, and a workspace with hundreds of run directories must not spend a request per story to
+ * render a list or to light a badge. Shared by the rail badge's background scan and the view's own tally so the
+ * two can never disagree about what "recent" means. */
+export const SCAN_RUNS = 10;
+
 const runDir = (runId: string): string => `${RUNS_DIR}/${runId}`;
 export const storyDir = (runId: string, slug: string): string => `${runDir(runId)}/${slug}`;
 export const runManifestPath = (runId: string): string => `${runDir(runId)}/run.json`;
@@ -89,6 +95,13 @@ export const reposOf = (manifest: RunManifest): readonly string[] => [...new Set
 // The verdict an agent writes into result.json. `blocked` is distinct from `fail` on purpose: "the app is broken
 // upstream of this story" is a different report to the author than "this story's behaviour is wrong".
 export type Verdict = "pass" | "fail" | "blocked";
+
+/* The colour a verdict reads as, in the one place both the run's report and the story list can share it —
+ * `blocked` is warning rather than danger because the run never got to judge the story, and a list that painted
+ * "we could not reach the app" the same red as "this promise is broken" would send someone to the wrong file.
+ * Plain strings: this module stays free of the UI kit, and the names are its StatusVariant's. */
+export const verdictTone = (verdict: Verdict): "success" | "danger" | "warning" =>
+    verdict === `pass` ? `success` : verdict === `fail` ? `danger` : `warning`;
 
 export interface StoryResult {
     readonly story: string;

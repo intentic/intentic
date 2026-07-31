@@ -2,7 +2,7 @@ import { WorkspaceChildrenSchema, WorkspaceFileSchema } from "@intentic/sandbox-
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { ref } from "vue";
 import { host } from "./host";
-import { parseManifest, parseResult, resultPath, RUNS_DIR, SEEN_PATH, type Verdict } from "./runs";
+import { parseManifest, parseResult, resultPath, RUNS_DIR, SCAN_RUNS, SEEN_PATH, type Verdict } from "./runs";
 
 /* The rail badge's source. Module state owned by activate(), NOT by the view: a badge that only updated while
  * you were already looking at Acceptance would never tell you anything you didn't know. That rules out the
@@ -15,9 +15,6 @@ import { parseManifest, parseResult, resultPath, RUNS_DIR, SEEN_PATH, type Verdi
 
 // Slow on purpose. This drives a glance; the view's own polling serves anyone actually watching a run.
 const POLL_MS = 60_000;
-// A bound on the walk, not on what can be tested: only the newest runs can carry news, and a workspace with
-// hundreds of run directories must not spend a request per directory every minute.
-const SCAN_RUNS = 10;
 
 interface Unseen {
     readonly runId: string;

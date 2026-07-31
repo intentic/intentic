@@ -2,11 +2,12 @@
 import { Button, cmp, Icon, InfoHint, Page, PageHeader, RowGroup, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markAcceptanceSeen } from "./attention";
-import { reposOf, RUNS_DIR } from "./runs";
+import { reposOf, RUNS_DIR, SCAN_RUNS, type Verdict, verdictTone } from "./runs";
 import RunDialog from "./RunDialog.vue";
 import RunReport from "./RunReport.vue";
-import type { Story } from "./stories";
-import StoryEditor from "./StoryEditor.vue";
+import { type Story, storyMarkdown } from "./stories";
+import StoryComposer from "./StoryComposer.vue";
+import StoryRow from "./StoryRow.vue";
 import type { RunRow } from "./useRuns";
 import { useRuns } from "./useRuns";
 import { useStories } from "./useStories";
@@ -21,12 +22,14 @@ import { useTargets } from "./useTargets";
  * thing that addresses the view. (Contrast git history and codebase health, which are properties OF a repo and
  * belong in its workspace panel.)
  *
- * Three surfaces, one per question:
- *  • STORIES — "what have we promised, and what does it take to call it done": every repo's docs/user-stories,
- *    editable here, criteria and all.
- *  • RUNS — "what did the tests say": every run, newest first, each opening into per-story verdicts and reports.
- *  • The agents' own browsers — "what is it doing right now": each live session's Chromium is watchable, and
- *    takeable, in the terminal panel. RunReport owns that button; see useRuns' `browsers`.
+ * ONE LIST, TWO QUESTIONS. The stories list is the view: each row is a promise, and each row carries where that
+ * promise currently stands — the verdict of the newest run that covered it, or `testing` while a session is still
+ * walking the page. That join is the whole point of putting stories and runs on one surface; without it the list
+ * is a pile of intentions and the answer to "is anything broken" lives one click deep in a run nobody opened.
+ * The runs list below is the history: the same facts addressed by moment rather than by promise.
+ *
+ * AUTHORING HAPPENS IN THE LIST, not in a dialog. The composer row creates a story from a title alone, and the
+ * row expands into its own editor — see StoryComposer and StoryRow for why that shape and not a form.
  *
  * A test session is an ordinary isolated fleet agent, which is why there is no session UI here: the card, the
  * live status, the cost, the transcript and the stop button already exist on the Agents board, and every story
@@ -46,13 +49,18 @@ const {
     save,
     remove,
 } = useStories();
-const { runs, browsers, error: runsError, isLoading: runsLoading, start, useRunOutcomes } = useRuns();
+const { runs, browsers, verdicts, error: runsError, isLoading: runsLoading, start, stop, useRunOutcomes } = useRuns();
 const targets = useTargets();
 
 const runDialogOpen = ref(false);
-const editorOpen = ref(false);
-// The story being edited; undefined while authoring a new one.
-const editing = ref<Story | undefined>(undefined);
+// Which stories the run dialog opens ticked. Undefined = all of them, the gesture the Run button means; a single
+// path is "run this one", the gesture a row means while someone is iterating on it.
+const preselect = ref<readonly string[] | undefined>(undefined);
+// The one story open for editing. Single, so there is one draft and one autosave in flight, and so the list stays
+// a list — an accordion of open editors is a form again by another name.
+const editing = ref<string | undefined>(undefined);
+// A story created seconds ago: its row opens focused on the first criterion so the author keeps typing.
+const created = ref<string | undefined>(undefined);
 // The run whose report is open. Undefined = the lists. Not a route: a report is a disclosure within this view,
 // and the view itself is already addressed by /ext/acceptance.
 const openRunId = ref<string | undefined>(undefined);
@@ -66,47 +74,83 @@ const topError = computed(() => actionError.value ?? storiesError.value ?? runsE
 // Opening the area IS reading it — the rail's badge clears here rather than at the next poll.
 onMounted(() => void markAcceptanceSeen());
 
-/* Stories grouped by REPO first, then by their subdirectory within it — the shape the files already have, read
- * outermost-in. A workspace with one repo therefore reads exactly as it did when this was a per-repo panel: one
- * heading, the groups under it. */
-const byRepo = computed(() => {
-    const groups = new Map<string, Map<string, Story[]>>();
-    for (const story of stories.value) {
-        const repoGroups = groups.get(story.repo) ?? new Map<string, Story[]>();
-        repoGroups.set(story.group, [...(repoGroups.get(story.group) ?? []), story]);
-        groups.set(story.repo, repoGroups);
+/* Every repo that can hold stories, whether it holds any yet or not, then its stories by subdirectory — the shape
+ * the files already have, read outermost-in. Listing the EMPTY repos matters: the composer lives in the group, so
+ * a repo missing from this list is a repo nobody can write the first story for. A workspace with one repo reads
+ * exactly as it did when this was a per-repo panel: one heading, the groups under it. */
+const byRepo = computed(() =>
+    [...repos.value]
+        .toSorted((left, right) => left.localeCompare(right))
+        .map((repo) => {
+            const own = stories.value.filter((story) => story.repo === repo);
+            const groups = new Map<string, Story[]>();
+            for (const story of own) {
+                groups.set(story.group, [...(groups.get(story.group) ?? []), story]);
+            }
+            return {
+                repo,
+                count: own.length,
+                // "" (the top level) first, then named subdirectories alphabetically.
+                groups: [...groups.entries()].toSorted(([left], [right]) => (left === `` ? -1 : right === `` ? 1 : left.localeCompare(right))),
+            };
+        }),
+);
+
+const paths = computed<readonly string[]>(() => stories.value.map((story) => story.path));
+
+/* WHERE EVERY PROMISE STANDS, by story path: the newest run that covered it and had something to say. Older runs
+ * are consulted when the newest never included the story — a story tested last week and untouched since is still
+ * telling you something, and blanking it because today's run skipped it would lose the only verdict there is.
+ * Bounded by useRuns' scan: a story whose last run has aged out of it simply shows nothing rather than a guess.
+ *
+ * Built once per change rather than asked per row: runs are newest-first, so the first run with an answer for a
+ * path wins and everything behind it is skipped. */
+const statuses = computed<Readonly<Record<string, { readonly label: string; readonly variant: StatusVariant }>>>(() => {
+    const found = new Map<string, { readonly label: string; readonly variant: StatusVariant }>();
+    for (const run of runs.value) {
+        for (const entry of run.manifest.stories) {
+            if (found.has(entry.path)) {
+                continue;
+            }
+            const verdict = verdicts.value[run.manifest.runId]?.[entry.slug];
+            if (verdict !== undefined) {
+                found.set(entry.path, { label: verdict, variant: verdictTone(verdict) });
+                continue;
+            }
+            const agent = run.agents.find((item) => item.id === entry.conversationId);
+            if (agent?.status === `running` || agent?.status === `awaiting`) {
+                found.set(entry.path, { label: `testing`, variant: `info` });
+            }
+        }
     }
-    return [...groups.entries()]
-        .toSorted(([left], [right]) => left.localeCompare(right))
-        .map(([repo, repoGroups]) => ({
-            repo,
-            count: [...repoGroups.values()].reduce((total, entries) => total + entries.length, 0),
-            // "" (the top level) first, then named subdirectories alphabetically.
-            groups: [...repoGroups.entries()].toSorted(([left], [right]) => (left === `` ? -1 : right === `` ? 1 : left.localeCompare(right))),
-        }));
+    return Object.fromEntries(found);
 });
 
-/* A run's headline: verdicts once they exist, live status until then. Deliberately NOT a percentage — a run of
+/* A run's headline: verdicts once they exist, live progress until then. Deliberately NOT a percentage — a run of
  * four stories where one failed is "1 failed", not "75%", and a bar that reads 75% while three tests are still
- * walking a page would be inventing a number nobody can act on. */
-const tally = (run: RunRow): { readonly label: string; readonly variant: StatusVariant } => {
-    const results = run.manifest.stories.flatMap((story) => {
-        const outcome = outcomes.data.value?.[story.slug]?.result;
-        return outcome === undefined ? [] : [outcome.verdict];
-    });
+ * walking a page would be inventing a number nobody can act on.
+ *
+ * Undefined for a run older than the scan: its results were never read, and "no results" would be a claim about a
+ * run this view knows nothing about. Opening it reads them. */
+const tally = (run: RunRow): { readonly label: string; readonly variant: StatusVariant } | undefined => {
+    const known: Readonly<Record<string, Verdict>> | undefined = verdicts.value[run.manifest.runId];
     if (run.running) {
         // A finished story is one that WROTE something, or whose session has settled — not merely one whose
         // agent is off the roster: archiving a finished agent removes it, and counting roster absence as
         // unfinished would walk the progress backwards while the rest of the run is still going.
         const done = run.manifest.stories.filter((story) => {
             const agent = run.agents.find((entry) => entry.id === story.conversationId);
-            return (
-                outcomes.data.value?.[story.slug]?.result !== undefined ||
-                (agent !== undefined && agent.status !== `running` && agent.status !== `awaiting`)
-            );
+            return known?.[story.slug] !== undefined || (agent !== undefined && agent.status !== `running` && agent.status !== `awaiting`);
         }).length;
         return { label: `${done}/${run.manifest.stories.length} done`, variant: `info` };
     }
+    if (known === undefined) {
+        return undefined;
+    }
+    const results = run.manifest.stories.flatMap((story) => {
+        const verdict = known[story.slug];
+        return verdict === undefined ? [] : [verdict];
+    });
     if (results.length === 0) {
         return { label: run.agents.some((agent) => agent.status === `error`) ? `errored` : `no results`, variant: `neutral` };
     }
@@ -121,13 +165,12 @@ const tally = (run: RunRow): { readonly label: string; readonly variant: StatusV
     return { label: `${results.length} passed`, variant: `success` };
 };
 
-const edit = (story: Story | undefined): void => {
-    editing.value = story;
-    editorOpen.value = true;
-};
+// Tallied once per run rather than per binding: the badge, its variant and its presence are three reads of the
+// same answer.
+const runRows = computed(() => runs.value.map((row) => ({ row, status: tally(row) })));
 
-// Every mutation reports through the one banner: this view has three write paths (save, delete, start) and a
-// failure in any of them is the same kind of news.
+// Every mutation this view still owns reports through the one banner. The story editor keeps its own failures in
+// the row that caused them — a save error belongs where the text you typed is, not at the top of a scrolled page.
 const attempt = async (action: () => Promise<void>): Promise<void> => {
     actionError.value = undefined;
     try {
@@ -135,6 +178,27 @@ const attempt = async (action: () => Promise<void>): Promise<void> => {
     } catch (error) {
         actionError.value = error instanceof Error ? error.message : String(error);
     }
+};
+
+/* Creating a story is one write of the plainest possible file: a heading. Everything else is added in the row
+ * that appears, which is why this can be a keystroke rather than a form — and why the empty story is written to
+ * disk immediately instead of being held as a draft. The file IS the story; a draft that only exists in a browser
+ * tab is a story that can be lost by closing it. */
+const create = (input: { readonly path: string; readonly title: string }): Promise<void> =>
+    attempt(async () => {
+        await save({ path: input.path, markdown: storyMarkdown({ title: input.title, narrative: ``, criteria: [] }) });
+        editing.value = input.path;
+        created.value = input.path;
+    });
+
+const toggle = (path: string): void => {
+    editing.value = editing.value === path ? undefined : path;
+    created.value = undefined;
+};
+
+const openRunDialog = (only?: readonly string[]): void => {
+    preselect.value = only;
+    runDialogOpen.value = true;
 };
 
 const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
@@ -164,7 +228,7 @@ const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
                         </p>
                         <p class="mt-2 text-xs text-muted">
                             Stories themselves are markdown in each repo's <span class="font-mono">docs/user-stories/</span> — product documentation,
-                            versioned with the code it describes.
+                            versioned with the code it describes. Editing one here writes that file; there is no separate copy.
                         </p>
                     </InfoHint>
                 </template>
@@ -172,10 +236,7 @@ const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
                     <Button label="Refresh" size="small" severity="secondary" @click="refreshStories()">
                         <template #icon><Icon name="refresh" /></template>
                     </Button>
-                    <Button label="New story" size="small" severity="secondary" :disabled="repos.length === 0" @click="edit(undefined)">
-                        <template #icon><Icon name="plus" /></template>
-                    </Button>
-                    <Button label="Run" size="small" :disabled="stories.length === 0" @click="runDialogOpen = true">
+                    <Button label="Run" size="small" :disabled="stories.length === 0" @click="openRunDialog()">
                         <template #icon><Icon name="play" /></template>
                     </Button>
                 </template>
@@ -194,44 +255,43 @@ const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
                     <Icon name="arrow-left" />
                     All runs
                 </button>
-                <RunReport :run="openRun" :outcomes="outcomes.data.value ?? {}" :browsers="browsers" :loading="outcomes.isLoading.value" />
+                <RunReport
+                    :run="openRun"
+                    :outcomes="outcomes.data.value ?? {}"
+                    :browsers="browsers"
+                    :loading="outcomes.isLoading.value"
+                    :stop="stop"
+                />
             </template>
 
             <template v-else>
-                <section class="mb-8">
+                <section class="mb-8 flex flex-col gap-4">
                     <div v-if="repos.length === 0 && !storiesLoading" :class="cmp.emptyState()">
                         No repository here runs an app yet. Give one a panel (an <span class="font-mono">operator/</span> directory it can serve) and
                         its stories become testable.
                     </div>
-                    <div v-else-if="stories.length === 0 && !storiesLoading" :class="cmp.emptyState()">
-                        No stories yet. Write one — a feature from the user's point of view, plus the criteria that decide whether it works — and it
-                        becomes one test session per run.
-                    </div>
-                    <RowGroup v-for="entry in byRepo" :key="entry.repo" :label="entry.repo" :count="entry.count" class="mb-4">
+                    <RowGroup v-for="entry in byRepo" :key="entry.repo" :label="entry.repo" :count="entry.count">
                         <template v-for="[group, entries] in entry.groups" :key="group || 'root'">
                             <div v-if="group !== ``" class="bg-canvas px-4 py-1 font-mono text-2xs text-subtle">{{ group }}/</div>
-                            <button
+                            <StoryRow
                                 v-for="story in entries"
                                 :key="story.path"
-                                type="button"
-                                class="flex w-full cursor-pointer items-center gap-3 px-4 py-2 text-left hover:bg-overlay"
-                                @click="edit(story)"
-                            >
-                                <Icon name="file" class="shrink-0 text-subtle" />
-                                <span class="min-w-0 flex-1 truncate text-sm text-content">{{ story.title }}</span>
-                                <!-- The criteria count is the story's readiness, at a glance: a story with none
-                                     still runs, but nobody has said yet what "done" means for it. -->
-                                <span v-if="(criteria[story.path] ?? []).length > 0" class="shrink-0 text-2xs text-subtle">
-                                    {{ (criteria[story.path] ?? []).length }} criteria
-                                </span>
-                                <span v-else class="shrink-0 text-2xs text-warning">no criteria</span>
-                                <span class="w-40 shrink-0 truncate text-right font-mono text-2xs text-subtle">{{
-                                    story.path.split(`/`).pop()
-                                }}</span>
-                            </button>
+                                :story="story"
+                                :content="contents[story.path]"
+                                :expanded="editing === story.path"
+                                :status="statuses[story.path]"
+                                :autofocus="created === story.path"
+                                :save="save"
+                                :remove="remove"
+                                @toggle="toggle(story.path)"
+                                @run="openRunDialog([story.path])"
+                            />
                         </template>
+                        <!-- Last row, always: writing the next story is the thing this list is for, and it costs
+                             one line of the list to make it cost one keystroke. -->
+                        <StoryComposer :repo="entry.repo" :taken="paths" @create="create" />
                     </RowGroup>
-                    <p v-if="unread > 0" class="mt-2 text-2xs text-subtle">
+                    <p v-if="unread > 0" class="text-2xs text-subtle">
                         {{ unread }} further story files are listed by filename only — titles, criteria and text are read for the first 200.
                     </p>
                 </section>
@@ -242,48 +302,37 @@ const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
                         <span class="font-mono">{{ RUNS_DIR }}/</span>, outside every repository.
                     </div>
                     <button
-                        v-for="row in runs"
-                        :key="row.manifest.runId"
+                        v-for="entry in runRows"
+                        :key="entry.row.manifest.runId"
                         type="button"
                         class="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-overlay"
-                        @click="openRunId = row.manifest.runId"
+                        @click="openRunId = entry.row.manifest.runId"
                     >
-                        <Icon :name="row.running ? `spinner` : `history`" :class="['shrink-0 text-subtle', row.running && `animate-spin`]" />
+                        <Icon
+                            :name="entry.row.running ? `spinner` : `history`"
+                            :class="['shrink-0 text-subtle', entry.row.running && `animate-spin`]"
+                        />
                         <span class="min-w-0 flex-1">
+                            <!-- What it TESTED, not how many. "3 stories" makes every run in the list look like
+                                 every other one; the titles are how someone finds the run they remember. -->
                             <span class="block truncate text-sm text-content">
-                                {{ row.manifest.stories.length }} {{ row.manifest.stories.length === 1 ? `story` : `stories` }}
+                                {{ entry.row.manifest.stories.map((story) => story.title).join(` · `) }}
                             </span>
-                            <!-- Which apps this run walked. The repos are the run's subject; the URLs behind them
-                                 are in the report, where there is room to say one per repo. -->
-                            <span class="block truncate font-mono text-2xs text-subtle">{{ reposOf(row.manifest).join(`, `) }}</span>
+                            <span class="block truncate font-mono text-2xs text-subtle">
+                                {{ reposOf(entry.row.manifest).join(`, `) }} · {{ entry.row.manifest.provider
+                                }}{{ entry.row.manifest.model ? ` ${entry.row.manifest.model}` : `` }}
+                            </span>
                         </span>
-                        <StatusBadge :variant="tally(row).variant" :label="tally(row).label" size="xs" />
-                        <span class="w-20 shrink-0 text-right text-2xs text-subtle">{{ timeAgo(row.manifest.createdAt) }}</span>
+                        <StatusBadge v-if="entry.status" :variant="entry.status.variant" :label="entry.status.label" size="xs" />
+                        <span class="w-20 shrink-0 text-right text-2xs text-subtle">{{ timeAgo(entry.row.manifest.createdAt) }}</span>
                     </button>
                 </RowGroup>
+                <p v-if="runs.length > SCAN_RUNS" class="mt-2 text-2xs text-subtle">
+                    Verdicts are read for the newest {{ SCAN_RUNS }} runs. Older ones show theirs when opened.
+                </p>
             </template>
         </Page>
 
-        <StoryEditor
-            v-model:visible="editorOpen"
-            :story="editing"
-            :content="editing ? contents[editing.path] : undefined"
-            :repos="repos"
-            @save="
-                (input) =>
-                    attempt(async () => {
-                        await save(input);
-                        editorOpen = false;
-                    })
-            "
-            @remove="
-                (path) =>
-                    attempt(async () => {
-                        await remove(path);
-                        editorOpen = false;
-                    })
-            "
-        />
         <RunDialog
             v-model:visible="runDialogOpen"
             :stories="stories"
@@ -291,6 +340,7 @@ const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
             :criteria="criteria"
             :notes="notes"
             :targets="targets"
+            :preselect="preselect"
             @submit="run"
         />
     </div>

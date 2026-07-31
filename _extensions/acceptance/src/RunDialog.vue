@@ -17,13 +17,15 @@ import type { useTargets } from "./useTargets";
  * stories and the API's together — two servers, two ports. Fields appear and disappear as stories are ticked,
  * which is also what makes the cross-repo cost visible before it is paid. */
 
-const { stories, contents, criteria, notes, targets } = defineProps<{
+const { stories, contents, criteria, notes, targets, preselect } = defineProps<{
     stories: readonly Story[];
     contents: Readonly<Record<string, string>>;
     criteria: Readonly<Record<string, readonly string[]>>;
     // Each repo's docs/user-stories/.acceptance.md, keyed by repo name.
     notes: Readonly<Record<string, string>>;
     targets: ReturnType<typeof useTargets>;
+    // The paths to open ticked. Undefined means every story — see the watch below for why those are different.
+    preselect?: readonly string[] | undefined;
 }>();
 const visible = defineModel<boolean>(`visible`, { required: true });
 const emit = defineEmits<{ submit: [StartRunInput] }>();
@@ -61,8 +63,10 @@ watch(visible, (open) => {
         return;
     }
     panelError.value = undefined;
-    // Everything selected by default — the common gesture is "run them all", and unpicking is cheaper than picking.
-    selected.value = new Set(stories.map((story) => story.path));
+    /* Everything selected by default — the common gesture is "run them all", and unpicking is cheaper than
+     * picking. Opened FROM a story it is that story alone: iterating on one promise is the other gesture this
+     * dialog serves, and it would be a strange one that started by unticking nine other stories. */
+    selected.value = new Set(preselect ?? stories.map((story) => story.path));
     prefill();
 });
 watch([repos, () => repos.value.map((repo) => targets.suggestedFor(repo)).join(`|`)], () => prefill());

@@ -2,7 +2,7 @@
 import { Button, Card, cmp, Icon, Markdown, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { host } from "./host";
-import { reposOf, storyDir, type Verdict } from "./runs";
+import { reposOf, storyDir, type Verdict, verdictTone } from "./runs";
 import type { LiveBrowser, RunRow, StoryOutcome } from "./useRuns";
 
 /* One run, story by story: the verdict, the walkthrough the agent wrote, and the screenshots it took at each
@@ -23,16 +23,21 @@ import type { LiveBrowser, RunRow, StoryOutcome } from "./useRuns";
  * a relative path alone. So the swap happens AFTER sanitizing, imperatively on the rendered DOM — which is also
  * the only place the fetch can be lazy, one story at a time, instead of pulling every shot of every story. */
 
-const { run, outcomes, browsers, loading } = defineProps<{
+const { run, outcomes, browsers, loading, stop } = defineProps<{
     run: RunRow;
     outcomes: Readonly<Record<string, StoryOutcome>>;
     // Live browsers by conversationId — see useRuns.
     browsers: Readonly<Record<string, LiveBrowser>>;
     loading: boolean;
+    // Ends one story's session. A fan-out of ten unattended sessions has to be stoppable from the surface that
+    // started it — sending someone to the Agents board to find the ten cards this view already knows about is
+    // the kind of errand that gets a run left running instead.
+    stop: (conversationId: string) => Promise<void>;
 }>();
 
 const api = host();
 const open = ref(new Set<string>());
+const failure = ref<string | undefined>(undefined);
 // Object URLs by workspace path, minted once per shot and revoked together when this view goes away.
 const shots = reactive<Record<string, string>>({});
 const reportEl = ref<Record<string, HTMLElement | undefined>>({});
@@ -54,7 +59,7 @@ const browserOf = (slug: string): LiveBrowser | undefined => {
 const verdictBadge = (slug: string): { readonly label: string; readonly variant: StatusVariant } => {
     const verdict: Verdict | undefined = outcomes[slug]?.result?.verdict;
     if (verdict !== undefined) {
-        return { label: verdict, variant: verdict === `pass` ? `success` : verdict === `fail` ? `danger` : `warning` };
+        return { label: verdict, variant: verdictTone(verdict) };
     }
     const agent = run.agents.find((entry) => entry.id === conversationOf(slug));
     if (agent === undefined) {
@@ -67,6 +72,25 @@ const openSession = (slug: string): void => {
     const id = conversationOf(slug);
     if (id !== undefined) {
         api.navigate(`/agents/${encodeURIComponent(id)}`);
+    }
+};
+
+// Live only: a settled session has nothing to stop, and the button would then be an offer to do nothing.
+const isLive = (slug: string): boolean => {
+    const status = run.agents.find((entry) => entry.id === conversationOf(slug))?.status;
+    return status === `running` || status === `awaiting`;
+};
+
+const halt = async (slug: string): Promise<void> => {
+    const id = conversationOf(slug);
+    if (id === undefined) {
+        return;
+    }
+    failure.value = undefined;
+    try {
+        await stop(id);
+    } catch (error) {
+        failure.value = error instanceof Error ? error.message : String(error);
     }
 };
 
@@ -164,6 +188,8 @@ const addresses = computed(() => reposOf(run.manifest).map((repo) => ({ repo, ur
             </div>
         </Card>
 
+        <div v-if="failure" :class="cmp.alertDanger()">{{ failure }}</div>
+
         <div class="overflow-hidden rounded-lg border border-line bg-card">
             <div v-for="story in run.manifest.stories" :key="story.slug" class="border-b border-line last:border-b-0">
                 <div class="flex items-center gap-3 px-4 py-2.5">
@@ -196,6 +222,9 @@ const addresses = computed(() => reposOf(run.manifest).map((repo) => ({ repo, ur
                     </Button>
                     <Button label="Session" size="small" severity="secondary" @click="openSession(story.slug)">
                         <template #icon><Icon name="comments" /></template>
+                    </Button>
+                    <Button v-if="isLive(story.slug)" label="Stop" size="small" severity="secondary" @click="halt(story.slug)">
+                        <template #icon><Icon name="stop" /></template>
                     </Button>
                 </div>
 
