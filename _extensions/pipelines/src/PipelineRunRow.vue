@@ -95,8 +95,13 @@ const jobCount = computed(() => stages.value.reduce((total, stage) => total + st
             <!-- Inline stage graph -->
             <div class="flex shrink-0 items-center">
                 <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
-                <div v-else-if="jobsLoading" class="flex items-center gap-1">
-                    <span v-for="i in 3" :key="i" class="h-5 w-5 animate-pulse rounded-full bg-subtle/10"></span>
+                <!-- Same circles-and-connectors geometry as the real graph, so the row does not re-flow around
+                     it when the jobs land. Three is the guess; the count is what we are waiting to learn. -->
+                <div v-else-if="jobsLoading" class="flex items-center" aria-hidden="true">
+                    <template v-for="i in 3" :key="i">
+                        <span v-if="i > 1" class="h-px w-3 shrink-0 bg-line"></span>
+                        <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
+                    </template>
                 </div>
             </div>
 
@@ -152,9 +157,19 @@ const jobCount = computed(() => stages.value.reduce((total, stage) => total + st
 
         <!-- Expanded: the run's job graph -->
         <div v-if="expanded" class="border-t border-line px-4 pb-4 pt-3">
-            <div v-if="jobsLoading" class="flex items-center gap-2 py-3 text-xs text-muted">
-                <Icon name="spinner" class="animate-spin text-sm" />
-                Loading jobs...
+            <!-- The heading is known before the jobs are, so it stays real text and only the graph band is a
+                 placeholder — sized to DagGraph's own floor (150px) so the row settles once, not twice. -->
+            <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading jobs">
+                <div class="flex items-center justify-between">
+                    <span class="text-2xs font-semibold uppercase tracking-wide text-subtle">Job graph</span>
+                    <span class="skeleton h-2.5 w-40"></span>
+                </div>
+                <div class="flex h-[150px] items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
+                    <template v-for="i in 3" :key="i">
+                        <span v-if="i > 1" class="h-px w-6 shrink-0 bg-line"></span>
+                        <span class="skeleton h-[52px] w-[200px] shrink-0 rounded-md"></span>
+                    </template>
+                </div>
             </div>
 
             <div v-else-if="stages.length > 0" class="flex flex-col gap-2">

@@ -48,7 +48,11 @@ export function usePipelines() {
         repos: computed(() => query.data.value?.repos ?? []),
         runs: computed(() => query.data.value?.runs ?? []),
         error: computed(() => query.error.value?.message),
-        isLoading: query.isLoading,
+        // isPending, not isLoading: true from mount until the FIRST response, INCLUDING the window where
+        // `enabled` still gates the fetch on the sandbox handshake. isLoading is false in that window (nothing
+        // is in flight yet), which is how the view came to flash "no repo maps to a connected account" at
+        // someone whose repos were about to load.
+        isPending: query.isPending,
         rerun,
         cancel,
         fix,

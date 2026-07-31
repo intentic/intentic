@@ -5,6 +5,7 @@ import { computed, onMounted, ref } from "vue";
 import { markPipelinesSeen } from "./ciAttention";
 import { useFailureHistory } from "./useFailureHistory";
 import PipelineRunRow from "./PipelineRunRow.vue";
+import PipelinesSkeleton from "./PipelinesSkeleton.vue";
 import { host } from "./host";
 import { usePipelines } from "./usePipelines";
 
@@ -12,7 +13,7 @@ import { usePipelines } from "./usePipelines";
  * auto-fetches its jobs and renders an inline GitLab-style connected-circles pipeline graph. Clicking
  * a stage circle pops over job details; clicking the chevron expands a full horizontal job flow. */
 
-const { repos, runs, error, isLoading, rerun, cancel, fix } = usePipelines();
+const { repos, runs, error, isPending, rerun, cancel, fix } = usePipelines();
 
 // Opening the view IS reading it: stamp read state so the rail stops flagging breakages now on screen. Only
 // on mount — re-stamping as runs stream in would swallow a failure that lands while the tab sits in the
@@ -112,90 +113,97 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
             <div v-if="error" :class="cmp.alertDanger(`mb-4 px-4 py-3 text-sm`)">{{ error }}</div>
             <div v-if="actionError" :class="cmp.alertDanger(`mb-4 px-4 py-3 text-sm`)">{{ actionError }}</div>
 
-            <!-- ---- Summary bar ---- -->
-            <div v-if="runs.length > 0" class="mb-5 flex flex-wrap items-center gap-3">
-                <div class="flex items-center gap-4 rounded-lg border border-line bg-card px-4 py-2.5">
-                    <div v-if="counts.failed > 0" class="flex items-center gap-1.5">
-                        <span class="h-2 w-2 rounded-full bg-danger"></span>
-                        <span class="text-sm font-semibold text-danger">{{ counts.failed }}</span>
-                        <span class="text-xs text-muted">failed</span>
-                    </div>
-                    <div v-if="counts.running > 0" class="flex items-center gap-1.5">
-                        <span class="h-2 w-2 animate-pulse rounded-full bg-info"></span>
-                        <span class="text-sm font-semibold text-info">{{ counts.running }}</span>
-                        <span class="text-xs text-muted">running</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <span class="h-2 w-2 rounded-full bg-success"></span>
-                        <span class="text-sm font-semibold text-success">{{ counts.success }}</span>
-                        <span class="text-xs text-muted">passed</span>
-                    </div>
-                    <div v-if="counts.other > 0" class="flex items-center gap-1.5">
-                        <span class="h-2 w-2 rounded-full bg-subtle"></span>
-                        <span class="text-sm font-semibold text-subtle">{{ counts.other }}</span>
-                        <span class="text-xs text-muted">other</span>
-                    </div>
-                </div>
-                <div v-if="successRate !== undefined" class="flex items-center gap-2">
-                    <ProgressRing :value="successRate" :size="20" :stroke="2.5" :class="successRate >= 80 ? `text-success` : successRate >= 50 ? `text-warning` : `text-danger`" />
-                    <span class="text-xs text-muted">{{ successRate }}% pass rate</span>
-                </div>
-            </div>
+            <!-- Nothing has come back yet — including the window where the sandbox handshake still gates the
+                 fetch. Show the board's shape rather than a bare page that is indistinguishable from "you have
+                 no repos connected". -->
+            <PipelinesSkeleton v-if="isPending" />
 
-            <!-- ---- What keeps breaking ----
-                 Above the runs on purpose: on a repo that fails often the list answers "did it fail" (yes,
-                 again), while the thing worth acting on is WHICH job has been failing all along. -->
-            <div v-if="recurring.length > 0" class="mb-5 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
-                <div class="flex items-center gap-2">
-                    <Icon name="exclamation-circle" class="text-sm text-danger" />
-                    <span class="text-sm font-semibold text-content">Failing repeatedly</span>
-                </div>
-                <div class="mt-2 flex flex-wrap gap-1.5">
-                    <span
-                        v-for="item in recurring"
-                        :key="`${item.repo}:${item.branch}:${item.job}`"
-                        class="inline-flex items-center gap-1.5 rounded-md border border-danger/20 bg-canvas px-2 py-1 text-xs"
-                        v-tooltip.top="`${item.job} has failed the last ${item.runs} runs on ${item.repo} ${item.branch}`"
-                    >
-                        <span class="font-medium text-danger">{{ item.job }}</span>
-                        <span class="text-2xs text-subtle">{{ item.runs }} runs</span>
-                    </span>
-                </div>
-            </div>
-
-            <!-- ---- Per-repo sections ---- -->
-            <div class="flex flex-col gap-6">
-                <RowGroup v-for="repo in repos" :key="repo.repo" :label="repo.repo">
-                    <template #info>
-                        <div class="flex items-center gap-1.5">
-                            <Icon :name="repo.host === `github` ? `github` : `gitlab`" class="text-subtle" />
-                            <a :href="repo.url" target="_blank" rel="noopener" class="truncate font-mono text-2xs text-subtle hover:text-link">
-                                {{ repo.project }}
-                            </a>
+            <template v-else>
+                <!-- ---- Summary bar ---- -->
+                <div v-if="runs.length > 0" class="mb-5 flex flex-wrap items-center gap-3">
+                    <div class="flex items-center gap-4 rounded-lg border border-line bg-card px-4 py-2.5">
+                        <div v-if="counts.failed > 0" class="flex items-center gap-1.5">
+                            <span class="h-2 w-2 rounded-full bg-danger"></span>
+                            <span class="text-sm font-semibold text-danger">{{ counts.failed }}</span>
+                            <span class="text-xs text-muted">failed</span>
                         </div>
-                    </template>
+                        <div v-if="counts.running > 0" class="flex items-center gap-1.5">
+                            <span class="h-2 w-2 animate-pulse rounded-full bg-info"></span>
+                            <span class="text-sm font-semibold text-info">{{ counts.running }}</span>
+                            <span class="text-xs text-muted">running</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="h-2 w-2 rounded-full bg-success"></span>
+                            <span class="text-sm font-semibold text-success">{{ counts.success }}</span>
+                            <span class="text-xs text-muted">passed</span>
+                        </div>
+                        <div v-if="counts.other > 0" class="flex items-center gap-1.5">
+                            <span class="h-2 w-2 rounded-full bg-subtle"></span>
+                            <span class="text-sm font-semibold text-subtle">{{ counts.other }}</span>
+                            <span class="text-xs text-muted">other</span>
+                        </div>
+                    </div>
+                    <div v-if="successRate !== undefined" class="flex items-center gap-2">
+                        <ProgressRing :value="successRate" :size="20" :stroke="2.5" :class="successRate >= 80 ? `text-success` : successRate >= 50 ? `text-warning` : `text-danger`" />
+                        <span class="text-xs text-muted">{{ successRate }}% pass rate</span>
+                    </div>
+                </div>
 
-                    <div v-if="repo.hookWarning" :class="cmp.alertWarning(`px-4 py-2.5 text-xs break-words`)">{{ repo.hookWarning }}</div>
+                <!-- ---- What keeps breaking ----
+                     Above the runs on purpose: on a repo that fails often the list answers "did it fail" (yes,
+                     again), while the thing worth acting on is WHICH job has been failing all along. -->
+                <div v-if="recurring.length > 0" class="mb-5 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <Icon name="exclamation-circle" class="text-sm text-danger" />
+                        <span class="text-sm font-semibold text-content">Failing repeatedly</span>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-1.5">
+                        <span
+                            v-for="item in recurring"
+                            :key="`${item.repo}:${item.branch}:${item.job}`"
+                            class="inline-flex items-center gap-1.5 rounded-md border border-danger/20 bg-canvas px-2 py-1 text-xs"
+                            v-tooltip.top="`${item.job} has failed the last ${item.runs} runs on ${item.repo} ${item.branch}`"
+                        >
+                            <span class="font-medium text-danger">{{ item.job }}</span>
+                            <span class="text-2xs text-subtle">{{ item.runs }} runs</span>
+                        </span>
+                    </div>
+                </div>
 
-                    <PipelineRunRow
-                        v-for="run in runsOf(repo)"
-                        :key="actionKey(run)"
-                        :run="run"
-                        :busy="busy"
-                        :recurring="recurringFor(run)"
-                        @rerun="act($event, rerun)"
-                        @cancel="act($event, cancel)"
-                        @fix="fixRun($event)"
-                    />
+                <!-- ---- Per-repo sections ---- -->
+                <div class="flex flex-col gap-6">
+                    <RowGroup v-for="repo in repos" :key="repo.repo" :label="repo.repo">
+                        <template #info>
+                            <div class="flex items-center gap-1.5">
+                                <Icon :name="repo.host === `github` ? `github` : `gitlab`" class="text-subtle" />
+                                <a :href="repo.url" target="_blank" rel="noopener" class="truncate font-mono text-2xs text-subtle hover:text-link">
+                                    {{ repo.project }}
+                                </a>
+                            </div>
+                        </template>
 
-                    <p v-if="runsOf(repo).length === 0 && !isLoading" class="py-4 text-center text-sm text-muted">No runs yet for this repo.</p>
-                </RowGroup>
+                        <div v-if="repo.hookWarning" :class="cmp.alertWarning(`px-4 py-2.5 text-xs break-words`)">{{ repo.hookWarning }}</div>
 
-                <p v-if="repos.length === 0 && !isLoading" class="py-8 text-center text-sm text-muted">
-                    No workspace repo maps to a connected GitHub/GitLab account — clone a repo from your connected host, or connect the matching
-                    capability on the + page.
-                </p>
-            </div>
+                        <PipelineRunRow
+                            v-for="run in runsOf(repo)"
+                            :key="actionKey(run)"
+                            :run="run"
+                            :busy="busy"
+                            :recurring="recurringFor(run)"
+                            @rerun="act($event, rerun)"
+                            @cancel="act($event, cancel)"
+                            @fix="fixRun($event)"
+                        />
+
+                        <p v-if="runsOf(repo).length === 0" class="py-4 text-center text-sm text-muted">No runs yet for this repo.</p>
+                    </RowGroup>
+
+                    <p v-if="repos.length === 0" class="py-8 text-center text-sm text-muted">
+                        No workspace repo maps to a connected GitHub/GitLab account — clone a repo from your connected host, or connect the matching
+                        capability on the + page.
+                    </p>
+                </div>
+            </template>
         </Page>
     </div>
 </template>

@@ -1,4 +1,4 @@
-/* Custom utilities — thin scrollbars and entrance animations, themed via role tokens. */
+/* Custom utilities — thin scrollbars, loading placeholders and entrance animations, themed via role tokens. */
 @layer utilities {
     .scrollbar-thin {
         scrollbar-width: thin;
@@ -25,6 +25,44 @@
 
     .animate-fade-in-up {
         animation: ui-fade-in-up 0.25s ease-out both;
+    }
+}
+
+/* Loading placeholder. The caller owns the BOX — `class="skeleton h-4 w-32 rounded-full"` — and this owns the
+   fill, the default radius and the motion, so every surface that renders a shape of the thing it is about to
+   show shimmers at one speed and one contrast instead of each view inventing its own pulse. The sweep is a
+   background-image over the fill (not opacity) so a skeleton laid on `bg-card` and one laid on `bg-canvas` read
+   the same.
+
+   In `components`, not `utilities`, for the same reason cmp.ts merges classes: the caller always wins. A tie in
+   `utilities` would resolve by source order, and this file loads after Tailwind's — which is how the first cut
+   of this rule turned every `rounded-full` avatar and stage circle into a square. */
+@layer components {
+    .skeleton {
+        border-radius: 0.25rem;
+        background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
+        background-image: linear-gradient(90deg, transparent 20%, color-mix(in srgb, var(--color-content) 8%, transparent) 50%, transparent 80%);
+        background-repeat: no-repeat;
+        background-size: 250% 100%;
+        animation: ui-skeleton-sweep 1.6s ease-in-out infinite;
+    }
+}
+
+@keyframes ui-skeleton-sweep {
+    from {
+        background-position: 150% 0;
+    }
+    to {
+        background-position: -50% 0;
+    }
+}
+
+/* A placeholder is by definition content the reader cannot act on yet, so its motion is pure decoration —
+   the first thing to drop for anyone who asked the OS for less of it. The fill stays: it is what says
+   "something is coming here". */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none;
     }
 }
 
