@@ -19,6 +19,7 @@ export const extensionUiNames = [
     "MarkdownFigure",
     "Page",
     "PageHeader",
+    "Picker",
     "Popover",
     "ProgressRing",
     "RowGroup",

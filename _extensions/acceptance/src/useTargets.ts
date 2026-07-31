@@ -36,6 +36,12 @@ export type PanelState =
     // The port answers. This is the only state that yields an address.
     | "ready";
 
+/* THE TMUX SESSION THE DEV SERVER RUNS IN. `panel-<key>`, where the key is the repo id with its slashes
+ * flattened — the daemon's PANEL_SESSION_PREFIX (processes/managed-processes.ts) over its panelKey
+ * (panels/panels.ts). Session names are wire vocabulary the browser is expected to build; this is the same
+ * string repo-apps builds for its own launches. */
+export const panelSessionOf = (repo: string): string => `panel-${repo.replaceAll(`/`, `--`)}`;
+
 export function useTargets() {
     const api = host();
     const queryClient = useQueryClient();
@@ -79,8 +85,17 @@ export function useTargets() {
         refresh: async (): Promise<void> => {
             await queryClient.invalidateQueries({ queryKey: key });
         },
+        // The dev server's own terminal, in the shell's global panel. What a start actually does — install,
+        // compile, bind, or fail — is only visible here, so nothing about it is hidden behind a status word.
+        showLog: (repo: string): void => api.terminal.open(panelSessionOf(repo)),
         startPanel: async (repo: string): Promise<void> => {
+            /* Open the panel BY NAME before the POST, then again after. The session does not exist until the
+             * POST lands, and a panel opened with no name on an empty strip fills the gap with its own `web-*`
+             * shell — naming it makes the panel wait for this session instead. The second call focuses it once
+             * it is really there. Same sequence repo-apps uses, and for the same reason. */
+            api.terminal.open(panelSessionOf(repo));
             await api.sandbox.json(`/panels/${encodeURIComponent(repo)}/start`, { method: `POST` });
+            api.terminal.open(panelSessionOf(repo));
             await queryClient.invalidateQueries({ queryKey: key });
         },
     };

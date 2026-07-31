@@ -7,6 +7,7 @@ export const ConnectorContributionSchema = m["ConnectorContributionSchema"];
 export const ConnectorFieldSchema = m["ConnectorFieldSchema"];
 export const EnvironmentContributionSchema = m["EnvironmentContributionSchema"];
 export const ExtensionManifestSchema = m["ExtensionManifestSchema"];
+export const FileContributionSchema = m["FileContributionSchema"];
 export const ListenerContributionSchema = m["ListenerContributionSchema"];
 export const ProcessContributionSchema = m["ProcessContributionSchema"];
 export const SettingContributionSchema = m["SettingContributionSchema"];

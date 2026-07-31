@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Checkbox, cmp, Dialog, Icon, InputText, Select } from "@intentic/extension-ui";
+import { Button, Checkbox, cmp, Dialog, Icon, InputText, Picker } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import type { Story } from "./stories";
 import { DEFAULT_MODEL_VALUE, modelForTurn, PROVIDER_OPTIONS, useModels } from "./useModels";
@@ -24,7 +24,12 @@ import type { useTargets } from "./useTargets";
  *
  * ONE ROW PER REPO, driven by the selection. The area is workspace-wide, so a run may carry the web app's
  * stories and the API's together — two servers, two ports. Rows appear and disappear as stories are ticked,
- * which is also what makes the cross-repo cost visible before it is paid. */
+ * which is also what makes the cross-repo cost visible before it is paid.
+ *
+ * NOT MODAL. This dialog's whole job is to get an app up, and the only place a boot is legible is the dev
+ * server's terminal — which the shell already has a panel for. A mask over it meant the dialog said "Terminals
+ * shows it live" while making Terminals unreachable. Without the mask the panel stays usable underneath, so
+ * "start it, watch it, run" is one continuous gesture instead of three modes. */
 
 const { stories, contents, criteria, notes, targets, preselect } = defineProps<{
     stories: readonly Story[];
@@ -53,6 +58,16 @@ const { models } = useModels(provider);
 
 // A provider switch invalidates a pinned model — its ids belong to the provider that vends them.
 watch(provider, () => (model.value = DEFAULT_MODEL_VALUE));
+
+/* The Picker's model is `T | undefined` because a picker CAN be cleared; neither of these ever is (both carry a
+ * real default), so an undefined emission is ignored rather than written through. Explicit binding instead of
+ * v-model for exactly that, the same shape AddWantDialog uses. */
+const setProvider = (value: string | undefined): void => {
+    provider.value = value ?? provider.value;
+};
+const setModel = (value: string | undefined): void => {
+    model.value = value ?? model.value;
+};
 
 const chosen = computed(() => stories.filter((story) => selected.value.has(story.path)));
 // First-appearance order of the repos the selection touches — the URL fields, and the keys the run's `targets`
@@ -144,7 +159,17 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Dialog v-model:visible="visible" modal header="Run acceptance tests" :style="{ width: `38rem` }">
+    <!-- `position="top"` keeps it clear of the terminal panel, which docks at the bottom: the two surfaces are
+         meant to be read together while a server boots. Draggable for the rest. -->
+    <Dialog
+        v-model:visible="visible"
+        :modal="false"
+        position="top"
+        draggable
+        header="Run acceptance tests"
+        :style="{ width: `38rem` }"
+        :pt="{ root: `shadow-2xl` }"
+    >
         <div class="flex flex-col gap-5">
             <section class="flex flex-col gap-2">
                 <div class="flex items-center justify-between">
@@ -204,18 +229,26 @@ const submit = (): void => {
                         <div v-if="targets.stateOf(repo) === `ready`" class="flex min-w-0 items-center gap-2">
                             <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
                             <span class="shrink-0 text-xs text-content">Dev server ready</span>
-                            <span class="min-w-0 truncate font-mono text-2xs text-subtle">{{ targets.localUrl(repo) }}</span>
+                            <span class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ targets.localUrl(repo) }}</span>
+                            <Button label="Terminal" size="small" severity="secondary" text @click="targets.showLog(repo)">
+                                <template #icon><Icon name="desktop" /></template>
+                            </Button>
                         </div>
-                        <!-- STARTING. Where Start used to vanish. The caveat is here because the command behind
-                             it installs dependencies on a first run, and a silent minute reads as a hang. -->
-                        <div v-else-if="targets.stateOf(repo) === `starting`" class="flex flex-col gap-0.5">
-                            <span class="flex items-center gap-2 text-xs text-content">
-                                <Icon name="spinner" class="shrink-0 animate-spin text-subtle" />
-                                Starting…
-                            </span>
-                            <span class="text-2xs text-subtle">
-                                A first start installs dependencies, which can take a minute. Terminals shows it live.
-                            </span>
+                        <!-- STARTING. Where Start used to vanish, and where the output lives: the command behind
+                             it installs dependencies on a first run, so a silent minute reads as a hang and a
+                             failed install has nowhere else to be seen. The terminal is opened by Start itself;
+                             this button is how you get back to it. -->
+                        <div v-else-if="targets.stateOf(repo) === `starting`" class="flex items-center gap-2">
+                            <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                                <span class="flex items-center gap-2 text-xs text-content">
+                                    <Icon name="spinner" class="shrink-0 animate-spin text-subtle" />
+                                    Starting…
+                                </span>
+                                <span class="text-2xs text-subtle">A first start installs dependencies, which can take a minute.</span>
+                            </div>
+                            <Button label="Terminal" size="small" severity="secondary" @click="targets.showLog(repo)">
+                                <template #icon><Icon name="desktop" /></template>
+                            </Button>
                         </div>
                         <div v-else class="flex items-center gap-2">
                             <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-content/25" />
@@ -244,15 +277,25 @@ const submit = (): void => {
                 </p>
             </section>
 
+            <!-- The design system's own picker — the control behind the Sandbox hub's model choice — rather
+                 than two bare Selects. Same rows, same keyboard handling, same mobile sheet, and a filter box
+                 that appears by itself once a provider's model list is long. -->
             <section class="flex gap-3">
-                <label class="flex flex-1 flex-col gap-1.5">
+                <div class="flex min-w-0 flex-1 flex-col gap-1.5">
                     <span :class="cmp.sectionLabel()">Agent</span>
-                    <Select v-model="provider" :options="[...PROVIDER_OPTIONS]" option-label="label" option-value="value" size="small" />
-                </label>
-                <label class="flex flex-1 flex-col gap-1.5">
+                    <Picker
+                        :model-value="provider"
+                        :options="PROVIDER_OPTIONS"
+                        class="w-full"
+                        aria-label="Agent"
+                        header="Agent"
+                        @update:model-value="setProvider"
+                    />
+                </div>
+                <div class="flex min-w-0 flex-1 flex-col gap-1.5">
                     <span :class="cmp.sectionLabel()">Model</span>
-                    <Select v-model="model" :options="models" option-label="label" option-value="value" size="small" />
-                </label>
+                    <Picker :model-value="model" :options="models" class="w-full" aria-label="Model" header="Model" @update:model-value="setModel" />
+                </div>
             </section>
 
             <p class="text-2xs text-subtle">
