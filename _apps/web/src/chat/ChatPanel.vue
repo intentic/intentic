@@ -3,17 +3,10 @@ import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-    type AgentCommand,
-    NATIVE_PROVIDERS,
-    type NativeProvider,
-    type OauthAccount,
-    providerLabel,
-    USAGE_LIMIT_AUTO_RESUME_ENABLED,
-} from "@intentic/sandbox-contract";
+import { type AgentCommand, type OauthAccount, providerLabel, USAGE_LIMIT_AUTO_RESUME_ENABLED } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
-import { effortsFor, MODES } from "../composables/chat/catalog";
-import { effectiveAccount, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
+import { MODES } from "../composables/chat/catalog";
+import { effectiveAccount, effortsFor, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
 import { acksOf, type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import {
     bindingWindow,
@@ -121,9 +114,8 @@ const modelHint = computed(() =>
         ? providerName.value
         : `${providerName.value} · this turn is running ${activeModel.value}`,
 );
-// An ACP provider owns its own model AND reasoning settings — no effort scale to offer (the segments hide).
-const nativeProvider = computed(() => NATIVE_PROVIDERS.includes(provider.value as NativeProvider));
-const efforts = computed(() => (nativeProvider.value ? effortsFor(provider.value, model.value, thinking.value) : []));
+// An ACP provider owns its own model AND reasoning settings — effortsFor offers it no scale, so the segments hide.
+const efforts = computed(() => effortsFor(provider.value, model.value, thinking.value));
 
 // The mobile pickers: pill taps open bottom sheets instead of anchored popovers.
 const modelSheetOpen = ref(false);

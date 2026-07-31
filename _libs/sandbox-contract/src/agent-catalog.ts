@@ -114,13 +114,8 @@ export const modelsFor = (provider: AgentProvider): CatalogOption[] => {
 // the only constrained tier and it fails two ways: no non-Claude scale HAS it, and Claude's API rejects it
 // outright when extended thinking is disabled ("effort 'max' is not supported when thinking is disabled on this
 // model" — a 400 that kills the turn before the model sees it, surfacing only as the SDK's `unknown` error
-// category). Every point where a selection can land on an invalid pair — restore from storage, provider switch,
-// thinking toggle, the picker's own option list — runs the pair through here, so the combination is unreachable
-// rather than merely discouraged.
+// category). It is the one rule a MODEL's published tier list can't express — the daemon reports what a model
+// accepts without knowing this turn's thinking setting — so the consumer that assembles the offered scale
+// (effortsFor, web-side) filters through here, and the clamp over that scale makes the pair unreachable.
 export const effortAllowed = (effort: string, provider: AgentProvider, thinking: boolean): boolean =>
     effort !== "max" || (provider === "claude" && thinking);
-
-// The tier a selection falls back to when effortAllowed rejects it — one rung down from 'max', the top of every
-// scale that excludes it.
-export const clampEffort = (effort: string, provider: AgentProvider, thinking: boolean): string =>
-    effortAllowed(effort, provider, thinking) ? effort : "xhigh";

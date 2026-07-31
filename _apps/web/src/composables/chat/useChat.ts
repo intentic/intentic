@@ -2,7 +2,6 @@ import {
     type AgentCommand,
     type AgentHarness,
     type AgentProvider,
-    clampEffort,
     type EditorContext,
     type KeyedProvider,
     type Model,
@@ -174,12 +173,11 @@ const restoreTab = (tab: StoredTab): Conversation => {
     }
     // ...and the rest of the tab's turn settings by the same rule: the composer's pills describe THIS chat, so a
     // reload restores what it was showing rather than re-seeding it from picks made in some other tab since.
-    // Thinking first — the effort clamp reads it (a 'max' tier is invalid with thinking off).
     if (tab.thinking !== undefined) {
         conversation.thinking.value = tab.thinking;
     }
     if (tab.effort !== undefined) {
-        conversation.effort.value = clampEffort(tab.effort, conversation.provider.value, conversation.thinking.value);
+        conversation.effortPick.value = tab.effort;
     }
     if (tab.session !== undefined) {
         // A session resumes only on the account that minted it, so it keeps its OWN pin rather than adopting the
@@ -230,7 +228,7 @@ watch(
                 provider: conversation.provider.value,
                 account: conversation.account.value,
                 model: conversation.model.value,
-                effort: conversation.effort.value,
+                effort: conversation.effortPick.value,
                 thinking: conversation.thinking.value,
                 harness: conversation.harness.value,
                 session: conversation.session.value && {
@@ -390,10 +388,12 @@ const selectModel = (pick: { provider: AgentProvider; value: string }): void => 
     turnDefaults.models.value = { ...turnDefaults.models.value, [pick.provider]: pick.value };
 };
 
+// The effort the composer shows is the EFFECTIVE one (the pick clamped to the current model's scale); setting
+// it records a new pick, on this conversation and as the seed for the next new chat.
 const effort = computed<string>({
     get: () => active.value.effort.value,
     set: (value) => {
-        active.value.effort.value = value;
+        active.value.effortPick.value = value;
         turnDefaults.effort.value = value;
     },
 });
@@ -402,11 +402,9 @@ const thinking = computed<boolean>({
     set: (value) => {
         active.value.thinking.value = value;
         turnDefaults.thinking.value = value;
-        // Turning thinking OFF invalidates a 'max' effort pick (the API rejects the pair), and the picker drops
-        // the tier from its list the moment this flips — so the selection is clamped here rather than left
-        // pointing at an option that is no longer offered. Writing through `effort` persists it to turnDefaults
-        // too, so the next new chat doesn't inherit the invalid pair.
-        effort.value = clampEffort(effort.value, provider.value, value);
+        // No effort clamp here: turning thinking OFF invalidates a 'max' pick (the API rejects the pair), and
+        // Conversation.effort already answers for it — thinking is one of the three inputs it clamps against, so
+        // the composer's segments and the next turn both follow this flip on their own.
     },
 });
 // Account facades: the active conversation's account selection + its picker. `accounts` lists the active
@@ -1245,12 +1243,11 @@ export const openAgentConversation = (agent: {
     conversation.harness.value = agent.harness;
     conversation.account.value = agent.account ?? rememberedAccountFor(agent.provider);
     conversation.model.value = agent.model ?? rememberedModelFor(agent.provider);
-    // Thinking before the effort clamp, as in restoreTab.
     if (agent.thinking !== undefined) {
         conversation.thinking.value = agent.thinking;
     }
     if (agent.effort !== undefined) {
-        conversation.effort.value = clampEffort(agent.effort, agent.provider, conversation.thinking.value);
+        conversation.effortPick.value = agent.effort;
     }
     conversation.title.value = agent.title ?? null;
     if (agent.sessionId !== undefined) {

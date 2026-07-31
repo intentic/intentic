@@ -6,10 +6,10 @@ import {
     type AgentReply,
     type AttachFrame,
     type CatalogOption,
-    clampEffort,
     type ContextUsage,
     deriveTitle,
     type EditorContext,
+    effortAllowed,
     type ModelBadge,
     modelsFor,
     NATIVE_PROVIDERS,
@@ -104,6 +104,49 @@ export const modelOptionsFor = (provider: AgentProvider): ModelOption[] => {
     const live = providerModels.value[provider] ?? [];
     return live.length > 0 ? live : modelsFor(provider);
 };
+
+const EFFORT_LABELS: Record<string, string> = { minimal: `Minimal`, low: `Low`, medium: `Medium`, high: `High`, xhigh: `X-High`, max: `Max` };
+
+// Every reasoning tier any provider has, weakest first. Only an ORDER — nothing is offered because it appears
+// here; it is what lets a clamp say "the strongest tier this model has that is no stronger than the pick".
+const EFFORT_SCALE: readonly string[] = [`minimal`, `low`, `medium`, `high`, `xhigh`, `max`];
+
+// The scale a model is offered on when its provider published none — the four tiers every non-Claude runtime
+// has historically accepted. 'max' rides the same effortAllowed filter as a live scale's would.
+const STATIC_EFFORTS: readonly string[] = [`low`, `medium`, `high`, `xhigh`, `max`];
+
+// Reasoning effort levels for a provider+model: the live catalog's per-model tiers when the daemon reported
+// them (/claude/models · /kimi/models carry each model's supported levels), else the static scale above.
+// Model-aware so a release with a different scale adjusts the picker with no code change. `thinking` filters
+// the top tier the same way effortAllowed does — the daemon reports a model's tiers without knowing this turn's
+// thinking setting, so the filter applies to BOTH the live list and the static fallback. Empty only for an ACP
+// provider, which owns its own reasoning settings and has no scale to offer.
+export const effortsFor = (provider: AgentProvider, modelId: string | undefined, thinking: boolean): CatalogOption[] => {
+    if (!NATIVE_PROVIDERS.includes(provider as NativeProvider)) {
+        return [];
+    }
+    const published = (providerModels.value[provider] ?? []).find((option) => option.value === modelId)?.efforts;
+    const scale = published !== undefined && published.length > 0 ? published : STATIC_EFFORTS;
+    return scale.filter((value) => effortAllowed(value, provider, thinking)).map((value) => ({ label: EFFORT_LABELS[value] ?? value, value }));
+};
+
+// The tier a selection actually RUNS at for a provider+model+thinking triple: the pick itself when that model
+// offers it, else the strongest weaker tier it does offer (the weakest it has, if the pick is below all of
+// them). Model-aware because a scale is a property of the MODEL, not the provider — Kimi K3 stops at 'high'
+// while Claude goes to 'max', so a pick made on one model is routinely off-scale on the next, and an off-scale
+// effort both leaves the composer's segments with nothing lit and sends a tier the runtime never accepted.
+// Applied at every read (Conversation.effort) rather than written back over the pick, so moving to a smaller
+// model and back restores what the user chose instead of quietly ratcheting it down.
+export const clampEffort = (effort: string, provider: AgentProvider, modelId: string | undefined, thinking: boolean): string => {
+    const offered = effortsFor(provider, modelId, thinking).map((option) => option.value);
+    if (offered.length === 0 || offered.includes(effort)) {
+        return effort;
+    }
+    const wanted = EFFORT_SCALE.indexOf(effort);
+    const ranked = offered.toSorted((left, right) => EFFORT_SCALE.indexOf(left) - EFFORT_SCALE.indexOf(right));
+    return ranked.findLast((value) => EFFORT_SCALE.indexOf(value) <= wanted) ?? ranked[0]!;
+};
+
 // The slash commands each provider last published daemon-side (GET /agent/commands), loaded on the same
 // reachable seam as accounts/models. A conversation's OWN list — replaced by every `commands` frame its turns
 // emit — stays authoritative once it has run one; this is the seed that makes the composer's `/` popover work
@@ -207,8 +250,8 @@ export interface TurnSettings {
 export const startingMode = (isolated: boolean): PermissionMode => (isolated ? `bypassPermissions` : `plan`);
 
 // The persisted turn prefs, one JSON blob. Restored values are validated per field (enum for provider, boolean
-// for thinking) so a stale or hand-edited entry degrades to the defaults; model/effort stay plain strings — the
-// Conversation constructor does the semantic clamping (codex model/effort scoping).
+// for thinking) so a stale or hand-edited entry degrades to the defaults; model/effort stay plain strings — a
+// stored effort is a PICK, and Conversation.effort clamps it to whatever the provider+model it lands on offers.
 const TURN_DEFAULTS_KEY = `intentic.turnDefaults`;
 
 interface TurnDefaults {
@@ -563,8 +606,18 @@ export class Conversation {
     readonly harness = ref<AgentHarness>(turnDefaults.harness.value);
     readonly account = ref<string | undefined>(rememberedAccountFor(turnDefaults.provider.value));
     readonly model = ref<string>(rememberedModelFor(turnDefaults.provider.value));
-    readonly effort = ref<string>(turnDefaults.effort.value);
     readonly thinking = ref<boolean>(turnDefaults.thinking.value);
+    // The reasoning effort the user ASKED for — which is not always runnable, because the tier scale belongs to
+    // the MODEL: a pick made on Claude ('max', 'xhigh') is off Kimi K3's scale, and 'max' leaves Claude's own the
+    // moment thinking is switched off. Everything that selects an effort writes this; everything that renders or
+    // SENDS one reads `effort` below. Keeping the pick means a trip through a smaller model doesn't ratchet it
+    // down — come back and the user's choice is still there.
+    readonly effortPick = ref<string>(turnDefaults.effort.value);
+
+    // The tier this conversation's next turn actually runs at: the pick, clamped to what the current
+    // provider+model+thinking triple offers. Clamped at READ rather than written back, so it also covers the
+    // moments no setter runs — the model catalog arriving after the conversation was seeded, most of all.
+    readonly effort = computed<string>(() => clampEffort(this.effortPick.value, this.provider.value, this.model.value, this.thinking.value));
 
     // This conversation's composer draft: the unsent message text and staged attachments. Per-tab so switching
     // tabs keeps each chat's draft; persisted per sandbox (see useChat's tab snapshot) so a refresh keeps it.
@@ -637,17 +690,11 @@ export class Conversation {
     // entry and the worktree, the strip puts on the tab, and the transcript mirror puts on the cache entry. It
     // survives provider/harness switches (which retire sessions) and reloads (persisted in the tab snapshot),
     // and its shape satisfies the wire's branch/path-safety regex (a UUID: hex + hyphens, starts alphanumeric).
-    constructor(readonly conversationId: string = crypto.randomUUID()) {
-        // A restored 'max' can be invalid two ways — Codex/Grok have no such tier, and Claude's API rejects it
-        // with thinking off — and turnDefaults persists BOTH halves, so an unclamped pair would fail every turn
-        // of every new conversation until the user happened to change one. The model is already provider-correct
-        // from the seed (rememberedModelFor), so no model re-scope is needed.
-        this.effort.value = clampEffort(this.effort.value, this.provider.value, this.thinking.value);
-    }
+    constructor(readonly conversationId: string = crypto.randomUUID()) {}
 
     // Switch the provider this conversation's next turn runs on and re-scope its provider-specific settings:
-    // the model repoints to the new provider's remembered/live-default pick, and a non-Claude effort scale
-    // tops out at xhigh. Writes the pick back to the module default so the next new chat inherits it. Mid-chat,
+    // the model repoints to the new provider's remembered/live-default pick (the effort scale follows the model,
+    // through Conversation.effort). Writes the pick back to the module default so the next new chat inherits it. Mid-chat,
     // the switch takes effect at the next send — the current session is retired then and the new provider's
     // fresh session is seeded with the transcript so far (see send); browsing the picker never destroys it.
     selectProvider(next: AgentProvider): void {
@@ -658,7 +705,6 @@ export class Conversation {
         // Switching back to the session's own runtime restores its account, so the next send resumes it.
         this.account.value = next === this.session.value?.provider ? this.session.value.account : rememberedAccountFor(next);
         this.model.value = rememberedModelFor(next);
-        this.effort.value = clampEffort(this.effort.value, next, this.thinking.value);
         turnDefaults.provider.value = next;
         // The old segment's live model and context meter don't describe the next turn.
         this.activeModel.value = null;
@@ -772,7 +818,8 @@ export class Conversation {
         this.harness.value = source.harness.value;
         this.account.value = source.account.value;
         this.model.value = source.model.value;
-        this.effort.value = source.effort.value;
+        // The PICK, not what it currently clamps to — a branch inherits the user's choice, not one model's ceiling.
+        this.effortPick.value = source.effortPick.value;
         this.thinking.value = source.thinking.value;
         this.mode.value = source.mode.value;
         this.isolated.value = source.isolated.value;

@@ -1,33 +1,11 @@
 import type { IconName } from "@intentic-app/ui";
-import { type AgentProvider, type CatalogOption, effortAllowed, type ModelBadge, type PermissionMode } from "@intentic/sandbox-contract";
-import { type ConversationStatus, providerModels } from "./conversation";
+import type { ModelBadge, PermissionMode } from "@intentic/sandbox-contract";
+import type { ConversationStatus } from "./conversation";
 
-/* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the effort catalog,
- * the permission modes, and the small presentational helpers (tab status icon, relative time). The provider/
- * harness/model catalog lives in @intentic/sandbox-contract (agent-catalog.ts) — shared with the automations
- * dialog; the live per-provider model state lives in conversation.ts. */
-
-const EFFORT_LABELS: Record<string, string> = { minimal: `Minimal`, low: `Low`, medium: `Medium`, high: `High`, xhigh: `X-High`, max: `Max` };
-
-// Reasoning effort levels for a provider+model: the live catalog's per-model tiers when the daemon reported
-// them (/claude/models carries each model's supported levels), else the provider's static scale — 'xhigh' is
-// the default in useChat; Codex's scale ends at xhigh. Model-aware so a release with a different scale adjusts
-// the picker with no code change. `thinking` filters the top tier the same way effortAllowed does — the daemon
-// reports a model's tiers without knowing this turn's thinking setting, so the filter applies to BOTH the live
-// list and the static fallback.
-export const effortsFor = (provider: AgentProvider, modelId: string | undefined, thinking: boolean): CatalogOption[] => {
-    const efforts = (providerModels.value[provider] ?? []).find((option) => option.value === modelId)?.efforts;
-    if (efforts !== undefined && efforts.length > 0) {
-        return efforts.filter((value) => effortAllowed(value, provider, thinking)).map((value) => ({ label: EFFORT_LABELS[value] ?? value, value }));
-    }
-    return [
-        { label: `Low`, value: `low` },
-        { label: `Medium`, value: `medium` },
-        { label: `High`, value: `high` },
-        { label: `X-High`, value: `xhigh` },
-        ...(effortAllowed(`max`, provider, thinking) ? [{ label: `Max`, value: `max` }] : []),
-    ];
-};
+/* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the permission modes
+ * and the small presentational helpers (tab status icon, relative time). The provider/harness/model catalog
+ * lives in @intentic/sandbox-contract (agent-catalog.ts) — shared with the automations dialog; the live
+ * per-provider model state, and the effort scale that is a property OF a model, live in conversation.ts. */
 
 // How a capability badge renders in the model picker: icon-only chips, the label carried by the tooltip (three
 // text chips per row would starve the description's space). The set is exactly the capability flags a provider
