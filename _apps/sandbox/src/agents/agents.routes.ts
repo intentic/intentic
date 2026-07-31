@@ -1,4 +1,4 @@
-import { agentsContract, type AgentChange, type AgentRepoChanges, type GitChange, runsClaudeCode } from "@intentic/sandbox-contract";
+import { agentsContract, type AgentChange, type AgentRepoChanges, runsClaudeCode } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
@@ -7,9 +7,10 @@ import type { OrpcContext } from "../context.js";
 import { landingGate } from "../gate/gate.js";
 import { conversationPrompts, matchPrompts } from "../sessions/prompt-index.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
+import { agentRepoChanges, anchorOf } from "./agent-changes.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents, purgeArchived } from "./archive.js";
-import { anchorOf, landAgent, outstandingConflicts } from "./land.js";
+import { landAgent, outstandingConflicts } from "./land.js";
 
 // The fleet routes: list/get the registry, review a conversation worktree's delta vs its recorded bases
 // (the same GitChanges shape the Changes panel renders), land it into the main tree, archive it off the board,
@@ -165,39 +166,27 @@ export const createAgentsRoutes = (services: Services) => {
         diff: i.diff.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             const repos: AgentRepoChanges[] = [];
-            for (const { repo, base, landedTip } of entry.repos) {
+            for (const composed of entry.repos) {
                 try {
-                    // The checkout when it is on disk, the two refs out of the main repo when it is not —
-                    // decided per repo, NOT by archivedAt: a restored agent keeps the marker clear while its
-                    // checkout stays retired until the next turn re-attaches it, and reading the worktree path
-                    // then reported a full branch as "no changes". The refs tell the same story either way
-                    // (retiring committed the worktree's remainder onto the branch; the object store is shared).
-                    const attached = await services.agentWorktrees.attached(entry.id, repo);
-                    const mainDir = services.agentWorktrees.mainDir(repo);
-                    const refDir = attached ? services.agentWorktrees.worktreeDir(entry.id, repo) : mainDir;
-                    const against = (from: string): Promise<GitChange[]> =>
-                        attached ? services.git.changesAgainstBase(refDir, from) : services.git.changesBetweenRefs(mainDir, from, entry.branch);
-                    /* Measured from the anchor land itself uses (land.ts anchorOf), not the frozen
-                     * creation-time base — a worktree that synced onto newer main commits otherwise reviews
-                     * as having authored everything main gained in between: one agent's card showed a
-                     * hundred files of other agents' landed work as its own. The cumulative pass drops the
-                     * landedTip rung (landed work must stay inspectable); the pending pass keeps it, which
-                     * is exactly the land's own incremental span. */
-                    const changes = await against(await anchorOf(refDir, mainDir, entry.branch, undefined, base));
+                    /* The one reading of this agent's delta (agent-changes.ts) — the same call the land totals
+                     * for the card's counter, so the two surfaces cannot disagree about what the agent did.
+                     * The cumulative span keeps landed work inspectable (a clean turn auto-lands within ms of
+                     * finishing); the outstanding one is the land's own incremental span, and flags the rest. */
+                    const changes = await agentRepoChanges(services.agentWorktrees, entry, composed, "cumulative");
                     if (changes.length === 0) {
                         continue;
                     }
                     const pending =
-                        landedTip === undefined
+                        composed.landedTip === undefined
                             ? new Set(changes.map((change) => change.path))
-                            : new Set((await against(await anchorOf(refDir, mainDir, entry.branch, landedTip, base))).map((change) => change.path));
+                            : new Set((await agentRepoChanges(services.agentWorktrees, entry, composed, "outstanding")).map((change) => change.path));
                     // Object.assign, not a spread: `changes` is this call's own freshly-parsed array, so the
                     // flag goes onto the objects that are about to be serialized and nothing is copied.
                     const flagged = changes.map((change): AgentChange => Object.assign(change, { landed: !pending.has(change.path) }));
-                    repos.push({ repo, branch: entry.branch, changes: flagged });
+                    repos.push({ repo: composed.repo, branch: entry.branch, changes: flagged });
                 } catch (error) {
                     // One broken worktree (mid-repair, deleted dir) must not 500 the whole review.
-                    services.logger.warn({ err: error, repo, id: entry.id }, "agents diff: repo skipped");
+                    services.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents diff: repo skipped");
                 }
             }
             /* The last land's refusal travels with the review it is about: the panel is opened FROM the

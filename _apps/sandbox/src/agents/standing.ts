@@ -1,8 +1,8 @@
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../git/changes.js";
 import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
+import { anchorOf } from "./agent-changes.js";
 import { branchSha } from "./agent-refs.js";
-import { anchorOf } from "./land.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
 /* WHERE AN AGENT'S WORK STANDS RELATIVE TO THE MAIN TREE — asked of git, not remembered from the last land.

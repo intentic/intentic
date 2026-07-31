@@ -9,14 +9,17 @@ import { afterEach, expect, test } from "vitest";
 import { changesAgainstBase } from "../git/changes.js";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { createLogger } from "../logger.js";
+import { createPerfTracker } from "../platform/perf.js";
 import { workspacePaths } from "../workspace/workspace.js";
+import { anchorOf } from "./agent-changes.js";
 import type { PersistedAgent } from "./agents-store.js";
-import { anchorOf, landAgent, outstandingConflicts } from "./land.js";
+import { landAgent, outstandingConflicts } from "./land.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
+const perf = createPerfTracker(logger);
 
 // No mount namespace here: these suites assert the SYMLINK mirroring, which is what a container without
 // CAP_SYS_ADMIN (and every test runner) actually gets. The bind-mount branch is isolation.test.ts's.
@@ -40,7 +43,14 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     await writeFile(join(work, "app.ts"), "line one\nline two\nline three\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
-    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), historyRoot, isolation: noIsolation, logger });
+    const worktrees = createAgentWorktrees({
+        workspace,
+        worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
+        isolation: noIsolation,
+        logger,
+        perf,
+    });
     const conversation = await worktrees.ensure("c1", []);
     return { work, worktrees, conversation };
 };
@@ -640,7 +650,7 @@ test("a user edit under a rename-with-edits is a conflict, not a clean change", 
     expect(existsSync(join(work, "moved.ts"))).toBe(false);
 });
 
-/* The review's span, measured the way the diff route now measures it (agents.routes.ts → anchorOf without
+/* The review's span, measured the way the diff route now measures it (agent-changes.ts → anchorOf without
  * the landedTip rung). The bug this pins down: an agent whose worktree fast-forwarded onto newer main
  * commits reviewed everything main gained in between as ITS OWN output — one real card showed a hundred
  * files of other agents' landed work under "the isolated branch this agent works on". */
@@ -659,6 +669,24 @@ test("a worktree synced onto newer main commits does not review main's work as i
     expect((await changesAgainstBase(conversation.cwd, anchor)).map((change) => change.path)).toEqual(["own.ts"]);
     // The frozen creation-time base tells the broken story this replaced.
     expect((await changesAgainstBase(conversation.cwd, base)).map((change) => change.path)).toContain("foreign.ts");
+});
+
+/* The CARD's counter over that same sequence — the half that was still measuring from the frozen base long
+ * after the review stopped. The card kept its own `git diff --shortstat base tip`, so a synced worktree
+ * reported "336 files · +15604 −4427" on the board over a review listing six files and +446: the difference
+ * was every commit main had gained since the checkout, counted as this agent's output. One reading now
+ * (agent-changes.ts), totalled here and listed there. */
+test("the card's diffstat counts the agent's own work, not the main line it synced onto", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(work, "foreign.ts"), "someone else's work\nand a second line\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "foreign");
+    await sh(conversation.cwd, "merge", "--ff-only", await sh(work, "rev-parse", "HEAD"));
+    await writeFile(join(conversation.cwd, "own.ts"), "this agent's work\n");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos));
+
+    expect(result.diff).toEqual({ files: 1, insertions: 1, deletions: 0 });
 });
 
 /* The exact sequence that stranded a real card on "1 file couldn't be applied": land → the user commits the

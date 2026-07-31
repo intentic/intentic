@@ -62,8 +62,6 @@ import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees.js
 import {
     type ActionResult,
     changedFiles,
-    changesAgainstBase,
-    changesBetweenRefs,
     checkoutRef,
     cherryPick,
     commitChanges,
@@ -296,15 +294,12 @@ export interface Services {
         readonly pushBranch: (dir: string, options: { branch?: string }) => Promise<ActionResult>;
         // The working tree's two diffs, one per side the Changes panel lists — a partially staged file has two
         // of them, and HEAD↔worktree is neither. `fileDiff`'s `ref` is the before side for the AGENTS review,
-        // whose worktree has no index to split (a conversation's recorded base sha).
+        // whose worktree has no index to split (a conversation's recorded base sha); `refFileDiff` is that same
+        // row for an ARCHIVED agent, whose retired checkout leaves both sides as refs in the main repo.
         readonly stagedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
         readonly unstagedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
         readonly conflictedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
         readonly fileDiff: (dir: string, path: string, ref: string) => Promise<FileDiff>;
-        readonly changesAgainstBase: (dir: string, base: string) => Promise<GitChange[]>;
-        // The same two reads for an ARCHIVED agent, whose checkout is retired: both sides come from refs in the
-        // main repo (shared object store) rather than from a working tree that no longer exists.
-        readonly changesBetweenRefs: (dir: string, base: string, tip: string) => Promise<GitChange[]>;
         readonly refFileDiff: (dir: string, path: string, base: string, tip: string) => Promise<FileDiff>;
         // The git-history graph (read-only): one repo's commit log across all refs, and lazy per-commit detail
         // (changed files, then a file's before/after AT the commit).
@@ -583,8 +578,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
             unstagedFileDiff,
             conflictedFileDiff,
             fileDiff: workingFileDiff,
-            changesAgainstBase,
-            changesBetweenRefs,
             refFileDiff,
             commitLog,
             collectRepoDiff,

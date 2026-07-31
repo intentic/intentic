@@ -7,6 +7,7 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { createLogger } from "../logger.js";
+import { createPerfTracker } from "../platform/perf.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import type { AgentsRegistry } from "./agents-registry.js";
 import type { PersistedAgent } from "./agents-store.js";
@@ -21,6 +22,7 @@ import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
+const perf = createPerfTracker(logger);
 
 // The baseline file with one line rewritten — the two agents take far-apart lines of it.
 const LINES = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`);
@@ -50,7 +52,14 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     await writeFile(join(work, "other.ts"), "untouched\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
-    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), historyRoot, isolation: noIsolation, logger });
+    const worktrees = createAgentWorktrees({
+        workspace,
+        worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
+        isolation: noIsolation,
+        logger,
+        perf,
+    });
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 

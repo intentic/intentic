@@ -299,7 +299,6 @@ const services = (overrides: Partial<Services> = {}): Services => {
             stagedFileDiff: async () => ({}),
             unstagedFileDiff: async () => ({}),
             fileDiff: async () => ({}),
-            changesAgainstBase: async () => [],
         },
         // A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
         // worktree git mechanics are stubbed — the worktree suites cover them against real git.

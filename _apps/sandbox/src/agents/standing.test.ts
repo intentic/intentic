@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { createLogger } from "../logger.js";
+import { createPerfTracker } from "../platform/perf.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import type { PersistedAgent } from "./agents-store.js";
 import { landAgent } from "./land.js";
@@ -16,6 +17,7 @@ const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const commit = (cwd: string, message: string): Promise<string> => sh(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message);
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
+const perf = createPerfTracker(logger);
 const noIsolation = { available: async () => false, planFor: async () => undefined };
 
 const tempDirs: string[] = [];
@@ -41,6 +43,7 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
         historyRoot: join(base, "history"),
         isolation: noIsolation,
         logger,
+        perf,
     });
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };

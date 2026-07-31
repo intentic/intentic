@@ -5,6 +5,7 @@ import type { GitChange, LandConflict, LandConflictReason, LandMode, LandResult 
 import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import { changedFiles, headSha, parseNameStatusZ } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { agentRepoChanges, anchorOf } from "./agent-changes.js";
 import { branchSha } from "./agent-refs.js";
 import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
@@ -36,80 +37,13 @@ const exists = async (path: string): Promise<boolean> => {
 
 // The wire LandResult plus what the registry persists: `changed` distinguishes "nothing to land" (no frame,
 // no status change) from a real outcome, `repos` carries the advanced landedTips, and `diff` is the agent's
-// CUMULATIVE base→tip output across the composition (refreshed here because land already holds the shas) —
-// independent of how much of it has landed.
+// CUMULATIVE anchor→tip output across the composition — the review's own reading of it (agent-changes.ts),
+// totalled for the card and independent of how much of it has landed.
 export interface LandOutcome extends LandResult {
     readonly changed: boolean;
     readonly repos: PersistedAgent["repos"];
     readonly diff: { files: number; insertions: number; deletions: number };
 }
-
-// `git diff --shortstat` line: " 3 files changed, 10 insertions(+), 2 deletions(-)" — every term optional.
-const SHORTSTAT = /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/;
-
-// `git merge-base --is-ancestor` answers by exit code, which the runner surfaces as a throw.
-const isAncestor = async (dir: string, ancestor: string, descendant: string, git: GitRunner): Promise<boolean> => {
-    try {
-        await git(dir, ["merge-base", "--is-ancestor", ancestor, descendant]);
-        return true;
-    } catch {
-        return false;
-    }
-};
-
-/* WHERE an agent's delta is measured from — which decides what "this agent's work" even means. Shared by the
- * land (with its landedTip rung, for the incremental remainder) and by the review's cumulative diff (without
- * it — see agents.routes.ts), because two answers to "what did this agent do" that disagree are worse than
- * either.
- *
- * An incremental land continues from `landedTip`, so a second land carries only what the agent has done
- * since the first. Everything else asks git: the agent's own work is what its tip has that the main line does
- * not, i.e. the delta from their MERGE-BASE.
- *
- * The base recorded at worktree creation is only the last resort, because it is a sha frozen in time and the
- * branch does not have to keep agreeing with it. Rebase an agent onto the current main line — the natural
- * response to being told the main tree moved on — and the branch now CONTAINS main's commits. Diffing from
- * the frozen base then yields "what this agent did PLUS everything main did since": a patch of dozens of
- * files that can never apply, because the main tree already has its own half of it. What the user sees for
- * that is a conflict report naming files the agent never touched, and no way forward. (The review had the
- * same bug for the same reason: an agent whose worktree fast-forwarded onto newer main commits showed a
- * hundred files other agents wrote as its own output.) The merge-base is immune — it moves with the sync,
- * and the delta stays exactly the agent's own work. */
-export const anchorOf = async (
-    // Where the ref reads run — the worktree while the checkout is attached, the main repo once it is retired
-    // (the object store is shared, so every sha the branch names answers in both).
-    dir: string,
-    main: string,
-    tip: string,
-    landedTip: string | undefined,
-    base: string,
-    git: GitRunner = defaultGit,
-): Promise<string> => {
-    const head = await headSha(main, git);
-    let merged = "";
-    if (head !== undefined) {
-        try {
-            merged = (await git(dir, ["merge-base", head, tip])).stdout.trim();
-        } catch {
-            // Unrelated histories — the merge-base rung simply doesn't exist.
-        }
-    }
-    /* landedTip only while the branch still descends from it (a rewrite that dropped the landed work has to
-     * re-land it) AND the merge-base still sits behind it. The second condition is what a `merge main` into
-     * the branch changes: the branch then contains main-line state landedTip's span predates, and a patch
-     * measured from landedTip carries pre-images main has already moved past — every such hunk "conflicts"
-     * with content the merge already reconciled, which read to the user as a land that could never succeed.
-     * Once the merge-base is no longer an ancestor of landedTip, IT is the honest anchor: everything at or
-     * before it is in main by definition, and anything landed-but-newer that the span re-offers is excluded
-     * per file by classifyDelta's reverse probe, exactly as for work that reached main by another road. */
-    if (landedTip !== undefined && (await isAncestor(dir, landedTip, tip, git))) {
-        if (merged === "" || (await isAncestor(dir, merged, landedTip, git))) {
-            return landedTip;
-        }
-        return merged;
-    }
-    return merged === "" ? base : merged;
-};
 
 /* Does a patch fit the main tree — and, asked in `reverse`, is it ALREADY IN IT?
  *
@@ -385,14 +319,15 @@ export const landAgent = async (
                 }
                 // Ref-only reads run wherever the refs live: the worktree while attached, the main repo after.
                 const refDir = attached ? worktree : main;
-                // Cumulative diffstat vs the BASE (not landedTip) — the agent's total output for the card.
-                if (tip !== base) {
-                    const stat = SHORTSTAT.exec((await git(refDir, ["diff", "--shortstat", base, tip])).stdout);
-                    if (stat !== null) {
-                        diff.files += Number(stat[1]);
-                        diff.insertions += Number(stat[2] ?? 0);
-                        diff.deletions += Number(stat[3] ?? 0);
-                    }
+                /* The card's counter, totalled over the very rows the REVIEW lists (agent-changes.ts) — the
+                 * agent's cumulative output, landed work included. Read here because a land is where a turn's
+                 * work becomes final and the shas are already in hand, but computed by the review's own
+                 * reader: a second, independent diffstat is how the card came to claim 336 files over a review
+                 * showing 6, having measured from the frozen base while the review measured from the anchor. */
+                for (const change of await agentRepoChanges(worktrees, entry, composed, "cumulative", git)) {
+                    diff.files += 1;
+                    diff.insertions += change.additions ?? 0;
+                    diff.deletions += change.deletions ?? 0;
                 }
                 const from = await anchorOf(refDir, main, tip, composed.landedTip, base, git);
                 if (tip === from) {

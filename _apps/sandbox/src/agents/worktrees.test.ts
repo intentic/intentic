@@ -9,12 +9,14 @@ import { afterEach, expect, test } from "vitest";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { repoGitDir } from "../history/history.js";
 import { createLogger } from "../logger.js";
+import { createPerfTracker } from "../platform/perf.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { createAgentWorktrees } from "./worktrees.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
+const perf = createPerfTracker(logger);
 
 // No mount namespace here: these suites assert the SYMLINK mirroring, which is what a container without
 // CAP_SYS_ADMIN (and every test runner) actually gets. The bind-mount branch is isolation.test.ts's.
@@ -48,7 +50,14 @@ const setup = async (): Promise<{ work: string; historyRoot: string; worktrees: 
     await writeFile(join(work, "CLAUDE.md"), "workspace notes\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
-    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), historyRoot, isolation: noIsolation, logger });
+    const worktrees = createAgentWorktrees({
+        workspace,
+        worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
+        isolation: noIsolation,
+        logger,
+        perf,
+    });
     return { work, historyRoot, worktrees };
 };
 
@@ -155,6 +164,7 @@ test("re-ensure converts pre-namespace symlinks into mount points once isolation
         historyRoot,
         isolation: { available: async () => true, planFor: async () => undefined },
         logger,
+        perf,
     });
     await isolated.ensure("c1", created.repos);
 
@@ -176,6 +186,7 @@ test("re-ensure restores the symlink when isolation is lost, but never over a re
         historyRoot,
         isolation: { available: async () => true, planFor: async () => undefined },
         logger,
+        perf,
     });
     const created = await isolated.ensure("c1", []);
     const worktree = join(created.cwd, "intent");
