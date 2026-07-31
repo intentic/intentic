@@ -228,13 +228,34 @@ export const restoreGitAccess = async (host: GitHost, exec: ExecInTerminal, deps
     return undefined;
 };
 
-// Whether this connection's container-local git credential is actually in place. The https line is written by
-// every path that wires git access (native ssh is best-effort on top of it), so its absence is precisely "the
-// manifest says connected, git isn't" — the state a container recreate leaves behind, and the one the capability
-// card used to report as active while `git pull` failed.
+// Whether the rewrite is in place, asked of git itself rather than read out of ~/.gitconfig — the value can
+// arrive through an include, and this is the same resolution the remote will get. An absent key exits 1, which
+// execFile rejects on, so "no rewrite" arrives as a rejection rather than as empty output.
+const httpsRewriteEnabled = async (host: GitHost): Promise<boolean> =>
+    directExec("git", ["config", "--global", "--get-all", rewriteKey(host)]).then(
+        ({ stdout }) => stdout.trim() !== "",
+        () => false,
+    );
+
+// Whether this connection's container-local git access is actually in place — BOTH halves of it. The https
+// credential line alone is not working git access: the remotes in this workspace are ssh-form
+// (`git@<host>:owner/repo`), and those reach the account over one of the two transports setupGitAccess wires —
+// the registered key behind its ssh alias, or the insteadOf rewrite that routes them onto the https credential.
+// With the credential written and NEITHER route present, `git push` answers `Permission denied (publickey)`
+// under a card reading active; that is precisely the state another daemon repointing ~/.ssh/intentic-hosts
+// leaves behind (platform/home-owner.ts), and reporting it is how the owner learns to re-add rather than
+// reading the failure as the remote's fault. So the status asks for the transport, not just the token.
 export const gitAccessWired = async (host: GitHost): Promise<boolean> => {
     const current = await readFile(credentialsPath(), "utf8").catch(() => "");
-    return current.split("\n").some((entry) => entry.endsWith(`@${host.host}`));
+    if (!current.split("\n").some((entry) => entry.endsWith(`@${host.host}`))) {
+        return false;
+    }
+    // The alias is written only after a successful registration, so its presence claims native ssh — which is
+    // only true while the key it names is still there to be offered.
+    if (await fileExists(hostConfPath(host.host))) {
+        return fileExists(hostKeyPath(host.host));
+    }
+    return httpsRewriteEnabled(host);
 };
 
 export const teardownGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<void> => {

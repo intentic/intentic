@@ -196,7 +196,12 @@ survive reconnects. Its subsystems:
   died on each one while the manifest still read "connected". What genuinely can't be persisted (`~/.gitconfig`,
   `~/.git-credentials`) is re-derived from the manifest at boot by
   [`restoreConnectorGitAccess`](_apps/sandbox/src/capabilities/cli/git-access.ts), the git counterpart to
-  `reconnectVpns`.
+  `reconnectVpns`. Every one of these HOME-level convergences — the ssh dir, the `~/.claude` session stores,
+  `authorized_keys`, the git credentials — runs only for the daemon holding the container's HOME claim
+  ([`claimContainerHome`](_apps/sandbox/src/platform/home-owner.ts)): HOME is shared by every process in the
+  container, so a SECOND daemon started inside it (a dev run rooted under `/tmp`) otherwise repoints all of it
+  at its own empty roots and takes the live sandbox's git access, transcripts and desktop enrollment down
+  without an error anywhere.
 - **Environment overlays** — agent-proposed Dockerfile layers, applied only after owner approval
   ([environment/](_apps/sandbox/src/environment/)).
 - **Discord** — chat/stream/voice integration, now an image-baked extension: a gateway `process` +

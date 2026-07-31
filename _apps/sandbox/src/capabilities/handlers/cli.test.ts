@@ -332,6 +332,23 @@ test("git restore keeps ssh-form remotes on https when the key had never been re
     expect(await gitAccessWired(host)).toBe(true);
 });
 
+test("git access whose ssh alias was taken out from under it pends instead of reading active", async () => {
+    const { ctx, root } = tempCtx();
+    await writeWorkspaceFile(skillPath(root, "gitlab"), "---\nname: gitlab\n---\n");
+    await linkSshHosts(mkdtempSync(join(tmpdir(), "git-cap-history-")));
+    const host = gitHostOf(gitlabOn);
+    await setupGitAccess(host, directExec, { uploadKey: async () => {}, deleteKey: async () => {} });
+    expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "active" });
+
+    // What a second daemon repointing the managed dir at ITS history root leaves behind: the https credential
+    // is untouched in HOME, the alias and key it was written beside are unreachable, and nothing routes
+    // `git@gitlab.com:` anywhere — the card has to say so rather than keep claiming git access works.
+    await linkSshHosts(mkdtempSync(join(tmpdir(), "git-cap-history-")));
+
+    expect(await gitAccessWired(host)).toBe(false);
+    expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "pending", detail: "git access needs a re-add" });
+});
+
 test("restoreConnectorGitAccess walks the manifest: git connectors only, one failure never stops the rest", async () => {
     const history = mkdtempSync(join(tmpdir(), "git-cap-history-"));
     gitHome();

@@ -42,6 +42,7 @@ import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { linkClaudeState } from "./sessions/session-store.js";
 import { createAnnouncer } from "./platform/announce.js";
 import { claimBootMarker } from "./platform/boot-marker.js";
+import { claimContainerHome } from "./platform/home-owner.js";
 import { startLoopWatchdog } from "./platform/loop-watchdog.js";
 import { startWorkloadPriorityGovernor } from "./platform/workload-priority.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
@@ -235,35 +236,51 @@ const main = async (): Promise<void> => {
     // "the daemon is just slow"), and streams the transition to whatever browser is watching.
     const boot = services.boot;
 
+    // ~/.ssh and ~/.claude are the CONTAINER's filesystem, shared by every process in it — so the jobs below that
+    // converge them onto THIS run's roots (the three steps here, plus the git-access restore further down) run
+    // only for the daemon that owns HOME. A second daemon started in here — a dev run rooted under /tmp — would
+    // otherwise repoint the live daemon's git keys and conversation state at its own empty roots, and nothing
+    // would notice until a push was refused: see platform/home-owner.ts for the day that happened.
+    const ownsHome = claimContainerHome({ workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot }, logger);
+
     // Desktop enrollments live on /history and outlive the container; the authorized_keys sshd reads does NOT
     // (it is ~/.ssh, container-local), so re-derive it from the store before sshd serves a laptop's first
     // reconnect. Ordered before the gate resolves — a rebuild otherwise leaves every enrollment valid but unauthorized.
-    await boot.step("authorizedKeys", () =>
-        restoreAuthorizedKeys(config.historyRoot).catch((error: unknown) =>
+    await boot.step("authorizedKeys", async () => {
+        if (!ownsHome) {
+            return;
+        }
+        await restoreAuthorizedKeys(config.historyRoot).catch((error: unknown) =>
             logger.warn({ err: error }, "authorized_keys not restored — enrolled machines will be refused until they re-enroll"),
-        ),
-    );
+        );
+    });
 
     // Claude conversation state (transcripts, plans, backups, task outputs, todos) lives under the SDK's
     // ~/.claude — ephemeral container fs. Converge every store onto /work BEFORE the gate opens (turns wait on
     // it, so the CLI can never race this). Awaited, unlike the best-effort steps below, because a turn
     // spawning the CLI mid-link would fork stores.
-    await boot.step("claudeState", () =>
-        linkClaudeState(services.workspace.root).catch((error: unknown) =>
+    await boot.step("claudeState", async () => {
+        if (!ownsHome) {
+            return;
+        }
+        await linkClaudeState(services.workspace.root).catch((error: unknown) =>
             logger.warn({ err: error }, "claude session state not persisted — sessions will not survive a rebuild whole"),
-        ),
-    );
+        );
+    });
 
     // The managed ssh dir (git-provider keys + every ssh capability's key) is the other store that lived in the
     // container's ephemeral HOME — point it at the /history volume before anything reads or writes an alias, so
     // a recreate stops silently taking git access and the ssh machines down with it. Awaited for that ordering;
     // a failure (a dev-host run, where the guard refuses to touch a real ~/.ssh/intentic-hosts) leaves the
     // pre-existing local dir in place rather than the daemon down.
-    await boot.step("sshHosts", () =>
-        linkSshHosts(config.historyRoot).catch((error: unknown) =>
+    await boot.step("sshHosts", async () => {
+        if (!ownsHome) {
+            return;
+        }
+        await linkSshHosts(config.historyRoot).catch((error: unknown) =>
             logger.warn({ err: error }, "ssh hosts dir not persisted — git access and ssh aliases will not survive a rebuild"),
-        ),
-    );
+        );
+    });
 
     // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge
     // excludes. Awaited (cheap, and the git routes assume it), but a failure must not take the daemon down — a
@@ -435,8 +452,11 @@ const main = async (): Promise<void> => {
     void reconnectVpns(services.capabilities, services.logger);
     // Git access dies with the container the same way: the keypair is on /history (linked above), but the
     // credential helper, the https line and the ssh-config Include were in HOME — re-derive them from the
-    // manifest so the owner's first `git pull` and the agent's first clone authenticate.
-    void restoreConnectorGitAccess(services.capabilities, services.logger);
+    // manifest so the owner's first `git pull` and the agent's first clone authenticate. HOME-level like the
+    // links it rides on, so it is the owning daemon's to write (see the claim above).
+    if (ownsHome) {
+        void restoreConnectorGitAccess(services.capabilities, services.logger);
+    }
     void startDockerdIfEnabled(bootCtx);
     // The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": starts when TRANSLATOR_URL
     // is baked (no-op on a bare dev run) and serves those providers on their connected subscription OAuth.
