@@ -6,6 +6,8 @@ import {
     LandConflictSchema,
     PermissionModeSchema,
     RateLimitInfoSchema,
+    SubagentKindSchema,
+    SubagentStatusSchema,
     UsageWindowSchema,
 } from "./schemas.js";
 
@@ -125,19 +127,36 @@ export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
 // tool_use/tool_result blocks, so a restored card carries everything the live `tool_call` frame did except
 // the streaming-only correlation fields.
 //
-// One restored tool card. Subagent (Task) calls do NOT nest here: the SDK stores a delegation's own calls in a
-// separate per-subagent file, so a Task card restores as a leaf and its children stay collapsed — the live
-// stream still nests them (see ChatTool.children).
-export const RestoredToolCallSchema = z.object({
-    id: z.string(),
-    name: z.string(),
-    category: ToolKindSchema,
-    status: ToolCallStatusSchema,
-    target: z.string().optional(),
-    locations: z.array(ToolCallLocationSchema).optional(),
-    content: z.array(ToolCallContentSchema).optional(),
-});
-export type RestoredToolCall = z.infer<typeof RestoredToolCallSchema>;
+// One restored tool card. A subagent's own calls and its thinking nest under the Agent card that spawned them,
+// the same two fields (and the same recursion) the live ChatTool carries — so a reopened chat redraws the
+// delegation it was showing instead of a leaf card with the whole child collapsed into its result text.
+// z.lazy because the shape refers to itself: a subagent that delegates nests one level deeper.
+export const RestoredToolCallSchema: z.ZodType<RestoredToolCall> = z.lazy(() =>
+    z.object({
+        id: z.string(),
+        name: z.string(),
+        category: ToolKindSchema,
+        status: ToolCallStatusSchema,
+        target: z.string().optional(),
+        locations: z.array(ToolCallLocationSchema).optional(),
+        content: z.array(ToolCallContentSchema).optional(),
+        children: z.array(RestoredToolCallSchema).optional(),
+        thinking: z.string().optional(),
+    }),
+);
+// Mutable, unlike most of this file: both builders settle a card IN PLACE when its result arrives turns later
+// (restoredTurn's `cards` map, readWorkspaceSession's `awaiting`), which is what saves them a second pass.
+export interface RestoredToolCall {
+    id: string;
+    name: string;
+    category: ToolKind;
+    status: ToolCallStatus;
+    target?: string | undefined;
+    locations?: ToolCallLocation[] | undefined;
+    content?: ToolCallContent[] | undefined;
+    children?: RestoredToolCall[] | undefined;
+    thinking?: string | undefined;
+}
 
 // One restored bubble. Each stored assistant message becomes its own, which is what reproduces the live
 // interleaving — prose, the tool cards that prose introduced, then the next block of prose — rather than
@@ -162,7 +181,8 @@ export const AgentTranscriptSchema = SessionTranscriptSchema.extend({ sessionId:
 // without a UI mapping is dropped. `plan`/`question`/`permission` pause the turn until the user answers on the
 // `POST /agent/reply` side channel, and `resolved` releases the one it names; `mode` reports the live
 // permission posture as the agent changes it.
-// `parentToolUseId` tags frames produced inside a subagent (Task tool).
+// `parentToolUseId` tags frames produced inside a subagent (Task tool); `subagent`/`subagent_update` report the
+// subagent itself, keyed by the same tool_use id those tagged frames carry.
 export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("session"), sessionId: z.string() }),
     /* First frame of an isolated turn: the conversation's worktree identity — its branch (agent/<id>) and the
@@ -229,6 +249,40 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // `browser-<id>` session, and the client surfaces it in the same panel as the terminals. One per turn, for
     // the same reason: one browser serves every browser call the turn makes.
     z.object({ kind: z.literal("browser"), session: z.string() }),
+    /* THE AGENT STARTED ANOTHER AGENT — an Agent/Task subagent, or a Codex/Grok CLI it drove from its own Bash
+     * (see SubagentSessionSchema). One `subagent` frame per child, then `subagent_update` as it works: the same
+     * call/update pair `tool_call`/`tool_call_update` uses, and for the same reason — the fields that move
+     * (status, spend, what it is doing) arrive many times and must REPLACE, while the fields that identify it are
+     * said once.
+     *
+     * `id` is the SPAWNING TOOL CALL's id — the same id the client already nests the child's inner frames under
+     * (`parentToolUseId`), so both frames land on the card that spawned the child by the lookup that is already
+     * there (mapToolAnywhere). No second correlation, and nothing to get wrong.
+     *
+     * These exist because the SDK's task messages were dropped. A BACKGROUNDED child (the Agent tool's default)
+     * emits its tool_use and then nothing until its result lands, which for a long child is minutes of a spinner
+     * that cannot say whether anything is happening. */
+    z.object({
+        kind: z.literal("subagent"),
+        id: z.string(),
+        subagentKind: SubagentKindSchema,
+        agentType: z.string().optional(),
+        description: z.string().optional(),
+        model: z.string().optional(),
+        background: z.boolean().optional(),
+        // A delegation's tmux session — the one live view a subagent doesn't have (SubagentSessionSchema).
+        terminal: z.string().optional(),
+    }),
+    z.object({
+        kind: z.literal("subagent_update"),
+        id: z.string(),
+        status: SubagentStatusSchema.optional(),
+        tokens: z.number().optional(),
+        toolUses: z.number().optional(),
+        lastTool: z.string().optional(),
+        summary: z.string().optional(),
+        error: z.string().optional(),
+    }),
     z.object({ kind: z.literal("todos"), items: z.array(TodoItemSchema) }),
     // The provider's own slash commands (ACP available_commands_update), replaced whole each time — the
     // composer's `/` popover lists them; invoking one is plain `/name …` prompt text (the ACP convention).

@@ -1,5 +1,6 @@
 import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
 import { isFailureSentence } from "../agent/failure-sentences.js";
+import { subagentCountsOf } from "../agent/subagents.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
 import { type AgentsStore, type AgentTitleSource, isIsolated, type PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
@@ -224,6 +225,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         const costUsd = entry.costUsd + (state?.pendingCostUsd ?? 0);
         const inputTokens = entry.inputTokens + (state?.pendingInputTokens ?? 0);
         const outputTokens = entry.outputTokens + (state?.pendingOutputTokens ?? 0);
+        const subagents = subagentCountsOf(entry.id);
         return {
             id: entry.id,
             status,
@@ -260,6 +262,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.turns !== undefined ? { turns: entry.turns } : {}),
             // Live count: the running turn's tool calls show on the card as they happen.
             ...((entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) > 0 ? { toolUses: (entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) } : {}),
+            // The agents this one started. Read straight off the subagent registry rather than accumulated here:
+            // that registry already retains and sweeps its own records, and a second copy of the count would be
+            // the same projection with its own staleness (see the derived-verdict note on `conflict` above).
+            ...(subagents.total > 0 ? { subagents } : {}),
             ...(entry.diffFiles !== undefined
                 ? { diff: { files: entry.diffFiles, insertions: entry.diffInsertions ?? 0, deletions: entry.diffDeletions ?? 0 } }
                 : {}),

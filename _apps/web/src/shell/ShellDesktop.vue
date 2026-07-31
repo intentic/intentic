@@ -5,6 +5,7 @@ import { computed, onUnmounted, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
 import { useBrowsersQuery } from "../composables/browser/browsersQuery";
+import { useSubagentsQuery } from "../composables/subagents/subagentsQuery";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
@@ -63,6 +64,9 @@ const { drafts, invalid: invalidDrafts } = useDrafts();
 // The agent's browsers, on the same appear-on-content terms. Polled loosely: this is the always-on read that
 // makes the tile show up mid-turn, and the view itself polls tighter once it is on screen.
 const { sessions: browsers } = useBrowsersQuery(10_000);
+// The agents this sandbox's agents started, on the same loose beat and for the same reason: this is the always-on
+// read that makes the tile appear the moment a turn delegates; the area polls tighter once it is on screen.
+const { sessions: subagents, running: runningSubagents } = useSubagentsQuery(10_000);
 const { reachable } = useSandbox();
 // Uncommitted workspace changes surface as a count badge on the Workspace rail tile, visible from any area.
 const changes = useChanges();
@@ -153,6 +157,21 @@ const browserTile = computed<AreaTile | undefined>(() => {
         ...(live > 0 ? { badge: { count: live, tooltip: `${live} agent browser${live === 1 ? `` : `s`} open` } } : {}),
     };
 });
+/* Subagents, on exactly the browsers' terms above: it appears when a turn starts an agent, and its badge counts
+ * only the ones still working. The third tile of this shape, because the three things a turn spawns that the
+ * operator can look at — a shell, a browser, another agent — should not each be found a different way. */
+const subagentTile = computed<AreaTile | undefined>(() => {
+    if (subagents.value.length === 0) {
+        return undefined;
+    }
+    const live = runningSubagents.value.length;
+    return {
+        to: `/subagents`,
+        label: `Subagents`,
+        icon: `users`,
+        ...(live > 0 ? { badge: { count: live, tooltip: `${live} agent${live === 1 ? `` : `s`} working` } } : {}),
+    };
+});
 // Activation.icon is an open string in the public extension API; the rail trusts it names one of the app's
 // icons (an unknown name renders the icon set's fallback).
 const extensionTile = (active: ActiveExtension): AreaTile => {
@@ -167,8 +186,8 @@ const extensionTile = (active: ActiveExtension): AreaTile => {
 };
 // The navigation tiles: the always-present areas, Drafts when there is something to review, then one tile per
 // EXTENSION ACTIVATION (extensions detect workspace content from /panels and contribute their own areas). Live
-// runtime surfaces (browsers, forwarded ports, the terminal) are NOT here — they render in the cluster below the
-// divider, next to the "+" and account controls.
+// runtime surfaces (browsers, subagents, forwarded ports, the terminal) are NOT here — they render in the cluster
+// below the divider, next to the "+" and account controls.
 const tiles = computed<readonly AreaTile[]>(() => {
     const base = drafts.value.length > 0 || invalidDrafts.value.length > 0 ? fixedTiles.value.toSpliced(1, 0, draftsTile) : fixedTiles.value;
     return [
@@ -345,6 +364,28 @@ onUnmounted(() => {
                     :class="badgeClass(browserTile.badge)"
                     v-tooltip.right="browserTile.badge.tooltip"
                     >{{ badgeText(browserTile.badge) }}</span
+                >
+            </RouterLink>
+
+            <!-- The agent's subagents, beside its browsers because they are the same kind of thing: work a turn
+                 spawned, watchable while it runs. Badged with the count still WORKING (see subagentTile). -->
+            <RouterLink
+                v-if="subagentTile"
+                :to="subagentTile.to"
+                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
+                :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(subagentTile.to) }"
+                :tabindex="reachable ? undefined : -1"
+                :aria-disabled="!reachable"
+                :aria-label="subagentTile.label"
+                v-tooltip.right="subagentTile.label"
+            >
+                <Icon :name="subagentTile.icon!" class="text-lg" />
+                <span
+                    v-if="subagentTile.badge"
+                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
+                    :class="badgeClass(subagentTile.badge)"
+                    v-tooltip.right="subagentTile.badge.tooltip"
+                    >{{ badgeText(subagentTile.badge) }}</span
                 >
             </RouterLink>
 

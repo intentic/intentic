@@ -1,6 +1,6 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
-import { SystemEventSchema } from "../events.js";
+import { SessionTranscriptSchema, SystemEventSchema } from "../events.js";
 import {
     BrowserNameParamSchema,
     BrowsersListSchema,
@@ -10,6 +10,8 @@ import {
     InfoSchema,
     OkSchema,
     PresenceReportSchema,
+    SubagentIdParamSchema,
+    SubagentsListSchema,
     TerminalNameParamSchema,
     TerminalsListSchema,
     UsageSummarySchema,
@@ -47,4 +49,16 @@ export const systemContract = {
     // which is the honest account of the owner pulling the plug.
     browsers: oc.route({ method: "GET", path: "/system/browsers" }).output(BrowsersListSchema),
     closeBrowser: oc.route({ method: "DELETE", path: "/system/browsers/{name}" }).input(BrowserNameParamSchema).output(OkSchema),
+    // The agents this sandbox's agents started — SDK subagents and delegated Codex/Grok runs alike (see
+    // SubagentSessionSchema). Same two-route shape as the browsers above, and same division of labour: the list
+    // is polled by the Subagents area while it is on screen and loosely by the rail, so its tile can appear the
+    // moment a turn delegates. There is no third WebSocket here, because a subagent has no byte stream to watch —
+    // what you watch it through is its TRANSCRIPT, which `subagentTranscript` serves in the one shape every
+    // other transcript route already answers in: live from the parent turn's frame log while it runs, off the
+    // provider's own store once it has finished.
+    subagents: oc.route({ method: "GET", path: "/system/subagents" }).output(SubagentsListSchema),
+    subagentTranscript: oc
+        .route({ method: "GET", path: "/system/subagents/{id}/transcript" })
+        .input(SubagentIdParamSchema)
+        .output(SessionTranscriptSchema),
 };

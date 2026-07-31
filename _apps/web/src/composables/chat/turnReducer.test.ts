@@ -128,6 +128,36 @@ describe(`tool calls`, () => {
         expect(state.messages[1]!.tools?.[0]?.children?.[0]?.id).toBe(`t2`);
     });
 
+    /* THE AGENT THE CALL STARTED, folded onto that same card. The frame's id IS the spawning call's, so it lands
+     * through the lookup the nesting above already uses — and the state it carries is the only account a card has
+     * of a BACKGROUNDED child, whose tool result may be minutes away. */
+    it(`wears the subagent its call started, and keeps its state current`, () => {
+        const { state } = run(
+            started(),
+            { kind: `tool_call`, id: `t1`, name: `Agent`, category: `other`, status: `in_progress` },
+            { kind: `subagent`, id: `t1`, subagentKind: `subagent`, agentType: `Explore`, description: `Locate claimIndexer`, background: true },
+            { kind: `subagent_update`, id: `t1`, tokens: 4200, lastTool: `Grep` },
+            { kind: `subagent_update`, id: `t1`, status: `completed`, summary: `it is in claims/indexer.ts` },
+        );
+        expect(state.messages[1]!.tools?.[0]?.subagent).toEqual({
+            kind: `subagent`,
+            agentType: `Explore`,
+            description: `Locate claimIndexer`,
+            background: true,
+            status: `completed`,
+            tokens: 4200,
+            lastTool: `Grep`,
+            summary: `it is in claims/indexer.ts`,
+        });
+    });
+
+    // Nothing to hang it off. Unlike a nested tool_call there is no top-level fallback: a subagent with no
+    // delegation card above it is not a thing the transcript can render.
+    it(`drops a subagent frame whose card is not there`, () => {
+        const { state } = run(started(), { kind: `subagent`, id: `gone`, subagentKind: `codex` }, { kind: `subagent_update`, id: `gone`, tokens: 9 });
+        expect(state.messages[1]?.tools).toBeUndefined();
+    });
+
     it(`falls back to a top-level append when the parent card is missing`, () => {
         // A malformed stream: dropping the call outright would lose work the agent actually did.
         const { state } = run(started(), {

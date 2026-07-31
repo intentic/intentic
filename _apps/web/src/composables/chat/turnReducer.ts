@@ -333,6 +333,27 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                     ...(event.locations !== undefined ? { locations: event.locations } : {}),
                 })).state,
             );
+        case `subagent`: {
+            /* The call just started an AGENT — an Agent/Task subagent, or a Codex/Grok CLI it drove from its own
+             * Bash. The frame's id IS the spawning call's, so it lands on that card through the same lookup a
+             * sub-agent's nested calls already use. A card that isn't there yet cannot happen in practice (the
+             * tool_call is streamed first), and if it did the frame is dropped rather than opening a card of its
+             * own: a subagent with no delegation above it is not a thing the transcript can render. */
+            const { kind: _kind, id, subagentKind, ...rest } = event;
+            return step(mapToolAnywhere(state, id, (tool) => ({ ...tool, subagent: { ...rest, kind: subagentKind, status: `running` } })).state);
+        }
+        case `subagent_update`:
+            // Present fields REPLACE, absent ones leave the child alone — the same snapshot semantics
+            // tool_call_update has, and for the same reason: progress arrives many times and says only what moved.
+            return step(
+                mapToolAnywhere(state, event.id, (tool) => {
+                    if (tool.subagent === undefined) {
+                        return tool;
+                    }
+                    const { kind: _kind, id: _id, ...patch } = event;
+                    return { ...tool, subagent: { ...tool.subagent, ...patch } };
+                }).state,
+            );
         case `todos`: {
             const opened = withBubble(state);
             return step(mapMessage(opened.state, opened.id, (message) => ({ ...message, todos: event.items })));

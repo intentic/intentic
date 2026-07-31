@@ -116,7 +116,14 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
     // session-store.ts). Fall back to the all-projects search before calling the session empty; ids are
     // UUIDs, so the widened search can only find the session that was asked for.
     const scoped = await getSessionMessages(id, { dir });
-    const messages = scoped.length > 0 ? scoped : await getSessionMessages(id);
+    return restoredSessionMessages(scoped.length > 0 ? scoped : await getSessionMessages(id), dir);
+};
+
+/* The stored-message → transcript reduction itself, over whatever set of SDK session messages it is handed.
+ * Exported because a SUBAGENT's transcript is the same file format read from a different file
+ * (getSubagentMessages — see sessions/subagent-transcript.ts): one reducer, so a delegation's transcript and its
+ * parent's are assembled by identical rules and cannot come to disagree about what a stored turn looks like. */
+export const restoredSessionMessages = (messages: readonly { readonly type?: string; readonly message?: unknown }[], dir: string): RestoredMessage[] => {
     const out: RestoredMessage[] = [];
     // tool_use id → the card to settle when its result arrives on the following (synthetic) user message. The
     // card is already in `out`; it is mutated in place, so ordering needs no second pass.

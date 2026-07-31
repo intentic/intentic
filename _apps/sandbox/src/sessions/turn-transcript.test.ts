@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { restoredTurn } from "./turn-transcript.js";
+import { restoredTurn, subagentTurn } from "./turn-transcript.js";
 
 describe("restoredTurn", () => {
     it("opens with the user's own words, with the daemon's injections taken back out", () => {
@@ -66,13 +66,54 @@ describe("restoredTurn", () => {
         expect(restoredTurn({ prompt: "run" }, events, "/work").at(-1)?.tools?.[0]?.status).toBe("in_progress");
     });
 
-    it("keeps a subagent's inner stream out of the flat transcript", () => {
+    /* A DELEGATION SURVIVES THE RELOAD. Its calls and its thinking nest under the Agent card that spawned them,
+     * which is where the live client puts them — so a reopened chat redraws the delegation it was showing rather
+     * than a leaf card. Its PROSE stays off the card: that card has nowhere to render prose, and the child's
+     * report already arrives as the card's own result content. */
+    it("nests a subagent's calls and thinking under the card that spawned them", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "delegating" },
+            { kind: "tool_call", id: "task-1", name: "Agent", category: "other", status: "in_progress" },
             { kind: "delta", text: "inner voice", parentToolUseId: "task-1" },
+            { kind: "thinking", text: "hmm", parentToolUseId: "task-1" },
+            { kind: "tool_call", id: "t2", name: "Read", category: "read", status: "in_progress", parentToolUseId: "task-1" },
+            { kind: "tool_call_update", id: "t2", status: "completed" },
+        ];
+        expect(restoredTurn({ prompt: "delegate" }, events, "/work").at(-1)?.tools).toEqual([
+            {
+                id: "task-1",
+                name: "Agent",
+                category: "other",
+                status: "in_progress",
+                thinking: "hmm",
+                children: [{ id: "t2", name: "Read", category: "read", status: "completed" }],
+            },
+        ]);
+    });
+
+    // Its Agent card is not in this stream (a malformed log, or one level of a deeper spawn read on its own), so
+    // there is nothing to hang the child off — which is exactly what keeps a nested level out of the level above.
+    it("drops a subagent's frames when the card that spawned them is absent", () => {
+        const events: AgentEvent[] = [
+            { kind: "delta", text: "delegating" },
             { kind: "tool_call", id: "t2", name: "Read", category: "read", status: "completed", parentToolUseId: "task-1" },
         ];
         expect(restoredTurn({ prompt: "delegate" }, events, "/work").slice(1)).toEqual([{ role: "assistant", text: "delegating" }]);
+    });
+
+    // One subagent's own side of the same log — what the Subagents area renders while it runs. Read at the
+    // child's level its prose IS top-level, and the parent's frames are not its business.
+    it("reads one subagent's stream as a transcript of its own", () => {
+        const events: AgentEvent[] = [
+            { kind: "delta", text: "parent prose" },
+            { kind: "tool_call", id: "t1", name: "Grep", category: "search", status: "completed" },
+            { kind: "delta", text: "found it", parentToolUseId: "task-1" },
+            { kind: "tool_call", id: "t2", name: "Read", category: "read", status: "completed", parentToolUseId: "task-1" },
+        ];
+        expect(subagentTurn(events, "task-1", "Locate claimIndexer")).toEqual([
+            { role: "user", text: "Locate claimIndexer" },
+            { role: "assistant", text: "found it", tools: [{ id: "t2", name: "Read", category: "read", status: "completed" }] },
+        ]);
     });
 
     it("records the thinking a turn showed", () => {

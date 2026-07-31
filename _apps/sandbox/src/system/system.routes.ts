@@ -11,7 +11,9 @@ import {
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { implement, ORPCError } from "@orpc/server";
 import type { VerifiedIdentity } from "../auth/auth.js";
+import { listSubagentSessions } from "../agent/subagents.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/browser-sessions.js";
+import { readSubagentTranscript } from "../sessions/subagent-transcript.js";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -374,6 +376,16 @@ export const createSystemRoutes = (services: Services) => {
             await closeBrowserSession(input.name);
             return { ok: true };
         }),
+        // The agents this sandbox's agents started, and one of their transcripts. Both are daemon-held records
+        // like the browsers above — the list from the registry the turn stream feeds (agent/subagents.ts), the
+        // transcript from whichever store actually ran the child (sessions/subagent-transcript.ts).
+        subagents: i.subagents.handler(() => ({ sessions: listSubagentSessions() })),
+        subagentTranscript: i.subagentTranscript.handler(async ({ input }) => ({
+            messages: await readSubagentTranscript(
+                { root: services.workspace.root, codexHome: services.codexHome, openCode: services.openCode },
+                input.id,
+            ),
+        })),
         // Destroy one session (its tab's close button). Validate the name before it reaches the `kill-session`
         // argv — the security guard against a name like `-C` being read as a flag. Killing a session that already
         // vanished is idempotent-OK (tmux exits non-zero; we don't surface it).

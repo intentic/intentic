@@ -262,6 +262,14 @@ export const AgentSummarySchema = z.object({
     // Completed turns and lifetime tool calls — the card's msgs/tools counters.
     turns: z.number().optional(),
     toolUses: z.number().optional(),
+    /* The agents THIS agent started (SubagentSessionSchema), live and lifetime. Absent ⇒ it has never delegated,
+     * which is most agents — so the card's chip appears on content rather than reading "0" down the board.
+     *
+     * It earns a place on a card because a fleet card is the answer to "what is this agent up to", and an agent
+     * running five children looked exactly like an agent running none: the work was real, the spend was real, and
+     * the board said nothing. The tokens are NOT folded into the parent's cost — a child's spend is its own, and
+     * the Subagents area is where it is attributed. */
+    subagents: z.object({ running: z.number(), total: z.number() }).optional(),
     // The agent's cumulative output (base → branch tip across every repo), refreshed on each land —
     // the card's "12 files · +412 −96" readout. Independent of what has landed.
     diff: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
@@ -2527,6 +2535,75 @@ export type BrowserSession = z.infer<typeof BrowserSessionSchema>;
 export const BrowsersListSchema = z.object({ sessions: z.array(BrowserSessionSchema) });
 export type BrowsersList = z.infer<typeof BrowsersListSchema>;
 export const BrowserNameParamSchema = z.object({ name: z.string() });
+
+/* ---- subagents: the agents an agent starts ----
+ *
+ * The third thing a turn spawns that the operator can be shown, after its shell and its browser — and the only
+ * one that is itself an agent. Two kinds land in this one list, because from outside they are the same fact
+ * (another agent, working, that you did not start):
+ *   • `subagent` — the SDK's Agent/Task tool. The daemon learns of it from the SubagentStart/SubagentStop hooks
+ *     and the task_* stream messages, joined on `toolUseId`.
+ *   • `codex` / `grok` — a CLI the agent drove from its own Bash (agent/delegation.ts). Detected in the Bash
+ *     PreToolUse hook, bound to its thread/session id from the command's output.
+ *
+ * `id` IS THE SPAWNING TOOL CALL'S id — the Agent card's, or the Bash card's for a delegation. It is the one key
+ * every source already carries (the SDK's subagent meta, its task_* messages, and the `parentToolUseId` the
+ * client nests inner frames under), so nothing has to be correlated: a card links to its subagent with the id it
+ * already has, and the subagent points back at the card the same way. The ids the transcripts are actually READ
+ * with — the SDK's agent id, a Codex thread, an OpenCode session — stay daemon-side, because no surface asks a
+ * question they answer.
+ *
+ * WHAT A KIND CHANGES, and it is only ever the live view: a subagent has no process of its own to look at, so
+ * watching it means reading its transcript. A delegation runs in a tmux window, so it has both — `terminal`
+ * names it, and the card keeps its existing "Watch in terminal" beside the transcript door. */
+export const SubagentKindSchema = z.enum(["subagent", "codex", "grok"]);
+export type SubagentKind = z.infer<typeof SubagentKindSchema>;
+
+// running/pending are live; the rest are terminal. Deliberately the SDK's own task vocabulary
+// (SDKTaskUpdatedMessage.patch.status) rather than AgentStatus: this is not a fleet card's lifecycle (no
+// draft/landed/conflict), and mapping the two would invent states neither side reports.
+export const SubagentStatusSchema = z.enum(["pending", "running", "completed", "failed", "killed", "paused"]);
+export type SubagentStatus = z.infer<typeof SubagentStatusSchema>;
+
+export const SubagentSessionSchema = z.object({
+    id: z.string(),
+    kind: SubagentKindSchema,
+    // The conversation whose turn spawned this — what the area groups its rows by, and the way back to the chat
+    // the card lives in.
+    conversationId: z.string(),
+    // What it is and what it was asked to do: the subagent type (`Explore`, `general-purpose`) or the delegated
+    // provider's model, and the caller's one-line description. The area's row and the card's title read as
+    // `Explore · Locate claimIndexer definition`.
+    agentType: z.string().optional(),
+    description: z.string().optional(),
+    model: z.string().optional(),
+    // How deep in the spawn tree (1 = spawned by the turn itself). From the SDK's meta.json; a subagent may
+    // itself delegate, and a flat list that cannot say so reads as though the turn started all of them.
+    spawnDepth: z.number().optional(),
+    // Backgrounded: the parent went on working instead of waiting for it. This is the whole reason the list
+    // exists — a backgrounded child used to be invisible until its result landed, sometimes minutes later.
+    background: z.boolean().optional(),
+    status: SubagentStatusSchema,
+    startedAt: z.number(),
+    endedAt: z.number().optional(),
+    activityAt: z.number(),
+    // What it has spent and done so far (task_progress). Tokens are the child's own, so a parent's cost line and
+    // the sum of its children's are two different true numbers.
+    tokens: z.number().optional(),
+    toolUses: z.number().optional(),
+    lastTool: z.string().optional(),
+    // Its report — the last assistant message (SubagentStop) or the task summary. The answer to "what did it
+    // conclude?" without opening the transcript, which is the question a finished child is read for.
+    summary: z.string().optional(),
+    error: z.string().optional(),
+    // A delegation's live view: the tmux session its command runs in. Absent for an SDK subagent, which has no
+    // process of its own to attach to.
+    terminal: z.string().optional(),
+});
+export type SubagentSession = z.infer<typeof SubagentSessionSchema>;
+export const SubagentsListSchema = z.object({ sessions: z.array(SubagentSessionSchema) });
+export type SubagentsList = z.infer<typeof SubagentsListSchema>;
+export const SubagentIdParamSchema = z.object({ id: z.string() });
 
 // ---- environment: the overlay Dockerfile extending the sandbox image ----
 // The approved file is DAEMON-COMPOSED: pinned FROM + capability fragments + the owner-approved custom section.

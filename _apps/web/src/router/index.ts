@@ -95,6 +95,9 @@ const routes: RouteRecordRaw[] = [
             // The session is in the URL so a reload reopens the same browser; optional, because the rail tile
             // links to the bare path and the view picks the most recently active one.
             { path: `browsers/:session?`, name: `browsers`, meta: { title: `Browsers` }, component: () => import(`../pages/Browsers.vue`) },
+            // Same shape and same reason as the browsers above: the id is in the URL so a reload — or the chat
+            // card's link — reopens the same agent, and the bare path shows whichever is most recently active.
+            { path: `subagents/:id?`, name: `subagents`, meta: { title: `Subagents` }, component: () => import(`../pages/Subagents.vue`) },
             { path: `ext/:ext/:key?`, name: `extension`, component: () => import(`../pages/ExtensionHost.vue`) },
             { path: `settings/:tab?`, name: `settings`, meta: { title: `Settings` }, component: () => import(`../pages/SettingsHub.vue`) },
         ],

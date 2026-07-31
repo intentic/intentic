@@ -398,6 +398,9 @@ async function* runTurn(
     const base: AgentRequest = {
         prompt: input.history !== undefined && input.history.length > 0 ? withRuntimeHistory(promptWithEditor, input.history) : promptWithEditor,
         cwd: effectiveCwd,
+        // Which agent the children this turn spawns belong to (agent/subagents.ts). Absent for a turn with no
+        // conversation behind it, whose children are not surfaced.
+        ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
         ...(isolation !== undefined ? { isolation } : {}),
         signal: signal ?? new AbortController().signal,
         ...(Object.keys(cliEnv).length > 0 ? { cliEnv } : {}),

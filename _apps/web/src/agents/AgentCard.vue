@@ -57,6 +57,18 @@ const meta = computed(() => agentStatusMeta(props.agent.status));
 const router = useRouter();
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
+/* WHAT THE LIVE LINE SAYS. Normally the agent's own last tool (or the todo it is on) — but a parent whose
+ * children are working is not itself the interesting fact, and its own tool line goes quiet for exactly as long
+ * as it waits on them. So the children lead, and what the parent was doing trails. */
+const activityText = computed(() => {
+    const activity = props.agent.activity;
+    const own = activity === undefined ? undefined : (activity.todo ?? [activity.tool, activity.target].filter(Boolean).join(` · `));
+    const running = props.agent.subagents?.running ?? 0;
+    if (running === 0) {
+        return own;
+    }
+    return [`${running} subagent${running === 1 ? `` : `s`}`, own].filter(Boolean).join(` · `);
+});
 // Archiving is offered wherever it means something — which is NOT the same as "the Finished lane" (see
 // canArchive): every card whose archive the daemon would take and that isn't holding a question for the user,
 // dead ends in the Attention lane included. It sits beside the rename pencil rather than behind the drag
@@ -307,6 +319,27 @@ const grab = (event: PointerEvent): void => {
                 <span v-if="agent.turns !== undefined && agent.turns > 0" v-tooltip.top="'Completed turns'">
                     <Icon name="comments" class="mr-0.5 text-2xs" />{{ agent.turns }}
                 </span>
+                <!-- THE AGENTS THIS AGENT STARTED. A card is the answer to "what is this agent up to", and one
+                     running five children used to look exactly like one running none. A nested button, like the
+                     cost above and for the same reason: the click opens the Subagents area rather than the agent.
+                     The chip counts live-of-total while any are working and settles to the total once none are —
+                     "3 / 5" says something a bare "5" cannot, and only while it is true. -->
+                <button
+                    v-if="agent.subagents !== undefined"
+                    type="button"
+                    class="cursor-pointer transition-colors hover:text-content hover:underline"
+                    :class="{ 'text-link': agent.subagents.running > 0 }"
+                    v-tooltip.top="
+                        agent.subagents.running > 0
+                            ? `${agent.subagents.running} of ${agent.subagents.total} agents this agent started are still working`
+                            : `${agent.subagents.total} agent${agent.subagents.total === 1 ? `` : `s`} this agent started`
+                    "
+                    @click.stop="router.push({ name: `subagents` })"
+                >
+                    <Icon name="users" class="mr-0.5 text-2xs" />{{
+                        agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total
+                    }}
+                </button>
                 <span v-if="context !== undefined" class="inline-flex items-center gap-1" v-tooltip.top="'Context window fill'">
                     <ProgressRing :value="context" :class="context >= 80 ? 'text-warning' : 'text-primary-500'" />
                     <span>{{ context }}%</span>
@@ -316,12 +349,14 @@ const grab = (event: PointerEvent): void => {
             <!-- The live line and the footer both claim the row's leftovers, so a wide board splits them and a
                  narrow one wraps the footer onto its own line rather than shaving the activity to an ellipsis. -->
             <p
-                v-if="turnInFlight(agent) && agent.activity !== undefined"
+                v-if="turnInFlight(agent) && activityText"
                 class="flex min-w-0 items-center gap-1.5 text-2xs text-link"
                 :class="dense ? 'min-w-32 flex-1' : ''"
             >
-                <Icon :name="activityIcon(agent.activity.tool)" class="shrink-0 text-2xs" />
-                <span class="truncate">{{ agent.activity.todo ?? [agent.activity.tool, agent.activity.target].filter(Boolean).join(" · ") }}</span>
+                <!-- The glyph follows whichever fact leads the line: the children when they are the work, else
+                     the tool the agent itself is on. -->
+                <Icon :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)" class="shrink-0 text-2xs" />
+                <span class="truncate">{{ activityText }}</span>
             </p>
 
             <!-- THE CONFLICTED CARD'S WAY OUT, ON THE CARD. A refused land is the one state on this board that

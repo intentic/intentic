@@ -1,4 +1,14 @@
-import type { AskQuestion, PermissionAsk, TodoItem, ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "@intentic/sandbox-contract";
+import type {
+    AskQuestion,
+    PermissionAsk,
+    SubagentKind,
+    SubagentStatus,
+    TodoItem,
+    ToolCallContent,
+    ToolCallLocation,
+    ToolCallStatus,
+    ToolKind,
+} from "@intentic/sandbox-contract";
 
 /* The transcript VOCABULARY — what a chat is made of, with no notion of how it is produced.
  *
@@ -60,6 +70,27 @@ export interface ChatTool {
     // A sub-agent's streamed thinking, grouped onto its own card rather than merged into the parent turn's
     // thinking block. Absent for an ordinary tool call.
     readonly thinking?: string;
+    /* THE CHILD THIS CALL STARTED, as the daemon's registry sees it (SubagentSessionSchema). Set on the card whose
+     * id the `subagent`/`subagent_update` frames name — which is this call's own id, so no correlation is needed:
+     * an Agent card wears its subagent's live state, and a Bash card that turned out to be a `codex exec` wears
+     * its delegate's.
+     *
+     * It is what a card can say about a BACKGROUNDED child, which is the case that used to be invisible: the tool
+     * result may be minutes away, and until it lands this is the only account of whether anything is happening. */
+    readonly subagent?: {
+        readonly kind: SubagentKind;
+        readonly agentType?: string;
+        readonly description?: string;
+        readonly status: SubagentStatus;
+        readonly tokens?: number;
+        readonly toolUses?: number;
+        readonly lastTool?: string;
+        readonly summary?: string;
+        readonly error?: string;
+        readonly background?: boolean;
+        // A delegation's tmux session — the live view a subagent has no equivalent of.
+        readonly terminal?: string;
+    };
 }
 
 // Apply `fn` to the tool with `id` anywhere in a bubble's tool tree — a sub-agent's calls live nested under its

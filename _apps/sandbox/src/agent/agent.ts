@@ -39,9 +39,22 @@ import { sdkSystemPrompt } from "./system-prompt.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 import { isAuthFailureText, isUsageLimitText } from "./failure-sentences.js";
+import {
+    closeSubagents,
+    noteDelegation,
+    noteSubagentTask,
+    settleDelegation,
+    subagentHooks,
+    type SubagentTaskMessage,
+    type SubagentTurn,
+} from "./subagents.js";
 
 export interface AgentRequest {
     readonly prompt: string;
+    // Which conversation this turn belongs to. Only the subagent registry reads it — a child is filed under the
+    // parent whose turn spawned it, which is what lets the Subagents area group by agent and the fleet card count
+    // its own. Absent ⇒ a turn with no conversation behind it (the bench), whose children are not registered.
+    readonly conversationId?: string;
     // Absolute paths of user-attached files, consumed by the CODEX adapter (images ride as native
     // local_image inputs). The Claude path folds these into the prompt in streamAgent instead — its Read
     // tool handles images/PDFs from disk natively.
@@ -391,6 +404,8 @@ async function* streamSdk(
     // Whose allowance this turn spends and when it reopens; absent on a native Claude turn, whose harness
     // answers both by itself. See TurnAllowance.
     allowance: TurnAllowance | undefined,
+    // The turn handle children are filed under; absent ⇒ no conversation to file them against (the bench).
+    subagents: SubagentTurn | undefined,
 ): AsyncGenerator<AgentEvent> {
     const vendor = allowance?.vendor ?? "Claude";
     /* WHEN THE SPENT WINDOW REOPENS, from the only party that knows. On a NATIVE Claude turn the harness sets
@@ -414,6 +429,8 @@ async function* streamSdk(
     // session (browser/browser-sessions.ts); this frame only tells the client its name.
     let browserSent = false;
     const bashToolIds = new Set<string>();
+    // Bash calls that turned out to be a delegated CLI agent, so their result settles the registry record too.
+    const delegationToolIds = new Set<string>();
     // tool_use ids of browser screenshots, so the result can be turned into a picture the chat actually shows
     // instead of the literal "[image]" a non-text block collapses to (browser/browser-artifacts.ts).
     const screenshotToolIds = new Set<string>();
@@ -455,6 +472,10 @@ async function* streamSdk(
         if (!sessionSent && typeof sessionId === "string" && sessionId !== "") {
             sessionSent = true;
             yield { kind: "session", sessionId };
+        }
+        // The session a child's transcript is filed under, onto the handle the hooks close over — see SubagentTurn.
+        if (subagents !== undefined && subagents.sessionId === undefined && typeof sessionId === "string" && sessionId !== "") {
+            subagents.sessionId = sessionId;
         }
         // Frames produced inside a subagent (Task tool) carry its id so the UI can group them.
         const parent = (message as { parent_tool_use_id?: string | null }).parent_tool_use_id ?? undefined;
@@ -542,6 +563,25 @@ async function* streamSdk(
                             }
                         }
                     }
+                    /* A Bash command can also BE an agent: `codex exec` / `opencode run` drive the user's other
+                     * connected accounts (delegation.ts), and the command line is the only place that is visible.
+                     * Registered off the same block the terminal frame comes from, so a delegation and the shell
+                     * it runs in are named together — and detected for every Bash call, tmux or not, because
+                     * whether the daemon can WATCH it is a different question from whether it happened. */
+                    if (block.name === "Bash" && subagents !== undefined) {
+                        const command = (block.input as { command?: unknown } | undefined)?.command;
+                        if (typeof command === "string") {
+                            const spawned = noteDelegation(subagents, {
+                                id: block.id,
+                                command,
+                                ...(agentSession !== undefined ? { terminal: agentSession } : {}),
+                            });
+                            if (spawned !== undefined) {
+                                delegationToolIds.add(block.id);
+                                yield spawned;
+                            }
+                        }
+                    }
                     // First browser tool of the turn: name the `browser-<id>` session so the card can offer to
                     // watch it. Unlike Bash there is no resurface pass — the session is registered by the same
                     // call's PreToolUse hook, which has already run by the time this block is streamed.
@@ -609,6 +649,14 @@ async function* streamSdk(
                     // so the call-time diff stays the card's content. Errors DO replace it (the text is the reason).
                     const failed = block.is_error === true;
                     const text = resultText(block.content);
+                    // The delegate stopped. Its last words are its report, which is what a finished child is read
+                    // for — so the registry takes them from the same text the card shows.
+                    if (delegationToolIds.has(block.tool_use_id)) {
+                        const settled = settleDelegation(block.tool_use_id, { failed, output: text });
+                        if (settled !== undefined) {
+                            yield settled;
+                        }
+                    }
                     // A screenshot's answer names the file it wrote; carry the picture alongside the text so the
                     // card can show what the agent looked at, not just say that it looked.
                     const image =
@@ -711,6 +759,16 @@ async function* streamSdk(
                     nextAttemptAt: Date.now() + message.retry_delay_ms,
                     ...(message.error_status !== null ? { status: message.error_status } : {}),
                 };
+                /* THE SDK'S SUBAGENT LIFECYCLE — the four messages that used to be dropped here for having "no UI
+                 * mapping". They are the only account of a child between its tool_use and its result: what it is,
+                 * what it is spending, what it is doing right now, whether it finished or failed. Which for a
+                 * BACKGROUNDED child (the Agent tool's default) is the entire account, because its result may not
+                 * land for minutes. The registry owns the fold; this only forwards what came back. */
+            } else if (subagents !== undefined && message.subtype.startsWith("task_")) {
+                const frame = noteSubagentTask(subagents, message as SubagentTaskMessage);
+                if (frame !== undefined) {
+                    yield frame;
+                }
             }
         } else if (message.type === "rate_limit_event") {
             // Claude subscription usage for the turn: which window is active, how much of it is spent, and when
@@ -885,12 +943,19 @@ const baseOptions = (
     abortController: AbortController,
     permissionMode: PermissionMode,
     tmuxEnabled: boolean,
+    // The turn handle the subagent registry files children under. Absent ⇒ this turn belongs to no conversation
+    // (the bench), so its children are not surfaced and the hooks are not wired.
+    subagents: SubagentTurn | undefined,
 ): OauthRecoveryOptions => ({
     cwd: request.cwd,
     // Only for a native Claude turn on a sandbox-owned credential: a translator endpoint authenticates with its
     // own bearer, and the container-env fallback has no refresh token behind it to mint from.
     ...(request.baseUrl === undefined && request.refreshOauthToken !== undefined ? { getOAuthToken: request.refreshOauthToken } : {}),
     includePartialMessages: true,
+    // Forward a subagent's own prose and thinking, not just its tool calls. Without it a child's transcript is a
+    // list of tool rows with no narration — enough for the parent's card (whose report arrives as the tool's
+    // result anyway) and nowhere near enough for the Subagents area, which renders the child as a conversation.
+    forwardSubagentText: true,
     permissionMode,
     abortController,
     // Claude Code's coding-tuned preset plus this harness's own guidance — or, when the owner has written a
@@ -949,6 +1014,10 @@ const baseOptions = (
         // is where the watchable session is registered. The hook only names what already exists — the browser
         // is the MCP's to launch and to kill (browser/browser-sessions.ts).
         request.browserPorts !== undefined ? browserSessionHooks(request.browserPorts) : {},
+        // Subagents, the same way: the ids a child's transcript is READ with are only ever named to a hook, so
+        // this pair is what makes the Subagents area's door open on anything (agent/subagents.ts). Pure
+        // record-keeping — the card already learned the child exists from the task stream.
+        subagents !== undefined ? subagentHooks(subagents) : {},
         // The hook body runs in the DAEMON, outside the turn's namespace, so the file the agent just edited
         // has to be named the way the daemon can reach it — otherwise an isolated turn type-checks the main
         // tree's copy of the path and reports diagnostics for code it did not write.
@@ -1145,9 +1214,14 @@ export async function* runAgent(
 
     const permissionMode: PermissionMode = request.permissionMode ?? "bypassPermissions";
     const tmuxEnabled = tmuxRunEnabled();
+    // One handle for every agent this turn starts, shared by the hooks (wired below, before the session id
+    // exists) and the stream (which fills it in). No conversation ⇒ nothing to file children under, so the whole
+    // surface stays off rather than accumulating records nothing can list.
+    const subagents: SubagentTurn | undefined =
+        request.conversationId === undefined ? undefined : { conversationId: request.conversationId, cwd: request.cwd, sessionId: undefined };
     let stderr = "";
     const options: Options = {
-        ...baseOptions(request, abortController, permissionMode, tmuxEnabled),
+        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents),
         allowDangerouslySkipPermissions: permissionMode === "bypassPermissions",
         stderr: (data) => {
             stderr += data;
@@ -1187,12 +1261,21 @@ export async function* runAgent(
                 request.steering,
                 readUsage,
                 request.allowance,
+                subagents,
             )) {
                 push(event);
             }
         } catch (error) {
             push({ kind: "error", message: errorMessage(error, stderr) });
         } finally {
+            /* Any child still marked live goes to `killed` as the turn ends. Nothing else can say so: a stopped
+             * turn, or a CLI that died under one, reports no terminal status for the children it was running, and
+             * a subagent left "running" forever in the list is precisely the lie the registry exists to remove. */
+            if (subagents !== undefined) {
+                for (const frame of closeSubagents(subagents.conversationId)) {
+                    push(frame);
+                }
+            }
             // Ends the streaming input, so the SDK subprocess settles; late steer pushes then report undelivered.
             request.steering?.close();
             queue.end();

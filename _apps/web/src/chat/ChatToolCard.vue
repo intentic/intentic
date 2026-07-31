@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic-app/ui";
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import type { ChatTool } from "../composables/chat/transcript";
 import { useChat } from "../composables/chat/useChat";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
@@ -55,7 +55,10 @@ const hasContent = computed(
         view.value.images.length > 0 ||
         view.value.body !== undefined ||
         props.tool.thinking !== undefined ||
-        (props.tool.children?.length ?? 0) > 0,
+        (props.tool.children?.length ?? 0) > 0 ||
+        // A backgrounded child's report is the only thing under its card until its result lands, and a card with
+        // nothing to open reads as a card with nothing to say.
+        props.tool.subagent?.summary !== undefined,
 );
 
 // Output fold, mirroring the turn's Thinking block. The registry decides the default (open while running or
@@ -84,6 +87,32 @@ const agentTerminal = computed(() => (view.value.body?.kind === `command` ? acti
 const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`browser `) ? active.value.agentBrowser.value : undefined));
 const router = useRouter();
 const watchBrowser = (session: string): void => void router.push(`/browsers/${session}`);
+
+/* THE AGENT THIS CALL STARTED — the third door of the same kind, onto the one thing a subagent has instead of a
+ * process: its transcript. The card's own id IS the subagent's id in the registry (see ChatTool.subagent), so the
+ * link needs nothing the card doesn't already hold.
+ *
+ * The line it wears is the answer to "is anything happening?", which for a BACKGROUNDED child is a question the
+ * transcript could not answer at all before: its result may be minutes away, and a spinner over an empty card is
+ * indistinguishable from a hang. So while it runs the card says what the child is doing and what it has spent,
+ * and once it stops it says what it concluded. */
+const subagent = computed(() => props.tool.subagent);
+const subagentLive = computed(() => subagent.value?.status === `running` || subagent.value?.status === `pending`);
+// What the row above the fold says, in the order it is read: the type it runs as, then what it was asked to do.
+const subagentTitle = computed(() => [subagent.value?.agentType, subagent.value?.description].filter(Boolean).join(` · `));
+// The quiet numbers line. Tokens are the CHILD's own spend, which is why they are worth saying next to a parent
+// whose cost readout does not include them yet.
+const subagentFacts = computed<string[]>(() => {
+    const child = subagent.value;
+    if (child === undefined) {
+        return [];
+    }
+    return [
+        ...(subagentLive.value && child.lastTool !== undefined ? [child.lastTool] : []),
+        ...(child.toolUses !== undefined && child.toolUses > 0 ? [`${child.toolUses} tools`] : []),
+        ...(child.tokens !== undefined && child.tokens > 0 ? [`${Math.round(child.tokens / 1000)}k tokens`] : []),
+    ];
+});
 </script>
 
 <template>
@@ -114,8 +143,11 @@ const watchBrowser = (session: string): void => void router.push(`/browsers/${se
                     <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
                 </span>
             </template>
+            <!-- A delegation says WHO it handed the work to and WHAT it asked for, in the slot a path would take:
+                 `Explore · Locate claimIndexer definition`. Not mono — this is a sentence, not an identifier. -->
+            <span v-if="subagentTitle" class="min-w-0 truncate">{{ subagentTitle }}</span>
             <button
-                v-if="location"
+                v-else-if="location"
                 type="button"
                 class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
                 v-tooltip.top="'Open in workspace'"
@@ -124,10 +156,21 @@ const watchBrowser = (session: string): void => void router.push(`/browsers/${se
                 {{ tool.target ?? location.path }}
             </button>
             <span v-else-if="tool.target" class="min-w-0 truncate font-mono">{{ tool.target }}</span>
+            <!-- Working in the background while the parent went on. The one fact that explains why this card can
+                 sit unfinished for minutes with the turn plainly still moving underneath it. -->
+            <span v-if="subagent?.background === true && subagentLive" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-subtle"
+                >background</span
+            >
             <!-- The result phrase stays visible while collapsed — a folded card should still say what
                  happened. Pushed right so it reads as a trailing annotation, not part of the target. A call
                  that never reported back says so, which is what the clock in its place means. -->
-            <span v-if="unfinished" class="ml-auto shrink-0 text-subtle">interrupted</span>
+            <!-- What the CHILD is doing and what it has spent — a subagent's own progress, which its parent's
+                 result summary cannot report because the result is the thing being waited for. Takes the trailing
+                 slot while the child is live and gives it back to the ordinary summary once it settles. -->
+            <span v-if="subagentFacts.length > 0 && subagentLive" class="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-subtle">
+                <span v-for="fact in subagentFacts" :key="fact">{{ fact }}</span>
+            </span>
+            <span v-else-if="unfinished" class="ml-auto shrink-0 text-subtle">interrupted</span>
             <span v-else-if="view.summary" class="ml-auto shrink-0 tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{
                 view.summary
             }}</span>
@@ -158,8 +201,31 @@ const watchBrowser = (session: string): void => void router.push(`/browsers/${se
             >
                 <Icon name="globe" class="text-2xs" />
             </button>
+            <!-- And the third: onto the child's own transcript. Unlike the two above this one is NOT hover-only
+                 once settled — a finished delegation's transcript is the record of work the parent only summarized,
+                 which is exactly what somebody scrolling back is looking for. -->
+            <RouterLink
+                v-if="subagent"
+                :to="`/subagents/${tool.id}`"
+                class="shrink-0 transition-colors hover:text-content"
+                v-tooltip.top="subagentLive ? 'Watch this agent' : `Open this agent's transcript`"
+                :aria-label="subagentLive ? 'Watch this agent' : `Open this agent's transcript`"
+            >
+                <Icon name="users" class="text-2xs" />
+            </RouterLink>
         </div>
         <template v-if="isOpen">
+            <!-- WHAT THE CHILD CONCLUDED — its own last words (a subagent's) or the tail of what it printed (a
+                 delegation's). Above the nested calls on purpose: the answer is what the delegation was for, and
+                 the work it did to get there is the detail underneath it. For a backgrounded child this arrives
+                 well before the tool result, and is the only report there is until then. -->
+            <p
+                v-if="subagent?.summary"
+                class="ml-4 whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"
+                :class="subagent.error ? 'text-danger' : 'text-muted'"
+            >
+                {{ subagent.summary }}
+            </p>
             <!-- A sub-agent's own thinking, grouped onto its card as a muted inner-voice block rather than
                  merged into the parent turn's thinking (see conversation.ts). -->
             <pre

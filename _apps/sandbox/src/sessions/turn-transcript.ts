@@ -18,9 +18,10 @@ import type { TranscriptAgent } from "./agent-transcript.js";
  * tool calls a prose block introduced open a fresh bubble underneath it. A reopened tab therefore shows what was
  * on screen, not a second arrangement of it.
  *
- * Frames tagged `parentToolUseId` are a subagent's inner stream. The client nests those under the Task card that
- * spawned them; RestoredMessage is flat and has nowhere to put them, so they stay out rather than arriving as an
- * unattributed second voice. */
+ * Frames tagged `parentToolUseId` are a subagent's inner stream, and they NEST — under the Agent card that
+ * spawned them, exactly where the live client puts them (ChatTool.children). They used to be dropped for having
+ * nowhere flat to go, which meant a reopened chat lost every delegation it was showing: the card came back a
+ * leaf, with the whole child collapsed into its result text. */
 export const restoredTurn = (
     turn: { readonly prompt: string; readonly attachments?: readonly string[] | undefined },
     events: readonly AgentEvent[],
@@ -43,8 +44,46 @@ export const restoredTurn = (
         out.push({ role: "user", text: stripped.text, ...(attachments.length > 0 ? { attachments } : {}) });
     }
 
+    out.push(...foldFrames(events, undefined));
+    return out;
+};
+
+/* ONE SUBAGENT'S SIDE OF A TURN, out of the same frame log — what the Subagents area renders for a child that is
+ * still running. Its frames are already in the parent run's log, tagged with the tool call that spawned it, so
+ * there is nothing to stream separately and nothing to store twice: the child's transcript is a projection of its
+ * parent's.
+ *
+ * `prompt` is what it was asked to do (the registry's description), pushed as the opening user bubble so the
+ * transcript reads like a conversation rather than starting mid-answer. */
+export const subagentTurn = (events: readonly AgentEvent[], id: string, prompt: string | undefined): RestoredMessage[] => [
+    ...(prompt !== undefined && prompt.length > 0 ? [{ role: "user" as const, text: prompt }] : []),
+    ...foldFrames(events, id),
+];
+
+// A tool_call frame as the card it restores to. Shared by both levels of the fold below — a child's card is
+// built by the same rules as its parent's, which is what makes a nested one indistinguishable from a top-level one.
+const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>): RestoredToolCall => ({
+    id: event.id,
+    name: event.name,
+    category: event.category,
+    status: event.status,
+    ...(event.target !== undefined ? { target: event.target } : {}),
+    ...(event.locations !== undefined ? { locations: event.locations } : {}),
+    ...(event.content !== undefined ? { content: event.content } : {}),
+});
+
+/* THE FOLD ITSELF, over whichever stream of the log the caller is reading.
+ *
+ * `tag` names that stream: undefined is the main turn, a tool_use id is the subagent spawned by it. Frames
+ * carrying THAT tag are the stream's own and land at top level; frames carrying a DIFFERENT one belong to a child
+ * of this stream, and nest under the card that spawned them. Which is one rule for both callers, and it is what
+ * makes depth fall out for free — a subagent that itself delegates nests one level further down, on the same
+ * pass, whichever level you asked to read. */
+const foldFrames = (events: readonly AgentEvent[], tag: string | undefined): RestoredMessage[] => {
+    const out: RestoredMessage[] = [];
     // tool_call id → the card a later tool_call_update settles. The card is already in `out` (or in the open
-    // bubble) and is mutated in place, so a result that lands turns after its call needs no second pass.
+    // bubble) and is mutated in place, so a result that lands turns after its call needs no second pass. Nested
+    // cards go in too: an update names only its id, so a child's result has to be reachable the same way.
     const cards = new Map<string, RestoredToolCall>();
     let bubble: { text: string; thinking: string; tools: RestoredToolCall[] } | undefined;
     const open = (): { text: string; thinking: string; tools: RestoredToolCall[] } => (bubble ??= { text: "", thinking: "", tools: [] });
@@ -71,7 +110,27 @@ export const restoredTurn = (
     };
 
     for (const event of events) {
-        if ("parentToolUseId" in event && event.parentToolUseId !== undefined) {
+        const parent = "parentToolUseId" in event ? event.parentToolUseId : undefined;
+        if (parent !== tag) {
+            /* A CHILD OF THIS STREAM. Its calls and its thinking hang off the card that spawned it; its PROSE
+             * does not, because a card has no place for prose and the child's report already arrives as that
+             * card's result content — which is the same division the live client makes (turnReducer drops a
+             * subagent delta for exactly this reason). Read at the child's own level (subagentTurn) that prose
+             * is top-level and lands in full.
+             *
+             * A card we have never seen means its spawning call is not in the stream being read, so there is
+             * nothing to hang it off; dropping it is what keeps a nested level out of the level above it. */
+            const card = parent === undefined ? undefined : cards.get(parent);
+            if (card === undefined) {
+                continue;
+            }
+            if (event.kind === "thinking") {
+                card.thinking = `${card.thinking ?? ""}${event.text}`;
+            } else if (event.kind === "tool_call") {
+                const child = cardOf(event);
+                card.children = [...(card.children ?? []), child];
+                cards.set(event.id, child);
+            }
             continue;
         }
         if (event.kind === "delta") {
@@ -81,15 +140,7 @@ export const restoredTurn = (
         } else if (event.kind === "thinking") {
             open().thinking += event.text;
         } else if (event.kind === "tool_call") {
-            const card: RestoredToolCall = {
-                id: event.id,
-                name: event.name,
-                category: event.category,
-                status: event.status,
-                ...(event.target !== undefined ? { target: event.target } : {}),
-                ...(event.locations !== undefined ? { locations: event.locations } : {}),
-                ...(event.content !== undefined ? { content: event.content } : {}),
-            };
+            const card = cardOf(event);
             open().tools.push(card);
             cards.set(event.id, card);
         } else if (event.kind === "tool_call_update") {
