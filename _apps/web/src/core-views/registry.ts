@@ -45,6 +45,32 @@ export interface ActiveExtension {
 export const extensionPath = (extension: ViewRegistration, activation: Activation): string =>
     activation.key === extension.id ? `/ext/${extension.id}` : `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
 
+/* THE RAIL'S READING ORDER, owned by the app rather than by whoever registered first.
+ *
+ * Without this the rail was in registration order — core views, then the `builtins.ts` array — which is an
+ * implementation detail, so Acceptance landed between Automations and Documentation for no reason a user could
+ * infer. The rail is the app's own furniture and the order is a product decision, so it is declared here.
+ *
+ * The sequence is a narrowing from "the work" to "the machinery underneath":
+ *   understand   Documentation — what this system is, read before touching it
+ *   verify       Acceptance, Pipelines — what we promised, and whether it builds
+ *   delegate     Automations — what runs without being asked
+ *   inspect      Memory, Activity — what the agent remembers, and what it did
+ *   operate      Infrastructure, Live status — the platform under all of it
+ *
+ * Agents and Workspace are not here: they are fixed shell tiles pinned above every extension (ShellDesktop's
+ * fixedTiles), because they are where work starts.
+ *
+ * An id absent from this list keeps its registration position, so a third-party extension appends rather than
+ * silently jumping the queue — and adding a first-party rail view without touching this list puts it last, which
+ * is the honest default rather than an arbitrary middle. */
+const RAIL_ORDER: readonly string[] = [`documentation`, `acceptance`, `pipelines`, `automations`, `memory`, `activity`, `infrastructure`, `live-status`];
+
+const railRank = (id: string): number => {
+    const at = RAIL_ORDER.indexOf(id);
+    return at === -1 ? RAIL_ORDER.length : at;
+};
+
 // detect() failures are contained, not propagated: one broken extension contributes nothing this round instead
 // of blanking every sidebar element with it.
 const safeDetect = (entry: RegisteredView, repos: readonly RepoFacts[], capabilities: readonly CapabilityFacts[]): Activation[] => {
@@ -69,12 +95,20 @@ export const detectActivations = (repos: readonly RepoFacts[], capabilities: rea
             .filter(({ extension }) => extension.fallback !== true && extension.auxiliary !== true)
             .flatMap(({ activations }) => activations.flatMap((a) => (a.repo === undefined ? [] : [a.repo]))),
     );
-    return detected.flatMap(({ extension, activations }) =>
+    const resolved = detected.flatMap(({ extension, activations }) =>
         (extension.fallback === true ? activations.filter((a) => a.repo === undefined || !claimed.has(a.repo)) : activations).map((activation) => ({
             extension,
             activation,
         })),
     );
+    /* Ordered here rather than in the surfaces, because BOTH the desktop rail and the mobile menu render this
+     * list and they must not disagree about what comes after what — ordering in each of them is the same fact in
+     * two places, which is the drift this file already avoids for registration.
+     *
+     * A stable sort, and only rail ids are ranked: everything unlisted shares the last rank and therefore keeps
+     * its registration order. So per-repo directory panels — which are ordered by the repo they belong to, not by
+     * any table here — pass through untouched. */
+    return resolved.toSorted((left, right) => railRank(left.extension.id) - railRank(right.extension.id));
 };
 
 // An element's tile badge, contained the same way detect() is: a throwing badge costs its own tile a number,

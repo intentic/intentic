@@ -1,5 +1,5 @@
 import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, ProcessStatus, RepoFacts } from "@intentic/extension-api";
-import { extensionApiVersion, extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-api";
+import { extensionApiVersion, extensionIdOf, flattenQuery, mergeQuery, sandboxRouteAllowed } from "@intentic/extension-api";
 import { useTheme } from "@intentic-app/ui";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { watch } from "vue";
@@ -243,6 +243,16 @@ export const createExtensionApi = (
         },
         navigate: (path) => {
             void router.push(path);
+        },
+        /* `router.currentRoute` rather than `useRoute()`: an extension reads this from a composable that may run
+         * outside any component's setup (module state, a lazily-created query), and useRoute() needs injection
+         * context. currentRoute is a ref, so reading it inside a computed is reactive either way. */
+        route: {
+            query: () => flattenQuery(router.currentRoute.value.query),
+            setQuery: (patch, options) => {
+                const query = mergeQuery(router.currentRoute.value.query, patch);
+                void (options?.push === true ? router.push({ query }) : router.replace({ query }));
+            },
         },
         theme: {
             mode: () => scheme.value,

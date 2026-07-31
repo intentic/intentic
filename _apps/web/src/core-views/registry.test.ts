@@ -1,5 +1,6 @@
 import type { Disposable, IntenticApi, ViewRegistration } from "@intentic/extension-api";
 import * as acceptance from "@intentic/ext-acceptance";
+import * as documentation from "@intentic/ext-documentation";
 import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic-app/api-contract";
@@ -10,10 +11,20 @@ import { detectActivations, registerView } from "./registry";
 // static core views (infrastructure/live-status/directory-ui). Register the two packaged detects here so the
 // cross-extension rules — apps claims a monorepo, preview is the dropped-when-claimed fallback — are exercised
 // against the same registry the shell composes.
-const registerApi = { views: { register: (view: ViewRegistration) => registerView(`test`, view) } } as unknown as IntenticApi;
+// Views are what this file is about; `commands` and `viewers` are here because activate() is one function — an
+// extension that registers a command as well as a view must not fail to register the view.
+const registerApi = {
+    views: { register: (view: ViewRegistration) => registerView(`test`, view) },
+    viewers: { register: (): Disposable => ({ dispose: () => {} }) },
+    commands: { register: (): Disposable => ({ dispose: () => {} }) },
+} as unknown as IntenticApi;
 apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [] });
 preview.activate(registerApi, { extensionId: `intentic.preview`, subscriptions: [] });
 acceptance.activate(registerApi, { extensionId: `intentic.acceptance`, subscriptions: [] });
+// Documentation too: the rail-order cases below need a listed rail view whose position was previously an accident
+// of the builtins array. Its activate() also starts a badge poll, which is harmless here — every read inside it is
+// guarded, so an unreachable host simply yields no badge.
+documentation.activate(registerApi, { extensionId: `intentic.documentation`, subscriptions: [] });
 
 // A PanelSummary with everything false — override only the facts a case exercises.
 const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({
@@ -177,5 +188,48 @@ describe(`re-activation`, () => {
         expect(detectActivations(panels, []).some(({ extension }) => extension.id === `ghost`)).toBe(true);
         live.dispose();
         expect(detectActivations(panels, []).some(({ extension }) => extension.id === `ghost`)).toBe(false);
+    });
+});
+
+/* The rail's order is a product decision, and it used to be an accident: whatever order the core views and the
+ * `builtins.ts` array happened to register in. That put Acceptance between Automations and Documentation, which
+ * is not a sequence a user can infer from anything. RAIL_ORDER now declares it — checked here rather than in a
+ * surface because BOTH the desktop rail and the mobile menu render this list and must agree. */
+describe(`rail order`, () => {
+    const railIds = (): string[] =>
+        detectActivations([panel({ repo: `demo`, hasPanel: true, userStories: true })], [])
+            .filter(({ extension }) => extension.surface === `rail`)
+            .map(({ extension }) => extension.id);
+
+    it(`reads from what to understand, through what to verify, down to what runs underneath`, () => {
+        const ids = railIds();
+        const rank = (id: string): number => ids.indexOf(id);
+        expect(rank(`documentation`)).toBeGreaterThanOrEqual(0);
+        // Documentation before Acceptance before the rest — the specific ordering the user could not infer before.
+        expect(rank(`documentation`)).toBeLessThan(rank(`acceptance`));
+    });
+
+    it(`keeps an unlisted view at the end instead of letting it jump the queue`, () => {
+        // A third-party extension appends; it cannot land itself between two first-party tiles by registering early.
+        const stray = registerView(`test`, {
+            id: `stray`,
+            label: `Stray`,
+            surface: `rail`,
+            detect: () => [{ key: `stray`, title: `Stray` }],
+            view: async () => ({}),
+        });
+        const ids = railIds();
+        expect(ids.at(-1)).toBe(`stray`);
+        stray.dispose();
+    });
+
+    it(`leaves per-repo directory panels in registration order, which the rail table says nothing about`, () => {
+        // Only rail ids are ranked, and the sort is stable, so directory activations pass through untouched.
+        const panels = [panel({ repo: `mono`, monorepo: true, hasPanel: true })];
+        const directory = detectActivations(panels, [])
+            .filter(({ extension }) => extension.surface === `directory`)
+            .map(({ extension }) => extension.id);
+        expect(directory).toEqual([...directory].sort((left, right) => directory.indexOf(left) - directory.indexOf(right)));
+        expect(directory.length).toBeGreaterThan(0);
     });
 });

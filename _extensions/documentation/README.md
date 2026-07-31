@@ -83,6 +83,23 @@ change that invalidated it.** The checker is the backstop for what slips.
 The figure vocabulary itself lives in the design system, since the app renders it:
 [`_libs/ui/src/markdown/figures.ts`](../../_libs/ui/src/markdown/figures.ts) and `MarkdownFigure.vue`.
 
+## The URL is the state
+
+`/ext/documentation?repo=<repo>&doc=<package-dir>` — which document is open lives in the query, so a page can be
+linked to and a reload lands where you were. The view *derives* its selection from the URL rather than mirroring it
+into a ref: mirroring needs one watcher to follow the URL and another to write it, and those two fight (the
+classic symptom being Back moving the URL while the view stays put). Selecting a page pushes a history entry;
+choosing a repository replaces one and clears `doc`, because a document path only means something inside its own
+repository.
+
+The published/draft toggle is deliberately **not** in the URL. A draft is one person's unreviewed work in progress,
+so a link carrying "show me your draft" would either mislead the recipient or show them nothing.
+
+This rides on `api.route` in the public extension API, added for this view because `/ext/:ext/:key?` has exactly one
+free path segment and it already means "which activation" — a view with internal navigation has nowhere else to put
+it. See `_libs/extension-api/src/route.ts` for the query rules and `route.test.ts` for the invariant that matters:
+patching your own key never disturbs another view's.
+
 ## Gotchas
 
 - `bin/intentic-docs` duplicates two path constants from `src/paths.ts` — it is plain ESM executed directly by the

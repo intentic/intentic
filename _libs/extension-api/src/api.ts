@@ -164,6 +164,24 @@ export interface IntenticApi {
     };
     // Navigate the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").
     readonly navigate: (path: string) => void;
+    /* THE URL AS A VIEW'S STATE, so what a reader is looking at can be linked to.
+     *
+     * A view's own route space is the QUERY, not extra path segments: `/ext/:ext/:key?` is the whole route, and
+     * the `:key` segment already means "which activation" (one per repo). A view with internal navigation — a
+     * document browser, a selected run, an open file — therefore has nowhere in the path to put it, and without
+     * this it could only hold that state in memory, where a reload loses it and a link cannot carry it.
+     *
+     * Reading is reactive: read inside a computed and the view re-renders when the URL moves, which lets a view
+     * DERIVE its state from the query rather than mirror it in a ref (mirroring needs two watchers that can fight
+     * each other). Back and forward then work for free, because the URL is the state. */
+    readonly route: {
+        // The current query, flattened — a repeated key takes its first value, since a view's state is scalar.
+        query(): Readonly<Record<string, string>>;
+        /* Merge a patch in; a key set to `undefined` is removed. Replaces the history entry by default and pushes
+         * a new one when asked: a filter or a display toggle should not fill the back stack, while moving to
+         * another document is exactly what Back ought to undo. Other views' params are left alone. */
+        setQuery(patch: Readonly<Record<string, string | undefined>>, options?: { readonly push?: boolean }): void;
+    };
     readonly theme: {
         mode(): "light" | "dark";
         onDidChange(listener: (mode: "light" | "dark") => void): Disposable;

@@ -26,7 +26,9 @@ const open = (anchor: DocAnchor): void => {
 </script>
 
 <template>
-    <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+    <!-- Its own scroll area, independent of the contents menu beside it — see DocsView. `scrollbar-thin` to match
+         the rest of the app's scrollers. -->
+    <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto scrollbar-thin">
         <!-- Staleness sits ABOVE the prose, because a reader who is about to trust a page needs to know first. It
              names the reason rather than just the verdict: "points at a file that is gone" and "12 commits behind"
              call for different actions. -->

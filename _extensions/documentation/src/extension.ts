@@ -31,11 +31,18 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             id: `documentation`,
             label: `Documentation`,
             surface: `rail`,
-            // `align-left` because the icon set has no `book` — and `Activation.icon` is a deliberately OPEN
-            // string (a third-party bundle may name an icon this package has never heard of), so a name that is
-            // not in the set is not a compile error: the rail silently renders its fallback. builtins.test.ts
-            // now checks every compiled-in extension's icons against the real set for exactly that reason.
-            detect: (repos) => (repos.length > 0 ? [{ key: `documentation`, title: `Documentation`, icon: `align-left` }] : []),
+            /* `question-circle`: the icon set has no `book`, and the two obvious alternatives both collide at
+             * rail size. `align-left` (the first attempt) is a stack of horizontal lines, which is Acceptance's
+             * `list-check` with the ticks removed — indistinguishable in a 20px tile. `file` is a page outline,
+             * which is Workspace's `folder` at a glance. A ring with a mark inside shares its silhouette with
+             * nothing else in the rail, and "?" is the most widely understood "read about this" affordance.
+             * `clock` (Automations) is the only other round glyph, so RAIL_ORDER keeps the two apart.
+             *
+             * `Activation.icon` is a deliberately OPEN string (a third-party bundle may name an icon this app has
+             * never heard of), so a name outside the set is not a compile error — the rail silently renders its
+             * fallback, which is how the tile shipped blank once. builtins.test.ts now checks every compiled-in
+             * extension's icons against the real vocabulary. */
+            detect: (repos) => (repos.length > 0 ? [{ key: `documentation`, title: `Documentation`, icon: `question-circle` }] : []),
             // Newly generated sets nobody has read yet — see attention.ts for why that is the bar rather than a
             // count of what is undocumented or stale.
             badge: () => documentationBadge(),
