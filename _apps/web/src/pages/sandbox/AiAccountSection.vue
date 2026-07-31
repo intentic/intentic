@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type AgentProvider, type KeyedProvider, type OauthAccount, providerLabel } from "@intentic/sandbox-contract";
+import { type AgentProvider, type KeyedProvider, type OauthAccount, type TranslatorAccount, providerLabel } from "@intentic/sandbox-contract";
 import { cmp, formatTokens, InfoHint, Row, RowGroup } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -170,7 +170,7 @@ const usageLine = (id: string): string | undefined => {
  * the right answer there — a stale reading should not pin a chip. But on this manage page a reset account IS at
  * 0%, not unmeasured: it was measured at some point, every window reopened, and saying "we don't know" is less
  * useful than saying "you have room". So the ring treats empty-windows-but-measured as 0%. */
-const accountRing = (account: OauthAccount | any): { percent: number; tone: string; tooltip: string } | undefined => {
+const accountRing = (account: OauthAccount | TranslatorAccount): { percent: number; tone: string; tooltip: string } | undefined => {
     const key = 'id' in account ? account.id : account.name;
     const usage = usageStatusByAccount.value[key] ?? ('usage' in account ? account.usage : undefined);
     if (usage === undefined) {
@@ -182,7 +182,7 @@ const accountRing = (account: OauthAccount | any): { percent: number; tone: stri
 };
 
 // An account whose binding pool is ≥90% full — effectively spent.
-const isExhausted = (account: OauthAccount | any): boolean => {
+const isExhausted = (account: OauthAccount | TranslatorAccount): boolean => {
     const key = 'id' in account ? account.id : account.name;
     const usage = usageStatusByAccount.value[key] ?? ('usage' in account ? account.usage : undefined);
     const percent = usagePercent(usage);
@@ -201,12 +201,12 @@ const sortedAccounts = computed<readonly OauthAccount[]>(() => {
     return [...active, ...spent];
 });
 
-const sortedanys = computed<readonly any[]>(() => {
+const sortedTranslatorAccounts = computed<readonly TranslatorAccount[]>(() => {
     if (routedProvider.value === undefined) {
         return [];
     }
-    const active: any[] = [];
-    const spent: any[] = [];
+    const active: TranslatorAccount[] = [];
+    const spent: TranslatorAccount[] = [];
     for (const account of translatorAccounts.value[routedProvider.value]) {
         (isExhausted(account) ? spent : active).push(account);
     }
@@ -464,7 +464,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                  asks for the landing URL back. Either way the shared poll lands the new account's row. -->
             <template v-if="routedProvider">
                 <ConnectionRow
-                    v-for="account in sortedanys.slice(0, visibleRoutedLimit)"
+                    v-for="account in sortedTranslatorAccounts.slice(0, visibleRoutedLimit)"
                     :key="account.name"
                     :title="ROUTED_ROW[routedProvider].title"
                     state="connected"
