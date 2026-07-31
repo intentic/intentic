@@ -1356,17 +1356,31 @@ export class Conversation {
         return true;
     }
 
-    // Answers a pending plan card. The turn is parked on ExitPlanMode, so on approval it executes in `mode`
-    // (the "auto-accept edits" vs "approve each edit" choice) and streams a closing turn; on rejection the
-    // feedback is fed back and it re-plans.
-    async decidePlan(message: ChatMessage, approve: boolean, mode: PermissionMode, feedback?: string): Promise<void> {
+    /* Answers a pending plan card. The turn is parked on ExitPlanMode, so on approval it executes in `mode`
+     * (the "auto-accept edits" vs "approve each edit" choice) and streams a closing turn; on rejection the
+     * feedback is fed back and it re-plans.
+     *
+     * Feedback may carry the composer's staged files. The reply has ONE text field on the wire, so they go up
+     * the way a user would type them — as `@`-prefixed workspace paths, which is exactly what mentionPaths
+     * produces for an ordinary send and what the harness resolves at the other end. The alternative was the
+     * rule this replaces ("plan feedback is text-only"), which refused the single most natural way to say what
+     * a plan got wrong: a screenshot. */
+    async decidePlan(
+        message: ChatMessage,
+        approve: boolean,
+        mode: PermissionMode,
+        feedback?: string,
+        attachments: readonly ChatAttachment[] = [],
+    ): Promise<void> {
         const plan = message.plan;
         if (plan?.status !== `pending`) {
             return;
         }
+        const trimmed = feedback?.trim();
+        const written = [trimmed, ...attachments.map((file) => `@${file.path}`)].filter(Boolean).join(`\n`);
         const landed = await this.decide(
             message.id,
-            { kind: `plan`, requestId: plan.requestId, approve, mode, feedback },
+            { kind: `plan`, requestId: plan.requestId, approve, mode, feedback: written.length > 0 ? written : undefined },
             `Could not record your plan decision — the turn may have ended.`,
             { plan: { ...plan, status: approve ? `approved` : `rejected` } },
         );
@@ -1374,11 +1388,10 @@ export class Conversation {
             return;
         }
         this.appendNotice(approve ? `Plan approved.` : `Kept planning.`);
-        // Keep the rejection feedback visible as the user's turn — otherwise the typed text vanishes from the
-        // transcript even though it was sent to the agent.
-        const trimmed = feedback?.trim();
-        if (!approve && trimmed) {
-            this.append({ role: `user`, text: trimmed });
+        // Keep the rejection feedback visible as the user's turn — otherwise the typed text (and the files it
+        // went with) vanish from the transcript even though the agent has them.
+        if (!approve && (trimmed !== undefined || attachments.length > 0)) {
+            this.append({ role: `user`, text: trimmed ?? ``, ...(attachments.length > 0 ? { attachments } : {}) });
         }
         // The turn is generating again, so anything queued behind the card can go in now.
         void this.drainQueue();

@@ -719,6 +719,47 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Plan approved.` });
     });
 
+    // The composer stages files against a pending plan card exactly as it does against a message; the reply has
+    // one text field, so they travel as `@`-paths and stay on the bubble the rejection leaves behind.
+    it(`sends a plan rejection's staged files as @-paths and keeps them on the feedback bubble`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
+        await conversation.send(`make a plan`, settings);
+        const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
+
+        sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
+        await conversation.decidePlan(planMessage!, false, `plan`, `this bit is wrong`, [
+            { name: `shot.png`, path: `.intentic/attachments/a1/shot.png` },
+        ]);
+
+        const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
+        expect(JSON.parse(String(body.body))).toMatchObject({
+            kind: `plan`,
+            approve: false,
+            feedback: `this bit is wrong\n@.intentic/attachments/a1/shot.png`,
+        });
+        expect(conversation.messages.value.at(-1)).toMatchObject({
+            role: `user`,
+            text: `this bit is wrong`,
+            attachments: [{ name: `shot.png`, path: `.intentic/attachments/a1/shot.png` }],
+        });
+    });
+
+    // A screenshot with nothing typed is a whole answer on its own — the branch the old text-only rule refused.
+    it(`sends an attachment-only plan rejection`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
+        await conversation.send(`make a plan`, settings);
+        const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
+
+        sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
+        await conversation.decidePlan(planMessage!, false, `plan`, ``, [{ name: `shot.png`, path: `.intentic/attachments/a1/shot.png` }]);
+
+        const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
+        expect(JSON.parse(String(body.body))).toMatchObject({ feedback: `@.intentic/attachments/a1/shot.png` });
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `user`, text: `` });
+    });
+
     it(`keeps the user's posture when the AGENT enters plan mode mid-turn`, async () => {
         const conversation = new Conversation(`c1`);
         // An isolated conversation (its own worktree in the sandbox container) runs unattended by default.

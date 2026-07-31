@@ -1010,9 +1010,15 @@ const stop = (): void => {
 };
 
 // `nextMode` is the posture the approved plan executes in (Claude Code's auto-accept vs approve-each-edit
-// choice); a rejection passes `plan` so the agent stays put and revises.
-const decidePlan = (message: ChatMessage, approve: boolean, nextMode: PermissionMode, feedback?: string): Promise<void> =>
-    active.value.decidePlan(message, approve, nextMode, feedback);
+// choice); a rejection passes `plan` so the agent stays put and revises, with the composer's text and staged
+// files as the feedback.
+const decidePlan = (
+    message: ChatMessage,
+    approve: boolean,
+    nextMode: PermissionMode,
+    feedback?: string,
+    staged?: readonly ChatAttachment[],
+): Promise<void> => active.value.decidePlan(message, approve, nextMode, feedback, staged);
 
 const answerQuestion = (message: ChatMessage, answers: Record<string, string[]>): Promise<void> => active.value.answerQuestion(message, answers);
 

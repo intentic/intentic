@@ -156,13 +156,17 @@ const grab = (event: PointerEvent): void => {
         role="button"
         tabindex="0"
         :aria-label="`Focus agent: ${displayTitle}`"
-        class="group flex w-full cursor-pointer select-none flex-col gap-1.5 rounded-lg border bg-card p-3 text-left outline-none transition-colors hover:bg-overlay focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="group flex w-full cursor-pointer select-none flex-col gap-1.5 rounded-lg border p-3 text-left outline-none transition-colors hover:bg-overlay focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
-            selected
-                ? 'border-primary-500/70 ring-1 ring-primary-500/40'
-                : lane === 'attention'
-                  ? 'border-warning/50 hover:border-warning/80'
-                  : 'border-line hover:border-line-strong',
+            /* TWO STATES, TWO CHANNELS. `selected` (this card's chat is the one docked) and the Attention lane
+               are unrelated facts that were both drawn as a coloured 1px outline plus a faint ring — near
+               identical at a glance, and mutually exclusive, so selecting a card that needed the user ERASED
+               the very cue that put it there. They are now told apart by WHERE they are drawn, which means they
+               also stack: selection is a ring around the whole card plus a lifted surface (a property of the
+               user's focus, in the app's own primary), attention is a solid bar down the left edge (a property
+               of the agent, in warning — the same colour as its chip on the row above). */
+            lane === 'attention' ? 'border-l-[3px] border-l-warning' : '',
+            selected ? 'border-primary-500 bg-overlay ring-2 ring-primary-500/50' : 'border-line bg-card hover:border-line-strong',
             dragging ? 'opacity-40' : '',
             pending !== undefined ? 'pointer-events-none opacity-60' : '',
         ]"

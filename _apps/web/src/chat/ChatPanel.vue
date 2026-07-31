@@ -468,20 +468,37 @@ const editorChipLabel = computed(() => {
 });
 // The composer Send is usable whenever there is something to send — text, a finished attachment, or a queued
 // message waiting to go out — regardless of what the conversation is doing: a message written mid-turn is
-// never refused, it is delivered into the running turn or queued behind it (see Conversation.enqueue). The
-// two blocks left are an attachment still uploading (or failed — remove it to proceed) and a pending plan,
-// whose card takes typed text as revision feedback rather than as a message.
+// never refused, it is delivered into the running turn or queued behind it (see Conversation.enqueue). A
+// pending plan is no exception: the typed text becomes revision feedback, and staged files ride along with it
+// (Conversation.decidePlan), because a screenshot is the most natural way to say what a plan got wrong.
+const staged = computed(() => draft.value.trim().length > 0 || attachments.value.length > 0);
+/* WHY SEND IS REFUSING, in the user's words — undefined when the press will land. The only thing that can hold
+ * a staged message back is an attachment that isn't on disk yet, and until now that greyed the button out and
+ * said nothing: the chip looks finished the moment its thumbnail renders, so a message that will not send has
+ * no visible cause anywhere on screen. Anything the composer refuses has to name itself. */
+const sendBlock = computed(() => {
+    if (!staged.value) {
+        // Nothing staged is not a refusal — an empty composer explains itself.
+        return undefined;
+    }
+    if (attachments.value.some((entry) => entry.status === `uploading`)) {
+        return `Waiting for the attachment to finish uploading…`;
+    }
+    if (attachments.value.some((entry) => entry.status === `failed`)) {
+        return `An attachment failed to upload — remove it (×) to send.`;
+    }
+    return undefined;
+});
 const canSend = computed(() => {
-    if (attachments.value.some((entry) => entry.status !== `done`)) {
+    if (sendBlock.value !== undefined) {
         return false;
     }
-    if (pendingPlanMessage.value) {
-        // Plan feedback is text-only; staged attachments wait for the next real turn.
-        return draft.value.trim().length > 0;
-    }
-    return draft.value.trim().length > 0 || attachments.value.length > 0 || (queued.value.length > 0 && !streaming.value);
+    return staged.value || (queued.value.length > 0 && !streaming.value && !pendingPlanMessage.value);
 });
 const sendHint = computed(() => {
+    if (sendBlock.value !== undefined) {
+        return sendBlock.value;
+    }
     if (pendingPlanMessage.value) {
         return `Send as feedback (keep planning)`;
     }
@@ -571,8 +588,13 @@ const composerHint = computed(() => {
     return draft.value === `` && history.value?.recallable === true ? `↑ for previous message` : `Shift+Enter for new line`;
 });
 
+// The staged chips as the message carries them: upload metadata plus the object URL, so the bubble it lands on
+// shows the same thumbnail the chip did without re-reading the bytes.
+const snapshotAttachments = (): ChatAttachment[] =>
+    attachments.value.map(({ name, path, previewUrl }): ChatAttachment => ({ name, path, ...(previewUrl !== undefined ? { previewUrl } : {}) }));
+
 const submit = (): void => {
-    // canSend covers the gates that are left: empty composer, uploads still in flight, an empty plan reply.
+    // canSend covers the gates that are left: an empty composer and an attachment that isn't on disk yet.
     if (!connected.value || !canSend.value) {
         return;
     }
@@ -580,8 +602,11 @@ const submit = (): void => {
     const pendingPlan = pendingPlanMessage.value;
     if (pendingPlan) {
         // Typing while a plan is pending rejects it with that text as feedback (Claude Code style) — the
-        // agent stays in plan mode and revises.
-        void decidePlan(pendingPlan, false, `plan`, text);
+        // agent stays in plan mode and revises. Staged files go with it (as workspace paths in the feedback —
+        // see decidePlan), then clear like a normal send: WITHOUT revoking the preview URLs, which the user
+        // bubble the rejection leaves behind now owns.
+        void decidePlan(pendingPlan, false, `plan`, text, snapshotAttachments());
+        attachments.value = [];
     } else {
         const target = editorTarget.value;
         const editorContext =
@@ -596,15 +621,7 @@ const submit = (): void => {
         // One path whether or not a turn is running — the conversation delivers it into the running turn or
         // queues it (see Conversation.enqueue). Snapshot the chips onto the message, then clear WITHOUT
         // revoking preview URLs — the thumbnails now live on the queued/sent message.
-        void send(
-            text,
-            attachments.value.map(({ name, path, previewUrl }): ChatAttachment => ({
-                name,
-                path,
-                ...(previewUrl !== undefined ? { previewUrl } : {}),
-            })),
-            editorContext,
-        );
+        void send(text, snapshotAttachments(), editorContext);
         attachments.value = [];
         includeEditorContext.value = false;
     }
@@ -1202,6 +1219,16 @@ watch(
                                             <ChatImageThumb v-if="a.previewUrl" :src="a.previewUrl" :alt="a.name" size="h-9 w-9" />
                                             <Icon name="file" v-else class="text-sm text-subtle" />
                                             <span class="max-w-36 truncate text-content" v-tooltip.top="a.error ?? a.name">{{ a.name }}</span>
+                                            <!-- The chip's own state, in a glyph. The progress hairline below is
+                                                 invisible once it fills, so a chip whose bytes are still in flight
+                                                 read as finished — while Send stayed disabled behind it. -->
+                                            <Icon v-if="a.status === 'uploading'" name="spinner" spin class="shrink-0 text-2xs text-link" />
+                                            <Icon
+                                                v-else-if="a.status === 'failed'"
+                                                name="exclamation-circle"
+                                                class="shrink-0 text-2xs text-danger"
+                                                v-tooltip.top="a.error ?? 'Upload failed'"
+                                            />
                                             <button
                                                 type="button"
                                                 class="composer-ghost h-5 w-5 shrink-0"
@@ -1344,10 +1371,17 @@ watch(
                 class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 pb-2 text-2xs text-subtle"
                 :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
             >
-                <!-- Keyboard hint is meaningless on a virtual keyboard (Enter is a newline there), and doesn't
+                <!-- The refusal owns this slot whenever there is one: a Send that won't go has to say what it
+                     is waiting for, and the tooltip alone never reaches a touch device. Every form factor and
+                     width, unlike the keyboard hint it displaces.
+                     Keyboard hint is meaningless on a virtual keyboard (Enter is a newline there), and doesn't
                      earn its width in a narrow panel. An empty composer is the one moment message recall is
                      available, so the slot advertises it instead. -->
-                <span v-if="!mobile" class="@max-md:hidden">{{ composerHint }}</span>
+                <span v-if="sendBlock !== undefined" class="flex min-w-0 items-center gap-1 text-warning">
+                    <Icon name="exclamation-circle" class="shrink-0 text-2xs" />
+                    <span class="truncate">{{ sendBlock }}</span>
+                </span>
+                <span v-else-if="!mobile" class="@max-md:hidden">{{ composerHint }}</span>
                 <div class="ml-auto flex items-center gap-3">
                     <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                         <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
