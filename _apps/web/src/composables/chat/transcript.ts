@@ -115,6 +115,14 @@ export interface ChatMessage {
      * be on by default: the moment the automatic behaviour fires is the moment "don't do that" is worth exactly
      * one press, so the opt-out is offered there rather than only in a settings page nobody is looking at. */
     readonly noticeAction?: "landHold" | "outageOptOut";
+    /* Set on a notice describing something that has not finished yet (notices only) — rendered with a spinner in
+     * place of its info icon while the wait is on, and as an ordinary settled line once it is over.
+     *
+     * A KIND rather than a boolean, for the same reason noticeAction is: whether the wait is STILL running is a
+     * fact about the conversation right now, not about a line frozen into a replayed transcript. The renderer
+     * pairs the kind with the live state that answers it (credentialRenewal), so a transcript replayed an hour
+     * later shows the line settled instead of spinning forever over a turn that came back long ago. */
+    readonly noticeWait?: "credentialRenewal";
     // Files the user attached to this turn (user bubbles only), for the chip/thumbnail row.
     readonly attachments?: readonly ChatAttachment[];
     // The workspace checkpoint capturing the state BEFORE this turn ran (user bubbles only, main-tree turns

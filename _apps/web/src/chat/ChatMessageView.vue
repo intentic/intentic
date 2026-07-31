@@ -181,10 +181,20 @@ const retryWait = computed(() => {
 // 529 is capacity, everything else in this frame is a fault. Worth distinguishing: "at capacity" tells a user
 // their request was fine and a smaller model would probably go through right now, which is actionable.
 const retryReason = computed(() => (providerRetry.value?.status === 529 ? `at capacity` : `not responding`));
+
+/* THIS NOTICE'S WAIT, WHILE IT IS STILL RUNNING (see ChatMessage.noticeWait). The message says which wait it
+ * describes; the CONVERSATION says whether that wait is still on. Pairing the two is what keeps a replayed
+ * transcript honest: the line stays in the record, and it only spins while there is genuinely something to wait
+ * for. Undefined the rest of the time, which is also what turns the ticker below off again. */
+const pendingWait = computed(() => (props.message.noticeWait === `credentialRenewal` ? active.value.credentialRenewal.value : undefined));
+
+// One second-ticking clock for every live readout in this view — the turn's elapsed counter, the retry
+// countdown, and a pending notice's wait. Runs whenever any of them is showing, which is why a notice's wait
+// counts too: it outlives the turn it describes, and a frozen "0s" beside a spinner reads as a hang.
 watch(
-    () => props.streaming,
-    (isStreamingNow, _prev, onCleanup) => {
-        if (!isStreamingNow) {
+    () => props.streaming || pendingWait.value !== undefined,
+    (ticking, _prev, onCleanup) => {
+        if (!ticking) {
             return;
         }
         now.value = Date.now(); // a turn starting after mount must not read a `now` left over from setup
@@ -685,8 +695,13 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             >
         </div>
         <div v-else-if="message.role === 'notice'" class="flex items-center gap-2 self-center py-0.5 text-2xs text-subtle">
-            <Icon name="info-circle" class="text-2xs" />
+            <!-- A notice whose wait is still running spins instead of showing the info glyph, and says how long
+                 it has been waiting — the two things that tell "something is happening" from "this is stuck". It
+                 settles back to the plain line the moment the wait ends (see ChatMessage.noticeWait). -->
+            <Icon v-if="pendingWait" name="spinner" spin class="text-2xs text-info" />
+            <Icon v-else name="info-circle" class="text-2xs" />
             <span>{{ message.text }}</span>
+            <span v-if="pendingWait" class="shrink-0 tabular-nums">{{ formatElapsed(pendingWait.since, now) }}</span>
             <!-- The quiet follow-up some notices carry — see holdOffer. A link, not a button: the notice line
                  is the most muted thing in the transcript, and the offer must not outshout the turn it trails. -->
             <button

@@ -107,9 +107,10 @@ export const appendMessage = (state: TurnState, message: Omit<ChatMessage, "id">
 });
 
 /** A small muted system line marking a control action (dismissed / kept planning / approved / stopped).
- * `action` is the one-press follow-up some notices offer — see ChatMessage.noticeAction. */
-export const appendNotice = (state: TurnState, text: string, action?: ChatMessage["noticeAction"]): TurnState =>
-    appendMessage(state, { role: `notice`, text, ...(action !== undefined ? { noticeAction: action } : {}) });
+ * `extra` carries the two things a notice line can be more than text: the one-press follow-up some of them offer
+ * (ChatMessage.noticeAction) and the unfinished wait some of them describe (ChatMessage.noticeWait). */
+export const appendNotice = (state: TurnState, text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): TurnState =>
+    appendMessage(state, { role: `notice`, text, ...extra });
 
 const mapMessage = (state: TurnState, id: number, fn: (message: ChatMessage) => ChatMessage): TurnState => ({
     ...state,
@@ -408,7 +409,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                     // The moment-of-regret offer, on the LANDED notice only (the same pattern as ChatPanel's
                     // outage banner): the automatic behaviour just fired, and "stop doing that" is
                     // worth one press exactly now. The renderer hides it once the agent already holds.
-                    event.landed ? `landHold` : undefined,
+                    event.landed ? { noticeAction: `landHold` } : undefined,
                 ),
             );
         case `commands`:

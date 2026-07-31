@@ -23,6 +23,7 @@ import {
     sseData,
     sseFrames,
     type TranslatorAccounts,
+    withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { recordPerf, trackPerf } from "../perf";
@@ -466,15 +467,19 @@ export const turnRequestBody = (input: {
     ...(input.editorContext !== undefined ? { editorContext: input.editorContext } : {}),
 });
 
-/* Provider-outage auto-resume, as this window sees it. The daemon owns the resume itself (turn-resume.ts fires
- * within a scheduler pass of the breaker's next attempt); what the client owns is RENDERING it — attach streams
- * are pull, and an open tab re-probes only on reachability flips, so a resumed run would play to nobody without
- * a local probe armed for around when the daemon fires. Probing starts a beat after the attempt is due and
- * retries across the poll cadence; it gives up quietly once the window has clearly passed (the toggle went off,
- * or the resumed run already finished — its transcript replays on the next hydrate either way). */
-const REATTACH_DELAY_MS = 10_000;
-const REATTACH_INTERVAL_MS = 15_000;
-const REATTACH_TRIES = 20;
+/* HOW THIS WINDOW FINDS A TURN THE DAEMON RESTARTED. The daemon owns every automatic resume (turn-resume.ts);
+ * what the client owns is RENDERING it — attach streams are pull, and an open tab re-probes only on reachability
+ * flips, so a resumed run plays to nobody unless a local probe goes looking for it. That is the whole reason a
+ * chat could sit dead on "the credential is being renewed" while the agent it describes was working away on the
+ * board: the notice was printed and nothing was ever armed to catch what it promised.
+ *
+ * The two conditions differ only in how long the wait is worth. A CREDENTIAL RENEWAL is due within one scheduler
+ * pass (5s), so it probes fast and gives up inside a minute — past that the re-mint failed, and the honest answer
+ * is "reconnect the account" rather than a spinner. An OUTAGE resume is due on a backoff that grows to twenty
+ * minutes, so it probes slowly and keeps looking for the best part of an hour. Both give up quietly: the resumed
+ * run's transcript replays on the next hydrate either way. */
+const RENEWAL_PROBE = { delayMs: 1_000, intervalMs: 3_000, tries: 15 } as const;
+const OUTAGE_PROBE = { delayMs: 10_000, intervalMs: 15_000, tries: 20 } as const;
 
 /* One chat conversation: its transcript, the resumed sandbox session, and the streaming machinery for a
  * turn. Self-contained so the manager can run several at once — each instance owns its AbortController and
@@ -650,6 +655,16 @@ export class Conversation {
      * during an outage. Cleared by the next turn starting, which is either the resume landing or the user's own
      * send superseding it. */
     readonly outageResume = ref<{ retryAt: number; attempt: number; maxAttempts: number; scheduled: boolean } | undefined>();
+
+    /* A credential renewal this conversation is waiting out — set the moment the API refuses this turn's token and
+     * cleared by whatever ends the wait: the resumed turn attaching (beginTurn), or the probe budget running out
+     * with nothing to attach to (applyAuthRefusedError). Its presence IS the spinner on the notice line, which is
+     * why it carries the instant it started rather than a bare flag: it is the only thing that can say how long
+     * the wait has been going, and a wait with no readout is the thing that reads as a hang.
+     *
+     * There is no instant to count DOWN to here, unlike an outage: the re-mint either works on the next scheduler
+     * pass (a few seconds) or the credential is dead. So the honest readout is elapsed, not remaining. */
+    readonly credentialRenewal = ref<{ since: number } | undefined>();
 
     /* The harness retrying INSIDE the live turn (provider_retry). Distinct from outageResume in the way that
      * matters most to a waiting user: nothing has failed and nothing has been lost — this turn is still running.
@@ -1009,6 +1024,9 @@ export class Conversation {
         // so the offer banner must not outlive the failure it described: THIS turn is the retry, or the send
         // that replaced it, whether the scheduler fired it or another window did.
         this.outageResume.value = undefined;
+        // ...and the same argument, one step stronger, for the credential wait: a turn running on this
+        // conversation is the renewed credential proving itself, so the spinner has nothing left to wait for.
+        this.credentialRenewal.value = undefined;
         this.turnStartedAt.value = startedAt;
     }
 
@@ -1024,6 +1042,16 @@ export class Conversation {
         // conversation permanently marked as re-telling history.
         this.replaying.value = false;
         this.turnStartedAt.value = undefined;
+        /* A credential wait opened by THIS turn's failure starts hunting for its replacement here rather than at
+         * the frame that opened it. The frame arrives mid-stream — the harness still has a `done` to send and the
+         * daemon a finally to run — and a probe that fires into that tail finds the conversation streaming, reads
+         * it as "the run I was looking for is already here", and abandons the hunt. Which is the very bug this
+         * exists to fix, reintroduced one second later.
+         *
+         * Armed only when the wait is still open: a turn that ended for any other reason has nothing to hunt. */
+        if (this.credentialRenewal.value !== undefined) {
+            this.scheduleReattach(Date.now(), RENEWAL_PROBE, () => this.giveUpOnRenewal());
+        }
         this.persist();
         void this.drainQueue();
     }
@@ -1080,7 +1108,7 @@ export class Conversation {
         }
         this.outageResume.value = { ...pending, scheduled: true };
         this.appendNotice(`Auto-resume enabled — this chat retries by itself in ${formatWait(pending.retryAt)}.`);
-        this.scheduleReattach(pending.retryAt * 1000 + REATTACH_DELAY_MS);
+        this.scheduleReattach(pending.retryAt * 1000, OUTAGE_PROBE);
         this.persist();
     }
 
@@ -1088,10 +1116,13 @@ export class Conversation {
     // conversation, so a fresh failure's schedule replaces a stale one.
     private reattachTimer: ReturnType<typeof setTimeout> | undefined;
 
-    /* Start probing at `firstProbeAt` (epoch ms — a beat AFTER the daemon is expected to fire) and re-probe on
-     * its poll cadence until the resumed run answers or the attempts run out. Takes an instant rather than the
-     * breaker's own attempt second because that instant moves with the backoff. */
-    private scheduleReattach(firstProbeAt: number): void {
+    /* Hunt for the run the daemon restarted: first probe at `dueAt` + the profile's delay (a beat AFTER the
+     * daemon is expected to fire), then on its cadence until the resumed run answers or the attempts run out.
+     * Takes an instant rather than an attempt number because for an outage that instant moves with the backoff.
+     *
+     * `exhausted` runs when the whole budget went by without a run to attach to — the resume did not happen, and
+     * a caller that promised the user one has to withdraw that promise rather than leave it hanging. */
+    private scheduleReattach(dueAt: number, profile: { delayMs: number; intervalMs: number; tries: number }, exhausted?: () => void): void {
         clearTimeout(this.reattachTimer);
         let attempts = 0;
         const probe = (): void => {
@@ -1100,12 +1131,17 @@ export class Conversation {
             }
             attempts += 1;
             void this.reattach().then((attached) => {
-                if (!attached && attempts < REATTACH_TRIES && !this.streaming.value) {
-                    this.reattachTimer = setTimeout(probe, REATTACH_INTERVAL_MS);
+                if (attached || this.streaming.value) {
+                    return;
                 }
+                if (attempts < profile.tries) {
+                    this.reattachTimer = setTimeout(probe, profile.intervalMs);
+                    return;
+                }
+                exhausted?.();
             });
         };
-        this.reattachTimer = setTimeout(probe, Math.max(0, firstProbeAt - Date.now()));
+        this.reattachTimer = setTimeout(probe, Math.max(0, dueAt + profile.delayMs - Date.now()));
     }
 
     // Release a hold placed by a failure the user has now fixed (reconnecting a revoked account) and let
@@ -1288,9 +1324,15 @@ export class Conversation {
             }
             engaged = true;
             this.beginTurn(controller, head.startedAt);
-            // The restored copy of THIS run, when the transcript already carries one, is adopted rather than
-            // appended alongside — see adoptRunningTurn.
-            const userMessageId = this.adoptRunningTurn(head.prompt) ?? this.append({ role: `user`, text: head.prompt });
+            /* What the user actually asked, whichever run this is. A run the DAEMON restarted carries the original
+             * prompt behind a note saying why (RESUME_NOTES), and rendering that verbatim put a paragraph of
+             * machine prose into the transcript as something the user had supposedly typed — right under the copy
+             * of it they really did type. Stripped, it matches that copy, and the bubble is reused instead.
+             *
+             * The strip is also what identifies a resume, which is what decides whether the tail under that bubble
+             * belongs to this run — see reuseUserBubble. */
+            const prompt = withoutResumeNote(head.prompt);
+            const userMessageId = this.reuseUserBubble(prompt, prompt === head.prompt) ?? this.append({ role: `user`, text: prompt });
             this.openBubble();
             return { userMessageId, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
         };
@@ -1767,13 +1809,7 @@ export class Conversation {
                 this.error.value = message;
                 return;
             case `claude-token-refused`:
-                /* The API refused the token mid-turn — nearly always one a rotation had just superseded. The
-                 * daemon re-mints and re-runs this turn on its own (turn-resume.ts), and the resumed turn
-                 * arrives on this same conversation moments later carrying its own note, so the red line would
-                 * be reporting a failure the user never has to act on. Muted, and phrased as what it is: an
-                 * interruption that is already being undone. The case where it is NOT — a credential too dead
-                 * to re-mint — surfaces separately as claude-reauth on the resumed turn's own refusal. */
-                this.appendNotice(`${message} The credential is being renewed and this turn continues automatically.`);
+                this.applyAuthRefusedError(error);
                 return;
             case `unknown-command`:
                 /* The harness claimed the leading `/` as a command name it doesn't have and threw the rest of the
@@ -1886,11 +1922,57 @@ export class Conversation {
             scheduled
                 ? `${message} Retrying by itself in ${formatWait(outage.retryAt)} — attempt ${outage.attempt} of ${outage.maxAttempts}.`
                 : `${message} Auto-resume is off, so this turn is waiting: turn it on and it continues from here.`,
-            scheduled ? `outageOptOut` : undefined,
+            scheduled ? { noticeAction: `outageOptOut` } : undefined,
         );
         if (scheduled) {
-            this.scheduleReattach(outage.retryAt * 1000 + REATTACH_DELAY_MS);
+            this.scheduleReattach(outage.retryAt * 1000, OUTAGE_PROBE);
         }
+    }
+
+    /* THE CREDENTIAL WAS REFUSED MID-TURN, AND THE TURN IS ALREADY ON ITS WAY BACK.
+     *
+     * Almost always a rotation the daemon itself performed: Anthropic retires an access token the instant its
+     * successor is minted, and a turn's token is snapshotted into the agent subprocess at spawn, so one rotation
+     * 401s every turn holding it at once. Nobody's work was wrong and nobody has anything to fix — the daemon
+     * re-mints and re-runs each of them within a scheduler pass (turn-resume.ts).
+     *
+     * So: muted, phrased as an interruption being undone, and — the part that was missing — actually WATCHED.
+     * The resumed run is a fresh detached run on this same conversation, and nothing in a pull-based attach model
+     * would have brought it to this window; the notice promised a continuation the tab then never showed, while
+     * /agents happily reported the same agent working. `interrupted` holds the queue back over the same gap, so a
+     * message waiting behind the killed turn doesn't race the daemon's resume to POST /agent and lose with "this
+     * agent already has a turn running".
+     *
+     * With no renewal armed (`autoResume` absent) nothing is coming: the credential is dead, or this turn was
+     * itself a resume that got refused again. That is the one case where the user really is needed, so it reads
+     * as the reconnect condition rather than a spinner. */
+    private applyAuthRefusedError(error: Extract<TurnEffect, { kind: "error" }>): void {
+        const { message } = error;
+        if (error.autoResume !== `scheduled`) {
+            this.markAccountReauth(message);
+            this.appendNotice(`${message} Reconnect the account to pick this conversation back up.`);
+            return;
+        }
+        this.interrupted = true;
+        // The wait opens here; endTurn arms the probe that closes it, once this turn's stream is actually done.
+        this.credentialRenewal.value = { since: Date.now() };
+        this.appendNotice(`${message} The credential is being renewed and this turn continues automatically.`, {
+            noticeWait: `credentialRenewal`,
+        });
+    }
+
+    // The probe budget went by with nothing to attach to, so the re-mint never produced a working credential.
+    // Stop spinning and say what is true now: this turn is not coming back on its own, and the account is the
+    // thing that needs fixing.
+    private giveUpOnRenewal(): void {
+        if (this.credentialRenewal.value === undefined) {
+            return;
+        }
+        this.credentialRenewal.value = undefined;
+        const detail = `Claude sign-in could not be renewed — reconnect the account.`;
+        this.markAccountReauth(detail);
+        this.appendNotice(`${detail} This turn stopped where it was; sending again picks the conversation back up.`);
+        this.persist();
     }
 
     // --- transcript writes the conversation itself makes (control actions, restores) --------------------------
@@ -1904,24 +1986,32 @@ export class Conversation {
         this.state.value = { ...this.state.value, bubbleId: id };
     }
 
-    /* THE TURN THAT IS BOTH RESTORED AND LIVE. The daemon's session store holds a turn from the moment it
-     * starts — the SDK writes the user message before the first token — so a hydrate that lands mid-turn
-     * restores that turn and then attaches to the very same run, and reattach's synthesized bubble renders it a
-     * SECOND time. On a fleet agent, whose whole chat is often one long turn, that reads as the entire
-     * conversation duplicated; reopening the tab again while the turn still runs adds another copy, because the
-     * duplicate is what gets mirrored to the cache in between.
+    /* THE BUBBLE AN ATTACHED RUN'S PROMPT IS ALREADY IN. Two different situations put it there, and in both the
+     * alternative is showing the user saying the same thing twice.
      *
-     * The live stream is the authoritative copy — it carries the tool cards, the cards awaiting an answer, and
-     * the tail still being written — so the restored head of the same run is ADOPTED: its bubble stays (with the
-     * attachment chips and checkpoint the replay has no way to rebuild) and becomes the turn's user message,
-     * while everything the store had recorded under it comes off, to be re-rendered by the frames replayed from
-     * seq 0. Returns the adopted bubble's id, or undefined when the transcript's tail is not this run.
+     * RESTORED-AND-LIVE. The daemon's session store holds a turn from the moment it starts — the SDK writes the
+     * user message before the first token — so a hydrate that lands mid-turn restores that turn and then attaches
+     * to the very same run. On a fleet agent, whose whole chat is often one long turn, rendering the head again
+     * reads as the entire conversation duplicated; reopening the tab adds another copy, because the duplicate is
+     * what got mirrored to the cache in between.
+     *
+     * RESUMED. The daemon re-ran a turn something killed (turn-resume.ts). Its prompt is the same words behind a
+     * note the caller has already stripped, so it matches the bubble the user really typed, one run up.
+     *
+     * `truncate` is the whole difference between them, and it is the difference between "this bubble's tail is
+     * about to be re-rendered" and "this bubble's tail is somebody else's work". The restored copy is followed by
+     * a partial replay of the SAME run, which the live frames replay from seq 0 — so it comes off. A resumed run's
+     * bubble is followed by whatever the run that DIED had already streamed, plus the notice explaining the
+     * interruption; nothing will ever re-render those, so they stay and the resumed answer appends below them.
+     *
+     * Either way the bubble itself stays, with the attachment chips and checkpoint a replay has no way to rebuild.
+     * Returns its id, or undefined when the transcript's tail is not about this prompt at all.
      *
      * Matched on the LAST user message only, and only by whole text: the stored prompt keeps an editor-context
      * note the daemon appended after it (the run's own prompt is the bare text), which is why a `${prompt}\n\n`
      * prefix counts — but a bare prefix does not, or a live "Continue" would swallow a restored "Continue with
      * the tests" sitting above it. */
-    private adoptRunningTurn(prompt: string): number | undefined {
+    private reuseUserBubble(prompt: string, truncate: boolean): number | undefined {
         const wanted = prompt.trim();
         if (wanted.length === 0) {
             return undefined;
@@ -1936,7 +2026,9 @@ export class Conversation {
         if (restored !== wanted && !restored.startsWith(`${wanted}\n\n`)) {
             return undefined;
         }
-        this.state.value = { ...this.state.value, messages: messages.slice(0, index + 1), bubbleId: null };
+        if (truncate) {
+            this.state.value = { ...this.state.value, messages: messages.slice(0, index + 1), bubbleId: null };
+        }
         return candidate.id;
     }
 
@@ -1947,9 +2039,9 @@ export class Conversation {
     }
 
     // A small muted system line marking a control action (dismissed / kept planning / approved / stopped).
-    // `action` is the one-press follow-up a notice can carry — see ChatMessage.noticeAction.
-    private appendNotice(text: string, action?: ChatMessage["noticeAction"]): void {
-        this.state.value = appendNotice(this.state.value, text, action);
+    // `extra` is the follow-up offer or unfinished wait a notice can carry — see turnReducer's appendNotice.
+    private appendNotice(text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): void {
+        this.state.value = appendNotice(this.state.value, text, extra);
     }
 
     // Hang an interactive card (plan / question / permission) on a bubble — and, with the answered card, freeze

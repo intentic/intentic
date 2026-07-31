@@ -48,17 +48,39 @@ const REFRESH_AHEAD_MS = 30 * 60_000;
  * replacement when it believes its token EXPIRED, and this one still looked valid by the clock, so it took the
  * terminal "run /login" road instead. Every session had to be restarted by hand.
  *
- * The fix is to rotate when nobody is holding the token. Turns are bursty and the gaps between them are ample,
- * REFRESH_AHEAD_MS is half an hour, and a rotation deferred by a few minutes costs nothing — so the timer
- * simply waits its turn. What it must NOT do is wait forever: a token allowed to actually expire fails the
- * NEXT turn too, so once the real expiry is this close the rotation happens regardless and the turns still
- * running are covered by the auth resume (agent/turn-resume.ts) instead.
+ * The fix is to rotate when nobody is holding the token. What it must NOT do is wait forever: a token allowed
+ * to actually expire fails the NEXT turn too, so once the real expiry is this close the rotation happens
+ * regardless and the turns still running are covered by the auth resume (agent/turn-resume.ts) instead.
  */
 const ROTATE_REGARDLESS_MS = 2 * 60_000;
+
+/* HOW LONG THE ROTATION IS GIVEN TO FIND A GAP — and why it is most of the token's life rather than the last
+ * half hour.
+ *
+ * Waiting for a gap only helps if a gap comes. Deferral used to begin at REFRESH_AHEAD_MS, which gave a busy
+ * fleet thirty minutes to fall quiet in — and a fleet that never does spends all thirty deferring and then
+ * rotates at the ROTATE_REGARDLESS_MS floor, i.e. at the ONE moment guaranteed to have the most turns running.
+ * That is exactly how one rotation at 18:50:14 killed five agents in twenty seconds: the gate did not prevent
+ * the collision, it scheduled it for the worst possible instant.
+ *
+ * So the hunt starts in the token's second half (they last eight hours) and, more importantly, it does not
+ * depend on a timer catching the gap — releaseQuiet below fires the rotation the moment the last turn holding
+ * the token finishes, which is precisely when rotating is free. Between one agent finishing and the next
+ * starting there is always a beat; over four hours, thousands of them. A rotation that early costs nothing but
+ * a slightly shorter token life, and it means the floor is reached only by a fleet that has genuinely not had a
+ * single idle instant in four hours.
+ */
+const OPPORTUNISTIC_AHEAD_MS = 4 * 60 * 60_000;
 
 // Turns currently holding a snapshot of each account's access token, by account id. A counter rather than a
 // set of turn ids: nothing here needs to know WHICH turns, only whether rotating now would break one.
 const holders = new Map<string, number>();
+
+/* What to do the instant an account falls quiet — installed by startClaudeRefresh, which is the only thing
+ * that owns a store to rotate against. It lives at module scope because the release closure below is the ONLY
+ * code that learns of a gap, and threading a store through every hold site (one per turn) to tell it so would
+ * put credential policy in the turn route. */
+let releaseQuiet: ((id: string) => void) | undefined;
 
 // Claim the account for a turn's lifetime; the returned release must run in that turn's finally. Called once
 // per turn that resolved a stored Claude credential — the container-env fallback has no rotation to defer.
@@ -73,9 +95,13 @@ export const holdAccount = (id: string): (() => void) => {
         const remaining = (holders.get(id) ?? 1) - 1;
         if (remaining > 0) {
             holders.set(id, remaining);
-        } else {
-            holders.delete(id);
+            return;
         }
+        holders.delete(id);
+        // The gap a deferred rotation has been waiting for. Taken NOW rather than on the next timer tick: the
+        // gap between one turn ending and the next starting is often shorter than the tick, and a fleet whose
+        // gaps are all missed is a fleet that rotates at the deadline instead — see OPPORTUNISTIC_AHEAD_MS.
+        releaseQuiet?.(id);
     };
 };
 
@@ -415,6 +441,15 @@ const rotate = async (store: ClaudeStore, id: string, spent: string | undefined,
 // revoked and only a reconnect can fix it — callers then fall back to the container's ANTHROPIC_API_KEY /
 // CLAUDE_CODE_OAUTH_TOKEN env (if any).
 export const ensureFreshToken = async (store: ClaudeStore, id: string, refresh: RefreshFn = refreshTokens): Promise<string | undefined> => {
+    /* A rotation is already running for this account — most likely the quiet-moment one, fired by the very turn
+     * whose gap this new turn is starting in. The store still holds the token that rotation is about to supersede,
+     * and handing it out here would snapshot a doomed credential into a subprocess: exactly the collision the rest
+     * of this file exists to avoid, in the one window the holder gate cannot see (nobody is holding it YET).
+     *
+     * So wait for the mint and then read what it wrote, rather than take its result directly: a rotation that
+     * fails leaves the store's current token in place and still valid for hours, which is what the path below
+     * then returns. */
+    await inFlight.get(id)?.catch(() => undefined);
     const account = await store.read(id);
     if (account === undefined || account.revokedAt !== undefined) {
         return undefined;
@@ -431,6 +466,17 @@ export const ensureFreshToken = async (store: ClaudeStore, id: string, refresh: 
         store.logger.debug({ account: id }, "claude token rotation deferred — turns are holding it");
         return account.accessToken;
     }
+    // Past the floor with turns still holding it: this rotation is about to 401 every one of them. They are
+    // resumed automatically (agent/turn-resume.ts), but a fleet that reaches this point has been busy for four
+    // solid hours and the operator should be able to find the collision in the log rather than infer it from
+    // five agents dying at once.
+    const breaking = holders.get(id) ?? 0;
+    if (breaking > 0) {
+        store.logger.warn(
+            { account: id, turns: breaking, expiresAt: account.expiresAt },
+            "claude token rotating with turns still holding it — they will be refused and resumed",
+        );
+    }
     return rotate(store, id, account.accessToken, refresh);
 };
 
@@ -446,26 +492,61 @@ export const replaceRejectedToken = (
     refresh: RefreshFn = refreshTokens,
 ): Promise<string | undefined> => rotate(store, id, rejected, refresh);
 
-// Refresh every connected account BEFORE a turn needs it. Lazy refresh alone means the rotation lands in the
-// middle of whatever burst of turns happens to cross the expiry window; doing it on a quiet timer means the
-// token a turn picks up is almost always minutes-old, and the locking above is a backstop rather than the
-// mechanism. Runs through the same locked path, so the timer and a turn can never both rotate — and through
-// the same holder gate, so "on a quiet timer" now means what it says: a tick that would break a running turn
-// waits for the next one instead of firing into it.
-export const startClaudeRefresh = (store: ClaudeStore, intervalMs = 5 * 60_000): (() => void) => {
+/* ROTATE THIS ACCOUNT WHILE IT IS FREE TO ROTATE — the whole of the collision-avoidance strategy, in one
+ * predicate: nobody is holding the token, and it is inside the last OPPORTUNISTIC_AHEAD_MS of its life. Anything
+ * that fails is logged and left; the token is still valid for hours, and the next gap tries again.
+ *
+ * A rotation from here supersedes the token the store currently holds. No turn holds it (that is the condition),
+ * so there is nobody to refuse. */
+const rotateWhileQuiet = async (store: ClaudeStore, id: string, refresh: RefreshFn): Promise<void> => {
+    if ((holders.get(id) ?? 0) > 0) {
+        return;
+    }
+    const account = await store.read(id);
+    if (account === undefined || account.revokedAt !== undefined || account.refreshToken === undefined) {
+        return;
+    }
+    if (account.expiresAt === undefined || account.expiresAt - Date.now() > OPPORTUNISTIC_AHEAD_MS) {
+        return;
+    }
+    await rotate(store, id, account.accessToken, refresh).catch((error: unknown) =>
+        store.logger.warn({ err: error, account: id }, "claude quiet-moment refresh failed — the next gap retries"),
+    );
+};
+
+/* Refresh every connected account BEFORE a turn needs it, and — the part that decides whether this works at all
+ * — before a turn is holding the token. Two triggers, one rule (rotateWhileQuiet):
+ *
+ *   • every turn's release, which is the exact instant an account falls quiet. This is the trigger that carries
+ *     the load on a busy sandbox: gaps between turns are frequent but short, and a timer alone misses them.
+ *   • a slow timer, for the account nothing is running against at all (an idle sandbox has no releases) and as
+ *     the backstop if a release is ever lost.
+ *
+ * The timer ALSO runs the lazy path, which is what still covers a token that reached REFRESH_AHEAD_MS without a
+ * single quiet moment: that one rotates through the holder gate and, at the floor, breaks the turns holding it.
+ * The point of the opportunistic pass above is to make reaching the floor the rare exception it was supposed to
+ * be all along. */
+export const startClaudeRefresh = (store: ClaudeStore, intervalMs = 5 * 60_000, refresh: RefreshFn = refreshTokens): (() => void) => {
     const tick = async (): Promise<void> => {
         for (const account of await store.list()) {
             if (account.needsReauth === true) {
                 continue;
             }
-            await ensureFreshToken(store, account.id).catch((error: unknown) =>
+            await rotateWhileQuiet(store, account.id, refresh);
+            await ensureFreshToken(store, account.id, refresh).catch((error: unknown) =>
                 store.logger.warn({ err: error, account: account.id }, "claude proactive refresh failed — the next turn retries"),
             );
         }
     };
+    // Fire-and-forget, and deliberately not awaited by the release it rides: a turn's finally must not wait on
+    // an HTTPS round-trip, and the rotation has no result the released turn could use.
+    releaseQuiet = (id) => void rotateWhileQuiet(store, id, refresh);
     const timer = setInterval(() => void tick(), intervalMs);
     // The daemon's other loops do the same: a background refresh must never hold the process open.
     timer.unref();
     void tick();
-    return () => clearInterval(timer);
+    return () => {
+        releaseQuiet = undefined;
+        clearInterval(timer);
+    };
 };

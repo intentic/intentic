@@ -1,7 +1,7 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clampEffort, Conversation, effortsFor, providerModels, turnDefaults, turnRequestBody } from "./conversation";
+import { clampEffort, Conversation, effortsFor, providerAccounts, providerModels, turnDefaults, turnRequestBody } from "./conversation";
 import { acksOf, type ChatMessage, isAcknowledgment, transcriptOf, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
@@ -1071,6 +1071,109 @@ describe(`Conversation`, () => {
         conversation.abort();
     });
 
+    /* A ROTATED CREDENTIAL. The daemon re-mints and re-runs the turn within a scheduler pass, so this reads as a
+     * wait rather than a crash — but the wait has to be VISIBLE and, above all, WATCHED. Both were missing: the
+     * notice promised a continuation and nothing was armed to catch it, so the chat sat on this line while
+     * /agents reported the same agent working. */
+    it(`reads a rotated credential as a wait it is actually watching`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                {
+                    kind: `error`,
+                    code: `claude-token-refused`,
+                    message: `Failed to authenticate. API Error: 401 OAuth access token has been revoked`,
+                    autoResume: `scheduled`,
+                },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`hello`, settings);
+
+        const notice = conversation.messages.value.at(-1)!;
+        expect(notice.role).toBe(`notice`);
+        expect(notice.text).toContain(`being renewed`);
+        // The spinner: the line declares which wait it describes, and the conversation says the wait is on.
+        expect(notice.noticeWait).toBe(`credentialRenewal`);
+        expect(conversation.credentialRenewal.value).toBeDefined();
+        expect(conversation.error.value).toBeNull();
+        // Not a reauth: the account is fine, and lighting its badge would send the user to fix nothing.
+        expect(providerAccounts.value[`claude`]?.some((account) => account.needsReauth === true)).not.toBe(true);
+        conversation.abort();
+    });
+
+    /* THE BUG THIS WHOLE PATH EXISTS FOR. Attach streams are pull: the daemon's resumed run reaches a window only
+     * if that window goes looking. Nothing did, so the chat kept showing the frame it died on while /agents
+     * reported the same agent working, and the only way back was reloading the browser. */
+    it(`goes looking for the resumed run and renders it, without the user doing anything`, async () => {
+        vi.useFakeTimers();
+        try {
+            const conversation = new Conversation(`c1`);
+            sandboxRequestMock.mockImplementation(
+                sseResponse([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` }, { kind: `done` }]),
+            );
+            await conversation.send(`refactor the store`, settings);
+            expect(conversation.credentialRenewal.value).toBeDefined();
+
+            // What the daemon started a moment later: the same request, behind the note saying why it re-ran.
+            sandboxRequestMock.mockImplementation(() => {
+                const body = new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        controller.enqueue(sseFrame(head({ prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) })));
+                        controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Picking it back up.` } }));
+                        controller.enqueue(sseFrame({ kind: `end` }));
+                        controller.close();
+                    },
+                });
+                return Promise.resolve({ ok: true, body } as Response);
+            });
+            await vi.advanceTimersByTimeAsync(2_000);
+
+            // The wait is over, and the resumed answer is in the transcript under the original question.
+            expect(conversation.credentialRenewal.value).toBeUndefined();
+            expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+                { role: `user`, text: `refactor the store` },
+                { role: `assistant`, text: `` },
+                { role: `notice`, text: expect.stringContaining(`being renewed`) },
+                { role: `assistant`, text: `Picking it back up.` },
+            ]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // The other half of the promise: the spinner belongs to a turn that comes back, so a turn attaching stops it.
+    it(`stops the renewal spinner when the resumed turn lands`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` }, { kind: `done` }]),
+        );
+        await conversation.send(`hello`, settings);
+        expect(conversation.credentialRenewal.value).toBeDefined();
+
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `back` }, { kind: `done` }]));
+        await conversation.send(`again`, settings);
+        expect(conversation.credentialRenewal.value).toBeUndefined();
+    });
+
+    // With nothing armed the daemon is telling us this turn is NOT coming back — the one case where the user
+    // really is needed. A spinner here would be a promise nothing was going to keep.
+    it(`asks for a reconnect when no renewal is armed`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.account.value = `acct-1`;
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked` }, { kind: `done` }]),
+        );
+        await conversation.send(`hello`, settings);
+
+        const notice = conversation.messages.value.at(-1)!;
+        expect(notice.text).toContain(`Reconnect`);
+        expect(notice.noticeWait).toBeUndefined();
+        expect(conversation.credentialRenewal.value).toBeUndefined();
+        expect(providerAccounts.value[`claude`]?.[0]?.needsReauth).toBe(true);
+    });
+
     it(`hands the message back and says so plainly once the retries are spent`, async () => {
         const conversation = new Conversation(`c1`);
         // No `outage` block: the daemon's attempts are gone, so nothing is coming back.
@@ -1560,6 +1663,33 @@ describe(`Conversation`, () => {
             { role: `assistant`, text: `All green.` },
             { role: `user`, text: `Continue` },
             { role: `assistant`, text: `` },
+        ]);
+    });
+
+    /* A RUN THE DAEMON RESTARTED. Its prompt is the user's words behind a note explaining the interruption
+     * (RESUME_NOTES), and rendering the head verbatim put that machine prose into the transcript as a message the
+     * user had supposedly typed — directly under the copy they really did type. Stripped, it matches the bubble
+     * that is already there, so the resumed run continues under the original question. */
+    it(`reattach continues the original prompt when the daemon resumed the turn`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.restoreMessages([{ role: `user`, text: `refactor the store` }]);
+        sandboxRequestMock.mockImplementation(() => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(sseFrame(head({ prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) })));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Picking it back up.` } }));
+                    controller.enqueue(sseFrame({ kind: `end` }));
+                    controller.close();
+                },
+            });
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `refactor the store` },
+            { role: `assistant`, text: `Picking it back up.` },
         ]);
     });
 

@@ -1,4 +1,4 @@
-import type { AgentTurn } from "@intentic/sandbox-contract";
+import { type AgentTurn, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { fireAutomation, type WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
@@ -87,16 +87,22 @@ export interface AuthFailure {
 
 const pendingAuth = new Map<string, AuthFailure>();
 
+/* Whether an auth-killed turn with THIS prompt is one this module will re-run. False for a turn that is ITSELF a
+ * resume: a credential that refuses the freshly minted token too is not a transient rotation, and re-running
+ * against it forever would be worse than the one red frame that now stands.
+ *
+ * Exported because the failure FRAME has to say whether anything is coming back, and the frame goes out while the
+ * turn is still unwinding — before recordAuthFailure runs in its finally. Without it the chat has to guess, which
+ * is how "the credential is being renewed and this turn continues automatically" came to be printed under turns
+ * that were never coming back. */
+export const authResumable = (prompt: string): boolean => !prompt.startsWith(RESUME_NOTES.auth);
+
 /* Remember an auth-killed turn for the next scheduler pass. Recorded from the turn's own exit rather than
  * resumed there and then, because the failing run still owns its conversation at that moment — starting the
  * replacement inline would hit turn-runs' conflict and drop the resume on the floor. The poll is a few seconds
- * behind, and the alternative is a tab that stays dead until a human types into it.
- *
- * A turn that is ITSELF a resume (its prompt already carries the note) is not recorded again: a credential
- * that refuses the freshly minted token too is not a transient rotation, and re-running against it forever
- * would be worse than the one red frame that now stands. */
+ * behind, and the alternative is a tab that stays dead until a human types into it. */
 export const recordAuthFailure = (failure: AuthFailure): void => {
-    if (failure.input.prompt.startsWith(AUTH_NOTE)) {
+    if (!authResumable(failure.input.prompt)) {
         return;
     }
     pendingAuth.set(failure.input.conversationId, failure);
@@ -127,19 +133,6 @@ export const recordOutageFailure = (failure: OutageFailure, now: number = Date.n
 };
 
 export const pendingOutageFailure = (conversationId: string): OutageFailure | undefined => pendingOutage.get(conversationId);
-
-// Prepended to the resumed turn's prompt — one wording per way a resume starts, so the model knows what
-// interrupted it and whether anything about the run has changed. Startswith-checked against ALL of them before
-// wrapping, so a resume that dies the same way again (and is re-recorded from its own input) doesn't stack a
-// second copy on the next fire, whichever road that fire takes.
-const AUTH_NOTE = "The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically.";
-const OUTAGE_NOTE = "The model provider was briefly unavailable and interrupted this conversation; this turn resumed automatically.";
-const RESTART_NOTE = "The sandbox restarted while this turn was running, which stopped it, and this turn resumed automatically once it came back.";
-
-const withResumeNote = (prompt: string, note: string): string =>
-    [AUTH_NOTE, OUTAGE_NOTE, RESTART_NOTE].some((known) => prompt.startsWith(known))
-        ? prompt
-        : `${note} The interrupted request is repeated below — where part of it was already completed in this session, continue from that point instead of starting over.\n\n${prompt}`;
 
 /* The turn a fire runs. The original prompt rides again IN FULL rather than as a bare "continue": whether
  * the CLI persisted the unprocessed user message before the refusal is its own implementation detail, and a
@@ -215,7 +208,7 @@ const fireAuthResume = async (services: Services, wake: WakeFn, failure: AuthFai
     if (replacement === undefined || replacement === failure.refusedToken) {
         return;
     }
-    if (startConversationTurn(services, wake, resumedTurn(failure, AUTH_NOTE)) !== undefined) {
+    if (startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.auth)) !== undefined) {
         services.logger.info({ conversationId, account: failure.account }, "auth auto-resume fired");
     }
 };
@@ -257,7 +250,7 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
         // conversation and supersedes the resume, and a retained entry would re-fire on every pass. A resume that
         // dies on the outage AGAIN is re-recorded by its own turn, with the breaker one step further along.
         pendingOutage.delete(conversationId);
-        if (startConversationTurn(services, wake, resumedTurn(failure, OUTAGE_NOTE)) !== undefined) {
+        if (startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.outage)) !== undefined) {
             services.logger.info({ conversationId, provider: failure.provider, waiting: stranded.length }, "provider-outage auto-resume fired");
         }
     }
@@ -384,7 +377,7 @@ export const resumeInterruptedTurns = async (services: Services, wake: WakeFn, n
 // uses resumedTurn. The journal names the same two things a failure record does under different keys; this is
 // only that rename.
 const restartTurnOf = (entry: JournalledTurn): AgentTurn & { conversationId: string } =>
-    resumedTurn({ input: entry.turn, ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}) }, RESTART_NOTE);
+    resumedTurn({ input: entry.turn, ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}) }, RESUME_NOTES.restart);
 
 const clearJournalled = async (services: Services, entry: JournalEntry): Promise<void> => {
     const clear =

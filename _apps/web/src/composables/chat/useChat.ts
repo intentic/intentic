@@ -1258,7 +1258,16 @@ export const openAgentConversation = (agent: {
         // the empty result that the restore sweep cached.
         if (existing.messages.value.length === 0 && !existing.streaming.value) {
             hydrateOnce(existing);
+            return existing;
         }
+        /* A tab that already has a transcript keeps it — but the turn it shows may have been superseded by one the
+         * DAEMON started since: an auth renewal, an outage resume, a boot resume, or simply another device. Only an
+         * attach can tell this window that, and until it did, opening such a chat showed the frame it died on while
+         * the board reported the same agent working. The probe 404s harmlessly when nothing is live, and returns
+         * immediately when this tab is already streaming — unlike hydrateOnce it never rewrites the transcript, so
+         * a chat with local notices in it does not lose them to a round-trip.
+         */
+        void existing.reattach();
         return existing;
     }
     const conversation = new Conversation(agent.id);

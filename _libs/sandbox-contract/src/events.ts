@@ -322,9 +322,11 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 "claude-reauth",
                 // The API refused this turn's token MID-FLIGHT — nearly always one superseded by a rotation,
                 // which Anthropic retires the moment its successor is minted. Distinct from claude-reauth: the
-                // account is fine and the daemon re-mints on the spot, so this frame is a notice about a turn
-                // that resumed itself, not a request for the user to do anything. It only reaches the client
-                // when the resume could NOT start, which is when reconnecting really is the fix.
+                // account is fine and the daemon re-mints on the spot, so this is usually a notice about a turn
+                // that is coming back rather than a request for the user to do anything. `autoResume` says
+                // which of the two: "scheduled" means the re-mint-and-re-run is armed, and its absence means
+                // nothing is coming (the turn was already a resume, or it ran on a credential with nothing to
+                // re-mint from) — that is the case where reconnecting really is the fix.
                 "claude-token-refused",
                 // The model provider itself failed transiently — 500/502/503, a 529 at capacity, a dropped
                 // socket — and the harness's own in-turn retries did not outlast it. Nothing about the workspace
@@ -346,10 +348,12 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         // rate_limit_event or the account's persisted usage windows). Absent when the reset instant is unknown
         // (nothing to schedule against).
         resetsAt: z.number().optional(),
-        // provider-outage only: where the daemon's resume of THIS turn stands. "scheduled" = the resume is
-        // armed and this turn comes back by itself; "available" = the daemon remembered the failed turn and
-        // turning resumeAfterOutage on arms that same resume, which is what the chat's offer banner hangs off.
-        // Absent means there is nothing automatic to resume — a spent usage limit never has one.
+        // Where the daemon's resume of THIS turn stands, for the two codes that have one (provider-outage,
+        // claude-token-refused). "scheduled" = the resume is armed and this turn comes back by itself;
+        // "available" = the daemon remembered the failed turn and turning resumeAfterOutage on arms that same
+        // resume, which is what the chat's offer banner hangs off — outage only, since a renewal is never gated
+        // on a setting. Absent means there is nothing automatic to resume: a spent usage limit never has one,
+        // and a refused credential has none once re-minting it has already been tried and failed.
         autoResume: z.enum(["scheduled", "available"]).optional(),
         /* provider-outage only: the shape of the wait. `retryAt` (epoch seconds) is when the next attempt is
          * due — not a fixed cadence, because an outage has no reset instant to aim at and hammering a provider
@@ -377,6 +381,32 @@ export const AttachFrameSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("end") }),
 ]);
 export type AttachFrame = z.infer<typeof AttachFrameSchema>;
+
+/* WHAT A RESUMED TURN'S PROMPT SAYS IT IS. The daemon re-runs a turn something underneath it killed (turn-resume.ts)
+ * by sending the original prompt again behind one of these sentences, so the model knows what interrupted it.
+ *
+ * They live on the wire rather than in the daemon because the CLIENT has to recognise them too: an attach head
+ * carries the run's prompt verbatim, and a window joining a resumed run would otherwise render the note as a
+ * message the USER wrote — the same words the user already said one run up, with a machine's preamble on them.
+ * Recognising the prefix is what lets that window reuse the bubble that is already there instead. */
+export const RESUME_NOTES = {
+    auth: "The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically.",
+    outage: "The model provider was briefly unavailable and interrupted this conversation; this turn resumed automatically.",
+    restart: "The sandbox restarted while this turn was running, which stopped it, and this turn resumed automatically once it came back.",
+} as const;
+
+// The prompt a resume actually sends: the note, then why the words below are being repeated, then them.
+export const withResumeNote = (prompt: string, note: string): string =>
+    Object.values(RESUME_NOTES).some((known) => prompt.startsWith(known))
+        ? prompt
+        : `${note} The interrupted request is repeated below — where part of it was already completed in this session, continue from that point instead of starting over.\n\n${prompt}`;
+
+// The user's own words inside a resumed prompt — the note and its explanation stripped back off. Returns the
+// prompt unchanged when it is not a resume, so a caller can hand every attach head through it.
+export const withoutResumeNote = (prompt: string): string => {
+    const note = Object.values(RESUME_NOTES).find((known) => prompt.startsWith(known));
+    return note === undefined ? prompt : prompt.slice(prompt.indexOf("\n\n") + 2);
+};
 
 // One parsed line from `intentic … --output ndjson` (engine events, provider `log`, the terminal `result`).
 // Open-ended by design — the sandbox consumes the wire shape, not @intentic/engine's types — so a string

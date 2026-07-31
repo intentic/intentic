@@ -30,7 +30,7 @@ import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
-import { clearPendingResume, recordAuthFailure, recordOutageFailure, startConversationTurn } from "./turn-resume.js";
+import { authResumable, clearPendingResume, recordAuthFailure, recordOutageFailure, startConversationTurn } from "./turn-resume.js";
 import { withRuntimeHistory } from "./runtime-history.js";
 import { turnRunOf } from "./turn-runs.js";
 import { nameAgentTitle } from "./title-namer.js";
@@ -472,6 +472,16 @@ async function* runTurn(
     // Set when the API refused this turn's credential mid-flight. Acted on in the finally so the resume
     // snapshots the turn's LAST session id — the one holding whatever it had done.
     let authRefused = false;
+    /* Whether an auth refusal on THIS turn would be re-minted and re-run. Needs the exact token that was refused
+     * (so the rotation supersedes it rather than replaying it) and the account it belongs to, which is why only a
+     * turn on a STORED Claude account qualifies: the container-env fallback has no refresh token behind it and
+     * nothing to re-mint from. And not a turn that is already a resume — see authResumable.
+     *
+     * Read twice, from one place: the error FRAME says whether a renewal is coming (the client renders a spinner
+     * or a red line off it), and the finally actually records it. Two copies of this condition is two ways for
+     * the chat's promise and the daemon's behaviour to disagree. */
+    const resumeArmed =
+        input.conversationId !== undefined && resolvedAccount !== undefined && request.oauthToken !== undefined && authResumable(input.prompt);
     /* The provider failed this turn transiently and a resume is worth arming. Same finally-time handling as the
      * one above, for the same reason: the resume wants the LAST session id, because a 500 that lands mid-turn
      * leaves real work behind it and the resume should continue from there rather than redo it. */
@@ -599,11 +609,18 @@ async function* runTurn(
                         continue;
                     }
                 }
-                /* A spent Claude allowance: resolve when the window reopens so the chat can name the instant
-                 * instead of only reporting that the turn stopped. Nothing is re-run — the allowance is the
-                 * user's own budget, and resuming into a freshly reset window would spend something they may
-                 * have been saving, so sending again is theirs to decide. No reset instant ⇒ the plain frame. */
-                authRefused ||= event.code === "claude-token-refused";
+                /* The credential was refused mid-turn. Say on the frame whether the daemon is going to re-mint
+                 * and re-run this turn, because that is the difference between a notice and a red line and the
+                 * client cannot work it out: the recording happens in the finally below, after this frame is
+                 * long gone. Same condition, named once (see resumeArmed) — a frame promising a renewal that the
+                 * finally then declines to arm leaves a spinner turning over a turn that is never coming back. */
+                if (event.code === "claude-token-refused") {
+                    authRefused = true;
+                    if (resumeArmed) {
+                        yield { ...event, autoResume: "scheduled" };
+                        continue;
+                    }
+                }
                 if (event.code === "rate_limit") {
                     // An api_retry rate limit carries the SDK's own retry instant directly. Older/final refusal
                     // shapes still resolve through the preceding rate_limit_event or the persisted account
@@ -625,11 +642,10 @@ async function* runTurn(
         // server it started) is still in there and keeps it alive until it exits, which is exactly the
         // behaviour a user watching that terminal expects.
         isolation?.anchor?.dispose();
-        /* The credential died under this turn — remember it so the next scheduler pass re-mints and re-runs it.
-         * Needs the exact token that was refused (so the rotation supersedes it rather than replaying it) and
-         * the account it belongs to, which is why only a turn on a STORED Claude account qualifies: the
-         * container-env fallback has no refresh token behind it and nothing to re-mint from. */
-        if (authRefused && input.conversationId !== undefined && resolvedAccount !== undefined && request.oauthToken !== undefined) {
+        // The credential died under this turn — remember it so the next scheduler pass re-mints and re-runs it.
+        // Armed on exactly the condition the frame above already promised the client (see resumeArmed); the
+        // narrowing repeats because TypeScript cannot carry it across the closure boundary.
+        if (authRefused && resumeArmed && input.conversationId !== undefined && resolvedAccount !== undefined && request.oauthToken !== undefined) {
             recordAuthFailure({
                 input: { ...input, conversationId: input.conversationId },
                 ...(sessionId !== undefined ? { sessionId } : {}),

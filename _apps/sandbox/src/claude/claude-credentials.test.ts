@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import {
     buildAuthorizeUrl,
     type ClaudeStore,
@@ -12,6 +12,7 @@ import {
     fileClaudeStore,
     newAccount,
     renameAccount,
+    startClaudeRefresh,
     type StoredAccount,
     toAccount,
     TokenRequestError,
@@ -314,4 +315,78 @@ test("holds nest and release once — two turns on one account, and the second r
     expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("held");
     second();
     expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("rotated");
+});
+
+/* WAITING FOR A GAP ONLY WORKS IF THE GAP IS TAKEN WHEN IT COMES. Deferring at REFRESH_AHEAD_MS gave a busy
+ * fleet half an hour to fall quiet in, and a fleet that never did rotated at the floor instead — into the most
+ * turns it would ever have running. One such rotation refused five agents in twenty seconds. So the hunt starts
+ * hours out and, crucially, fires off the RELEASE rather than off a timer that keeps missing the gaps. */
+test("the last turn's release rotates the token there and then", async () => {
+    const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
+    const stop = startClaudeRefresh(store, 60 * 60_000, async () => ({ accessToken: "rotated" }));
+    // The boot tick runs immediately; nothing holds the account, so it takes the gap it is already in.
+    await vi.waitFor(() => expect(store.current()?.accessToken).toBe("rotated"));
+    // Now with a turn in flight: the release is the trigger, so nothing moves until it lands.
+    await store.write(stored({ accessToken: "second", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
+    const release = holdAccount("a");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(store.current()?.accessToken).toBe("second");
+    release();
+    await vi.waitFor(() => expect(store.current()?.accessToken).toBe("rotated"));
+    stop();
+});
+
+// The other half of the rule: early is only safe when it is also FREE. A token with most of its life left is
+// left alone, so the sandbox is not re-minting on every turn boundary for no reason.
+test("a quiet moment does not rotate a token that is nowhere near expiry", async () => {
+    const store = memoryStore(stored({ accessToken: "fresh", refreshToken: "r", expiresAt: Date.now() + 7 * 60 * 60_000 }));
+    const stop = startClaudeRefresh(store, 60 * 60_000, async () => ({ accessToken: "rotated" }));
+    const release = holdAccount("a");
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(store.current()?.accessToken).toBe("fresh");
+    stop();
+});
+
+/* THE GAP IS ALSO WHEN THE NEXT TURN STARTS. A quiet rotation and a turn resolving its credential race over the
+ * same instant, and the holder gate cannot separate them: the new turn holds nothing YET. Handing it the store's
+ * current token would snapshot into a subprocess the exact token the in-flight mint is about to retire — the
+ * collision, reintroduced through the door opened to avoid it. So the resolve waits for the mint. */
+test("a turn starting during a rotation gets the new token, not the one being superseded", async () => {
+    const store = memoryStore(stored({ accessToken: "doomed", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
+    let began = (): void => {};
+    let mint = (): void => {};
+    const started = new Promise<void>((resolve) => {
+        began = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+        mint = resolve;
+    });
+    const stop = startClaudeRefresh(store, 60 * 60_000, async () => {
+        began();
+        await held;
+        return { accessToken: "rotated" };
+    });
+    // The boot tick's rotation has reached the provider and is waiting on it; the store still holds the token
+    // that mint is about to supersede, which is exactly the state a turn must not resolve its credential in.
+    await started;
+    expect(store.current()?.accessToken).toBe("doomed");
+    const resolving = ensureFreshToken(store, "a");
+    mint();
+    expect(await resolving).toBe("rotated");
+    stop();
+});
+
+// A release arriving after the daemon tore the loop down must not reach into a store that is no longer running.
+test("stopping the refresh loop unhooks the release trigger", async () => {
+    const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
+    // Held across the boot tick, so the loop is genuinely stopped rather than having already rotated.
+    const release = holdAccount("a");
+    const stop = startClaudeRefresh(store, 60 * 60_000, async () => ({ accessToken: "rotated" }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(store.current()?.accessToken).toBe("held");
+    stop();
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(store.current()?.accessToken).toBe("held");
 });
