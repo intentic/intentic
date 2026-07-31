@@ -2,6 +2,7 @@ import type { Disposable } from "@intentic/extension-api";
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { registerCommand, type RegisteredCommand } from "./useCommands";
+import { tabSurfaceOf } from "./tabSurface";
 import { useChatPopout } from "../chat/useChatPopout";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { useTerminalPopout } from "../terminal/useTerminalPopout";
@@ -66,11 +67,33 @@ export function useShellCommands(): void {
             // VSCode's New Terminal chord, matched by physical key (the Backquote row) so the Shift glyph "~"
             // or a dead-key layout can't break it.
             { command: `terminal.new`, title: `New Terminal`, icon: `code`, keybinding: `Ctrl+Shift+\``, handler: () => terminal.spawnShell() },
-            { command: `chat.togglePopout`, title: `Toggle Chat Pop-Out`, icon: `window-maximize`, handler: () => chat.toggle() },
+            /* MOVING THE CHAT INTO ITS OWN WINDOW, in the words the tab strip's menu row already uses. The old
+             * "Toggle Chat Pop-Out" was a third name for it — and the palette matches on the title and the id
+             * (QuickOpen), so typing the thing the user actually wants ("window", "new window") found nothing.
+             * The title says which DIRECTION the press will take, because a row promising a new window while it
+             * docks is worse than no row: a getter, so the palette's computed re-reads it when the state flips.
+             *
+             * F9 is the point of the exercise. This is a several-times-an-hour gesture for anyone working with
+             * the chat on a second screen, and a menu row three clicks deep can't be that; every surface that
+             * offers the action now teaches this key. Bare, because a modifier chord is the thing the hand
+             * hesitates on — and gated off the terminal, where F9 belongs to whatever TUI is running in it
+             * (mc's menu, an editor's key) rather than to the shell. */
+            {
+                command: `chat.togglePopout`,
+                get title(): string {
+                    return chat.poppedOut.value ? `Dock Chat Back` : `Move Chat into New Window`;
+                },
+                icon: `external-link`,
+                keybinding: `F9`,
+                when: (event: KeyboardEvent): boolean => tabSurfaceOf(event) !== `terminal`,
+                handler: () => chat.toggle(),
+            },
             {
                 command: `terminal.togglePopout`,
-                title: `Toggle Terminal Pop-Out`,
-                icon: `window-maximize`,
+                get title(): string {
+                    return terminalPopout.poppedOut.value ? `Dock Terminal Back` : `Move Terminal into New Window`;
+                },
+                icon: `external-link`,
                 handler: (): void => {
                     // Popping out a closed panel would float an empty window — open it first (docking keeps it open).
                     terminal.setOpen(true);
@@ -78,7 +101,9 @@ export function useShellCommands(): void {
                 },
             },
         ];
-        disposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
+        // Object.assign rather than `{ owner, ...entry }`: a spread READS every property, which would freeze the
+        // two dynamic titles above at whatever they said the moment the shell mounted.
+        disposables = entries.map((entry) => registerCommand(Object.assign(entry, { owner: `builtin` })));
     });
 
     onUnmounted(() => {

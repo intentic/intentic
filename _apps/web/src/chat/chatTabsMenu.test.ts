@@ -214,6 +214,23 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
     expect(open).toHaveBeenCalled();
 });
 
+/* THE POP-OUT'S OWN BUTTON, beside the ✚ / history pair. The action had no visible control at all: it lived
+ * behind a right-click on strip chrome that the tabs themselves eat (they `grow` into every pixel of slack), so
+ * the target shrank as sessions were opened — hardest to hit exactly when a floating chat is most wanted. The
+ * label doubles as the tooltip and carries the chord once one is bound, which is not the case here: this file
+ * mounts the strip alone, and `chat.togglePopout` belongs to the shell's registration. */
+it(`moves the chat into its own window from the strip's own button`, async () => {
+    openTabs(2);
+    await nextTick();
+
+    const button = strip.querySelector<HTMLElement>(`[aria-label="Move chat into new window"]`);
+    expect(button).not.toBeNull();
+    button!.click();
+    await flush();
+
+    expect(open).toHaveBeenCalled();
+});
+
 /* The ✚ and history buttons are siblings of the tab scroll box — they stay put while the tabs scroll — so the
  * empty-space handler used to sit on the box and miss them entirely: the one patch of the strip that looks like
  * tab chrome and behaved like a web page, handing back the browser's own menu. The handler lives on the whole

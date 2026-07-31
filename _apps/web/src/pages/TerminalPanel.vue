@@ -9,7 +9,7 @@ import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vu
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
 import RecentTerminals from "../components/RecentTerminals.vue";
 import { inTabSurface } from "../composables/commands/tabSurface";
-import { commandShortcut, registerCommand, type RegisteredCommand } from "../composables/commands/useCommands";
+import { commandShortcut, registerCommand, type RegisteredCommand, withShortcut } from "../composables/commands/useCommands";
 import { showWorkTerminals } from "../composables/terminal/useWorkTerminals";
 import { KIND_ICONS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
 import { useTerminalsQuery } from "../composables/terminal/terminalsQuery";
@@ -104,12 +104,9 @@ const stripIndex = computed(() => {
     }
     return index;
 });
-// A tooltip that also teaches its shortcut: "New terminal (Ctrl+Shift+`)" when the command is bound, plain
-// text otherwise. Inline in the template binding, so a live remap reflects on the next render.
-const withShortcut = (text: string, command: string): string => {
-    const shortcut = commandShortcut(command);
-    return shortcut === undefined ? text : `${text} (${shortcut})`;
-};
+// What the pop-out button says and is named, both directions — the same wording as the strip menu's row and the
+// palette's, with the chord when one is bound (withShortcut, shared with the chat strip's own button).
+const popoutHint = computed(() => withShortcut(popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`, `terminal.togglePopout`));
 const segmentIcon = (name: string): IconName => terminalMeta(name).icon ?? KIND_ICONS[tabByName.value.get(name)?.kind ?? `shell`];
 const segmentColor = (name: string): string | undefined => {
     const color = terminalMeta(name).color;
@@ -889,6 +886,19 @@ const endResize = (event: PointerEvent): void => {
                     aria-label="Refresh sessions"
                 >
                     <Icon name="refresh" class="text-xs" />
+                </button>
+                <!-- Into its own window, and back. It was a right-click-the-strip menu row only — the same
+                     burial the chat's pop-out had, on a toolbar that has room to say it out loud. Beside the
+                     collapse/close pair because all three answer "where does this panel live", and it flips
+                     with the state so the one control is the whole round trip. -->
+                <button
+                    type="button"
+                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    @click="popout.toggle()"
+                    v-tooltip.top="popoutHint"
+                    :aria-label="popoutHint"
+                >
+                    <Icon :name="popout.poppedOut.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
                 </button>
                 <button
                     v-if="resizable"

@@ -51,6 +51,14 @@ declare global {
          * document still sitting on screen. */
         __intentic?: { readonly adoptPopout: (name: string, win: Window) => boolean };
     }
+
+    /* The one fact the Window Management API gives a page without asking permission: whether the desktop spans
+     * more than one screen. Chromium answers, the DOM lib TypeScript builds against doesn't know it yet, and
+     * everyone else stays silent — so it is declared OPTIONAL, because "the browser didn't say" is a third
+     * answer this module acts on (see onSomeScreen). */
+    interface Screen {
+        readonly isExtended?: boolean;
+    }
 }
 
 // The page every popped-out panel floats in (popout.html, at the app's root). Opened with the panel named in
@@ -116,15 +124,44 @@ const dressWindow = (win: Window, title: string): void => {
     doc.body.style.cssText = `margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;background:var(--color-canvas);color:var(--color-content)`;
 };
 
-// Where the window opens: the panel's current size, centred on the screen the app is on. Chrome only honors a
-// separate window (rather than a tab) when `popup` is asked for.
-const features = (size: { width: number; height: number }): string => {
-    const width = Math.round(size.width);
-    const height = Math.round(size.height);
-    const left = Math.round(window.screenX + Math.max(0, (window.outerWidth - width) / 2));
-    const top = Math.round(window.screenY + Math.max(0, (window.outerHeight - height) / 2));
-    return `popup=1,width=${width},height=${height},left=${left},top=${top}`;
-};
+/* WHERE THE WINDOW OPENS — the four numbers window.open takes, which are exactly the four a window hands back
+ * (screenX / screenY / outerWidth / outerHeight). Being the same four is what lets the frame the user left the
+ * window in be asked for again: popping out is a many-times-a-day gesture, and a window that always opens
+ * centred on the app is one the user drags back to the same corner of the same screen every single time.
+ * Chrome only honors a separate window (rather than a tab) when `popup` is asked for. */
+interface Frame {
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+}
+
+const features = (frame: Frame): string =>
+    `popup=1,width=${Math.round(frame.width)},height=${Math.round(frame.height)},left=${Math.round(frame.left)},top=${Math.round(frame.top)}`;
+
+// Where a panel with nothing remembered opens: its current size, centred on the screen the app is on.
+const centred = (size: { width: number; height: number }): Frame => ({
+    width: size.width,
+    height: size.height,
+    left: window.screenX + Math.max(0, (window.outerWidth - size.width) / 2),
+    top: window.screenY + Math.max(0, (window.outerHeight - size.height) / 2),
+});
+
+// Nobody deliberately leaves a window this small, so a frame under it is a bad reading (a window mid-close, a
+// minimized one reporting zeros) rather than a preference — reopening into it would hand back an unusable sliver.
+const MIN_FRAME = 240;
+
+/* A remembered frame is honored verbatim, INCLUDING a position on a screen this page cannot measure — that is
+ * the whole point, since the second monitor is where a popped-out panel tends to live. The one case worth
+ * second-guessing is the monitor that has since been unplugged, whose coordinates now name nothing: a window
+ * opened out there is one the user can neither find nor close. `screen.isExtended` is all a page is told about
+ * the desktop's shape without asking permission, and only its FALSE is actionable — one screen attached, so a
+ * frame that doesn't overlap it is stranded and the panel opens centred instead. Undefined (a browser that
+ * doesn't answer) or true leaves the frame alone; guessing there would strand the multi-monitor user this
+ * remembers the frame for. */
+const onSomeScreen = (frame: Frame): boolean =>
+    window.screen.isExtended !== false ||
+    (frame.left < window.screen.availWidth && frame.top < window.screen.availHeight && frame.left + frame.width > 0 && frame.top + frame.height > 0);
 
 // Every pop-out store on the page, by window name — a keeper knows only its own name, and the page it calls
 // back may be a completely fresh load, so the hook resolves the store at call time. An unknown name answers
@@ -317,6 +354,39 @@ export const createPopout = (name: string, title: string, size: () => { width: n
 
     const restoring = ref(sessionStorage.getItem(storageKey) === `1`);
 
+    /* THE FRAME THE WINDOW COMES BACK IN. localStorage, not the sessionStorage note above, because the two are
+     * different claims: that note says "THIS tab had the panel floating a moment ago" and dies with the tab,
+     * while where the user keeps this window is a habit that outlives tabs, sessions and browser restarts.
+     * Written when the panel LEAVES the window — its ×, a dock, a reload out there — which is the last moment
+     * the geometry is still readable, and the moment a user who has just finished moving the window has
+     * finished moving it. */
+    const frameKey = `ui-popout-frame-${name}`;
+    const rememberFrame = (win: Window): void => {
+        // A window mid-close reports zeros, and parking the next one in the top-left corner at 0×0 is worse
+        // than forgetting where this one was.
+        if (win.closed || win.outerWidth < MIN_FRAME || win.outerHeight < MIN_FRAME) {
+            return;
+        }
+        localStorage.setItem(frameKey, [win.screenX, win.screenY, win.outerWidth, win.outerHeight].join(`,`));
+    };
+
+    const rememberedFrame = (): Frame | undefined => {
+        const stored = localStorage.getItem(frameKey);
+        if (stored === null) {
+            return undefined;
+        }
+        const [left, top, width, height] = stored.split(`,`).map(Number);
+        if (left === undefined || top === undefined || width === undefined || height === undefined) {
+            return undefined;
+        }
+        // A NaN or an Infinity anywhere in a hand-edited (or half-written) note makes the sum non-finite.
+        if (!Number.isFinite(left + top + width + height) || width < MIN_FRAME || height < MIN_FRAME) {
+            return undefined;
+        }
+        const frame = { left, top, width, height };
+        return onSomeScreen(frame) ? frame : undefined;
+    };
+
     /* Two ways the wait for a returning window can end, and they are NOT the same decision — running them
      * through one flag is what let a window that reported in a beat late get closed under the user, panel and
      * all, for the crime of a slow reload:
@@ -415,6 +485,9 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         themeObserver?.disconnect();
         themeObserver = undefined;
         if (win) {
+            // Before anything else: this runs from `beforeunload` / `pagehide`, while the window is still whole
+            // and its frame still readable. A moment later it is a closed window reporting zeros.
+            rememberFrame(win);
             win.removeEventListener(`beforeunload`, released);
             win.removeEventListener(`pagehide`, released);
         }
@@ -454,7 +527,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         }
         // A matching target name reuses the window it already refers to, navigating it: re-popping cannot stack
         // windows, and a window a reload left floating is taken back over rather than joined by a second one.
-        const win = window.open(`${POPOUT_PAGE}?panel=${name}`, name, features(size()));
+        const win = window.open(`${POPOUT_PAGE}?panel=${name}`, name, features(rememberedFrame() ?? centred(size())));
         if (win === null) {
             return; // blocked by the popup blocker — the panel stays docked
         }

@@ -71,3 +71,11 @@ export const commandShortcut = (command: string): string | undefined => {
     const chord = effectiveKeybinding(command, entry.keybinding);
     return chord === undefined ? undefined : formatChord(chord, isApplePlatform());
 };
+
+// A label that also teaches its shortcut — "New terminal (Ctrl+Shift+`)" when the command is bound, the plain
+// text otherwise. Tooltips and aria-labels on buttons that DUPLICATE a command call this, so the control the
+// pointer finds is what teaches the key the hand should learn instead.
+export const withShortcut = (text: string, command: string): string => {
+    const shortcut = commandShortcut(command);
+    return shortcut === undefined ? text : `${text} (${shortcut})`;
+};

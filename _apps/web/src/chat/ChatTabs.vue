@@ -29,7 +29,7 @@ import { type Conversation, modelLabelFor } from "../composables/chat/conversati
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { inTabSurface } from "../composables/commands/tabSurface";
-import { commandShortcut, registerCommand, type RegisteredCommand } from "../composables/commands/useCommands";
+import { commandShortcut, registerCommand, type RegisteredCommand, withShortcut } from "../composables/commands/useCommands";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
 
@@ -49,6 +49,9 @@ const emit = defineEmits<{
 const { conversations, activeId, sessions, loadSessions } = useChat();
 const { agentById, fleet, archived, loadArchived } = useAgents();
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
+// The toolbar button's tooltip AND its accessible name, one string: the control the pointer finds is what
+// teaches the chord that makes the trip unnecessary. Docked-only, so it never has to say the way back.
+const popoutHint = computed(() => withShortcut(`Move chat into new window`, `chat.togglePopout`));
 
 /* Undocked, the strip stands up the window's LEFT EDGE as a resizable rail of CARDS instead of wrapping pill
  * tabs across the top. A pop-out window is as wide as the user drags it, so a top strip spends the one axis
@@ -929,14 +932,32 @@ const openHistory = (event: Event): void => {
         <span v-if="edit.error !== undefined" class="min-w-0 shrink truncate text-2xs text-danger" v-tooltip.bottom.overflow="edit.error">{{
             edit.error
         }}</span>
-        <!-- Docked: the ✚ / history pair beside the strip, unchanged — a header row has width to spare and no
-             room for two labels. Neither ever scrolls with the tabs. -->
+        <!-- Docked: the ✚ / history / pop-out trio beside the strip — a header row has width to spare and no
+             room for three labels. None of them ever scrolls with the tabs.
+             THE THIRD GLYPH IS THE POINT OF THIS BAR HAVING A TOOLBAR AT ALL. Moving the chat into its own
+             window is a several-times-an-hour act for anyone running it beside an editor or on a second screen,
+             and it lived only behind a right-click on chrome the tabs themselves keep eating: the strip's tabs
+             `grow` into every pixel of slack, so "the empty space" that opens the menu is in practice these
+             buttons and 6px of padding — an affordance that gets HARDER to hit the more sessions you have open,
+             which is exactly when you want it. It sits last, hard against the window edge where window controls
+             live, and its tooltip teaches F9 so the pointer trip is one a hand only has to make until it
+             remembers. It is absent from the rail (the popped-out strip), which is already in the window this
+             button opens — out there the way back is the window's own ×, F9, or the menu's "Dock chat back". -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent()" v-tooltip.bottom="'New agent'" aria-label="New agent">
                 <Icon name="plus" class="text-sm" />
             </button>
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="openHistory" v-tooltip.bottom="'History'" aria-label="Chat history">
                 <Icon name="history" class="text-sm" />
+            </button>
+            <button
+                type="button"
+                class="composer-ghost h-7 w-7 shrink-0"
+                @click="togglePopout"
+                v-tooltip.bottom="popoutHint"
+                :aria-label="popoutHint"
+            >
+                <Icon name="external-link" class="text-sm" />
             </button>
         </div>
         <!-- FOOT OF THE RAIL: the two ways out of the list — one more session, or an older one. Both stay where

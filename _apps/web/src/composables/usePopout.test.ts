@@ -19,6 +19,12 @@ const fakeWindow = (name: string) => {
         name,
         document: doc,
         closed: false,
+        // Where the user left it: the four numbers window.open takes back, which is what makes a frame
+        // rememberable at all. These stand for a window dragged onto a second screen.
+        screenX: 2200,
+        screenY: 180,
+        outerWidth: 900,
+        outerHeight: 1100,
         focus: vi.fn(),
         close: vi.fn(),
         addEventListener: vi.fn(),
@@ -48,6 +54,7 @@ const size = () => ({ width: 500, height: 400 });
 
 beforeEach(() => {
     sessionStorage.clear();
+    localStorage.clear(); // where the pop-out window's last frame is kept — see the frame tests below
     vi.useFakeTimers();
 });
 
@@ -304,6 +311,53 @@ describe(`createPopout`, () => {
         expect(popout.body.value).toBeUndefined();
         expect(win.close).toHaveBeenCalled();
         expect(sessionStorage.getItem(`ui-popout-dock-panel`)).toBeNull();
+    });
+
+    /* WHERE THE WINDOW COMES BACK. Popping a panel out is a many-times-a-day gesture, so a window that always
+     * opens centred on the app is a window the user drags to the same corner of the same screen a dozen times a
+     * day. The frame it was last left in is what reopening asks for — the one part of the cost of this action
+     * that no amount of surfacing the ACTION could pay off. */
+    it(`reopens the window in the frame the user left it in`, () => {
+        const popout = createPopout(`frame-panel`, `Panel`, size);
+        const win = fakeWindow(`frame-panel`);
+        adopt(`frame-panel`, win);
+
+        unload(win); // the window's own × — the last moment its geometry is still readable
+
+        const open = vi.spyOn(window, `open`).mockReturnValue(null);
+        popout.popOut();
+
+        // The second screen it was dragged to, at the size it was dragged to — not `size()` centred on the app.
+        expect(open).toHaveBeenCalledWith(expect.any(String), `frame-panel`, `popup=1,width=900,height=1100,left=2200,top=180`);
+        open.mockRestore();
+    });
+
+    it(`centres a panel whose window has never been placed`, () => {
+        const popout = createPopout(`unplaced-panel`, `Panel`, size);
+        const open = vi.spyOn(window, `open`).mockReturnValue(null);
+
+        popout.popOut();
+
+        // jsdom's window is 1024×768 at the screen's origin, so the 500×400 panel centres at 262,184.
+        expect(open).toHaveBeenCalledWith(expect.any(String), `unplaced-panel`, `popup=1,width=500,height=400,left=262,top=184`);
+        open.mockRestore();
+    });
+
+    it(`re-centres a frame stranded on a monitor that has gone away`, () => {
+        localStorage.setItem(`ui-popout-frame-gone-panel`, `2200,180,900,1100`);
+        // One screen attached now, and the remembered frame is off the side of it: the monitor it names has been
+        // unplugged, and a window opened out there is one the user can neither find nor close. Only a browser
+        // that says `false` proves this — silence keeps the frame, because silence is also what a second monitor
+        // sounds like.
+        Object.defineProperty(window.screen, `isExtended`, { value: false, configurable: true });
+        const popout = createPopout(`gone-panel`, `Panel`, size);
+        const open = vi.spyOn(window, `open`).mockReturnValue(null);
+
+        popout.popOut();
+
+        expect(open).toHaveBeenCalledWith(expect.any(String), `gone-panel`, `popup=1,width=500,height=400,left=262,top=184`);
+        open.mockRestore();
+        Reflect.deleteProperty(window.screen, `isExtended`);
     });
 
     it(`syncs dynamically added style tags in document.head to pop-out documents`, async () => {
