@@ -1,0 +1,416 @@
+#!/usr/bin/env node
+/* `intentic-docs` — the FACTS half of the documentation system, on the agent's PATH every turn
+ * (contributes.bin: the daemon prepends this directory, and the files themselves are the approved code because
+ * they ride the sha-pinned checkout).
+ *
+ * The split this tool exists to enforce: a model authors judgement, a script computes facts. Which packages
+ * exist, what depends on what, how big each one is, which revision a document was written against, whether an
+ * anchor still resolves — all of that is cheap and exact from the filesystem and git, and all of it is something
+ * a model will otherwise produce plausibly and wrongly. So the agent runs `facts` before it writes a word, and
+ * `validate` after, and the only thing left for it to get wrong is the part that needs a mind.
+ *
+ * THREE VERBS
+ *   facts     enumerate packages, their dependency edges, sizes and revisions          → JSON on stdout
+ *   validate  every document parses, every anchor resolves                             → exit 1 + reasons
+ *   check     recompute the derived index (staleness, orphans, coverage)                → writes index.json
+ *
+ * `check` is where rot becomes visible. Staleness is computed HERE and written to a file rather than derived in
+ * the browser, because `GET /git/{repo}/log` takes no path filter — the browser would need one commit-diff
+ * request per commit to learn what touched a package. One `git rev-list --count` answers it exactly.
+ *
+ * WHY THIS FILE IS PLAIN ESM AND NOT TYPESCRIPT. It is executed directly by the agent's shell, so it must run
+ * with no build step and no loader. That costs a small, deliberate duplication: the two path constants below
+ * also live in src/paths.ts. paths.test.ts imports both and asserts they are equal, so the duplication cannot
+ * drift silently — it fails a test the moment it does. */
+
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Mirrored from src/paths.ts — see the header, and paths.test.ts which pins them together.
+export const DOCS_DIR = "docs/architecture";
+export const STAGING_ROOT = ".intentic/docs";
+
+const MANIFESTS = ["package.json", "Cargo.toml", "pyproject.toml", "go.mod"];
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "target", ".cache", ".next", "coverage", "vendor", "__pycache__"]);
+/* A manifest inside one of these is a FIXTURE, not a package — `_libs/iq-recall/src/__fixtures__/workspace` has a
+ * package.json because a test needs one to read. These dirs are still WALKED (their lines count toward the package
+ * that owns them, and their names are how `hasTests` is detected); they just cannot themselves be a package. */
+const NON_PACKAGE_SEGMENTS = new Set(["__fixtures__", "__mocks__", "__snapshots__", "__tests__", "fixtures", "test", "tests", "spec"]);
+const SOURCE_EXTENSIONS = new Set(["ts", "tsx", "js", "jsx", "mjs", "cjs", "vue", "rs", "py", "go", "sql", "css", "svelte"]);
+// A generated bundle or a lockfile would dominate a size comparison while telling the reader nothing.
+const MAX_MEASURED_BYTES = 512 * 1024;
+// Deep enough for `_apps/web/src/...`-shaped monorepos, shallow enough that a stray checkout cannot walk forever.
+const MAX_DEPTH = 5;
+
+// ---- shell ---------------------------------------------------------------------------------------------------
+
+/* git, or undefined. Every git fact here is optional by design: a repo with no commits yet, a directory that has
+ * never been committed, or a workspace that is not a git repo at all are all ordinary states for a workspace an
+ * agent is actively building — and none of them should stop a document from being written. */
+const git = (cwd, args) => {
+    try {
+        return execFileSync(`git`, args, { cwd, encoding: `utf8`, stdio: [`ignore`, `pipe`, `ignore`] }).trim();
+    } catch {
+        return undefined;
+    }
+};
+
+const readJson = (path) => {
+    try {
+        return JSON.parse(readFileSync(path, `utf8`));
+    } catch {
+        return undefined;
+    }
+};
+
+/* Canonical JSON: sorted keys, two-space indent, trailing newline. The whole reviewability argument for a data
+ * document model rests on this — unstable key order turns every regeneration into an unreadable diff, which is
+ * exactly the objection that ruled out generated HTML in the first place. */
+const canonical = (value) => `${JSON.stringify(sortKeys(value), undefined, 2)}\n`;
+
+const sortKeys = (value) => {
+    if (Array.isArray(value)) {
+        return value.map(sortKeys);
+    }
+    if (value === null || typeof value !== `object`) {
+        return value;
+    }
+    return Object.fromEntries(
+        Object.keys(value)
+            .sort()
+            .map((key) => [key, sortKeys(value[key])]),
+    );
+};
+
+// ---- discovery -----------------------------------------------------------------------------------------------
+
+/* Every package under a repo: a directory holding a recognised manifest. Evidence over configuration — reading
+ * pnpm-workspace globs, npm `workspaces`, Cargo `members` and their equivalents would be four parsers that each
+ * disagree with the filesystem in a different way, and the filesystem is the thing that is actually true.
+ *
+ * The repo root counts as a package only when nothing under it does, so a plain single-package repo documents
+ * itself instead of coming back empty. */
+const discoverPackages = (repoRoot) => {
+    const found = [];
+    const walk = (dir, depth) => {
+        if (depth > MAX_DEPTH) {
+            return;
+        }
+        let entries;
+        try {
+            entries = readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        const candidate = relative(repoRoot, dir).split(`\\`).join(`/`);
+        const isFixture = candidate.split(`/`).some((segment) => NON_PACKAGE_SEGMENTS.has(segment));
+        if (dir !== repoRoot && !isFixture && MANIFESTS.some((manifest) => entries.some((entry) => entry.isFile() && entry.name === manifest))) {
+            found.push(candidate);
+            // Do NOT return: a monorepo nests packages under packages, and stopping here would hide them.
+        }
+        for (const entry of entries) {
+            if (entry.isDirectory() && !SKIP_DIRS.has(entry.name) && !entry.name.startsWith(`.`)) {
+                walk(join(dir, entry.name), depth + 1);
+            }
+        }
+    };
+    walk(repoRoot, 0);
+    if (found.length === 0 && MANIFESTS.some((manifest) => existsSync(join(repoRoot, manifest)))) {
+        return [``];
+    }
+    return found.sort();
+};
+
+// Lines of source and file count for one package dir, not counting nested packages — otherwise a monorepo root
+// would report the whole tree and every comparison between packages would be meaningless.
+const measure = (repoRoot, dir, nested) => {
+    const absolute = dir === `` ? repoRoot : join(repoRoot, dir);
+    let files = 0;
+    let loc = 0;
+    let hasTests = false;
+    const walk = (current, depth) => {
+        if (depth > MAX_DEPTH) {
+            return;
+        }
+        let entries;
+        try {
+            entries = readdirSync(current, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        for (const entry of entries) {
+            const path = join(current, entry.name);
+            if (entry.isDirectory()) {
+                const rel = relative(repoRoot, path).split(`\\`).join(`/`);
+                if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith(`.`) && !nested.includes(rel)) {
+                    if (entry.name === `test` || entry.name === `tests` || entry.name === `__tests__`) {
+                        hasTests = true;
+                    }
+                    walk(path, depth + 1);
+                }
+                continue;
+            }
+            const extension = entry.name.includes(`.`) ? entry.name.slice(entry.name.lastIndexOf(`.`) + 1) : ``;
+            if (!SOURCE_EXTENSIONS.has(extension)) {
+                continue;
+            }
+            if (/\.(test|spec)\./.test(entry.name)) {
+                hasTests = true;
+            }
+            files += 1;
+            try {
+                if (statSync(path).size <= MAX_MEASURED_BYTES) {
+                    loc += readFileSync(path, `utf8`).split(`\n`).length;
+                }
+            } catch {
+                // An unreadable file still counts as a file; its size is simply unknown.
+            }
+        }
+    };
+    walk(absolute, 0);
+    return { files, loc, hasTests };
+};
+
+// Workspace dependency edges, from each package.json's declared deps intersected with the packages that exist
+// here. Only intra-repo edges: an edge to `vue` says nothing about this repo's shape.
+const dependencyEdges = (repoRoot, packages) => {
+    const nameToDir = new Map();
+    const manifests = new Map();
+    for (const dir of packages) {
+        const manifest = readJson(join(dir === `` ? repoRoot : join(repoRoot, dir), `package.json`));
+        if (manifest?.name !== undefined) {
+            nameToDir.set(manifest.name, dir);
+        }
+        manifests.set(dir, manifest);
+    }
+    const edges = [];
+    for (const dir of packages) {
+        const manifest = manifests.get(dir);
+        if (manifest === undefined) {
+            continue;
+        }
+        const runtime = manifest.dependencies ?? {};
+        const declared = new Set([...Object.keys(runtime), ...Object.keys(manifest.devDependencies ?? {})]);
+        for (const name of declared) {
+            const to = nameToDir.get(name);
+            if (to !== undefined && to !== dir) {
+                // Dev only when it is NOT also a runtime dependency: a package listed in both is load-bearing at
+                // runtime, and drawing that edge as dashed would understate it.
+                edges.push({ from: dir, to, dev: !(name in runtime) });
+            }
+        }
+    }
+    return edges.sort((left, right) => `${left.from}->${left.to}`.localeCompare(`${right.from}->${right.to}`));
+};
+
+// The last commit that touched a directory. A real commit rather than a tree hash, so a reader can look it up —
+// and `rev-list --count` against it answers "how far behind" exactly.
+const revOf = (repoRoot, dir) => git(repoRoot, [`log`, `-1`, `--format=%H`, `--`, dir === `` ? `.` : dir]);
+const commitsSince = (repoRoot, dir, rev) => {
+    const count = git(repoRoot, [`rev-list`, `--count`, `${rev}..HEAD`, `--`, dir === `` ? `.` : dir]);
+    return count === undefined ? 0 : Number.parseInt(count, 10) || 0;
+};
+
+// ---- the document tree ---------------------------------------------------------------------------------------
+
+const docsBase = (root, repo, from) =>
+    from === `staging` ? join(root, STAGING_ROOT, repo === `` ? `root` : repo) : join(root, repo === `` ? `` : repo, DOCS_DIR);
+
+// Which package dirs the document tree holds a doc.json for. Read off the filesystem rather than from repo.json,
+// so a document that exists is counted whether or not the map remembered to mention it.
+const documentedDirs = (base) => {
+    const found = [];
+    const walk = (dir, depth) => {
+        if (depth > MAX_DEPTH + 1) {
+            return;
+        }
+        let entries;
+        try {
+            entries = readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        if (entries.some((entry) => entry.isFile() && entry.name === `doc.json`)) {
+            found.push(relative(base, dir).split(`\\`).join(`/`));
+        }
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                walk(join(dir, entry.name), depth + 1);
+            }
+        }
+    };
+    walk(base, 0);
+    return found.filter((dir) => dir !== `` && dir !== `.`).sort();
+};
+
+// ---- verbs ---------------------------------------------------------------------------------------------------
+
+const factsOf = (root, repo) => {
+    const repoRoot = repo === `` ? root : join(root, repo);
+    const packages = discoverPackages(repoRoot);
+    return {
+        repo,
+        head: git(repoRoot, [`rev-parse`, `HEAD`]),
+        packages: packages.map((dir) => {
+            const manifest = readJson(join(dir === `` ? repoRoot : join(repoRoot, dir), `package.json`));
+            const nested = packages.filter((other) => other !== dir && other.startsWith(dir === `` ? `` : `${dir}/`));
+            const { files, loc, hasTests } = measure(repoRoot, dir, nested);
+            return { dir, name: manifest?.name, description: manifest?.description, files, loc, hasTests, sourceRev: revOf(repoRoot, dir) };
+        }),
+        edges: dependencyEdges(repoRoot, packages),
+    };
+};
+
+/* Every document parses and every anchor resolves. Anchors are checked against the WORKING TREE the agent is in,
+ * which is the point: an anchor that no longer resolves is the one staleness signal that needs no git history and
+ * cannot be argued with. */
+const validateDocs = (root, repo, from) => {
+    const base = docsBase(root, repo, from);
+    const repoRoot = repo === `` ? root : join(root, repo);
+    const problems = [];
+    if (!existsSync(base)) {
+        return [`no documents at ${relative(root, base)} — nothing to validate`];
+    }
+    const repoDoc = readJson(join(base, `repo.json`));
+    if (repoDoc === undefined) {
+        problems.push(`repo.json is missing or is not valid JSON`);
+    } else if (repoDoc.provenance?.sourceRev === undefined) {
+        problems.push(`repo.json has no provenance.sourceRev — a document that cannot be dated cannot be trusted`);
+    }
+    for (const dir of documentedDirs(base)) {
+        const doc = readJson(join(base, dir, `doc.json`));
+        if (doc === undefined) {
+            problems.push(`${dir}/doc.json is not valid JSON`);
+            continue;
+        }
+        if (typeof doc.oneLiner !== `string` || doc.oneLiner.trim() === ``) {
+            problems.push(`${dir}/doc.json has no oneLiner`);
+        }
+        if (doc.provenance?.sourceRev === undefined) {
+            problems.push(`${dir}/doc.json has no provenance.sourceRev`);
+        }
+        if (!existsSync(join(base, dir, `doc.md`))) {
+            problems.push(`${dir} has a doc.json but no doc.md — the prose IS the document`);
+        }
+        for (const anchor of Array.isArray(doc.keyFiles) ? doc.keyFiles : []) {
+            if (typeof anchor?.path !== `string`) {
+                problems.push(`${dir}/doc.json has a keyFiles entry with no path`);
+                continue;
+            }
+            if (!existsSync(join(repoRoot, anchor.path))) {
+                problems.push(`${dir}/doc.json points at ${anchor.path}, which does not exist`);
+            }
+        }
+    }
+    return problems;
+};
+
+const checkDocs = (root, repo, from, write) => {
+    const base = docsBase(root, repo, from);
+    const repoRoot = repo === `` ? root : join(root, repo);
+    const packages = discoverPackages(repoRoot);
+    const documented = documentedDirs(base);
+    const repoDoc = readJson(join(base, `repo.json`));
+    const componentOf = (dir) =>
+        (Array.isArray(repoDoc?.components) ? repoDoc.components : []).find((component) => (component.packages ?? []).includes(dir))?.id;
+
+    const entries = documented.map((dir) => {
+        const doc = readJson(join(base, dir, `doc.json`)) ?? {};
+        const sourceRev = doc.provenance?.sourceRev;
+        const gone = !existsSync(join(repoRoot, dir));
+        const deadAnchor = (Array.isArray(doc.keyFiles) ? doc.keyFiles : []).find(
+            (anchor) => typeof anchor?.path === `string` && !existsSync(join(repoRoot, anchor.path)),
+        );
+        const behind = sourceRev === undefined || gone ? 0 : commitsSince(repoRoot, dir, sourceRev);
+        /* Reasons are ordered by how much they tell the reader, not by how easy they are to compute. A dead
+         * anchor is a document that is already wrong; being commits behind only means it MIGHT be. */
+        const reason = gone
+            ? `the package no longer exists`
+            : deadAnchor !== undefined
+              ? `it points at ${deadAnchor.path}, which no longer exists`
+              : behind > 0
+                ? `${behind} commit${behind === 1 ? `` : `s`} have touched this package since it was documented`
+                : undefined;
+        return {
+            dir,
+            oneLiner: typeof doc.oneLiner === `string` ? doc.oneLiner : ``,
+            component: componentOf(dir),
+            sourceRev: sourceRev ?? ``,
+            stale: reason !== undefined,
+            reason,
+            behind,
+        };
+    });
+
+    const index = {
+        repo,
+        generatedAt: Date.now(),
+        entries,
+        orphans: documented.filter((dir) => !existsSync(join(repoRoot, dir))),
+        undocumented: packages.filter((dir) => dir !== `` && !documented.includes(dir)),
+    };
+    if (write) {
+        mkdirSync(base, { recursive: true });
+        writeFileSync(join(base, `index.json`), canonical(index));
+    }
+    return index;
+};
+
+// ---- cli -----------------------------------------------------------------------------------------------------
+
+const USAGE = `intentic-docs — facts, validation and staleness for generated documentation
+
+  intentic-docs facts     [--root DIR] [--repo DIR]
+  intentic-docs validate  [--root DIR] [--repo DIR] [--from staging|published]
+  intentic-docs check     [--root DIR] [--repo DIR] [--from staging|published] [--write]
+
+  --root  workspace root (default /work)
+  --repo  repository directory relative to the root; omit for the root repo itself
+  --from  which document tree to read: the staged one you are writing, or the published one (default staging)
+  --write check only: rewrite index.json in place. Without it, the index goes to stdout.
+`;
+
+const main = (argv) => {
+    const verb = argv[0];
+    const flag = (name, fallback) => {
+        const at = argv.indexOf(`--${name}`);
+        return at === -1 || argv[at + 1] === undefined ? fallback : argv[at + 1];
+    };
+    const root = flag(`root`, `/work`);
+    const repo = flag(`repo`, ``);
+    const from = flag(`from`, `staging`) === `published` ? `published` : `staging`;
+
+    if (verb === `facts`) {
+        process.stdout.write(canonical(factsOf(root, repo)));
+        return 0;
+    }
+    if (verb === `validate`) {
+        const problems = validateDocs(root, repo, from);
+        if (problems.length === 0) {
+            process.stdout.write(`documents are valid\n`);
+            return 0;
+        }
+        process.stderr.write(`${problems.map((problem) => `- ${problem}`).join(`\n`)}\n`);
+        return 1;
+    }
+    if (verb === `check`) {
+        const index = checkDocs(root, repo, from, argv.includes(`--write`));
+        if (!argv.includes(`--write`)) {
+            process.stdout.write(canonical(index));
+            return 0;
+        }
+        const stale = index.entries.filter((entry) => entry.stale).length;
+        process.stdout.write(`${index.entries.length} documented, ${stale} stale, ${index.undocumented.length} undocumented, ${index.orphans.length} orphaned\n`);
+        return 0;
+    }
+    process.stderr.write(USAGE);
+    return verb === `--help` || verb === `help` ? 0 : 2;
+};
+
+// Only run when executed, so the constants above can be imported by a test that pins them to src/paths.ts.
+const entry = process.argv[1];
+if (entry !== undefined && realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))) {
+    process.exit(main(process.argv.slice(2)));
+}

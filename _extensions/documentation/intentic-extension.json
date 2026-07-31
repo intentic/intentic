@@ -1,0 +1,32 @@
+{
+    "publisher": "intentic",
+    "name": "documentation",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.4.0" },
+    "permissions": {
+        "sandbox": [
+            "GET /workspace/children",
+            "GET /workspace/file",
+            "POST /workspace/upload",
+            "DELETE /workspace/entry",
+            "GET /panels",
+            "POST /agent",
+            "POST /agent/stop",
+            "GET /agents",
+            "GET /git/*/status",
+            "PUT /git/*/file",
+            "POST /git/*/stage",
+            "POST /git/*/commit"
+        ]
+    },
+    "contributes": {
+        "views": [
+            { "id": "documentation", "label": "Documentation", "surface": "rail", "badge": true },
+            { "id": "documentation-repo", "label": "Docs", "surface": "directory" }
+        ],
+        "files": [{ "path": ".intentic/docs/", "invalidates": ["documentation", "documentation-runs"] }],
+        "commands": [{ "command": "documentation.generate", "title": "Generate documentation" }],
+        "bin": "bin",
+        "agent": { "path": "plugin" }
+    }
+}

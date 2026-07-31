@@ -1,0 +1,8 @@
+{
+    "name": "documentation",
+    "description": "Teach a coding agent this workspace's documentation conventions: where architecture documents live, the plain-language house style, the inline figure fences, and — the part that keeps documentation true — updating a package's document in the same commit as the change that invalidated it. Ships the `documenting` skill; the `intentic-docs` CLI arrives on PATH from the same extension.",
+    "version": "1.0.0",
+    "author": { "name": "intentic" },
+    "homepage": "https://gitlab.com/radarsu/intentic",
+    "repository": "https://gitlab.com/radarsu/intentic"
+}

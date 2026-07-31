@@ -2,6 +2,7 @@
 // (_apps/web/scripts/generate-ext-shims.mjs) and hostModules' dev-time coverage assertion. Update alongside
 // src/index.ts; the assertion catches drift on the next dev boot.
 export const extensionUiNames = [
+    "BarChart",
     "BottomSheet",
     "Button",
     "Card",
@@ -15,6 +16,7 @@ export const extensionUiNames = [
     "InfoHint",
     "InputText",
     "Markdown",
+    "MarkdownFigure",
     "Page",
     "PageHeader",
     "Popover",
@@ -22,6 +24,7 @@ export const extensionUiNames = [
     "RowGroup",
     "Segmented",
     "Select",
+    "StatRow",
     "StatusBadge",
     "StepSection",
     "ToggleSwitch",

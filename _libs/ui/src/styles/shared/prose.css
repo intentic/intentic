@@ -44,6 +44,19 @@
     margin-bottom: 0;
 }
 
+/* A document containing FIGURES renders as alternating prose runs (`.md-run`) and figure components rather than
+   as one v-html blob, because a figure is a component and there is nowhere in an HTML string to put one. That
+   puts one level between the container and its prose, so the edge-collapse above has to reach through it —
+   otherwise a document with a figure gains a stray leading margin the same document without one does not have.
+   Only the document's own first/last block collapses; a run that merely follows a figure keeps its top margin,
+   which is what separates it from the figure. */
+.md-prose > .md-run:first-child > :first-child {
+    margin-top: 0;
+}
+.md-prose > .md-run:last-child > :last-child {
+    margin-bottom: 0;
+}
+
 .md-prose p,
 .md-prose ul,
 .md-prose ol,

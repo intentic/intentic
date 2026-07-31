@@ -7,6 +7,22 @@
 
 export { type CodeBlock, codeBlockHtml, copyCodeFromEvent, escapeHtml } from "./code.js";
 export {
+    type BarsFigure,
+    type BarsFigureItem,
+    type DagFigure,
+    type DagFigureEdge,
+    type DagFigureNode,
+    type Figure,
+    FIGURE_ACCENTS,
+    type FigureAccent,
+    FIGURE_LANGS,
+    type MarkdownSegment,
+    parseFigure,
+    splitFigureSegments,
+    type StatsFigure,
+    type StatsFigureItem,
+} from "./figures.js";
+export {
     createStreamingMarkdown,
     type MarkdownDecorator,
     markdownParseCount,

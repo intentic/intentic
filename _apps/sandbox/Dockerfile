@@ -289,9 +289,18 @@ RUN cd /opt/extensions/discord/node_modules/.pnpm/@discordjs+opus@*/node_modules
     && rm -rf prebuild build-tmp-napi-v3 \
     && npm run install
 COPY --from=trees extensions/imap /opt/extensions/imap
+# documentation is a UI extension with daemon-side contributions, so it sits between the two groups: its views are
+# compiled into the web bundle like the manifest-only ones below, but `contributes.bin` (the intentic-docs CLI the
+# agent runs) and `contributes.agent` (the documenting skill) are read from the image, so those two directories have
+# to be here or the CLI never reaches the agent's PATH and the skill never loads. Straight from context rather than
+# the trees stage: both are dependency-free — plain ESM and markdown — so there is no node_modules to deploy. `src/`
+# is deliberately not copied; that is the web bundle's half.
+COPY _extensions/documentation/intentic-extension.json /opt/extensions/documentation/
+COPY _extensions/documentation/bin /opt/extensions/documentation/bin
+COPY _extensions/documentation/plugin /opt/extensions/documentation/plugin
 # The web-builtin UI extensions bake their MANIFEST ONLY — their code is compiled into the web bundle
 # (extension-host/builtins.ts), so there is nothing daemon-side to ship. The manifest is what makes them exist
-# for the daemon: `GET /extensions` then enumerates all twelve first-party extensions through one enumerator,
+# for the daemon: `GET /extensions` then enumerates all thirteen first-party extensions through one enumerator,
 # so the Extensions tab is a complete list with a working on/off switch instead of a view of one load path.
 # The pairing is checked both ways — a manifest here with no compiled-in module shows as "missing" in the tab
 # (image and web bundle built from different commits), and a module with no manifest shows as "unlisted".

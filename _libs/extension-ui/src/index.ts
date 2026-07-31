@@ -7,6 +7,7 @@
  * Publishing a typed npm artifact for out-of-repo authors is a marketplace-phase task. */
 
 export {
+    BarChart,
     BottomSheet,
     Card,
     cmp,
@@ -20,11 +21,13 @@ export {
     type IconName,
     InfoHint,
     Markdown,
+    MarkdownFigure,
     Page,
     PageHeader,
     ProgressRing,
     RowGroup,
     Segmented,
+    StatRow,
     StatusBadge,
     type StatusVariant,
     StepSection,
@@ -32,6 +35,21 @@ export {
     useDevice,
     useTheme,
 } from "@intentic-app/ui";
+/* The figure vocabulary that <Markdown> renders from prose and <MarkdownFigure> renders from data. Types only —
+ * an extension needs them to BUILD a figure out of facts it already holds (a dependency graph, a staleness
+ * tally) rather than round-tripping through markdown to draw one. The parser and the document splitter stay out
+ * of the kit: they are the prose surface's job, and <Markdown> already does it. */
+export type {
+    BarsFigure,
+    BarsFigureItem,
+    DagFigure,
+    DagFigureEdge,
+    DagFigureNode,
+    Figure,
+    FigureAccent,
+    StatsFigure,
+    StatsFigureItem,
+} from "@intentic-app/ui/markdown";
 export { default as Button } from "primevue/button";
 export { default as Checkbox } from "primevue/checkbox";
 export { default as ContextMenu } from "primevue/contextmenu";

@@ -25,6 +25,7 @@ Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/*
 | `activity` | UI view | The agent activity feed. |
 | `repo-apps` | UI view | Per-repo apps: preview URLs, add/start/stop, vitest. |
 | `automations` | UI view | Cron / webhook / listener automations. |
+| `documentation` | UI view + agent CLI + plugin | Plain-language architecture docs for every repo and package: a map-first agent run writes them as a reviewable draft, the owner publishes them into the repo. Ships the `intentic-docs` CLI (`contributes.bin`) and the `documenting` skill (`contributes.agent`). |
 | `logs` | UI view | Workspace log tail. |
 | `memory` | UI view | The agent's persistent memory notes: review, edit, delete. |
 | `pipelines` | UI view | CI runs: status, rerun/cancel, agent-driven fixes. |
