@@ -49,7 +49,7 @@ this page.
 
 One page, one continuous scroll. Section ids in parens; copy per section in `landing.ts`.
 
-1. **Hero (`#hero`)** — the thesis in one line ("The IDE you share with your agents.") + the subhead
+1. **Hero (`#hero`)** — the thesis in one line ("An IDE for your agents. A window for you.") + the subhead
    that carries the argument ("Everyone else lets you edit the prompt…") + CTAs + chips, with a visual
    of a specialized agent as a *configured worker*, not a chat window. States the one thing sold.
    (P1, P2)

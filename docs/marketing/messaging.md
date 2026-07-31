@@ -61,10 +61,11 @@ Retired framing (do not bring back): "Your coding agent. Out of the terminal.", 
 intent." as the definition, "An AI-native workspace for infra, data, apps, and code…", "Specialized
 agents that own their workspace", and **"A specialized agent is more than a prompt."** as the
 headline — it argued against a strawman nobody's pain matches, restated the contrast band 1500px
-early, and filed us with prompt-builders instead of Cursor/Codespaces/Devin. "specialized agent"
-survives as *mechanism* vocabulary (see the glossary); it is no longer the headline claim. The brand
-tagline is now "A shared IDE for you and your agents" (org metadata,
-`_libs/site-content/src/site.ts`), rendered as the hero `The IDE you share / with your agents.`
+early, and filed us with prompt-builders instead of Cursor/Codespaces/Devin, and **"The IDE you
+share with your agents."** / "A shared IDE for you and your agents" as the tagline. "specialized
+agent" survives as *mechanism* vocabulary (see the glossary); it is no longer the headline claim.
+The brand tagline is now "An IDE for your agents. A window for you." (org metadata,
+`_libs/site-content/src/site.ts`), rendered as the hero `An IDE for your agents. / A window for you.`
 
 ## Section order
 
@@ -165,7 +166,7 @@ team sharing). Do not reintroduce a pricing section.
 - The landing is a single page — its title/description are **not** per-variant. Fallback
   (`_libs/site-content/src/page-meta.ts`): `intentic — Specialized agents that own their workspace`.
 - Org description (`_libs/site-content/src/site.ts`, JSON-LD) — the canonical product sentence; keep
-  the site and these docs in sync with it verbatim: `A shared IDE for you and your agents. intentic
+  the site and these docs in sync with it verbatim: `An IDE for your agents. A window for you. intentic
   gives each coding agent — Claude Code, Codex, or Grok — its own sandbox on hardware you own: the
   dev-tools its job needs really installed, wired to your systems, its context curated for one job —
   and every layer of that environment visible and yours to change. Run one, or ten in parallel. Free

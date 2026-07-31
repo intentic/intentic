@@ -107,12 +107,12 @@ export interface LandingContent {
 // (Pro = many), and automations.
 export const landingContent: LandingContent = {
     meta: {
-        title: "intentic — A shared IDE for you and your agents",
+        title: "intentic — An IDE for your agents. A window for you.",
         description:
-            "A shared IDE for you and your agents. Every agent gets its own sandbox on hardware you own — its dev-tools really installed, wired to your systems, its context curated for one job — and you can see and change every layer of it. Works with Claude Code, Codex, Grok, Kimi Code, and Gemini. Free to start.",
+            "An IDE for your agents. A window for you. Every agent gets its own sandbox on hardware you own — its dev-tools really installed, wired to your systems, its context curated for one job — and you can see and change every layer of it. Works with Claude Code, Codex, Grok, Kimi Code, and Gemini. Free to start.",
     },
     hero: {
-        headlineLines: ["The IDE you share", "with your agents."],
+        headlineLines: ["An IDE for your agents.", "A window for you."],
         subhead:
             "Everyone else lets you edit the prompt. intentic lets you see and change the whole environment your agents work in — the dev-tools really installed, the systems they can reach, the context they load every turn. Run one, or ten in parallel, on hardware you own.",
         chips: ["Free plan", "Bring your own agent", "Runs on your hardware"],

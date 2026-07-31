@@ -1,6 +1,6 @@
 # intentic
 
-**A shared IDE for you and your agents.** One workspace, two kinds of operator. intentic turns a generic coding assistant into a *specialized agent* — an autonomous employee with its own sandbox on hardware you own: its dev-tools really installed, wired to the systems it operates, its context curated for one job. Everywhere else the prompt is the only layer you can change; here every layer of that environment is visible and yours to edit. Run one, or ten in parallel, from any browser. Works with Claude Code, Codex, Grok, Kimi Code, and Gemini, on your own subscription.
+**An IDE for your agents. A window for you.** One workspace, two kinds of operator. intentic turns a generic coding assistant into a *specialized agent* — an autonomous employee with its own sandbox on hardware you own: its dev-tools really installed, wired to the systems it operates, its context curated for one job. Everywhere else the prompt is the only layer you can change; here every layer of that environment is visible and yours to edit. Run one, or ten in parallel, from any browser. Works with Claude Code, Codex, Grok, Kimi Code, and Gemini, on your own subscription.
 
 ## Co-piloted, not fire-and-forget
 
