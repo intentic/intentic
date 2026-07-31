@@ -1,0 +1,16 @@
+{
+  "dir": "_libs/site-content",
+  "keyFiles": [
+    {
+      "path": "_libs/site-content/src/landing.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic-dev/site-content",
+  "oneLiner": "The website's words and page structure, as data.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "85b09b24aa9db32e05c2d30c18ca2d62b1d89bfa"
+  }
+}

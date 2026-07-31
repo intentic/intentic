@@ -1,0 +1,16 @@
+{
+  "dir": "_tools/localhost-https",
+  "keyFiles": [
+    {
+      "path": "_tools/localhost-https/package.json",
+      "what": "What this package is and how it is built."
+    }
+  ],
+  "name": "@intentic-app/localhost-https",
+  "oneLiner": "Local HTTPS certificates for development.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "13530c21c2e95d3ac43e474047485cf032fcf571"
+  }
+}

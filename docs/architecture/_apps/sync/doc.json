@@ -1,0 +1,16 @@
+{
+  "dir": "_apps/sync",
+  "keyFiles": [
+    {
+      "path": "_apps/sync/src/commands.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic/sync",
+  "oneLiner": "Keeps a folder on your computer in step with the sandbox.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "9351dd9b346041edd7b1c4e34ae5218fd5d356f8"
+  }
+}

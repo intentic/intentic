@@ -4,7 +4,19 @@ import { computed, type ComputedRef, type Ref } from "vue";
 import { mapBrief, packageBrief } from "./brief.js";
 import { componentOfPackage, parseRepoDoc, type RepoDoc } from "./docModel.js";
 import { host } from "./host.js";
-import { conversationIdOf, mapConversationId, REPO_DOC_TAIL, RUNS_DIR, runIdAt, runManifestPath, runPrefix, SCAN_RUNS, slugOf, stagingPath } from "./paths.js";
+import {
+    ANY_RUN_PREFIX,
+    conversationIdOf,
+    mapConversationId,
+    REPO_DOC_TAIL,
+    RUNS_DIR,
+    runIdAt,
+    runManifestPath,
+    runPrefix,
+    SCAN_RUNS,
+    slugOf,
+    stagingPath,
+} from "./paths.js";
 import { documentedDirs, listStagedTails } from "./stagedTree.js";
 
 /* GENERATION — map first, then one agent per package.
@@ -131,7 +143,20 @@ export function useRuns(repo: Ref<string>) {
     const agentsQuery = useQuery({
         queryKey: agentsKey,
         enabled: computed(() => api.sandbox.reachable()),
-        refetchInterval: () => (live.value ? POLL_MS : false),
+        /* Liveness comes from THIS QUERY'S OWN DATA, never from a computed defined below it.
+         *
+         * vue-query resolves `refetchInterval` synchronously while `useQuery` builds its observer, so a callback
+         * reading a `const` declared later in this function reads it inside its temporal dead zone and throws
+         * `Cannot access 'live' before initialization` — which is what shipped, because nothing in the suite ever
+         * CALLED this composable: a type-level cycle was broken with annotations while the runtime cycle was left
+         * in place. useRuns.test.ts now executes it for exactly this reason.
+         *
+         * Deriving from `query.state.data` is not a workaround but the honest source: "is any documentation-run
+         * agent still working" is a fact about the agents list, and this query IS the agents list. */
+        refetchInterval: (query) => {
+            const agents = query.state.data ?? [];
+            return agents.some((agent) => agent.id.startsWith(ANY_RUN_PREFIX) && isLive(agent)) ? POLL_MS : false;
+        },
         queryFn: async (): Promise<readonly AgentSummary[]> => {
             const body = await json<unknown>(`/agents`);
             return body === undefined ? [] : AgentsListSchema.parse(body).agents;
@@ -147,10 +172,8 @@ export function useRuns(repo: Ref<string>) {
         queryFn: async () => documentedDirs(await listStagedTails(api, repo.value)),
     });
 
-    /* Explicitly annotated, and `live` below with it. The agents query polls only while a run is live, so its
-     * `refetchInterval` reads `live` → `rows` → its own `data` — a cycle TypeScript cannot infer through even
-     * though it is perfectly well-founded at runtime (the interval is evaluated after the query exists). The
-     * annotations are what break the inference cycle; without them every downstream `row` degrades to `any`. */
+    // Annotated because the inferred type would otherwise walk back through three query results; the annotation
+    // is also what keeps every downstream `row` from degrading to `any`.
     const rows: ComputedRef<readonly RunRow[]> = computed(() => {
         const agents = agentsQuery.data.value ?? [];
         const staged = stagedQuery.data.value ?? [];
@@ -172,8 +195,6 @@ export function useRuns(repo: Ref<string>) {
                 };
             });
     });
-
-    const live: ComputedRef<boolean> = computed(() => rows.value.some((row) => row.running));
 
     /* No provider or model is sent: `POST /agent` defaults them, which means a documentation run uses whatever the
      * owner's other agents use. A picker here would be a second place to configure the same thing, and the first
@@ -259,5 +280,5 @@ export function useRuns(repo: Ref<string>) {
         void queryClient.invalidateQueries({ queryKey: agentsKey.value });
     };
 
-    return { rows, live, isLoading: runsQuery.isLoading, start, advance, stop };
+    return { rows, isLoading: runsQuery.isLoading, start, advance, stop };
 }

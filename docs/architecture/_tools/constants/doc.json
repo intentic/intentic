@@ -1,0 +1,16 @@
+{
+  "dir": "_tools/constants",
+  "keyFiles": [
+    {
+      "path": "_tools/constants/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    }
+  ],
+  "name": "@intentic/constants",
+  "oneLiner": "A handful of values more than one package needs.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "6beb10ae62595d56abcf9326ee09278cb5f30e6c"
+  }
+}

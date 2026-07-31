@@ -1,0 +1,20 @@
+{
+  "dir": "_libs/providers",
+  "keyFiles": [
+    {
+      "path": "_libs/providers/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    },
+    {
+      "path": "_libs/providers/README.md",
+      "what": "The package's own notes and gotchas."
+    }
+  ],
+  "name": "@intentic/providers",
+  "oneLiner": "The code that actually talks to real services.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "4d3ff977270939c9f565a6b6cfea0de5f5649644"
+  }
+}

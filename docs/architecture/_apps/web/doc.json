@@ -1,0 +1,20 @@
+{
+  "dir": "_apps/web",
+  "keyFiles": [
+    {
+      "path": "_apps/web/README.md",
+      "what": "The package's own notes and gotchas."
+    },
+    {
+      "path": "_apps/web/src/composables/chat/conversation.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic-app/web",
+  "oneLiner": "The browser app — the whole editor you see and click.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "6b0114cad65ee0e9868b592fbd626e174dfe55bf"
+  }
+}

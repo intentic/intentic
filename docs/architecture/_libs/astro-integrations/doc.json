@@ -1,0 +1,16 @@
+{
+  "dir": "_libs/astro-integrations",
+  "keyFiles": [
+    {
+      "path": "_libs/astro-integrations/src/indexnow.mjs",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic-dev/astro-integrations",
+  "oneLiner": "Small build-time helpers for the website.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "0505c51af57a5a6a6c915373548164d1ecafa9e3"
+  }
+}

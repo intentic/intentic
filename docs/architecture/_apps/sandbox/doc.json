@@ -1,0 +1,20 @@
+{
+  "dir": "_apps/sandbox",
+  "keyFiles": [
+    {
+      "path": "_apps/sandbox/README.md",
+      "what": "The package's own notes and gotchas."
+    },
+    {
+      "path": "_apps/sandbox/src/agent/agent.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic/sandbox",
+  "oneLiner": "The daemon — the program running inside your project's box.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "4a57e4d504eb2d2341a33fc1c46fc7be2124a844"
+  }
+}

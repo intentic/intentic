@@ -94,8 +94,15 @@ const CONVERSATION_ID_MAX = 64;
 
 // `dg` for "docs generation" — the prefix `GET /agents` is filtered by to join a run to the live fleet, which is
 // why the ids are derived rather than stored.
+/* Exported because THREE things filter on it — one run's agents, any run's agents, and the poll deciding whether
+ * to keep polling — and the id scheme has to live in one place. */
+export const RUN_ID_PREFIX = "dg";
+
+// Every documentation-run conversation, across all runs.
+export const ANY_RUN_PREFIX = `${RUN_ID_PREFIX}-`;
+
 export const conversationIdOf = (runId: string, slug: string): string =>
-    `dg-${runId}-${slug}`.slice(0, CONVERSATION_ID_MAX).replace(/[-_]+$/, ``);
+    `${RUN_ID_PREFIX}-${runId}-${slug}`.slice(0, CONVERSATION_ID_MAX).replace(/[-_]+$/, ``);
 
 // The map phase's own conversation — one per run, before the fan-out. Named so it sorts first and reads as what
 // it is in the fleet board.
@@ -104,4 +111,4 @@ export const mapConversationId = (runId: string): string => conversationIdOf(run
 /* Every conversation belonging to a run starts with this. A run whose scope the MAP decides cannot enumerate its
  * own conversation ids, so joining it to the live fleet is a prefix filter over `GET /agents` — which is the whole
  * reason the ids are derived from the run id instead of being stored anywhere. */
-export const runPrefix = (runId: string): string => `dg-${runId}-`;
+export const runPrefix = (runId: string): string => `${ANY_RUN_PREFIX}${runId}-`;

@@ -1,0 +1,15 @@
+{
+  "dir": "_archive/desktop-tauri/app/src-tauri",
+  "keyFiles": [
+    {
+      "path": "_archive/desktop-tauri/app/src-tauri/core/src/sandbox.rs",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "oneLiner": "Retired: the desktop experiment's Rust shell.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "1968d7bfcfa7fc908f36282c64a3862703b98f10"
+  }
+}

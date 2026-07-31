@@ -1,0 +1,16 @@
+{
+  "dir": "_extensions/discord",
+  "keyFiles": [
+    {
+      "path": "_extensions/discord/src/voice.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic/ext-discord",
+  "oneLiner": "Your Discord server as something the agent can read and post to.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da"
+  }
+}

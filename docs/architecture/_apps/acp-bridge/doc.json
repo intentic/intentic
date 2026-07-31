@@ -1,0 +1,20 @@
+{
+  "dir": "_apps/acp-bridge",
+  "keyFiles": [
+    {
+      "path": "_apps/acp-bridge/README.md",
+      "what": "The package's own notes and gotchas."
+    },
+    {
+      "path": "_apps/acp-bridge/src/bridge.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic/acp-bridge",
+  "oneLiner": "Lets Zed or JetBrains drive the agents in your sandbox.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "7964113d35fd91f2c3dc949af5d3598b40cd3f60"
+  }
+}

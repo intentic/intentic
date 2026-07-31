@@ -1,0 +1,20 @@
+{
+  "dir": "_libs/sandbox-contract",
+  "keyFiles": [
+    {
+      "path": "_libs/sandbox-contract/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    },
+    {
+      "path": "_libs/sandbox-contract/src/schemas.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic/sandbox-contract",
+  "oneLiner": "The rulebook both sides of the wire agree on.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "365510f8085cdac1d209de4cbc3f891bf090bf16"
+  }
+}

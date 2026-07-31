@@ -1,0 +1,16 @@
+{
+  "dir": "_extensions/connectors",
+  "keyFiles": [
+    {
+      "path": "_extensions/connectors/package.json",
+      "what": "What this package is and how it is built."
+    }
+  ],
+  "name": "@intentic/ext-connectors",
+  "oneLiner": "A pile of ready-made tool connections — GitHub, Postgres, Sentry and friends.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "a344e0d284d4542efef83b45b8de15ae1dfa9d67"
+  }
+}

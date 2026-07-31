@@ -1,0 +1,20 @@
+{
+  "dir": "_extensions/automations",
+  "keyFiles": [
+    {
+      "path": "_extensions/automations/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    },
+    {
+      "path": "_extensions/automations/src/CreateAutomationDialog.vue",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic/ext-automations",
+  "oneLiner": "Wakes an agent on a schedule, a webhook, or an incoming message.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "53225eaa44802806ca3b32f065ec25a5b00c8a6d"
+  }
+}

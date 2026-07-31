@@ -1,0 +1,20 @@
+{
+  "dir": "_libs/ui",
+  "keyFiles": [
+    {
+      "path": "_libs/ui/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    },
+    {
+      "path": "_libs/ui/README.md",
+      "what": "The package's own notes and gotchas."
+    }
+  ],
+  "name": "@intentic-app/ui",
+  "oneLiner": "The shared look and feel — buttons, cards, charts, rendered prose.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "6b0114cad65ee0e9868b592fbd626e174dfe55bf"
+  }
+}

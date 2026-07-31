@@ -1,0 +1,20 @@
+{
+  "dir": "_libs/workspace-ignore",
+  "keyFiles": [
+    {
+      "path": "_libs/workspace-ignore/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    },
+    {
+      "path": "_libs/workspace-ignore/src/constants.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic/workspace-ignore",
+  "oneLiner": "What must never be read, indexed or shown.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "7930fb86cef65d22bc4031e7bbe2715b9979c637"
+  }
+}

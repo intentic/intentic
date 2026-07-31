@@ -1,0 +1,20 @@
+{
+  "dir": "_libs/scaffold",
+  "keyFiles": [
+    {
+      "path": "_libs/scaffold/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    },
+    {
+      "path": "_libs/scaffold/src/deploy-config.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic/scaffold",
+  "oneLiner": "Makes the starter files for a new project.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "2278a2446fd0d6e3718e986aacd4827e49c2c5df"
+  }
+}

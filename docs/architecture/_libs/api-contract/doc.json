@@ -1,0 +1,20 @@
+{
+  "dir": "_libs/api-contract",
+  "keyFiles": [
+    {
+      "path": "_libs/api-contract/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    },
+    {
+      "path": "_libs/api-contract/README.md",
+      "what": "The package's own notes and gotchas."
+    }
+  ],
+  "name": "@intentic-app/api-contract",
+  "oneLiner": "The rulebook for talking to that small server.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "c5a768a9312696c375a80f8712637c075de2d6ff"
+  }
+}

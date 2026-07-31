@@ -1,0 +1,20 @@
+{
+  "dir": "_tools/e2e",
+  "keyFiles": [
+    {
+      "path": "_tools/e2e/README.md",
+      "what": "The package's own notes and gotchas."
+    },
+    {
+      "path": "_tools/e2e/global-setup.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic-app/e2e",
+  "oneLiner": "The end-to-end browser test suite.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "b27ae97b06f2805a73ef4f9958e1021e84bf7d83"
+  }
+}

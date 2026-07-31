@@ -56,6 +56,10 @@ It is **not part of the intentic product.** It is one of the many tools a specia
 
 [ARCHITECTURE.md](ARCHITECTURE.md) covers the platform / sandbox / workspace split, the ownership and trust model, the extension system, the agent-facing tooling (iq/lsp), and the bundled deployment engine.
 
+For the shorter, picture-led version — one page per package, mostly diagrams and charts — read
+**[docs/architecture/repo.md](docs/architecture/repo.md)**, or open the **Documentation** tile in the app, which
+renders the same files and flags any page whose code has moved on since it was written.
+
 ## License
 
 MIT

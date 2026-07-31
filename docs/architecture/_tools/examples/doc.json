@@ -1,0 +1,16 @@
+{
+  "dir": "_tools/examples",
+  "keyFiles": [
+    {
+      "path": "_tools/examples/deploy.config.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic/examples",
+  "oneLiner": "Example deployment configs.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "f38cee0a83a85ded1cd75ce4e5fda2d71c6e00af"
+  }
+}

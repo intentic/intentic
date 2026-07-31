@@ -1,0 +1,20 @@
+{
+  "dir": "_libs/state-resolver",
+  "keyFiles": [
+    {
+      "path": "_libs/state-resolver/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    },
+    {
+      "path": "_libs/state-resolver/README.md",
+      "what": "The package's own notes and gotchas."
+    }
+  ],
+  "name": "@intentic/state-resolver",
+  "oneLiner": "Turns needs into a concrete desired state.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "f38cee0a83a85ded1cd75ce4e5fda2d71c6e00af"
+  }
+}

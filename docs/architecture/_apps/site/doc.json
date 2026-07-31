@@ -1,0 +1,16 @@
+{
+  "dir": "_apps/site",
+  "keyFiles": [
+    {
+      "path": "_apps/site/astro.config.mjs",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic-dev/site",
+  "oneLiner": "The public marketing website.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "defafa2da5351076f1c55bf4bd4ab15ed3fdd4f5"
+  }
+}

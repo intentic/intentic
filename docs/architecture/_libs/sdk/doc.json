@@ -1,0 +1,20 @@
+{
+  "dir": "_libs/sdk",
+  "keyFiles": [
+    {
+      "path": "_libs/sdk/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    },
+    {
+      "path": "_libs/sdk/README.md",
+      "what": "The package's own notes and gotchas."
+    }
+  ],
+  "name": "@intentic/sdk",
+  "oneLiner": "The friendly way to write down what you want.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "0cacaa7653464fce9d0205fd59f8e1e5383056c8"
+  }
+}

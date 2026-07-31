@@ -1,0 +1,20 @@
+{
+  "dir": "_libs/workspace-setup",
+  "keyFiles": [
+    {
+      "path": "_libs/workspace-setup/src/index.ts",
+      "what": "The entry point — what this package hands to everyone else."
+    },
+    {
+      "path": "_libs/workspace-setup/vitest.config.ts",
+      "what": "The largest file here — usually where the real work happens."
+    }
+  ],
+  "name": "@intentic/workspace-setup",
+  "oneLiner": "Guesses which package manager a dropped project needs.",
+  "provenance": {
+    "generatedAt": 1785535377531,
+    "model": "claude-opus-4-6",
+    "sourceRev": "525ed012d2fc8d0a5a6197eac608e2fb8a959b7a"
+  }
+}
