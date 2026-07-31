@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { linuxDesktopEntry, macPlistXml, windowsTaskArgs } from "./autostart.js";
+import { linuxDesktopEntry, macPlistXml, windowsRunAddArgs, windowsRunDeleteArgs } from "./autostart.js";
 import type { CliLauncher } from "./mirror.js";
 
 // The three OS autostart entries are string/argv builders (the side-effecting register/unregister spawn the OS
@@ -44,21 +44,36 @@ describe("linuxDesktopEntry", () => {
     });
 });
 
-describe("windowsTaskArgs", () => {
-    it("creates a forced ONLOGON task whose action runs the launcher with `mirror --watch`", () => {
-        expect(windowsTaskArgs(NODE)).toEqual([
-            "/Create",
-            "/TN",
+// Windows registers through the CURRENT USER's Run key — the same mechanism Mutagen's `daemon register` uses,
+// and the reason it kept succeeding where our schtasks call could not: `/SC ONLOGON` triggers for any user on
+// the machine (elevation), and schtasks always wants a password it has no stdin to read.
+const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+
+describe("windowsRunAddArgs", () => {
+    it("writes a forced per-user Run value that starts the watcher with the launcher it was handed", () => {
+        expect(windowsRunAddArgs(NODE)).toEqual([
+            "add",
+            RUN_KEY,
+            "/v",
             "IntenticSyncMirror",
-            "/SC",
-            "ONLOGON",
-            "/F",
-            "/TR",
-            '"/usr/bin/node" "/opt/intentic/sync/dist/cli.js" "mirror" "--watch"',
+            "/t",
+            "REG_SZ",
+            "/d",
+            '"/usr/bin/node" "/opt/intentic/sync/dist/cli.js" "mirror"',
+            "/f",
         ]);
     });
 
     it("registers a compiled binary with the command directly", () => {
-        expect(windowsTaskArgs(BINARY).at(-1)).toBe('"/home/dev/.intentic/sync/bin/intentic-sync" "mirror" "--watch"');
+        expect(windowsRunAddArgs(BINARY).at(-2)).toBe('"/home/dev/.intentic/sync/bin/intentic-sync" "mirror"');
+    });
+
+    it("never registers the foreground loop — Explorer would leave its console window on screen all session", () => {
+        expect(windowsRunAddArgs(BINARY).join(" ")).not.toContain("--watch");
+    });
+
+    it("deletes exactly the value it adds, or uninstall leaves mirroring resurrecting at every login", () => {
+        const added = windowsRunAddArgs(BINARY);
+        expect(windowsRunDeleteArgs()).toEqual(["delete", added[1], "/v", added[3], "/f"]);
     });
 });

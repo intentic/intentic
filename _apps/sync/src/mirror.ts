@@ -246,6 +246,9 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
 // Start the watcher detached so it outlives the terminal that launched it, its stdout appended to mirror.log.
 // Idempotent: a live watcher already covers this machine, so a second start is a no-op (the single-holder
 // invariant means one watcher is always enough). `launcher` is how to re-invoke this CLI (see cliLauncher).
+// windowsHide keeps a detached child from getting a console window of its own — this is what the login
+// autostart runs (autostart.ts registers `mirror`, which lands here), and the watcher never exits, so without
+// it every Windows login would leave a black console parked on the desktop until shutdown.
 export const startMirrorWatcher = async (launcher: CliLauncher, log: Log): Promise<void> => {
     const existing = await readLiveWatcherPid();
     if (existing !== undefined) {
@@ -254,7 +257,7 @@ export const startMirrorWatcher = async (launcher: CliLauncher, log: Log): Promi
     }
     const logFd = openSync(mirrorLogPath, "a");
     const [command, ...leading] = launcher;
-    const child = spawn(command, [...leading, "mirror", "--watch"], { detached: true, stdio: ["ignore", logFd, logFd] });
+    const child = spawn(command, [...leading, "mirror", "--watch"], { detached: true, windowsHide: true, stdio: ["ignore", logFd, logFd] });
     child.unref();
     log(`mirroring the sandbox's workspace ports onto localhost (pid ${child.pid}). Details: ${mirrorLogPath}`);
 };

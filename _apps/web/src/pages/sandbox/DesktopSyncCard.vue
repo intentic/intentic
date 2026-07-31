@@ -237,8 +237,8 @@ onUnmounted(stop);
                         <li>The sync agent, Mutagen, and cloudflared under <span class="font-mono">~/.intentic/sync</span>.</li>
                         <li>An SSH key for the sandbox tunnel, plus one include line in <span class="font-mono">~/.ssh/config</span>.</li>
                         <li>
-                            A background port-mirror watcher, registered to resume at login (launchd / Task Scheduler / XDG autostart) so localhost
-                            ports survive reboots.
+                            A background port-mirror watcher, registered to resume at login (launchd / the Windows Run key / XDG autostart) so
+                            localhost ports survive reboots.
                         </li>
                         <li>
                             <span class="font-mono text-content">intentic-sync uninstall</span> removes all of it; disabling sync here also makes the
