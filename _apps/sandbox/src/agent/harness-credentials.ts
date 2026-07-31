@@ -1,6 +1,7 @@
 import { type AgentProvider, type KeyedProvider, NATIVE_PROVIDERS, type NativeProvider, PROVIDER_VENDOR } from "@intentic/sandbox-contract";
 import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
+import { accountWithHeadroom } from "../usage/account-usage.js";
 
 /* WHAT AUTHENTICATES A CLAUDE CODE HARNESS TURN, per provider — the one question every caller of that harness
  * has to answer before it can spawn anything, and there is now more than one caller: the chat's own turn route
@@ -238,7 +239,15 @@ export const resolveHarnessCredentials = async (
             },
         };
     }
-    const accountId = input.account ?? (await services.claudeStore.list())[0]?.id;
+    // An unnamed account is chosen by HEADROOM, not by connection order — see accountWithHeadroom. The order
+    // handed over is the store's own (connectedAt), which stays the tiebreak between equals, so a sandbox whose
+    // accounts all read the same still behaves exactly as it did.
+    const accountId =
+        input.account ??
+        (await accountWithHeadroom(
+            services.accountUsage,
+            (await services.claudeStore.list()).map((account) => account.id),
+        ));
     // A refresh that fails joins the other refusals rather than throwing past the caller: a stored account whose
     // token can no longer be renewed is the same class of problem as one that was never connected, and both end
     // at the same place on the surface. Reported with the store's own message, which says which of the several

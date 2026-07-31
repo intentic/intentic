@@ -54,6 +54,42 @@ export const accountLimitReset = async (store: AccountUsageStore, account: strin
     )?.resetsAt;
 };
 
+/* WHICH ACCOUNT TO RUN ON when the caller named none — a turn the user started without picking, and every
+ * helper, none of which ever names one.
+ *
+ * The rule this replaces was `list()[0]`: the oldest-connected account, permanently, whatever its allowance.
+ * That is fine while a sandbox has one account and silently wrong the moment it has several, because the pick
+ * never moves — so a single capped account absorbs every unattributed call there will ever be. Found by the
+ * session namer, which had never once written a title: its quick-model call went to the same spent account on
+ * every turn while two others sat with room, and the CLI answered 429 each time.
+ *
+ * Three tiers, because "no reading" and "a reading of 100%" are different facts and ordering them together
+ * would lose the distinction that matters:
+ *   0  measured with room     — proven to have headroom, best first
+ *   1  never measured         — no evidence either way. Below a proven-good account rather than above it: an
+ *                              account no turn has run on is exactly how one goes spent without anyone seeing,
+ *                              which is the state this was found in.
+ *   2  measured at the cap    — known spent, and the only tier that is worse than knowing nothing.
+ * Ties keep the caller's order, which is connectedAt, so the pick stays stable rather than flapping between
+ * equals turn to turn and fragmenting attribution across accounts. */
+export const accountWithHeadroom = async (store: AccountUsageStore, accounts: readonly string[]): Promise<string | undefined> => {
+    const [first] = accounts;
+    if (first === undefined || accounts.length === 1) {
+        return first;
+    }
+    // `read()` has already dropped every window the provider has since reset, so what is left is what the plan
+    // still counts against this account.
+    const usage = await store.read();
+    const ranked = accounts.map((account, order) => {
+        const windows = usage[account]?.windows ?? [];
+        const spent = windows.reduce((worst, window) => Math.max(worst, window.utilization), 0);
+        return { account, order, tier: windows.length === 0 ? 1 : spent >= 100 ? 2 : 0, spent };
+    });
+    return ranked.reduce((best, next) =>
+        next.tier !== best.tier ? (next.tier < best.tier ? next : best) : next.spent < best.spent ? next : best,
+    ).account;
+};
+
 export const fileAccountUsageStore = (path: string): AccountUsageStore => {
     /* The FILE is the authority, not an in-memory record it echoes. This used to load once and answer every
      * read from that copy, which was defensible while the daemon was the only writer — but the two writers

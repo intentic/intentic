@@ -39,6 +39,12 @@ import { isFailureSentence } from "./failure-sentences.js";
  * way. Errors propagate: every caller here is a click that can report its own failure, and swallowing a
  * credential problem into an empty string would make it look like the model had nothing to say. */
 
+/* How long a helper will wait out a retry that is NOT a spent allowance — a connection blip, a 500, a momentary
+ * overload, all of which the CLI clears in well under this. Long enough that an ordinary hiccup still produces
+ * an answer, short enough that no caller here is ever left holding a process: every one of them is a one-liner
+ * whose value is that it appeared while the user was still looking at the thing it names. */
+const MAX_RETRY_WAIT_MS = 15_000;
+
 export const runOneShot = async (params: {
     readonly prompt: string;
     // The tree the model runs in. Nothing is read from it (no tools), but the SDK spawns the CLI there and a
@@ -80,6 +86,30 @@ export const runOneShot = async (params: {
     const session = query({ prompt: params.prompt, options });
     try {
         for await (const message of session) {
+            /* A RETRY THIS CALLER WILL NEVER OUTLIVE. The CLI's retry budget is deliberately enormous
+             * (CLAUDE_CODE_RETRY_WATCHDOG, 300 attempts) because a TURN should ride out a rate limit: the user
+             * asked for it, is watching it, and would rather wait than lose the work. A helper is the opposite
+             * on every count — nobody is watching, nothing is lost by failing, and the answer is worthless by
+             * the time it arrives.
+             *
+             * Left unhandled, the loop below simply skips these frames and waits. Measured against a spent
+             * allowance, the CLI answers 429 and schedules the next attempt for the window's remaining
+             * lifetime — `retry_delay_ms: 21_600_000`, six hours — so `for await` never yields a result, the
+             * caller's promise never settles, and the CLI process stays resident. One per call, until the
+             * daemon restarts: 14 were alive when this was found, and not one title had ever been written.
+             *
+             * So the same distinction agent.ts draws for a live turn, drawn one notch tighter: a spent
+             * allowance is terminal here rather than something to park on, and any other retry is ridden out
+             * only while it stays within a helper's patience. The message is the provider's own sentence, which
+             * failure-sentences.ts already teaches every caller to recognise and refuse as data. */
+            if (message.type === `system` && message.subtype === `api_retry`) {
+                if (message.error === `rate_limit`) {
+                    throw new Error(`Claude usage limit reached — this account's allowance is exhausted. Try again once it resets.`);
+                }
+                if (message.retry_delay_ms > MAX_RETRY_WAIT_MS) {
+                    throw new Error(`the model did not answer (retry deferred ${Math.round(message.retry_delay_ms / 1000)}s)`);
+                }
+            }
             if (message.type !== `result`) {
                 continue;
             }

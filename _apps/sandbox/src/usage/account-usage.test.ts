@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { accountLimitReset, fileAccountUsageStore } from "./account-usage.js";
+import { accountLimitReset, accountWithHeadroom, fileAccountUsageStore } from "./account-usage.js";
 
 // A store over a fresh temp path whose parent dir doesn't exist yet — the store must create it on write.
 const tempStore = () => {
@@ -96,4 +96,67 @@ test("accountLimitReset answers with the fullest pool's reset — the one that r
     expect(await accountLimitReset(store, "acct-1")).toBe(inAnHour() + 900);
     expect(await accountLimitReset(store, "acct-unknown")).toBeUndefined();
     expect(await accountLimitReset(store, undefined)).toBeUndefined();
+});
+
+/* WHICH ACCOUNT AN UNNAMED CALLER RUNS ON. The rule this replaced was "the oldest-connected one, forever",
+ * which is how one spent account came to absorb every helper call in the sandbox while two others sat with
+ * room — and why no session title had ever been written. */
+
+test("prefers the account with the most room left", async () => {
+    const { store } = tempStore();
+    await store.record("busy", { measuredAt: Date.now(), windows: [window({ utilization: 92 })] });
+    await store.record("free", { measuredAt: Date.now(), windows: [window({ utilization: 18 })] });
+    expect(await accountWithHeadroom(store, ["busy", "free"])).toBe("free");
+});
+
+test("reads an account at its WORST pool, not its kindest", async () => {
+    // Five-hour room is no use to a turn its weekly window will refuse.
+    const { store } = tempStore();
+    await store.record("weekly-spent", {
+        measuredAt: Date.now(),
+        windows: [window({ utilization: 4 }), window({ kind: "seven_day", utilization: 100 })],
+    });
+    await store.record("steady", { measuredAt: Date.now(), windows: [window({ utilization: 60 })] });
+    expect(await accountWithHeadroom(store, ["weekly-spent", "steady"])).toBe("steady");
+});
+
+test("ranks a never-measured account below a proven one, and a spent one below that", async () => {
+    /* The three tiers, in the order that matters. An account nothing has measured is exactly how one goes spent
+     * unnoticed — it is listed first by connectedAt and never appears in the usage file at all — so it must not
+     * outrank an account known to have room. It must still beat one known to be at the cap. */
+    const { store } = tempStore();
+    await store.record("proven", { measuredAt: Date.now(), windows: [window({ utilization: 70 })] });
+    await store.record("capped", { measuredAt: Date.now(), windows: [window({ utilization: 100 })] });
+    expect(await accountWithHeadroom(store, ["unmeasured", "proven", "capped"])).toBe("proven");
+    expect(await accountWithHeadroom(store, ["capped", "unmeasured"])).toBe("unmeasured");
+});
+
+test("keeps the caller's order between equals, so the pick does not flap", async () => {
+    // Ties resolve to connectedAt — the order the store hands over — rather than rotating between accounts and
+    // fragmenting attribution across them.
+    const { store } = tempStore();
+    await store.record("first", { measuredAt: Date.now(), windows: [window({ utilization: 50 })] });
+    await store.record("second", { measuredAt: Date.now(), windows: [window({ utilization: 50 })] });
+    expect(await accountWithHeadroom(store, ["first", "second"])).toBe("first");
+    expect(await accountWithHeadroom(store, ["second", "first"])).toBe("second");
+});
+
+test("a window the provider has already reset stops counting against an account", async () => {
+    /* read() drops expired windows, and an account left with none is absent rather than measured-and-empty — so
+     * a stale 100% no longer benches its account: it leaves the capped tier and reads as unmeasured, which is
+     * enough to be picked ahead of one still at its cap. It does NOT leapfrog an account proven to have room,
+     * because "reset, therefore free" and "never measured" arrive here as the same fact and only one of them is
+     * safe to bet on. */
+    const { store } = tempStore();
+    await store.record("reset", { measuredAt: Date.now(), windows: [window({ utilization: 100, resetsAt: 1 })] });
+    await store.record("capped", { measuredAt: Date.now(), windows: [window({ utilization: 100 })] });
+    await store.record("proven", { measuredAt: Date.now(), windows: [window({ utilization: 80 })] });
+    expect(await accountWithHeadroom(store, ["capped", "reset"])).toBe("reset");
+    expect(await accountWithHeadroom(store, ["reset", "proven"])).toBe("proven");
+});
+
+test("one account, or none, needs no reading at all", async () => {
+    const { store } = tempStore();
+    expect(await accountWithHeadroom(store, ["only"])).toBe("only");
+    expect(await accountWithHeadroom(store, [])).toBeUndefined();
 });

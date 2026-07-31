@@ -51,3 +51,38 @@ test("a non-success subtype names the subtype it failed with", async () => {
     );
     await expect(ask()).rejects.toThrow("the model did not answer (error_during_execution)");
 });
+
+/* THE RETRY THAT NEVER ENDS. The CLI's retry budget is sized for a TURN riding out a rate limit — 300 attempts,
+ * and on a spent allowance a delay set to the closed window's remaining lifetime. A helper skipping those frames
+ * waits the whole six hours: measured on a live sandbox, 14 CLI processes were resident, the oldest an hour old,
+ * and not one session title had ever been written. Both tests below hang forever against the old loop. */
+
+// A retry that yields no result afterwards — exactly what the CLI does while it waits out the window.
+const retrying = (retry: { readonly error: string; readonly retry_delay_ms: number }): void => {
+    query.mockReturnValue(
+        (async function* () {
+            yield { type: "system", subtype: "api_retry", attempt: 1, max_retries: 300, error_status: 429, ...retry };
+            await new Promise(() => {});
+        })(),
+    );
+};
+
+test("a spent allowance is terminal for a helper, not something to wait out", async () => {
+    retrying({ error: "rate_limit", retry_delay_ms: 21_600_000 });
+    await expect(ask()).rejects.toThrow("Claude usage limit reached");
+});
+
+test("an ordinary retry is ridden out only while it stays within a helper's patience", async () => {
+    retrying({ error: "unknown", retry_delay_ms: 60_000 });
+    await expect(ask()).rejects.toThrow("the model did not answer (retry deferred 60s)");
+});
+
+test("a brief retry is still worth waiting for — the answer after it is the answer", async () => {
+    query.mockReturnValue(
+        (async function* () {
+            yield { type: "system", subtype: "api_retry", attempt: 1, max_retries: 300, error_status: null, error: "unknown", retry_delay_ms: 561 };
+            yield { type: "result", subtype: "success", is_error: false, result: "Sandbox freezes · fix" };
+        })(),
+    );
+    await expect(ask()).resolves.toBe("Sandbox freezes · fix");
+});
