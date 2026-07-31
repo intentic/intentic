@@ -8,6 +8,7 @@ import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useAsyncAction } from "../../composables/useAsyncAction";
+import DiffToolbar from "../workspace/viewers/DiffToolbar.vue";
 import DiffView from "../workspace/viewers/DiffView.vue";
 
 /* The sandbox's environment (its composed overlay Dockerfile, on the /sandbox hub). The daemon composes it
@@ -69,12 +70,14 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         <!-- A proposal awaiting the owner's decision: the diff against the approved custom section (capability
              fragments are daemon-owned and not up for review here). -->
         <template v-if="proposal">
-            <div class="h-72 overflow-hidden rounded-lg border border-line">
+            <div class="flex h-72 flex-col overflow-hidden rounded-lg border border-line">
+                <DiffToolbar path="environment.custom.Dockerfile" />
                 <DiffView
                     :key="proposal.hash"
                     :before="state?.custom?.content ?? ''"
                     :after="proposal.content"
                     path="environment.custom.Dockerfile"
+                    class="min-h-0 flex-1"
                 />
             </div>
             <div v-if="isOwner" class="flex items-center justify-end gap-2">

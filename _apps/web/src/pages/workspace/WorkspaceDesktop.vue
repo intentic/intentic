@@ -26,6 +26,7 @@ import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { filesToEntries } from "./dropEntries";
 import BinaryDiffView from "./viewers/BinaryDiffView.vue";
 import CodebaseHealth from "./CodebaseHealth.vue";
+import DiffToolbar from "./viewers/DiffToolbar.vue";
 import DiffView from "./viewers/DiffView.vue";
 import DirectoryOperator from "./DirectoryOperator.vue";
 import DirectoryUiHost from "./DirectoryUiHost.vue";
@@ -777,18 +778,29 @@ const endResize = (event: PointerEvent): void => {
                         <FileViewer v-else :path="activeFile.path" :meta="openMeta" :line="openLine" @gone="closeTab" />
                     </div>
                 </template>
-                <div v-else-if="activeTab?.kind === 'diff'" class="min-h-0 flex-1">
-                    <!-- No text to diff is not the same as nothing to see: an image renders as its two sides. -->
-                    <BinaryDiffView
-                        v-if="rendersAsBytes(activeTab.path, activeTab.binary)"
-                        :key="activeTab.id"
-                        :path="activeTab.path"
-                        :before="activeTab.beforeRaw"
-                        :after="activeTab.afterRaw"
+                <!-- The tab strip names the file; this bar says how it is being READ (side-by-side or inline,
+                     comments in or out) — the same bar the agent review renders, so one habit carries across
+                     both surfaces. Above every diff state, so a binary or oversized one still has its controls. -->
+                <template v-else-if="activeTab?.kind === 'diff'">
+                    <DiffToolbar
+                        :path="activeTab.label"
+                        :status="activeTab.status"
+                        :additions="activeTab.additions"
+                        :deletions="activeTab.deletions"
                     />
-                    <p v-else-if="activeTab.truncated" class="p-4 text-xs text-subtle">File too large to diff in the browser.</p>
-                    <DiffView v-else :key="activeTab.id" :before="activeTab.before" :after="activeTab.after" :path="activeTab.path" />
-                </div>
+                    <div class="min-h-0 flex-1">
+                        <!-- No text to diff is not the same as nothing to see: an image renders as its two sides. -->
+                        <BinaryDiffView
+                            v-if="rendersAsBytes(activeTab.path, activeTab.binary)"
+                            :key="activeTab.id"
+                            :path="activeTab.path"
+                            :before="activeTab.beforeRaw"
+                            :after="activeTab.afterRaw"
+                        />
+                        <p v-else-if="activeTab.truncated" class="p-4 text-xs text-subtle">File too large to diff in the browser.</p>
+                        <DiffView v-else :key="activeTab.id" :before="activeTab.before" :after="activeTab.after" :path="activeTab.path" />
+                    </div>
+                </template>
                 <div v-else-if="activeTab?.kind === 'plan'" class="min-h-0 flex-1">
                     <MarkdownViewer :source="activeTab.text" />
                 </div>

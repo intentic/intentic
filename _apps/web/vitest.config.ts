@@ -12,6 +12,11 @@ export default defineConfig({
     // dist. See source-aliases.ts.
     resolve: {
         alias: sourceAliases(),
+        // Every workspace package exports an `@intentic/src` condition pointing at its .ts source, and none of
+        // them ship a dist in a fresh checkout. Vite applies the condition for the app build; vitest resolves
+        // with node's defaults unless told, which is why a suite that reached one of the un-aliased libs
+        // (@intentic/sandbox-run, @intentic/constants) failed to LOAD rather than to assert.
+        conditions: [`@intentic/src`],
     },
     test: {
         include: ["./src/**/*.test.ts"],

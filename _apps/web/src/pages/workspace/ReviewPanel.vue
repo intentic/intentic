@@ -268,6 +268,8 @@ const openDiff = (repo: string, side: GitDiffSide, change: GitChange): void => {
             label: side === `staged` ? `${changeLabel(repo, change)} (staged)` : changeLabel(repo, change),
             status: change.status,
             path: change.path,
+            additions: change.additions,
+            deletions: change.deletions,
             ...body,
             ...diffRawUrls({ source: `working`, repo, side }, change.path, change.status),
         });

@@ -30,7 +30,10 @@ export function useSandboxQuery<T>(options: UseQueryOptions<T>) {
         ...(typeof fetcher === `function`
             ? { queryFn: ((context) => trackPerf(`query.fetch`, { key }, async () => fetcher(context))) satisfies QueryFunction<T> }
             : {}),
-        enabled: reachable,
+        // Reachability is an ADDITIONAL gate, not a replacement: a caller may have its own reason not to run
+        // yet (an id it doesn't have, a subject that isn't in scope on this screen), and overwriting that with
+        // `reachable` alone turned every such caller into a request for a resource it knew wasn't there.
+        enabled: computed(() => toValue(reachable) && (resolved.enabled === undefined || toValue(resolved.enabled) !== false)),
     });
     return { query, error: computed(() => query.error.value?.message) };
 }

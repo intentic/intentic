@@ -8,8 +8,9 @@
 import type { AgentChangesResponse } from "@intentic-app/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { REASON_COPY } from "../composables/agents/conflictResolution";
+import { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { queryClient } from "../composables/queryPersistence";
 import { sandboxKey } from "../composables/sandbox/useSandbox";
 import { router } from "../router";
@@ -88,7 +89,14 @@ const mount = async (): Promise<HTMLElement> => {
     queryClient.setQueryData(sandboxKey(`agents`, AGENT, `diff`), changes);
     const el = document.createElement(`div`);
     document.body.append(el);
-    app = createApp({ render: () => h(AgentReviewPanel, { agentId: AGENT }) });
+    // The review's state is created by AgentDetail in the real page and handed down, so one instance serves
+    // both the header's actions and this panel's — the host here stands in for exactly that.
+    app = createApp({
+        setup() {
+            const review = useAgentChanges(ref(AGENT));
+            return () => h(AgentReviewPanel, { agentId: AGENT, changes: review, streaming: false });
+        },
+    });
     // Registered app-wide by installUi in the real page. Icon prints the glyph it was handed, because WHICH
     // glyph a mark wears is the link between the report's group heading and the rows it is talking about.
     app.component(

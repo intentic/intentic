@@ -58,10 +58,15 @@ const NONE: ReadonlySet<string> = new Set();
 // The agents whose land conflict the user has handed back to them — see `asked` below for what retires it.
 const askedByAgent = ref<ReadonlySet<string>>(new Set());
 
+// An EMPTY id means "no review on this screen" — a draft agent, an id the roster hasn't resolved yet. The
+// caller owns the review's state for the whole page (AgentDetail), so it exists before it is known whether
+// there is anything to read; without this the page would ask the daemon for the diff of an agent that has
+// never run, and be told so, once per visit.
 export function useAgentChanges(agentId: Ref<string>) {
     const { query, error } = useSandboxQuery({
         queryKey: computed(() => sandboxKey(`agents`, agentId.value, `diff`)),
         queryFn: () => sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(agentId.value)}/diff`),
+        enabled: computed(() => agentId.value !== ``),
     });
 
     const repos = computed<readonly AgentRepoChanges[]>(() => query.data.value?.repos ?? []);

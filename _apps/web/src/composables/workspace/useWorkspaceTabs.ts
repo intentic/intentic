@@ -91,6 +91,8 @@ const openDiff = (payload: DiffTabPayload): void => {
         truncated: payload.truncated,
         beforeRaw: payload.beforeRaw,
         afterRaw: payload.afterRaw,
+        additions: payload.additions,
+        deletions: payload.deletions,
     };
     openLine.value = undefined;
     tabs.value = tabs.value.some((existing) => existing.id === id)

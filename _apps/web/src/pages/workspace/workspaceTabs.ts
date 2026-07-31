@@ -41,6 +41,8 @@ export type WorkspaceTab =
           readonly truncated?: boolean;
           readonly beforeRaw?: string;
           readonly afterRaw?: string;
+          readonly additions?: number;
+          readonly deletions?: number;
       }
     | { readonly kind: "plan"; readonly id: string; readonly title: string; readonly text: string }
     | { readonly kind: "directory"; readonly id: string; readonly dir: string }
@@ -59,6 +61,11 @@ export interface DiffTabPayload extends DiffRawSides {
     readonly after?: string;
     readonly binary?: boolean;
     readonly truncated?: boolean;
+    // What the row that opened this diff already knew about its size, carried onto the tab's toolbar. Absent
+    // where the source has no numstat to give (a checkpoint's change list, a binary file) — DiffStat then
+    // renders nothing rather than a zero.
+    readonly additions?: number;
+    readonly deletions?: number;
 }
 
 export const diffTabId = (key: string, scope: string, path: string): string => `diff:${key}:${scope}/${path}`;

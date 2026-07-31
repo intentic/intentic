@@ -15,6 +15,7 @@ import { useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSear
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import BinaryDiffView from "./viewers/BinaryDiffView.vue";
+import DiffToolbar from "./viewers/DiffToolbar.vue";
 import DiffView from "./viewers/DiffView.vue";
 import { rendersAsBytes } from "./fileType";
 import type { DiffTabPayload } from "./workspaceTabs";
@@ -213,7 +214,29 @@ const onPick = (event: Event): void => {
     <div class="relative flex h-full min-h-0 flex-col bg-canvas text-content">
         <!-- Full-screen viewer: `?file=` (any kind) or `?diff=` (from Changes/History). Back = OS gesture. -->
         <template v-if="openPath !== undefined || diffTab !== undefined">
-            <div class="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-card px-1">
+            <!-- A diff gets the SAME bar the desktop tab and the agent review get, with the phone's back arrow
+                 in its lead slot — one bar, not the generic header plus a second one. It already names the
+                 file and marks its status, so the "diff" label this replaces had nothing left to add. -->
+            <DiffToolbar
+                v-if="diffTab"
+                :path="diffTab.label"
+                :status="diffTab.status"
+                :additions="diffTab.additions"
+                :deletions="diffTab.deletions"
+                class="bg-card"
+            >
+                <template #lead>
+                    <button
+                        type="button"
+                        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors active:bg-overlay"
+                        aria-label="Back"
+                        @click="router.back()"
+                    >
+                        <Icon name="arrow-left" class="text-lg" />
+                    </button>
+                </template>
+            </DiffToolbar>
+            <div v-else class="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-card px-1">
                 <button
                     type="button"
                     class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors active:bg-overlay"
@@ -222,8 +245,7 @@ const onPick = (event: Event): void => {
                 >
                     <Icon name="arrow-left" class="text-lg" />
                 </button>
-                <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ fileName(diffTab?.path ?? openPath ?? "") }}</span>
-                <span v-if="diffTab" class="shrink-0 pr-2 text-2xs uppercase tracking-wide text-subtle">diff</span>
+                <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ fileName(openPath ?? "") }}</span>
             </div>
             <div class="min-h-0 flex-1">
                 <template v-if="diffTab">
@@ -260,9 +282,13 @@ const onPick = (event: Event): void => {
                     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted transition-colors active:bg-overlay"
                     @click="segment === 'changes' ? changes.refresh() : refetch()"
                     aria-label="Refresh"
-                    :disabled="segment === 'changes' ? (changes.actionBusy.value || changes.loading.value) : (busy || isLoading)"
+                    :disabled="segment === 'changes' ? changes.actionBusy.value || changes.loading.value : busy || isLoading"
                 >
-                    <Icon name="refresh" class="text-base" :spin="segment === 'changes' ? (changes.loading.value || changes.actionBusy.value) : (isLoading || busy)" />
+                    <Icon
+                        name="refresh"
+                        class="text-base"
+                        :spin="segment === 'changes' ? changes.loading.value || changes.actionBusy.value : isLoading || busy"
+                    />
                 </button>
             </div>
             <p v-if="actionError ?? error" class="shrink-0 border-b border-danger/30 bg-danger/10 px-3 py-1.5 text-xs text-danger">

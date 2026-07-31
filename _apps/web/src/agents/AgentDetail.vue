@@ -1,20 +1,30 @@
 <script setup lang="ts">
-import { Segmented, useDevice } from "@intentic-app/ui";
+import { BottomSheet, cmp, Segmented, useDevice } from "@intentic-app/ui";
+import Dialog from "primevue/dialog";
+import Popover from "primevue/popover";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ChatPanel from "../chat/ChatPanel.vue";
 import { agentStatusMeta } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
+import { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
+import AgentSessionMenu from "./AgentSessionMenu.vue";
 
 /* Drill-in for one agent (/agents/:id) — one canonical chat surface per form factor (the fleet-UX rule that
  * kills the duplicated-conversation problem):
  * - MOBILE: this IS the chat surface (no dock exists) — Chat | Changes segmented, chat default.
  * - DESKTOP: the conversation lives ONLY in the docked ChatPanel (focused by the binding below); this view is
  *   review-only — the isolated diff + Land/Discard, the one job the dock can't host. A draft/unknown id has
- *   nothing to review → back to the board. */
+ *   nothing to review → back to the board.
+ *
+ * THIS ROW OWNS THE SESSION; the panel below owns the review. That split is the whole point of the header:
+ * everything here answers "what is this agent, and what do I want to happen to it" — the title, the branch, the
+ * one status chip, Land, and the ⋯ that holds the rest — while the panel's bars answer "what did it write".
+ * They used to be interleaved across three stacked bars, which is how the page came to state its file count
+ * four times and the word "landed" twice, in two different senses, twenty-four pixels apart. */
 
 const route = useRoute();
 const router = useRouter();
@@ -82,8 +92,46 @@ const edit = createTitleEdit(
 );
 
 // The card's own status glyph, carried into the header — the one piece of fleet state the review below can't
-// tell you (it reports the work, not whether the agent is still writing it).
+// tell you (it reports the work, not whether the agent is still writing it). It is also the page's ONLY
+// statement of whether the work landed: the review's toolbar used to carry a second "✓ landed" chip a line
+// below this one, meaning "every file reached the workspace" where this one means "the last turn landed" —
+// two scopes, one word, stacked.
 const status = computed(() => (fleetAgent.value === undefined ? undefined : agentStatusMeta(fleetAgent.value.status)));
+
+/* THE REVIEW'S STATE, owned here and handed to the panel. One instance, because the actions are split across
+ * the two components now — Land and the ⋯ menu fire from this row, the conflict report's merge/resolve fire
+ * from the panel — and a second useAgentChanges() would give each its own busy and error flags. The query
+ * behind it is keyed by agent id, so this is also the only fetch. */
+// Empty until the agent is known to HAVE a review (registered, branch-backed) — see useAgentChanges: this is
+// created for the page, which outlives the panel, so a draft agent must not send it looking for a diff.
+const changes = useAgentChanges(computed(() => (reviewable.value ? agentId.value : ``)));
+const streaming = computed(() => conversation.value?.streaming.value === true);
+
+// Land/discard stay gated on the turn: both are refused daemon-side while it streams (CONFLICT), so they are
+// disabled up front when this browser is the one streaming.
+const canLand = computed(() => !changes.actionBusy.value && !streaming.value && changes.pending.value.length > 0);
+
+const menu = ref<InstanceType<typeof Popover> | null>(null);
+const menuSheet = ref(false);
+const openMenu = (event: MouseEvent): void => {
+    if (mobile.value) {
+        menuSheet.value = true;
+        return;
+    }
+    menu.value?.toggle(event);
+};
+const closeMenu = (): void => {
+    menuSheet.value = false;
+    menu.value?.hide();
+};
+
+// Destructive and unrecoverable (the branch and worktree go), so it asks in the same modal every other
+// irreversible git action in this app uses.
+const pendingDiscard = ref(false);
+const confirmDiscard = (): void => {
+    pendingDiscard.value = false;
+    void changes.discard();
+};
 </script>
 
 <template>
@@ -134,12 +182,95 @@ const status = computed(() => (fleetAgent.value === undefined ? undefined : agen
                 <Icon :name="status.icon" :spin="status.spin" class="text-2xs" />{{ status.label }}
             </span>
             <Segmented v-if="mobile && reviewable" v-model="view" :options="viewOptions" />
+            <template v-if="reviewable">
+                <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
+                <!-- The page's one primary action, beside the status chip that says whether it is even needed.
+                     It appears only when there is something to apply, so the button's presence IS the "not
+                     landed" signal the toolbar below used to spend a pill on. -->
+                <button
+                    v-if="!mobile && changes.pending.value.length > 0"
+                    type="button"
+                    :class="cmp.buttonSuccess('shrink-0 gap-0 whitespace-nowrap px-2.5 py-1 text-2xs')"
+                    :disabled="!canLand"
+                    @click="changes.land()"
+                    v-tooltip.bottom="
+                        streaming ? 'Wait for the agent turn to finish' : `Applies ${changes.pending.value.length} change(s) to your workspace`
+                    "
+                >
+                    <Icon name="check" class="mr-1 text-2xs" />Land now
+                </button>
+                <button
+                    type="button"
+                    class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    @click="openMenu"
+                    v-tooltip.bottom="'Session actions'"
+                    aria-label="Session actions"
+                >
+                    <Icon name="bars" class="text-xs" />
+                </button>
+            </template>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
         <ChatPanel v-if="mobile && (view === 'chat' || !reviewable)" class="min-h-0 flex-1" />
         <!-- `chat` is the review asking to be swapped for the conversation — raised when it hands a land
              conflict back to the agent and offers to show the turn. Desktop never sees it: the docked chat is
              already on screen there, so the review has nothing to swap itself for. -->
-        <AgentReviewPanel v-else-if="agentId !== '' && reviewable" :agent-id="agentId" class="min-h-0 flex-1" @chat="view = 'chat'" />
+        <AgentReviewPanel
+            v-else-if="agentId !== '' && reviewable"
+            :agent-id="agentId"
+            :changes="changes"
+            :streaming="streaming"
+            class="min-h-0 flex-1"
+            @chat="view = 'chat'"
+        />
+
+        <!-- The session menu: anchored popover on desktop, bottom sheet on mobile — same body, the pattern the
+             chat's pickers use. -->
+        <BottomSheet v-if="mobile" v-model="menuSheet" header="Session">
+            <AgentSessionMenu
+                :agent-id="agentId"
+                :changes="changes"
+                :streaming="streaming"
+                :land-in-menu="true"
+                @selected="closeMenu"
+                @discard="pendingDiscard = true"
+            />
+        </BottomSheet>
+        <Popover v-else ref="menu" :pt="{ content: { class: '!p-0' } }">
+            <div class="w-72">
+                <AgentSessionMenu
+                    :agent-id="agentId"
+                    :changes="changes"
+                    :streaming="streaming"
+                    :land-in-menu="false"
+                    @selected="closeMenu"
+                    @discard="pendingDiscard = true"
+                />
+            </div>
+        </Popover>
+
+        <Dialog
+            :visible="pendingDiscard"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            :style="{ width: '24rem' }"
+            header="Discard this agent's work"
+            @update:visible="pendingDiscard = false"
+        >
+            <p class="text-xs text-content">
+                Delete the agent's branch and worktree? Its {{ changes.count.value }} changed file{{ changes.count.value === 1 ? "" : "s" }} and the
+                conversation's isolated history go with them.
+            </p>
+            <p v-if="changes.count.value > changes.pending.value.length" class="mt-2 text-xs text-muted">
+                Work that already landed stays in your workspace — only what is still on the branch is lost.
+            </p>
+            <template #footer>
+                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingDiscard = false">Cancel</button>
+                <button type="button" :class="cmp.buttonDanger('rounded px-3 py-1')" :disabled="changes.actionBusy.value" @click="confirmDiscard">
+                    Discard
+                </button>
+            </template>
+        </Dialog>
     </div>
 </template>

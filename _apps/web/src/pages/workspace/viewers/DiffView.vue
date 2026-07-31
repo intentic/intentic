@@ -14,17 +14,16 @@ import { langFromShebang, resolveFile } from "../fileType";
  * the parent remounts per file via :key.
  *
  * Comments are stripped from both sides unless the reader asks for them (useLayout.showComments, off by default):
- * the diff is then computed on code alone, so comment churn stops registering as change at all. The toggle rides
- * on this component rather than on each host because no diff surface here has a toolbar of its own to hold it. */
+ * the diff is then computed on code alone, so comment churn stops registering as change at all. Both reading
+ * settings are the reader's, held in useLayout and driven by DiffToolbar, which every host renders above this. */
 
-// `sideBySide` pins the layout for a caller that offers its own Split|Unified control (the agent review, whose
-// pane is narrower than the editor area); left unset, the form factor decides.
-const { before, after, path, sideBySide } = defineProps<{ before?: string; after?: string; path: string; sideBySide?: boolean }>();
+const { before, after, path } = defineProps<{ before?: string; after?: string; path: string }>();
 
 const { mobile } = useDevice();
-const split = computed(() => sideBySide ?? !mobile.value);
 const { ensureMonaco, ensureLanguage } = useMonaco();
-const { showComments, toggleShowComments } = useLayout();
+const { showComments, toggleShowComments, diffLayout } = useLayout();
+// The stored preference is a desktop one: two panes cannot fit a phone, so mobile is always inline regardless.
+const split = computed(() => !mobile.value && diffLayout.value === `split`);
 
 const host = ref<HTMLElement>();
 const diff = shallowRef<Monaco.editor.IStandaloneDiffEditor>();
@@ -101,7 +100,7 @@ onMounted(async () => {
     modifiedEditor.addCommand(m.KeyMod.Shift | m.KeyCode.F7, () => editor.goToDiff(`previous`));
 });
 
-// Crossing the breakpoint (rotation, split-screen) or flipping the caller's toggle swaps side-by-side ↔
+// Crossing the breakpoint (rotation, split-screen) or flipping the toolbar's toggle swaps side-by-side ↔
 // unified in place — no rebuild.
 watch(split, (on) => diff.value?.updateOptions({ renderSideBySide: on }));
 
@@ -134,20 +133,6 @@ onBeforeUnmount(() => {
                 Only comments changed — show them
             </button>
         </div>
-        <!-- Inset past the 30px diff overview ruler. This view has no toolbar above it, and a default that
-             silently removes lines has to keep saying so. -->
-        <button
-            v-else
-            type="button"
-            class="absolute right-9 top-2 z-10 flex items-center gap-1 rounded-md border border-line bg-card/90 px-1.5 py-0.5 text-2xs font-medium text-muted shadow-sm backdrop-blur transition-colors hover:text-content"
-            :class="{ 'bg-primary-600/15 text-link': showComments }"
-            :aria-pressed="showComments"
-            v-tooltip.left="showComments ? 'Comments shown — click to diff the code alone' : 'Comments hidden — click to show them'"
-            @click="toggleShowComments()"
-        >
-            <Icon class="text-2xs" :name="showComments ? `eye` : `eye-slash`" />
-            Comments
-        </button>
         <!-- Touch chunk navigation (side-by-side collapses to unified on mobile). -->
         <div v-if="mobile" class="absolute bottom-4 right-4 z-10 flex gap-2">
             <button

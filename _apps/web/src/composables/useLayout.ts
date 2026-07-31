@@ -4,6 +4,8 @@ export type ChatPosition = "left" | "right";
 // What the ONE workspace sidebar shows: the file explorer, the agent-changes review, or the snapshot timeline
 // (VSCode's Source-Control-in-the-sidebar pattern — no second nav column stealing width from the diff view).
 export type SidebarPanel = "files" | "changes" | "history";
+// How a diff renders its two sides. One setting for every diff surface — see DIFF_LAYOUT_KEY.
+export type DiffLayout = "split" | "unified";
 
 const STORAGE_KEY = `ui-chat-position`;
 const WIDTH_KEY = `ui-chat-width`;
@@ -48,6 +50,12 @@ const EDIT_MODE_KEY = `ui-workspace-edit-mode`;
 // Comments in a diff — off by default, so every diff surface (workspace tab, agent review, environment card)
 // opens on the code alone and comment-only edits don't read as changes. See codeComments.ts. Persists.
 const SHOW_COMMENTS_KEY = `ui-diff-show-comments`;
+
+// Side-by-side or inline, for every diff surface at once — the reader's habit, not a property of the file they
+// happen to be looking at. It lives beside showComments because the two are the same kind of setting: how this
+// person reads a diff, chosen once, honoured everywhere (DiffToolbar owns the control). Mobile ignores it —
+// two panes don't fit a phone — so the stored value is the desktop preference and survives a trip through one.
+const DIFF_LAYOUT_KEY = `ui-diff-layout`;
 
 /* Owns shell-layout state shared across areas (module-level singleton): where the chat panel sits relative to
  * the workspace (bound onto a `data-chat-position` attribute whose CSS grid swaps
@@ -117,6 +125,7 @@ const sidebarPanel = ref<SidebarPanel>(readEnum(SIDEBAR_PANEL_KEY, [`files`, `ch
 const includeIgnored = ref<boolean>(readBool(INCLUDE_IGNORED_KEY));
 const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
 const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
+const diffLayout = ref<DiffLayout>(readEnum(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`));
 
 const set = (value: ChatPosition): void => {
     position.value = value;
@@ -201,6 +210,11 @@ const toggleShowComments = (): void => {
     write(SHOW_COMMENTS_KEY, showComments.value ? `1` : `0`);
 };
 
+const setDiffLayout = (value: DiffLayout): void => {
+    diffLayout.value = value;
+    write(DIFF_LAYOUT_KEY, value);
+};
+
 export function useLayout() {
     return {
         position,
@@ -213,6 +227,7 @@ export function useLayout() {
         includeIgnored,
         editMode,
         showComments,
+        diffLayout,
         set,
         toggle,
         setChatWidth,
@@ -229,5 +244,6 @@ export function useLayout() {
         toggleIncludeIgnored,
         setEditMode,
         toggleShowComments,
+        setDiffLayout,
     };
 }

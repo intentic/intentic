@@ -103,6 +103,8 @@ const openFileDiff = (commit: GitCommit, change: GitChange): void => {
             label: `${change.path} @ ${commit.short}`,
             status: change.status,
             path: change.path,
+            additions: change.additions,
+            deletions: change.deletions,
             ...body,
             // The image the commit's diff can only flag — fetched per side from /diff/raw, at this commit and
             // its first parent, the same pair the text diff above compares.

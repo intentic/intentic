@@ -3,6 +3,7 @@ import { formatBytes, useDevice } from "@intentic-app/ui";
 import { computed, ref, watch } from "vue";
 import { sandboxBlob } from "../../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../../composables/useAsyncAction";
+import { useLayout } from "../../../composables/useLayout";
 import { resolveFile } from "../fileType";
 
 /* WHAT CHANGED, WHEN THE CHANGE ISN'T TEXT. Monaco's diff editor is the right tool for a file made of lines and
@@ -25,12 +26,14 @@ import { resolveFile } from "../fileType";
  * Only images render inline. A font, an archive, a .wasm has no visual form to compare — for those the pane
  * states what it is and offers the bytes, which is the honest end of the road rather than a placeholder. */
 
-const { path, before, after, sideBySide } = defineProps<{ path: string; before?: string; after?: string; sideBySide?: boolean }>();
+const { path, before, after } = defineProps<{ path: string; before?: string; after?: string }>();
 
 const { mobile } = useDevice();
-// Two panes need the width for two: on a phone (or a caller that has asked for unified) they stack instead, so
-// each side still gets the full column rather than two unreadable thumbnails.
-const split = computed(() => (sideBySide ?? !mobile.value) && before !== undefined && after !== undefined);
+const { diffLayout } = useLayout();
+// Two panes need the width for two: on a phone (or under the reader's Unified setting — the same one DiffView
+// obeys, set from DiffToolbar) they stack instead, so each side still gets the full column rather than two
+// unreadable thumbnails.
+const split = computed(() => !mobile.value && diffLayout.value === `split` && before !== undefined && after !== undefined);
 // The path decides how the bytes are shown — not their content. It is the same resolution the workspace file
 // view uses, so a .png in a diff and a .png in the tree are rendered by the same rule.
 const renderable = computed(() => resolveFile(path, undefined).mode === `image`);
