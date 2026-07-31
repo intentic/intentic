@@ -188,9 +188,9 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // (nobody has had their look yet):
     //   · the tab the user is on RIGHT NOW — yanking a terminal out from under someone mid-read would be its own
     //     bug, so it stays until they switch away (see `switchTab`)
-    //   · one that is not on the strip yet — a reveal of an ALREADY-finished session (the Recent popover's rows
-    //     are mostly those) is decided in the same relist that first lists it, and retiring it there would make
-    //     the click do nothing at all
+    //   · one that is not on the strip yet — a reveal of an ALREADY-finished session (the chat's Bash card on a
+    //     turn that has ended, the Capabilities page on an install that just landed) is decided in the same
+    //     relist that first lists it, and retiring it there would make the click do nothing at all
     // Called on every relist, which is where a liveness change lands.
     const retireFinished = (tabs: TerminalTab[]): void => {
         const onStrip = new Set(order.value.map((tab) => tab.name));
@@ -423,7 +423,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const focus = async (name: string): Promise<void> => {
         if (!order.value.some((tab) => tab.name === name)) {
             // Focusing IS the explicit open that reveals a hidden work terminal (the chat's Bash card, the
-            // Recent-terminals popover, the Capabilities page's running install) — recorded before the relist,
+            // work-terminals popover, the Capabilities page's running install) — recorded before the relist,
             // which is what decides whether it tabs. Unconditional: the set is only ever consulted for agent/job
             // sessions, so a shell or panel name landing in it changes nothing.
             revealed.add(name);
@@ -445,7 +445,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const surface = async (name: string): Promise<void> => {
         // Only the agent channel surfaces, and by default its shells don't tab (useWorkTerminals) — so the
         // retry loop has nothing to wait for. One relist still earns its keep: it writes the shared session
-        // list, which is what makes the Recent-terminals popover show the turn's shell the moment it starts
+        // list, which is what makes the work-terminals popover show the turn's shell the moment it starts
         // rather than up to a poll later.
         if (!showWorkTerminals.value) {
             await refresh();

@@ -32,7 +32,7 @@ const MIN_REVIEW_LIST_WIDTH = 180;
 const MAX_REVIEW_LIST_WIDTH = 800;
 
 // The global terminal — the panel the shell mounts below every view. Only the OPEN state lives here (the rail's
-// terminal button + Ctrl+` toggle it); height/collapse belong to the shared TerminalPanel, persisted per surface.
+// terminal button + Ctrl+` toggle it); its height belongs to the shared TerminalPanel, persisted per surface.
 const TERMINAL_OPEN_KEY = `ui-workspace-terminal-open`;
 
 // Which panel the workspace sidebar shows (files | changes | history). Persists like the terminal's open state.

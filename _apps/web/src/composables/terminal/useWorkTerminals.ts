@@ -1,6 +1,5 @@
 import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
-import { sandboxJson } from "../sandbox/sandboxClient";
-import { refreshTerminals, removeTerminal, type TerminalSession, useTerminalsQuery } from "./terminalsQuery";
+import { type TerminalSession, useTerminalsQuery } from "./terminalsQuery";
 
 /* The surfaces WORK runs on — the agent's shells (`agent-<sdk session>`) and the daemon's job sessions
  * (`job-<flow>`: a capability add, the infra check) — as a surface of their own, and the preference that
@@ -13,8 +12,15 @@ import { refreshTerminals, removeTerminal, type TerminalSession, useTerminalsQue
  * left one behind for good, the user's real shells were pushed toward the wrap cap, and what remained was a row
  * of corpses that only a broom cleared. So they are hidden by default and stay one click away instead: the
  * chat's Bash card reveals the turn's own shell, the Capabilities page opens the install it just started, and
- * the panel's Recent-terminals popover lists whatever has run lately. `showWorkTerminals` turns the old
- * behaviour back on for whoever wants it.
+ * the panel's work-terminals popover lists whatever is running NOW. `showWorkTerminals` turns the old behaviour
+ * back on for whoever wants it.
+ *
+ * `rows` is live work ONLY. A dead pane is not a record of anything — its bytes are on disk in the terminal
+ * logs, its commands are in the transcript, and opening it lands you in a shell that will never say another
+ * word. Listing those was just the row of corpses again, moved from the strip into a popover, with a broom
+ * beside it to sweep a list nobody asked to keep. So this answers one question — what is running right now —
+ * and the sessions themselves age out in the daemon's own sweep (terminal-session.ts reapFinishedSessions),
+ * which is what keeps them openable for a while from the surfaces that name one directly.
  *
  * Per-browser (localStorage), like every other panel preference (terminalMeta, the panel height): which tabs
  * you want in front of you is a property of the seat you are sitting at, not of the sandbox. */
@@ -61,11 +67,7 @@ export interface WorkTerminalRow {
     // The owning conversation's title when it noted one, else the session's own label.
     readonly name: string;
     readonly kind: "agent" | "job";
-    // False for a finished turn's (or flow's) lingering shell, its output still in scrollback.
-    readonly running: boolean;
-    // The last command's exit status. Undefined while it runs, and on a session tmux reported none for.
-    readonly exitCode: number | undefined;
-    // Epoch ms of the session's last output — "how long ago did this finish". 0 when the daemon couldn't say.
+    // Epoch ms of the session's last output — "is this still saying anything". 0 when the daemon couldn't say.
     readonly activityAt: number;
 }
 
@@ -86,49 +88,22 @@ export const openWorkTerminal = (session: string): void => {
     void import(`./useTerminalPanel`).then((module) => module.useTerminalPanel().openFocused(session));
 };
 
-/* Kill the sessions of finished work. The strip no longer tabs these at all, so the list that shows them owns
- * the broom — and it is the only broom left: with nothing accumulating in the strip there is nothing there to
- * sweep. Only finished rows go; a running one is carrying the agent's own command or a live install.
- *
- * Rarely needed, since the daemon ages these out by itself (terminal-session.ts reapFinishedSessions). It is
- * here for the user who wants the sandbox tidy NOW, and it asks nothing first: every pane's bytes are already
- * on disk in the terminal logs, so this costs precisely nothing.
- *
- * Each kill drops off the shared list the moment it is issued (the strip's rule — see removeTerminal), and the
- * daemon's account of all of them lands once at the end, which is what puts anything back that failed. */
-export const clearFinishedWorkTerminals = async (rows: readonly WorkTerminalRow[]): Promise<void> => {
-    const finished = rows.filter((row) => !row.running);
-    for (const row of finished) {
-        removeTerminal(row.session);
-    }
-    await Promise.all(
-        finished.map(async (row) => {
-            try {
-                await sandboxJson(`/system/terminals/${encodeURIComponent(row.session)}`, { method: `DELETE` });
-            } catch (error) {
-                console.error(`terminal ${row.session}: kill failed`, error);
-            }
-        }),
-    );
-    await refreshTerminals();
-};
-
 export function useWorkTerminals(): { rows: ComputedRef<WorkTerminalRow[]>; showWorkTerminals: Ref<boolean> } {
     const { sessions } = useTerminalsQuery(POLL_MS);
     const rows = computed<WorkTerminalRow[]>(() =>
         sessions.value
             .filter(
-                (session): session is TerminalSession & { kind: "agent" | "job" } => session.kind === `agent` || session.kind === `job`,
+                (session): session is TerminalSession & { kind: "agent" | "job" } =>
+                    session.running && (session.kind === `agent` || session.kind === `job`),
             )
-            // Live work first — it's what someone opening this is looking for — then the most recently finished,
-            // because a record is read newest-first and the tail of the list is the part nobody wants.
-            .toSorted((left, right) => Number(right.running) - Number(left.running) || right.activityAt - left.activityAt)
+            // Whatever spoke last, first: with everything here alive, recency of OUTPUT is the only ordering
+            // that says anything — the turn that just ran a command sits above the install that has been
+            // compiling quietly for ten minutes.
+            .toSorted((left, right) => right.activityAt - left.activityAt)
             .map((session) => ({
                 session: session.name,
                 name: owners.value[session.name] ?? session.label ?? session.name,
                 kind: session.kind,
-                running: session.running,
-                exitCode: session.exitCode,
                 activityAt: session.activityAt,
             })),
     );

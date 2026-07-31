@@ -122,7 +122,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         <!-- Terminal — what the panel's strip carries. The terminals work runs in are hidden by default (they're
              evidence about something that ran, not tabs you keep — useWorkTerminals); this is the sticky way
              back. The same preference is a checked row in the panel's own right-click menu and the
-             Recent-terminals popover's footer, which is where someone irritated by it will actually reach. -->
+             work-terminals popover's footer, which is where someone irritated by it will actually reach. -->
         <RowGroup label="Terminal">
             <Row as="label" icon="sparkles" title="Work terminals" description="Give every agent and job terminal its own tab in the terminal panel.">
                 <template #control><ToggleSwitch v-model="showWorkTerminals" /></template>

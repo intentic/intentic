@@ -7,10 +7,10 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 
 /* The terminals work runs in — an agent's shells AND the daemon's job sessions — are hidden by default, and
- * these tests hold the two halves of that honest: the popover has to LIST what the strip is no longer tabbing
- * (naming the conversation that owns it, live work first, newest finished next, with how it exited), and the
- * rail's badge has to stop counting what the panel stopped showing — a badge reading 3 over a strip showing 1 is
- * the exact drift terminalsQuery exists to prevent. */
+ * these tests hold the two halves of that honest: the popover has to LIST what the strip is no longer tabbing —
+ * the work that is RUNNING, named after the conversation that owns it, whatever spoke last on top, and nothing
+ * that has already exited — and the rail's badge has to stop counting what the panel stopped showing, since a
+ * badge reading 3 over a strip showing 1 is the exact drift terminalsQuery exists to prevent. */
 
 const store = new Map<string, string>();
 vi.stubGlobal(`localStorage`, {
@@ -28,7 +28,7 @@ const { sandboxJson } = await import("../sandbox/sandboxClient");
 const jsonMock = vi.mocked(sandboxJson);
 const { queryClient } = await import("../queryPersistence");
 const { clearPendingTerminals } = await import("./terminalsQuery");
-const { clearFinishedWorkTerminals, noteAgentTerminal, showWorkTerminals, useWorkTerminals } = await import("./useWorkTerminals");
+const { noteAgentTerminal, showWorkTerminals, useWorkTerminals } = await import("./useWorkTerminals");
 const { useTerminalActivity } = await import("./useTerminalActivity");
 
 const HOUR = 3_600_000;
@@ -77,7 +77,7 @@ beforeEach(() => {
 });
 
 test("the popover lists the agent's shells AND the daemon's jobs, named after the conversation that owns them", async () => {
-    daemonLists(shell(`web-1`), agent(`aaaa1111`, false), agent(`bbbb2222`), job(`capability-demo`, false));
+    daemonLists(shell(`web-1`), agent(`aaaa1111`), agent(`bbbb2222`), job(`capability-demo`));
     noteAgentTerminal(`agent-aaaa1111`, `Redesign the chat rail`);
 
     const { rows } = mounted(() => useWorkTerminals());
@@ -89,20 +89,33 @@ test("the popover lists the agent's shells AND the daemon's jobs, named after th
     expect(rows.value.map((row) => row.name)).toContain(`Redesign the chat rail`);
 });
 
-test("live work comes first, then the most recently finished — a record is read newest-first", async () => {
+// THE reported nonsense: a popover holding every dead shell of the day, with a broom beside it to sweep them.
+// A finished session is a pane that will never say another word — the logs on disk are the record — so the
+// list answers one question, what is running right now, and there is nothing in it to clear.
+test("work that has exited is not listed, whether it succeeded or failed", async () => {
     const now = Date.now();
     daemonLists(
-        job(`infra-check`, false, { exitCode: 1, activityAt: now - 3 * HOUR }),
         agent(`aaaa1111`, false, { exitCode: 0, activityAt: now - 10 * 60_000 }),
+        job(`infra-check`, false, { exitCode: 1, activityAt: now - 3 * HOUR }),
         job(`capability-demo`, true),
+    );
+
+    const { rows } = mounted(() => useWorkTerminals());
+    await vi.waitFor(() => expect(rows.value.map((row) => row.session)).toEqual([`job-capability-demo`]));
+});
+
+test("whatever spoke last is on top — the only ordering that says anything once every row is alive", async () => {
+    const now = Date.now();
+    daemonLists(
+        job(`capability-demo`, true, { activityAt: now - 20 * 60_000 }),
+        agent(`aaaa1111`, true, { activityAt: now - 60_000 }),
+        job(`infra-check`, true, { activityAt: now - 5 * 60_000 }),
     );
 
     const { rows } = mounted(() => useWorkTerminals());
     await vi.waitFor(() => expect(rows.value).toHaveLength(3));
 
-    expect(rows.value.map((row) => row.session)).toEqual([`job-capability-demo`, `agent-aaaa1111`, `job-infra-check`]);
-    // The exit status rides along, which is what lets a failed run be found without opening it.
-    expect(rows.value.map((row) => row.exitCode)).toEqual([undefined, 0, 1]);
+    expect(rows.value.map((row) => row.session)).toEqual([`agent-aaaa1111`, `job-infra-check`, `job-capability-demo`]);
 });
 
 test("the rail's badge stops counting work terminals while they don't tab, and counts them again once they do", async () => {
@@ -116,21 +129,6 @@ test("the rail's badge stops counting work terminals while they don't tab, and c
 
     expect(activity.count.value).toBe(3);
     expect(activity.summary.value).toBe(`1 shell, 1 agent shell, 1 job`);
-});
-
-test("the broom takes every finished session, agent and job alike, and leaves the running ones alone", async () => {
-    daemonLists(shell(`web-1`), agent(`aaaa1111`, false), agent(`bbbb2222`), job(`capability-demo`, false), job(`infra-check`));
-
-    const { rows } = mounted(() => useWorkTerminals());
-    await vi.waitFor(() => expect(rows.value).toHaveLength(4));
-
-    await clearFinishedWorkTerminals(rows.value);
-
-    // One DELETE per finished session; a running one is untouched (its kill would take the live command).
-    const killed = jsonMock.mock.calls
-        .filter(([, options]) => (options as { method?: string } | undefined)?.method === `DELETE`)
-        .map(([route]) => route);
-    expect(killed.toSorted()).toEqual([`/system/terminals/agent-aaaa1111`, `/system/terminals/job-capability-demo`]);
 });
 
 test("the preference persists per browser, so a reload doesn't hand the panel back the tabs it hid", async () => {

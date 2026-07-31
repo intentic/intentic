@@ -96,8 +96,8 @@ test("a job tabs while it is being watched and lets go once it has finished and 
 });
 
 // The reveal and the first list that carries the session land together, so retiring on that same pass would
-// make the Recent popover's rows — which are finished by definition — click into nothing.
-test("opening an ALREADY-finished terminal from the Recent list still tabs and focuses it", async () => {
+// make the chat's "watch this turn's shell" — clicked on a turn that has since ended — do nothing at all.
+test("opening an ALREADY-finished terminal from the chat's Bash card still tabs and focuses it", async () => {
     const { tabs, attach, names } = panel([shell(`web-1`), agent(`aaaa1111`, false)]);
     await attach();
     expect(names()).toEqual([`web-1`]);

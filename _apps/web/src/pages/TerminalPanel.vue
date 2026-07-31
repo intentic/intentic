@@ -7,7 +7,7 @@ import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
-import RecentTerminals from "../components/RecentTerminals.vue";
+import WorkTerminals from "../components/WorkTerminals.vue";
 import { inTabSurface } from "../composables/commands/tabSurface";
 import { commandShortcut, registerCommand, type RegisteredCommand, withShortcut } from "../composables/commands/useCommands";
 import { showWorkTerminals } from "../composables/terminal/useWorkTerminals";
@@ -19,7 +19,7 @@ import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 
 /* THE terminal panel — mounted once in the shell, below every view. Each tab is a tmux-backed session in the
  * shared cache (composables/useTerminal): mounting re-appends the active tab's persistent host element,
- * unmounting only detaches it, so scrollback and running processes survive collapse, navigation, and reload.
+ * unmounting only detaches it, so scrollback and running processes survive close, navigation, and reload.
  * Tabs arrange into split GROUPS (useTerminal.groups): one pill per group, one segment per session; the
  * active group's sessions render side by side in the pane. The strip is a VSCode-style list: Shift/Ctrl+click
  * multi-selects pills, right-click opens the action menu (split / join / unsplit / kill, and per-terminal
@@ -31,14 +31,14 @@ import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
  *
  * The strip lists PLACES — the user's shells and their dev servers. The terminals WORK runs in (an agent's
  * Bash, a capability install) are records of something that already happened, so they tab only while someone is
- * watching and retire themselves when they finish (useWorkTerminals, useTerminal's `revealed`), and stay
- * readable afterwards in the toolbar's Recent-terminals popover. That is why there is no broom here: nothing
+ * watching and retire themselves when they finish (useWorkTerminals, useTerminal's `revealed`); while they run
+ * they are one click away in the toolbar's work-terminals popover. That is why there is no broom here: nothing
  * accumulates in the strip to sweep. Every tab still gets the hover-×, and a stopped dev server keeps its pill
  * — it's a place you restart, not litter. Restart is shell-only (a dev-server tab is re-run via Start, or ↑ at
  * its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves — they live
  * in the toolbar's processes popover, and their × only hides the read-only log view. `initial` is an object so
- * re-requesting the same session still refocuses. Height and collapse persist per storageKey;
- * `resizable: false` pins the panel to its container (the mobile route, and the pop-out window). */
+ * re-requesting the same session still refocuses. Height persists per storageKey; `resizable: false` pins the
+ * panel to its container (the mobile route, and the pop-out window). */
 
 const {
     source,
@@ -280,7 +280,7 @@ const stripItems = computed<MenuItem[]>(() => {
         ...(items.length > 0 ? [{ separator: true }] : []),
         // The one CHECKED row in this menu (see the #item slot's checkmark gutter): whether the terminals work
         // runs in tab here at all. It sits where the annoyance is felt — a right-click on the strip they were
-        // crowding — and writes the same preference as the Recent popover's footer and Settings → Appearance.
+        // crowding — and writes the same preference as the work popover's footer and Settings → Appearance.
         {
             label: `Show work terminals`,
             checked: showWorkTerminals.value,
@@ -354,10 +354,10 @@ const menuItems = computed<MenuItem[]>(() => {
 });
 
 // --- Panel geometry ----------------------------------------------------------------------------
-// Persisted per surface. Height is clamped to a floor and ~80% of the viewport. Declared above the commands
-// below, which expand a collapsed panel and measure the root.
+// Persisted per surface. Height is clamped to a floor and ~80% of the viewport. There is no collapsed state:
+// the toolbar's × closes the panel outright, and closing already only unmounts it — every session keeps
+// streaming in the shared cache — so a second, half-shut state was a control that did the same thing worse.
 const HEIGHT_KEY = `ui-${storageKey}-terminal-height`;
-const COLLAPSED_KEY = `ui-${storageKey}-terminal-collapsed`;
 const DEFAULT_HEIGHT = 240;
 const MIN_HEIGHT = 96;
 const clampHeight = (px: number): number => Math.round(Math.max(MIN_HEIGHT, Math.min(px, window.innerHeight * 0.8)));
@@ -367,13 +367,6 @@ const readHeight = (): number => {
         return Number.isFinite(parsed) ? clampHeight(parsed) : DEFAULT_HEIGHT;
     } catch {
         return DEFAULT_HEIGHT;
-    }
-};
-const readCollapsed = (): boolean => {
-    try {
-        return localStorage.getItem(COLLAPSED_KEY) === `1`;
-    } catch {
-        return false;
     }
 };
 const write = (key: string, value: string): void => {
@@ -386,22 +379,13 @@ const write = (key: string, value: string): void => {
 
 const root = ref<HTMLElement>();
 const height = ref(readHeight());
-const collapsed = ref(readCollapsed());
-// A fixed surface (the mobile route, the pop-out window) has no collapse chevron, so honoring a collapsed
-// flag persisted from the docked panel would strand an empty pane there — ignore it while !resizable.
-const effectiveCollapsed = computed(() => collapsed.value && resizable);
 const setHeight = (px: number): void => {
     height.value = clampHeight(px);
     write(HEIGHT_KEY, String(height.value));
 };
-const setCollapsed = (value: boolean): void => {
-    collapsed.value = value;
-    write(COLLAPSED_KEY, value ? `1` : `0`);
-};
 
 // Alt+PageDown/PageUp walk the strip in READING order — every session, splits included, not just one pill at a
-// time — wrapping at the ends, and expanding a collapsed panel first (switching to a tab nobody can see is the
-// same trap rename dodges). The chord is the shell-wide one; see the command entries below.
+// time — wrapping at the ends. The chord is the shell-wide one; see the command entries below.
 const cycleTab = (delta: number): void => {
     const names = groups.value.flat();
     if (names.length < 2) {
@@ -410,7 +394,6 @@ const cycleTab = (delta: number): void => {
     const index = names.findIndex((name) => name === activeName.value);
     const next = names[(index + delta + names.length) % names.length];
     if (next !== undefined) {
-        setCollapsed(false);
         switchTab(next);
     }
 };
@@ -461,10 +444,7 @@ const registerPanelCommands = (): void => {
                 if (renamingName.value !== undefined) {
                     return; // already editing (F2 lands in the field) — restarting would wipe the draft
                 }
-                // The strip renames the ACTIVE terminal — collapsed, its pill (and the field) isn't on screen,
-                // so expand first rather than edit something invisible.
                 if (activeName.value !== undefined) {
-                    setCollapsed(false);
                     beginRename(activeName.value);
                 }
             },
@@ -751,10 +731,10 @@ const endResize = (event: PointerEvent): void => {
         ref="root"
         class="term relative flex min-h-0 shrink-0 border-t border-line"
         :class="[vertical ? 'flex-row' : 'flex-col', { 'is-resizing': resizing, 'h-full': !resizable }]"
-        :style="!resizable || collapsed ? undefined : { height: `${height}px` }"
+        :style="resizable ? { height: `${height}px` } : undefined"
     >
         <div
-            v-if="resizable && !collapsed"
+            v-if="resizable"
             class="term-resize"
             @pointerdown="startResize"
             @pointermove="onResize"
@@ -774,8 +754,7 @@ const endResize = (event: PointerEvent): void => {
                  source manages sessions — a small × that appears on hover. Click switches (and focuses the
                  clicked split); Shift/Ctrl+click multi-selects pills for the right-click mass actions; × kills
                  that session; + opens a new one. A dimmed segment is an untracked session (a finished one-shot
-                 job's lingering shell, output in scrollback). Hidden while collapsed so the collapsed bar stays
-                 a single clean line (the chevron expands).
+                 job's lingering shell, output in scrollback).
 
                  Pills fill one row, then wrap to a second (the chat strip's rule): a sandbox with a dozen
                  sessions used to push half of them off the right edge, where a tab you can't see is a tab you
@@ -784,7 +763,6 @@ const endResize = (event: PointerEvent): void => {
                  rows once there are genuinely more tabs than fit. Rows sit a touch further apart than pills in a
                  row (gap-y-1 vs gap-x-0.5): stacked pill backgrounds need the separation to read as two rows. -->
             <div
-                v-if="!effectiveCollapsed"
                 class="scrollbar-thin flex min-w-0 flex-1 gap-x-0.5 gap-y-1 overflow-x-hidden overflow-y-auto"
                 :class="vertical ? 'min-h-0 flex-col items-stretch' : 'max-h-13 flex-wrap items-center'"
             >
@@ -861,11 +839,9 @@ const endResize = (event: PointerEvent): void => {
                     <Icon name="plus" class="text-2xs" />
                 </button>
             </div>
-            <!-- The strip is what holds the toolbar against the right edge; collapsed, there is no strip. -->
-            <span v-else class="flex-1"></span>
             <!-- The toolbar: trailing the pills across the top, wrapped under them in the rail. -->
             <div class="flex shrink-0 items-center gap-1" :class="vertical ? 'flex-wrap justify-center border-t border-line pt-1.5' : undefined">
-                <RecentTerminals />
+                <WorkTerminals />
                 <BackgroundProcesses />
                 <button
                     v-if="restart !== undefined && activeShell"
@@ -889,8 +865,8 @@ const endResize = (event: PointerEvent): void => {
                 </button>
                 <!-- Into its own window, and back. It was a right-click-the-strip menu row only — the same
                      burial the chat's pop-out had, on a toolbar that has room to say it out loud. Beside the
-                     collapse/close pair because all three answer "where does this panel live", and it flips
-                     with the state so the one control is the whole round trip. -->
+                     close × because both answer "where does this panel live", and it flips with the state so
+                     the one control is the whole round trip. -->
                 <button
                     type="button"
                     class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
@@ -899,16 +875,6 @@ const endResize = (event: PointerEvent): void => {
                     :aria-label="popoutHint"
                 >
                     <Icon :name="popout.poppedOut.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
-                </button>
-                <button
-                    v-if="resizable"
-                    type="button"
-                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                    @click="setCollapsed(!collapsed)"
-                    v-tooltip.top="collapsed ? 'Expand terminal' : 'Collapse terminal'"
-                    :aria-label="collapsed ? 'Expand terminal' : 'Collapse terminal'"
-                >
-                    <Icon class="text-xs" :name="collapsed ? 'chevron-up' : 'chevron-down'" />
                 </button>
                 <button
                     type="button"
@@ -924,15 +890,11 @@ const endResize = (event: PointerEvent): void => {
         <!-- The panes and the touch keys under them: always a column, whichever side the bar is on. -->
         <div class="flex min-h-0 min-w-0 flex-1 flex-col">
             <!-- xterm sizes to this container; the session's fit observer keeps each cell filling its share of
-                 the pane (useTerminal's mount builds one .term-cell per split). v-show (not v-if) keeps xterm
-                 open()'d and the shell alive while collapsed — it refits when shown again. -->
-            <div v-show="!effectiveCollapsed" ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2"></div>
+                 the pane (useTerminal's mount builds one .term-cell per split). -->
+            <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2"></div>
             <!-- Touch extra-keys row (coarse pointers only). pointerdown.prevent keeps the terminal focused so
                  the soft keyboard stays up while the key is injected. -->
-            <div
-                v-if="coarse && !effectiveCollapsed"
-                class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5"
-            >
+            <div v-if="coarse" class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">
                 <button type="button" class="termkey" :class="{ 'termkey-on': ctrlArmed }" @pointerdown.prevent="ctrlArmed = !ctrlArmed">Ctrl</button>
                 <button v-for="key in EXTRA_KEYS" :key="key.label" type="button" class="termkey" @pointerdown.prevent="pressKey(key.data)">
                     {{ key.label }}

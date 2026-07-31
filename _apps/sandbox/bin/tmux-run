@@ -78,7 +78,7 @@ printf '%s\n' "$cmd" > "$d/cmd"
 #
 # The runner then EXITS WITH THE COMMAND'S CODE rather than falling off the end at 0. That code is the only
 # thing that makes `pane_dead_status` mean anything: the epitaph above reads it, and so does the terminals list
-# (src/system/system.routes.ts paneStates → the panel's Recent list, "exit 1 · 1h ago"). It changes nothing
+# (src/system/system.routes.ts paneStates). It changes nothing
 # else — `remain-on-exit on` keeps the window whatever the status, and the wrapper's own exit code still comes
 # from the status file below, which is written first so a failure can't lose it.
 epitaph='#{?#{==:#{pane_dead_status},0},#[fg=green]✓ finished,#[fg=red]✗ #{?#{!=:#{pane_dead_signal},},signal #{pane_dead_signal},exit #{pane_dead_status}}}#[default] · #{t:pane_dead_time}'

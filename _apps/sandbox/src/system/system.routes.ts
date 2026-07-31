@@ -38,8 +38,9 @@ const execFileAsync = promisify(execFile);
 //
 // `exitCode` follows `command` — the LAST pane wins, which for a window-per-command session is precisely the
 // last command's status (empty, hence undefined, while that pane still runs). `activityAt` is session-wide, so
-// every line of a session carries the same value; 0 stands for "tmux didn't say", and both consumers (the
-// Recent list's age, the retention sweep's clock) read that as unknown rather than as 1970.
+// every line of a session carries the same value; 0 stands for "tmux didn't say", and both consumers (the work
+// popover's "how long since this said anything", the retention sweep's clock) read that as unknown rather than
+// as 1970.
 export interface PaneState {
     readonly command: string;
     readonly live: boolean;

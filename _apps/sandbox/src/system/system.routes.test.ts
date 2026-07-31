@@ -39,8 +39,8 @@ test("the reported command is the session's last pane — single-pane panel-* se
     expect(states.get("panel-docker")?.command).toBe("zsh");
 });
 
-// The exit status of the LAST window is the exit status of the last command — which is the one the panel's
-// Recent list reports, and the only reason bin/tmux-run exits its runner with the command's own code.
+// The exit status of the LAST window is the exit status of the last command — which is the one the dead pane's
+// epitaph shows, and the only reason bin/tmux-run exits its runner with the command's own code.
 test("the exit status is the last window's, and absent while that pane still runs", () => {
     const finished = paneStates(listPanes(["job-infra-check", 1, "0", ""], ["job-infra-check", 1, "1", ""]));
     expect(finished.get("job-infra-check")?.exitCode).toBe(1);

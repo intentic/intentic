@@ -25,13 +25,15 @@ export const isValidSessionName = (name: string): boolean => SESSION_NAME.test(n
 // RETENTION — the hourly sweep that keeps the tmux server from silting up.
 //
 // Two clocks, because the two kinds of session mean different things. A web-* shell is a PLACE the user works
-// in: it only ages out when it has plainly been abandoned. An agent-* or job-* session is a RECORD of work that
-// has already finished — the panel stops tabbing it the moment it finishes (the browser's rule; see the web
-// app's useTerminal), so past this window it is a session nobody can see and nothing will ever write to again.
+// in: it only ages out when it has plainly been abandoned. An agent-* or job-* session is the shell work HAPPENED
+// in, and the browser lists none of them once they finish — no tab, no popover row (see the web app's
+// useTerminal and useWorkTerminals). This window is the grace period on that: long enough that the surfaces
+// naming ONE directly — the chat's Bash card on the turn that just ended, the Capabilities page on the install
+// that just landed — still open something, then gone.
 //
-// Reaping one costs NOTHING, which is what lets this run unattended and the UI ask no confirmation: every
-// pane's bytes are already on disk under historyRoot/logs/terminals (logs/log-files.ts, its own 30-day prune),
-// and an agent's commands are in its transcript besides. The tab was never the record.
+// Reaping one costs NOTHING, which is what lets this run unattended: every pane's bytes are already on disk
+// under historyRoot/logs/terminals (logs/log-files.ts, its own 30-day prune), and an agent's commands are in its
+// transcript besides. The tab was never the record.
 //
 // The guards are about not yanking something out from under someone, not about disk:
 //   · attached — a browser is looking at this session RIGHT NOW

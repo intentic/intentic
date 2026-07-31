@@ -2459,10 +2459,9 @@ export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 // it lists from /system/browsers with the pages it has open (BrowserSessionSchema below).
 //
 // `activityAt` (epoch ms of the session's last output) and `exitCode` (the LAST window's exit status, absent
-// while that pane still lives) are what let a finished session be READ rather than merely listed: the panel's
-// Recent-terminals popover orders by the one and reports the other ("exit 1 · 1h ago"), and the daemon's
-// retention sweep ages sessions out by the same clock. 0 is "tmux didn't say" — treated as unknown by both,
-// never as 1970.
+// while that pane still lives) describe a session beyond "it exists": the panel's work popover orders its live
+// rows by the one and dates them off it, and the daemon's retention sweep ages sessions out by the same clock.
+// 0 is "tmux didn't say" — treated as unknown by both, never as 1970.
 export const TerminalSessionSchema = z.object({
     name: z.string(),
     label: z.string().optional(),

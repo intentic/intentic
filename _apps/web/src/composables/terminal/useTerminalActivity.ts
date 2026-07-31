@@ -16,7 +16,7 @@ import { useTerminalsQuery } from "./terminalsQuery";
  * `showWorkTerminals` is off: they don't tab then either, and a badge reading 3 over a strip showing 1 is
  * exactly the disagreement this composable exists to prevent. Both already have their own always-on surfaces —
  * the chat rail's status, the Capabilities page's progress — and stay one click away in the panel's
- * Recent-terminals popover, which shows a live dot of its own while any of them is running.
+ * work-terminals popover, whose button appears in the toolbar for exactly as long as one of them is running.
  *
  * The agent's BROWSER is deliberately absent: it is not a tmux session and does not tab in this panel — it has
  * a rail area of its own (ShellDesktop's browserTile, counted off browsersQuery). */
