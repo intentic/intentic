@@ -24,8 +24,8 @@
      panel it opened over. Escape is bound in the BUBBLE phase on purpose: content that wants Escape first
      (the model picker clears its search query with it) can still stopPropagation. -->
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { type Cross, placeAnchored, type Side } from "../composables/anchorPlacement.js";
+import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { type Cross, placeAnchored, type Placement, type Side } from "../composables/anchorPlacement.js";
 
 const {
     anchor,
@@ -45,14 +45,35 @@ const {
 const open = defineModel<boolean>({ required: true });
 
 const box = ref<HTMLElement>();
-/* Placed yet? The box is rendered in order to be MEASURED, so it exists for one frame before it has
- * coordinates — painted then, it flashes in the corner of the window on every open. Parked off-screen rather
- * than hidden, because the two obvious ways to hide it both break something here: `visibility: hidden` cannot
- * take focus, and the panel inside is expected to claim it (the model picker focuses its search box as it
- * mounts, in that very frame), while `opacity: 0` loses to the fade-in animation, which is a higher cascade
- * origin than an inline style. A translate is neither, and it leaves the box's measured SIZE untouched. */
-const placed = ref(false);
-const arrow = ref<Side>(side);
+/* WHERE THE BOX IS — undefined until it has been measured, and PARKED off-screen for as long as it is. The box
+ * is rendered in order to be measured, so it exists before it has coordinates; painted then, it flashes in the
+ * corner of the window on every open. Parked rather than hidden, because the two obvious ways to hide it both
+ * break something here: `visibility: hidden` cannot take focus, and the panel inside is expected to claim it
+ * (the model picker focuses its search box as it mounts, in that very frame), while `opacity: 0` loses to the
+ * fade-in animation, which is a higher cascade origin than an inline style. A translate is neither, and it
+ * leaves the box's measured SIZE untouched.
+ *
+ * AND PLACING IT IS A BINDING, NEVER A WRITE ON TOP OF ONE. Both states are the one `:style` below, because an
+ * element Vue binds a style on cannot also be positioned through `el.style`: the moment that binding goes from
+ * the parked object to nothing, Vue patches it as `removeAttribute("style")` and takes the left, top,
+ * max-height and arrow written imperatively a microtask earlier with it. The box then sat unstyled in the
+ * window's top-left corner — the very flash the parking exists to prevent, dressed as the fix for it. It was
+ * the ResizeObserver's first delivery that recovered it, which is why a POP-OUT showed it worst: an observer
+ * watching an element in another window rides the OPENER's rendering loop, so the correction lands frames late
+ * out there, and not at all while the opener is a background tab. One value, applied one way, cannot be
+ * half-applied. */
+const placement = ref<Placement>();
+
+const style = computed<CSSProperties>(() =>
+    placement.value === undefined
+        ? { transform: `translate(-200vw, -200vh)`, pointerEvents: `none` }
+        : {
+              left: `${Math.round(placement.value.left)}px`,
+              top: `${Math.round(placement.value.top)}px`,
+              maxHeight: `${Math.round(placement.value.maxHeight)}px`,
+              "--ui-anchored-arrow": `${Math.round(placement.value.arrow)}px`,
+          },
+);
 
 const reposition = (): void => {
     const el = box.value;
@@ -67,7 +88,7 @@ const reposition = (): void => {
         open.value = false;
         return;
     }
-    const placement = placeAnchored({
+    placement.value = placeAnchored({
         anchor: rect,
         box: el.getBoundingClientRect(),
         view: { width: view.innerWidth, height: view.innerHeight },
@@ -76,12 +97,6 @@ const reposition = (): void => {
         gap,
         edge,
     });
-    el.style.left = `${Math.round(placement.left)}px`;
-    el.style.top = `${Math.round(placement.top)}px`;
-    el.style.maxHeight = `${Math.round(placement.maxHeight)}px`;
-    el.style.setProperty(`--ui-anchored-arrow`, `${Math.round(placement.arrow)}px`);
-    arrow.value = placement.side;
-    placed.value = true;
 };
 
 // What is armed while the panel is up, and on WHICH document/window — remembered so the same pair is disarmed
@@ -151,7 +166,7 @@ watch(
     [open, () => anchor],
     async ([isOpen]) => {
         disarm();
-        placed.value = false;
+        placement.value = undefined;
         if (!isOpen) {
             /* THE KEYBOARD'S PLACE, HANDED BACK. A panel that closes while focus lived inside it (Escape, or a
              * row that picked something) leaves the document focusing <body> — from there Tab restarts at the
@@ -178,14 +193,7 @@ onBeforeUnmount(disarm);
 
 <template>
     <Teleport v-if="open && anchor !== undefined" :to="anchor.ownerDocument.body">
-        <div
-            ref="box"
-            class="ui-anchored"
-            :class="`ui-anchored-${arrow}`"
-            :style="placed ? undefined : { transform: `translate(-200vw, -200vh)`, pointerEvents: `none` }"
-            role="dialog"
-            aria-modal="false"
-        >
+        <div ref="box" class="ui-anchored" :class="`ui-anchored-${placement?.side ?? side}`" :style="style" role="dialog" aria-modal="false">
             <!-- The surface is what paints and CLIPS; the frame above it cannot, or it would cut off its own
                  arrow. See anchored-overlay.css. -->
             <div class="ui-anchored-surface">
