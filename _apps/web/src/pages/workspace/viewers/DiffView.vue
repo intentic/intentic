@@ -5,7 +5,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vu
 import { useLayout } from "../../../composables/useLayout";
 import { stripComments } from "../../../composables/workspace/codeComments";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
-import { langFromShebang, resolveFile } from "../fileType";
+import { highlightLangFor } from "../fileType";
 
 /* Diff of one file across a snapshot (before = parent, after = the snapshot) on Monaco's diff editor — the
  * same engine VSCode uses, so it brings its own minimap, change overview ruler, and diff computation. Side-by-side
@@ -61,9 +61,13 @@ const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
 
 onMounted(async () => {
     const m = await ensureMonaco();
-    // Filename first (like resolveFile); for an extensionless script fall back to the shebang in either side's
-    // bytes (both panes carry the same file, so whichever is present agrees), matching VSCode.
-    lang = resolveFile(path, undefined).lang ?? langFromShebang(after ?? before ?? ``);
+    /* The SAME call the file viewer settles its tokenizer with, so a file colors identically whether it is being
+     * read or reviewed — extension table first, then the shebang for an extensionless script, and nothing at all
+     * over the highlight cap. Both panes hold the same file, so whichever side is present names the language (an
+     * added or deleted file has only one). The cap sees the larger side, since both get tokenized; character
+     * count stands in for the byte size it wants — these props are already-decoded text, and the cap is a guard
+     * against tokenizing something enormous, not a byte-exact budget. */
+    lang = highlightLangFor(path, Math.max(before?.length ?? 0, after?.length ?? 0), after ?? before ?? ``);
     await ensureLanguage(m, lang);
     if (disposed || host.value === undefined) {
         return; // unmounted (fast file-switch) while Monaco/grammar loaded

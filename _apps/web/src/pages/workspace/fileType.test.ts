@@ -5,7 +5,7 @@ import { codeLangForPath, highlightLangFor, langFromShebang, RAW_MAX_BYTES, rend
 describe(`resolveFile empty files`, () => {
     it(`empty text files resolve to an editable mode`, () => {
         expect(resolveFile(`new.ts`, 0)).toEqual({ mode: `code`, lang: `typescript` });
-        expect(resolveFile(`README.md`, 0)).toEqual({ mode: `markdown` });
+        expect(resolveFile(`README.md`, 0)).toEqual({ mode: `markdown`, lang: `markdown` });
         expect(resolveFile(`.gitignore`, 0)).toEqual({ mode: `code`, lang: `gitignore` });
     });
 
@@ -17,6 +17,29 @@ describe(`resolveFile empty files`, () => {
         expect(resolveFile(`song.mp3`, 0)).toEqual({ mode: `empty` });
         expect(resolveFile(`report.docx`, 0)).toEqual({ mode: `empty` });
         expect(resolveFile(`sheet.xlsx`, 0)).toEqual({ mode: `empty` });
+    });
+});
+
+/* Every TEXT mode carries a grammar, not just `code`. Markdown and SVG render their source through the same
+ * editor, so a viewer that shows source — and the DIFF surface, which is one component for all three — gets the
+ * language from the resolution rather than hardcoding one per mode. Markdown used to resolve with no `lang` at
+ * all, which is exactly how .md diffs ended up as uncolored plaintext while the file viewer looked fine. */
+describe(`resolveFile text modes carry a lang`, () => {
+    it(`resolves a grammar for markdown`, () => {
+        expect(resolveFile(`ARCHITECTURE.md`, 1000)).toEqual({ mode: `markdown`, lang: `markdown` });
+        expect(resolveFile(`notes.markdown`, 1000)).toEqual({ mode: `markdown`, lang: `markdown` });
+        expect(resolveFile(`page.mdx`, 1000)).toEqual({ mode: `markdown`, lang: `markdown` });
+    });
+
+    it(`resolves svg markup as xml`, () => {
+        expect(resolveFile(`icon.svg`, 1000)).toEqual({ mode: `svg`, lang: `xml` });
+        // The same answer for a path, whichever surface asks — this is what the chat's Read card colors from too.
+        expect(codeLangForPath(`icon.svg`)).toBe(`xml`);
+    });
+
+    it(`applies the highlight cap to every text mode, not just code`, () => {
+        expect(resolveFile(`huge.md`, 1_000_000)).toEqual({ mode: `markdown` });
+        expect(resolveFile(`huge.svg`, 1_000_000)).toEqual({ mode: `svg` });
     });
 });
 

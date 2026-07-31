@@ -1,5 +1,5 @@
 // Pure file-type resolution for the workspace viewer: maps a path + size to a render mode (and a Shiki lang id
-// for code), so the viewer dispatches WITHOUT fetching first. No framework code here — unit-testable in isolation.
+// for text), so the viewer dispatches WITHOUT fetching first. No framework code here — unit-testable in isolation.
 
 /* `big-text` is decided AFTER the read, from the size the daemon reports, like `binary` is decided from the
  * bytes: text over the editable cap renders windowed and read-only (BigTextView) instead of as a buffer.
@@ -8,8 +8,9 @@ export type ViewMode = "code" | "markdown" | "big-text" | "image" | "svg" | "pdf
 
 export interface FileResolution {
     readonly mode: ViewMode;
-    // Shiki language id for `code` mode; undefined renders as plain <pre> (unknown extension, or a file too big
-    // to tokenize). Must be a key of useHighlighter LANGS.
+    // Shiki language id, carried by every TEXT mode (`code`, `markdown`, `svg`) — all three render source through
+    // the same editor, so all three need a grammar. undefined opens as plaintext (unknown extension, or a file too
+    // big to tokenize) and is the only value a non-text mode ever carries. Must be a key of useHighlighter LANGS.
     readonly lang?: string;
 }
 
@@ -83,6 +84,8 @@ const EXT_LANG: Record<string, string> = {
     swift: "swift",
     diff: "diff",
     patch: "diff",
+    // SVG is XML. The image is what the viewer SHOWS, but its Source toggle and its diff are markup.
+    svg: "xml",
     // Timestamps, levels and paths coloured like a terminal. Only under the highlight cap — the logs that most
     // want it are the ones far too big for a tokenizer, and those open plain in the windowed viewer.
     log: "log",
@@ -269,9 +272,13 @@ export const resolveFile = (path: string, size: number | undefined): FileResolut
     // An empty file has nothing to preview — but text types (code/markdown, incl. unknown/dotfiles) still fall
     // through to their editable blank editor. Only the non-text preview types below short-circuit to "empty".
     const empty = size === 0;
+    // The tokenizer hint every TEXT mode carries. Resolved ONCE here rather than per-branch: markdown and svg
+    // render their source through the same editor `code` does, so "what grammar is this file?" has exactly one
+    // answer per path, independent of which preview the mode picks. Nothing at all above the highlight cap.
+    const lang = tooBig(HIGHLIGHT_MAX_BYTES) ? undefined : langFor(name, ext);
 
     if (ext === "svg") {
-        return empty ? { mode: "empty" } : tooBig(RAW_MAX_BYTES) ? { mode: "too-large" } : { mode: "svg" };
+        return empty ? { mode: "empty" } : tooBig(RAW_MAX_BYTES) ? { mode: "too-large" } : { mode: "svg", lang };
     }
     if (IMAGE_EXTS.has(ext)) {
         return empty ? { mode: "empty" } : tooBig(RAW_MAX_BYTES) ? { mode: "too-large" } : { mode: "image" };
@@ -280,7 +287,7 @@ export const resolveFile = (path: string, size: number | undefined): FileResolut
         return empty ? { mode: "empty" } : tooBig(RAW_MAX_BYTES) ? { mode: "too-large" } : { mode: "pdf" };
     }
     if (MARKDOWN_EXTS.has(ext)) {
-        return { mode: "markdown" };
+        return { mode: "markdown", lang };
     }
     // Raw-byte families: fetched via /workspace/raw, so the 25 MiB cap applies (oversize → download).
     if (AUDIO_EXTS.has(ext)) {
@@ -299,7 +306,7 @@ export const resolveFile = (path: string, size: number | undefined): FileResolut
     // gate here: the SIZE the gate needs is the daemon's, which arrives with the first window (FileViewer), and
     // a resolution made from a tree entry that may be missing is exactly how an unbounded read used to slip
     // through. Text always resolves to text; how much of it opens, and whether it is editable, is decided there.
-    return { mode: "code", lang: tooBig(HIGHLIGHT_MAX_BYTES) ? undefined : langFor(name, ext) };
+    return { mode: "code", lang };
 };
 
 // The render modes that are TEXT — the ones a line-by-line diff is the right tool for.

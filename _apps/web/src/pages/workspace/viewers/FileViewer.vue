@@ -187,9 +187,9 @@ watch(
         if (resolution.mode === `code` || resolution.mode === `markdown`) {
             loading.value = true;
             // Warm Monaco + the file's grammar concurrently with the fetch (CodeView awaits both before painting,
-            // so this just hides the load behind the fetch). Markdown renders as prose (marked); warm the markdown
-            // grammar for its Source toggle.
-            void ensureMonaco().then((monaco) => ensureLanguage(monaco, resolution.mode === `markdown` ? `markdown` : resolution.lang));
+            // so this just hides the load behind the fetch). Markdown renders as prose (marked), but its Source
+            // toggle is the same editor, and the resolution carries a grammar for it like any other text file.
+            void ensureMonaco().then((monaco) => ensureLanguage(monaco, resolution.lang));
             readText(currentPath).then((window) => {
                 const content = window.content;
                 if (id !== seq) {
@@ -320,8 +320,6 @@ const canEdit = computed(() => (mode.value === `code` || mode.value === `markdow
 // Global edit mode (useLayout), gated per file by canEdit so images/PDFs/binaries stay in their viewer.
 const editingThis = computed(() => !mobile.value && layout.editMode.value && canEdit.value);
 const dirtyThis = computed(() => edit.isDirty(path));
-// CodeMirror grammar: markdown mode carries no Shiki lang id, so name it explicitly; code mode reuses the id.
-const editorLang = computed(() => (mode.value === `markdown` ? `markdown` : lang.value));
 const editorSeed = computed(() => edit.bufferOf(path) ?? text.value ?? ``);
 
 const onEditorChange = (value: string): void => edit.setBuffer(path, value);
@@ -407,7 +405,7 @@ const onEditorSave = (value: string): void =>
                 editable
                 :path="path"
                 :code="editorSeed"
-                :lang="editorLang"
+                :lang="lang"
                 :scroll-to-line="line"
                 @change="onEditorChange"
                 @save="onEditorSave"
