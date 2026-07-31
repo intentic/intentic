@@ -38,8 +38,7 @@ import { harnessEnv } from "./harness-credentials.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
-import { isAuthFailureText } from "./auth-failure-text.js";
-import { isUsageLimitText } from "./usage-limit-text.js";
+import { isAuthFailureText, isUsageLimitText } from "./failure-sentences.js";
 
 export interface AgentRequest {
     readonly prompt: string;
@@ -336,7 +335,7 @@ const rateLimitFrame = (resetsAt?: number): Extract<AgentEvent, { kind: "error" 
  *
  * Two of these read the CATEGORY the SDK filed, and two read the SENTENCE, and the split is not arbitrary. A
  * spent allowance and a refused credential arrive as prose under whatever category the failing layer happened to
- * pick (see usage-limit-text.ts, auth-failure-text.ts), so there the text is the only signal. A provider outage
+ * pick (see failure-sentences.ts), so there the text is the only signal. A provider outage
  * does not: the harness buckets every 5xx, every 529 at capacity, and every dropped socket as `server_error`, and
  * a pre-retry capacity refusal as `overloaded`. Those two categories mean precisely "the provider failed us and
  * the request is worth making again", which is the one claim an automatic resume has to be right about — so it is

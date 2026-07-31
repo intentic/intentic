@@ -278,20 +278,29 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
     });
 
-    it("refuses a usage-limit refusal as any automatic title — it names the failure, not the work", async () => {
+    /* The two conditions the CLI reports as prose (agent/failure-sentences.ts), each of which has reached this
+     * function as a proposed name: the limit sentence from a summary pass whose quick-model call was out of
+     * allowance, the auth sentence from one whose token had been revoked. Both are asserted at every rule
+     * because guarding the first alone is precisely how the second got in. */
+    const FAILURE_SENTENCES = [
+        "You've hit your session limit · resets 11:50pm (UTC)",
+        "Failed to authenticate. API Error: 401 OAuth access token has been revoked",
+    ];
+
+    it.each(FAILURE_SENTENCES)("refuses %s as any automatic title — it names the failure, not the work", async (sentence) => {
         const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
 
-        // A summary pass whose own quick-model call hit the limit hands the refusal sentence over as if it
-        // were the name. The derived title must stand, and stand REPLACEABLE (the next honest summary lands).
-        await registry.setTitle("c1", "You've hit your session limit · resets 11:50pm (UTC)", "summary");
+        // A summary pass whose own quick-model call hit the condition hands the sentence over as if it were
+        // the name. The derived title must stand, and stand REPLACEABLE (the next honest summary lands).
+        await registry.setTitle("c1", sentence, "summary");
         expect(registry.get("c1")?.title).toBe("Fix the login bug");
         expect((await registry.setTitle("c1", "Wire the fleet board broadcast", "summary"))?.title).toBe("Wire the fleet board broadcast");
     });
 
-    it("a stolen limit-sentence title forfeits its rank, so the next summary heals it", async () => {
-        // An entry poisoned before the refusal guard existed: the sentence sits at `summary` rank, where the
+    it.each(FAILURE_SENTENCES)("a stolen title reading %s forfeits its rank, so the next summary heals it", async (sentence) => {
+        // An entry poisoned before the guard covered this sentence: it sits at `summary` rank, where the
         // sideways-move rule would protect it forever.
         const poisoned: PersistedAgent = {
             id: "c1",
@@ -305,7 +314,7 @@ describe("agents registry", () => {
             outputTokens: 0,
             createdAt: 1_000,
             updatedAt: 1_000,
-            title: "You've hit your session limit · resets 11:50pm (UTC)",
+            title: sentence,
             titleSource: "summary",
         };
         const registry = createAgentsRegistry(memoryStore([poisoned]), standings());

@@ -1,5 +1,5 @@
 import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
-import { isUsageLimitText } from "../agent/usage-limit-text.js";
+import { isFailureSentence } from "../agent/failure-sentences.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
 import { type AgentsStore, type AgentTitleSource, isIsolated, type PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
@@ -304,15 +304,16 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         if (entry === undefined || clean === undefined) {
             return false;
         }
-        // A provider refusal ("You've hit your session limit · resets …") is never a NAME, however it got
-        // here — a summary pass whose own model call hit the limit, a plan heading quoting the failure. Only
-        // a rename may say it, because a rename is the user's to waste. And a STORED title that is the
-        // refusal was stolen exactly that way before this guard existed: it forfeits its source's rank, so
-        // the next honest promotion replaces it instead of bouncing off the sideways-move rule below.
-        if (source !== "user" && isUsageLimitText(clean)) {
+        // A provider failure sentence ("You've hit your session limit · resets …", "Failed to authenticate.
+        // API Error: 401 …") is never a NAME, however it got here — a summary pass whose own model call hit
+        // the condition, a plan heading quoting the failure. Only a rename may say it, because a rename is the
+        // user's to waste. And a STORED title that is one was stolen exactly that way: it forfeits its
+        // source's rank, so the next honest promotion replaces it instead of bouncing off the sideways-move
+        // rule below. The family, never a member of it — see failure-sentences.ts on what guarding one cost.
+        if (source !== "user" && isFailureSentence(clean)) {
             return false;
         }
-        const currentRank = entry.title !== undefined && isUsageLimitText(entry.title) ? -1 : TITLE_RANK[entry.titleSource ?? "derived"];
+        const currentRank = entry.title !== undefined && isFailureSentence(entry.title) ? -1 : TITLE_RANK[entry.titleSource ?? "derived"];
         if (source !== "user" && TITLE_RANK[source] <= currentRank) {
             return false;
         }

@@ -37,7 +37,12 @@ test("returns empty for a reply with nothing in it", () => {
 /* The pass itself, over a fake registry: only the entry read and the title write matter to these rules, and
  * the quick model is the mock above — what it answers (or that it was never asked) IS each test's subject. */
 
-const LIMIT = "You've hit your session limit · resets 11:50pm (UTC)";
+// The conditions the CLI reports as prose (failure-sentences.ts). Every rule below is asserted over BOTH,
+// because this pass guarded the first alone and the second walked in and took four sessions' names.
+const FAILURE_SENTENCES = [
+    "You've hit your session limit · resets 11:50pm (UTC)",
+    "Failed to authenticate. API Error: 401 OAuth access token has been revoked",
+];
 
 const servicesWith = (
     entry: { title?: string; titleSource?: "derived" | "summary" | "plan" | "user" } | undefined,
@@ -58,19 +63,19 @@ test("names a still-derived conversation from the finished turn", async () => {
     expect(setTitle).toHaveBeenCalledWith("c1", "Wire the fleet board broadcast", "summary");
 });
 
-test("a closing that IS the usage-limit refusal is not an answer to read — no model call, no title", async () => {
+test.each(FAILURE_SENTENCES)("a closing that IS %s is not an answer to read — no model call, no title", async (failure) => {
     const setTitle = vi.fn();
     await summarizeAgentTitle(servicesWith({ title: "Fix the auth tests", titleSource: "derived" }, setTitle), "c1", {
         prompt: "fix the auth tests",
-        closing: LIMIT,
+        closing: failure,
     });
     expect(ask).not.toHaveBeenCalled();
     expect(setTitle).not.toHaveBeenCalled();
 });
 
-test("a quick-model reply that is the refusal sentence never becomes the name", async () => {
+test.each(FAILURE_SENTENCES)("a quick-model reply reading %s never becomes the name", async (failure) => {
     const setTitle = vi.fn();
-    ask.mockResolvedValue({ text: LIMIT });
+    ask.mockResolvedValue({ text: failure });
     await summarizeAgentTitle(servicesWith({ title: "Fix the auth tests", titleSource: "derived" }, setTitle), "c1", {
         prompt: "fix the auth tests",
         closing: "All green now.",
@@ -78,10 +83,10 @@ test("a quick-model reply that is the refusal sentence never becomes the name", 
     expect(setTitle).not.toHaveBeenCalled();
 });
 
-test("a stored title stolen by the refusal sentence counts as no name — the pass runs again and heals it", async () => {
+test.each(FAILURE_SENTENCES)("a stored title stolen by %s counts as no name — the pass runs again and heals it", async (failure) => {
     const setTitle = vi.fn();
     ask.mockResolvedValue({ text: "Fix the flaky auth tests" });
-    await summarizeAgentTitle(servicesWith({ title: LIMIT, titleSource: "summary" }, setTitle), "c1", {
+    await summarizeAgentTitle(servicesWith({ title: failure, titleSource: "summary" }, setTitle), "c1", {
         prompt: "fix the auth tests",
         closing: "All green now.",
     });
