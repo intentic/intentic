@@ -85,6 +85,21 @@ const mirrorRoot = (doc: Document): void => {
     }
 };
 
+const syncDocStyles = (doc: Document): void => {
+    const clones = doc.head.querySelectorAll(`[${CLONE_ATTR}]`);
+    for (let i = 0; i < clones.length; i++) {
+        clones[i]?.remove();
+    }
+    const sheets = document.head.querySelectorAll(`style, link[rel="stylesheet"]`);
+    for (let i = 0; i < sheets.length; i++) {
+        const clone = sheets[i]?.cloneNode(true) as Element | undefined;
+        if (clone) {
+            clone.setAttribute(CLONE_ATTR, ``);
+            doc.head.appendChild(clone);
+        }
+    }
+};
+
 // Clone every stylesheet (Vite/Tailwind/PrimeVue inject <style> in dev, <link> in prod) into the pop-out
 // document, mirror the theme root, and make the body a full-height flex column on the app's canvas so the
 // teleported panel fills the window at every size the user drags it to (full-screen included). Re-runnable:
@@ -92,16 +107,9 @@ const mirrorRoot = (doc: Document): void => {
 // panel DOM first.
 const dressWindow = (win: Window, title: string): void => {
     const doc = win.document;
-    for (const clone of doc.head.querySelectorAll(`[${CLONE_ATTR}]`)) {
-        clone.remove();
-    }
     doc.title = title;
     doc.body.replaceChildren();
-    for (const sheet of document.head.querySelectorAll(`style, link[rel="stylesheet"]`)) {
-        const clone = sheet.cloneNode(true) as Element;
-        clone.setAttribute(CLONE_ATTR, ``);
-        doc.head.appendChild(clone);
-    }
+    syncDocStyles(doc);
     mirrorRoot(doc);
     // Inline rather than in the page's own stylesheet, because the clones above land after it: the layout the
     // Teleport target needs cannot be something an app-wide `body` rule gets to override.
@@ -215,10 +223,38 @@ document.removeEventListener = ((
     }
 }) as Document[`removeEventListener`];
 
+let headObserver: MutationObserver | undefined;
+
+const syncAllPopoutStyles = (): void => {
+    popoutDocuments.forEach((doc) => {
+        syncDocStyles(doc);
+    });
+};
+
+const startHeadObserver = (): void => {
+    if (headObserver !== undefined || typeof MutationObserver === `undefined` || !document.head) {
+        return;
+    }
+    headObserver = new MutationObserver(() => {
+        if (popoutDocuments.size > 0) {
+            syncAllPopoutStyles();
+        }
+    });
+    headObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
+};
+
+const stopHeadObserver = (): void => {
+    if (popoutDocuments.size === 0 && headObserver !== undefined) {
+        headObserver.disconnect();
+        headObserver = undefined;
+    }
+};
+
 // A pop-out document joins the set of documents the app renders into: everything armed so far is armed on it,
 // so an overlay that was ALREADY open when the panel popped out dismisses out there too.
 const shareListeners = (doc: Document): void => {
     popoutDocuments.add(doc);
+    startHeadObserver();
     for (const entry of sharedListeners) {
         doc.addEventListener(entry.type, entry.listener, entry.options);
     }
@@ -228,6 +264,7 @@ const shareListeners = (doc: Document): void => {
 // hands back keeps its document, and a page that adopts it next arms its own realm's listeners on it.
 const unshareListeners = (doc: Document): void => {
     popoutDocuments.delete(doc);
+    stopHeadObserver();
     for (const entry of sharedListeners) {
         doc.removeEventListener(entry.type, entry.listener, entry.options);
     }

@@ -305,4 +305,24 @@ describe(`createPopout`, () => {
         expect(win.close).toHaveBeenCalled();
         expect(sessionStorage.getItem(`ui-popout-dock-panel`)).toBeNull();
     });
+
+    it(`syncs dynamically added style tags in document.head to pop-out documents`, async () => {
+        createPopout(`dynamic-style-panel`, `Panel`, size);
+        const win = fakeWindow(`dynamic-style-panel`);
+        adopt(`dynamic-style-panel`, win);
+
+        const dynamicStyle = document.createElement(`style`);
+        dynamicStyle.setAttribute(`data-primevue-style-id`, `contextmenu-style`);
+        dynamicStyle.textContent = `.p-contextmenu { background: red; }`;
+        document.head.appendChild(dynamicStyle);
+
+        await vi.advanceTimersByTimeAsync(10);
+
+        const clonedStyles = Array.prototype.slice.call(win.document.head.querySelectorAll(`style[data-primevue-style-id="contextmenu-style"]`)) as Element[];
+        expect(clonedStyles).toHaveLength(1);
+        expect(clonedStyles[0]?.textContent).toBe(`.p-contextmenu { background: red; }`);
+        expect(clonedStyles[0]?.getAttribute(`data-intentic-clone`)).toBe(``);
+
+        dynamicStyle.remove();
+    });
 });
