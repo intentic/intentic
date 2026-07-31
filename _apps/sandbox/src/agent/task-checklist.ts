@@ -40,8 +40,10 @@ export class TaskChecklist {
     // TaskCreate tool_use id -> the subject/activeForm it asked for, held until its result names the task id.
     private readonly pending = new Map<string, TodoItem>();
 
+    // A fresh array, but the items themselves are shared: every mutation below REPLACES a task rather than
+    // patching one in place, so an already-emitted list can never change under the UI.
     private snapshot(): TodoItem[] {
-        return [...this.tasks.values()].map((task) => ({ ...task }));
+        return [...this.tasks.values()];
     }
 
     // A TaskCreate call: remember what it asked for. Nothing to render yet — the id arrives with the result.

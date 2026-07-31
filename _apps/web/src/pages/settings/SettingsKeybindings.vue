@@ -39,7 +39,7 @@ const rows = computed<readonly Row[]>(() => {
             hasDefault: entry.keybinding !== undefined,
         }))
         .filter((row) => q.length === 0 || row.title.toLowerCase().includes(q) || row.command.toLowerCase().includes(q))
-        .sort((a, b) => a.title.localeCompare(b.title));
+        .toSorted((a, b) => a.title.localeCompare(b.title));
 });
 
 // Any override at all → the "Reset all" affordance is meaningful.
@@ -64,6 +64,18 @@ const chordOwners = computed<Record<string, readonly string[]>>(() => {
 });
 const conflicting = (chord: string | undefined): boolean => chord !== undefined && (chordOwners.value[chord]?.length ?? 0) > 1;
 
+// Recording is a two-way pair — the capture handler ends it, and ending it detaches the handler — so the
+// listener rides in a variable both can name and neither has to be declared before the other.
+let capture: ((event: KeyboardEvent) => void) | undefined;
+
+const stopRecording = (): void => {
+    recording.value = undefined;
+    if (capture !== undefined) {
+        window.removeEventListener(`keydown`, capture, true);
+        capture = undefined;
+    }
+};
+
 const onCapture = (event: KeyboardEvent): void => {
     event.preventDefault();
     event.stopPropagation();
@@ -87,13 +99,9 @@ const startRecording = (command: string): void => {
     // Swap targets cleanly if another row was already capturing.
     stopRecording();
     recording.value = command;
+    capture = onCapture;
     // Capture phase so this handler beats the shell dispatcher's window listener and stopPropagation halts it.
-    window.addEventListener(`keydown`, onCapture, true);
-};
-
-const stopRecording = (): void => {
-    recording.value = undefined;
-    window.removeEventListener(`keydown`, onCapture, true);
+    window.addEventListener(`keydown`, capture, true);
 };
 
 onUnmounted(stopRecording);

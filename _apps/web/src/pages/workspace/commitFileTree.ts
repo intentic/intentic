@@ -65,7 +65,7 @@ export const buildFileTree = (files: readonly GitChange[]): TreeNode[] => {
             dirs.push({ type: "dir", name: dirName, path: dirPath, children: convert(current, dirPath) });
         }
         dirs.sort((a, b) => a.name.localeCompare(b.name));
-        const fileNodes = [...raw.files].sort((a, b) => a.name.localeCompare(b.name));
+        const fileNodes = raw.files.toSorted((a, b) => a.name.localeCompare(b.name));
         return [...dirs, ...fileNodes];
     };
     return convert(root, "");

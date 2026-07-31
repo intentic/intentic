@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { ANCHOR_READY, inWorktree, type IsolationPlan, isolationScript, MAIN_MOUNT, modulesDirs, nsenterArgv, nsenterPrefix } from "./isolation.js";
+import { ANCHOR_READY, inWorktree, type IsolationPlan, isolationScript, MAIN_MOUNT, mirroredDirs, nsenterArgv, nsenterPrefix } from "./isolation.js";
 
 /* The namespace itself needs CAP_SYS_ADMIN, which no test runner is guaranteed to have — so what is asserted
  * here is the PLAN: the ordering that makes the mounts correct, and the path translation the daemon depends
@@ -19,7 +19,7 @@ afterEach(async () => {
 const plan: IsolationPlan = {
     worktree: "/history/worktrees/abc",
     root: "/work",
-    modules: ["", "_apps/web"],
+    mirrors: ["node_modules", "_apps/web/node_modules", "_apps/web/dist"],
     overlays: "/history/overlays/abc",
 };
 
@@ -49,7 +49,7 @@ test("shared state is re-bound from the aside mount, not from the shadowed path"
     expect(script).toContain(`mkdir -p '/work/.intentic'`);
 });
 
-test("a dependency tree is an overlay over the main checkout, never a writable bind onto it", () => {
+test("a mirrored tree is an overlay over the main checkout, never a writable bind onto it", () => {
     const script = isolationScript(plan);
     // The whole point: pnpm hardlinks workspace sources into node_modules, so a WRITABLE bind here let a
     // write through the node_modules name rewrite the main checkout's tracked file. Reads still come from
@@ -66,6 +66,11 @@ test("a dependency tree is an overlay over the main checkout, never a writable b
     expect(script).toContain(`mkdir -p '/work/node_modules' '/history/overlays/abc/node_modules/upper' '/history/overlays/abc/node_modules/work'`);
     // Nothing binds a dependency tree any more — a single leftover bind is the whole hole reopened.
     expect(script).not.toContain(`mount --bind '${MAIN_MOUNT}/node_modules'`);
+    // Build output rides the same mechanism: without it a worktree resolves third-party imports but not its
+    // own siblings', and every suite that crosses a package boundary dies at collection.
+    expect(script).toContain(
+        `mount -t overlay intentic-modules -o 'lowerdir=${MAIN_MOUNT}/_apps/web/dist,upperdir=/history/overlays/abc/_apps%2Fweb%2Fdist/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fdist/work' '/work/_apps/web/dist'`,
+    );
 });
 
 test("a path that would corrupt the overlay option string is refused rather than mounted wrong", () => {
@@ -112,13 +117,65 @@ test("re-bound subtrees resolve to the main tree in both namespaces and are neve
     expect(inWorktree("/work/.intentic-notes/x.md", plan)).toBe("/history/worktrees/abc/.intentic-notes/x.md");
 });
 
-test("dependency dirs are discovered shallowest-first so a parent never shadows a child", async () => {
+// A checked-out worktree of `root`: tracked source only, which is precisely why the dirs below are missing
+// from it and have to be mirrored.
+const checkout = async (): Promise<string> => {
+    const worktree = await mkdtemp(join(tmpdir(), "isolation-wt-"));
+    tempDirs.push(worktree);
+    for (const pkg of ["_apps/web", "_libs/ui"]) {
+        await mkdir(join(worktree, pkg), { recursive: true });
+    }
+    return worktree;
+};
+
+test("dependency and build-output dirs are discovered shallowest-first so a parent never shadows a child", async () => {
     const root = await mkdtemp(join(tmpdir(), "isolation-"));
     tempDirs.push(root);
     await mkdir(join(root, "node_modules"), { recursive: true });
     await mkdir(join(root, "_apps", "web", "node_modules"), { recursive: true });
     await mkdir(join(root, "_libs", "ui", "node_modules"), { recursive: true });
+    // Build output is untracked the same way an install is, and a sibling package's import resolves through it.
+    await mkdir(join(root, "_libs", "ui", "dist"), { recursive: true });
     // Never descended into: the walk must not plant a mount inside a dependency tree.
     await mkdir(join(root, "node_modules", "pkg", "node_modules"), { recursive: true });
-    expect(await modulesDirs(root)).toEqual(["", "_apps/web", "_libs/ui"]);
+    // A build CACHE is deliberately not mirrored — main's tsbuildinfo would tell the turn's incremental build
+    // that the mirrored dist already covers sources the turn has since changed.
+    await mkdir(join(root, "_libs", "ui", ".cache"), { recursive: true });
+
+    expect(await mirroredDirs(root, await checkout(root), { intoNestedRepos: true })).toEqual([
+        "node_modules",
+        "_apps/web/node_modules",
+        "_libs/ui/dist",
+        "_libs/ui/node_modules",
+    ]);
+});
+
+test("a dir the checkout fills is never mirrored — a tracked build output stays the agent's own", async () => {
+    const root = await mkdtemp(join(tmpdir(), "isolation-"));
+    tempDirs.push(root);
+    await mkdir(join(root, "_libs", "ui", "dist"), { recursive: true });
+    await mkdir(join(root, "_libs", "ui", "node_modules"), { recursive: true });
+
+    // The repo TRACKS its dist, so the checkout carries it. Mounting the main tree's over it would hide the
+    // very files the agent's branch exists to change.
+    const worktree = await checkout(root);
+    await mkdir(join(worktree, "_libs", "ui", "dist"), { recursive: true });
+    await writeFile(join(worktree, "_libs", "ui", "dist", "index.js"), "the agent's own\n");
+
+    expect(await mirroredDirs(root, worktree, { intoNestedRepos: true })).toEqual(["_libs/ui/node_modules"]);
+});
+
+test("a nested repo's dirs belong to its own worktree, not the parent's", async () => {
+    const root = await mkdtemp(join(tmpdir(), "isolation-"));
+    tempDirs.push(root);
+    await mkdir(join(root, "node_modules"), { recursive: true });
+    await mkdir(join(root, "intent", ".git"), { recursive: true });
+    await mkdir(join(root, "intent", "node_modules"), { recursive: true });
+
+    const worktree = await checkout(root);
+    // The PLAN spans the workspace: each nested worktree is mounted under the same root, so it wants both.
+    expect(await mirroredDirs(root, worktree, { intoNestedRepos: true })).toEqual(["node_modules", "intent/node_modules"]);
+    // The symlink mirror runs per repo, and planting `intent/node_modules` from here would put the nested
+    // repo's link inside the PARENT's checkout.
+    expect(await mirroredDirs(root, worktree, { intoNestedRepos: false })).toEqual(["node_modules"]);
 });

@@ -45,8 +45,8 @@ const graphRows = computed(() =>
 );
 
 // A ref decoration split into its kind — a branch pill vs a `tag: x` pill; HEAD is surfaced separately.
-const refBadge = (ref: string): { tag: boolean; label: string } =>
-    ref.startsWith(`tag: `) ? { tag: true, label: ref.slice(`tag: `.length) } : { tag: false, label: ref };
+const refBadge = (decoration: string): { tag: boolean; label: string } =>
+    decoration.startsWith(`tag: `) ? { tag: true, label: decoration.slice(`tag: `.length) } : { tag: false, label: decoration };
 
 // --- inline expandable detail (accordion): one commit open at a time; its changed files load lazily ----------
 const openSha = ref<string | undefined>(undefined);
@@ -137,6 +137,27 @@ const openMenu = (event: Event, commit: GitCommit): void => {
     menuCommit.value = commit;
     menu.value?.show(event);
 };
+const pending = ref<{ kind: ActionKind; commit: GitCommit } | undefined>(undefined);
+const nameInput = ref(``);
+const resetMode = ref<"soft" | "mixed" | "hard">(`mixed`);
+const acting = ref(false);
+const actionError = ref<string | undefined>(undefined);
+
+const start = (kind: ActionKind): void => {
+    const commit = menuCommit.value;
+    if (commit === undefined) {
+        return;
+    }
+    nameInput.value = ``;
+    resetMode.value = `mixed`;
+    actionError.value = undefined;
+    pending.value = { kind, commit };
+};
+const cancelAction = (): void => {
+    pending.value = undefined;
+    actionError.value = undefined;
+};
+
 const menuItems = computed<MenuItem[]>(() => {
     const commit = menuCommit.value;
     if (commit === undefined) {
@@ -159,27 +180,6 @@ const menuItems = computed<MenuItem[]>(() => {
         { label: `Copy Commit Subject`, command: () => copy(commit.subject) },
     ];
 });
-
-const pending = ref<{ kind: ActionKind; commit: GitCommit } | undefined>(undefined);
-const nameInput = ref(``);
-const resetMode = ref<"soft" | "mixed" | "hard">(`mixed`);
-const acting = ref(false);
-const actionError = ref<string | undefined>(undefined);
-
-const start = (kind: ActionKind): void => {
-    const commit = menuCommit.value;
-    if (commit === undefined) {
-        return;
-    }
-    nameInput.value = ``;
-    resetMode.value = `mixed`;
-    actionError.value = undefined;
-    pending.value = { kind, commit };
-};
-const cancelAction = (): void => {
-    pending.value = undefined;
-    actionError.value = undefined;
-};
 
 const pendingBody = computed<string>(() => {
     const target = pending.value;
@@ -212,6 +212,29 @@ const pendingBody = computed<string>(() => {
 const isConflict = (result: unknown): boolean =>
     typeof result === `object` && result !== null && `ok` in result && (result as GitActionResult).ok === false;
 
+const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<unknown> => {
+    switch (kind) {
+        case `branch`:
+            return log.createBranch(commit.sha, name);
+        case `tag`:
+            return log.createTag(commit.sha, name);
+        case `checkout`:
+            return log.checkout(commit.sha);
+        case `cherry-pick`:
+            return log.cherryPick(commit.sha);
+        case `revert`:
+            return log.revert(commit.sha);
+        case `drop`:
+            return log.drop(commit.sha);
+        case `merge`:
+            return log.merge(commit.sha);
+        case `rebase`:
+            return log.rebase(commit.sha);
+        case `reset`:
+            return log.reset(commit.sha, resetMode.value);
+    }
+};
+
 const runPending = async (): Promise<void> => {
     const target = pending.value;
     if (target === undefined || acting.value) {
@@ -238,29 +261,6 @@ const runPending = async (): Promise<void> => {
         actionError.value = cause instanceof Error ? cause.message : `Action failed.`;
     } finally {
         acting.value = false;
-    }
-};
-
-const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<unknown> => {
-    switch (kind) {
-        case `branch`:
-            return log.createBranch(commit.sha, name);
-        case `tag`:
-            return log.createTag(commit.sha, name);
-        case `checkout`:
-            return log.checkout(commit.sha);
-        case `cherry-pick`:
-            return log.cherryPick(commit.sha);
-        case `revert`:
-            return log.revert(commit.sha);
-        case `drop`:
-            return log.drop(commit.sha);
-        case `merge`:
-            return log.merge(commit.sha);
-        case `rebase`:
-            return log.rebase(commit.sha);
-        case `reset`:
-            return log.reset(commit.sha, resetMode.value);
     }
 };
 </script>

@@ -106,9 +106,9 @@ const schedule = (path) => {
     queued = (queued ?? false) || full;
     clearTimeout(timer);
     timer = setTimeout(() => {
-        const full = queued ?? false;
+        const due = queued ?? false;
         queued = undefined;
-        void cycle(full);
+        void cycle(due);
     }, DEBOUNCE_MS);
 };
 

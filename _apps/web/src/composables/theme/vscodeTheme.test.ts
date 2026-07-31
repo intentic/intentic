@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compositeOver, parseHexColor, toHex, vscodeThemeToTokens } from "./vscodeTheme";
+import { compositeOver, parseHexColor, vscodeThemeToTokens } from "./vscodeTheme";
 
 /* The theme importer is the biggest familiarity lever, so its color math has to be right: VSCode themes ship
  * alpha'd borders/hovers, and getting those wrong is exactly the kind of off-by-a-shade that makes an imported

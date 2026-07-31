@@ -184,6 +184,10 @@ export interface CliProxyClient {
     readonly models: (provider: KeyedProvider) => Promise<Model[]>;
 }
 
+// An account's key in the shared usage store, namespaced by provider — an auth-file name is only unique
+// within the provider it belongs to, and the store is shared with the native accounts.
+const usageKey = (provider: KeyedProvider, name: string): string => `${provider}:${name}`;
+
 export const createCliProxyClient = (params: {
     managementUrl: string;
     token: string;
@@ -329,7 +333,6 @@ export const createCliProxyClient = (params: {
      * caches the successes; this is what bounds the FAILURES — an upstream that is down, or one that answers
      * with no quota at all, would otherwise be retried on every call, and `accounts` is called on every routed
      * turn and every three seconds for as long as a connect flow is open. */
-    const usageKey = (provider: KeyedProvider, name: string): string => `${provider}:${name}`;
     const REFRESH_AFTER_MS = 5 * 60_000;
     const attemptedAt = new Map<string, number>();
 

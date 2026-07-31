@@ -3,7 +3,11 @@ import { expect, test } from "vitest";
 import { inWorktree, type IsolationPlan } from "./isolation.js";
 import { redirectCommand, worktreeRedirectHooks } from "./worktree-redirect.js";
 
-const plan: IsolationPlan = { worktree: "/history/worktrees/abc", root: "/work", modules: ["", "intentic", "intentic/_apps/web"] };
+const plan: IsolationPlan = {
+    worktree: "/history/worktrees/abc",
+    root: "/work",
+    mirrors: ["node_modules", "intentic/node_modules", "intentic/_apps/web/node_modules", "intentic/_apps/web/dist"],
+};
 
 // The tool input a PreToolUse hook actually returns, or undefined when it declined to rewrite anything.
 const rewritten = async (
@@ -34,6 +38,9 @@ test("the subtrees that mean the main checkout on both sides survive the redirec
     expect(inWorktree("/work/node_modules/.bin/tsgo", plan)).toBe("/work/node_modules/.bin/tsgo");
     expect(inWorktree("/work/intentic/node_modules/vue/index.js", plan)).toBe("/work/intentic/node_modules/vue/index.js");
     expect(inWorktree("/work/intentic/_apps/web/node_modules/x", plan)).toBe("/work/intentic/_apps/web/node_modules/x");
+    // Build output is mirrored on the same terms, so it carves out on the same terms — a `dist` entry the
+    // worktree only has because the main tree does must not be looked for inside the worktree.
+    expect(inWorktree("/work/intentic/_apps/web/dist/index.js", plan)).toBe("/work/intentic/_apps/web/dist/index.js");
 });
 
 test("paths outside the workspace root are the same file in both trees and are left alone", () => {

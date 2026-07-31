@@ -202,8 +202,10 @@ const attempt = async (): Promise<void> => {
     }
 };
 
+// `for (;;)` rather than `while (running)`: `running` is flipped by stop(), from outside this function, so a
+// loop condition on it proves nothing to a reader — the two explicit exits are where stopping takes effect.
 const loop = async (): Promise<void> => {
-    while (running) {
+    for (;;) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- a reconnect loop is sequential by definition
         await attempt();
         if (!running) {
@@ -211,6 +213,9 @@ const loop = async (): Promise<void> => {
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- ditto: the backoff IS the loop
         await sleep(connection.value.retryDelayMs);
+        if (!running) {
+            return;
+        }
     }
 };
 

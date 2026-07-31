@@ -519,7 +519,9 @@ export const commitChanges = async (dir: string, sha: string, git: GitRunner = d
     ]);
     const status = parseNameStatusZ(statusOut.stdout);
     const stats = parseNumstatZ(statsOut.stdout);
-    return status.map((change) => ({ ...change, ...(stats.get(change.path) ?? {}) }));
+    // In place: `status` was just parsed here and nothing else holds it, so the merge needs no copy. Assigning
+    // `undefined` (a path numstat had nothing for — a binary file, a pure rename) is a no-op.
+    return status.map((change) => Object.assign(change, stats.get(change.path)));
 };
 
 // Both sides of a file AT a commit: the blob at the first parent (`<sha>^`) vs the blob at `<sha>`. A root

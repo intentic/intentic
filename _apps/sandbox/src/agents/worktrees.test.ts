@@ -101,6 +101,41 @@ test("a worktree resolves dependencies through links to the main checkout", asyn
     expect(existsSync(join(worktree, "pkg", "b", "node_modules"))).toBe(false);
 });
 
+// The half that was missing: node_modules alone lets a worktree resolve a THIRD-PARTY import and still not
+// its own siblings', because a workspace package's entry point is its build output. Every suite that crosses a
+// package boundary died at collection with "Failed to resolve entry for package".
+test("a package's build output is mirrored alongside its dependencies", async () => {
+    const { work, worktrees } = await setup();
+    const intent = join(work, "intent");
+    await install(intent, "**/node_modules\n**/dist");
+    await mkdir(join(intent, "pkg", "a", "dist"), { recursive: true });
+    await writeFile(join(intent, "pkg", "a", "dist", "index.js"), "built\n");
+
+    const conversation = await worktrees.ensure("c1", []);
+    const worktree = join(conversation.cwd, "intent");
+
+    expect(await readFile(join(worktree, "pkg", "a", "dist", "index.js"), "utf8")).toBe("built\n");
+    expect(await sh(worktree, "status", "--porcelain")).toBe("");
+});
+
+// A repo that COMMITS its build output carries it in the checkout, and the mirror must keep its hands off:
+// pointing that path at the main tree would hide the very files the agent's branch exists to change.
+test("a tracked build output is left as the checkout's own", async () => {
+    const { work, worktrees } = await setup();
+    const intent = join(work, "intent");
+    await install(intent, "**/node_modules");
+    await mkdir(join(intent, "pkg", "a", "dist"), { recursive: true });
+    await writeFile(join(intent, "pkg", "a", "dist", "index.js"), "committed\n");
+    await sh(intent, "add", "-A");
+    await sh(intent, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "dist");
+
+    const conversation = await worktrees.ensure("c1", []);
+    const worktree = join(conversation.cwd, "intent");
+
+    expect(lstatSync(join(worktree, "pkg", "a", "dist")).isSymbolicLink()).toBe(false);
+    expect(await readFile(join(worktree, "pkg", "a", "dist", "index.js"), "utf8")).toBe("committed\n");
+});
+
 test("the mirror stays out of git, so retire cannot commit it onto the branch", async () => {
     const { work, worktrees } = await setup();
     await install(join(work, "intent"), "**/node_modules");

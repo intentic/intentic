@@ -590,10 +590,10 @@ async function* streamSdk(
                             screenshotToolIds.add(block.id);
                         }
                         if (!browserSent && typeof sessionId === "string") {
-                            const session = browserSessionName(sessionId);
-                            if (session !== undefined) {
+                            const browser = browserSessionName(sessionId);
+                            if (browser !== undefined) {
                                 browserSent = true;
-                                yield { kind: "browser", session };
+                                yield { kind: "browser", session: browser };
                             }
                         }
                     }

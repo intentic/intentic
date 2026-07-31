@@ -264,8 +264,7 @@ const accountRows = computed(() =>
         const usage = usageStatusFor(entry.id);
         const percent = usagePercent(usage);
         const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
-        return {
-            ...entry,
+        return Object.assign({}, entry, {
             subtitle:
                 identity.length > 0
                     ? identity.join(` · `)
@@ -275,7 +274,7 @@ const accountRows = computed(() =>
             headroom: usage === undefined || percent === undefined ? undefined : formatUtilization(percent, isStale(usage)),
             usageDetail: usage !== undefined ? usageDetail(usage) : undefined,
             usageWarn: percent !== undefined && percent >= 75,
-        };
+        });
     }),
 );
 

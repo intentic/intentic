@@ -304,6 +304,17 @@ const observeHost = (s: TerminalSession): void => {
 const EST_CELL_W = 7.8;
 const EST_CELL_H = 17;
 
+// Re-dispatch a mouse event the drag gate below held back. The constructor reads coords, button, buttons,
+// detail and modifiers off the source instance; the clone is synthetic (isTrusted false), which is what stops
+// the gate from re-capturing its own replay.
+const replayMouse = (event: MouseEvent, forceShift: boolean): void => {
+    const clone = new MouseEvent(event.type, event);
+    if (forceShift) {
+        Object.defineProperty(clone, `shiftKey`, { value: true });
+    }
+    event.target?.dispatchEvent(clone);
+};
+
 // Build one session's xterm + host + socket. The host stays out of the DOM until mountTerminalSession.
 // `readOnly` makes it a log view (a background process's tab): stdin is disabled and keystrokes never reach
 // the PTY — resize/ping still flow, tmux needs the grid to redraw. `spawnWithin` is the surface the session
@@ -339,14 +350,6 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     // swallow the real mouseup too and replay press then release, so xterm runs its full pipeline (focus,
     // report press, arm its document-level release listener, report release). Replays are synthetic
     // (isTrusted false), which is what stops this gate from re-capturing them.
-    const replayMouse = (event: MouseEvent, forceShift: boolean): void => {
-        // The constructor reads coords, button, buttons, detail and modifiers off the source instance.
-        const clone = new MouseEvent(event.type, event);
-        if (forceShift) {
-            Object.defineProperty(clone, `shiftKey`, { value: true });
-        }
-        event.target?.dispatchEvent(clone);
-    };
     let pending: MouseEvent | undefined;
     host.addEventListener(
         `mousedown`,

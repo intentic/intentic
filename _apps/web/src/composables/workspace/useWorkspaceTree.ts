@@ -265,7 +265,8 @@ export function useWorkspaceTree() {
     watch(
         () => query.dataUpdatedAt.value,
         () => {
-            for (const path of [...lazyChildren.value.keys()]) {
+            // Iterating the live keys is safe: fetchChildren only writes this map after its first await.
+            for (const path of lazyChildren.value.keys()) {
                 if (!lazyLoading.value.has(path)) {
                     void fetchChildren(path);
                 }

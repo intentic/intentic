@@ -62,7 +62,9 @@ test("leaves non-string commands and already-wrapped commands alone", async () =
 test("forwards env key NAMES as sorted -e flags before the session — never values", async () => {
     const hooks = bashTmuxHooks(undefined, ["IMAP_PASSWORD_IMAP", "DISCORD_BOT_TOKEN_DISCORD"]);
     const command = await rewritten({ command: "echo hi", description: "Say Hi!" }, hooks);
-    expect(command).toBe(`/usr/local/bin/tmux-run -e DISCORD_BOT_TOKEN_DISCORD -e IMAP_PASSWORD_IMAP agent-3f2a9b1c ${shellQuote(demoted("echo hi"))} say-hi`);
+    expect(command).toBe(
+        `/usr/local/bin/tmux-run -e DISCORD_BOT_TOKEN_DISCORD -e IMAP_PASSWORD_IMAP agent-3f2a9b1c ${shellQuote(demoted("echo hi"))} say-hi`,
+    );
 });
 
 test("drops env keys that are not plain identifiers — they land unquoted in every rewritten command", async () => {
@@ -79,7 +81,7 @@ test("agentSessionName derives the same agent-* name the hook routes commands th
 });
 
 test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrapper", async () => {
-    const plan = { worktree: "/history/worktrees/abc", root: "/work", modules: [] };
+    const plan = { worktree: "/history/worktrees/abc", root: "/work", mirrors: [] };
     const anchor = { pid: 4321, cwd: "/work", plan, dispose: () => {} };
     const command = await rewritten({ command: "sed -i s/a/b/ x.ts", description: "edit" }, bashTmuxHooks(undefined, [], { plan, anchor }));
     // tmux-run stays OUTSIDE: the server, the pane logs and the terminals panel are daemon-side, and only the
@@ -96,7 +98,14 @@ test("the rtk backend prefixes commands rtk can exec — including chains whose 
 });
 
 test("the rtk backend leaves shell-interpreted commands bare — rtk execs its argument, so a builtin, keyword or assignment first word would die with exit 127", async () => {
-    for (const command of ["cd /tmp && git status", "export FOO=1", "for f in *; do echo $f; done", "FOO=1 pnpm test", "(cd /tmp && ls)", "! grep -q x file"]) {
+    for (const command of [
+        "cd /tmp && git status",
+        "export FOO=1",
+        "for f in *; do echo $f; done",
+        "FOO=1 pnpm test",
+        "(cd /tmp && ls)",
+        "! grep -q x file",
+    ]) {
         expect(await rewritten({ command }, bashTmuxHooks("rtk"))).toContain(`'${command.replaceAll("'", `'\\''`)}'`);
         expect(await rewritten({ command }, bashTmuxHooks("rtk"))).not.toContain("rtk");
     }
@@ -111,7 +120,7 @@ test("cleaning switched off leaves the command bare on the rtk backend too", asy
 });
 
 test("the rtk backend's prefix rides inside the namespace with the command it wraps", async () => {
-    const plan = { worktree: "/wt", root: "/work", modules: [] };
+    const plan = { worktree: "/wt", root: "/work", mirrors: [] };
     const command = await rewritten({ command: "ls" }, bashTmuxHooks("rtk", [], { plan, anchor: { pid: 9, cwd: "/work", plan, dispose: () => {} } }));
     expect(command).toContain(`bash -c '\\''rtk ls'\\''`);
     // rtk is the agent's own command line, so it must not run outside the tree the agent is working in.
@@ -122,7 +131,7 @@ test("the rtk backend's prefix rides inside the namespace with the command it wr
  * alone there writes the SHARED tree at the same absolute path whose Edit went to the worktree — the exact
  * disagreement the nsenter hop above exists to prevent. The rewrite is the same substitution by other means. */
 test("without an anchor, an isolated turn's Bash has its main-tree paths rewritten into the worktree", async () => {
-    const plan = { worktree: "/history/worktrees/abc", root: "/work", modules: ["intentic"] };
+    const plan = { worktree: "/history/worktrees/abc", root: "/work", mirrors: ["intentic/node_modules"] };
     const command = await rewritten({ command: "sed -i s/a/b/ /work/intentic/x.ts" }, bashTmuxHooks(undefined, [], { plan }));
     expect(command).toContain("/history/worktrees/abc/intentic/x.ts");
     expect(command).not.toContain("/work/intentic/x.ts");
@@ -131,7 +140,7 @@ test("without an anchor, an isolated turn's Bash has its main-tree paths rewritt
 });
 
 test("the Bash rewrite leaves the shared subtrees and any path that merely starts with the root alone", async () => {
-    const plan = { worktree: "/wt", root: "/work", modules: ["intentic"] };
+    const plan = { worktree: "/wt", root: "/work", mirrors: ["intentic/node_modules"] };
     const rewrite = async (command: string): Promise<string> => await rewritten({ command }, bashTmuxHooks(undefined, [], { plan }));
     // Dependency trees and daemon state resolve to the main checkout on both sides — redirecting them would
     // aim at a path the worktree does not have.

@@ -37,7 +37,7 @@ const openDb = (): Promise<IDBDatabase | undefined> => {
             };
             request.onsuccess = () => resolve(request.result);
             // Blocked, denied, or version-clash: every caller degrades to the uncached path.
-            request.onerror = () => resolve(undefined);
+            request.addEventListener(`error`, () => resolve(undefined));
             request.onblocked = () => resolve(undefined);
         } catch {
             resolve(undefined);
@@ -55,7 +55,7 @@ const run = async <T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => 
         try {
             const request = act(db.transaction(STORE, mode).objectStore(STORE));
             request.onsuccess = () => resolve(request.result);
-            request.onerror = () => resolve(undefined);
+            request.addEventListener(`error`, () => resolve(undefined));
         } catch {
             resolve(undefined);
         }
@@ -66,14 +66,13 @@ const run = async <T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => 
 // at nothing after a reload — dropped, which degrades the chip to its file icon exactly as a restored tab's
 // attachments already do. Everything else on a message is plain data and structured-clones as-is.
 const persistable = (messages: readonly ChatMessage[]): ChatMessage[] =>
-    messages.slice(-KEPT_MESSAGES).map((message) =>
-        message.attachments === undefined
-            ? message
-            : {
-                  ...message,
-                  attachments: message.attachments.map(({ name, path }) => ({ name, path })),
-              },
-    );
+    messages
+        .slice(-KEPT_MESSAGES)
+        .map((message) =>
+            message.attachments === undefined
+                ? message
+                : Object.assign({}, message, { attachments: message.attachments.map(({ name, path }) => ({ name, path })) }),
+        );
 
 /* `authoritative` marks a transcript the DAEMON confirmed (a session replay), which is allowed to shrink the
  * mirror — it is the source of truth, and a compacted or trimmed session legitimately has fewer messages than

@@ -1013,16 +1013,18 @@ const editAndResend = async (message: ChatMessage, text: string): Promise<void> 
     if (index === -1 || message.role !== `user` || source.streaming.value) {
         return;
     }
-    const attachments = message.attachments ?? [];
+    // The edited turn's OWN attachments, not the composer's (`attachments` above) — a branch resends what the
+    // original message carried.
+    const carried = message.attachments ?? [];
     // Mirror send's own guard before opening a tab, so an empty edit doesn't leave an empty branch behind.
-    if (text.trim().length === 0 && attachments.length === 0) {
+    if (text.trim().length === 0 && carried.length === 0) {
         return;
     }
     const branch = new Conversation();
     branch.branchFrom(source, index);
     setConversations([...conversations.value, branch], branch.conversationId);
     track(`message_sent`, { agent: branch.provider.value, edited: true });
-    await branch.send(text, branch.turnSettings(), attachments);
+    await branch.send(text, branch.turnSettings(), carried);
 };
 
 const stop = (): void => {

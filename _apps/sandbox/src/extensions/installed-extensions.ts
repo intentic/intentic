@@ -19,8 +19,8 @@ export interface ExtensionHost {
  * first-party extension (ext-discord, ext-connectors) behaves identically to one a user cloned. Baked ones live
  * under services.config.extensionsDir (EXTENSIONS_DIR), one subdir per checkout, the iq-plugin precedent
  * — no capability entry, not removable, present because they shipped in the image. The web-builtin UI
- * extensions bake their MANIFEST ONLY (the code is compiled into the web bundle), so all twelve first-party
- * extensions enumerate here and the Extensions tab is a complete list rather than a view of one load path. */
+ * extensions bake their MANIFEST ONLY (the code is compiled into the web bundle), so every first-party
+ * extension enumerates here and the Extensions tab is a complete list rather than a view of one load path. */
 
 export interface InstalledExtension {
     // The routing handle: the capability entry id for a git-installed extension, or the manifest-derived

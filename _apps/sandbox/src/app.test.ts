@@ -333,7 +333,7 @@ const services = (overrides: Partial<Services> = {}): Services => {
         // The isolation.test.ts suite covers the plan these routes would build when it IS available.
         // No mount capability, like a container launched without CAP_SYS_ADMIN — the plan still describes where
         // the worktree is, and the harness enforces it by redirecting tool paths instead of by mounting.
-        turnIsolation: { available: async () => false, planFor: async (worktree: string) => ({ worktree, root: "/work", modules: [] }) },
+        turnIsolation: { available: async () => false, planFor: async (worktree: string) => ({ worktree, root: "/work", mirrors: [] }) },
         // No agent has landed anything into these fake repos, so every changed file is the user's — and with no
         // ids to attribute, `identify` has nobody to resolve.
         agentOrigins: { forRepo: async () => ({}), identify: () => ({}) },
@@ -3333,6 +3333,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.automations",
         "intentic.connectors",
         "intentic.discord",
+        "intentic.documentation",
         "intentic.imap",
         "intentic.logs",
         "intentic.memory",

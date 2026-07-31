@@ -178,6 +178,16 @@ const scopeEnv = (scope: Scope): Record<string, string> => ({
     GIT_INDEX_FILE: join(scope.gitDir, "snapshot.index"),
 });
 
+// Is the worktree down to deletion remnants? A deletion (local rm carried in by desktop sync, an agent's
+// rm -rf) removes every tracked file but CANNOT remove what sync ignores — node_modules, dist, the .git
+// pointer — so "the directory still exists" proves nothing. This readdir is the cheap gate in front of the
+// real check (deletionState): a live repo virtually always has a plain file or dir at its root, so the healthy
+// case costs one readdir and no git spawn.
+const looksEmptied = async (worktree: string): Promise<boolean> => {
+    const entries = await readdir(worktree, { withFileTypes: true }).catch(() => []);
+    return entries.every((entry) => entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name));
+};
+
 export const createWorkspaceHistory = (
     options: { readonly workspace: WorkspacePaths; readonly historyRoot: string; readonly logger: Logger },
     git: HistoryGitRunner = defaultRunner,
@@ -227,16 +237,6 @@ export const createWorkspaceHistory = (
         await mkdir(trashRoot, { recursive: true });
         await rename(join(historyRoot, "gits", entry), join(trashRoot, `${entry}-${Date.now()}`));
         logger.info({ repo: decodeURIComponent(entry), reason }, "history: reaped a deleted repo's git dir");
-    };
-
-    // Is the worktree down to deletion remnants? A deletion (local rm carried in by desktop sync, an agent's
-    // rm -rf) removes every tracked file but CANNOT remove what sync ignores — node_modules, dist, the .git
-    // pointer — so "the directory still exists" proves nothing. This readdir is the cheap gate in front of the
-    // real check below: a live repo virtually always has a plain file or dir at its root, so the healthy case
-    // costs one readdir and no git spawn.
-    const looksEmptied = async (worktree: string): Promise<boolean> => {
-        const entries = await readdir(worktree, { withFileTypes: true }).catch(() => []);
-        return entries.every((entry) => entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name));
     };
 
     // The definitive read: "deleted" ⇔ the index names files and NONE of them is on disk. An empty index is a

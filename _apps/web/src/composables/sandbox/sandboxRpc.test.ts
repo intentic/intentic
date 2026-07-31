@@ -45,9 +45,8 @@ it(`decodes the daemon's event stream into typed contract frames`, async () => {
 it(`sends the session bearer and the TOFU connect token on the stream request`, async () => {
     const fetchMock = vi.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
     vi.stubGlobal(`fetch`, fetchMock);
-    for await (const _frame of await sandboxRpc.system.events({ clientId: `c1` })) {
-        break;
-    }
+    // One pull is all it takes: what this asserts on is the request that goes out, not the frames that come back.
+    await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
     const request = fetchMock.mock.calls[0]![0];
     expect(request.headers.get(`authorization`)).toBe(`Bearer session-token`);
     expect(request.headers.get(`x-intentic-connect`)).toBe(`connect`);

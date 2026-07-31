@@ -1,14 +1,13 @@
 import { access, lstat, mkdir, readdir, rm, rmdir, symlink } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
-import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import type { PerfTracker } from "../platform/perf.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { dropAgentRef, dropOrphanParkedRefs, parkAgentRefs, unparkAgentRef } from "./agent-refs.js";
-import { overlaysDir, overlaysRoot, type TurnIsolation } from "./isolation.js";
+import { mirroredDirs, overlaysDir, overlaysRoot, type TurnIsolation } from "./isolation.js";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, mirroring the /work layout —
 // <worktreesRoot>/<id>/ is the ROOT repo's worktree and <worktreesRoot>/<id>/<repo>/ each nested
@@ -66,14 +65,15 @@ const exists = async (path: string): Promise<boolean> => {
     }
 };
 
-// DEPENDENCY MIRRORING. A worktree is a checkout of TRACKED files, and an installed dependency tree is
-// untracked by design (`**/node_modules` is gitignored) — so a fresh worktree holds source that cannot resolve
-// a single import. Nothing type-checks, lints or tests, and the post-edit diagnostics gate on a resolvable
-// node_modules (agent-diagnostics.ts), so an isolated turn silently gets NO compile feedback at all while the
-// readiness notice tells it, every turn, to run an install that would cost minutes and a duplicate tree per
-// agent. Mirroring is the cheap answer: one symlink per package, at the same relative path, pointing at the
-// main checkout's installed dir. Node and TypeScript both resolve through symlinks by default, so tooling in a
-// worktree behaves as it does in /work.
+// DEPENDENCY MIRRORING. A worktree is a checkout of TRACKED files, and everything a package's imports resolve
+// THROUGH is untracked by design — its installed tree and its build output (isolation.ts's MIRRORED_DIRS) — so
+// a fresh worktree holds source that cannot resolve a single import, its own siblings least of all. Nothing
+// type-checks, lints or tests, and the post-edit diagnostics gate on a resolvable node_modules
+// (agent-diagnostics.ts), so an isolated turn silently gets NO compile feedback at all while the readiness
+// notice tells it, every turn, to run an install that would cost minutes and a duplicate tree per agent.
+// Mirroring is the cheap answer: one symlink per dir, at the same relative path, pointing at the main
+// checkout's. Node and TypeScript both resolve through symlinks by default, so tooling in a worktree behaves
+// as it does in /work.
 //
 // The tradeoff this accepts, deliberately: the tree is SHARED, not copied. A worktree's `pnpm add` writes into
 // the main checkout's node_modules (its package.json/lockfile edits stay in the worktree, where they belong),
@@ -86,40 +86,6 @@ const exists = async (path: string): Promise<boolean> => {
 // unlike the symlink (or a plain bind), an overlay does not share the WRITE side: pnpm hardlinks a workspace
 // package's sources into node_modules, so a write through the mirrored path used to land on the main
 // checkout's own tracked file. Reads still come from the main tree; writes stop at the turn's layer.
-const MODULES = "node_modules";
-
-// Deep enough for the layouts that exist (a monorepo's `_apps/<pkg>`, `_libs/<pkg>`), bounded so a pathological
-// tree can't stall a turn's first ensure.
-const MAX_LINK_DEPTH = 3;
-
-// Every dir under `main` that owns an installed dependency tree, root-relative ("" is `main` itself). Stops at
-// a nested repo (`.git`): that repo mirrors into its OWN worktree, and descending would plant its links in the
-// parent's checkout instead. Junk dirs are never descended into, so a node_modules is never walked.
-const packagesWithModules = async (main: string): Promise<string[]> => {
-    const found: string[] = [];
-    const walk = async (dir: string, rel: string, depth: number): Promise<void> => {
-        const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-        if (entries.some((entry) => entry.name === MODULES)) {
-            found.push(rel);
-        }
-        if (depth >= MAX_LINK_DEPTH) {
-            return;
-        }
-        await Promise.all(
-            entries
-                .filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && !IGNORED_DIRS.has(entry.name))
-                .map(async (entry) => {
-                    const child = join(dir, entry.name);
-                    if (await exists(join(child, ".git"))) {
-                        return;
-                    }
-                    await walk(child, rel === "" ? entry.name : `${rel}/${entry.name}`, depth + 1);
-                }),
-        );
-    };
-    await walk(main, "", 0);
-    return found;
-};
 
 export const createAgentWorktrees = (
     options: {
@@ -266,25 +232,24 @@ export const createAgentWorktrees = (
         return new Set(stdout.split("\n").filter((path) => path !== ""));
     };
 
-    // Mirror one repo's installed dependency dirs from its main checkout into its worktree. Idempotent — an
-    // existing link, and a package the agent's branch doesn't carry, are both left alone — so it re-runs on
-    // every ensure and picks up packages whose install landed after the checkout did. Best-effort by design: a
-    // link that fails costs that package's tooling, never the turn.
-    const linkModules = async (id: string, repo: string): Promise<void> => {
+    // Mirror one repo's untracked dependency and build-output dirs from its main checkout into its worktree.
+    // Idempotent — an existing link, and a package the agent's branch doesn't carry, are both left alone — so
+    // it re-runs on every ensure and picks up dirs an install or build produced after the checkout did.
+    // Best-effort by design: a link that fails costs that package's tooling, never the turn.
+    const linkMirrors = async (id: string, repo: string): Promise<void> => {
         const main = mainDir(repo);
         const worktree = worktreeDir(id, repo);
-        const packages = await packagesWithModules(main);
-        const linkOf = (pkg: string): string => (pkg === "" ? MODULES : `${pkg}/${MODULES}`);
-        const ignored = await ignoredLinks(worktree, packages.map(linkOf));
-        // An isolated turn gets these as bind mounts inside its namespace, so all this has to leave behind is
-        // something to mount ONTO. The gitignore check still gates it: an empty dir git would commit is just
-        // as unwelcome on the branch as a machine-local symlink.
+        const mirrors = await mirroredDirs(main, worktree, { intoNestedRepos: false });
+        const ignored = await ignoredLinks(worktree, mirrors);
+        // An isolated turn gets these as overlay mounts inside its namespace, so all this has to leave behind
+        // is something to mount ONTO. The gitignore check still gates it: an empty dir git would commit is
+        // just as unwelcome on the branch as a machine-local symlink.
         const isolated = await isolation.available();
         await Promise.all(
-            packages.map(async (pkg) => {
-                const rel = linkOf(pkg);
+            mirrors.map(async (rel) => {
                 const target = join(worktree, rel);
-                if (!ignored.has(rel) || !(await exists(join(worktree, pkg)))) {
+                // The dir the mirror belongs to — a package the agent's branch does not carry gets nothing.
+                if (!ignored.has(rel) || !(await exists(join(worktree, dirname(rel))))) {
                     return;
                 }
                 // The mirror's FORM is a property of the container (namespace or not), and worktrees outlive
@@ -299,7 +264,7 @@ export const createAgentWorktrees = (
                         await rm(target).catch(() => undefined);
                     }
                     await mkdir(target, { recursive: true }).catch((error: unknown) =>
-                        logger.warn({ err: error, repo, package: pkg }, "agents: node_modules mount point failed"),
+                        logger.warn({ err: error, repo, mirror: rel }, "agents: mirror mount point failed"),
                     );
                     return;
                 }
@@ -310,7 +275,7 @@ export const createAgentWorktrees = (
                 await symlink(join(main, rel), target, "dir").catch((error: unknown) => {
                     // EEXIST is the steady state, not a failure: the link — or a real install — is already there.
                     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-                        logger.warn({ err: error, repo, package: pkg }, "agents: node_modules link failed");
+                        logger.warn({ err: error, repo, mirror: rel }, "agents: mirror link failed");
                     }
                 });
             }),
@@ -321,7 +286,7 @@ export const createAgentWorktrees = (
     // planted in it. No repo lock — this reads the main checkout and writes only inside this conversation's own
     // worktree, so taking one would serialize the fleet behind a queue it has no reason to join.
     const linkComposition = async (id: string, repos: readonly { readonly repo: string }[]): Promise<void> => {
-        await Promise.all(repos.map(({ repo }) => linkModules(id, repo)));
+        await Promise.all(repos.map(({ repo }) => linkMirrors(id, repo)));
     };
 
     return {

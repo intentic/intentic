@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
@@ -24,9 +24,9 @@ import { promisify } from "node:util";
  *   - <root>/.intentic — the workspace's daemon state: chat transcripts (~/.claude/projects symlinks into it,
  *     so a turn writing there would strand its own session), user attachments, browser output. Shared by
  *     definition; a per-worktree copy is a lost transcript.
- *   - every installed dependency tree — bound from the main checkout, replacing the absolute symlinks the
- *     no-namespace path uses (worktrees.ts). A bind keeps the same st_dev as the source, so pnpm's hardlinks
- *     work in a worktree for the first time.
+ *   - every installed dependency tree and build output — mirrored from the main checkout, replacing the
+ *     absolute symlinks the no-namespace path uses (worktrees.ts). Untracked by definition, so a checkout has
+ *     neither, and without them a worktree resolves neither a third-party import nor a sibling package's.
  *
  * Everything else is per-namespace and dies with the turn: the mounts are private (rprivate propagation), so
  * nothing here is visible to the daemon, to another conversation, or to a main-tree turn.
@@ -46,7 +46,22 @@ export const MAIN_MOUNT = "/mnt/intentic-main";
 // The workspace subdir that must stay SHARED rather than per-worktree — daemon state, not repo content.
 const SHARED_STATE = ".intentic";
 
-const MODULES = "node_modules";
+/* WHAT A CHECKOUT CANNOT CARRY, and so has to come from the main tree.
+ *
+ * A worktree is TRACKED files only, and the two things a package's dependents resolve THROUGH are both
+ * untracked: its installed tree (`node_modules`) and its build output (`dist`, `generated` — the entry every
+ * `exports` map points at once the sources are compiled). Mirroring only the first is why a fresh turn could
+ * import a third-party package but not a sibling workspace one: `vitest run` in an app that imports a local
+ * lib died at collection with "Failed to resolve entry for package", and every route to a green suite began
+ * with a build the agent had to know to run.
+ *
+ * CACHES ARE DELIBERATELY ABSENT (`.cache`, `.turbo`, `.astro`). `.cache/tsbuildinfo` is the main checkout's
+ * record of what its dist was built FROM; handed to a turn whose sources have since moved, an incremental
+ * build reads it, agrees with the mirrored dist and emits nothing — leaving the agent testing the main tree's
+ * code under its own file names. A turn with no tsbuildinfo simply builds from scratch, which is slower and
+ * always right. */
+const MIRRORED_DIRS = new Set(["node_modules", "dist", "generated"]);
+
 // Same bound as the symlink mirroring it replaces (a monorepo's `_apps/<pkg>`, `_libs/<pkg>`).
 const MAX_LINK_DEPTH = 3;
 
@@ -55,10 +70,11 @@ export interface IsolationPlan {
     readonly worktree: string;
     // The real workspace root, bound aside at MAIN_MOUNT.
     readonly root: string;
-    // Root-relative dirs owning an installed dependency tree, overlaid from the main checkout ("" is the
-    // root itself). Ordered shallowest-first so a parent's mount can never shadow a child's.
-    readonly modules: readonly string[];
-    // Where this conversation's private overlay layers live — one upper/work pair per entry in `modules`.
+    // Root-relative dirs overlaid from the main checkout — the untracked dependency and build-output trees a
+    // checkout cannot carry (MIRRORED_DIRS). Ordered shallowest-first so a parent's mount can never shadow a
+    // child's.
+    readonly mirrors: readonly string[];
+    // Where this conversation's private overlay layers live — one upper/work pair per entry in `mirrors`.
     // Outside the worktree on purpose: inside it, every write an install makes would show up as untracked
     // content in the agent's own `git status` and ride its next commit.
     readonly overlays: string;
@@ -86,8 +102,12 @@ export const overlaysDir = (historyRoot: string, id: string): string => join(ove
  * own upper layer and every later write lands there. The main checkout's inode is never opened for writing,
  * so there is nothing for a hardlink to carry back. The layers die with the conversation.
  *
- * The trade is deliberate: an upper layer is a different filesystem from the workspace, so a `pnpm install`
- * INSIDE a turn copies where it used to hardlink. Slower, and only for the turns that install.
+ * The trade is deliberate, and it is sharper than "slower": an overlay reports its own st_dev, so a hardlink
+ * from the workspace into it is cross-device and pnpm does not degrade to a copy — it throws EXDEV. pnpm
+ * copies where it can, but its injected-deps SYNCER links unconditionally, so in a repo with
+ * `syncInjectedDepsAfterScripts` the `pnpm run build` of an injected workspace package fails inside a turn
+ * after its script has already succeeded. Turn-local builds run the compiler directly (turbo, or the
+ * package's own `.bin`); reaching for `pnpm run build` is what finds this edge.
  */
 // The "device" an overlay mount reports. Cosmetic, but it is what `mount` and `df` show, so name it after
 // what it is rather than leaving another anonymous `overlay` row in the sandbox's mount table.
@@ -134,10 +154,10 @@ const quote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
  *     "isolated" turn silently rewrites the real /work for everyone.
  *  2. the main root is bound aside BEFORE the shadow goes up; afterwards there is no path left that names it.
  *  3. the shadow.
- *  4. the shared state and the dependency trees, each sourced from MAIN_MOUNT — the only surviving handle on
- *     the real tree — and each preceded by `mkdir -p` because a fresh checkout has no mount point for an
- *     untracked dir. `.intentic` is a BIND, because a transcript written there has to reach the daemon; a
- *     dependency tree is an OVERLAY, because nothing written there should reach anyone (see overlayOptions).
+ *  4. the shared state and the mirrors, each sourced from MAIN_MOUNT — the only surviving handle on the real
+ *     tree — and each preceded by `mkdir -p` because a fresh checkout has no mount point for an untracked
+ *     dir. `.intentic` is a BIND, because a transcript written there has to reach the daemon; a mirror is an
+ *     OVERLAY, because nothing written there should reach anyone (see overlayOptions).
  *
  * Every step is fatal (`set -e`): a half-built namespace is worse than no namespace, because the agent would
  * be writing into a tree that looks right and is not. The caller degrades to the plain unshadowed spawn only
@@ -156,11 +176,10 @@ export const isolationScript = (plan: IsolationPlan, trailer: string = ANCHOR_TR
     ];
     const shared = join(plan.root, SHARED_STATE);
     lines.push(`mkdir -p ${quote(shared)}`, `mount --bind ${quote(join(MAIN_MOUNT, SHARED_STATE))} ${quote(shared)}`);
-    for (const pkg of plan.modules) {
-        const rel = pkg === "" ? MODULES : `${pkg}/${MODULES}`;
+    for (const rel of plan.mirrors) {
         const target = join(plan.root, rel);
         // One layer dir per mount: upperdir and workdir must be siblings on one filesystem, and workdir must
-        // not sit inside upperdir. The package's path is encoded so nested dirs can't collide or nest.
+        // not sit inside upperdir. The mirror's path is encoded so nested dirs can't collide or nest.
         const layer = join(plan.overlays, encodeURIComponent(rel));
         const upper = join(layer, "upper");
         const work = join(layer, "work");
@@ -251,27 +270,60 @@ export const isolationAvailable = async (historyRoot: string): Promise<boolean> 
     }
 };
 
-// Root-relative dirs under `root` that own an installed dependency tree, shallowest-first. Stops at a nested
-// repo's own boundary the same way the symlink mirroring does — a nested repo contributes its own entries
-// through its own subtree, and descending past `.git` would attribute them to the parent.
-export const modulesDirs = async (root: string): Promise<string[]> => {
+/* NOTHING THE CHECKOUT ALREADY FILLS IS EVER MIRRORED. A mirror is only ever correct where the worktree has
+ * nothing of its own: a repo that TRACKS its `dist` carries it in the checkout, and mounting the main tree's
+ * over it would hide the very files the agent's branch is there to change — the silent-wrong-tree failure
+ * this module exists to prevent. Absent, an empty mount point and a symlink from a pre-namespace run all mean
+ * "nothing of my own"; anything else (a real install the agent made, tracked output) means hands off. */
+const mirrorable = async (path: string): Promise<boolean> => {
+    const entry = await lstat(path).catch(() => undefined);
+    if (entry === undefined || entry.isSymbolicLink()) {
+        return true;
+    }
+    return entry.isDirectory() && (await readdir(path)).length === 0;
+};
+
+/* The mirrors for one checkout, root-relative and shallowest-first: every MIRRORED_DIRS dir the main tree has
+ * and `worktree` does not. The single discovery both mirror forms run on — the namespace's overlay mounts and,
+ * where no namespace can be built, worktrees.ts's symlinks — because a dir one form mirrors and the other does
+ * not is a path that means different files depending on how the container was launched.
+ *
+ * `intoNestedRepos` is what separates the two callers. The PLAN spans the whole workspace and wants every
+ * repo's dirs, since each nested worktree is mounted at its own path under the same root. The symlink mirror
+ * runs per repo and must stop at a nested `.git`: that repo mirrors into its OWN worktree, and descending
+ * would plant its links in the parent's checkout instead. */
+export const mirroredDirs = async (main: string, worktree: string, { intoNestedRepos }: { readonly intoNestedRepos: boolean }): Promise<string[]> => {
     const found: string[] = [];
     const walk = async (dir: string, rel: string, depth: number): Promise<void> => {
         const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-        if (entries.some((entry) => entry.name === MODULES)) {
-            found.push(rel);
-        }
-        if (depth >= MAX_LINK_DEPTH) {
+        if (!intoNestedRepos && rel !== "" && entries.some((entry) => entry.name === ".git")) {
             return;
         }
         await Promise.all(
             entries
-                .filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && !IGNORED_DIRS.has(entry.name))
+                .filter((entry) => entry.isDirectory() && MIRRORED_DIRS.has(entry.name))
+                .map(async (entry) => {
+                    const mirror = rel === "" ? entry.name : `${rel}/${entry.name}`;
+                    if (await mirrorable(join(worktree, mirror))) {
+                        found.push(mirror);
+                    }
+                }),
+        );
+        if (depth >= MAX_LINK_DEPTH) {
+            return;
+        }
+        // A mirror's CONTENTS are never mirror points of their own — one mount over the tree covers everything
+        // inside it, and walking an installed tree would cost thousands of readdirs to find that out.
+        await Promise.all(
+            entries
+                .filter(
+                    (entry) => entry.isDirectory() && !entry.name.startsWith(".") && !MIRRORED_DIRS.has(entry.name) && !IGNORED_DIRS.has(entry.name),
+                )
                 .map((entry) => walk(join(dir, entry.name), rel === "" ? entry.name : `${rel}/${entry.name}`, depth + 1)),
         );
     };
-    await walk(root, "", 0);
-    // Shallowest first: a bind onto `_apps/web/node_modules` must happen while its parent dir is still the
+    await walk(main, "", 0);
+    // Shallowest first: the mount onto `_apps/web/node_modules` must happen while its parent dir is still the
     // worktree's own, and sorting by depth is what guarantees a parent is never mounted over afterwards.
     return found.toSorted((a, b) => a.split("/").length - b.split("/").length || (a < b ? -1 : 1));
 };
@@ -388,7 +440,12 @@ export const createTurnIsolation = (options: { readonly root: string; readonly h
         // The conversation id is the worktree's own directory name (worktrees.ts owns that layout), so the
         // overlay scratch is derived from it rather than threaded separately — and the teardown paths there
         // reclaim the same path with the same helper.
-        planFor: async (worktree) => ({ worktree, root, modules: await modulesDirs(root), overlays: overlaysDir(historyRoot, basename(worktree)) }),
+        planFor: async (worktree) => ({
+            worktree,
+            root,
+            mirrors: await mirroredDirs(root, worktree, { intoNestedRepos: true }),
+            overlays: overlaysDir(historyRoot, basename(worktree)),
+        }),
     };
 };
 
@@ -396,7 +453,7 @@ export const createTurnIsolation = (options: { readonly root: string; readonly h
 // them back in over the worktree's own copies, and where it cannot be built (worktree-redirect.ts) the
 // worktree reaches them through symlinks. Either way a path into one of these is already correct, so the rule
 // lives here rather than in a copy per caller.
-const sharedPrefixes = (plan: IsolationPlan): string[] => [SHARED_STATE, ...plan.modules.map((pkg) => (pkg === "" ? MODULES : `${pkg}/${MODULES}`))];
+const sharedPrefixes = (plan: IsolationPlan): string[] => [SHARED_STATE, ...plan.mirrors];
 
 /* WHICH FILE A WORKSPACE PATH ACTUALLY NAMES for an isolated turn — one mapping, used by both layers that
  * need it, because they are the same question asked from opposite ends:

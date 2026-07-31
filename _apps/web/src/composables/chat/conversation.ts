@@ -2014,7 +2014,9 @@ export class Conversation {
         const provider = this.provider.value;
         const accounts = providerAccounts.value[provider] ?? [];
         const accountId = this.account.value ?? accounts[0]?.id;
-        const marked = accounts.map((account: OauthAccount) => (account.id === accountId ? { ...account, needsReauth: true, detail } : account));
+        const marked = accounts.map((account: OauthAccount) =>
+            account.id === accountId ? Object.assign({}, account, { needsReauth: true, detail }) : account,
+        );
         providerAccounts.value = { ...providerAccounts.value, [provider]: marked };
     }
 

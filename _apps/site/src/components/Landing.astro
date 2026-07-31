@@ -90,7 +90,7 @@ const brandLogos: Record<string, { viewBox: string; body: string; stroke?: boole
 const round = (n: number) => Math.round(n * 100) / 100;
 const hubNodes = content.integrations.nodes.map((node, i) => {
     const angle = (-90 + (360 / content.integrations.nodes.length) * i) * (Math.PI / 180);
-    return { ...node, x: round(50 + Math.cos(angle) * 46), y: round(50 + Math.sin(angle) * 41) };
+    return Object.assign({}, node, { x: round(50 + Math.cos(angle) * 46), y: round(50 + Math.sin(angle) * 41) });
 });
 ---
 
