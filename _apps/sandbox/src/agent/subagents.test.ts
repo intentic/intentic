@@ -58,6 +58,27 @@ describe("the SDK's own subagents", () => {
         expect(listSubagentSessions()).toEqual([]);
     });
 
+    /* THE BUG THIS SURFACE SHIPPED WITH. The SDK runs one task machine for all of its background work, so a Bash
+     * command sent to the background arrives as a task_started with a tool_use id and a description, exactly like
+     * a child does — and the area filled up with shell commands listed as agents, each opening on an empty
+     * transcript because no per-child JSONL exists for something that was never a child. */
+    it("files agent tasks only, not the shell/monitor/workflow work the same stream carries", () => {
+        expect(noteSubagentTask(turn(), started({ subagent_type: undefined, task_type: "shell", description: "Run full web suite" }))).toBeUndefined();
+        expect(noteSubagentTask(turn(), started({ tool_use_id: "call-2", subagent_type: undefined, task_type: "monitor" }))).toBeUndefined();
+        expect(noteSubagentTask(turn(), started({ tool_use_id: "call-3", subagent_type: undefined, task_type: "local_workflow" }))).toBeUndefined();
+        // An unlabelled task is left off too: unknown task types are the SDK's to add, and guessing is what put
+        // shell commands on this surface. A real child that arrives unlabelled is still adopted by the hooks.
+        expect(noteSubagentTask(turn(), started({ tool_use_id: "call-4", subagent_type: undefined }))).toBeUndefined();
+        expect(listSubagentSessions()).toEqual([]);
+        // Either field is enough on its own — the Task tool sets subagent_type, the machine's discriminant is
+        // task_type, and a child carrying only the latter is still a child.
+        expect(noteSubagentTask(turn(), started({ tool_use_id: "call-5", subagent_type: undefined, task_type: "subagent" }))).toMatchObject({
+            kind: "subagent",
+            id: "call-5",
+        });
+        expect(listSubagentSessions().map((session) => session.id)).toEqual(["call-5"]);
+    });
+
     it("folds progress onto the record and reports only what moved", () => {
         noteSubagentTask(turn(), started());
         const first = update(
@@ -198,12 +219,17 @@ describe("the roster", () => {
         expect(closeSubagents("conv-1")).toEqual([]);
     });
 
-    it("ages a finished child out of the list, and keeps a live one", () => {
+    /* The window is SHORT (RETAIN_FINISHED_MS), because a turn spawns children faster than anything else on the
+     * rail and a long one turns this list into an unpruned log. Pinned from both sides so the boundary is a
+     * decision the test defends, not an accident of a number that happens to be larger than the wait. */
+    it("ages a finished child out of the list after five minutes, and keeps a live one", () => {
         vi.useFakeTimers();
         noteSubagentTask(turn(), started());
         noteSubagentTask(turn(), started({ tool_use_id: "live-1", task_id: "task-b" }));
         noteSubagentTask(turn(), { subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } });
-        vi.advanceTimersByTime(3 * 3_600_000);
+        vi.advanceTimersByTime(4 * 60_000);
+        expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1", "call-1"]);
+        vi.advanceTimersByTime(2 * 60_000);
         expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1"]);
     });
 });

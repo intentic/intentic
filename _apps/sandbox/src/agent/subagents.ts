@@ -17,8 +17,8 @@ import type { AgentEvent, SubagentKind, SubagentSession, SubagentStatus } from "
  * idea: the agent's shell (terminal/terminal-session.ts) and the agent's browser (browser/browser-sessions.ts)
  * are already daemon-held registries with a /system list route, an appear-on-content rail tile, and a door from
  * the tool card that spawned them. A subagent is the same kind of fact — something a turn started that the
- * operator may want to look at — so it lists the same way, retains for the same window after finishing, and is
- * named by the same rule.
+ * operator may want to look at — so it lists the same way, ages out the same way, and is named by the same rule.
+ * Its retention window is its own, and much shorter; RETAIN_FINISHED_MS says why.
  *
  * WHAT IS DIFFERENT is what "look at it" means. A shell is one stream of bytes and a browser is a live page; a
  * subagent has neither. What it has is a TRANSCRIPT, so there is no third WebSocket here — sessions/
@@ -32,9 +32,12 @@ import type { AgentEvent, SubagentKind, SubagentSession, SubagentStatus } from "
  * hold. The ids the transcripts are actually read with (the SDK's agent id, a Codex thread, an OpenCode
  * session) never reach the wire, because no surface asks a question they answer. */
 
-// A finished subagent stays listable this long, so the area's Finished group can still be read — and its report
-// still answered for — after the turn that ran it ended. The window tmux sessions and browsers already get.
-const RETAIN_FINISHED_MS = 2 * 3_600_000;
+/* A finished subagent stays listable this long, so its report is still readable just after the turn that ran it
+ * ended — then it goes. SHORT on purpose, and shorter than the browsers' two hours: a turn spawns children at a
+ * rate nothing else on the rail comes close to (a single verification pass can start a dozen), so a window sized
+ * for "what did the agent open today" turns this list into a log nobody prunes. What a finished child is worth
+ * looking at for is the minutes right after it reports; past that the parent's own transcript is the record. */
+const RETAIN_FINISHED_MS = 5 * 60_000;
 
 // A delegation's report is the tail of what its CLI printed. Bounded because this rides on a card and in a list
 // row: the whole of a Codex run's stdout is the transcript's job, not the summary's.
@@ -261,7 +264,14 @@ const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefi
  * tool_use id, so it is the only one that can — and a task with no tool_use id is not a subagent at all (an
  * ambient/housekeeping task the SDK asks consumers to keep out of the transcript), so it is skipped rather than
  * listed as an agent nobody started. `task_updated` names only its task_id, which is why `tasks` remembers the
- * pairing that `task_started` established. */
+ * pairing that `task_started` established.
+ *
+ * NOT EVERY TASK IS AN AGENT, and reading the stream as though it were is what first shipped here. The SDK runs
+ * one task machine for all of its background work — `shell`, `subagent`, `monitor`, `workflow` — so a Bash
+ * command sent to the background arrives as a `task_started` with a tool_use id like any other, and filing it
+ * listed a shell command as an agent, under its Bash description, with a transcript door that opened on nothing
+ * (there is no per-child JSONL for something that was never a child). Hence IS_SUBAGENT: the two fields the SDK
+ * sets only for Task-tool children, either of which is enough. */
 
 // The narrow shape of the SDK's task messages, declared here because the daemon reads a handful of fields off a
 // union of four types (agent.ts does the same for the stream events it maps).
@@ -270,6 +280,9 @@ export interface SubagentTaskMessage {
     readonly task_id?: string;
     readonly tool_use_id?: string;
     readonly description?: string;
+    // 'shell' | 'subagent' | 'monitor' | 'workflow' | 'local_workflow' — see IS_SUBAGENT. Left an open string
+    // because the SDK documents the set as a label that "falls back to the raw discriminant for unknown types".
+    readonly task_type?: string;
     readonly subagent_type?: string;
     readonly prompt?: string;
     readonly skip_transcript?: boolean;
@@ -281,6 +294,17 @@ export interface SubagentTaskMessage {
 }
 
 const tasks = new Map<string, string>();
+
+/* Is this task an AGENT, as opposed to the shell/monitor/workflow work the same stream carries? Either field
+ * answers yes on its own: `subagent_type` is documented as set only for Task-tool subagents, and `task_type`
+ * names the machine's own discriminant. Deliberately a whitelist — an unknown task type the SDK adds later is
+ * left off this surface rather than filed as an agent, which is the failure that produced a Subagents list of
+ * backgrounded shell commands.
+ *
+ * A real child that somehow reached us unlabelled is still not lost: SubagentStart/SubagentStop adopt it from
+ * its own meta file, and those hooks fire for nothing else. */
+const isSubagentTask = (message: SubagentTaskMessage): boolean =>
+    message.subagent_type !== undefined || message.task_type === "subagent";
 
 // The SDK's task status vocabulary is our own (SubagentStatusSchema), so a value it adds that we have never heard
 // of leaves the status where it was rather than being coerced into a wrong one.
@@ -296,7 +320,7 @@ const NOTIFIED: Record<string, SubagentStatus> = { completed: "completed", faile
 export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessage): AgentEvent | undefined => {
     if (message.subtype === "task_started") {
         const id = message.tool_use_id;
-        if (id === undefined || message.skip_transcript === true || records.has(id)) {
+        if (id === undefined || message.skip_transcript === true || !isSubagentTask(message) || records.has(id)) {
             return undefined;
         }
         if (message.task_id !== undefined) {
