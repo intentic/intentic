@@ -97,6 +97,15 @@ onMounted(async () => {
     modified = m.editor.createModel(``, lang);
     editor.setModel({ original, modified });
     await render(editor);
+    if (disposed) {
+        return; // unmounted (fast file-switch) while the sides were stripped
+    }
+    /* Land the reader on the first hunk instead of line 1: the change is often mid-file, and Monaco opens at
+     * the top, leaving it to be found by scrolling. Filling the models above marked the diff out of date
+     * synchronously, and revealFirstDiff waits out the (asynchronous) recomputation itself — so this reveals
+     * the diff `render` just loaded, never the empty-vs-empty one the blank models scheduled. A change-less
+     * result — an identical file, or a diff whose every change was a comment — reveals nothing. */
+    editor.revealFirstDiff();
 
     // VSCode's diff-navigation keys, on the focused (modified) pane.
     const modifiedEditor = editor.getModifiedEditor();
@@ -109,8 +118,15 @@ onMounted(async () => {
 watch(split, (on) => diff.value?.updateOptions({ renderSideBySide: on }));
 
 watch(showComments, async () => {
-    if (diff.value !== undefined) {
-        await render(diff.value);
+    if (diff.value === undefined) {
+        return;
+    }
+    // Revealing on every toggle would yank a scroll position the reader chose. Out of a comments-only diff
+    // there is no such position — the pane held no change at all — so land on the hunks the toggle un-hid.
+    const wasChangeless = commentsOnly.value;
+    await render(diff.value);
+    if (wasChangeless) {
+        diff.value.revealFirstDiff();
     }
 });
 
