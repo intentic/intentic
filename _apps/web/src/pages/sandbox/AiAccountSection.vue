@@ -170,8 +170,9 @@ const usageLine = (id: string): string | undefined => {
  * the right answer there — a stale reading should not pin a chip. But on this manage page a reset account IS at
  * 0%, not unmeasured: it was measured at some point, every window reopened, and saying "we don't know" is less
  * useful than saying "you have room". So the ring treats empty-windows-but-measured as 0%. */
-const accountRing = (account: OauthAccount): { percent: number; tone: string; tooltip: string } | undefined => {
-    const usage = usageStatusByAccount.value[account.id] ?? account.usage;
+const accountRing = (account: OauthAccount | any): { percent: number; tone: string; tooltip: string } | undefined => {
+    const key = 'id' in account ? account.id : account.name;
+    const usage = usageStatusByAccount.value[key] ?? ('usage' in account ? account.usage : undefined);
     if (usage === undefined) {
         return undefined;
     }
@@ -181,8 +182,9 @@ const accountRing = (account: OauthAccount): { percent: number; tone: string; to
 };
 
 // An account whose binding pool is ≥90% full — effectively spent.
-const isExhausted = (account: OauthAccount): boolean => {
-    const usage = usageStatusByAccount.value[account.id] ?? account.usage;
+const isExhausted = (account: OauthAccount | any): boolean => {
+    const key = 'id' in account ? account.id : account.name;
+    const usage = usageStatusByAccount.value[key] ?? ('usage' in account ? account.usage : undefined);
     const percent = usagePercent(usage);
     return percent !== undefined && percent >= 90;
 };
@@ -194,6 +196,18 @@ const sortedAccounts = computed<readonly OauthAccount[]>(() => {
     const active: OauthAccount[] = [];
     const spent: OauthAccount[] = [];
     for (const account of managedAccounts.value) {
+        (isExhausted(account) ? spent : active).push(account);
+    }
+    return [...active, ...spent];
+});
+
+const sortedanys = computed<readonly any[]>(() => {
+    if (routedProvider.value === undefined) {
+        return [];
+    }
+    const active: any[] = [];
+    const spent: any[] = [];
+    for (const account of translatorAccounts.value[routedProvider.value]) {
         (isExhausted(account) ? spent : active).push(account);
     }
     return [...active, ...spent];
@@ -450,13 +464,17 @@ onUnmounted(() => clearTimeout(ringTimer));
                  asks for the landing URL back. Either way the shared poll lands the new account's row. -->
             <template v-if="routedProvider">
                 <ConnectionRow
-                    v-for="account in translatorAccounts[routedProvider].slice(0, visibleRoutedLimit)"
+                    v-for="account in sortedanys.slice(0, visibleRoutedLimit)"
                     :key="account.name"
                     :title="ROUTED_ROW[routedProvider].title"
                     state="connected"
                     :note="account.label"
                     :description="ROUTED_ROW[routedProvider].hint"
                     :about="ROUTED_ROW[routedProvider].about"
+                    :usage-percent="accountRing(account)?.percent"
+                    :usage-tone="accountRing(account)?.tone"
+                    :usage-tooltip="accountRing(account)?.tooltip"
+                    :exhausted="isExhausted(account)"
                 >
                     <template #control>
                         <Button
