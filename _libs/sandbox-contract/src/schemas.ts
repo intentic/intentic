@@ -355,9 +355,8 @@ export const AgentLandSchema = z.object({ id: z.string().min(1), mode: LandModeS
 // The providers whose model can run UNDER the Claude Code harness through the bundled translator (CLIProxyAPI),
 // which holds their SUBSCRIPTION OAuth and re-serves it behind an Anthropic endpoint. The `claude` provider is
 // absent — native Anthropic OAuth serves it directly, without the translator. Codex and Grok also have a native
-// runtime and so carry the harness axis; `gemini` is routed-only (Google publishes no Anthropic-protocol
-// endpoint and this sandbox bakes no Gemini runtime), so a Gemini turn is always a Claude Code turn.
-export const KeyedProviderSchema = z.enum(["codex", "grok", "gemini"]);
+// runtime and so carry the harness axis; Kimi and Gemini are routed-only, so their turns always use Claude Code.
+export const KeyedProviderSchema = z.enum(["codex", "grok", "kimi", "gemini"]);
 export type KeyedProvider = z.infer<typeof KeyedProviderSchema>;
 
 // One connected subscription in the translator. `name` is CLIProxyAPI's auth-file name — the stable store key a
@@ -371,6 +370,7 @@ export type TranslatorAccount = z.infer<typeof TranslatorAccountSchema>;
 export const TranslatorAccountsSchema = z.object({
     codex: z.array(TranslatorAccountSchema),
     grok: z.array(TranslatorAccountSchema),
+    kimi: z.array(TranslatorAccountSchema),
     gemini: z.array(TranslatorAccountSchema),
 });
 export type TranslatorAccounts = z.infer<typeof TranslatorAccountsSchema>;
@@ -525,11 +525,6 @@ export const OauthExchangeSchema = z.object({
     label: z.string().optional(),
 });
 export const AuthorizeChallengeSchema = z.object({ authorizeUrl: z.string(), verifier: z.string(), state: z.string() });
-// Kimi (Moonshot) authenticates with an API key, not OAuth: the user pastes a key from their Moonshot account
-// and the sandbox stores it as an account (one key per account, several accounts side by side). `label` is the
-// user's display name (blank ⇒ the daemon derives a default). The key never rides back out — connection status
-// is existence in `/kimi/accounts`.
-export const KimiConnectSchema = z.object({ apiKey: z.string().min(1), label: z.string().optional() });
 // xAI Grok (via OpenCode) uses subscription OAuth via the headless device-code method. `start` returns the
 // `url` the user opens (xAI's verification_uri_complete, which pre-fills the code) and `code` — the same
 // one-time code, surfaced so the card matches x.ai exactly. There is no paste-back: OpenCode polls to
@@ -539,13 +534,15 @@ export const KimiConnectSchema = z.object({ apiKey: z.string().min(1), label: z.
 // A device-code login start: the verification URL + the one-time code the user enters there. The native Grok
 // flow (via OpenCode) — see TranslatorStartSchema for the routed-provider connect, which adds `state`.
 export const DeviceStartSchema = z.object({ url: z.string(), code: z.string() });
-// A routed-provider subscription login start (codex/grok/gemini via CLIProxyAPI). Codex and Grok mint a
-// one-time device `code` the user enters at the provider's site, and CLIProxyAPI polls to completion on its
-// own — the card only waits. Google publishes no device flow: the user approves in a browser and is redirected
-// to a loopback URL this sandbox never receives, so `code` is empty and the card asks them to paste that URL
-// back (see TranslatorCompleteSchema). Which half a provider uses is READ from the response rather than
-// hardcoded per provider, so the card needs no provider table.
-export const TranslatorStartSchema = z.object({ url: z.string(), code: z.string(), state: z.string() });
+// A routed-provider subscription login start (codex/grok/kimi/gemini via CLIProxyAPI). Device flows poll to
+// completion after the user approves upstream; redirect flows need the browser's landing URL pasted back. The
+// explicit flow discriminator matters even when a provider's verification URL already embeds its optional code.
+export const TranslatorStartSchema = z.object({
+    url: z.string(),
+    code: z.string(),
+    state: z.string(),
+    flow: z.enum(["device", "redirect"]),
+});
 // The paste-back half of a redirect login: the URL the provider sent the browser to, carrying the grant as
 // ?code=&state=. `state` ties it to the handshake that issued it — the translator rejects a mismatch.
 export const TranslatorCompleteSchema = z.object({
@@ -555,7 +552,7 @@ export const TranslatorCompleteSchema = z.object({
 });
 // A provider's model catalog, resolved daemon-side from live discovery with a persisted last-known-good list and
 // a seed floor (Grok via opencode.ts xaiModels, Codex via codex-models.ts, Claude via the Agent SDK's
-// supportedModels) — never empty, so the picker is never blank. `label` is the humanized display name; `default`
+// supportedModels) — never empty, so the picker is never blank. `label` is the provider's display name; `default`
 // is the model a fresh chat on that provider seeds (always present). Shared by /grok/models, /codex/models,
 // /claude/models. `efforts` is the reasoning-effort tiers the model accepts (Claude reports them per model);
 // empty ⇒ the client's default tiers.
@@ -563,8 +560,8 @@ export const TranslatorCompleteSchema = z.object({
 // EVERY field here is provider-reported — nothing about a model is curated in this repo, so a new release or a
 // renamed family flows to the UI with no code change. Providers differ in how much they publish: the Claude
 // Agent SDK reports a display name, a capability description, effort tiers, and capability flags, while the
-// OpenAI-compatible /v1/models endpoints (codex/grok/kimi) report ids only — those rows render label-only, and
-// that absence is the honest answer rather than something to paper over with a hand-written table.
+// Some OpenAI-compatible /v1/models endpoints report ids only — those rows render label-only, and that absence
+// is the honest answer rather than something to paper over with a hand-written table.
 //
 // ORDER IS MEANINGFUL: `models` arrives in the provider's own preference order, which is what the picker sorts
 // by, and `default` is the provider's own default. Neither is re-ranked locally.

@@ -8,12 +8,7 @@ import { providerReady } from "../../composables/chat/access";
 import { relativeTime } from "../../composables/chat/catalog";
 import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
-import {
-    usageDetail,
-    usagePercent,
-    usageStatusByAccount,
-    usageTone,
-} from "../../composables/chat/usageStatus";
+import { usageDetail, usagePercent, usageStatusByAccount, usageTone } from "../../composables/chat/usageStatus";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
@@ -64,14 +59,15 @@ const {
     disconnectTranslator,
 } = useChat();
 
-// The subscription connections, served by the sandbox's translator (CLIProxyAPI). For ChatGPT (codex) they are
-// the ONLY connections — Codex authenticates through the translator everywhere (native and under the Claude
-// Code harness), so there's no separate account. For Grok they're secondary rows beneath the native account
+// The subscription connections, served by the sandbox's translator (CLIProxyAPI). For ChatGPT, Kimi Code and
+// Google they are the only connections. For Grok they're secondary rows beneath the native account
 // (the account runs Grok's own harness; a subscription runs Grok models UNDER the Claude Code harness). Claude
 // has no row: it IS the Claude Code harness. A provider can hold several subscription accounts — the translator
 // balances turns across them — so each renders as a row of its own.
 const routedProvider = computed<KeyedProvider | undefined>(() =>
-    managedProvider.value === `codex` || managedProvider.value === `grok` || managedProvider.value === `gemini` ? managedProvider.value : undefined,
+    managedProvider.value === `codex` || managedProvider.value === `grok` || managedProvider.value === `kimi` || managedProvider.value === `gemini`
+        ? managedProvider.value
+        : undefined,
 );
 // Each routed row carries two registers of explanation, because they are read at different moments. `hint` is
 // the glanceable one — what this connection costs you, in a fragment — and it is the only one on screen. `about`
@@ -89,6 +85,11 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: st
         hint: `Your SuperGrok / X Premium subscription.`,
         about: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription — a separate sign-in from the Grok account above.`,
     },
+    kimi: {
+        title: `Kimi Code subscription`,
+        hint: `Runs on your Kimi Code plan.`,
+        about: `Runs Kimi models under the Claude Code harness on your Kimi Code subscription — no API key or metered API balance required.`,
+    },
     gemini: {
         title: `Google account`,
         // The models are worth naming even in the short line, because they are not the ones a "Google" tab
@@ -99,9 +100,8 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: st
     },
 };
 
-// Codex and Gemini own no native account — the subscription row IS their connection, so the accounts list is
-// theirs to skip entirely.
-const hasNativeAccounts = computed(() => managedProvider.value !== `codex` && managedProvider.value !== `gemini`);
+// Codex, Kimi and Gemini own no native account — the subscription row IS their connection.
+const hasNativeAccounts = computed(() => managedProvider.value !== `codex` && managedProvider.value !== `kimi` && managedProvider.value !== `gemini`);
 // Grok holds a single account (OpenCode owns the xAI credential), so hide "connect another" once it's linked.
 const canConnectMore = computed(() => managedProvider.value !== `grok` || managedAccounts.value.length === 0);
 // Whether a sign-in is unfolding under this provider's native / routed row right now. Both flows carry the
@@ -115,8 +115,7 @@ const routedFlowLive = computed(() => routedProvider.value !== undefined && tran
  *
  *   1. the identity the provider itself reports (Claude returns the email + organization with the token), shown
  *      beside the name because the NAME is the user's to change and can be anything;
- *   2. the name, renamable in place — the only answer for a credential that carries no identity (a pasted API
- *      key), and the one the user reaches for when the derived name isn't what they call this account;
+ *   2. the name, renamable in place — the answer when the derived identity isn't what the user calls an account;
  *   3. failing both, when two rows still read alike, when each was connected — a weak difference, but a real one,
  *      and infinitely better than none.
  *
@@ -171,8 +170,8 @@ const usageLine = (id: string): string | undefined => {
  * 0%, not unmeasured: it was measured at some point, every window reopened, and saying "we don't know" is less
  * useful than saying "you have room". So the ring treats empty-windows-but-measured as 0%. */
 const accountRing = (account: OauthAccount | TranslatorAccount): { percent: number; tone: string; tooltip: string } | undefined => {
-    const key = 'id' in account ? account.id : account.name;
-    const usage = usageStatusByAccount.value[key] ?? ('usage' in account ? account.usage : undefined);
+    const key = "id" in account ? account.id : account.name;
+    const usage = usageStatusByAccount.value[key] ?? ("usage" in account ? account.usage : undefined);
     if (usage === undefined) {
         return undefined;
     }
@@ -183,8 +182,8 @@ const accountRing = (account: OauthAccount | TranslatorAccount): { percent: numb
 
 // An account whose binding pool is ≥90% full — effectively spent.
 const isExhausted = (account: OauthAccount | TranslatorAccount): boolean => {
-    const key = 'id' in account ? account.id : account.name;
-    const usage = usageStatusByAccount.value[key] ?? ('usage' in account ? account.usage : undefined);
+    const key = "id" in account ? account.id : account.name;
+    const usage = usageStatusByAccount.value[key] ?? ("usage" in account ? account.usage : undefined);
     const percent = usagePercent(usage);
     return percent !== undefined && percent >= 90;
 };
@@ -268,7 +267,7 @@ const connectRequested = (target: AgentProvider): void => {
     if (nativeConnectFlow.value !== undefined || translatorConnectFlow.value !== undefined || providerReady(target)) {
         return;
     }
-    if (target === `codex` || target === `gemini`) {
+    if (target === `codex` || target === `kimi` || target === `gemini`) {
         void connectTranslator(target);
         return;
     }
@@ -378,7 +377,7 @@ onUnmounted(() => clearTimeout(ringTimer));
              progress opens in the row's own #below, so it stays inside that row's hairline instead of spawning
              an inset panel detached from the thing it connects. -->
         <template v-else>
-            <!-- Native accounts (Claude, Grok, Kimi), each disconnectable on its own. Codex and Gemini have
+            <!-- Native accounts (Claude and Grok), each disconnectable on its own. Codex, Kimi and Gemini have
                  none — the subscription row below IS their connection — so they skip straight to it. -->
             <template v-if="hasNativeAccounts">
                 <ConnectionRow
@@ -455,11 +454,11 @@ onUnmounted(() => clearTimeout(ringTimer));
                 </ConnectionRow>
             </template>
 
-            <!-- The subscription connection (translator). ChatGPT/Codex and Gemini: the ONE connection kind, so
+            <!-- The subscription connection (translator). ChatGPT/Codex, Kimi and Gemini: the ONE connection kind, so
                  it's the group's primary control. Grok: rows beneath the native account, for running Grok UNDER
                  the Claude Code harness. A provider can hold SEVERAL subscription accounts side by side — the
                  translator balances turns across them, so a second account is more headroom — and each renders
-                 as its own row with its own Disconnect, mirroring the native list above. Codex/Grok mint a
+                 as its own row with its own Disconnect, mirroring the native list above. Codex/Grok/Kimi mint a
                  one-time code and the translator connects on its own; Google redirects instead, so that flow
                  asks for the landing URL back. Either way the shared poll lands the new account's row. -->
             <template v-if="routedProvider">

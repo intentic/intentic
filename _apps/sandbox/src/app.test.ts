@@ -247,16 +247,18 @@ const services = (overrides: Partial<Services> = {}): Services => {
         claudeUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
         // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
         cliProxy: {
-            accounts: async () => ({ codex: [], grok: [], gemini: [] }),
-            connect: async () => ({ url: "", code: "", state: "" }),
+            accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }),
+            connect: async () => ({ url: "", code: "", state: "", flow: "device" as const }),
             complete: async () => {},
             disconnect: async () => {},
+            models: async () => [],
         },
         codexHome: "/work/.intentic/codex",
         codexThreadExists: async () => true,
         // Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model.
         claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
         codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
+        kimiModels: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
         geminiModels: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
         history: fakeHistory(),
         agent: async function* () {
@@ -1515,10 +1517,11 @@ test("agent.run selects the Claude account named on the turn and forwards its to
 
 const withTranslator = { ...baseConfig, translator: { url: "http://127.0.0.1:8788", token: "local-bearer" } };
 const codexConnectedProxy = {
-    accounts: async () => ({ codex: [{ name: "codex-user.json", label: "user@example.com" }], grok: [], gemini: [] }),
-    connect: async () => ({ url: "", code: "", state: "" }),
+    accounts: async () => ({ codex: [{ name: "codex-user.json", label: "user@example.com" }], grok: [], kimi: [], gemini: [] }),
+    connect: async () => ({ url: "", code: "", state: "", flow: "device" as const }),
     complete: async () => {},
     disconnect: async () => {},
+    models: async () => [],
 };
 
 test("agent.run serves a Codex turn on the translator subscription over the local bearer, no per-turn home", async () => {
@@ -1569,10 +1572,11 @@ test("agent.run serves a Gemini turn on the translator subscription, withholding
             services({
                 config: withTranslator,
                 cliProxy: {
-                    accounts: async () => ({ codex: [], grok: [], gemini: [{ name: "antigravity-user.json", label: "user@gmail.com" }] }),
-                    connect: async () => ({ url: "", code: "", state: "" }),
+                    accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [{ name: "antigravity-user.json", label: "user@gmail.com" }] }),
+                    connect: async () => ({ url: "", code: "", state: "", flow: "redirect" as const }),
                     complete: async () => {},
                     disconnect: async () => {},
+                    models: async () => [],
                 },
                 agent: async function* (request) {
                     seen = request;
@@ -1591,13 +1595,44 @@ test("agent.run serves a Gemini turn on the translator subscription, withholding
     expect(seen?.oauthToken).toBeUndefined();
 });
 
+test("agent.run serves Kimi K3 on the Kimi Code subscription through the translator", async () => {
+    let seen: { baseUrl?: string; authToken?: string; model?: string; oauthToken?: string } | undefined;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                cliProxy: {
+                    accounts: async () => ({ codex: [], grok: [], kimi: [{ name: "kimi-user.json", label: "Kimi User" }], gemini: [] }),
+                    connect: async () => ({ url: "", code: "", state: "", flow: "device" as const }),
+                    complete: async () => {},
+                    disconnect: async () => {},
+                    models: async () => [{ id: "kimi-k3", label: "Kimi K3" }],
+                },
+                agent: async function* (request) {
+                    seen = request;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    const events = await runAgentTurn(client, { prompt: "hi", agent: "kimi" });
+
+    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(seen?.baseUrl).toBe("http://127.0.0.1:8788");
+    expect(seen?.authToken).toBe("local-bearer");
+    expect(seen?.model).toBe("kimi-k3");
+    expect(seen?.oauthToken).toBeUndefined();
+});
+
 test("agent.run keeps a pinned Gemini model the catalog still offers, and drops one it doesn't", async () => {
     const models = ["gemini-pro-agent", "gemini-3-flash"];
     const geminiConnected = {
-        accounts: async () => ({ codex: [], grok: [], gemini: [{ name: "antigravity-user.json", label: "user@gmail.com" }] }),
-        connect: async () => ({ url: "", code: "", state: "" }),
+        accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [{ name: "antigravity-user.json", label: "user@gmail.com" }] }),
+        connect: async () => ({ url: "", code: "", state: "", flow: "redirect" as const }),
         complete: async () => {},
         disconnect: async () => {},
+        models: async () => [],
     };
     const run = async (model: string): Promise<string | undefined> => {
         let seen: { model?: string } | undefined;
@@ -2697,6 +2732,7 @@ test("the daemon's control plane is unreachable through the generic file API; it
         ".intentic/codex/acc/auth.json",
         ".intentic/kimi/acc.json",
         ".intentic/opencode/auth.json",
+        ".intentic/cliproxy/kimi-user.json",
         ".git",
         ".git/config",
         ".git/objects/ab/cdef",

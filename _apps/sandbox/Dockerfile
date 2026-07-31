@@ -127,10 +127,10 @@ RUN mkdir -p /root/.config/opencode \
 # (`codex exec`, agent/delegation.ts), authenticated via the CODEX_HOME injected per turn. Pin in lockstep
 # with @openai/codex-sdk in _apps/sandbox/package.json (the Codex primary adapter), same rationale as opencode.
 RUN npm install -g @openai/codex@0.142.5 && codex --version
-# The `cli-proxy-api` binary on PATH — CLIProxyAPI, the Anthropic↔OpenAI/xAI translator that lets the Claude Code
-# harness drive Codex/Grok on the user's SUBSCRIPTION OAuth: agent/translator.ts spawns it as the server (a routed
-# turn's ANTHROPIC_BASE_URL points at it), and its device-code logins (--codex-device-login / the xAI Management
-# flow) connect the subscriptions. A prebuilt Go release, pinned like the npm CLIs above.
+# The `cli-proxy-api` binary on PATH — CLIProxyAPI, the translator that lets the Claude Code harness drive
+# Codex/Grok/Kimi/Google models on the user's SUBSCRIPTION OAuth: agent/translator.ts spawns it as the server (a
+# routed turn's ANTHROPIC_BASE_URL points at it), and its Management/device flows connect the subscriptions. A
+# prebuilt Go release, pinned like the npm CLIs above.
 # ponytail: bump the pin deliberately; a wire-API or Management-endpoint change surfaces as a translator-only
 # failure (native-harness turns never touch it).
 ARG CLIPROXY_VERSION=7.2.110

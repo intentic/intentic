@@ -12,9 +12,9 @@ import { useChat } from "../../composables/chat/useChat";
  * the same "Cancel" sat in two different places) — which is exactly the drift a user reads as "these providers
  * work differently" when the only real difference is the shape of the token.
  *
- * That real difference is the ONE branch here: a device `code` means the provider polls itself and the panel is
- * read-only; an empty code means the provider hands the user something to paste back (Anthropic's
- * authorization code, a Moonshot API key, the address Google dead-ends on).
+ * That real difference is the ONE branch here: a device flow means the provider polls itself and the panel is
+ * read-only; a redirect flow hands the user something to paste back (Anthropic's authorization code or the
+ * address Google dead-ends on).
  *
  * Cancel deliberately does NOT live here: it belongs in the row's single action slot, where the button that
  * started this sign-in was — see AiAccountSection. useChat is a module singleton, so this reads the live
@@ -46,20 +46,25 @@ const DESTINATION: Record<string, string> = {
     claude: `Anthropic`,
     codex: `ChatGPT`,
     grok: `x.ai`,
-    kimi: `Moonshot`,
+    kimi: `Kimi Code`,
     gemini: `Google`,
 };
 const openLabel = computed(() => `Open ${DESTINATION[provider] ?? provider}`);
 
+const deviceFlow = computed(() => {
+    const live = flow.value;
+    return live !== undefined && (`flow` in live ? live.flow === `device` : live.code !== ``);
+});
+
 // Only the mechanics a user cannot infer from the button they just pressed and the field in front of them.
 // Anthropic's flow says everything it needs to in "Open Anthropic" + "Paste code…", so it gets no line at all.
 const hint = computed<string | undefined>(() => {
-    if (flow.value?.code) {
-        // xAI's verification URL arrives with the code already filled in; CLIProxyAPI's device logins don't.
-        return kind === `native` ? `Already filled in at x.ai — approve on any device.` : `Sign in, then enter this code.`;
-    }
-    if (provider === `kimi`) {
-        return `Create an API key on your Kimi account, then paste it here.`;
+    if (deviceFlow.value) {
+        return kind === `native`
+            ? `Already filled in at x.ai — approve on any device.`
+            : flow.value?.code
+              ? `Sign in and approve — enter this code if the page asks for it.`
+              : `Approve the sign-in on the page that opens.`;
     }
     if (kind === `routed`) {
         // The dead-end landing page is the one thing a user cannot work out on their own, so it stays in full.
@@ -68,11 +73,9 @@ const hint = computed<string | undefined>(() => {
     return undefined;
 });
 
-const pastePlaceholder = computed(() =>
-    kind === `routed` ? `Paste the address you landed on…` : provider === `kimi` ? `Paste API key…` : `Paste code…`,
-);
+const pastePlaceholder = computed(() => (kind === `routed` ? `Paste the address you landed on…` : `Paste code…`));
 
-// The one field the paste flows share: an authorization code, an API key, or a redirect URL — the panel takes
+// The one field the paste flows share: an authorization code or redirect URL — the panel takes
 // the string and hands it to whichever half of the handshake is live.
 const pasted = ref(``);
 const finish = async (): Promise<void> => {
@@ -114,10 +117,11 @@ watch(flow, (live) => {
         <p v-if="hint" class="text-2xs text-subtle">{{ hint }}</p>
         <!-- A device code is read, not typed: one line, at a size you can read off a second screen, with copy as
              an icon rather than a chip competing with the real action. -->
-        <div v-if="flow.code" class="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5">
+        <div v-if="deviceFlow && flow.code" class="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5">
             <span class="truncate font-mono text-base font-semibold tracking-[0.2em] text-content">{{ flow.code }}</span>
             <CopyButton :text="flow.code" />
         </div>
+        <p v-else-if="deviceFlow" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />Waiting for approval…</p>
         <div v-else class="flex gap-2">
             <input
                 v-model="pasted"

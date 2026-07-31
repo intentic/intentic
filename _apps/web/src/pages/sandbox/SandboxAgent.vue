@@ -29,7 +29,7 @@ import CommandOutputInfo from "./CommandOutputInfo.vue";
 
 /* The Sandbox hub's "Agent" tab — the home for everything about the AI the sandbox runs. The AI provider
  * accounts (Claude / ChatGPT / Grok / Kimi / Gemini) it authenticates as — each provider's native-harness
- * account plus, for codex/grok/gemini, the subscription the translator serves them on, all of which live in
+ * account plus, for codex/grok/kimi/gemini, the subscription the translator serves them on, all of which live in
  * AiAccountSection — its behavior settings, and the import-memory tool. Accounts and memory live INSIDE the
  * sandbox, never on the platform, which is why this is a sandbox tab. */
 

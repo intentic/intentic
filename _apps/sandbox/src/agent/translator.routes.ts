@@ -3,9 +3,9 @@ import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 
-// Routed-provider subscriptions (Sandbox ▸ Agent). The bundled translator (CLIProxyAPI) runs codex/grok/gemini
+// Routed-provider subscriptions (Sandbox ▸ Agent). The bundled translator (CLIProxyAPI) runs codex/grok/kimi/gemini
 // UNDER the Claude Code harness on the user's subscription, so `connect` starts an OAuth login and CLIProxyAPI
-// finishes it in the background — the UI polls `accounts` until connected. Codex and Grok are device-code logins
+// finishes it in the background — the UI polls `accounts` until connected. Codex, Grok and Kimi use device login
 // that need nothing further; Google's browser redirect dead-ends on a loopback URL only this container binds, so
 // the user pastes that URL back through `complete`. A provider holds any number of accounts side by side (the
 // translator balances across them); `disconnect` clears ONE account's tokens by its auth-file name.

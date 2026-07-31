@@ -1155,7 +1155,7 @@ export async function* runAgent(
     };
 
     // A turn that authenticated with a stored account's OAuth token can read that plan's limit pools at settle;
-    // endpoint turns (translator, Moonshot) and container-env turns have no pools to read — and no account to
+    // translator endpoint and container-env turns have no pools to read — and no account to
     // file a reading under (agent.routes persists only attributed frames).
     const oauthToken = request.oauthToken;
     const readUsage = oauthToken === undefined ? undefined : (): Promise<UsageWindow[]> => claudeUsageWindows(oauthToken, usageFetch);

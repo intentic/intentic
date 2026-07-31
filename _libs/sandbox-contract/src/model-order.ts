@@ -3,7 +3,7 @@
  *
  * Anthropic's REST /v1/models answers newest-first: that IS a provider opinion, and Claude's catalog rides it
  * (claude-models.ts). Every other provider here is read through an OpenAI-compatible /v1/models — Codex and
- * Gemini via the bundled translator, Kimi via Moonshot — or out of xAI's "Did you mean" rejection, and those
+ * Gemini and Kimi via the bundled translator — or out of xAI's "Did you mean" rejection, and those
  * endpoints publish a SET, not a ranking: they hand the ids back in whatever order their registry iterates,
  * which in practice is alphabetical. Reading that as a preference is what put "GPT 5.4 Mini" at the head of the
  * Codex group with GPT 5.6 below it, and what made a fresh Codex conversation start on whichever id happened to

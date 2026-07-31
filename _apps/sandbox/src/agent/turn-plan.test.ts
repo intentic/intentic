@@ -31,7 +31,7 @@ const servicesWith = (overrides: Record<string, unknown>): Services =>
         tools: [],
         capabilities: { list: async () => [] },
         config: { translator: { url: "", token: "" }, openaiApiKey: "", iqPluginDir: "", intenticAgentModel: "" },
-        cliProxy: { accounts: async () => ({ codex: [], grok: [], gemini: [] }) },
+        cliProxy: { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) },
         codexAgent: async function* () {},
         grokAgent: async function* () {},
         agent: async function* () {},
@@ -117,7 +117,7 @@ test("Codex resolves the catalog default when the turn pins no model", async () 
     const services = servicesWith({
         codexThreadExists: async () => true,
         config: { translator: { url: "http://127.0.0.1:8788", token: "local" }, openaiApiKey: "" },
-        cliProxy: { accounts: async () => ({ codex: ["sub"], grok: [], gemini: [] }) },
+        cliProxy: { accounts: async () => ({ codex: ["sub"], grok: [], kimi: [], gemini: [] }) },
         codexModels: { models: async () => ({ default: "gpt-5.6-codex" }) },
     });
 
@@ -179,7 +179,7 @@ test("a translator holding the ChatGPT subscription puts CODEX_HOME and the bear
     const plan = await planTurn(
         harnessServices({
             config: { translator: { url: "http://127.0.0.1:8788", token: "local" }, openaiApiKey: "", iqPluginDir: "", intenticAgentModel: "" },
-            cliProxy: { accounts: async () => ({ codex: ["sub"], grok: [], gemini: [] }) },
+            cliProxy: { accounts: async () => ({ codex: ["sub"], grok: [], kimi: [], gemini: [] }) },
         }),
         turn(),
         context,

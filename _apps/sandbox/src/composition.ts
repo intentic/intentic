@@ -93,7 +93,6 @@ import { type GeminiCatalog, createGeminiCatalog } from "./gemini/gemini-catalog
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
 import { type KimiCatalog, createKimiCatalog } from "./kimi/kimi-catalog.js";
-import { fileKimiStore, type KimiStore } from "./kimi/kimi-credentials.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
@@ -228,20 +227,16 @@ export interface Services {
     // its model here so it never sends the SDK's rejected gpt-5-codex default; /codex/models serves the picker;
     // a turn's self-heal `record`s the ids the subscription proved valid.
     readonly codexModels: CodexCatalog;
-    // Kimi (Moonshot) API-key accounts (one <id>.json per account under .intentic/kimi), several per sandbox.
-    readonly kimiStore: KimiStore;
-    // Kimi/Moonshot's live model catalog (discovery → persisted → seed floor, never empty). A Kimi turn resolves
-    // its model here (it runs on the Claude Code harness pointed at Moonshot's Anthropic endpoint); /kimi/models
-    // serves the picker.
+    // Kimi Code's model catalog from CLIProxyAPI's provider-scoped definitions (seed floor, never empty).
+    // The same translator owns the subscription and executes each Kimi turn; /kimi/models serves the picker.
     readonly kimiModels: KimiCatalog;
     // Gemini's live model catalog, read from the translator's /v1/models (persisted → seed floor, never empty).
     // A Gemini turn resolves its model here; /gemini/models serves the picker. There is no geminiStore twin:
     // Gemini is routed-only, so the translator owns the credential.
     readonly geminiModels: GeminiCatalog;
     // The bundled translator (CLIProxyAPI): connects/lists/disconnects the routed providers' SUBSCRIPTION OAuth
-    // (codex → ChatGPT, grok → SuperGrok, gemini → Google). Codex and Gemini have no other credential — every
-    // Codex turn (native provider + the Claude agent's shell delegation) and every Gemini turn authenticates
-    // through this. /translator drives the connect; streamAgent reads `accounts` to gate a routed turn.
+    // (codex → ChatGPT, grok → SuperGrok, kimi → Kimi Code, gemini → Google). Codex, Kimi and Gemini have no
+    // other credential. /translator drives the connect; streamAgent reads `accounts` to gate a routed turn.
     readonly cliProxy: CliProxyClient;
     // The sandbox-wide CODEX_HOME (sessions + the config.toml selecting the translator provider). The codex
     // adapter defaults to it, and the Claude agent's shell delegation points `codex` at it.
@@ -414,6 +409,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Base dir under which each Codex account gets its own CODEX_HOME (`<authRoot>/codex/<id>`); also the
     // adapter's default (the OPENAI_API_KEY fallback home when a turn resolved no account).
     const codexBase = join(authRoot, "codex");
+    const cliProxy = createCliProxyClient({
+        managementUrl: cliProxyManagementUrl(config),
+        token: config.translator.token,
+        configPath: cliProxyConfigPath(config),
+    });
     // Referenced twice below: as the openCode service field and to build the Grok adapter's runner. Its data dir
     // (OpenCode's XDG_DATA_HOME) is the credential root so xAI OAuth tokens persist across restarts.
     const openCode = createOpenCodeService(authRoot);
@@ -444,7 +444,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
         : undefined;
 
     const claudeStore = fileClaudeStore(join(authRoot, "claude"), logger);
-    const kimiStore = fileKimiStore(join(authRoot, "kimi"));
 
     // Hoisted (not inline in the literal below): the ACP connection pool implements ACP terminal/* over the
     // same runner, so both must share one instance (and its `visible` gate).
@@ -523,14 +522,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         claudeUsage: fileClaudeUsageStore(join(config.historyRoot, "claude-usage.json")),
         claudeModels: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
         codexModels: createCodexCatalog(config, join(codexBase, "models.json")),
-        kimiStore,
-        kimiModels: createKimiCatalog(kimiStore, config, join(authRoot, "kimi", "models.json")),
+        kimiModels: createKimiCatalog(cliProxy),
         geminiModels: createGeminiCatalog(config, join(authRoot, "gemini", "models.json")),
-        cliProxy: createCliProxyClient({
-            managementUrl: cliProxyManagementUrl(config),
-            token: config.translator.token,
-            configPath: cliProxyConfigPath(config),
-        }),
+        cliProxy,
         codexHome: codexBase,
         codexThreadExists: (threadId) => codexThreadExists(codexBase, threadId),
         openCode,

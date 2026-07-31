@@ -191,7 +191,7 @@ const planAcpTurn = async (
 };
 
 /* The Claude Code harness — a native Claude turn's subscription OAuth (with its mid-turn refresh callback), or
- * the translator/Moonshot endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
+ * the translator endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
  * which the quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically;
  * its refusals are values, and this is where they become the refusal the composer's connect gate reads. */
 const planHarnessTurn = async (

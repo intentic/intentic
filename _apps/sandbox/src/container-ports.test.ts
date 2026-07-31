@@ -9,7 +9,7 @@ import { expect, test } from "vitest";
  * the only fixed bind in the container not declared in @intentic/constants, so when the loopback listener was
  * added and took the number one above the daemon's, nothing compared them: 8788 twice, in two files, in two
  * languages. The daemon boots first and wins the bind, so cli-proxy-api died on arrival on every sandbox —
- * exit 0, its reason on stdout, restarted forever — and every routed (Codex/Grok/Gemini) turn had no
+ * exit 0, its reason on stdout, restarted forever — and every routed (Codex/Grok/Kimi/Gemini) turn had no
  * translator to reach. Both halves of that are checked below: the values are distinct, and the image's baked
  * ports are the declared ones rather than literals free to drift back into each other.
  */

@@ -1,27 +1,24 @@
-import { type AgentProvider, NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract";
+import { type AgentProvider, type KeyedProvider, NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract";
 import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
-import { resolveKimiKey } from "../kimi/kimi-credentials.js";
-import { MOONSHOT_ANTHROPIC_BASE } from "../kimi/kimi-models.js";
 import type { Services } from "../composition.js";
 
 /* WHAT AUTHENTICATES A CLAUDE CODE HARNESS TURN, per provider — the one question every caller of that harness
  * has to answer before it can spawn anything, and there is now more than one caller: the chat's own turn route
  * and the quick-model one-shot behind the commit box's autofill. It lives here rather than inline in
- * agent.routes.ts because the alternative is two places deciding whether Gemini rides the translator and which
- * Moonshot key a Kimi call uses, and they would drift silently — a helper that resolves credentials a different
+ * agent.routes.ts because the alternative is two places deciding which providers ride the translator, and they
+ * would drift silently — a helper that resolves credentials a different
  * way than the chat does is a helper that fails only for the users whose setup differs from the developer's.
  *
- * Three shapes come out, and they are mutually exclusive by construction:
+ * Two shapes come out, and they are mutually exclusive by construction:
  *   claude              → the account's Anthropic subscription OAuth (undefined ⇒ the container env fallback)
- *   codex/grok/gemini   → the sandbox translator's endpoint + local bearer + an explicitly named model
- *   kimi                → Moonshot's Anthropic-compatible endpoint + the sandbox-owned API key
+ *   codex/grok/kimi/gemini → the sandbox translator's endpoint + local bearer + an explicitly named model
  *
  * Note what setting `endpoint` implies downstream: agent.ts drops CLAUDE_CODE_OAUTH_TOKEN whenever a baseUrl is
  * present, so a subscription token can never leave for a foreign endpoint. That is why this returns the two as
  * one value rather than letting a caller assemble them.
  *
  * A refusal is a VALUE, not a throw. Every one of these is an ordinary state of a sandbox — no translator in
- * the image, a subscription the user hasn't connected, a Kimi key never added — and each caller renders it its
+ * the image, a subscription the user hasn't connected — and each caller renders it its
  * own way: the turn route yields an error frame the composer's connect gate reads, the one-shot turns it into a
  * disabled button. `code` carries the machine-readable discriminator the UI keys off (AgentEvent's `error`). */
 
@@ -123,9 +120,10 @@ export type HarnessCredentialsResult =
 
 // The label a routed provider's missing subscription is named by — the vendor's own noun, matching the connect
 // prompts (PROVIDER_ACCESS.requirement).
-const ROUTED_REQUIREMENT: Record<"codex" | "grok" | "gemini", string> = {
+const ROUTED_REQUIREMENT: Record<KeyedProvider, string> = {
     codex: "ChatGPT subscription",
     grok: "SuperGrok subscription",
+    kimi: "Kimi Code subscription",
     gemini: "Google account",
 };
 
@@ -143,12 +141,15 @@ const routedModel = (catalog: { models: readonly { id: string }[]; default: stri
 
 // Each routed provider resolves against its OWN live catalog — the same catalogs the native paths use, so a
 // pick is validated identically whichever harness runs it.
-const routedCatalog = async (services: Services, provider: "codex" | "grok" | "gemini") => {
+const routedCatalog = async (services: Services, provider: KeyedProvider) => {
     if (provider === "codex") {
         return services.codexModels.models();
     }
     if (provider === "grok") {
         return services.openCode.xaiModels();
+    }
+    if (provider === "kimi") {
+        return services.kimiModels.models();
     }
     return services.geminiModels.models();
 };
@@ -164,15 +165,15 @@ const routedCatalog = async (services: Services, provider: "codex" | "grok" | "g
  * costs an error message rather than a wrong turn. */
 export const harnessReadyProviders = async (services: Services): Promise<Record<NativeProvider, boolean>> => {
     const translator = services.config.translator.url === "" ? undefined : await services.cliProxy.accounts();
-    const routed = (provider: "codex" | "grok" | "gemini"): boolean => (translator?.[provider].length ?? 0) > 0;
+    const routed = (provider: KeyedProvider): boolean => (translator?.[provider].length ?? 0) > 0;
     const ready: Record<NativeProvider, boolean> = {
         // A stored account, else the container's own credential — the same two rungs the claude branch takes.
         claude:
             (await services.claudeStore.list()).length > 0 || services.config.claudeCodeOauthToken !== "" || services.config.anthropicApiKey !== "",
         codex: routed("codex"),
         grok: routed("grok"),
+        kimi: routed("kimi"),
         gemini: routed("gemini"),
-        kimi: (await services.kimiStore.list()).length > 0 || services.config.moonshotApiKey !== "",
     };
     // Named rather than returned raw so a provider added to NATIVE_PROVIDERS without a rung here fails the
     // type-check instead of silently reading back `undefined` (AgentProvider is a bare string on the wire).
@@ -183,11 +184,11 @@ export const resolveHarnessCredentials = async (
     services: Services,
     input: { readonly agent: AgentProvider | undefined; readonly account?: string; readonly model?: string },
 ): Promise<HarnessCredentialsResult> => {
-    if (input.agent === "codex" || input.agent === "grok" || input.agent === "gemini") {
+    if (input.agent === "codex" || input.agent === "grok" || input.agent === "kimi" || input.agent === "gemini") {
         if (services.config.translator.url === "") {
-            // Codex/Grok can fall back to their own runtime; Gemini has none, so it can only be an image problem.
+            // Codex/Grok can fall back to their own runtime; Kimi/Gemini have none, so it can only be an image problem.
             const fallback =
-                input.agent === "gemini"
+                input.agent === "kimi" || input.agent === "gemini"
                     ? "Run a sandbox built from the published image."
                     : "Use the provider's native harness, or run a sandbox built from the published image.";
             return {
@@ -211,30 +212,6 @@ export const resolveHarnessCredentials = async (
                     authToken: services.config.translator.token,
                     model: routedModel(catalog, input.model),
                 },
-            },
-        };
-    }
-    if (input.agent === "kimi") {
-        // Kimi (Moonshot) speaks the Anthropic Messages protocol, so it runs on THIS harness with the endpoint
-        // pointed at Moonshot's Anthropic-compatible base and authenticated with the sandbox-owned API key (the
-        // selected account's, else the first stored one, else the container MOONSHOT_API_KEY).
-        const resolved = await resolveKimiKey(services.kimiStore, services.config, input.account);
-        if (resolved === undefined) {
-            return {
-                ok: false,
-                code: "subscription-required",
-                message: "No Kimi account connected — add your Kimi (Moonshot) API key in Sandbox ▸ Agent before chatting.",
-            };
-        }
-        // Resolve a concrete model so the turn never sends an empty id to Moonshot: the pinned pick, else the
-        // live catalog default (discovery → persisted → seed floor, never empty).
-        const model = input.model !== undefined && input.model !== "" ? input.model : (await services.kimiModels.models()).default;
-        return {
-            ok: true,
-            credentials: {
-                // Absent when the key came from the container MOONSHOT_API_KEY rather than a stored account.
-                ...(resolved.accountId !== undefined ? { account: resolved.accountId } : {}),
-                endpoint: { baseUrl: MOONSHOT_ANTHROPIC_BASE, authToken: resolved.apiKey, model },
             },
         };
     }

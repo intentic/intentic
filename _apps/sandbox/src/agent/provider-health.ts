@@ -30,7 +30,7 @@
  * refusals — otherwise a user hammering send during an outage (or a burst of parallel turns dying together)
  * would rocket the backoff to its ceiling in seconds and read as "the daemon gave up immediately".
  *
- * Keyed by provider name ("claude", "codex", "grok", "gemini") — the granularity an outage actually has. A 529
+ * Keyed by provider name ("claude", "codex", "grok", "kimi", "gemini") — the granularity an outage actually has. A 529
  * is often narrower than that (one model at capacity while its siblings serve fine), which makes this breaker
  * slightly pessimistic for capacity events: an Opus refusal also defers a Sonnet resume. That is the safe
  * direction to be wrong in when the entire purpose is to not spam, and the chat still offers the immediate

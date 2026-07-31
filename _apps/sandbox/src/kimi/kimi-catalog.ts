@@ -1,64 +1,48 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
-import type { Config } from "../env.config.js";
-import { type KimiStore, resolveKimiKey } from "./kimi-credentials.js";
-import { discoverKimiModels, humanizeModelId, SEED_KIMI_MODELS } from "./kimi-models.js";
+import { compareUnrankedModelIds, type Model } from "@intentic/sandbox-contract";
+import type { CliProxyClient } from "../agent/translator.js";
 
-/* The Kimi model catalog service — the Kimi twin of codex-catalog.ts. Resolves the ids a Kimi turn can drive,
- * ALWAYS non-empty so the picker is never blank and a turn always resolves a concrete model. Source, in order:
- *   1. Moonshot's OpenAI-compatible /v1/models with a stored key (or the container MOONSHOT_API_KEY);
- *   2. the persisted last-known-good catalog;
- *   3. the compile-time SEED_KIMI_MODELS floor.
- * Cached briefly, and only real (discovered) results are cached — the seed stays uncached so a usable key is
- * retried on the next read (e.g. once the user connects one). */
+/* Kimi Code's picker catalog. CLIProxyAPI owns both the subscription credential and the executor, so its
+ * provider-scoped model definitions are the only catalog that can honestly describe what this pinned runtime
+ * knows how to route. The endpoint is local and requires no inference from the multiplexed /v1/models owner.
+ * A compile-time floor keeps the picker useful while the proxy is still booting; only a real answer is cached,
+ * so the next read replaces that floor as soon as CLIProxyAPI is reachable. */
 export interface KimiCatalog {
-    // The Kimi models (+ default id), never empty.
-    readonly models: () => Promise<{ models: { id: string; label: string }[]; default: string }>;
+    readonly models: () => Promise<{ models: Model[]; default: string }>;
 }
 
 const MODELS_TTL_MS = 60_000;
 
-// Moonshot's OpenAI-compatible /v1/models publishes a SET, not a ranking (see model-order.ts), so the app
-// imposes the order — which is what makes `default` the frontier newest rather than whichever id the endpoint
-// happened to list first.
-const toCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
-    const ordered = ids.toSorted(compareUnrankedModelIds);
-    return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
+const SEED_KIMI_MODELS: readonly Model[] = [
+    { id: "kimi-k3", label: "Kimi K3", efforts: ["low", "high", "max"] },
+    { id: "kimi-k3-256k", label: "Kimi K3 256K", efforts: ["low", "high", "max"] },
+    { id: "kimi-k2.7-code", label: "Kimi K2.7 Code", efforts: ["low", "high"] },
+    { id: "kimi-k2.7-code-highspeed", label: "Kimi K2.7 Code HighSpeed", efforts: ["low", "high"] },
+];
+
+const isChatModel = (model: Model): boolean => !/(embedding|whisper|tts|audio|vision-only|moderation|image-generation)/i.test(model.id);
+
+// CLIProxyAPI publishes a set in registry order, not a preference order. Put the frontier generation first so
+// the catalog's first row is also the default a turn receives when nothing was pinned.
+const toCatalog = (models: readonly Model[]): { models: Model[]; default: string } => {
+    const ordered = models.filter(isChatModel).toSorted((left, right) => compareUnrankedModelIds(left.id, right.id));
+    return { models: ordered, default: ordered[0]!.id };
 };
 
-export const createKimiCatalog = (store: KimiStore, config: Config, persistPath: string, fetchImpl: typeof fetch = fetch): KimiCatalog => {
-    let cache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;
-
-    const readPersisted = async (): Promise<string[]> => {
-        try {
-            const parsed = JSON.parse(await readFile(persistPath, "utf8")) as unknown;
-            return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
-        } catch {
-            return [];
-        }
-    };
-    const writePersisted = async (ids: string[]): Promise<void> => {
-        await mkdir(dirname(persistPath), { recursive: true });
-        await writeFile(persistPath, JSON.stringify(ids));
-    };
+export const createKimiCatalog = (cliProxy: Pick<CliProxyClient, "models">): KimiCatalog => {
+    let cache: { value: { models: Model[]; default: string }; expiresAt: number } | undefined;
 
     return {
         models: async () => {
             if (cache !== undefined && Date.now() < cache.expiresAt) {
                 return cache.value;
             }
-            const key = await resolveKimiKey(store, config);
-            const discovered = key !== undefined ? (await discoverKimiModels(key.apiKey, fetchImpl).catch(() => [])).map((model) => model.id) : [];
+            const discovered = (await cliProxy.models("kimi").catch(() => [])).filter(isChatModel);
             if (discovered.length > 0) {
-                await writePersisted(discovered);
                 const value = toCatalog(discovered);
                 cache = { value, expiresAt: Date.now() + MODELS_TTL_MS };
                 return value;
             }
-            // No live catalog (no key, or discovery came back empty): serve the last-known-good, else the seed floor.
-            const persisted = await readPersisted();
-            return toCatalog(persisted.length > 0 ? persisted : [...SEED_KIMI_MODELS]);
+            return toCatalog(SEED_KIMI_MODELS);
         },
     };
 };

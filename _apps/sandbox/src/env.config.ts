@@ -78,7 +78,7 @@ const configSchema = z.object({
     // it at the repo's _extensions/ for local dev, see .env.example).
     extensionsDir: z.string().default(""),
     // The bundled translator (CLIProxyAPI) the Claude Code harness points at to serve NON-Claude providers
-    // (codex/grok) under it on the user's subscription. `url` is what ANTHROPIC_BASE_URL is set to for a routed
+    // under it on the user's subscription. `url` is what ANTHROPIC_BASE_URL is set to for a routed
     // turn (and the base for CLIProxyAPI's localhost Management API) — empty ⇒ no translator baked (e.g. a bare
     // `tsx watch` dev run) ⇒ routed turns surface a clean error; `token` is a fixed local bearer, accepted both as
     // ANTHROPIC_AUTH_TOKEN (downstream) and as the Management API key. Both set by the Dockerfile.
@@ -94,10 +94,6 @@ const configSchema = z.object({
     // Container-env OpenAI fallback cred: gates native Codex turns (the OPENAI_API_KEY fallback CODEX_HOME when a
     // turn resolved no connected ChatGPT account).
     openaiApiKey: z.string().default("").meta({ secret: true }),
-    // Container-env Kimi (Moonshot) fallback cred: gates a Kimi turn when no key-based account is stored (a bare
-    // dev run) and feeds the /kimi/models catalog discovery. Kimi runs on the Claude Code harness pointed at
-    // Moonshot's Anthropic-compatible endpoint, so this is the key that endpoint authenticates with.
-    moonshotApiKey: z.string().default("").meta({ secret: true }),
     // The user's Cloudflare API token, set by connect.{sh,ps1} on the own-Cloudflare path (empty on the
     // intentic-provided path — the user has no token). The infra panel's context reads its presence to know
     // whether host tunnels are minted by the user's CF (own) or relayed to the platform (intentic-provided).

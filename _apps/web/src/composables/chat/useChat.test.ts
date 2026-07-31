@@ -50,8 +50,8 @@ const sandboxJsonMock = vi.mocked(sandboxJson);
 // The daemon's connection reads, as one mock. Both halves go through sandboxJson — a read that fails THROWS
 // rather than returning an empty list (refreshAccounts), which is what lets the UI tell "you have no account"
 // apart from "the daemon didn't answer". `accounts` is keyed by the provider route prefix the call carries.
-type Subscriptions = { codex: unknown[]; grok: unknown[]; gemini: unknown[] };
-const NO_SUBSCRIPTIONS: Subscriptions = { codex: [], grok: [], gemini: [] };
+type Subscriptions = { codex: unknown[]; grok: unknown[]; kimi: unknown[]; gemini: unknown[] };
+const NO_SUBSCRIPTIONS: Subscriptions = { codex: [], grok: [], kimi: [], gemini: [] };
 const mockConnections = (connections: { subscriptions?: Subscriptions; accounts?: (path: string) => unknown[] } = {}): void => {
     sandboxJsonMock.mockImplementation((path: string) =>
         Promise.resolve(
@@ -85,13 +85,27 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.connected.value).toBe(false);
 
         // No native accounts anywhere; only the ChatGPT subscription is connected in the translator.
-        mockConnections({ subscriptions: { codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], gemini: [] } });
+        mockConnections({ subscriptions: { codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], kimi: [], gemini: [] } });
         await loadAccountStatus();
         await nextTick();
 
         // The untouched fresh conversation follows Codex (subscription-connected), so the composer is reachable —
         // no Claude wall, and no separate ChatGPT account was ever needed.
         expect(chat.provider.value).toBe(`codex`);
+        expect(chat.connected.value).toBe(true);
+    });
+
+    it(`treats a Kimi Code translator subscription as Kimi's connection`, async () => {
+        storage.clear();
+        resetChat();
+        const chat = useChat();
+        mockConnections({ subscriptions: { codex: [], grok: [], kimi: [{ name: `kimi-user.json`, label: `Kimi User` }], gemini: [] } });
+
+        await loadAccountStatus();
+        chat.selectProvider(`kimi`);
+        await nextTick();
+
+        expect(chat.provider.value).toBe(`kimi`);
         expect(chat.connected.value).toBe(true);
     });
 
@@ -112,7 +126,7 @@ describe(`useChat provider reconciliation`, () => {
         // The subscription connects (via the Agent tab's "Under Claude Code" row) — the same gate opens.
         mockConnections({
             accounts: (path) => (path.startsWith(`/grok`) ? [{ id: `xai`, label: `Grok`, connectedAt: 0 }] : []),
-            subscriptions: { codex: [], grok: [{ name: `xai-user.json`, label: `user@x.ai` }], gemini: [] },
+            subscriptions: { codex: [], grok: [{ name: `xai-user.json`, label: `user@x.ai` }], kimi: [], gemini: [] },
         });
         await loadAccountStatus();
         expect(chat.connected.value).toBe(true);

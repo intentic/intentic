@@ -22,8 +22,10 @@ export const resolveWithin = (dir: string, relPath: string): string | undefined 
 // The daemon's own credential and authorization state, all of it directly under the WORKSPACE ROOT's .intentic/.
 // owner.json and members.json ARE the answer to "who may drive this sandbox" — re-read from disk on every
 // request — capabilities.json carries the capability manifest's secrets, ci.json the CI webhook secret, and
-// claude/ codex/ kimi/ opencode/ hold the agent providers' tokens (AGENT_AUTH_DIR moves that set out of /work
-// entirely, and then none of this is reachable to begin with).
+// claude/ codex/ opencode/ and cliproxy/ hold agent-provider tokens (AGENT_AUTH_DIR moves that set out of /work
+// entirely, and then none of this is reachable to begin with). `kimi` remains protected because sandboxes made
+// before Kimi Code moved into cliproxy may still contain an inert API key there; generic file access must never
+// turn a retired credential path into a readable one.
 const CONTROL_PLANE_ENTRIES = new Set([
     "owner.json",
     "members.json",
@@ -34,6 +36,7 @@ const CONTROL_PLANE_ENTRIES = new Set([
     "codex",
     "kimi",
     "opencode",
+    "cliproxy",
 ]);
 
 // Whether an absolute path lands in that control plane. Every one of those files has a purpose-built, owner-gated

@@ -31,7 +31,7 @@ test("puts tier ahead of cost — a free frontier model is still the wrong tool 
     expect(resolveQuickModel([CLAUDE, proOnly], ``)).toEqual({ provider: `claude`, model: `claude-haiku-4-5-20251001` });
 });
 
-test("prefers a subscription to a metered key at equal tier, since only one of them charges per click", () => {
+test("uses stable provider order when two subscriptions offer the same tier", () => {
     const kimiCheap: QuickModelSource = { provider: `kimi`, ready: true, models: [`kimi-k2-mini`] };
     const claudeCheap: QuickModelSource = { provider: `claude`, ready: true, models: [`claude-haiku-4-5`] };
 

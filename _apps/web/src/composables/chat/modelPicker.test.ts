@@ -215,7 +215,7 @@ const readyOnly =
         connected.includes(provider);
 
 test("seats connected providers above the ones that still need a credential", () => {
-    // PROVIDERS order alone put Kimi — with no Moonshot key — above a connected Gemini purely by position.
+    // PROVIDERS order alone put Kimi — with no Kimi Code subscription — above a connected Gemini purely by position.
     const sections = pickerSections(MIXED, `claude`, undefined, readyOnly(`claude`, `gemini`));
 
     expect(sections.slice(0, 3).map((section) => section.provider)).toEqual([`claude`, `gemini`, `codex`]);

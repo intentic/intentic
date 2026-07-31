@@ -42,7 +42,7 @@ export const PROVIDER_ACCESS: Record<NativeProvider, ProviderAccess> = {
     claude: { kind: "subscription", requirement: "Claude subscription", runs: "Claude Code" },
     codex: { kind: "subscription", requirement: "ChatGPT subscription", runs: "Codex" },
     grok: { kind: "subscription", requirement: "SuperGrok subscription", runs: "Grok" },
-    kimi: { kind: "key", requirement: "Moonshot API key", runs: "Kimi Code" },
+    kimi: { kind: "subscription", requirement: "Kimi Code subscription", runs: "Kimi Code" },
     gemini: { kind: "free", requirement: "Google sign-in", runs: "Gemini, Claude and GPT-OSS under Claude Code" },
 };
 
@@ -71,8 +71,8 @@ export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
 
 // Whether a turn on this provider/harness pair ACTUALLY runs the Claude Code Agent SDK loop — which is not the
 // same question as `harness === "claude-code"`. Claude is always its own Claude Code loop, and kimi/gemini have
-// no native runtime at all (Moonshot speaks the Anthropic protocol directly; Google is re-served through the
-// translator), so all three run it whatever harness the client happened to send; only codex/grok have a native
+// no native runtime at all (both are re-served through the translator), so all three run it whatever harness the
+// client happened to send; only codex/grok have a native
 // runtime to switch away from. An ACP agent runs its own loop and is never one of these.
 //
 // Everything the SDK loop owns keys off this: the SteeringQueue that makes mid-turn injection possible, and the

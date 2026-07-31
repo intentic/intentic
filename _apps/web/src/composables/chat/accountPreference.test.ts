@@ -74,7 +74,7 @@ vi.mocked(sandboxRequest).mockImplementation(() => Promise.resolve({ ok: false, 
 vi.mocked(sandboxJson).mockImplementation((path: string) =>
     Promise.resolve(
         path === `/translator/accounts`
-            ? { codex: [], grok: [], gemini: [] }
+            ? { codex: [], grok: [], kimi: [], gemini: [] }
             : {
                   accounts: path.startsWith(`/claude`)
                       ? [

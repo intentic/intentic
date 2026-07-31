@@ -38,8 +38,8 @@ test("every harness process is told to ride out a provider outage rather than gi
 });
 
 test("a custom endpoint with no resolved model pins nothing rather than an empty id", () => {
-    const env = harnessEnv({ baseUrl: "https://api.moonshot.ai/anthropic", authToken: "key" });
-    expect(env["ANTHROPIC_BASE_URL"]).toBe("https://api.moonshot.ai/anthropic");
+    const env = harnessEnv({ baseUrl: "https://router.example", authToken: "local" });
+    expect(env["ANTHROPIC_BASE_URL"]).toBe("https://router.example");
     expect(env["ANTHROPIC_DEFAULT_SONNET_MODEL"]).toBeUndefined();
     expect(env["CLAUDE_CODE_SUBAGENT_MODEL"]).toBeUndefined();
 });

@@ -1,12 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { KeyedProvider, TranslatorAccounts } from "@intentic/sandbox-contract";
+import type { KeyedProvider, Model, TranslatorAccounts } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
 
 /* The bundled translator is CLIProxyAPI: a Go proxy that lets the Claude Code harness — which speaks only the
- * Anthropic Messages API — drive OpenAI (Codex), xAI (Grok) and Google (Gemini) models on the user's
+ * Anthropic Messages API — drive OpenAI (Codex), xAI (Grok), Kimi Code and Google (Gemini) models on the user's
  * SUBSCRIPTION. CLIProxyAPI holds each provider's subscription OAuth in its auth-dir and re-serves it behind an
  * Anthropic-compatible endpoint; a routed turn (streamAgent) points ANTHROPIC_BASE_URL at config.translator.url
  * with config.translator.token as the bearer, and the model id selects the upstream provider.
@@ -20,7 +20,7 @@ import type { Services } from "../composition.js";
 // CLIProxyAPI says "xai", and "gemini" where it says "antigravity" — Antigravity is Google's own agent product,
 // and its channel is the one CLIProxyAPI serves Gemini models on from a plain Google-account sign-in. The app
 // surfaces the model the user picks, not the Google product that vends it.
-const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = { codex: "codex", grok: "xai", gemini: "antigravity" };
+const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = { codex: "codex", grok: "xai", kimi: "kimi", gemini: "antigravity" };
 
 // The subscription-token store (survives sandbox rebuilds alongside the other AI-provider credentials).
 const cliProxyAuthDir = (authRoot: string): string => join(authRoot, "cliproxy");
@@ -117,16 +117,24 @@ export const startTranslator = (services: Services): void => {
 // starts a provider's login and returns what the card shows; `complete` finishes the one provider whose login
 // can't self-complete (see below); `disconnect` clears ONE account's tokens by auth-file name.
 //
-// Codex and Grok are device-code logins: the user opens a URL and enters the code, and CLIProxyAPI polls to
+// Codex, Grok and Kimi are device-code logins: the user opens a URL and approves, and CLIProxyAPI polls to
 // completion in the background and writes the token to auth-dir, so the UI polls `accounts` until connected and
 // never calls `complete`. Google's is a browser redirect to a loopback port that only exists inside this
 // container, so nothing can observe the grant — the user pastes the URL they landed on and `complete` hands it
 // back to CLIProxyAPI, which then finishes the exchange on its own and the UI polls `accounts` the same way.
+interface TranslatorLogin {
+    readonly url: string;
+    readonly code: string;
+    readonly state: string;
+    readonly flow: "device" | "redirect";
+}
+
 export interface CliProxyClient {
     readonly accounts: () => Promise<TranslatorAccounts>;
-    readonly connect: (provider: KeyedProvider) => Promise<{ url: string; code: string; state: string }>;
+    readonly connect: (provider: KeyedProvider) => Promise<TranslatorLogin>;
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
+    readonly models: (provider: KeyedProvider) => Promise<Model[]>;
 }
 
 export const createCliProxyClient = (params: { managementUrl: string; token: string; configPath: string }): CliProxyClient => {
@@ -142,27 +150,26 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
         return ((await response.json()) as { files?: { name?: string; provider?: string; email?: string; label?: string }[] }).files ?? [];
     };
 
-    // Grok: CLIProxyAPI's xAI login is a device-code flow (headless-friendly) exposed over the Management API. It
-    // returns the verification URL (with the code pre-filled) + user code and auto-polls to completion in the
-    // background; the UI polls `accounts` until connected.
-    const connectGrok = async (): Promise<{ url: string; code: string; state: string }> => {
-        const response = await fetch(`${managementUrl}/xai-auth-url`, { headers: auth });
+    // CLIProxyAPI's xAI and Kimi logins are headless-friendly device flows exposed over the Management API. Each
+    // returns a verification URL, optional user code and state, then polls to completion in the background.
+    const connectDevice = async (provider: "grok" | "kimi"): Promise<TranslatorLogin> => {
+        const response = await fetch(`${managementUrl}/${provider === "grok" ? "xai" : "kimi"}-auth-url`, { headers: auth });
         if (!response.ok) {
-            throw new Error(`xAI subscription login failed to start (${response.status})`);
+            throw new Error(`${provider === "grok" ? "xAI" : "Kimi Code"} subscription login failed to start (${response.status})`);
         }
         const body = (await response.json()) as { url?: string; user_code?: string; state?: string };
-        if (body.url === undefined) {
-            throw new Error("xAI subscription login returned no verification URL");
+        if (body.url === undefined || body.state === undefined || body.state === "") {
+            throw new Error(`${provider === "grok" ? "xAI" : "Kimi Code"} subscription login returned an incomplete device flow`);
         }
-        return { url: body.url, code: body.user_code ?? "", state: body.state ?? "" };
+        return { url: body.url, code: body.user_code ?? "", state: body.state, flow: "device" };
     };
 
     // Gemini: CLIProxyAPI's Antigravity login is Google's ordinary browser OAuth — it hands back an authorize URL
     // and a `state`, then waits for the grant to land in its auth-dir. Google redirects to a loopback port bound
     // inside THIS container, which the user's browser can never reach, so the redirect always dead-ends in their
     // address bar; that URL carries the grant, and `complete` below posts it back. No device-code flow exists for
-    // Google, so the empty `code` is what tells the card to ask for a paste instead of showing a code.
-    const connectGemini = async (): Promise<{ url: string; code: string; state: string }> => {
+    // Google; the explicit redirect flow tells the card to ask for the landing URL.
+    const connectGemini = async (): Promise<TranslatorLogin> => {
         const response = await fetch(`${managementUrl}/antigravity-auth-url`, { headers: auth });
         if (!response.ok) {
             throw new Error(`Google sign-in failed to start (${response.status})`);
@@ -171,7 +178,7 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
         if (body.url === undefined || body.state === undefined || body.state === "") {
             throw new Error("Google sign-in returned no authorization URL");
         }
-        return { url: body.url, code: "", state: body.state };
+        return { url: body.url, code: "", state: body.state, flow: "redirect" };
     };
 
     // Hand a pasted redirect URL back to CLIProxyAPI, which parses ?code=&state= out of it, matches it to the
@@ -194,7 +201,7 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
     // so drive that as a subprocess: parse the URL + code it prints, surface them, and leave it running to poll to
     // completion (writing the token to auth-dir). A superseding connect kills the prior child.
     let codexChild: ChildProcess | undefined;
-    const connectCodex = (): Promise<{ url: string; code: string; state: string }> =>
+    const connectCodex = (): Promise<TranslatorLogin> =>
         new Promise((resolve, reject) => {
             codexChild?.kill("SIGTERM");
             const child = spawn("cli-proxy-api", ["--codex-device-login", "--no-browser", "--config", configPath], {
@@ -213,7 +220,7 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
                 if (!settled && url !== undefined && code !== undefined) {
                     settled = true;
                     // The subprocess owns the poll to completion, so there is no handshake for the UI to resume.
-                    resolve({ url, code, state: "" });
+                    resolve({ url, code, state: "", flow: "device" });
                 }
             };
             child.stdout?.on("data", onData);
@@ -262,10 +269,32 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
                         ? [{ name: file.name, label: file.email ?? file.label ?? file.name }]
                         : [],
                 );
-            return { codex: of("codex"), grok: of("grok"), gemini: of("gemini") };
+            return { codex: of("codex"), grok: of("grok"), kimi: of("kimi"), gemini: of("gemini") };
         },
-        connect: (provider) => (provider === "grok" ? connectGrok() : provider === "gemini" ? connectGemini() : connectCodex()),
+        connect: (provider) =>
+            provider === "grok" || provider === "kimi" ? connectDevice(provider) : provider === "gemini" ? connectGemini() : connectCodex(),
         complete,
         disconnect,
+        models: async (provider) => {
+            const response = await fetch(`${managementUrl}/model-definitions/${CLIPROXY_PROVIDER[provider]}`, { headers: auth });
+            if (!response.ok) {
+                throw new Error(`${provider} model catalog unavailable (${response.status})`);
+            }
+            const body = (await response.json()) as {
+                models?: { id?: string; display_name?: string; description?: string; thinking?: { levels?: string[] } }[];
+            };
+            return (body.models ?? []).flatMap((model) =>
+                model.id === undefined || model.id === ""
+                    ? []
+                    : [
+                          {
+                              id: model.id,
+                              label: model.display_name ?? model.id,
+                              ...(model.description !== undefined && model.description !== "" ? { description: model.description } : {}),
+                              ...(model.thinking?.levels !== undefined ? { efforts: model.thinking.levels } : {}),
+                          },
+                      ],
+            );
+        },
     };
 };

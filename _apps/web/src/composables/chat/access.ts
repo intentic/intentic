@@ -4,7 +4,7 @@ import { acpProviders, providerAccounts, translatorAccounts } from "./conversati
 /* CAN THIS PROVIDER ACTUALLY RUN, and what does it take to unlock it — one rule, read by every surface that
  * offers a provider (the model picker's rows and rail, the connect gate above the composer, the account panel).
  * It existed only inside useChat before, as the composer's own gate, which is why the picker listed Kimi models
- * to a user with no Moonshot key exactly as it listed the ones they could send to: a catalog is deliberately
+ * to a user with no Kimi Code subscription exactly as it listed the ones they could send to: a catalog is deliberately
  * never empty daemon-side (every provider serves a seed floor so a turn always resolves a model), so "has rows"
  * says nothing at all about "can send".
  *
@@ -25,12 +25,12 @@ const accountsOf = (provider: AgentProvider) => providerAccounts.value[provider]
 const isAcp = (provider: AgentProvider): boolean => acpProviders.value.some((agent) => agent.id === provider);
 
 // Whether a provider can serve a fresh conversation. Mirrors the daemon's own gate (agent.routes): codex and
-// gemini authenticate ONLY through the translator's subscription, grok through either its native xAI account or
+// kimi and gemini authenticate ONLY through the translator's subscription, grok through either its native xAI account or
 // the translator, everything else through a daemon-stored account. Harness-independent on purpose — this answers
 // "is this provider usable at all", which is what a model row needs; the composer's gate (useChat.chatReady)
 // narrows it to the one harness the active conversation is actually set to.
 export const providerReady = (provider: AgentProvider): boolean => {
-    if (provider === `codex` || provider === `gemini`) {
+    if (provider === `codex` || provider === `kimi` || provider === `gemini`) {
         return translatorAccounts.value[provider].length > 0;
     }
     if (provider === `grok`) {

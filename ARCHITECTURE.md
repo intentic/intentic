@@ -102,9 +102,9 @@ endpoint. One Node process serves the oRPC contract on `:8787` and a preview pro
 terminals, panel dev servers, and agent shell commands all run in a shared `tmux` server so they
 survive reconnects. Its subsystems:
 
-- **Agent backends** — Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code (Moonshot's
-  Anthropic-compatible endpoint on the Claude Code harness), and Gemini (Google's models re-served through the
-  bundled translator, also on the Claude Code harness)
+- **Agent backends** — Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code, and Gemini. Kimi
+  and Google's models are re-served from subscription OAuth through the bundled translator on the Claude Code
+  harness
   ([agent/](_apps/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE
   ([webchat/](_apps/sandbox/src/webchat/)). A chat turn executes as a **detached run**
   ([agent/turn-runs.ts](_apps/sandbox/src/agent/turn-runs.ts)): `POST /agent` acks with a run id and the

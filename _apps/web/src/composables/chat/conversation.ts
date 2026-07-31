@@ -54,7 +54,7 @@ import { bindingWindow, formatReset, formatWait, usageStatusByAccount, usageStat
 
 // A live-catalog model option: the picker entry plus whatever the provider published about the model — the
 // reasoning-effort tiers it accepts, its capability description, and capability badges. All optional because
-// only Claude's discovery reports them; the OpenAI-compatible providers send ids alone and render label-only.
+// provider catalogs differ in how much they report; rows with ids alone render label-only.
 // Nothing here is ever synthesized locally, so a new release carries its own presentation with no code change.
 export interface ModelOption extends CatalogOption {
     readonly efforts?: readonly string[];
@@ -298,11 +298,11 @@ export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>(
 export const effectiveAccount = (provider: AgentProvider, picked: string | undefined): string | undefined =>
     picked ?? providerAccounts.value[provider]?.[0]?.id;
 
-// Which SUBSCRIPTIONS the bundled translator holds (codex/grok/gemini) — the other half of "can this provider
-// run", since those three authenticate through the translator rather than through a daemon-stored account.
+// Which SUBSCRIPTIONS the bundled translator holds (codex/grok/kimi/gemini) — the other half of "can this
+// provider run", since these authenticate through the translator rather than through a daemon-stored account.
 // Written by useChat (refreshTranslatorAccounts / resetChat); kept here beside providerAccounts so the access
 // rules can be derived from one place without importing useChat (a cycle).
-export const translatorAccounts = ref<TranslatorAccounts>({ codex: [], grok: [], gemini: [] });
+export const translatorAccounts = ref<TranslatorAccounts>({ codex: [], grok: [], kimi: [], gemini: [] });
 
 /* Whether the lists above have been READ from this sandbox's daemon yet — the difference between "you have no
  * account" and "we haven't asked". They are the same empty list, and every surface that offers a provider used

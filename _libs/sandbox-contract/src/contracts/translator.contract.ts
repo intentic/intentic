@@ -7,12 +7,10 @@ import { KeyedProviderSchema, OkSchema, TranslatorAccountsSchema, TranslatorComp
 // than an API key. A provider can hold several accounts side by side (the translator balances across them);
 // `accounts` lists what's connected per provider and `disconnect` clears ONE account by its auth-file `name`.
 //
-// Two login shapes ride one pair of routes. Codex and Grok mint a one-time device `code`: the user enters it at
-// the provider's site and the translator polls to completion in the background, so the UI just polls `accounts`
-// and `complete` is never called. Google has no device flow — it redirects the browser to a loopback URL this
-// sandbox can't receive — so its `connect` returns an EMPTY code, the card asks the user to paste the URL they
-// landed on, and `complete` hands it to the translator to finish the exchange. The card branches on that empty
-// code rather than on the provider id, so a provider that later gains a device flow needs no UI change.
+// Two login shapes ride one pair of routes. Codex, Grok and Kimi use device authorization: the translator polls
+// to completion in the background, so the UI only polls `accounts`. Google redirects the browser to a loopback
+// URL this sandbox can't receive, so `complete` hands the landing URL to the translator. `connect.flow` tells the
+// card which mechanic it received without inferring it from whether an optional device code happened to exist.
 export const translatorContract = {
     accounts: oc.route({ method: "GET", path: "/translator/accounts" }).output(TranslatorAccountsSchema),
     connect: oc
