@@ -10,6 +10,7 @@ import {
     type PermissionMode,
     planParts,
     providerLabel,
+    type ProviderRefusals,
     type RestoredMessage,
     type TranslatorAccounts,
     type UsageAccount,
@@ -29,6 +30,7 @@ import {
     providerDefaultModel,
     providerModels,
     providerModelsState,
+    providerRefusals,
     rememberedAccountFor,
     rememberedModelFor,
     selectedAccountId,
@@ -497,6 +499,17 @@ const refreshTranslatorAccounts = async (): Promise<void> => {
     }
 };
 
+// When each provider last refused a turn — the observed counterpart to the polled snapshots that ride the two
+// account listings (see providerRefusals). Swallows its own failure like the translator read above: a refusal
+// history is an annotation on the connection surfaces, never a reason for them not to render.
+const refreshProviderRefusals = async (): Promise<void> => {
+    try {
+        providerRefusals.value = (await sandboxJson<ProviderRefusals>(`/agent/refusals`)).refusals;
+    } catch {
+        // Leave the last reading; the surfaces simply keep showing what they had.
+    }
+};
+
 // CLIProxyAPI finishes every routed login in the background — the device flows poll upstream on their own, and
 // a redirect flow resumes the moment `completeTranslator` hands it the pasted URL — so in both cases the UI just
 // polls the connection state until the provider flips connected, bounded by the device flows' deadline.
@@ -908,6 +921,7 @@ export const resetChat = (): void => {
     translatorConnectFlow.value = undefined;
     accountBusy.value = undefined;
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
+    providerRefusals.value = {};
     error.value = null;
 };
 
@@ -1422,7 +1436,11 @@ const showActiveProvider = (): void => {
  * that vote deliberately — it swallows its own failure, so it always "succeeds". */
 const refreshConnections = async (): Promise<void> => {
     const natives = NATIVE_PROVIDERS.filter((target) => !subscriptionOnly(target));
-    const [reads] = await Promise.all([Promise.allSettled(natives.map((target) => refreshAccounts(target))), refreshTranslatorAccounts()]);
+    const [reads] = await Promise.all([
+        Promise.allSettled(natives.map((target) => refreshAccounts(target))),
+        refreshTranslatorAccounts(),
+        refreshProviderRefusals(),
+    ]);
     if (reads.some((read) => read.status === `fulfilled`)) {
         accountsLoaded.value = true;
     }

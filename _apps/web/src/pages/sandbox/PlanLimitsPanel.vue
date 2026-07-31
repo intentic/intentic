@@ -3,7 +3,7 @@ import { providerLabel } from "@intentic/sandbox-contract";
 import { cmp, RowGroup } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
-import { accountsLoaded, providerAccounts, translatorAccounts } from "../../composables/chat/conversation";
+import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/conversation";
 import {
     formatAge,
     formatReset,
@@ -17,6 +17,8 @@ import {
     type PlanLimitRow,
     planLimitRows,
     planLimitSummary,
+    refusalIsCurrent,
+    refusalLine,
     usageTone,
 } from "../../composables/chat/usageStatus";
 
@@ -45,7 +47,7 @@ import {
  * colour agrees with it. */
 
 const rows = computed(() => planLimitRows(providerAccounts.value, translatorAccounts.value));
-const groups = computed(() => planLimitGroups(rows.value));
+const groups = computed(() => planLimitGroups(rows.value, providerRefusals.value));
 const summary = computed(() => planLimitSummary(rows.value));
 
 // ---- capacity ------------------------------------------------------------------------------------------------
@@ -182,6 +184,21 @@ const roster = computed(() => {
                 </span>
                 <span v-else-if="!isInline(group)" class="ml-auto shrink-0 text-2xs text-muted">{{ groupState(group) }}</span>
             </div>
+
+            <!-- What the provider itself said, the last time it refused a turn. Above the meters because it
+                 OVERRIDES them when it is current: a meter is a poll and this is an observation, so a green bar
+                 under a fresh refusal means the poll is stale, not that there is room. Dimmed once a reading
+                 taken since has found headroom — kept, because "this refused on Tuesday" is still context, but
+                 no longer shouted. Two lines at most: the vendors' sentences run to a paragraph with a pricing
+                 URL on the end, and the part that matters is at the front. -->
+            <p
+                v-if="group.refusal"
+                class="line-clamp-2 text-2xs"
+                :class="refusalIsCurrent(group.refusal, group.rows) ? `text-warning` : `text-subtle`"
+                :title="refusalLine(group.refusal)"
+            >
+                {{ refusalLine(group.refusal) }}
+            </p>
 
             <!-- Small provider: the meters themselves, exactly as before. Nothing that fits is folded away. -->
             <template v-if="isInline(group)">
@@ -326,8 +343,8 @@ const roster = computed(() => {
              elsewhere — which is the entire distance between "1%" here and 98% in a terminal on the same
              account. -->
         <p class="px-4 py-2.5 text-2xs text-subtle">
-            Read from your plan — Claude's when a turn finishes, ChatGPT's and Google's pulled in the background — so a number here can only ever be a
-            floor: usage never falls inside a window, and other clients on the account spend the same pools without telling this sandbox.
+            Read from your plan — Claude's when a turn finishes, ChatGPT's, Google's and Kimi's pulled in the background — so a number here can only
+            ever be a floor: usage never falls inside a window, and other clients on the account spend the same pools without telling this sandbox.
         </p>
     </RowGroup>
 

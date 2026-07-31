@@ -83,13 +83,16 @@ export const providerLabel = (provider: AgentProvider): string => PROVIDERS.find
  * difference between "this plan publishes nothing" and "we haven't measured yet" — two states that look
  * identical as a blank row and mean opposite things.
  *
- * Three can be read, by two mechanisms that stop at the daemon's readers: Claude's rides its own turn (the
- * OAuth usage endpoint, agent.ts), ChatGPT's and Google's are pulled through the translator's
- * credential-scoped api-call. Grok is absent because xAI's usable billing data needs a subject id CLIProxyAPI
- * keeps out of its auth-file listing, and the fallback probe spends a token to answer. Kimi is absent because
- * it publishes no quota endpoint — the bundled translator knows only its chat and OAuth routes. Adding either
- * is adding a reader and its name here, and nothing else. */
-export const PLAN_LIMIT_PROVIDERS: readonly NativeProvider[] = ["claude", "codex", "gemini"];
+ * Four can be read, by two mechanisms that stop at the daemon's readers: Claude's rides its own turn (the
+ * OAuth usage endpoint, agent.ts), ChatGPT's, Google's and Kimi's are pulled through the translator's
+ * credential-scoped api-call. Kimi's endpoint is the platform's own `/coding/v1/usages`, which the Kimi Code
+ * subscription's OAuth token reads directly — the bundled translator does not route it, but it does not have
+ * to: the api-call substitutes that token server-side like it does for the other two.
+ *
+ * Grok is the one absence, because xAI's usable billing data needs a subject id CLIProxyAPI keeps out of its
+ * auth-file listing, and the fallback probe spends a token to answer. Adding it is adding a reader and its name
+ * here, and nothing else. */
+export const PLAN_LIMIT_PROVIDERS: readonly NativeProvider[] = ["claude", "codex", "gemini", "kimi"];
 export const reportsPlanLimits = (provider: AgentProvider): boolean => PLAN_LIMIT_PROVIDERS.includes(provider as NativeProvider);
 
 // The harness (agentic loop) a turn runs on, orthogonal to the provider. `native` = the provider's own runtime;

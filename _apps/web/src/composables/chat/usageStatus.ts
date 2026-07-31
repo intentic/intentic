@@ -2,6 +2,7 @@ import {
     type AccountUsage,
     type AgentProvider,
     type OauthAccount,
+    type ProviderRefusal,
     reportsPlanLimits,
     type TranslatorAccounts,
     type UsageWindow,
@@ -192,7 +193,8 @@ export const usageDetail = (usage: AccountUsage): string =>
  *
  * An account with NO reading is a row too. Absence rendered as absence is indistinguishable from an account
  * with room to spare, and those mean opposite things — so the row is listed and says which of the two states
- * it is in: a plan that publishes no limits at all (`readable: false` — Kimi, SuperGrok), or one that simply
+ * it is in: a plan that publishes no limits at all (`readable: false` — SuperGrok alone, now that Kimi's own
+ * endpoint is read), or one that simply
  * has not been measured yet. */
 
 export interface PlanLimitPool {
@@ -294,7 +296,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
 export const PLAN_LIMIT_BANDS = [`spent`, `tight`, `room`, `unread`, `none`] as const;
 export type PlanLimitBand = (typeof PLAN_LIMIT_BANDS)[number];
 
-// `none` is not a degree of fullness — it is a plan that publishes no limits at all (Kimi, SuperGrok), and it
+// `none` is not a degree of fullness — it is a plan that publishes no limits at all (SuperGrok), and it
 // stays out of the capacity bar for that reason: an account whose headroom is unknowable is not headroom.
 export const planLimitBand = (row: PlanLimitRow): PlanLimitBand => {
     if (row.percent === undefined) {
@@ -345,12 +347,18 @@ export interface PlanLimitGroup {
     // The account that gates this provider first — what the group row states instead of a percentage of its own.
     readonly tightest: PlanLimitRow | undefined;
     readonly nextResetAt: number | undefined;
+    // The last turn this provider actually refused. Provider-level like the group itself — see refusalLine.
+    readonly refusal: ProviderRefusal | undefined;
 }
 
 // One group per provider, each group's most-constrained account first, and the groups themselves ordered by how
 // close they are to gating a turn. A provider with no reading at all sinks below every provider that has one —
 // the same rule the rows follow, one level up.
-export const planLimitGroups = (rows: readonly PlanLimitRow[], now: number = Date.now()): PlanLimitGroup[] => {
+export const planLimitGroups = (
+    rows: readonly PlanLimitRow[],
+    refusals: Record<string, ProviderRefusal> = {},
+    now: number = Date.now(),
+): PlanLimitGroup[] => {
     const byProvider = new Map<AgentProvider, PlanLimitRow[]>();
     for (const row of rows) {
         const group = byProvider.get(row.provider) ?? [];
@@ -360,9 +368,50 @@ export const planLimitGroups = (rows: readonly PlanLimitRow[], now: number = Dat
     return [...byProvider.entries()]
         .map(([provider, groupRows]): PlanLimitGroup => {
             const tightest = groupRows.find((row) => row.percent !== undefined);
-            return { provider, rows: groupRows, counts: countBands(groupRows), tightest, nextResetAt: nextReset(groupRows, now) };
+            return {
+                provider,
+                rows: groupRows,
+                counts: countBands(groupRows),
+                tightest,
+                nextResetAt: nextReset(groupRows, now),
+                refusal: refusals[provider],
+            };
         })
         .toSorted((left, right) => (right.tightest?.percent ?? -1) - (left.tightest?.percent ?? -1) || left.provider.localeCompare(right.provider));
+};
+
+/* WHAT A REFUSAL READS AS, once — because both surfaces that show one (the Agent tab's connection list, the
+ * Usage tab's provider groups) have to say the same thing about the same event, and because the sentence is the
+ * whole point. It is the PROVIDER's own words, and it is the only part that names which pool ran out or which
+ * credential was rejected; paraphrasing it would throw away the single most useful thing here.
+ *
+ * The prefix says which of the two conditions it was, from the record's `kind` — read off what the provider
+ * said, not off the frame code, precisely so a spent Kimi plan stops reading as a broken sign-in.
+ *
+ * The AGE, not the clock time, and no reset instant: a reset belongs to a POOL, and this event knows only that
+ * one of them refused. The pools' own resets are already on the meters beside this line. */
+export const refusalLine = (refusal: ProviderRefusal, now: number = Date.now()): string =>
+    `${refusal.kind === `limit` ? `Hit its usage limit` : `Refused its credential`} ${formatAge(refusal.at, now)} — ${refusal.message}`;
+
+/* Whether a refusal still describes the situation on screen, or has been overtaken by a reading taken since.
+ * A refusal survives in the store for a week (the longest pool cycle any of these plans sells), which is right
+ * for keeping it and wrong for shouting about it: an account measured with room AFTER the refusal has provably
+ * recovered, and leading with a stale alarm over a live meter is how a surface loses the reader's trust.
+ *
+ * So: loud while it is the newest thing known about the provider, quiet once a reading has overtaken it. Never
+ * hidden — "this refused a turn on Tuesday" is context worth having, just not context worth alarming over. */
+export const refusalIsCurrent = (
+    refusal: ProviderRefusal | undefined,
+    // Structurally what a PlanLimitRow already is, so the Usage tab passes its rows straight in and the Agent
+    // tab passes the same two fields off the snapshot it decorated its own rows with.
+    readings: readonly { readonly measuredAt: number | undefined; readonly percent: number | undefined }[],
+): boolean => {
+    if (refusal === undefined) {
+        return false;
+    }
+    const overtaken = (reading: (typeof readings)[number]): boolean =>
+        reading.measuredAt !== undefined && reading.measuredAt > refusal.at && reading.percent !== undefined && reading.percent < SPENT_PERCENT;
+    return !readings.some(overtaken);
 };
 
 export interface PlanLimitSummary {

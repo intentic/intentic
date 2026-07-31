@@ -19,6 +19,7 @@ import {
     type OauthAccount,
     type PermissionMode,
     providerLabel,
+    type ProviderRefusal,
     type RestoredMessage,
     sseData,
     sseFrames,
@@ -349,6 +350,19 @@ export const effectiveAccount = (provider: AgentProvider, picked: string | undef
 // Written by useChat (refreshTranslatorAccounts / resetChat); kept here beside providerAccounts so the access
 // rules can be derived from one place without importing useChat (a cycle).
 export const translatorAccounts = ref<TranslatorAccounts>({ codex: [], grok: [], kimi: [], gemini: [] });
+
+/* When each provider last REFUSED a turn — a spent plan or a credential the API would not take (see
+ * ProviderRefusalSchema). Keyed by provider, because that is the resolution the daemon has for a routed turn.
+ *
+ * The observed half of "can I run on this", read beside the polled snapshots on the account rows above. Neither
+ * is the whole answer: a snapshot can be five minutes stale and account-wide, so a full pool can read as room;
+ * a refusal is exact but says nothing about the pools that did not refuse. Shown together, a green meter under
+ * a fresh refusal tells the reader the meter is what is wrong — which is the state that sent someone to
+ * reconnect a perfectly healthy Kimi account.
+ *
+ * Filled by useChat (refreshConnections / resetChat), and here rather than there for the same reason as the
+ * lists above: the surfaces that draw it must not have to import useChat. */
+export const providerRefusals = ref<Record<string, ProviderRefusal>>({});
 
 /* Whether the lists above have been READ from this sandbox's daemon yet — the difference between "you have no
  * account" and "we haven't asked". They are the same empty list, and every surface that offers a provider used

@@ -46,6 +46,7 @@ import { createSessions, type MintedSession } from "./auth/session.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
 import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
+import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
 import { createCodexAgent } from "./codex/codex-agent.js";
 import { type CodexCatalog, createCodexCatalog } from "./codex/codex-catalog.js";
 import { codexThreadExists } from "./sessions/codex-sessions.js";
@@ -220,6 +221,11 @@ export interface Services {
     // routed subscriptions; /claude/accounts and /translator/accounts each merge it into their own rows, so
     // every account the user can see reports its headroom from one place.
     readonly accountUsage: AccountUsageStore;
+    // The last time each PROVIDER refused a turn outright (historyRoot/provider-refusals.json) — a spent plan or
+    // a credential the API would not take. The observed counterpart to the polled snapshot above: streamAgent
+    // records it from the turn that was refused, and /agent/refusals serves it to the account surfaces, which
+    // read the two together (a healthy meter beside a fresh refusal means the meter is stale).
+    readonly providerRefusals: ProviderRefusalStore;
     // Claude's live model catalog from the Agent SDK's supportedModels() (alias fallback, never empty). Serves
     // /claude/models for the picker so new tiers + effort levels need no code change.
     readonly claudeModels: ClaudeCatalog;
@@ -528,6 +534,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         pushSender: createPushSender(pushStore, logger),
         claudeStore,
         accountUsage,
+        providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
         claudeModels: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
         codexModels: createCodexCatalog(config, join(codexBase, "models.json")),
         kimiModels: createKimiCatalog(cliProxy),

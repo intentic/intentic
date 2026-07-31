@@ -45,3 +45,21 @@ export const isAuthFailureText = (text: string): boolean => text.startsWith(AUTH
 // Neither condition is ever a name, a commit subject, or anything else a caller asked a model to produce — so
 // this is the predicate the one-shot seam and both naming guards read, and no caller of them names a member.
 export const isFailureSentence = (text: string): boolean => isUsageLimitText(text) || isAuthFailureText(text);
+
+/* A SPENT ALLOWANCE IN SOMEBODY ELSE'S WORDS — the same condition as isUsageLimitText, for the providers whose
+ * wording the Claude Code SDK has no prefix list for.
+ *
+ * Kimi answers a spent Kimi Code plan with `403 You've reached your usage limit for this billing cycle`, and a
+ * 403 is what the CLI prints its "Failed to authenticate" prefix over — so the frame reaches us coded as a
+ * refused CREDENTIAL and the user is told to reconnect an account that is in perfect health. Every routed
+ * provider can do this to us: the harness only knows Anthropic's vocabulary, and it is reading somebody else's.
+ *
+ * Deliberately NOT wired into the error codes. What a turn does next — re-mint the token, wait for a reset,
+ * resume — still keys off the prefixes above, because those say what the CLI has stopped trying and this cannot;
+ * "rate limit" appears in transient retries the CLI is still working through, which is exactly why it is not one
+ * of the phrases below. This decides how a refusal is DESCRIBED, where believing the code over the sentence is
+ * what puts the wrong sentence on the screen. */
+const SPENT_ALLOWANCE_PHRASES = ["usage limit", "quota", "billing cycle"];
+
+export const mentionsSpentAllowance = (text: string): boolean =>
+    isUsageLimitText(text) || SPENT_ALLOWANCE_PHRASES.some((phrase) => text.toLowerCase().includes(phrase));

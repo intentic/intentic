@@ -27,6 +27,7 @@ import type { AgentRequest } from "./agent.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
+import { mentionsSpentAllowance } from "./failure-sentences.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
 import { authResumable, clearPendingResume, recordAuthFailure, recordOutageFailure, startConversationTurn } from "./turn-resume.js";
@@ -583,6 +584,29 @@ async function* runTurn(
                 record({ type: "turn.plan", content: event.text, extra: { requestId: event.requestId } });
             } else if (event.kind === "error") {
                 record({ type: "turn.error", outcome: "error", error: event.message });
+                /* THE PLAN SAID NO — file it, so the account surfaces can say when it last happened.
+                 *
+                 * The two codes that mean "this provider would not serve the turn", as opposed to the workspace
+                 * or the request being at fault. Nothing here changes what the turn DOES about it (the branches
+                 * below own that, unchanged); this is the durable trace, and it is the only one: a rate_limit
+                 * frame is relayed to whoever is attached and forgotten, so a refusal that landed while nobody
+                 * was watching — an automation at 4am, a fleet agent — left no mark anywhere a person could find.
+                 *
+                 * `kind` is read off the SENTENCE (mentionsSpentAllowance) rather than off the code, because for
+                 * every provider but Claude the two disagree — see failure-sentences.ts. Fire-and-forget, the
+                 * same contract as every other turn-end write: a refusal must not be able to fail the turn it is
+                 * describing. */
+                if (event.code === "rate_limit" || event.code === "claude-token-refused") {
+                    void services.providerRefusals
+                        .record(provider, {
+                            at: Date.now(),
+                            kind: mentionsSpentAllowance(event.message) ? "limit" : "auth",
+                            message: event.message,
+                            // Routed turns have no account to name: CLIProxyAPI picks the auth file itself.
+                            ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
+                        })
+                        .catch((error: unknown) => services.logger.warn({ err: error }, "provider refusal: write failed"));
+                }
                 /* The provider failed us, not the workspace. Open (or re-observe) its outage and tell the client
                  * where the resume stands: which attempt this is, when the next one is due, and whether it is
                  * armed or merely on offer behind the setting. Past the attempt budget nothing more will fire, so
@@ -807,5 +831,8 @@ export const createAgentRoutes = (services: Services) => {
         // The provider's slash commands from its most recent turn. Empty (not an error) when it has never run
         // one here — the popover simply stays closed until the first turn publishes the list.
         commands: i.commands.handler(({ input }) => ({ commands: [...commandsOf(input.agent ?? "claude")] })),
+        // What each provider last refused a turn with. Empty when none has — which is the common, healthy case,
+        // and reads as "nothing to say" on every surface rather than as a failed read.
+        refusals: i.refusals.handler(async () => ({ refusals: await services.providerRefusals.read() })),
     };
 };

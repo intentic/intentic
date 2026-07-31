@@ -1,6 +1,15 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { AgentCommandsQuerySchema, AgentCommandsSchema, AttachFrameSchema } from "../events.js";
-import { AgentReplySchema, AgentTurnSchema, AttachTurnSchema, OkSchema, StartedTurnSchema, SteerSchema, StopTurnSchema } from "../schemas.js";
+import {
+    AgentReplySchema,
+    AgentTurnSchema,
+    AttachTurnSchema,
+    OkSchema,
+    ProviderRefusalsSchema,
+    StartedTurnSchema,
+    SteerSchema,
+    StopTurnSchema,
+} from "../schemas.js";
 
 // A turn EXECUTES as a detached daemon-side run: `run` starts it and acks with the run id; any number of
 // clients render it via `attach` (replay from a seq cursor, then live) — the initiating window holds no
@@ -16,4 +25,8 @@ export const agentContract = {
     // The provider's slash commands as last published by one of its turns, so a conversation's `/` popover is
     // populated before it has run one. The live `commands` frame stays authoritative for a running turn.
     commands: oc.route({ method: "GET", path: "/agent/commands" }).input(AgentCommandsQuerySchema).output(AgentCommandsSchema),
+    // The last refusal per provider, as reported by whichever turn was refused (ProviderRefusalSchema). Read
+    // alongside the account listings by the surfaces that draw plan limits: the snapshot on an account row says
+    // how full its pools were when last polled, and this says whether one of them has since said no.
+    refusals: oc.route({ method: "GET", path: "/agent/refusals" }).output(ProviderRefusalsSchema),
 };

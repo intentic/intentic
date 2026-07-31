@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { codexUsageFromPayload, geminiUsageFromPayload } from "./translator-usage.js";
+import { codexUsageFromPayload, geminiUsageFromPayload, kimiUsageFromPayload } from "./translator-usage.js";
 
 // The two upstream payload shapes, pinned. These are private endpoints rather than published contracts, so what
 // these tests really defend is the mapping INTO AccountUsage: every pool the provider names arrives as its own
@@ -113,10 +113,53 @@ test("treats an exhausted Google bucket as fully utilized rather than unmeasured
     ]);
 });
 
+/* The live Kimi Code payload, captured from `/coding/v1/usages` on the account whose 5-hour window had just
+ * refused a turn — the exact reading the "You've reached your usage limit for this billing cycle" 403 is the
+ * prose version of. Counts, not percentages, and decimal STRINGS at that, so the division is the mapping's job:
+ * 100/100 is the spent throttle and 40/100 the plan pool it sits inside, and reporting either as the other is
+ * how a spent account keeps its green dot. */
+test("maps a Kimi Code reading to its plan pool and its throttle", () => {
+    const measuredAt = 1_800_000_000_000;
+    expect(
+        kimiUsageFromPayload(
+            {
+                limited: true,
+                usage: { limit: "100", used: "40", remaining: "60", resetTime: "2026-08-07T07:16:02.549855Z" },
+                limits: [
+                    {
+                        window: { duration: 300, timeUnit: "TIME_UNIT_MINUTE" },
+                        detail: { limit: "100", used: "100", resetTime: "2026-07-31T22:16:02.549855Z" },
+                    },
+                ],
+            },
+            measuredAt,
+        ),
+    ).toEqual({
+        measuredAt,
+        windows: [
+            { kind: "seven_day", utilization: 40, resetsAt: Math.floor(Date.parse("2026-08-07T07:16:02.549855Z") / 1000) },
+            { kind: "five_hour", utilization: 100, resetsAt: Math.floor(Date.parse("2026-07-31T22:16:02.549855Z") / 1000) },
+        ],
+    });
+});
+
+// A throttle whose length is neither of the two shared kinds keeps its own namespaced kind and says how long it
+// is — an unnamed pool is still one this account will be gated by.
+test("names a Kimi throttle this vocabulary has no shared kind for", () => {
+    expect(
+        kimiUsageFromPayload({
+            limits: [{ window: { duration: 12, timeUnit: "TIME_UNIT_HOUR" }, detail: { limit: "50", used: "10" } }],
+        })?.windows,
+    ).toEqual([{ kind: "kimi:43200s", label: "12-hour window", utilization: 20 }]);
+});
+
 // No quota in the payload is not a reading of zero — the account must come back unmeasured so the row keeps its
-// dot instead of claiming headroom nobody measured.
+// dot instead of claiming headroom nobody measured. A Kimi pool with a ZERO limit is the same claim: the plan
+// does not meter it, and dividing by it would report every such account as permanently spent.
 test("returns nothing when a payload carries no usable window", () => {
     expect(codexUsageFromPayload({ rate_limit: null })).toBeUndefined();
     expect(geminiUsageFromPayload({ groups: [] })).toBeUndefined();
     expect(geminiUsageFromPayload("not json")).toBeUndefined();
+    expect(kimiUsageFromPayload({ usage: { limit: "0", used: "0" }, limits: [] })).toBeUndefined();
+    expect(kimiUsageFromPayload("not json")).toBeUndefined();
 });

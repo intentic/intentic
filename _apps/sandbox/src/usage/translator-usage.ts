@@ -45,6 +45,14 @@ const asNumber = (value: unknown): number | undefined => {
 const asString = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim() : undefined);
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
 
+// An ISO-8601 reset instant as the epoch SECONDS the wire carries. Google and Kimi both name their resets this
+// way (Codex sends numbers, hence resetSeconds below) — one parse, so an unreadable instant is dropped by the
+// same rule on both rather than by two copies that could disagree about what "unparseable" means.
+const resetFromIso = (value: unknown): number | undefined => {
+    const parsed = Date.parse(asString(value) ?? "");
+    return Number.isNaN(parsed) ? undefined : Math.floor(parsed / 1000);
+};
+
 const resetSeconds = (absolute: unknown, relative: unknown, measuredAt: number): number | undefined => {
     const direct = asNumber(absolute);
     if (direct !== undefined) {
@@ -163,20 +171,103 @@ export const geminiUsageFromPayload = (payload: unknown, measuredAt: number = Da
             const remaining = typeof remainingRaw === "string" && remainingRaw.trim().endsWith("%") ? remainingNumber / 100 : remainingNumber;
             const bucketName = asString(bucket[`displayName`] ?? bucket[`display_name`]);
             const bucketId = asString(bucket[`bucketId`] ?? bucket[`bucket_id`]) ?? `${groupIndex + 1}-${bucketIndex + 1}`;
-            const resetRaw = asString(bucket[`resetTime`] ?? bucket[`reset_time`]);
-            const resetMs = resetRaw === undefined ? Number.NaN : Date.parse(resetRaw);
+            const resetsAt = resetFromIso(bucket[`resetTime`] ?? bucket[`reset_time`]);
             windows.push({
                 kind: `google:${bucketId}`,
                 label: bucketName === undefined || bucketName === groupName ? groupName : `${groupName} · ${bucketName}`,
                 utilization: clampPercent((1 - remaining) * 100),
-                ...(Number.isNaN(resetMs) ? {} : { resetsAt: Math.floor(resetMs / 1000) }),
+                ...(resetsAt === undefined ? {} : { resetsAt }),
             });
         }
     }
     return windows.length === 0 ? undefined : { windows, measuredAt };
 };
 
+/* KIMI CODE, whose quota this sandbox spent a release reporting as unknowable. It is not: the Kimi Code
+ * subscription's own OAuth token reads `/coding/v1/usages` directly, which is the same door the vendor's CLI
+ * uses and needs nothing from CLIProxyAPI beyond the token substitution every reader here already gets.
+ *
+ * Two pools arrive under different keys and mean different things: `usage` is the PLAN's pool (a week, whose
+ * exhaustion is the "billing cycle" 403), and each `limits[]` entry is a shorter throttle inside it — today a
+ * single 5-hour window. Both are used/limit COUNTS, as decimal strings, so utilization is computed here rather
+ * than read; a pool with no limit is dropped rather than divided by. */
+const KIMI_UNIT_SECONDS: Record<string, number> = {
+    TIME_UNIT_MINUTE: 60,
+    TIME_UNIT_HOUR: 3_600,
+    TIME_UNIT_DAY: 86_400,
+    TIME_UNIT_WEEK: 604_800,
+};
+
+// The window's length in seconds, from the proto-style enum the platform sends it as. Undefined ⇒ a shape we
+// don't recognise, which costs the pool its name below and nothing else.
+const kimiWindowSeconds = (value: unknown): number | undefined => {
+    const window = asRecord(value);
+    const unit = KIMI_UNIT_SECONDS[asString(window?.[`timeUnit`]) ?? ``];
+    const duration = asNumber(window?.[`duration`]);
+    return unit === undefined || duration === undefined ? undefined : unit * duration;
+};
+
+/* A pool's identity on our wire. The two lengths every other subscription also has take the SHARED kinds, so a
+ * Kimi meter sorts and reads beside a Claude one instead of inventing a second vocabulary for the same idea
+ * (WINDOW_NAMES, usageStatus.ts). Anything else keeps its own namespaced kind and states its length, because a
+ * throttle we cannot name is still a throttle worth drawing. */
+const kimiWindowKind = (seconds: number | undefined): { kind: string; label?: string } => {
+    if (seconds === 18_000) {
+        return { kind: "five_hour" };
+    }
+    if (seconds === 604_800) {
+        return { kind: "seven_day" };
+    }
+    if (seconds === undefined) {
+        return { kind: "kimi:window", label: "Throttle" };
+    }
+    const [size, unit] =
+        seconds % 86_400 === 0 ? [seconds / 86_400, "day"] : seconds % 3_600 === 0 ? [seconds / 3_600, "hour"] : [Math.round(seconds / 60), "minute"];
+    return { kind: `kimi:${String(seconds)}s`, label: `${String(size)}-${unit} window` };
+};
+
+const appendKimiPool = (windows: UsageWindow[], value: unknown, seconds: number | undefined): void => {
+    const pool = asRecord(value);
+    const used = asNumber(pool?.[`used`]);
+    const limit = asNumber(pool?.[`limit`]);
+    // A limit of zero is not a spent pool, it is a pool the plan does not meter — dividing by it would report
+    // every such account as permanently exhausted.
+    if (used === undefined || limit === undefined || limit <= 0) {
+        return;
+    }
+    const { kind, label } = kimiWindowKind(seconds);
+    // First writer wins: the plan pool is appended before the throttles, so a `limits[]` entry that repeats the
+    // same length cannot overwrite the pool the plan is actually sold by.
+    if (windows.some((window) => window.kind === kind)) {
+        return;
+    }
+    const resetsAt = resetFromIso(pool?.[`resetTime`]);
+    windows.push({
+        kind,
+        ...(label === undefined ? {} : { label }),
+        utilization: clampPercent((used / limit) * 100),
+        ...(resetsAt === undefined ? {} : { resetsAt }),
+    });
+};
+
+export const kimiUsageFromPayload = (payload: unknown, measuredAt: number = Date.now()): AccountUsage | undefined => {
+    const body = asRecord(payload);
+    if (body === undefined) {
+        return undefined;
+    }
+    const windows: UsageWindow[] = [];
+    // The plan pool carries no window of its own — the platform leaves it implicit, and it is the weekly one the
+    // subscription is sold by, which is also what the vendor's own client assumes when it synthesizes it.
+    appendKimiPool(windows, body[`usage`], 604_800);
+    for (const entry of Array.isArray(body[`limits`]) ? body[`limits`] : []) {
+        const limit = asRecord(entry);
+        appendKimiPool(windows, limit?.[`detail`], kimiWindowSeconds(limit?.[`window`]));
+    }
+    return windows.length === 0 ? undefined : { windows, measuredAt };
+};
+
 const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+const KIMI_USAGE_URL = "https://api.kimi.com/coding/v1/usages";
 const GOOGLE_USAGE_URLS = [
     "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
     "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary",
@@ -258,6 +349,18 @@ export const fetchTranslatorUsage = async (params: {
                 signal,
             });
             return codexUsageFromPayload(payload, measuredAt);
+        }
+
+        if (params.provider === "kimi") {
+            const payload = await apiCall({
+                ...params,
+                authIndex,
+                url: KIMI_USAGE_URL,
+                method: "GET",
+                header: { Authorization: "Bearer $TOKEN$", Accept: "application/json" },
+                signal,
+            });
+            return kimiUsageFromPayload(payload, measuredAt);
         }
 
         const project = asString(params.file.project_id);

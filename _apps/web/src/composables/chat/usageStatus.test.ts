@@ -15,6 +15,8 @@ import {
     type PlanLimitRow,
     planLimitRows,
     planLimitSummary,
+    refusalIsCurrent,
+    refusalLine,
     usageDetail,
     usagePercent,
     usageRing,
@@ -254,10 +256,17 @@ describe(`planLimitRows`, () => {
     });
 
     it(`lists an account with no reading and says which kind of nothing it is`, () => {
-        const rows = planLimitRows({ claude: [account({ usage: usage() })] }, { ...noRouted, kimi: [{ name: `kimi-1`, label: `Kimi Code` }] });
+        // Kimi is deliberately NOT the example any more: its `/coding/v1/usages` reading is pulled like
+        // ChatGPT's and Google's, so `readable` is true for it and unread means unread. SuperGrok is the one
+        // plan left that publishes nothing at all, which is the state this pair of columns exists to separate.
+        const rows = planLimitRows(
+            { claude: [account({ usage: usage() })] },
+            { ...noRouted, grok: [{ name: `xai-1`, label: `SuperGrok` }], kimi: [{ name: `kimi-1`, label: `Kimi Code` }] },
+        );
         expect(rows.map((row) => [row.label, row.percent, row.readable, row.pools.length])).toEqual([
             [`Claude`, 42, true, 1],
-            [`Kimi Code`, undefined, false, 0],
+            [`Kimi Code`, undefined, true, 0],
+            [`SuperGrok`, undefined, false, 0],
         ]);
     });
 
@@ -337,6 +346,39 @@ describe(`plan-limit aggregates`, () => {
         // now = 5s in epoch ms ⇒ the 1,000s reset is behind us and the 9,000s one is not.
         expect(planLimitSummary([past, future], 5_000_000).nextResetAt).toBe(9_000);
         expect(planLimitSummary([past], 5_000_000).nextResetAt).toBeUndefined();
+    });
+
+    /* The refusal, which is the only OBSERVED fact on this screen — everything else is a poll. What these guard
+     * is that it is read as such: it survives a week in the store, so the question "is this still describing the
+     * situation" has to be answered here rather than by whether a record exists. */
+    it(`hands each provider its own last refusal`, () => {
+        const refusals = { kimi: { at: 1_000, kind: `limit` as const, message: `You've reached your usage limit` } };
+        const groups = planLimitGroups([at(20, { id: `k`, provider: `kimi` }), at(95, { id: `c` })], refusals);
+        expect(groups.map((group) => [group.provider, group.refusal?.message])).toEqual([
+            [`claude`, undefined],
+            [`kimi`, `You've reached your usage limit`],
+        ]);
+    });
+
+    it(`stays current until a reading taken since finds headroom`, () => {
+        const refusal = { at: 1_000, kind: `limit` as const, message: `spent` };
+        // Nothing measured at all, and a reading from BEFORE the refusal: neither can contradict it.
+        expect(refusalIsCurrent(refusal, [])).toBe(true);
+        expect(refusalIsCurrent(refusal, [{ measuredAt: 500, percent: 3 }])).toBe(true);
+        // Measured since, and still spent — the refusal is exactly what that pool is saying.
+        expect(refusalIsCurrent(refusal, [{ measuredAt: 2_000, percent: 99 }])).toBe(true);
+        // Measured since, with room: the pool reopened and the refusal is history.
+        expect(refusalIsCurrent(refusal, [{ measuredAt: 2_000, percent: 3 }])).toBe(false);
+        expect(refusalIsCurrent(undefined, [])).toBe(false);
+    });
+
+    /* The prefix is read off the record's `kind`, which the daemon derived from the SENTENCE rather than from
+     * the frame code — this is the whole reason a spent Kimi plan stops telling the user to reconnect a healthy
+     * account. The provider's own words are then printed verbatim: they are the only part naming which pool. */
+    it(`names the condition from the record, then quotes the provider verbatim`, () => {
+        const message = `API Error: 403 You've reached your usage limit for this billing cycle.`;
+        expect(refusalLine({ at: 0, kind: `limit`, message }, 300_000)).toBe(`Hit its usage limit 5m ago — ${message}`);
+        expect(refusalLine({ at: 0, kind: `auth`, message: `token revoked` }, 300_000)).toBe(`Refused its credential 5m ago — token revoked`);
     });
 
     it(`raises only what someone has to act on — a spent pool or a dead credential`, () => {

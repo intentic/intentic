@@ -13,9 +13,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { providerReady } from "../../composables/chat/access";
 import { relativeTime } from "../../composables/chat/catalog";
-import { providerTabs } from "../../composables/chat/conversation";
+import { providerRefusals, providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
-import { isSpent, liveUsage, type UsageRing, usageRing } from "../../composables/chat/usageStatus";
+import { isSpent, liveUsage, refusalIsCurrent, refusalLine, type UsageRing, usageRing } from "../../composables/chat/usageStatus";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
@@ -181,11 +181,14 @@ const usageLine = (id: string): string | undefined => {
  * fourth for the dimming) recomputed the same snapshot four times per render, and that duplication is exactly
  * what let the ring and the row's own dimming disagree about which accounts were spent. */
 
-// A row ready to render: the account, its ring, and whether it is effectively spent.
+// A row ready to render: the account, its ring, whether it is effectively spent, and when the reading behind
+// the ring was taken — the last one only so the provider's refusal line can tell whether a reading has
+// overtaken it (refusalIsCurrent), which is a question about the whole list rather than about any one row.
 interface AccountRow<T> {
     account: T;
     ring: UsageRing | undefined;
     exhausted: boolean;
+    measuredAt: number | undefined;
 }
 
 /* Decorate and sort in one pass. When a provider holds dozens of accounts the list is only useful if the ones
@@ -196,7 +199,7 @@ const rowsOf = <T,>(accounts: readonly T[], keyOf: (account: T) => string, usage
     const spent: AccountRow<T>[] = [];
     for (const account of accounts) {
         const usage = liveUsage(keyOf(account), usageOf(account));
-        const row = { account, ring: usageRing(usage), exhausted: isSpent(usage) };
+        const row = { account, ring: usageRing(usage), exhausted: isSpent(usage), measuredAt: usage?.measuredAt };
         (row.exhausted ? spent : active).push(row);
     }
     return [...active, ...spent];
@@ -218,6 +221,29 @@ const translatorRows = computed<readonly AccountRow<TranslatorAccount>[]>(() =>
               (account) => account.name,
               (account) => account.usage,
           ),
+);
+
+/* --- The provider's last refusal --------------------------------------------------------------------------
+ * ONE line for the whole section rather than one per row, because that is the resolution of the fact: a routed
+ * turn is served by whichever auth file CLIProxyAPI picks, so a refusal belongs to the provider the switcher is
+ * on. Repeating it down 31 Google rows would restate one event 31 times.
+ *
+ * It earns a place beside the rings because it answers what a ring cannot. A ring is polled — at turn end for
+ * Claude, on a five-minute sweep for the routed subscriptions — and the pools are account-wide, so every other
+ * client on the plan drains them without this sandbox hearing about it. The refusal is the moment the plan
+ * actually said no. Together they are readable: a green ring under a fresh refusal says the ring is stale.
+ *
+ * This is the state that sent someone here to reconnect a Kimi account in perfect health — the chat said
+ * "Failed to authenticate", because that is what the harness prints over a 403, and the Agent tab showed a
+ * healthy green dot beside it with nothing to reconcile the two. */
+const refusal = computed(() => providerRefusals.value[managedProvider.value]);
+// Loud only while nothing measured since has found headroom — see refusalIsCurrent. Both lists, because the
+// provider's accounts are one list to the reader whichever mechanism holds them.
+const refusalCurrent = computed(() =>
+    refusalIsCurrent(
+        refusal.value,
+        [...accountRows.value, ...translatorRows.value].map((row) => ({ measuredAt: row.measuredAt, percent: row.ring?.percent })),
+    ),
 );
 
 /* --- Collapsing long lists -----------------------------------------------------------------------------------
@@ -354,6 +380,12 @@ onUnmounted(() => clearTimeout(ringTimer));
         </template>
 
         <p v-if="chatError" :class="cmp.alertDanger('m-3')">{{ chatError }}</p>
+
+        <!-- The provider's own words, the last time it refused a turn (see `refusal` above). An alert while it
+             is the newest thing known about this provider; a quiet footnote once a reading has overtaken it,
+             because a stale alarm over a live meter is worse than no alarm at all. -->
+        <p v-if="refusal && refusalCurrent" :class="cmp.alertWarning('m-3')">{{ refusalLine(refusal) }}</p>
+        <p v-else-if="refusal" class="mx-3 mt-3 text-2xs text-subtle">{{ refusalLine(refusal) }}</p>
 
         <!-- Nothing has been read yet. An offline sandbox says so and stops (there is nothing to wait for);
              otherwise the rows that are coming stand in as skeletons, in their own shape, so the section keeps

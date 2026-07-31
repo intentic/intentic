@@ -414,7 +414,7 @@ export type UsageWindow = z.infer<typeof UsageWindowSchema>;
 // An account's headroom: EVERY window the provider reports, read together, plus when the reading was taken.
 // All of them, not the binding one, because "which pool is binding" changes between turns and a reader
 // comparing accounts needs the same pools on every row. How the reading is TAKEN is per provider and stops at
-// the daemon's readers: Claude's rides the turn's own stream, ChatGPT's and Google's are pulled through
+// the daemon's readers: Claude's rides the turn's own stream, ChatGPT's, Google's and Kimi's are pulled through
 // CLIProxyAPI's credential-scoped management call. All of them are control requests, so none costs tokens.
 //
 // Within one window utilization only climbs, so an un-reset window stays a valid FLOOR however old it is; past
@@ -426,13 +426,45 @@ export const AccountUsageSchema = z.object({
 });
 export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 
+/* THE LAST TIME A PROVIDER ACTUALLY REFUSED A TURN — the other half of "can I run on this", and the half no
+ * meter can supply.
+ *
+ * A snapshot above is POLLED and therefore always a floor: read at turn end (Claude) or on a five-minute sweep
+ * (the routed subscriptions), and account-wide, so every other client on the plan spends the same pools without
+ * this sandbox hearing about it. A refusal is the opposite kind of fact — observed, exact, and timestamped by
+ * the only event that proves the plan said no. Between them they answer a question neither can alone: a green
+ * meter beside "refused a turn 4 minutes ago" means the reading is stale, not that the account has room.
+ *
+ * Keyed by PROVIDER rather than by account, because that is the resolution the daemon honestly has. A native
+ * Claude turn knows which account served it and names it; a routed turn does not — CLIProxyAPI picks the auth
+ * file itself and only refuses once every credential it holds is cooling down, which makes the refusal a fact
+ * about the provider in the first place.
+ *
+ * `kind` is read off what the provider SAID, not off the frame code the harness filed it under, because those
+ * two disagree: Kimi answers a spent plan with `403 You've reached your usage limit for this billing cycle`,
+ * which the CLI prints under "Failed to authenticate" and the stream codes as a refused credential. Sending
+ * someone to reconnect a perfectly good account is the cost of believing the code over the sentence. */
+export const ProviderRefusalSchema = z.object({
+    // Epoch MS, matching AccountUsage.measuredAt — the two are read side by side.
+    at: z.number(),
+    kind: z.enum(["limit", "auth"]),
+    // The provider's own sentence, verbatim. It is the only part that says WHICH pool or WHICH credential.
+    message: z.string(),
+    // The account that was serving, when the daemon knows it (native turns only — see above).
+    account: z.string().optional(),
+});
+export type ProviderRefusal = z.infer<typeof ProviderRefusalSchema>;
+
+export const ProviderRefusalsSchema = z.object({ refusals: z.record(z.string(), ProviderRefusalSchema) });
+export type ProviderRefusals = z.infer<typeof ProviderRefusalsSchema>;
+
 // One connected subscription in the translator. `name` is CLIProxyAPI's auth-file name — the stable store key a
 // disconnect addresses — and `label` the sign-in identity it reported (the account email, else the file name).
 export const TranslatorAccountSchema = z.object({
     name: z.string(),
     label: z.string(),
     // The same headroom an OauthAccount carries, on the same field, for the same reason: the account rows are
-    // one list to the reader. Optional because a provider whose quota this sandbox cannot read (Grok, Kimi) —
+    // one list to the reader. Optional because a provider whose quota this sandbox cannot read (Grok) —
     // or one that did not answer — must still render as the connected account it is, with a dot instead of a
     // ring.
     usage: AccountUsageSchema.optional(),
