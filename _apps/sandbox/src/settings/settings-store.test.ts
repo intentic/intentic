@@ -84,3 +84,10 @@ test("an older manifest missing a flag keeps its picks and defaults the new one"
     await writeFile(path, JSON.stringify({ iqSearch: true }));
     expect(await store.get()).toEqual({ ...DEFAULTS, iqSearch: true });
 });
+
+test("a saved usage-limit auto-resume opt-in is clamped off without discarding other settings", async () => {
+    const { store, path } = tempStore();
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, JSON.stringify({ iqSearch: true, autoResumeOnLimit: true }));
+    expect(await store.get()).toEqual({ ...DEFAULTS, iqSearch: true, autoResumeOnLimit: false });
+});

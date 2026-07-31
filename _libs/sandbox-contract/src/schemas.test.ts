@@ -84,3 +84,7 @@ test("a key of the wrong type is still a parse failure — tolerance is for abse
     // The prompt cap is a real bound, not advice: the text IS the system prompt, and every turn pays for it.
     expect(SandboxSettingsSchema.safeParse({ systemPrompt: "x".repeat(20001) }).success).toBe(false);
 });
+
+test("usage-limit auto-resume stays off while the feature is disabled, including for an older saved true value", () => {
+    expect(SandboxSettingsSchema.parse({ autoResumeOnLimit: true }).autoResumeOnLimit).toBe(false);
+});

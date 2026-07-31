@@ -1,4 +1,4 @@
-import type { AgentTurn, UsageWindow } from "@intentic/sandbox-contract";
+import { type AgentTurn, USAGE_LIMIT_AUTO_RESUME_ENABLED, type UsageWindow } from "@intentic/sandbox-contract";
 import { fireAutomation, type WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
@@ -17,8 +17,9 @@ import { startTurnRun, type TurnRun } from "./turn-runs.js";
  *
  * USAGE LIMIT. The Claude subscription's spent allowance. The turn is not broken, it is EARLY, and the reset
  * instant that reopens the window rides on the failure itself. So the daemon remembers every limit-killed
- * conversation turn (whatever the autoResumeOnLimit setting says — enabling the toggle right after a failure
- * must arm the resume that failure already offered) and a poll re-runs it once its window has reopened.
+ * conversation turn and, when the build-wide feature gate and per-sandbox setting are both on, a poll re-runs
+ * it once its window has reopened. The build gate is currently off; keeping the hit also preserves the explicit
+ * resume-on-another-account action.
  *
  * AUTH. The access token the turn snapshotted at spawn stopped being accepted — almost always because a
  * rotation superseded it, which Anthropic answers with "401 OAuth access token has been revoked" on the old
@@ -321,10 +322,10 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
     }
 };
 
-// Polls all three pending maps (the restart condition has no map — see resumeInterruptedTurns). A limit resume waits for its window to reopen (reset + the delay above) and for
-// the toggle, read per pass rather than snapshotted at failure time: flipping it on while a reset is pending arms
-// that resume, and a reset that arrives with the toggle off simply waits for it (until staleness drops the
-// entry). An auth resume has neither gate — it is due the moment it is recorded, and it is not the user's
+// Polls all three pending maps (the restart condition has no map — see resumeInterruptedTurns). A limit resume
+// waits for its window to reopen (reset + the delay above), the build gate, and the per-sandbox toggle read on
+// each pass. While the build gate is off it can only be fired explicitly on another account, and staleness
+// eventually drops it. An auth resume has neither gate — it is due the moment it is recorded, and it is not the user's
 // budget being spent but the daemon's own rotation being undone. An outage resume waits on the shared
 // per-provider breaker instead of on any instant of its own — see runOutagePass.
 export const createTurnResumeScheduler = (services: Services, wake: WakeFn, intervalMs = 5_000): TurnResumeScheduler => {
@@ -348,7 +349,7 @@ export const createTurnResumeScheduler = (services: Services, wake: WakeFn, inte
         const { autoResumeOnLimit } = await services.sandboxSettings.get();
         for (const hit of due) {
             const conversationId = hit.input.conversationId;
-            if (!autoResumeOnLimit) {
+            if (!USAGE_LIMIT_AUTO_RESUME_ENABLED || !autoResumeOnLimit) {
                 if (now - hit.recordedAt > STALE_AFTER_MS) {
                     pending.delete(conversationId);
                 }

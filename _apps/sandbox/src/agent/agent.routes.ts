@@ -6,6 +6,7 @@ import {
     type EditorContext,
     runsClaudeCode,
     type WorkspaceEvent,
+    USAGE_LIMIT_AUTO_RESUME_ENABLED,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { createOutboundSniffer } from "../activity/outbound.js";
@@ -568,8 +569,9 @@ async function* runTurn(
                 }
                 // A spent Claude allowance: resolve when the window reopens (the stream's own rate_limit_event,
                 // else the account's persisted binding window) and tell the client where the resume stands, so
-                // the chat can say "continues automatically at …" or offer the toggle at the moment it would
-                // have helped. No reset instant ⇒ nothing to schedule against ⇒ the plain frame, as before.
+                // the chat can say where the limit stands. The auto-resume state is omitted entirely while its
+                // build gate is off, though reset/account attribution still supports an explicit account switch.
+                // No reset instant ⇒ nothing to schedule against ⇒ the plain frame, as before.
                 authRefused ||= event.code === "claude-token-refused";
                 if (event.code === "rate_limit" && input.conversationId !== undefined) {
                     // An api_retry rate limit carries the SDK's own retry instant directly. Older/final refusal
@@ -578,13 +580,14 @@ async function* runTurn(
                     limitHitAt = limitReset ?? event.resetsAt ?? (await accountLimitReset(services, resolvedAccount));
                     if (limitHitAt !== undefined) {
                         const { autoResumeOnLimit } = await services.sandboxSettings.get();
+                        const autoResume = autoResumeOnLimit ? "scheduled" : "available";
                         // The account is the daemon-resolved one, not the client's selection (which can be
                         // empty): it names whose allowance is spent, so the client can offer the provider's
                         // OTHER accounts as a resume-now (/agent/resume-limit) instead of only the wait.
                         yield {
                             ...event,
                             resetsAt: limitHitAt,
-                            autoResume: autoResumeOnLimit ? "scheduled" : "available",
+                            ...(USAGE_LIMIT_AUTO_RESUME_ENABLED ? { autoResume } : {}),
                             ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
                         };
                         continue;
@@ -602,8 +605,8 @@ async function* runTurn(
         // behaviour a user watching that terminal expects.
         isolation?.anchor?.dispose();
         // The limit killed this turn's work — remember it for the resume scheduler, with the last session the
-        // stream reported (the one holding any partial progress). Recorded whatever the toggle says: enabling
-        // autoResumeOnLimit right after the failure arms exactly this resume.
+        // stream reported (the one holding any partial progress). It remains useful while automatic firing is
+        // build-disabled because the user can explicitly resume it on another account.
         if (limitHitAt !== undefined && input.conversationId !== undefined) {
             recordLimitHit({
                 input: { ...input, conversationId: input.conversationId },

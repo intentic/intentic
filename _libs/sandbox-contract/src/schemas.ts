@@ -643,6 +643,12 @@ export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"
 // surface fail to parse the moment a toggle is added — which reaches the user as a page of switches that are
 // silently dead, not as an error. It also means an older on-disk manifest keeps the owner's other picks rather
 // than being discarded whole.
+// Build-wide kill switch for usage-limit auto-resume. Keep the setting and implementation in place while the
+// feature is disabled, but clamp every daemon response and settings write to OFF so a persisted `true` from an
+// older build cannot keep spending a newly reset allowance. The web also reads this constant to render the
+// control unavailable and to distrust a stale daemon that still reports a scheduled resume.
+export const USAGE_LIMIT_AUTO_RESUME_ENABLED: boolean = false;
+
 export const SandboxSettingsSchema = z.object({
     stableSystemPrompt: z.boolean().default(false),
     skills: z.array(z.string()).default([]),
@@ -699,12 +705,13 @@ export const SandboxSettingsSchema = z.object({
      * automation-opened agents (Discord, webhooks, email) finish turns with no browser in the room — a
      * browser-held preference could not govern them. Per-agent override: AgentSummarySchema.autoLand. */
     autoLand: z.boolean().default(true),
-    // When a turn dies on the Claude subscription's usage limit, re-run it automatically once the limit
-    // window resets (a minute after, so a skewed clock can't retry into the same closed window). Off by
-    // default: an unattended retry spends the fresh window without the user in the room, so the daemon
-    // records every limit-hit either way and the chat OFFERS the toggle at the moment it would have helped —
-    // enabling it then still resumes the turn that just bounced.
-    autoResumeOnLimit: z.boolean().default(false),
+    // Latent opt-in for re-running a turn after the Claude subscription's usage window resets. It defaults off
+    // because an unattended retry spends the fresh allowance without the user in the room, and the build-wide
+    // gate above currently clamps even an older saved opt-in off while the feature is unavailable.
+    autoResumeOnLimit: z
+        .boolean()
+        .default(false)
+        .overwrite((enabled) => USAGE_LIMIT_AUTO_RESUME_ENABLED && enabled),
     /* When a turn dies because the MODEL PROVIDER was failing (500/502/503, a 529 at capacity, a dropped
      * socket), re-run it on an escalating backoff until it goes through or the attempts are spent.
      *

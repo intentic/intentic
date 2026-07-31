@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { type AgentProvider, type BuiltinPromptText, quickModelKey, type SandboxSettings, type SystemPromptMode } from "@intentic/sandbox-contract";
+import {
+    type AgentProvider,
+    type BuiltinPromptText,
+    quickModelKey,
+    type SandboxSettings,
+    type SystemPromptMode,
+    USAGE_LIMIT_AUTO_RESUME_ENABLED,
+} from "@intentic/sandbox-contract";
 import { Card, cmp, CopyButton, formatTokens, Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
@@ -193,10 +200,11 @@ const toggleIqSearch = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, iqSearch: value });
 };
 
-// Usage-limit auto-resume: re-run a limit-killed turn once the limit window reopens (see turn-resume.ts).
+// Dormant usage-limit auto-resume control. The shared build gate keeps this handler inert and the switch off;
+// retaining both makes re-enabling the implementation an explicit one-line product decision.
 const toggleAutoResume = (value: boolean): void => {
     const current = sandboxSettings.value;
-    if (current === undefined) {
+    if (!USAGE_LIMIT_AUTO_RESUME_ENABLED || current === undefined) {
         return;
     }
     saveSandboxSettings.mutate({ ...current, autoResumeOnLimit: value });
@@ -782,12 +790,12 @@ const importMemory = async (): Promise<void> => {
             <Row
                 icon="clock"
                 title="Auto-resume after usage limits"
-                description="When a turn dies on the Claude usage limit, re-run it automatically about a minute after the limit resets."
+                description="Currently unavailable. Usage-limit turns remain stopped after the limit resets."
             >
                 <template #control>
                     <ToggleSwitch
-                        :model-value="sandboxSettings?.autoResumeOnLimit ?? false"
-                        :disabled="sandboxSettings === undefined"
+                        :model-value="USAGE_LIMIT_AUTO_RESUME_ENABLED && (sandboxSettings?.autoResumeOnLimit ?? false)"
+                        :disabled="!USAGE_LIMIT_AUTO_RESUME_ENABLED || sandboxSettings === undefined"
                         @update:model-value="toggleAutoResume"
                     />
                 </template>

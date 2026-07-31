@@ -350,7 +350,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         // provider outage, because the client's reading of them is the same: "scheduled" = the resume is armed
         // and this turn comes back by itself; "available" = the daemon remembered the failed turn and turning
         // the setting on (autoResumeOnLimit / resumeAfterOutage) arms that same resume, which is what the
-        // chat's offer banner hangs off. Absent ⇒ there is nothing to resume.
+        // chat's offer banner hangs off. Absent normally means there is nothing automatic to resume; the
+        // usage-limit feature gate also leaves it absent while preserving the explicit account-switch path.
         autoResume: z.enum(["scheduled", "available"]).optional(),
         /* provider-outage only: the shape of the wait. `retryAt` (epoch seconds) is when the next attempt is
          * due — not a fixed cadence, because an outage has no reset instant to aim at and hammering a provider

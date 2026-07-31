@@ -405,9 +405,9 @@ const main = async (): Promise<void> => {
     // interval), so completed pipelines wake `ci` automations and freshen the Pipelines view.
     services.ciHooks.start();
 
-    // Usage-limit auto-resume: re-run turns the Claude subscription's limit killed, once their window reopens
-    // (gated by the autoResumeOnLimit setting; the failures are remembered regardless), and re-runs a turn whose
-    // credential was refused mid-flight as soon as a replacement token exists — see turn-resume.ts.
+    // Resume scheduler: usage-limit firing is currently stopped by its build-wide gate (hits remain available
+    // for an explicit account switch); credential refusals and provider outages still resume through this same
+    // scheduler — see turn-resume.ts.
     const limitResume = createTurnResumeScheduler(services, streamAgent);
     limitResume.start();
 

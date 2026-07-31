@@ -946,9 +946,9 @@ describe(`Conversation`, () => {
         expect(conversation.status.value).not.toBe(`error`);
     });
 
-    it(`says when the chat continues by itself when the daemon scheduled the auto-resume`, async () => {
+    it(`does not trust a stale daemon that says usage-limit auto-resume is scheduled while the feature is disabled`, async () => {
         const conversation = new Conversation(`c1`);
-        // Far-future reset so the re-attach probe this arms stays parked for the test's lifetime.
+        // A stale daemon may still send the scheduled state from the older implementation.
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
             sseResponse([
@@ -966,16 +966,13 @@ describe(`Conversation`, () => {
         await conversation.send(`hello`, settings);
 
         expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
-        expect(conversation.messages.value.at(-1)!.text).toContain(`Auto-resume is on`);
-        // The banner rides alongside the schedule in its scheduled posture (no enable button, but a resume-now
-        // on another account stays on offer), naming the spent allowance so the offer can exclude it.
-        expect(conversation.limitResume.value).toEqual({ resetsAt, scheduled: true, account: `acct-spent` });
+        expect(conversation.messages.value.at(-1)!.text).not.toContain(`Auto-resume is on`);
+        // Keep the explicit account-switch offer, but downgrade the stale schedule to a stopped turn.
+        expect(conversation.limitResume.value).toEqual({ resetsAt, scheduled: false, account: `acct-spent` });
         expect(conversation.error.value).toBeNull();
-        // Tears down the armed probe timer so the test leaves no open handle behind.
-        conversation.abort();
     });
 
-    it(`offers enabling auto-resume when the daemon only remembered the failed turn, and arming retires the offer`, async () => {
+    it(`keeps a remembered usage-limit turn stopped when auto-resume is unavailable`, async () => {
         const conversation = new Conversation(`c1`);
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
@@ -993,12 +990,10 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
         expect(conversation.error.value).toBeNull();
 
-        // The user enabled the setting: the banner flips to its scheduled posture (the resume-now offer stays)
-        // and the transcript says when the chat continues.
+        // Even a programmatic call cannot arm the dormant scheduler path.
         conversation.armLimitResume();
-        expect(conversation.limitResume.value).toEqual({ resetsAt, scheduled: true, account: undefined });
-        expect(conversation.messages.value.at(-1)!.text).toContain(`Auto-resume enabled`);
-        conversation.abort();
+        expect(conversation.limitResume.value).toEqual({ resetsAt, scheduled: false, account: undefined });
+        expect(conversation.messages.value.at(-1)!.text).not.toContain(`Auto-resume enabled`);
     });
 
     /* A PROVIDER OUTAGE, which reads like a limit hit and behaves nothing like one: no reset instant to aim at,

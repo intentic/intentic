@@ -3,7 +3,14 @@ import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { type AgentCommand, NATIVE_PROVIDERS, type NativeProvider, type OauthAccount, providerLabel } from "@intentic/sandbox-contract";
+import {
+    type AgentCommand,
+    NATIVE_PROVIDERS,
+    type NativeProvider,
+    type OauthAccount,
+    providerLabel,
+    USAGE_LIMIT_AUTO_RESUME_ENABLED,
+} from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { effectiveAccount, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
@@ -144,16 +151,14 @@ const activeAccountReauth = computed(() => {
     return accounts.value.find((entry) => entry.id === id && entry.needsReauth === true);
 });
 
-// The usage-limit banner (Conversation.limitResume): the daemon remembered the turn the limit killed, and the
-// banner offers every way forward it can vouch for. "Enable auto-resume" flips the STANDING autoResumeOnLimit
-// setting (Sandbox ▸ Agent) — the save alone arms that resume daemon-side; armLimitResume then reflects it in
-// this chat (notice + re-attach probe). "Resume with <account>" skips the wait entirely: the allowance is per
-// account, so any OTHER connected account of this provider can carry the interrupted turn right now.
+// The usage-limit banner (Conversation.limitResume): the daemon remembered the turn the limit killed. Automatic
+// firing and its enable action stay behind the shared build gate; "Resume with <account>" remains available
+// because it is an explicit user action on a different allowance, not an unattended retry.
 const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
 const limitResume = computed(() => active.value.limitResume.value);
 const enableAutoResume = async (): Promise<void> => {
     const current = sandboxSettings.value;
-    if (current === undefined) {
+    if (!USAGE_LIMIT_AUTO_RESUME_ENABLED || current === undefined) {
         return;
     }
     await saveSandboxSettings.mutateAsync({ ...current, autoResumeOnLimit: true });
@@ -1076,10 +1081,13 @@ watch(
                                 <Icon name="clock" class="mt-0.5 shrink-0" />
                                 <span class="min-w-0 flex-1"
                                     >Usage limit reached — resets {{ formatReset(limitResume.resetsAt) }}.
-                                    <template v-if="limitResume.scheduled"
+                                    <template v-if="USAGE_LIMIT_AUTO_RESUME_ENABLED && limitResume.scheduled"
                                         >Auto-resume is on — this chat continues by itself about a minute after.</template
                                     >
-                                    <template v-else>Auto-resume can continue this chat by itself about a minute after.</template></span
+                                    <template v-else-if="USAGE_LIMIT_AUTO_RESUME_ENABLED"
+                                        >Auto-resume can continue this chat by itself about a minute after.</template
+                                    >
+                                    <template v-else>Auto-resume is currently unavailable.</template></span
                                 >
                                 <button
                                     v-for="other in limitSwitchAccounts"
@@ -1093,7 +1101,7 @@ watch(
                                     Resume with {{ other.label }}
                                 </button>
                                 <button
-                                    v-if="!limitResume.scheduled"
+                                    v-if="USAGE_LIMIT_AUTO_RESUME_ENABLED && !limitResume.scheduled"
                                     type="button"
                                     class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
                                     :disabled="sandboxSettings === undefined || saveSandboxSettings.isPending.value"

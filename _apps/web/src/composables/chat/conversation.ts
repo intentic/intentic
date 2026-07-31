@@ -22,6 +22,7 @@ import {
     sseData,
     sseFrames,
     type TranslatorAccounts,
+    USAGE_LIMIT_AUTO_RESUME_ENABLED,
 } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
@@ -1004,14 +1005,14 @@ export class Conversation {
         this.queued.value = [{ id: crypto.randomUUID(), text: bubble.text, attachments: bubble.attachments ?? [] }, ...this.queued.value];
     }
 
-    // The user enabled auto-resume while this conversation's limit failure was still pending. The daemon's
+    // When the build gate is available, the user enabled auto-resume while this conversation's limit failure was still pending. The daemon's
     // scheduler owns the resume from here (it remembered the failed turn regardless of the toggle), so this
     // only reflects that: flip the banner to its scheduled posture (the enable button retires; a resume-now on
     // another account stays on offer — the wait it skips is the very one just scheduled), say when the chat
     // continues, and arm the re-attach probe that renders the resumed run in this window.
     armLimitResume(): void {
         const pending = this.limitResume.value;
-        if (pending === undefined) {
+        if (!USAGE_LIMIT_AUTO_RESUME_ENABLED || pending === undefined) {
             return;
         }
         this.limitResume.value = { ...pending, scheduled: true };
@@ -1778,11 +1779,12 @@ export class Conversation {
 
     /* Claude's subscription usage cap, not a crash — the daemon's message renders as a muted notice (like
      * session-not-found) rather than the red error ref, so it reads as "wait and retry" instead of "the
-     * workspace broke". The daemon says where the resume stands: "scheduled" means it re-runs this turn by
+     * workspace broke". When the build gate is on, the daemon says where the resume stands: "scheduled" means it re-runs this turn by
      * itself a minute after the reset (arm the re-attach probe so this window renders the resumed run);
      * "available" means it remembered the failed turn and enabling autoResumeOnLimit arms that same resume —
-     * surfaced as the composer's offer banner. The frame's own reset instant wins over the usage store's
-     * binding window (the frame names the pool that actually refused). */
+     * surfaced as the composer's offer banner. While the gate is off, even a stale "scheduled" frame is treated
+     * as stopped, but the banner retains the explicit account-switch option. The frame's own reset instant wins
+     * over the usage store's binding window (the frame names the pool that actually refused). */
     private applyLimitError(error: Extract<TurnEffect, { kind: "error" }>): void {
         const { message } = error;
         const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.account.value))?.resetsAt;
@@ -1790,7 +1792,7 @@ export class Conversation {
             this.appendNotice(message);
             return;
         }
-        if (error.autoResume === `scheduled`) {
+        if (USAGE_LIMIT_AUTO_RESUME_ENABLED && error.autoResume === `scheduled`) {
             this.appendNotice(`${message} Auto-resume is on — this chat continues by itself around ${formatReset(resetsAt + RESUME_DELAY_S)}.`);
             // The banner rides alongside the schedule, not instead of it: waiting is the default outcome, but
             // another account of this provider can carry the turn NOW, and that offer belongs in the room while
@@ -1799,7 +1801,7 @@ export class Conversation {
             this.scheduleReattach(resetsAt * 1000 + LIMIT_REATTACH_DELAY_MS);
             return;
         }
-        if (error.autoResume === `available`) {
+        if (!USAGE_LIMIT_AUTO_RESUME_ENABLED || error.autoResume === `available`) {
             this.limitResume.value = { resetsAt, scheduled: false, account: error.account };
         }
         this.appendNotice(`${message} Resets ${formatReset(resetsAt)}.`);

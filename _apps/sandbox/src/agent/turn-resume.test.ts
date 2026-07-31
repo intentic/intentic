@@ -119,30 +119,29 @@ test("with no session anywhere, the history seed rides the resume unchanged", ()
     expect(turn.history).toEqual([{ role: "user", text: "hi" }]);
 });
 
-test("a due resume fires only once the toggle is on, and firing consumes the pending entry", async () => {
+test("a due usage-limit resume cannot fire while the feature is disabled, even with a saved true value", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     recordLimitHit(hit("lr-fire"), DUE_AT - 1);
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
 
-    // Toggle off: the reset has passed, but nothing may run — the entry WAITS for the toggle (that is what
-    // lets the chat's offer banner arm the very resume that just bounced).
+    // Toggle off: the reset has passed, but nothing may run.
     await scheduler.tick(DUE_AT);
     expect(prompts).toEqual([]);
     expect(pendingLimitHit("lr-fire")).toBeDefined();
 
+    // A manifest from a build where the feature was available may still say true. The shared settings schema
+    // clamps it off, and the scheduler's own kill switch independently prevents a fire.
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, autoResumeOnLimit: true });
     await scheduler.tick(DUE_AT);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
-    expect(prompts[0]).toContain("finish the report");
-    expect(pendingLimitHit("lr-fire")).toBeUndefined();
+    expect(prompts).toEqual([]);
+    expect(pendingLimitHit("lr-fire")).toBeDefined();
+    clearPendingResume("lr-fire");
 });
 
-test("a resume whose window has not reopened yet stays put even with the toggle on", async () => {
+test("a disabled resume whose window has not reopened yet stays pending", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
-    const settings = await services.sandboxSettings.get();
-    await services.sandboxSettings.set({ ...settings, autoResumeOnLimit: true });
     recordLimitHit(hit("lr-early"), DUE_AT - RESUME_DELAY_MS);
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
