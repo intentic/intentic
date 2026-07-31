@@ -139,6 +139,24 @@ const mcpResultText = (item: Extract<ThreadItem, { type: "mcp_tool_call" }>): st
  * optional rather than have this guess one. */
 const CODEX_STREAM_RETRY = /^Reconnecting\.\.\.\s*(\d+)\s*\/\s*(\d+)/;
 
+/* Codex's post-compaction notice, which is a LIFECYCLE event wearing an error's clothes. The CLI compacted the
+ * thread successfully and says so — unconditionally, on every compaction, not (despite its own wording) only
+ * after several: core/src/compact.rs sends it as an `EventMsg::Warning` the moment the rewritten history lands.
+ *
+ * It arrives as an error because `exec --experimental-json` — the surface the SDK drives — has no compaction
+ * event in its ThreadEvent union at all, so a warning can only be serialized as a completed `error` item. The
+ * app-server's `thread/compacted` frame is the same fact with a name, and this transport never sees it.
+ *
+ * Read as a failure, it painted the red line under every long Sol turn: the turn had just compacted at ~90% of
+ * the window and answered normally, and one thread emits it again for every compaction it goes on to do. So it
+ * is the `compact` frame the Claude path already yields off compact_boundary — same fact, same muted notice in
+ * the chat, and off the error channel entirely, which is what the coded-advisory route never managed: an error
+ * frame still writes turn.error into the activity log and reddens the agent's card, whatever its code.
+ *
+ * `auto` is not a guess: this surface publishes no slash commands (codex never sends a `commands` frame), so
+ * there is no `/compact` to reach it by, and auto-compaction is the only compaction that happens here. */
+const CODEX_COMPACTED = /long threads and multiple compactions/i;
+
 /* What a codex error message actually is, when it is not a failure. Both of codex's error channels run through
  * here so a notice reads the same whichever one carries it — the CLI has moved them before (an advisory rides
  * the item channel, a stream retry the top-level event) and the two are one `error` kind by the time they reach
@@ -147,6 +165,9 @@ const codexNotice = (message: string): AgentEvent | undefined => {
     const retry = CODEX_STREAM_RETRY.exec(message);
     if (retry !== null) {
         return { kind: "provider_retry", attempt: Number(retry[1]), maxAttempts: Number(retry[2]) };
+    }
+    if (CODEX_COMPACTED.test(message)) {
+        return { kind: "compact", trigger: "auto" };
     }
     // An advisory shares this channel with real failures but is not one — the turn answers normally after it. So
     // it must not mark the phase errored: a plan turn that hit one still has a plan to propose (CODEX_ADVISORY).

@@ -372,6 +372,74 @@ test("an advisory doesn't stand in for the real failure when the turn then dies"
     ]);
 });
 
+// Codex's post-compaction notice, verbatim off `codex exec --json`: an `error` ITEM the CLI sends the moment a
+// compaction lands, on every one of them — its "multiple compactions" wording describes the risk it warns about,
+// not a threshold it waits for. The turn carries on with the rewritten history.
+const COMPACTED =
+    "Heads up: Long threads and multiple compactions can cause the model to be less accurate. Start a new thread when possible to keep threads small and targeted.";
+
+test("a compaction notice is the compact lifecycle frame, not a failure, and the turn's answer still lands", async () => {
+    // The incident: every long Sol turn ended with the red error line, directly under the answer it had just
+    // produced — a thread that auto-compacts at ~90% of the window earns one of these for each compaction.
+    const { runner } = fakeRunner([
+        { type: "thread.started", thread_id: "thr-13" },
+        { type: "item.completed", item: { id: "e1", type: "error", message: COMPACTED } },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "carrying on" } },
+    ]);
+    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+        { kind: "session", sessionId: "thr-13" },
+        // The frame the Claude path already yields off compact_boundary: one muted "context compacted" notice in
+        // the chat for both providers, and nothing on the error channel to write turn.error or redden the card.
+        { kind: "compact", trigger: "auto" },
+        { kind: "delta", text: "carrying on" },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
+test("a plan turn survives a compaction and still proposes its plan", async () => {
+    // A compaction that marked the phase errored would have plan-emulation drop a plan the turn really produced —
+    // and a plan turn is exactly the long, tool-heavy kind that reaches the compaction threshold.
+    const { runner, calls } = fakeRunner(
+        [
+            { type: "thread.started", thread_id: "thr-14" },
+            { type: "item.completed", item: { id: "e1", type: "error", message: COMPACTED } },
+            { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } },
+        ],
+        [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
+    );
+    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+
+    expect(events).toEqual([
+        { kind: "session", sessionId: "thr-14" },
+        { kind: "compact", trigger: "auto" },
+        { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route." },
+        {
+            kind: "resolved",
+            requestId: expect.any(String) as string,
+            reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
+        },
+        { kind: "delta", text: "Done." },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+    expect(calls).toHaveLength(2);
+});
+
+test("a compaction doesn't stand in for the real failure when the turn then dies", async () => {
+    // A turn can compact and THEN die for a real reason. The compact frame never touches surfacedError, so the
+    // SDK's exit-code wrapper still gets to speak rather than the turn ending silent.
+    const runner: CodexRunner = async function* () {
+        yield { type: "item.completed", item: { id: "e1", type: "error", message: COMPACTED } } as ThreadEvent;
+        throw new Error("Codex Exec exited with code 1: Reading prompt from stdin...");
+    };
+    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+        { kind: "compact", trigger: "auto" },
+        { kind: "error", message: "Codex Exec exited with code 1: Reading prompt from stdin..." },
+        { kind: "done" },
+    ]);
+});
+
 test("turn failures and thrown runners become error events followed by done", async () => {
     const failing = fakeRunner([{ type: "turn.failed", error: { message: "usage limit reached" } }]);
     expect(await collect(createCodexAgent("/home", failing.runner), request)).toEqual([
