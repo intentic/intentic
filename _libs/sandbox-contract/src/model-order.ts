@@ -109,12 +109,21 @@ const TIER_RANK: Readonly<Record<string, number>> = {
 
 const UNRANKED = -1;
 
-// The LAST recognized word wins, because tier words compose and the rightmost is the most specific one:
-// gemini-flash-lite is the cheap end of Flash, gpt-codex-max the frontier end of Codex.
-export const tierRankOf = (family: string): number => {
+/* Some providers name a capability ladder INSIDE one release instead of using the cross-release adjectives
+ * above. Codex 5.6's Sol/Terra/Luna rows are that shape: they must remain together ahead of the older 5.5 line,
+ * but their order is not an arbitrary id tiebreak — Sol is the strongest, followed by Terra, then Luna. Keeping
+ * this as a separate rank lets release recency still win across generations (a future GPT 5.7 base model must
+ * not be buried under a recognized 5.6 suffix), while the three siblings sort by their real tier. */
+const RELEASE_TIER_RANK: Readonly<Record<string, number>> = {
+    sol: 0,
+    terra: 1,
+    luna: 2,
+};
+
+const lastRankOf = (family: string, ranks: Readonly<Record<string, number>>): number => {
     let rank = UNRANKED;
     for (const segment of family.split("-")) {
-        const found = TIER_RANK[segment];
+        const found = ranks[segment];
         if (found !== undefined) {
             rank = found;
         }
@@ -122,18 +131,32 @@ export const tierRankOf = (family: string): number => {
     return rank;
 };
 
-// The canonical order of two model ids: tier first, then release. Hand it straight to Array#toSorted — that sort
-// is stable, so two ids this rule cannot separate keep the order they arrived in (for Claude, the provider's own).
-export const compareModelIds = (left: string, right: string): number =>
-    tierRankOf(familyOf(left)) - tierRankOf(familyOf(right)) || compareRelease(releaseOf(left), releaseOf(right));
+const releaseTierRankOf = (family: string): number => lastRankOf(family, RELEASE_TIER_RANK);
+
+// The LAST recognized word wins, because tier words compose and the rightmost is the most specific one:
+// gemini-flash-lite is the cheap end of Flash, gpt-codex-max the frontier end of Codex.
+export const tierRankOf = (family: string): number => lastRankOf(family, TIER_RANK);
+
+// The canonical order of two model ids: broad tier first, then release, then a tier declared within that release.
+// Hand it straight to Array#toSorted — that sort is stable, so two ids this rule cannot separate keep the order
+// they arrived in (for Claude, the provider's own).
+export const compareModelIds = (left: string, right: string): number => {
+    const leftFamily = familyOf(left);
+    const rightFamily = familyOf(right);
+    return (
+        tierRankOf(leftFamily) - tierRankOf(rightFamily) ||
+        compareRelease(releaseOf(left), releaseOf(right)) ||
+        releaseTierRankOf(leftFamily) - releaseTierRankOf(rightFamily)
+    );
+};
 
 /* The order for a catalog its endpoint published as a SET — Codex, Gemini, Kimi and Grok, i.e. everything but
  * Anthropic's ranked list. Falling back on arrival order is what the rule above does with a tie, and for a RANKED
  * catalog that is exactly right: the tie is the provider's own opinion, so claude-opus-5 stays ahead of
  * claude-fable-5. For a set there is no opinion to keep, and the header of this file assumed the leftover order
- * was at least alphabetical — it is not. A subscription vending sol/terra/luna (same tier, same 5.6 release, three
- * ids this rule cannot separate) hands its rows back in whatever order its registry iterated THIS request, so the
- * tie decided which model a fresh conversation opened on AND flipped between catalog refreshes.
+ * was at least alphabetical — it is not. A subscription can hand tied rows back in whatever order its registry
+ * iterated THIS request, so the tie decides which model a fresh conversation opens on and can flip between
+ * catalog refreshes.
  *
  * So a set breaks its own ties on the id. Which sibling that seats first is arbitrary — but it is the same
  * arbitrary answer every refresh, which is the property `default` actually needs. */
@@ -151,5 +174,12 @@ export const compareUnrankedModelIds = (left: string, right: string): number => 
  * not the efficient rung — and the cheap end is only ever a family whose tier word is actually recognized.
  * Falling off the end of a catalog with no efficient tier at all (Kimi publishes none) is then honest: the
  * newest of what it does publish, chosen by the release tiebreak below. */
-export const compareCheapestFirst = (left: string, right: string): number =>
-    tierRankOf(familyOf(right)) - tierRankOf(familyOf(left)) || compareRelease(releaseOf(left), releaseOf(right));
+export const compareCheapestFirst = (left: string, right: string): number => {
+    const leftFamily = familyOf(left);
+    const rightFamily = familyOf(right);
+    return (
+        tierRankOf(rightFamily) - tierRankOf(leftFamily) ||
+        compareRelease(releaseOf(left), releaseOf(right)) ||
+        releaseTierRankOf(rightFamily) - releaseTierRankOf(leftFamily)
+    );
+};

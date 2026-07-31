@@ -21,11 +21,18 @@ const translatorServes =
 const persistPath = async (): Promise<string> => join(await mkdtemp(join(tmpdir(), "codex-catalog-")), "models.json");
 
 test("serves a registry-ordered catalog frontier-newest-first, and starts conversations on its head", async () => {
-    const alphabetical = ["gpt-5.1-codex", "gpt-5.4-mini", "gpt-5.5", "gpt-5.6-sol"];
+    const alphabetical = ["gpt-5.1-codex", "gpt-5.4-mini", "gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"];
 
     const catalog = await createCodexCatalog(translatorConfig, await persistPath(), translatorServes(alphabetical)).models();
 
-    expect(catalog.models.map((model) => model.id)).toEqual(["gpt-5.6-sol", "gpt-5.5", "gpt-5.1-codex", "gpt-5.4-mini"]);
+    expect(catalog.models.map((model) => model.id)).toEqual([
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.1-codex",
+        "gpt-5.4-mini",
+    ]);
     expect(catalog.default).toBe("gpt-5.6-sol");
 });
 

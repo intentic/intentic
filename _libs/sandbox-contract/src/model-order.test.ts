@@ -7,37 +7,42 @@ import { compareCheapestFirst, compareModelIds, compareUnrankedModelIds, familyO
  * conversations on whichever id sorted first. */
 
 // A Codex catalog exactly as an OpenAI-compatible /v1/models hands it over: alphabetical, i.e. meaningless.
-const CODEX = ["gpt-5.1-codex", "gpt-5.4-mini", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra"];
+const CODEX = ["gpt-5.1-codex", "gpt-5.4-mini", "gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"];
 
 test("ranks the frontier line above the cheap one and the newest release above its predecessors", () => {
     // The base line (no tier word) leads, newest first; the mini rung sinks under all of it regardless of how
     // recently it shipped — which is the whole decision a user makes in this list.
-    expect(CODEX.toSorted(compareModelIds)).toEqual(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5", "gpt-5.1-codex", "gpt-5.4-mini"]);
+    expect(CODEX.toSorted(compareModelIds)).toEqual(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.1-codex", "gpt-5.4-mini"]);
 });
 
-test("lands the same models at the head and the tail whichever order the endpoint listed them in", () => {
-    // Arrival order survives only as the tiebreak between two ids the rule ranks equally (the 5.6 siblings), so
-    // an alphabetical registry and a reversed one can no longer disagree about which model the group opens on.
+test("orders a release's named tiers strongest-first whichever order the endpoint listed them in", () => {
     for (const arrival of [CODEX.toSorted(), CODEX.toReversed()]) {
         const ordered = arrival.toSorted(compareModelIds);
 
-        expect(ordered.slice(0, 2).toSorted()).toEqual(["gpt-5.6-sol", "gpt-5.6-terra"]);
+        expect(ordered.slice(0, 3)).toEqual(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]);
         expect(ordered.at(-1)).toBe("gpt-5.4-mini");
     }
 });
 
-test("an unranked catalog settles its own ties, so the SAME sibling opens the group on every refresh", () => {
-    // The measured failure: the translator's /v1/models hands sol/terra/luna back in a different order per
-    // request, and the rule above ranks all three equally — same tier, same 5.6 release. Under plain stability
-    // the catalog's head (i.e. the model a fresh conversation starts on) followed that reshuffling.
+test("keeps release-local tiers below the next generation and above the previous one", () => {
+    expect(["gpt-5.6-luna", "gpt-5.5", "gpt-5.7", "gpt-5.6-sol"].toSorted(compareModelIds)).toEqual([
+        "gpt-5.7",
+        "gpt-5.6-sol",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+    ]);
+});
+
+test("the Codex release-tier order is stable across catalog refreshes", () => {
     const arrivals = [
         ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
         ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-sol"],
         ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"],
     ];
-    const heads = arrivals.map((arrival) => arrival.toSorted(compareUnrankedModelIds)[0]);
 
-    expect(new Set(heads).size).toBe(1);
+    for (const arrival of arrivals) {
+        expect(arrival.toSorted(compareUnrankedModelIds)).toEqual(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]);
+    }
     // Same rule, so ranking still outranks the tiebreak: the mini rung stays at the tail, under every sibling.
     expect(["gpt-5.4-mini", ...arrivals[0]!].toSorted(compareUnrankedModelIds).at(-1)).toBe("gpt-5.4-mini");
 });
@@ -167,6 +172,10 @@ test("finds each vendor's own cheap rung, including a re-served open-weights row
     // is what says so — without that word the id carries no tier at all and would sink to the bottom.
     expect(["claude-opus-4-6-thinking", "gpt-oss-120b-medium"].toSorted(compareCheapestFirst)[0]).toBe("gpt-oss-120b-medium");
     expect(["grok-4", "grok-4-fast"].toSorted(compareCheapestFirst)[0]).toBe("grok-4-fast");
+});
+
+test("reads a release-local tier ladder from the cheap end too", () => {
+    expect(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"].toSorted(compareCheapestFirst)[0]).toBe("gpt-5.6-luna");
 });
 
 test("falls back on the newest release for a catalog that publishes no cheap tier at all", () => {

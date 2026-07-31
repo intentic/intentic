@@ -123,14 +123,16 @@ const CODEX: readonly PickerEntry[] = [
     entry(`codex`, `gpt-5.1-codex`, `GPT 5.1 Codex`),
     entry(`codex`, `gpt-5.4-mini`, `GPT 5.4 Mini`),
     entry(`codex`, `gpt-5.5`, `GPT 5.5`),
+    entry(`codex`, `gpt-5.6-luna`, `GPT 5.6 Luna`),
     entry(`codex`, `gpt-5.6-sol`, `GPT 5.6 Sol`),
     entry(`codex`, `gpt-5.6-terra`, `GPT 5.6 Terra`),
 ];
 
-test("opens a registry-ordered group on the frontier line, with the cheap rung last instead of first", () => {
+test("opens a registry-ordered group with Sol first and the remaining Codex tiers strongest-first", () => {
     expect(pickerBlocks(familyGroups(CODEX), undefined, false)[0]?.entries.map((row) => row.label)).toEqual([
         `GPT 5.6 Sol`,
         `GPT 5.6 Terra`,
+        `GPT 5.6 Luna`,
         `GPT 5.5`,
         `GPT 5.1 Codex`,
         `GPT 5.4 Mini`,
