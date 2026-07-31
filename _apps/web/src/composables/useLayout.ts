@@ -45,6 +45,10 @@ const INCLUDE_IGNORED_KEY = `ui-workspace-include-ignored`;
 // CodeMirror editor instead of the read-only viewer. Persists like the panels above.
 const EDIT_MODE_KEY = `ui-workspace-edit-mode`;
 
+// Comments in a diff — off by default, so every diff surface (workspace tab, agent review, environment card)
+// opens on the code alone and comment-only edits don't read as changes. See codeComments.ts. Persists.
+const SHOW_COMMENTS_KEY = `ui-diff-show-comments`;
+
 /* Owns shell-layout state shared across areas (module-level singleton): where the chat panel sits relative to
  * the workspace (bound onto a `data-chat-position` attribute whose CSS grid swaps
  * off it — mirroring how useTheme drives `data-mode`), the chat panel width, the workspace explorer
@@ -112,6 +116,7 @@ const terminalOpen = ref<boolean>(readBool(TERMINAL_OPEN_KEY));
 const sidebarPanel = ref<SidebarPanel>(readEnum(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`));
 const includeIgnored = ref<boolean>(readBool(INCLUDE_IGNORED_KEY));
 const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
+const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
 
 const set = (value: ChatPosition): void => {
     position.value = value;
@@ -191,6 +196,11 @@ const setEditMode = (on: boolean): void => {
     write(EDIT_MODE_KEY, on ? `1` : `0`);
 };
 
+const toggleShowComments = (): void => {
+    showComments.value = !showComments.value;
+    write(SHOW_COMMENTS_KEY, showComments.value ? `1` : `0`);
+};
+
 export function useLayout() {
     return {
         position,
@@ -202,6 +212,7 @@ export function useLayout() {
         sidebarPanel,
         includeIgnored,
         editMode,
+        showComments,
         set,
         toggle,
         setChatWidth,
@@ -217,5 +228,6 @@ export function useLayout() {
         setSidebarPanel,
         toggleIncludeIgnored,
         setEditMode,
+        toggleShowComments,
     };
 }

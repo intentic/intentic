@@ -2,6 +2,8 @@
 import { useDevice } from "@intentic-app/ui";
 import type * as Monaco from "monaco-editor-core";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { useLayout } from "../../../composables/useLayout";
+import { stripComments } from "../../../composables/workspace/codeComments";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
 import { langFromShebang, resolveFile } from "../fileType";
 
@@ -9,7 +11,11 @@ import { langFromShebang, resolveFile } from "../fileType";
  * same engine VSCode uses, so it brings its own minimap, change overview ruler, and diff computation. Side-by-side
  * with a minimap per pane on desktop; inline/unified on mobile, where two panes can't fit (chunk navigation moves
  * to prev/next buttons there). Read-only; an absent side (added/deleted file) is an empty pane. Uncontrolled —
- * the parent remounts per file via :key. */
+ * the parent remounts per file via :key.
+ *
+ * Comments are stripped from both sides unless the reader asks for them (useLayout.showComments, off by default):
+ * the diff is then computed on code alone, so comment churn stops registering as change at all. The toggle rides
+ * on this component rather than on each host because no diff surface here has a toolbar of its own to hold it. */
 
 // `sideBySide` pins the layout for a caller that offers its own Split|Unified control (the agent review, whose
 // pane is narrower than the editor area); left unset, the form factor decides.
@@ -18,20 +24,47 @@ const { before, after, path, sideBySide } = defineProps<{ before?: string; after
 const { mobile } = useDevice();
 const split = computed(() => sideBySide ?? !mobile.value);
 const { ensureMonaco, ensureLanguage } = useMonaco();
+const { showComments, toggleShowComments } = useLayout();
 
 const host = ref<HTMLElement>();
 const diff = shallowRef<Monaco.editor.IStandaloneDiffEditor>();
 let original: Monaco.editor.ITextModel | undefined;
 let modified: Monaco.editor.ITextModel | undefined;
+let lang: string | undefined;
 let disposed = false;
+// The file changed, but not once the comments come out — an empty diff has to say why it is empty.
+const commentsOnly = ref(false);
 
 const step = (forward: boolean): void => diff.value?.goToDiff(forward ? `next` : `previous`);
+
+// One side as its pane should show it. Stripping shortens the model, so the gutter has to render the source line
+// each kept line came from — Monaco's own numbering would be off by every comment above it.
+const side = async (text: string): Promise<{ text: string; lineNumbers: Monaco.editor.LineNumbersType }> => {
+    const stripped = showComments.value ? undefined : await stripComments(text, lang);
+    if (stripped === undefined) {
+        return { text, lineNumbers: `on` };
+    }
+    return { text: stripped.text, lineNumbers: (line) => String(stripped.lines[line - 1] ?? ``) };
+};
+
+// Load both sides into the panes. Also the toggle's whole effect: same editor, same file, comments in or out.
+const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void> => {
+    const [left, right] = await Promise.all([side(before ?? ``), side(after ?? ``)]);
+    if (disposed) {
+        return; // unmounted (fast file-switch) while the grammar tokenized
+    }
+    original?.setValue(left.text);
+    modified?.setValue(right.text);
+    editor.getOriginalEditor().updateOptions({ lineNumbers: left.lineNumbers });
+    editor.getModifiedEditor().updateOptions({ lineNumbers: right.lineNumbers });
+    commentsOnly.value = left.text === right.text && (before ?? ``) !== (after ?? ``);
+};
 
 onMounted(async () => {
     const m = await ensureMonaco();
     // Filename first (like resolveFile); for an extensionless script fall back to the shebang in either side's
     // bytes (both panes carry the same file, so whichever is present agrees), matching VSCode.
-    const lang = resolveFile(path, undefined).lang ?? langFromShebang(after ?? before ?? ``);
+    lang = resolveFile(path, undefined).lang ?? langFromShebang(after ?? before ?? ``);
     await ensureLanguage(m, lang);
     if (disposed || host.value === undefined) {
         return; // unmounted (fast file-switch) while Monaco/grammar loaded
@@ -56,9 +89,11 @@ onMounted(async () => {
         lineHeight: 20,
     });
     diff.value = editor;
-    original = m.editor.createModel(before ?? ``, lang);
-    modified = m.editor.createModel(after ?? ``, lang);
+    // Empty models first: `render` owns what goes in them, so the toggle and the first paint take one path.
+    original = m.editor.createModel(``, lang);
+    modified = m.editor.createModel(``, lang);
     editor.setModel({ original, modified });
+    await render(editor);
 
     // VSCode's diff-navigation keys, on the focused (modified) pane.
     const modifiedEditor = editor.getModifiedEditor();
@@ -69,6 +104,12 @@ onMounted(async () => {
 // Crossing the breakpoint (rotation, split-screen) or flipping the caller's toggle swaps side-by-side ↔
 // unified in place — no rebuild.
 watch(split, (on) => diff.value?.updateOptions({ renderSideBySide: on }));
+
+watch(showComments, async () => {
+    if (diff.value !== undefined) {
+        await render(diff.value);
+    }
+});
 
 onBeforeUnmount(() => {
     disposed = true;
@@ -81,6 +122,32 @@ onBeforeUnmount(() => {
 <template>
     <div class="relative flex h-full min-h-0">
         <div ref="host" class="h-full min-w-0 flex-1 overflow-hidden bg-canvas"></div>
+        <!-- Hiding comments can leave nothing at all to look at. Saying so — and offering the one click that
+             brings the change back — beats a blank diff the reader has to explain to themselves. -->
+        <div v-if="commentsOnly" class="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-9">
+            <button
+                type="button"
+                class="pointer-events-auto flex items-center gap-1.5 rounded-full border border-line bg-card/95 px-3 py-1 text-2xs text-muted shadow-sm backdrop-blur transition-colors hover:text-content"
+                @click="toggleShowComments()"
+            >
+                <Icon name="eye-slash" class="text-2xs" />
+                Only comments changed — show them
+            </button>
+        </div>
+        <!-- Inset past the 30px diff overview ruler. This view has no toolbar above it, and a default that
+             silently removes lines has to keep saying so. -->
+        <button
+            v-else
+            type="button"
+            class="absolute right-9 top-2 z-10 flex items-center gap-1 rounded-md border border-line bg-card/90 px-1.5 py-0.5 text-2xs font-medium text-muted shadow-sm backdrop-blur transition-colors hover:text-content"
+            :class="{ 'bg-primary-600/15 text-link': showComments }"
+            :aria-pressed="showComments"
+            v-tooltip.left="showComments ? 'Comments shown — click to diff the code alone' : 'Comments hidden — click to show them'"
+            @click="toggleShowComments()"
+        >
+            <Icon class="text-2xs" :name="showComments ? `eye` : `eye-slash`" />
+            Comments
+        </button>
         <!-- Touch chunk navigation (side-by-side collapses to unified on mobile). -->
         <div v-if="mobile" class="absolute bottom-4 right-4 z-10 flex gap-2">
             <button
