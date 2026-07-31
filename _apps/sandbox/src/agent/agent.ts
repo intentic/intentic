@@ -327,7 +327,7 @@ const rateLimitFrame = (resetsAt?: number): Extract<AgentEvent, { kind: "error" 
     kind: "error",
     code: "rate_limit",
     message:
-        "Claude usage limit reached — this account's allowance is exhausted, not a provider outage. This turn can continue after the limit resets.",
+        "Claude usage limit reached — this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.",
     ...(resetsAt !== undefined ? { resetsAt } : {}),
 });
 

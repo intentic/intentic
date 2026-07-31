@@ -40,6 +40,21 @@ export interface AccountUsageStore {
 const liveWindows = (usage: AccountUsage, now: number): UsageWindow[] =>
     usage.windows.filter((window) => window.resetsAt === undefined || window.resetsAt * 1000 > now);
 
+/* When a spent account's window reopens, for a refusal whose own stream never named an instant: the persisted
+ * snapshots above. The pool that refused the turn is the account's FULLEST one, so its reset is when the wait
+ * ends — the same binding-window rule the browser's usage readouts apply. It is what lets a rate_limit frame
+ * say "resets Friday 11:22 PM" rather than only that the allowance is gone. */
+export const accountLimitReset = async (store: AccountUsageStore, account: string | undefined): Promise<number | undefined> => {
+    if (account === undefined) {
+        return undefined;
+    }
+    const usage = (await store.read())[account];
+    return usage?.windows.reduce<UsageWindow | undefined>(
+        (worst, window) => (worst === undefined || window.utilization > worst.utilization ? window : worst),
+        undefined,
+    )?.resetsAt;
+};
+
 export const fileAccountUsageStore = (path: string): AccountUsageStore => {
     // One in-memory record is the authority (the daemon is the only writer); the file is its durable echo.
     let loaded: Promise<Record<string, AccountUsage>> | undefined;

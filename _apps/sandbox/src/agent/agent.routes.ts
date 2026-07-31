@@ -6,7 +6,6 @@ import {
     capabilitiesOf,
     type EditorContext,
     type WorkspaceEvent,
-    USAGE_LIMIT_AUTO_RESUME_ENABLED,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { createOutboundSniffer } from "../activity/outbound.js";
@@ -21,6 +20,7 @@ import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
 import { holdAccount } from "../claude/claude-credentials.js";
+import { accountLimitReset } from "../usage/account-usage.js";
 import { isIsolated } from "../agents/agents-store.js";
 import { landAgent } from "../agents/land.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
@@ -30,16 +30,7 @@ import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
-import {
-    accountLimitReset,
-    clearPendingResume,
-    pendingLimitHit,
-    recordAuthFailure,
-    recordLimitHit,
-    recordOutageFailure,
-    resumeTurnOf,
-    startConversationTurn,
-} from "./turn-resume.js";
+import { clearPendingResume, recordAuthFailure, recordOutageFailure, startConversationTurn } from "./turn-resume.js";
 import { withRuntimeHistory } from "./runtime-history.js";
 import { turnRunOf } from "./turn-runs.js";
 import { summarizeAgentTitle } from "./title-summary.js";
@@ -482,17 +473,14 @@ async function* runTurn(
     // the SDK transcript. Fire-and-forget: logging must never delay or fail a turn.
     const provider = input.agent ?? "claude";
     let sessionId = input.sessionId;
-    // The usage-limit trail for auto-resume: the reset instant the stream last named (rate_limit_event rides
-    // ahead of the refusal it explains), and — once a rate_limit error actually ends the turn's work — the
-    // instant the pending resume is recorded against in the finally below. Recorded at settle, not at the
-    // error frame, so the resume snapshots the turn's LAST session id rather than a mid-turn one.
+    // The reset instant the stream last named (rate_limit_event rides ahead of the refusal it explains), so a
+    // rate_limit frame can tell the client when the spent window reopens.
     let limitReset: number | undefined;
-    let limitHitAt: number | undefined;
-    // Set when the API refused this turn's credential mid-flight. Like limitHitAt, it is acted on in the
-    // finally so the resume snapshots the turn's LAST session id — the one holding whatever it had done.
+    // Set when the API refused this turn's credential mid-flight. Acted on in the finally so the resume
+    // snapshots the turn's LAST session id — the one holding whatever it had done.
     let authRefused = false;
     /* The provider failed this turn transiently and a resume is worth arming. Same finally-time handling as the
-     * two above, for the same reason: the resume wants the LAST session id, because a 500 that lands mid-turn
+     * one above, for the same reason: the resume wants the LAST session id, because a 500 that lands mid-turn
      * leaves real work behind it and the resume should continue from there rather than redo it. */
     let outageHit = false;
     // Whether the provider has answered THIS turn at all. Any real content proves it is serving requests, which
@@ -618,29 +606,18 @@ async function* runTurn(
                         continue;
                     }
                 }
-                // A spent Claude allowance: resolve when the window reopens (the stream's own rate_limit_event,
-                // else the account's persisted binding window) and tell the client where the resume stands, so
-                // the chat can say where the limit stands. The auto-resume state is omitted entirely while its
-                // build gate is off, though reset/account attribution still supports an explicit account switch.
-                // No reset instant ⇒ nothing to schedule against ⇒ the plain frame, as before.
+                /* A spent Claude allowance: resolve when the window reopens so the chat can name the instant
+                 * instead of only reporting that the turn stopped. Nothing is re-run — the allowance is the
+                 * user's own budget, and resuming into a freshly reset window would spend something they may
+                 * have been saving, so sending again is theirs to decide. No reset instant ⇒ the plain frame. */
                 authRefused ||= event.code === "claude-token-refused";
-                if (event.code === "rate_limit" && input.conversationId !== undefined) {
+                if (event.code === "rate_limit") {
                     // An api_retry rate limit carries the SDK's own retry instant directly. Older/final refusal
                     // shapes still resolve through the preceding rate_limit_event or the persisted account
-                    // snapshot. Keeping the precedence here makes every rate-limit source enter one scheduler.
-                    limitHitAt = limitReset ?? event.resetsAt ?? (await accountLimitReset(services, resolvedAccount));
-                    if (limitHitAt !== undefined) {
-                        const { autoResumeOnLimit } = await services.sandboxSettings.get();
-                        const autoResume = autoResumeOnLimit ? "scheduled" : "available";
-                        // The account is the daemon-resolved one, not the client's selection (which can be
-                        // empty): it names whose allowance is spent, so the client can offer the provider's
-                        // OTHER accounts as a resume-now (/agent/resume-limit) instead of only the wait.
-                        yield {
-                            ...event,
-                            resetsAt: limitHitAt,
-                            ...(USAGE_LIMIT_AUTO_RESUME_ENABLED ? { autoResume } : {}),
-                            ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
-                        };
+                    // snapshot — one precedence, whatever the rate-limit source.
+                    const resetsAt = limitReset ?? event.resetsAt ?? (await accountLimitReset(services.accountUsage, resolvedAccount));
+                    if (resetsAt !== undefined) {
+                        yield { ...event, resetsAt };
                         continue;
                     }
                 }
@@ -655,16 +632,6 @@ async function* runTurn(
         // server it started) is still in there and keeps it alive until it exits, which is exactly the
         // behaviour a user watching that terminal expects.
         isolation?.anchor?.dispose();
-        // The limit killed this turn's work — remember it for the resume scheduler, with the last session the
-        // stream reported (the one holding any partial progress). It remains useful while automatic firing is
-        // build-disabled because the user can explicitly resume it on another account.
-        if (limitHitAt !== undefined && input.conversationId !== undefined) {
-            recordLimitHit({
-                input: { ...input, conversationId: input.conversationId },
-                ...(sessionId !== undefined ? { sessionId } : {}),
-                resetsAt: limitHitAt,
-            });
-        }
         /* The credential died under this turn — remember it so the next scheduler pass re-mints and re-runs it.
          * Needs the exact token that was refused (so the rotation supersedes it rather than replaying it) and
          * the account it belongs to, which is why only a turn on a STORED Claude account qualifies: the
@@ -831,27 +798,6 @@ export const createAgentRoutes = (services: Services) => {
             // Join the run here: a successful Stop response now means the conversation lock is truly free.
             await run?.waitUntilFinished();
             return { ok: true } as const;
-        }),
-        // Fire the conversation's remembered usage-limit resume NOW, on `account` when the user picked one of
-        // the provider's other accounts — a spent allowance on one account is no reason to wait when a second
-        // has headroom. The same detached-run shape as `run`/the scheduler's own fire, so every window can
-        // attach to the resumed turn. NOT_FOUND = nothing pending (a fresh turn superseded the failure, or the
-        // daemon restarted and the in-memory entry died with it) — the client retires its offer on it.
-        resumeLimit: i.resumeLimit.handler(({ input }) => {
-            const hit = pendingLimitHit(input.conversationId);
-            if (hit === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "no usage-limit resume is pending for that conversation" });
-            }
-            const conversationId = input.conversationId;
-            // Cleared before firing, like the scheduler's own fire — the turn this starts supersedes the
-            // entry (and clears it again at its own start; a resume that re-hits the limit records afresh).
-            clearPendingResume(conversationId);
-            const run = startConversationTurn(services, streamAgent, resumeTurnOf(hit, input.account));
-            if (run === undefined) {
-                throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
-            }
-            services.logger.info({ conversationId, account: input.account }, "usage-limit resume fired by hand");
-            return { run: run.id };
         }),
         // The provider's slash commands from its most recent turn. Empty (not an error) when it has never run
         // one here — the popover simply stays closed until the first turn publishes the list.

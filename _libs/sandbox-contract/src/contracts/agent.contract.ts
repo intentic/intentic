@@ -1,15 +1,6 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { AgentCommandsQuerySchema, AgentCommandsSchema, AttachFrameSchema } from "../events.js";
-import {
-    AgentReplySchema,
-    AgentTurnSchema,
-    AttachTurnSchema,
-    OkSchema,
-    ResumeLimitSchema,
-    StartedTurnSchema,
-    SteerSchema,
-    StopTurnSchema,
-} from "../schemas.js";
+import { AgentReplySchema, AgentTurnSchema, AttachTurnSchema, OkSchema, StartedTurnSchema, SteerSchema, StopTurnSchema } from "../schemas.js";
 
 // A turn EXECUTES as a detached daemon-side run: `run` starts it and acks with the run id; any number of
 // clients render it via `attach` (replay from a seq cursor, then live) — the initiating window holds no
@@ -22,10 +13,6 @@ export const agentContract = {
     reply: oc.route({ method: "POST", path: "/agent/reply" }).input(AgentReplySchema).output(OkSchema),
     steer: oc.route({ method: "POST", path: "/agent/steer" }).input(SteerSchema).output(OkSchema),
     stop: oc.route({ method: "POST", path: "/agent/stop" }).input(StopTurnSchema).output(OkSchema),
-    // Fire the conversation's pending usage-limit resume immediately, optionally on another account — the
-    // chat's "resume on another account" action. Acks with the run id, exactly like `run`; the resumed turn
-    // is an ordinary detached run any window attaches to.
-    resumeLimit: oc.route({ method: "POST", path: "/agent/resume-limit" }).input(ResumeLimitSchema).output(StartedTurnSchema),
     // The provider's slash commands as last published by one of its turns, so a conversation's `/` popover is
     // populated before it has run one. The live `commands` frame stays authoritative for a running turn.
     commands: oc.route({ method: "GET", path: "/agent/commands" }).input(AgentCommandsQuerySchema).output(AgentCommandsSchema),

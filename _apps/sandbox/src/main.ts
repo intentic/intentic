@@ -469,11 +469,10 @@ const main = async (): Promise<void> => {
     // interval), so completed pipelines wake `ci` automations and freshen the Pipelines view.
     services.ciHooks.start();
 
-    // Resume scheduler: usage-limit firing is currently stopped by its build-wide gate (hits remain available
-    // for an explicit account switch); credential refusals and provider outages still resume through this same
-    // scheduler — see turn-resume.ts.
-    const limitResume = createTurnResumeScheduler(services, streamAgent);
-    limitResume.start();
+    // Resume scheduler: credential refusals and provider outages re-run the turn they killed — see
+    // turn-resume.ts. A spent usage limit is deliberately not among them; that allowance is the user's own.
+    const turnResume = createTurnResumeScheduler(services, streamAgent);
+    turnResume.start();
 
     // Restart auto-resume, the third condition in turn-resume.ts: the turn journal on /history holds every turn
     // and automation fire that was in flight, so whatever survived to here is what the daemon died under — a
@@ -539,7 +538,7 @@ const main = async (): Promise<void> => {
         landingGate(services, streamAgent).stop();
         workloadPriority.stop();
         services.ciHooks.stop();
-        limitResume.stop();
+        turnResume.stop();
         versionCheck.stop();
         announcer.stop();
         localCertRenewal.stop();

@@ -1,12 +1,5 @@
 <script setup lang="ts">
-import {
-    type AgentProvider,
-    type BuiltinPromptText,
-    quickModelKey,
-    type SandboxSettings,
-    type SystemPromptMode,
-    USAGE_LIMIT_AUTO_RESUME_ENABLED,
-} from "@intentic/sandbox-contract";
+import { type AgentProvider, type BuiltinPromptText, quickModelKey, type SandboxSettings, type SystemPromptMode } from "@intentic/sandbox-contract";
 import { Card, cmp, CopyButton, formatTokens, Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
@@ -220,18 +213,8 @@ const setIqContextHoldout = (fraction: number): void => {
     saveSandboxSettings.mutate({ ...current, iqContextHoldout: fraction });
 };
 
-// Dormant usage-limit auto-resume control. The shared build gate keeps this handler inert and the switch off;
-// retaining both makes re-enabling the implementation an explicit one-line product decision.
-const toggleAutoResume = (value: boolean): void => {
-    const current = sandboxSettings.value;
-    if (!USAGE_LIMIT_AUTO_RESUME_ENABLED || current === undefined) {
-        return;
-    }
-    saveSandboxSettings.mutate({ ...current, autoResumeOnLimit: value });
-};
-
 // Provider-outage auto-resume: re-run a turn the provider killed, on an escalating shared backoff. Defaults ON —
-// see the field comment in schemas.ts for why this one and not the limit resume beside it.
+// see the field comment in schemas.ts for why this one and not a spent usage limit.
 const toggleResumeAfterOutage = (value: boolean): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
@@ -862,25 +845,11 @@ const importMemory = async (): Promise<void> => {
                 </template>
             </Row>
 
-            <!-- The two auto-resumes, adjacent because they answer the same question ("who restarts a turn that
-                 died through no fault of its own?") and default OPPOSITE ways on purpose. A usage limit spends
-                 the user's own allowance and waits hours, so it is opt-in; a provider outage spends nothing the
-                 dead turn hadn't already committed and clears in minutes, so it is opt-out. Both are also
-                 offered from the chat at the moment they would have helped. -->
-            <Row
-                icon="clock"
-                title="Auto-resume after usage limits"
-                description="Currently unavailable. Usage-limit turns remain stopped after the limit resets."
-            >
-                <template #control>
-                    <ToggleSwitch
-                        :model-value="USAGE_LIMIT_AUTO_RESUME_ENABLED && (sandboxSettings?.autoResumeOnLimit ?? false)"
-                        :disabled="!USAGE_LIMIT_AUTO_RESUME_ENABLED || sandboxSettings === undefined"
-                        @update:model-value="toggleAutoResume"
-                    />
-                </template>
-            </Row>
-
+            <!-- The two auto-resumes, adjacent because they answer the same question: who restarts a turn that
+                 died through no fault of its own? Both are on by default, and a spent usage limit is the case
+                 deliberately missing from the pair — that allowance is the user's own budget, so it stops the
+                 turn, says when it resets, and leaves the next send to them. The outage row is also offered from
+                 the chat at the moment it would have helped. -->
             <Row
                 icon="refresh"
                 title="Auto-resume after provider outages"

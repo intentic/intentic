@@ -346,12 +346,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         // rate_limit_event or the account's persisted usage windows). Absent when the reset instant is unknown
         // (nothing to schedule against).
         resetsAt: z.number().optional(),
-        // Where the daemon's resume of THIS turn stands — the same two states for a spent allowance and for a
-        // provider outage, because the client's reading of them is the same: "scheduled" = the resume is armed
-        // and this turn comes back by itself; "available" = the daemon remembered the failed turn and turning
-        // the setting on (autoResumeOnLimit / resumeAfterOutage) arms that same resume, which is what the
-        // chat's offer banner hangs off. Absent normally means there is nothing automatic to resume; the
-        // usage-limit feature gate also leaves it absent while preserving the explicit account-switch path.
+        // provider-outage only: where the daemon's resume of THIS turn stands. "scheduled" = the resume is
+        // armed and this turn comes back by itself; "available" = the daemon remembered the failed turn and
+        // turning resumeAfterOutage on arms that same resume, which is what the chat's offer banner hangs off.
+        // Absent means there is nothing automatic to resume — a spent usage limit never has one.
         autoResume: z.enum(["scheduled", "available"]).optional(),
         /* provider-outage only: the shape of the wait. `retryAt` (epoch seconds) is when the next attempt is
          * due — not a fixed cadence, because an outage has no reset instant to aim at and hammering a provider
@@ -362,10 +360,6 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
          * on-by-default retry that gives no account of how long it will keep going is the kind users switch off
          * defensively; one that says "attempt 2 of 6" is one they leave on. */
         outage: z.object({ retryAt: z.number(), attempt: z.number(), maxAttempts: z.number() }).optional(),
-        // rate_limit only: the account whose allowance is spent, as the DAEMON resolved it (the client's own
-        // selection can be empty, which means "the provider's first"). It is what lets the chat offer the
-        // provider's OTHER accounts as a resume-now instead of a wait — see /agent/resume-limit.
-        account: z.string().optional(),
     }),
     z.object({ kind: z.literal("done") }),
 ]);

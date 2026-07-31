@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AccountUsage, AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { fileApprovalsStore } from "../automations/approvals-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
@@ -13,28 +13,21 @@ import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } fro
 import { fileTurnJournal, type JournalledTurn } from "./turn-journal.js";
 import { turnRunOf } from "./turn-runs.js";
 import {
-    accountLimitReset,
     clearPendingResume,
     createTurnResumeScheduler,
-    type LimitHit,
-    pendingLimitHit,
     pendingOutageFailure,
     recordAuthFailure,
-    recordLimitHit,
     recordOutageFailure,
-    RESUME_DELAY_MS,
     resumeInterruptedTurns,
-    resumeTurnOf,
     startConversationTurn,
 } from "./turn-resume.js";
 
-// The scheduler touches settings/push/logger (and accountLimitReset reads accountUsage); the fake stays that
-// small, plus the transcript record every started turn writes its settled frames to (startConversationTurn).
-const fakeServices = (root: string, usage: Record<string, AccountUsage> = {}): Services => {
+// The scheduler touches settings/push/logger; the fake stays that small, plus the transcript record every
+// started turn writes its settled frames to (startConversationTurn).
+const fakeServices = (root: string): Services => {
     const record = fileTranscriptRecord(join(root, "transcripts"));
     return {
         sandboxSettings: fileSandboxSettingsStore(join(root, "settings.json")),
-        accountUsage: { read: async () => usage },
         pushSender: { notifyIfAway: async () => {} },
         logger: { info: () => {}, warn: () => {}, error: () => {} },
         workspace: { root },
@@ -60,15 +53,6 @@ const settle = async (conversationId: string): Promise<void> => {
     await turnRunOf(conversationId)?.waitUntilFinished();
 };
 
-const hit = (conversationId: string, extra: Partial<LimitHit> = {}): LimitHit => ({
-    input: { prompt: "finish the report", conversationId, isolated: true },
-    resetsAt: 1_000,
-    ...extra,
-});
-
-// The instant the scheduler's gate opens for a resetsAt of 1_000 (epoch seconds → ms, plus the fire delay).
-const DUE_AT = 1_000 * 1000 + RESUME_DELAY_MS;
-
 /* startConversationTurn is THE one way a conversation's turn starts, which is why the transcript hangs off it:
  * every provider goes through here, so every provider's conversation is readable afterwards. Run on codex/native
  * on purpose — the pair with no Claude Code session store behind it, whose chats opened blank for exactly as
@@ -88,112 +72,6 @@ test("a started turn records its settled transcript, whatever provider ran it", 
         { role: "user", text: "ship it" },
         { role: "assistant", text: "shipped" },
     ]);
-});
-
-test("resumeTurnOf repeats the original request under the resume note and returns to the failed turn's session", () => {
-    const turn = resumeTurnOf(
-        hit("lr-shape", {
-            sessionId: "s-latest",
-            input: { prompt: "finish the report", conversationId: "lr-shape", sessionId: "s-old", history: [{ role: "user", text: "hi" }] },
-        }),
-    );
-    expect(turn.prompt).toContain("usage limit");
-    expect(turn.prompt).toContain("finish the report");
-    // The stream's latest session wins over the one the client sent, and a resumed session needs no history seed.
-    expect(turn.sessionId).toBe("s-latest");
-    expect(turn.history).toBeUndefined();
-
-    // Re-wrapping a resume that ALSO died on the limit must not stack a second note.
-    const again = resumeTurnOf(hit("lr-shape", { input: { prompt: turn.prompt, conversationId: "lr-shape" } }));
-    expect(again.prompt).toBe(turn.prompt);
-});
-
-test("an account override points the resume at the other allowance, under its own note, session intact", () => {
-    const turn = resumeTurnOf(
-        hit("lr-switch", { sessionId: "s-live", input: { prompt: "finish the report", conversationId: "lr-switch", account: "acct-spent" } }),
-        "acct-b",
-    );
-    // The switch wording, not the reset wording — the model should know it is riding a fresh allowance.
-    expect(turn.prompt).toContain("different account");
-    expect(turn.prompt).toContain("finish the report");
-    expect(turn.account).toBe("acct-b");
-    // Sessions live in the sandbox's store, not the account: the partial work continues under the new credential.
-    expect(turn.sessionId).toBe("s-live");
-
-    // Cross-note dedup: a switched resume that ALSO dies on the limit and then resumes by reset (or vice
-    // versa) must not stack the other road's note on top.
-    const again = resumeTurnOf(hit("lr-switch", { input: { prompt: turn.prompt, conversationId: "lr-switch" } }));
-    expect(again.prompt).toBe(turn.prompt);
-});
-
-test("with no session anywhere, the history seed rides the resume unchanged", () => {
-    const turn = resumeTurnOf(hit("lr-hist", { input: { prompt: "p", conversationId: "lr-hist", history: [{ role: "user", text: "hi" }] } }));
-    expect(turn.sessionId).toBeUndefined();
-    expect(turn.history).toEqual([{ role: "user", text: "hi" }]);
-});
-
-test("a due usage-limit resume cannot fire while the feature is disabled, even with a saved true value", async () => {
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
-    recordLimitHit(hit("lr-fire"), DUE_AT - 1);
-    const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
-
-    // Toggle off: the reset has passed, but nothing may run.
-    await scheduler.tick(DUE_AT);
-    expect(prompts).toEqual([]);
-    expect(pendingLimitHit("lr-fire")).toBeDefined();
-
-    // A manifest from a build where the feature was available may still say true. The shared settings schema
-    // clamps it off, and the scheduler's own kill switch independently prevents a fire.
-    const settings = await services.sandboxSettings.get();
-    await services.sandboxSettings.set({ ...settings, autoResumeOnLimit: true });
-    await scheduler.tick(DUE_AT);
-    expect(prompts).toEqual([]);
-    expect(pendingLimitHit("lr-fire")).toBeDefined();
-    clearPendingResume("lr-fire");
-});
-
-test("a disabled resume whose window has not reopened yet stays pending", async () => {
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
-    recordLimitHit(hit("lr-early"), DUE_AT - RESUME_DELAY_MS);
-    const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
-    await scheduler.tick(DUE_AT - 1);
-    expect(prompts).toEqual([]);
-    expect(pendingLimitHit("lr-early")).toBeDefined();
-    clearPendingResume("lr-early");
-});
-
-test("clearPendingResume supersedes a pending resume — the next turn on the conversation owns it now", () => {
-    recordLimitHit(hit("lr-clear"));
-    clearPendingResume("lr-clear");
-    expect(pendingLimitHit("lr-clear")).toBeUndefined();
-});
-
-test("an offer nobody enabled goes stale after a day and is dropped", async () => {
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
-    recordLimitHit(hit("lr-stale"), DUE_AT - 25 * 60 * 60_000);
-    const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
-    await scheduler.tick(DUE_AT);
-    expect(prompts).toEqual([]);
-    expect(pendingLimitHit("lr-stale")).toBeUndefined();
-});
-
-test("accountLimitReset answers with the fullest pool's reset — the one that refused the turn", async () => {
-    const usage: Record<string, AccountUsage> = {
-        "acct-1": {
-            measuredAt: 1,
-            windows: [
-                { kind: "five_hour", utilization: 40, resetsAt: 2_000 },
-                { kind: "seven_day", utilization: 98, resetsAt: 9_000 },
-            ],
-        },
-    };
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "turn-resume-")), usage);
-    expect(await accountLimitReset(services, "acct-1")).toBe(9_000);
-    expect(await accountLimitReset(services, "acct-unknown")).toBeUndefined();
-    expect(await accountLimitReset(services, undefined)).toBeUndefined();
 });
 
 /* THE AUTH RESUME — the failure a rotation causes and the recovery the user should never have to perform.

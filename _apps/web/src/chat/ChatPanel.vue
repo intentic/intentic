@@ -3,7 +3,7 @@ import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { type AgentCommand, type OauthAccount, providerLabel, USAGE_LIMIT_AUTO_RESUME_ENABLED } from "@intentic/sandbox-contract";
+import { type AgentCommand, providerLabel } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
 import { modeMeta } from "../composables/chat/catalog";
 import { effectiveAccount, effortsFor, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
@@ -147,38 +147,13 @@ const activeAccountReauth = computed(() => {
     return accounts.value.find((entry) => entry.id === id && entry.needsReauth === true);
 });
 
-// The usage-limit banner (Conversation.limitResume): the daemon remembered the turn the limit killed. Automatic
-// firing and its enable action stay behind the shared build gate; "Resume with <account>" remains available
-// because it is an explicit user action on a different allowance, not an unattended retry.
+/* The outage banner (Conversation.outageResume). A spent usage limit gets no equivalent: it has a known reset
+ * instant and nothing anyone can do before it, so the transcript notice naming that instant says everything
+ * there is to say. An outage has no known end, which is why it needs a live banner — its whole job is to answer
+ * "is anything still happening?", which during an outage is the only question anyone has. When auto-resume is
+ * off it is instead the offer to turn it on, which arms the very turn that bounced (the daemon remembered it
+ * either way). */
 const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
-const limitResume = computed(() => active.value.limitResume.value);
-const enableAutoResume = async (): Promise<void> => {
-    const current = sandboxSettings.value;
-    if (!USAGE_LIMIT_AUTO_RESUME_ENABLED || current === undefined) {
-        return;
-    }
-    await saveSandboxSettings.mutateAsync({ ...current, autoResumeOnLimit: true });
-    active.value.armLimitResume();
-};
-// The provider's other accounts — each its own allowance. The spent one is the DAEMON-resolved account off the
-// failure frame (the local selection can be empty, meaning "the provider's first"), and a credential that
-// can't refresh can't serve a resume, so it isn't offered.
-const limitSwitchAccounts = computed<OauthAccount[]>(() => {
-    const pending = limitResume.value;
-    if (pending === undefined) {
-        return [];
-    }
-    const spent = pending.account ?? account.value ?? accounts.value[0]?.id;
-    return accounts.value.filter((entry) => entry.id !== spent && entry.needsReauth !== true);
-});
-const resumeWith = (target: OauthAccount): Promise<void> => active.value.resumeOnAccount(target.id, target.label);
-
-/* The outage banner (Conversation.outageResume). Deliberately NOT the limit banner reused: a limit has a known
- * reset instant and other accounts that can carry the turn now, and an outage has neither — the only honest
- * offers are the wait (with its escalating clock) and, when the user would rather not wait, sending again by
- * hand. Its whole job is to answer "is anything still happening?", which during an outage is the only question
- * anyone has. When auto-resume is off it is instead the offer to turn it on, which arms the very turn that
- * bounced (the daemon remembered it either way). */
 const outageResume = computed(() => active.value.outageResume.value);
 const enableOutageResume = async (): Promise<void> => {
     const current = sandboxSettings.value;
@@ -1083,47 +1058,6 @@ watch(
                                     <span class="font-semibold underline">Reconnect</span></span
                                 >
                             </button>
-                            <!-- Usage-limit banner: surfaced at the moment it would have helped. The daemon remembered
-                         the turn the limit killed; enabling the standing toggle arms that very resume (~1 min after
-                         the limit resets, plus every future one), and each OTHER account of this provider is a
-                         "resume with" that fires the same turn right now on its own allowance. -->
-                            <div
-                                v-if="limitResume"
-                                class="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
-                            >
-                                <Icon name="clock" class="mt-0.5 shrink-0" />
-                                <span class="min-w-0 flex-1"
-                                    >Usage limit reached — resets {{ formatReset(limitResume.resetsAt) }}.
-                                    <template v-if="USAGE_LIMIT_AUTO_RESUME_ENABLED && limitResume.scheduled"
-                                        >Auto-resume is on — this chat continues by itself about a minute after.</template
-                                    >
-                                    <template v-else-if="USAGE_LIMIT_AUTO_RESUME_ENABLED"
-                                        >Auto-resume can continue this chat by itself about a minute after.</template
-                                    >
-                                    <template v-else>Auto-resume is currently unavailable.</template></span
-                                >
-                                <button
-                                    v-for="other in limitSwitchAccounts"
-                                    :key="other.id"
-                                    type="button"
-                                    class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                                    :disabled="streaming"
-                                    v-tooltip.top="'Re-runs the interrupted turn now on this account\'s own allowance; the chat continues on it'"
-                                    @click="resumeWith(other)"
-                                >
-                                    Resume with {{ other.label }}
-                                </button>
-                                <button
-                                    v-if="USAGE_LIMIT_AUTO_RESUME_ENABLED && !limitResume.scheduled"
-                                    type="button"
-                                    class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                                    :disabled="sandboxSettings === undefined || saveSandboxSettings.isPending.value"
-                                    v-tooltip.top="'Also turns on the standing toggle in Sandbox ▸ Agent'"
-                                    @click="enableAutoResume"
-                                >
-                                    Enable auto-resume
-                                </button>
-                            </div>
                             <!-- Provider-outage banner: the turn is coming back on an escalating backoff, and this
                          says when and how many tries are left. Naming the bound is the point — an automation
                          that is on by default has to account for itself, or the reasonable response is to

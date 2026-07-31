@@ -432,7 +432,7 @@ test("a rate_limit assistant error is tagged with a code and a human message, no
             kind: "error",
             code: "rate_limit",
             message:
-                "Claude usage limit reached — this account's allowance is exhausted, not a provider outage. This turn can continue after the limit resets.",
+                "Claude usage limit reached — this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.",
         },
         { kind: "done" },
     ]);

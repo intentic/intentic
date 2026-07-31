@@ -29,7 +29,6 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
         quickModel: "",
         agentRetentionDays: 3,
         autoLand: true,
-        autoResumeOnLimit: false,
         resumeAfterOutage: true,
         autoResumeOnRestart: true,
         gateCommand: "",
@@ -68,9 +67,8 @@ test("an empty object is the full default settings object", () => {
         // On because it is the historical behaviour — defaulting off would silently hold every existing
         // sandbox's finished work on branches nobody is watching.
         autoLand: true,
-        autoResumeOnLimit: false,
-        // On, unlike the limit resume beside it: an outage resume spends nothing the dead turn hadn't already
-        // committed, and the turns it saves are the unattended ones nobody is watching to restart by hand.
+        // On, where a spent usage limit re-runs nothing: an outage resume spends nothing the dead turn hadn't
+        // already committed, and the turns it saves are the unattended ones nobody is watching to restart by hand.
         resumeAfterOutage: true,
         // On: a daemon restart is usually intentic's own doing (an image update, an approved environment
         // change), not the user's decision, so the turn it interrupted resumes rather than staying stuck.
@@ -89,8 +87,4 @@ test("a key of the wrong type is still a parse failure — tolerance is for abse
     expect(SandboxSettingsSchema.safeParse({ outputHoldout: 4 }).success).toBe(false);
     // The prompt cap is a real bound, not advice: the text IS the system prompt, and every turn pays for it.
     expect(SandboxSettingsSchema.safeParse({ systemPrompt: "x".repeat(20001) }).success).toBe(false);
-});
-
-test("usage-limit auto-resume stays off while the feature is disabled, including for an older saved true value", () => {
-    expect(SandboxSettingsSchema.parse({ autoResumeOnLimit: true }).autoResumeOnLimit).toBe(false);
 });

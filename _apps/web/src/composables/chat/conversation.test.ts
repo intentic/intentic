@@ -1013,54 +1013,28 @@ describe(`Conversation`, () => {
         expect(conversation.status.value).not.toBe(`error`);
     });
 
-    it(`does not trust a stale daemon that says usage-limit auto-resume is scheduled while the feature is disabled`, async () => {
+    /* A spent allowance names its reset instant and stops there. Nothing re-runs the turn and nothing is armed:
+     * the allowance is the user's own budget, so the next send is theirs to make. A daemon old enough to still
+     * send an `autoResume` verdict on a rate_limit frame changes none of that. */
+    it(`names the reset instant on a usage limit and arms nothing`, async () => {
         const conversation = new Conversation(`c1`);
-        // A stale daemon may still send the scheduled state from the older implementation.
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
             sseResponse([
-                {
-                    kind: `error`,
-                    code: `rate_limit`,
-                    message: `Claude usage limit reached.`,
-                    resetsAt,
-                    autoResume: `scheduled`,
-                    account: `acct-spent`,
-                },
+                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `scheduled` },
                 { kind: `done` },
             ]),
         );
         await conversation.send(`hello`, settings);
 
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
-        expect(conversation.messages.value.at(-1)!.text).not.toContain(`Auto-resume is on`);
-        // Keep the explicit account-switch offer, but downgrade the stale schedule to a stopped turn.
-        expect(conversation.limitResume.value).toEqual({ resetsAt, scheduled: false, account: `acct-spent` });
+        const notice = conversation.messages.value.at(-1)!;
+        expect(notice.role).toBe(`notice`);
+        expect(notice.text).toContain(`Resets`);
+        expect(notice.text).not.toContain(`Auto-resume`);
+        // No offer banner and no opt-out: there is no automation here to describe or to regret.
+        expect(notice.noticeAction).toBeUndefined();
+        expect(conversation.outageResume.value).toBeUndefined();
         expect(conversation.error.value).toBeNull();
-    });
-
-    it(`keeps a remembered usage-limit turn stopped when auto-resume is unavailable`, async () => {
-        const conversation = new Conversation(`c1`);
-        const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
-                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `available` },
-                { kind: `done` },
-            ]),
-        );
-        await conversation.send(`hello`, settings);
-
-        // The offer banner's state, alongside the usual muted notice. No account on the frame (an older daemon,
-        // or a failure the daemon could not attribute) still yields the offer — the banner then falls back to
-        // the local selection to name the spent allowance.
-        expect(conversation.limitResume.value).toEqual({ resetsAt, scheduled: false, account: undefined });
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
-        expect(conversation.error.value).toBeNull();
-
-        // Even a programmatic call cannot arm the dormant scheduler path.
-        conversation.armLimitResume();
-        expect(conversation.limitResume.value).toEqual({ resetsAt, scheduled: false, account: undefined });
-        expect(conversation.messages.value.at(-1)!.text).not.toContain(`Auto-resume enabled`);
     });
 
     /* A PROVIDER OUTAGE, which reads like a limit hit and behaves nothing like one: no reset instant to aim at,
@@ -1155,62 +1129,6 @@ describe(`Conversation`, () => {
         expect(conversation.providerRetry.value).toBeUndefined();
         expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`retry`))).toBe(false);
         expect(conversation.error.value).toBeNull();
-    });
-
-    it(`resumeOnAccount fires the pending resume on the picked account and moves the chat onto it`, async () => {
-        const conversation = new Conversation(`c1`);
-        const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
-                {
-                    kind: `error`,
-                    code: `rate_limit`,
-                    message: `Claude usage limit reached.`,
-                    resetsAt,
-                    autoResume: `available`,
-                    account: `acct-spent`,
-                },
-                { kind: `done` },
-            ]),
-        );
-        await conversation.send(`hello`, settings);
-        expect(conversation.limitResume.value).toBeDefined();
-
-        // The daemon acks the resume-now and the re-attach then renders the resumed run.
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
-        await conversation.resumeOnAccount(`acct-b`, `Work`);
-
-        const posted = sandboxRequestMock.mock.calls.find(([path]) => path === `/agent/resume-limit`);
-        expect(JSON.parse(posted![1]!.body as string)).toEqual({ conversationId: `c1`, account: `acct-b` });
-        // The offer retired, the chat moved onto the account it resumed on, and the transcript says so.
-        expect(conversation.limitResume.value).toBeUndefined();
-        expect(conversation.account.value).toBe(`acct-b`);
-        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`Work`))).toBe(true);
-        // The un-awaited re-attach streams the resumed answer into this window.
-        await vi.waitFor(() => expect(conversation.messages.value.some((message) => message.text.includes(`carrying on`))).toBe(true));
-    });
-
-    it(`resumeOnAccount retires the offer honestly when nothing is pending daemon-side`, async () => {
-        const conversation = new Conversation(`c1`);
-        const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
-                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `available` },
-                { kind: `done` },
-            ]),
-        );
-        await conversation.send(`hello`, settings);
-
-        // NOT_FOUND: a fresh turn superseded the failure, or the daemon restarted and forgot the entry.
-        sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: false } as Response));
-        const before = conversation.account.value;
-        await conversation.resumeOnAccount(`acct-b`, `Work`);
-
-        expect(conversation.limitResume.value).toBeUndefined();
-        // No move onto the picked account — nothing resumed there.
-        expect(conversation.account.value).toBe(before);
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
-        expect(conversation.messages.value.at(-1)!.text).toContain(`no longer held`);
     });
 
     it(`stores an account_usage frame against its account, stamped so staleness is comparable`, async () => {

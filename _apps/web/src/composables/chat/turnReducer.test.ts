@@ -332,8 +332,8 @@ describe(`effects`, () => {
     });
 
     it(`offers "keep future work on the branch" on the landed notice, and only there`, () => {
-        // The moment the auto-land just fired is when "stop doing that" is worth one press — the
-        // autoResumeOnLimit pattern. A held or conflicted outcome has nothing to regret, so no offer.
+        // The moment the auto-land just fired is when "stop doing that" is worth one press — the same
+        // pattern as the outage banner's opt-out. A held or conflicted outcome has nothing to regret, so no offer.
         const landed = run(started(), { kind: `landed`, landed: true });
         expect(landed.state.messages.at(-1)).toMatchObject({ role: `notice`, noticeAction: `landHold` });
         const conflicted = run(started(), { kind: `landed`, landed: false, conflicts: [] });

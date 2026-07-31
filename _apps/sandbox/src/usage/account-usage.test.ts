@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { fileAccountUsageStore } from "./account-usage.js";
+import { accountLimitReset, fileAccountUsageStore } from "./account-usage.js";
 
 // A store over a fresh temp path whose parent dir doesn't exist yet — the store must create it on write.
 const tempStore = () => {
@@ -85,4 +85,15 @@ test("a half-written or foreign file degrades to empty instead of throwing", asy
     await store.record("acct-1", snapshot());
     await writeFile(path, "{ not json");
     expect(await fileAccountUsageStore(path).read()).toEqual({});
+});
+
+test("accountLimitReset answers with the fullest pool's reset — the one that refused the turn", async () => {
+    const { store } = tempStore();
+    await store.record("acct-1", {
+        measuredAt: Date.now(),
+        windows: [window({ utilization: 40, resetsAt: inAnHour() }), window({ kind: "seven_day", utilization: 98, resetsAt: inAnHour() + 900 })],
+    });
+    expect(await accountLimitReset(store, "acct-1")).toBe(inAnHour() + 900);
+    expect(await accountLimitReset(store, "acct-unknown")).toBeUndefined();
+    expect(await accountLimitReset(store, undefined)).toBeUndefined();
 });

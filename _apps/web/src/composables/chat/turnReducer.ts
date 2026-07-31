@@ -68,16 +68,14 @@ export type TurnEffect =
     | { readonly kind: "surfaceBrowser"; readonly session: string }
     // A turn-level failure. Wording and severity are the caller's: several codes need state this module has no
     // business reading (the account's usage windows, the provider's account list) to phrase themselves.
-    // rate_limit failures also carry the daemon's resume verdict: when the spent window reopens, whether an
-    // auto-resume is scheduled ("scheduled") or merely on offer behind the setting ("available"), and which
-    // account's allowance is the spent one (so the offer can name the provider's OTHER accounts).
+    // rate_limit failures carry when the spent window reopens; provider-outage failures carry the daemon's
+    // resume verdict — armed ("scheduled") or merely on offer behind the setting ("available").
     | {
           readonly kind: "error";
           readonly message: string;
           readonly code: Extract<AgentEvent, { kind: "error" }>["code"];
           readonly resetsAt: number | undefined;
           readonly autoResume: Extract<AgentEvent, { kind: "error" }>["autoResume"];
-          readonly account: string | undefined;
           // provider-outage only: when the next attempt is due and how many are left — see events.ts.
           readonly outage: Extract<AgentEvent, { kind: "error" }>["outage"];
       }
@@ -407,8 +405,8 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                           )
                               .map((conflict) => conflict.repo)
                               .join(`, `)}. Open the agent's review to see what blocked them and land from there.`,
-                    // The moment-of-regret offer, on the LANDED notice only (the autoResumeOnLimit pattern —
-                    // ChatPanel's limit banner): the automatic behaviour just fired, and "stop doing that" is
+                    // The moment-of-regret offer, on the LANDED notice only (the same pattern as ChatPanel's
+                    // outage banner): the automatic behaviour just fired, and "stop doing that" is
                     // worth one press exactly now. The renderer hides it once the agent already holds.
                     event.landed ? `landHold` : undefined,
                 ),
@@ -444,7 +442,6 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 code: event.code,
                 resetsAt: event.resetsAt,
                 autoResume: event.autoResume,
-                account: event.account,
                 outage: event.outage,
             });
         case `provider_retry`:

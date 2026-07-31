@@ -591,8 +591,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                      * argument for switching the automation off.
                      *
                      * Keyed on the frame's own verdict rather than on the code, so it covers every condition that
-                     * resumes itself: a spent allowance waiting on its reset reads the same way. "available" is
-                     * NOT covered — nothing is armed, so the failure stands until the user arms it. */
+                     * resumes itself. "available" is NOT covered — nothing is armed, so the failure stands until
+                     * the user arms it. */
                     if (event.autoResume === "scheduled") {
                         return;
                     }

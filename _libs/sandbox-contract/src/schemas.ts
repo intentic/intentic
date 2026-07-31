@@ -496,12 +496,6 @@ export const SteerSchema = z
 // True cancel for the conversation's in-flight turn — aborts the agent daemon-side, unlike closing the
 // /agent fetch (which sends no cancel frame).
 export const StopTurnSchema = z.object({ conversationId: z.string().min(1) });
-// Fire the conversation's remembered usage-limit resume NOW instead of waiting out the reset. `account`
-// points the re-run at a different connected account of the same provider — the "resume on another account"
-// action a spent allowance offers when the sandbox holds more than one; omitted, the turn re-runs on
-// whatever served it (a plain "try again now"). NOT_FOUND when nothing is pending (the failure was already
-// superseded by a fresh turn, or the daemon restarted).
-export const ResumeLimitSchema = z.object({ conversationId: z.string().min(1), account: z.string().min(1).optional() });
 
 // ---- claude rate-limit gate ----
 // The GATE signal: whether the provider is letting turns through right now, and — when it is refusing — which
@@ -685,11 +679,6 @@ export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"
 // surface fail to parse the moment a toggle is added — which reaches the user as a page of switches that are
 // silently dead, not as an error. It also means an older on-disk manifest keeps the owner's other picks rather
 // than being discarded whole.
-// Build-wide kill switch for usage-limit auto-resume. Keep the setting and implementation in place while the
-// feature is disabled, but clamp every daemon response and settings write to OFF so a persisted `true` from an
-// older build cannot keep spending a newly reset allowance. The web also reads this constant to render the
-// control unavailable and to distrust a stale daemon that still reports a scheduled resume.
-export const USAGE_LIMIT_AUTO_RESUME_ENABLED: boolean = false;
 
 export const SandboxSettingsSchema = z.object({
     stableSystemPrompt: z.boolean().default(false),
@@ -762,18 +751,12 @@ export const SandboxSettingsSchema = z.object({
      * automation-opened agents (Discord, webhooks, email) finish turns with no browser in the room — a
      * browser-held preference could not govern them. Per-agent override: AgentSummarySchema.autoLand. */
     autoLand: z.boolean().default(true),
-    // Latent opt-in for re-running a turn after the Claude subscription's usage window resets. It defaults off
-    // because an unattended retry spends the fresh allowance without the user in the room, and the build-wide
-    // gate above currently clamps even an older saved opt-in off while the feature is unavailable.
-    autoResumeOnLimit: z
-        .boolean()
-        .default(false)
-        .overwrite((enabled) => USAGE_LIMIT_AUTO_RESUME_ENABLED && enabled),
     /* When a turn dies because the MODEL PROVIDER was failing (500/502/503, a 529 at capacity, a dropped
      * socket), re-run it on an escalating backoff until it goes through or the attempts are spent.
      *
-     * Defaults ON, unlike autoResumeOnLimit, and the difference is not an inconsistency: a spent allowance is
-     * the user's own budget, and resuming into a fresh window spends something they may have been saving. An
+     * Defaults ON, and a spent Claude allowance is the counter-example that explains why: that one is the
+     * user's own budget, and resuming into a freshly reset window spends something they may have been saving —
+     * so a usage limit stops the turn and says when it resets, and nothing re-runs it. An
      * outage resume spends nothing the dead turn had not already committed, resolves in minutes rather than
      * hours, and — the deciding argument — the turns hurt worst by it are the ones with nobody in the room
      * (automation wakes, Discord, webhooks), which no browser-held preference could ever rescue. It is the same
@@ -781,8 +764,8 @@ export const SandboxSettingsSchema = z.object({
     resumeAfterOutage: z.boolean().default(true),
     /* When the daemon dies under a running turn, re-run that turn once it is back (agent/turn-journal.ts records
      * every in-flight turn; the boot pass in agent/turn-resume.ts re-runs what survived). ON by default, where
-     * autoResumeOnLimit is off, and the difference is who broke the turn: a spent allowance is the user's own
-     * budget, while a restart is usually intentic's OWN doing — the container is recreated on every update,
+     * a spent usage limit re-runs nothing, and the difference is who broke the turn: a spent allowance is the
+     * user's own budget, while a restart is usually intentic's OWN doing — the container is recreated on every update,
      * every environment approval and every dev-sandbox.sh swap. Approving the Dockerfile change an agent asked
      * for must not cost the run that asked for it, and a user who just clicked Approve is in the room expecting
      * the work to continue, not a second button.
@@ -813,7 +796,7 @@ export const SandboxSettingsSchema = z.object({
     // gate exists to prevent is a green light nobody earned.
     gateTimeoutMs: z.number().min(60_000).max(3_600_000).default(900_000),
     /* Wake a fixer automatically when the gate goes red, instead of only lighting the badge. ON with a
-     * configured command, unlike the other unattended-spend toggles (autoResumeOnLimit), and the difference is
+     * configured command, and the difference from the unattended spend a usage limit refuses is
      * that the spend here is the POINT: a red gate whose fix waits for the user to notice has moved the CI
      * round-trip into the workspace without removing it from the user's day. One attempt per verdict, so a
      * command that fails for a reason no agent can fix costs one turn, not a loop (gate/gate.ts). */

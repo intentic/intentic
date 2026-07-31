@@ -41,7 +41,7 @@ const JournalledTurnSchema = z.object({
     ...inFlightSince,
     kind: z.literal("turn"),
     // The turn as the client sent it, re-resolved at resume time (fresh credentials, fresh worktree state) —
-    // nothing perishable is snapshotted here, the same contract turn-resume's LimitHit keeps. Intersected
+    // nothing perishable is snapshotted here, the same contract turn-resume's in-memory failures keep. Intersected
     // rather than extended: AgentTurnSchema carries the refinements that make a turn coherent (a prompt or
     // attachments, history XOR sessionId), and the journal has no business accepting a turn that would be
     // refused at the route — it would only fail again on resume.
