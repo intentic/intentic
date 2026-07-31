@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { type AgentProvider, type KeyedProvider, type OauthAccount, type TranslatorAccount, providerLabel } from "@intentic/sandbox-contract";
+import {
+    type AccountUsage,
+    type AgentProvider,
+    type KeyedProvider,
+    type OauthAccount,
+    type TranslatorAccount,
+    providerLabel,
+} from "@intentic/sandbox-contract";
 import { cmp, formatTokens, InfoHint, Row, RowGroup } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -8,7 +15,7 @@ import { providerReady } from "../../composables/chat/access";
 import { relativeTime } from "../../composables/chat/catalog";
 import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
-import { usageDetail, usagePercent, usageStatusByAccount, usageTone } from "../../composables/chat/usageStatus";
+import { isSpent, liveUsage, type UsageRing, usageRing } from "../../composables/chat/usageStatus";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
@@ -161,56 +168,57 @@ const usageLine = (id: string): string | undefined => {
 };
 
 /* --- Usage ring per account ---------------------------------------------------------------------------------
- * Plan-limit utilization from the account's subscription snapshot, surfaced as a ProgressRing on the connection
- * row. Same data the chat composer chip reads (usageStatusByAccount) — the ring here answers at a glance which
- * accounts still have headroom and which are spent, without opening the Usage tab.
+ * Plan-limit utilization surfaced as a ProgressRing on the connection row, so this list answers at a glance
+ * which accounts still have headroom and which are spent without a trip to the Usage tab.
  *
- * The chat composer's `usagePercent` returns undefined when all limit windows have reset (empty array). That is
- * the right answer there — a stale reading should not pin a chip. But on this manage page a reset account IS at
- * 0%, not unmeasured: it was measured at some point, every window reopened, and saying "we don't know" is less
- * useful than saying "you have room". So the ring treats empty-windows-but-measured as 0%. */
-const accountRing = (account: OauthAccount | TranslatorAccount): { percent: number; tone: string; tooltip: string } | undefined => {
-    const key = "id" in account ? account.id : account.name;
-    const usage = usageStatusByAccount.value[key] ?? ("usage" in account ? account.usage : undefined);
-    if (usage === undefined) {
-        return undefined;
-    }
-    // usagePercent returns undefined when windows is empty (all pools reset) — treat as 0% here.
-    const percent = usagePercent(usage) ?? 0;
-    return { percent, tone: usageTone(percent), tooltip: usageDetail(usage) };
-};
+ * ONE path for every provider, because by the time a row reaches this component the difference between a native
+ * account and a routed subscription is already gone: the daemon puts the same `usage` on both (see
+ * AccountUsageSchema), whether it read it from a Claude turn's stream or pulled it from the translator. What a
+ * ring MEANS lives in usageStatus.ts with the composer's — the threshold, the tone and the merge with a live
+ * turn's frame are shared, not re-decided here.
+ *
+ * Rows are decorated ONCE rather than per binding: three ring props off three separate calls per row (plus a
+ * fourth for the dimming) recomputed the same snapshot four times per render, and that duplication is exactly
+ * what let the ring and the row's own dimming disagree about which accounts were spent. */
 
-// An account whose binding pool is ≥90% full — effectively spent.
-const isExhausted = (account: OauthAccount | TranslatorAccount): boolean => {
-    const key = "id" in account ? account.id : account.name;
-    const usage = usageStatusByAccount.value[key] ?? ("usage" in account ? account.usage : undefined);
-    const percent = usagePercent(usage);
-    return percent !== undefined && percent >= 90;
-};
+// A row ready to render: the account, its ring, and whether it is effectively spent.
+interface AccountRow<T> {
+    account: T;
+    ring: UsageRing | undefined;
+    exhausted: boolean;
+}
 
-/* --- Sorted accounts (active first, exhausted last) ----------------------------------------------------------
- * When a provider holds many accounts the list is only useful if the ones with headroom are at the top. Accounts
- * without usage data are considered active (unknown ≠ exhausted). Within each group the original order holds. */
-const sortedAccounts = computed<readonly OauthAccount[]>(() => {
-    const active: OauthAccount[] = [];
-    const spent: OauthAccount[] = [];
-    for (const account of managedAccounts.value) {
-        (isExhausted(account) ? spent : active).push(account);
+/* Decorate and sort in one pass. When a provider holds dozens of accounts the list is only useful if the ones
+ * with headroom are at the top; an account with no reading counts as active, because unknown ≠ exhausted.
+ * Within each group the daemon's order holds. */
+const rowsOf = <T,>(accounts: readonly T[], keyOf: (account: T) => string, usageOf: (account: T) => AccountUsage | undefined): AccountRow<T>[] => {
+    const active: AccountRow<T>[] = [];
+    const spent: AccountRow<T>[] = [];
+    for (const account of accounts) {
+        const usage = liveUsage(keyOf(account), usageOf(account));
+        const row = { account, ring: usageRing(usage), exhausted: isSpent(usage) };
+        (row.exhausted ? spent : active).push(row);
     }
     return [...active, ...spent];
-});
+};
 
-const sortedTranslatorAccounts = computed<readonly TranslatorAccount[]>(() => {
-    if (routedProvider.value === undefined) {
-        return [];
-    }
-    const active: TranslatorAccount[] = [];
-    const spent: TranslatorAccount[] = [];
-    for (const account of translatorAccounts.value[routedProvider.value]) {
-        (isExhausted(account) ? spent : active).push(account);
-    }
-    return [...active, ...spent];
-});
+const accountRows = computed<readonly AccountRow<OauthAccount>[]>(() =>
+    rowsOf(
+        managedAccounts.value,
+        (account) => account.id,
+        (account) => account.usage,
+    ),
+);
+
+const translatorRows = computed<readonly AccountRow<TranslatorAccount>[]>(() =>
+    routedProvider.value === undefined
+        ? []
+        : rowsOf(
+              translatorAccounts.value[routedProvider.value],
+              (account) => account.name,
+              (account) => account.usage,
+          ),
+);
 
 /* --- Collapsing long lists -----------------------------------------------------------------------------------
  * Five accounts fit comfortably; beyond that the card becomes a scroll trap that pushes the rest of the Agent
@@ -221,21 +229,18 @@ const VISIBLE_WHEN_COLLAPSED = 3;
 const expanded = ref(false);
 
 // The count of ALL visible accounts, both native and routed — the metric that decides whether collapsing fires.
-const totalAccountCount = computed(() => {
-    const routed = routedProvider.value !== undefined ? translatorAccounts.value[routedProvider.value].length : 0;
-    return sortedAccounts.value.length + routed;
-});
+const totalAccountCount = computed(() => accountRows.value.length + translatorRows.value.length);
 const shouldCollapse = computed(() => totalAccountCount.value > COLLAPSE_THRESHOLD);
 const collapsedCount = computed(() => totalAccountCount.value - VISIBLE_WHEN_COLLAPSED);
 
 // How many native accounts to show when collapsed: the first VISIBLE_WHEN_COLLAPSED, unless routed rows exist
 // and would push the total above VISIBLE_WHEN_COLLAPSED — then native gets fewer to make room for at least one
 // routed row. When expanded, all of them.
-const visibleNativeAccounts = computed<readonly OauthAccount[]>(() => {
+const visibleNativeAccounts = computed<readonly AccountRow<OauthAccount>[]>(() => {
     if (!shouldCollapse.value || expanded.value) {
-        return sortedAccounts.value;
+        return accountRows.value;
     }
-    return sortedAccounts.value.slice(0, VISIBLE_WHEN_COLLAPSED);
+    return accountRows.value.slice(0, VISIBLE_WHEN_COLLAPSED);
 });
 
 // How many routed accounts to show when collapsed: fill the remaining slots after native accounts.
@@ -381,7 +386,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                  none — the subscription row below IS their connection — so they skip straight to it. -->
             <template v-if="hasNativeAccounts">
                 <ConnectionRow
-                    v-for="account in visibleNativeAccounts"
+                    v-for="{ account, ring, exhausted } in visibleNativeAccounts"
                     :key="account.id"
                     :title="account.label"
                     :state="account.needsReauth ? `reauth` : `connected`"
@@ -389,10 +394,10 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :note="identityNote(account)"
                     :description="account.needsReauth ? (account.detail ?? `Signed out — reconnect to keep using it.`) : usageLine(account.id)"
                     :renamable="renamable"
-                    :usage-percent="accountRing(account)?.percent"
-                    :usage-tone="accountRing(account)?.tone"
-                    :usage-tooltip="accountRing(account)?.tooltip"
-                    :exhausted="isExhausted(account)"
+                    :usage-percent="ring?.percent"
+                    :usage-tone="ring?.tone"
+                    :usage-tooltip="ring?.tooltip"
+                    :exhausted="exhausted"
                     @rename="(label: string) => renameAccount(account.id, label)"
                 >
                     <template #control>
@@ -420,7 +425,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                      that changes as the sign-in runs — Connect, then Connect spinning, then Cancel — so the
                      handshake never arrives as a control the user didn't press anything to get. -->
                 <ConnectionRow
-                    v-if="sortedAccounts.length === 0"
+                    v-if="accountRows.length === 0"
                     :title="`${managedLabel} account`"
                     state="missing"
                     :note="nativeFlowLive ? `signing in…` : `not connected`"
@@ -463,17 +468,17 @@ onUnmounted(() => clearTimeout(ringTimer));
                  asks for the landing URL back. Either way the shared poll lands the new account's row. -->
             <template v-if="routedProvider">
                 <ConnectionRow
-                    v-for="account in sortedTranslatorAccounts.slice(0, visibleRoutedLimit)"
+                    v-for="{ account, ring, exhausted } in translatorRows.slice(0, visibleRoutedLimit)"
                     :key="account.name"
                     :title="ROUTED_ROW[routedProvider].title"
                     state="connected"
                     :note="account.label"
                     :description="ROUTED_ROW[routedProvider].hint"
                     :about="ROUTED_ROW[routedProvider].about"
-                    :usage-percent="accountRing(account)?.percent"
-                    :usage-tone="accountRing(account)?.tone"
-                    :usage-tooltip="accountRing(account)?.tooltip"
-                    :exhausted="isExhausted(account)"
+                    :usage-percent="ring?.percent"
+                    :usage-tone="ring?.tone"
+                    :usage-tooltip="ring?.tooltip"
+                    :exhausted="exhausted"
                 >
                     <template #control>
                         <Button

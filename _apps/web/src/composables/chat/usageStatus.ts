@@ -29,7 +29,11 @@ const WINDOW_NAMES: Record<string, string> = {
 };
 
 export const usageWindowLabel = (window: UsageWindow): string =>
-    window.label !== undefined ? `Weekly · ${window.label}` : (WINDOW_NAMES[window.kind] ?? window.kind);
+    window.label !== undefined
+        ? window.kind.startsWith(`model:`)
+            ? `Weekly · ${window.label}`
+            : window.label
+        : (WINDOW_NAMES[window.kind] ?? window.kind);
 
 // Display order: the window that bites soonest first, then the broad weekly pool, then the per-model ones, then
 // anything the provider has added since. Stable across accounts so rows line up when several are listed.
@@ -60,7 +64,51 @@ export const usagePercent = (usage: AccountUsage | undefined): number | undefine
 
 /* Severity, shared by every surface that draws one of these numbers, so a percentage never means one thing in
  * the composer and another on the Usage tab. Danger is reserved for a pool that is effectively spent. */
-export const usageTone = (percent: number): string => (percent >= 90 ? `text-danger` : percent >= 75 ? `text-warning` : `text-link`);
+export const usageTone = (percent: number): string => (percent >= SPENT_PERCENT ? `text-danger` : percent >= 75 ? `text-warning` : `text-link`);
+
+/* Where "effectively spent" is defined, once. The account list dims a spent row and sinks it below the ones
+ * with headroom, and the ring above it turns red — three decisions that have to agree, and did not while each
+ * surface carried its own 90. */
+export const SPENT_PERCENT = 90;
+export const isSpent = (usage: AccountUsage | undefined): boolean => {
+    const percent = usagePercent(usage);
+    return percent !== undefined && percent >= SPENT_PERCENT;
+};
+
+/* The freshest reading for an account, given what the server attached to its row. Both sources are the same
+ * AccountUsage; they differ only in how they arrive. The daemon's rides the accounts list (any provider — a
+ * Claude snapshot it persisted, a routed subscription's quota it pulled), while the streamed one is pushed by a
+ * turn ending in THIS tab, which no list fetched a moment earlier can know about. Newer `measuredAt` wins,
+ * which for every provider but Claude simply means the daemon's. */
+export const liveUsage = (account: string, attached: AccountUsage | undefined): AccountUsage | undefined => {
+    const streamed = usageStatusByAccount.value[account];
+    if (streamed === undefined || attached === undefined) {
+        return streamed ?? attached;
+    }
+    return streamed.measuredAt >= attached.measuredAt ? streamed : attached;
+};
+
+export interface UsageRing {
+    percent: number;
+    tone: string;
+    tooltip: string;
+}
+
+/* An account's headroom as a ring: the one number, its severity, and the full per-pool breakdown behind it.
+ * Undefined only when there is NO reading — that is the state the connection row answers with a plain dot, and
+ * it must stay distinguishable from a measured 0%.
+ *
+ * The `?? 0` is the one deliberate difference from the composer chip. `usagePercent` returns undefined when
+ * every window has reset (an empty array), which is right for a chip that should not be pinned by a stale
+ * reading — but wrong for an account row, where a reset account IS at 0%: it was measured, its pools reopened,
+ * and "you have room" beats "we don't know". */
+export const usageRing = (usage: AccountUsage | undefined): UsageRing | undefined => {
+    if (usage === undefined) {
+        return undefined;
+    }
+    const percent = usagePercent(usage) ?? 0;
+    return { percent, tone: usageTone(percent), tooltip: usageDetail(usage) };
+};
 
 // Format an epoch-seconds reset instant as a short local weekday + time (e.g. "Mon 3:20 PM") — unambiguous for
 // both the 5-hour and weekly windows without a ticking relative clock.

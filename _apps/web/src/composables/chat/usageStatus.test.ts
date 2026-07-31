@@ -6,10 +6,14 @@ import {
     formatReset,
     formatUtilization,
     formatWait,
+    isSpent,
     isStale,
+    liveUsage,
     orderedWindows,
     usageDetail,
     usagePercent,
+    usageRing,
+    usageStatusByAccount,
     usageWindowLabel,
 } from "./usageStatus";
 
@@ -26,6 +30,10 @@ describe(`usageWindowLabel`, () => {
 
     it(`prefers the provider's own name for a per-model pool`, () => {
         expect(usageWindowLabel(window({ kind: `model:Fable`, label: `Fable` }))).toBe(`Weekly · Fable`);
+    });
+
+    it(`uses a non-Claude provider's complete label without incorrectly calling it weekly`, () => {
+        expect(usageWindowLabel(window({ kind: `google:pro-five-hour`, label: `Gemini Pro · 5-hour` }))).toBe(`Gemini Pro · 5-hour`);
     });
 
     it(`shows an unrecognised pool under its raw key rather than folding it into a neighbour`, () => {
@@ -142,5 +150,87 @@ describe(`formatWait`, () => {
 
     it(`never counts backwards past zero — a due-but-unfired retry reads as imminent, not overdue`, () => {
         expect(formatWait(now / 1000 - 60, now)).toBe(`about 5s`);
+    });
+});
+
+/* The account row's ring. Every provider reaches this the same way — the daemon attaches the same AccountUsage
+ * to a native account and to a routed subscription alike — so what is pinned here is the meaning of the ring
+ * itself, which the Agent tab, the picker and the composer all have to agree on. */
+describe(`usageRing`, () => {
+    it(`renders no ring at all for an account nobody has measured`, () => {
+        // The state the row answers with a plain dot. It must stay distinguishable from a measured 0%, which is
+        // what a green "0%" ring over an unread account would destroy.
+        expect(usageRing(undefined)).toBeUndefined();
+    });
+
+    it(`reads a spent account as a full red ring rather than a healthy dot`, () => {
+        // The exact shape a used-up Google or ChatGPT subscription arrives in — the bug this feature exists for.
+        const ring = usageRing(usage({ windows: [window({ kind: `google:weekly`, utilization: 100 })] }));
+        expect(ring?.percent).toBe(100);
+        expect(ring?.tone).toBe(`text-danger`);
+    });
+
+    it(`treats a fully reset account as 0%, not as unknown`, () => {
+        // usagePercent alone answers undefined here (no live windows). On an account row that is the wrong
+        // answer: the account was measured and every pool reopened, so it has room rather than no reading.
+        const ring = usageRing(usage({ windows: [] }));
+        expect(ring?.percent).toBe(0);
+        expect(ring?.tone).toBe(`text-link`);
+    });
+
+    it(`shows the pool that bites first, not whichever the provider listed first`, () => {
+        const ring = usageRing(
+            usage({ windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 91 })] }),
+        );
+        expect(ring?.percent).toBe(91);
+        expect(ring?.tooltip).toContain(`5-hour session`);
+        expect(ring?.tooltip).toContain(`Weekly · all models`);
+    });
+});
+
+// One definition of "spent", because three surfaces act on it: the ring turns red, the row dims, and the list
+// sinks the account below the ones with headroom. They disagreed while each carried its own threshold.
+describe(`isSpent`, () => {
+    it(`is false for an account with no reading — unknown is not exhausted`, () => {
+        expect(isSpent(undefined)).toBe(false);
+    });
+
+    it(`agrees with the ring's own danger tone at the boundary`, () => {
+        const at = usage({ windows: [window({ utilization: 90 })] });
+        const below = usage({ windows: [window({ utilization: 89 })] });
+        expect([isSpent(at), usageRing(at)?.tone]).toEqual([true, `text-danger`]);
+        expect([isSpent(below), usageRing(below)?.tone]).toEqual([false, `text-warning`]);
+    });
+});
+
+/* Which of the two readings an account row draws. The daemon's rides the accounts list for every provider; the
+ * streamed one is pushed by a turn ending in this tab and only ever exists for Claude. Newer measurement wins,
+ * so a routed subscription simply keeps the daemon's. */
+describe(`liveUsage`, () => {
+    it(`keeps the daemon's reading when nothing has streamed for that account`, () => {
+        const attached = usage({ measuredAt: 500 });
+        expect(liveUsage(`gemini-account`, attached)).toBe(attached);
+    });
+
+    it(`prefers a turn's fresher frame over the list it was fetched alongside`, () => {
+        const streamed = usage({ measuredAt: 900 });
+        usageStatusByAccount.value = { "claude-1": streamed };
+        // toEqual, not toBe: the shared store is a Vue ref, so what comes back is its reactive proxy.
+        expect(liveUsage(`claude-1`, usage({ measuredAt: 500 }))).toEqual(streamed);
+        usageStatusByAccount.value = {};
+    });
+
+    it(`does not let a stale frame overwrite a newer reading from the daemon`, () => {
+        const attached = usage({ measuredAt: 900 });
+        usageStatusByAccount.value = { "claude-1": usage({ measuredAt: 500 }) };
+        expect(liveUsage(`claude-1`, attached)).toBe(attached);
+        usageStatusByAccount.value = {};
+    });
+
+    it(`falls back to a streamed frame for an account the list carried no reading for`, () => {
+        const streamed = usage({ measuredAt: 100 });
+        usageStatusByAccount.value = { "claude-1": streamed };
+        expect(liveUsage(`claude-1`, undefined)).toEqual(streamed);
+        usageStatusByAccount.value = {};
     });
 });

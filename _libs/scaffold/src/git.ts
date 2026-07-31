@@ -89,7 +89,14 @@ export const gitCommitAll = async (
     if ((await git(dir, ["diff", "--cached", "--name-only", "-z"])).stdout === "") {
         return false;
     }
-    await git(dir, ["-c", `user.name=${author.name}`, "-c", `user.email=${author.email}`, "commit", "-m", message]);
+    /* `--no-verify` because this commit is PROVENANCE, not authorship: it preserves an agent's worktree state on
+     * its own branch so a land has something to take a delta from, and its message is machine-written from the
+     * agent's title. A repo whose commit-msg hook enforces Conventional Commits (this one's does) rejected every
+     * such message that didn't happen to parse — and since the hook's exit code propagates out of `git commit`,
+     * that refusal surfaced as a 500 from /agents/{id}/land with the real reason buried in the daemon log. The
+     * user's commit policy governs the user's commits; it cannot be allowed to make an agent's work unlandable.
+     */
+    await git(dir, ["-c", `user.name=${author.name}`, "-c", `user.email=${author.email}`, "commit", "--no-verify", "-m", message]);
     return true;
 };
 

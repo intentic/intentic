@@ -166,7 +166,7 @@ export const accountLimitReset = async (services: Services, account: string | un
     if (account === undefined) {
         return undefined;
     }
-    const usage = (await services.claudeUsage.read())[account];
+    const usage = (await services.accountUsage.read())[account];
     return usage?.windows.reduce<UsageWindow | undefined>(
         (worst, window) => (worst === undefined || window.utilization > worst.utilization ? window : worst),
         undefined,

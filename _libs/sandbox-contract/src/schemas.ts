@@ -383,9 +383,52 @@ export const AgentLandSchema = z.object({ id: z.string().min(1), mode: LandModeS
 export const KeyedProviderSchema = z.enum(["codex", "grok", "kimi", "gemini"]);
 export type KeyedProvider = z.infer<typeof KeyedProviderSchema>;
 
+// ---- plan-limit usage ----
+// Declared ABOVE both account shapes because both carry it: headroom is one idea in this product, not a Claude
+// idea that other providers imitate. A native account (OauthAccount) and a routed subscription
+// (TranslatorAccount) differ in who holds the credential and how the reading is taken — never in what a
+// reading IS — so every surface that draws a percentage reads this one type and no other.
+
+// One plan-limit pool. `kind` is the provider's own key ('five_hour' | 'seven_day' | 'seven_day_opus' |
+// 'seven_day_sonnet' | 'model:Fable' | …) rather than an enum we'd have to keep in step with the provider: an
+// unrecognised pool is shown under its raw key, which is far better than being silently folded into a
+// neighbour. `label` is the provider's OWN display name where it supplies one (the per-model buckets do) — it
+// wins over anything we'd infer, because the model names in a plan's limits are the provider's to rename.
+// `resetsAt` is epoch SECONDS (matching the SDK's frame).
+export const UsageWindowSchema = z.object({
+    kind: z.string(),
+    label: z.string().optional(),
+    utilization: z.number(), // 0-100
+    resetsAt: z.number().optional(),
+});
+export type UsageWindow = z.infer<typeof UsageWindowSchema>;
+
+// An account's headroom: EVERY window the provider reports, read together, plus when the reading was taken.
+// All of them, not the binding one, because "which pool is binding" changes between turns and a reader
+// comparing accounts needs the same pools on every row. How the reading is TAKEN is per provider and stops at
+// the daemon's readers: Claude's rides the turn's own stream, ChatGPT's and Google's are pulled through
+// CLIProxyAPI's credential-scoped management call. All of them are control requests, so none costs tokens.
+//
+// Within one window utilization only climbs, so an un-reset window stays a valid FLOOR however old it is; past
+// its `resetsAt` it describes a pool that no longer exists and the store drops it. `measuredAt` is epoch MS
+// (matching connectedAt) — deliberately a different unit from the windows' seconds.
+export const AccountUsageSchema = z.object({
+    windows: z.array(UsageWindowSchema),
+    measuredAt: z.number(),
+});
+export type AccountUsage = z.infer<typeof AccountUsageSchema>;
+
 // One connected subscription in the translator. `name` is CLIProxyAPI's auth-file name — the stable store key a
 // disconnect addresses — and `label` the sign-in identity it reported (the account email, else the file name).
-export const TranslatorAccountSchema = z.object({ name: z.string(), label: z.string() });
+export const TranslatorAccountSchema = z.object({
+    name: z.string(),
+    label: z.string(),
+    // The same headroom an OauthAccount carries, on the same field, for the same reason: the account rows are
+    // one list to the reader. Optional because a provider whose quota this sandbox cannot read (Grok, Kimi) —
+    // or one that did not answer — must still render as the connected account it is, with a dot instead of a
+    // ring.
+    usage: AccountUsageSchema.optional(),
+});
 export type TranslatorAccount = z.infer<typeof TranslatorAccountSchema>;
 // Which routed-provider subscriptions are connected in the translator, per provider — a LIST per provider, not
 // a flag: CLIProxyAPI holds any number of auth files per provider side by side and balances requests across
@@ -460,7 +503,7 @@ export const StopTurnSchema = z.object({ conversationId: z.string().min(1) });
 // superseded by a fresh turn, or the daemon restarted).
 export const ResumeLimitSchema = z.object({ conversationId: z.string().min(1), account: z.string().min(1).optional() });
 
-// ---- claude subscription usage ----
+// ---- claude rate-limit gate ----
 // The GATE signal: whether the provider is letting turns through right now, and — when it is refusing — which
 // window is binding and when it lifts. This is the SDK's rate_limit_event, mapped one-to-one, and it is only
 // ever about the CURRENT moment. It is deliberately NOT the thing the headroom displays read: the event names a
@@ -473,34 +516,6 @@ export const RateLimitInfoSchema = z.object({
     utilization: z.number().optional(), // 0-100, how much of the window is used
 });
 export type RateLimitInfo = z.infer<typeof RateLimitInfoSchema>;
-
-// One plan-limit pool. `kind` is the provider's own key ('five_hour' | 'seven_day' | 'seven_day_opus' |
-// 'seven_day_sonnet' | 'model:Fable' | …) rather than an enum we'd have to keep in step with the provider: an
-// unrecognised pool is shown under its raw key, which is far better than being silently folded into a
-// neighbour. `label` is the provider's OWN display name where it supplies one (the per-model buckets do) — it
-// wins over anything we'd infer, because the model names in a plan's limits are the provider's to rename.
-// `resetsAt` is epoch SECONDS (matching the SDK's frame).
-export const UsageWindowSchema = z.object({
-    kind: z.string(),
-    label: z.string().optional(),
-    utilization: z.number(), // 0-100
-    resetsAt: z.number().optional(),
-});
-export type UsageWindow = z.infer<typeof UsageWindowSchema>;
-
-// An account's headroom: EVERY window the provider reports, read together, plus when the reading was taken.
-// All of them, not the binding one, because "which pool is binding" changes between turns and a reader
-// comparing accounts needs the same pools on every row. Sourced from the CLI's own usage endpoint at turn end
-// (see claudeUsageWindows) — a control request, so it costs no tokens.
-//
-// Within one window utilization only climbs, so an un-reset window stays a valid FLOOR however old it is; past
-// its `resetsAt` it describes a pool that no longer exists and the store drops it. `measuredAt` is epoch MS
-// (matching connectedAt) — deliberately a different unit from the windows' seconds.
-export const AccountUsageSchema = z.object({
-    windows: z.array(UsageWindowSchema),
-    measuredAt: z.number(),
-});
-export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 
 // ---- provider oauth ----
 // Claude uses the PKCE authorize-URL + paste-back handshake (start → exchange). Codex uses OpenAI's device-code
@@ -528,8 +543,9 @@ export const OauthAccountSchema = z.object({
     needsReauth: z.boolean().optional(),
     detail: z.string().optional(),
     // The account's last known subscription-usage snapshot, so the picker can show what's left on each account
-    // before the user commits a turn to one. Claude-only (it is the sole provider whose stream reports a usage
-    // window) and absent until that account has run a turn — an unmeasured account reads as unknown, never 0%.
+    // before the user commits a turn to one. Absent until a reading exists for it — an unmeasured account reads
+    // as unknown, never 0%. Claude is the provider that fills it here, because its stream reports the windows;
+    // the routed subscriptions carry the identical field on TranslatorAccount, filled by a pulled reading.
     usage: AccountUsageSchema.optional(),
 });
 export type OauthAccount = z.infer<typeof OauthAccountSchema>;

@@ -28,13 +28,13 @@ import {
     startConversationTurn,
 } from "./turn-resume.js";
 
-// The scheduler touches settings/push/logger (and accountLimitReset reads claudeUsage); the fake stays that
+// The scheduler touches settings/push/logger (and accountLimitReset reads accountUsage); the fake stays that
 // small, plus the transcript record every started turn writes its settled frames to (startConversationTurn).
 const fakeServices = (root: string, usage: Record<string, AccountUsage> = {}): Services => {
     const record = fileTranscriptRecord(join(root, "transcripts"));
     return {
         sandboxSettings: fileSandboxSettingsStore(join(root, "settings.json")),
-        claudeUsage: { read: async () => usage },
+        accountUsage: { read: async () => usage },
         pushSender: { notifyIfAway: async () => {} },
         logger: { info: () => {}, warn: () => {}, error: () => {} },
         workspace: { root },

@@ -1,9 +1,11 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { KeyedProvider, Model, TranslatorAccounts } from "@intentic/sandbox-contract";
+import type { AccountUsage, KeyedProvider, Model, TranslatorAccounts } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
+import type { AccountUsageStore } from "../usage/account-usage.js";
+import { fetchTranslatorUsage, type TranslatorAuthFile, USAGE_READABLE } from "../usage/translator-usage.js";
 
 /* The bundled translator is CLIProxyAPI: a Go proxy that lets the Claude Code harness — which speaks only the
  * Anthropic Messages API — drive OpenAI (Codex), xAI (Grok), Kimi Code and Google (Gemini) models on the user's
@@ -66,6 +68,10 @@ export const nextRestartDelay = (previousDelayMs: number, uptimeMs: number): num
 // The tail of the proxy's output kept per run — enough to carry a Go panic or a bind error into the exit log.
 const OUTPUT_TAIL_BYTES = 2_048;
 
+// How long after spawning the proxy the first quota sweep runs — long enough for its management API to be
+// listening, short enough that opening the Agent tab straight after a restart still finds rings.
+const WARMUP_DELAY_MS = 15_000;
+
 // Start the CLIProxyAPI server and keep it alive. Best-effort and non-throwing: a routed turn that finds it down
 // surfaces its own error. Returns immediately; the proxy runs for the daemon's lifetime. No-op when no translator
 // is baked (config.translator.url empty — the dev path).
@@ -109,6 +115,16 @@ export const startTranslator = (services: Services): void => {
     };
 
     void start().catch((error: unknown) => logger.warn({ err: error }, "translator: initial start failed"));
+
+    /* Warm the routed accounts' headroom once the proxy is answering. Without this the first person to open the
+     * Agent tab after a restart reads a cold store and gets dots, because `accounts` serves what is on file and
+     * schedules the pull rather than waiting for it — the tab would fill in only on a later visit. The delay is
+     * for the proxy's own startup: the management API is what these reads go through, and a sweep fired the
+     * instant the child is spawned would simply find nothing listening. Best-effort like everything else here. */
+    setTimeout(
+        () => void services.cliProxy.refreshUsage().catch((error: unknown) => logger.warn({ err: error }, "translator: usage warm-up failed")),
+        WARMUP_DELAY_MS,
+    ).unref();
 };
 
 // The CLIProxyAPI Management API client + login orchestration the /translator routes and the routed-turn gate
@@ -130,30 +146,44 @@ interface TranslatorLogin {
 }
 
 export interface CliProxyClient {
+    // The connection inventory, each row carrying whatever headroom is on file for it. ONE method, and it never
+    // waits on an upstream quota call: this is the routed-turn credential gate as well as the settings list, so
+    // a round-trip here would land on every routed turn's startup path. Freshness comes from the refresh this
+    // read SCHEDULES, not from one it waits for — see the store policy below.
     readonly accounts: () => Promise<TranslatorAccounts>;
+    // Pull every readable account's quota now and record it. The daemon calls this once at boot so the first
+    // person to open the Agent tab already has rings to look at.
+    readonly refreshUsage: () => Promise<void>;
     readonly connect: (provider: KeyedProvider) => Promise<TranslatorLogin>;
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
     readonly models: (provider: KeyedProvider) => Promise<Model[]>;
 }
 
-export const createCliProxyClient = (params: { managementUrl: string; token: string; configPath: string }): CliProxyClient => {
-    const { managementUrl, token, configPath } = params;
+export const createCliProxyClient = (params: {
+    managementUrl: string;
+    token: string;
+    configPath: string;
+    usageStore: AccountUsageStore;
+    fetchFn?: typeof fetch;
+}): CliProxyClient => {
+    const { managementUrl, token, configPath, usageStore } = params;
+    const fetchFn = params.fetchFn ?? fetch;
     const auth = { authorization: `Bearer ${token}` };
 
-    const listFiles = async (): Promise<{ name?: string; provider?: string; email?: string; label?: string }[]> => {
-        const response = await fetch(`${managementUrl}/auth-files`, { headers: auth });
+    const listFiles = async (): Promise<TranslatorAuthFile[]> => {
+        const response = await fetchFn(`${managementUrl}/auth-files`, { headers: auth });
         // Management not reachable (proxy still booting / not baked) ⇒ treat as nothing connected rather than throw.
         if (!response.ok) {
             return [];
         }
-        return ((await response.json()) as { files?: { name?: string; provider?: string; email?: string; label?: string }[] }).files ?? [];
+        return ((await response.json()) as { files?: TranslatorAuthFile[] }).files ?? [];
     };
 
     // CLIProxyAPI's xAI and Kimi logins are headless-friendly device flows exposed over the Management API. Each
     // returns a verification URL, optional user code and state, then polls to completion in the background.
     const connectDevice = async (provider: "grok" | "kimi"): Promise<TranslatorLogin> => {
-        const response = await fetch(`${managementUrl}/${provider === "grok" ? "xai" : "kimi"}-auth-url`, { headers: auth });
+        const response = await fetchFn(`${managementUrl}/${provider === "grok" ? "xai" : "kimi"}-auth-url`, { headers: auth });
         if (!response.ok) {
             throw new Error(`${provider === "grok" ? "xAI" : "Kimi Code"} subscription login failed to start (${response.status})`);
         }
@@ -170,7 +200,7 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
     // address bar; that URL carries the grant, and `complete` below posts it back. No device-code flow exists for
     // Google; the explicit redirect flow tells the card to ask for the landing URL.
     const connectGemini = async (): Promise<TranslatorLogin> => {
-        const response = await fetch(`${managementUrl}/antigravity-auth-url`, { headers: auth });
+        const response = await fetchFn(`${managementUrl}/antigravity-auth-url`, { headers: auth });
         if (!response.ok) {
             throw new Error(`Google sign-in failed to start (${response.status})`);
         }
@@ -185,7 +215,7 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
     // pending session and resumes the token exchange in the background. Its rejections are the ones worth
     // reading (an expired handshake, a state that belongs to a different login), so surface its own message.
     const complete = async (input: { provider: KeyedProvider; redirectUrl: string; state: string }): Promise<void> => {
-        const response = await fetch(`${managementUrl}/oauth-callback`, {
+        const response = await fetchFn(`${managementUrl}/oauth-callback`, {
             method: "POST",
             headers: { ...auth, "content-type": "application/json" },
             body: JSON.stringify({ provider: CLIPROXY_PROVIDER[input.provider], redirect_url: input.redirectUrl, state: input.state }),
@@ -246,7 +276,9 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
 
     // Drop ONE account: the provider check keeps a name from another provider's file (or a stale row) from
     // deleting a credential the user didn't point at. A pending codex device login still dies with any codex
-    // disconnect — its poll would otherwise re-land a token into a store the user is clearing out.
+    // disconnect — its poll would otherwise re-land a token into a store the user is clearing out. The account's
+    // snapshot goes with it, exactly as /claude/accounts drops a disconnected account's: leaving it behind would
+    // hand its headroom straight back to the next account to be given the same auth-file name.
     const disconnect = async (provider: KeyedProvider, name: string): Promise<void> => {
         if (provider === "codex") {
             codexChild?.kill("SIGTERM");
@@ -255,22 +287,98 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
         const cliproxyProvider = CLIPROXY_PROVIDER[provider];
         for (const file of await listFiles()) {
             if (file.provider === cliproxyProvider && file.name === name) {
-                await fetch(`${managementUrl}/auth-files?name=${encodeURIComponent(file.name)}`, { method: "DELETE", headers: auth });
+                await fetchFn(`${managementUrl}/auth-files?name=${encodeURIComponent(file.name)}`, { method: "DELETE", headers: auth });
+                attemptedAt.delete(usageKey(provider, name));
+                await usageStore.clear(usageKey(provider, name));
             }
         }
     };
 
+    /* WHERE a routed account's headroom lives, and how often it is re-read.
+     *
+     * The readings themselves go in the shared account-usage store, exactly as a Claude turn's do — so a page
+     * load draws its rings from disk instead of owing an upstream round-trip per account, and a daemon restart
+     * doesn't blank the Agent tab. Namespaced by provider because that store is shared with the native accounts:
+     * an auth-file name is only unique within its own provider.
+     *
+     * `attemptedAt` deliberately records when each account was last ASKED, not what it answered. The store
+     * caches the successes; this is what bounds the FAILURES — an upstream that is down, or one that answers
+     * with no quota at all, would otherwise be retried on every call, and `accounts` is called on every routed
+     * turn and every three seconds for as long as a connect flow is open. */
+    const usageKey = (provider: KeyedProvider, name: string): string => `${provider}:${name}`;
+    const REFRESH_AFTER_MS = 5 * 60_000;
+    const attemptedAt = new Map<string, number>();
+
+    // Every auth file whose quota this client can actually read, paired with the provider it belongs to.
+    const readableFiles = (files: readonly TranslatorAuthFile[]): { provider: KeyedProvider; file: TranslatorAuthFile; key: string }[] =>
+        USAGE_READABLE.flatMap((provider) =>
+            files.flatMap((file) =>
+                file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined
+                    ? [{ provider, file, key: usageKey(provider, file.name) }]
+                    : [],
+            ),
+        );
+
+    /* One sweep of upstream reads. Concurrency is bounded because a sandbox can hold dozens of Google accounts
+     * and firing every request at once is how a refresh becomes a self-inflicted rate limit. A failed or
+     * quota-less read records the attempt and nothing else, so the last good snapshot stays where it is instead
+     * of being replaced by a blank. */
+    const REFRESH_CONCURRENCY = 4;
+    const refreshUsage = async (): Promise<void> => {
+        const pending = readableFiles(await listFiles());
+        const worker = async (): Promise<void> => {
+            for (let next = pending.shift(); next !== undefined; next = pending.shift()) {
+                attemptedAt.set(next.key, Date.now());
+                const usage = await fetchTranslatorUsage({
+                    fetchFn,
+                    managementUrl,
+                    managementToken: token,
+                    provider: next.provider,
+                    file: next.file,
+                });
+                if (usage !== undefined) {
+                    await usageStore.record(next.key, usage);
+                }
+            }
+        };
+        await Promise.all(Array.from({ length: REFRESH_CONCURRENCY }, worker));
+    };
+
+    // Refresh what has gone stale, in the background — never awaited by `accounts`, whose answer is drawn from
+    // what is already on file. The rings a sweep produces are for the NEXT read, and that is precisely what
+    // keeps an upstream quota call off the routed turn's startup path.
+    let refreshing = false;
+    const refreshStale = (files: readonly TranslatorAuthFile[], stored: Record<string, AccountUsage>): void => {
+        const now = Date.now();
+        const due = readableFiles(files).some(
+            (entry) => stored[entry.key] === undefined || now - (attemptedAt.get(entry.key) ?? 0) > REFRESH_AFTER_MS,
+        );
+        if (!due || refreshing) {
+            return;
+        }
+        refreshing = true;
+        void refreshUsage()
+            .catch(() => undefined)
+            .finally(() => {
+                refreshing = false;
+            });
+    };
+
     return {
         accounts: async () => {
-            const files = await listFiles();
+            const [files, stored] = await Promise.all([listFiles(), usageStore.read()]);
+            refreshStale(files, stored);
             const of = (provider: KeyedProvider) =>
-                files.flatMap((file) =>
-                    file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined
-                        ? [{ name: file.name, label: file.email ?? file.label ?? file.name }]
-                        : [],
-                );
+                files.flatMap((file) => {
+                    if (file.provider !== CLIPROXY_PROVIDER[provider] || file.name === undefined) {
+                        return [];
+                    }
+                    const usage = stored[usageKey(provider, file.name)];
+                    return [{ name: file.name, label: file.email ?? file.label ?? file.name, ...(usage === undefined ? {} : { usage }) }];
+                });
             return { codex: of("codex"), grok: of("grok"), kimi: of("kimi"), gemini: of("gemini") };
         },
+        refreshUsage,
         connect: (provider) =>
             provider === "grok" || provider === "kimi" ? connectDevice(provider) : provider === "gemini" ? connectGemini() : connectCodex(),
         complete,

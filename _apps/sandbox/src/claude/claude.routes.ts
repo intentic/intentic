@@ -36,14 +36,14 @@ export const createClaudeRoutes = (services: Services) => {
         // spending a turn on it. Absent for an account that hasn't run a Claude turn since its window last
         // reset — the UI reads that as unknown, not as empty.
         accounts: i.accounts.handler(async () => {
-            const [accounts, usage] = await Promise.all([services.claudeStore.list(), services.claudeUsage.read()]);
+            const [accounts, usage] = await Promise.all([services.claudeStore.list(), services.accountUsage.read()]);
             return { accounts: accounts.map((account) => withUsage(account, usage[account.id])) };
         }),
         models: i.models.handler(() => services.claudeModels.models()),
         // Forget the credential AND its usage snapshot: a reconnect mints a fresh account id, so a snapshot left
         // behind here is orphaned for good.
         disconnect: i.disconnect.handler(async ({ input }) => {
-            await Promise.all([services.claudeStore.clear(input.id), services.claudeUsage.clear(input.id)]);
+            await Promise.all([services.claudeStore.clear(input.id), services.accountUsage.clear(input.id)]);
             return { ok: true } as const;
         }),
     };

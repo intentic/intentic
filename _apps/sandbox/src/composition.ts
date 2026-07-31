@@ -46,7 +46,7 @@ import { createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStor
 import { createSessions, type MintedSession } from "./auth/session.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
-import { type ClaudeUsageStore, fileClaudeUsageStore } from "./claude/claude-usage.js";
+import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
 import { createCodexAgent } from "./codex/codex-agent.js";
 import { type CodexCatalog, createCodexCatalog } from "./codex/codex-catalog.js";
 import { codexThreadExists } from "./sessions/codex-sessions.js";
@@ -217,9 +217,11 @@ export interface Services {
     readonly pushSender: PushSender;
     // Claude subscription accounts (one <id>.json per account under .intentic/claude), several per sandbox.
     readonly claudeStore: ClaudeStore;
-    // The latest usage-window snapshot per Claude account (historyRoot/claude-usage.json). streamAgent records
-    // what the turn stream reports; /claude/accounts merges it in so the picker shows each account's headroom.
-    readonly claudeUsage: ClaudeUsageStore;
+    // The latest plan-limit snapshot per account of ANY provider (historyRoot/account-usage.json). streamAgent
+    // records what a Claude turn's stream reports and the translator client records what it pulls for the
+    // routed subscriptions; /claude/accounts and /translator/accounts each merge it into their own rows, so
+    // every account the user can see reports its headroom from one place.
+    readonly accountUsage: AccountUsageStore;
     // Claude's live model catalog from the Agent SDK's supportedModels() (alias fallback, never empty). Serves
     // /claude/models for the picker so new tiers + effort levels need no code change.
     readonly claudeModels: ClaudeCatalog;
@@ -412,10 +414,14 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Base dir under which each Codex account gets its own CODEX_HOME (`<authRoot>/codex/<id>`); also the
     // adapter's default (the OPENAI_API_KEY fallback home when a turn resolved no account).
     const codexBase = join(authRoot, "codex");
+    // Hoisted because two services share it: the turn stream records Claude's readings into it, and the
+    // translator client both reads and records the routed subscriptions' through the same file.
+    const accountUsage = fileAccountUsageStore(join(config.historyRoot, "account-usage.json"));
     const cliProxy = createCliProxyClient({
         managementUrl: cliProxyManagementUrl(config),
         token: config.translator.token,
         configPath: cliProxyConfigPath(config),
+        usageStore: accountUsage,
     });
     // Referenced twice below: as the openCode service field and to build the Grok adapter's runner. Its data dir
     // (OpenCode's XDG_DATA_HOME) is the credential root so xAI OAuth tokens persist across restarts.
@@ -522,7 +528,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         push: pushStore,
         pushSender: createPushSender(pushStore, logger),
         claudeStore,
-        claudeUsage: fileClaudeUsageStore(join(config.historyRoot, "claude-usage.json")),
+        accountUsage,
         claudeModels: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
         codexModels: createCodexCatalog(config, join(codexBase, "models.json")),
         kimiModels: createKimiCatalog(cliProxy),
