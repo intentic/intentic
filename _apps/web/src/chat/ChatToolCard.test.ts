@@ -87,6 +87,24 @@ describe(`ChatToolCard`, () => {
         expect(element.querySelector(`.border-l`)).toBeNull();
     });
 
+    it(`keeps an output-less tool name on one line beside a long, elastic target`, () => {
+        const element = mount({
+            id: `t1`,
+            name: `Edit`,
+            category: `edit`,
+            status: `completed`,
+            target: `update /history/worktrees/very-long-worktree-name/intentic/_apps/web/src/chat/ChatToolCard.vue`,
+        });
+        const name = element.querySelector(`span.font-medium`)!;
+
+        // Chat messages inherit `overflow-wrap: anywhere`. The name therefore needs both a non-shrinking
+        // header boundary and an explicit no-wrap rule; the adjacent target owns all width compression.
+        expect(name.parentElement?.classList).toContain(`shrink-0`);
+        expect(name.parentElement?.classList).toContain(`whitespace-nowrap`);
+        expect(name.parentElement?.nextElementSibling?.classList).toContain(`min-w-0`);
+        expect(name.parentElement?.nextElementSibling?.classList).toContain(`truncate`);
+    });
+
     it(`spins a call in flight while its turn is live`, () => {
         const element = mount({ id: `t1`, name: `Bash`, category: `execute`, status: `in_progress`, target: `pnpm test` });
         expect(element.querySelector(`[data-icon="spinner"]`)).not.toBeNull();

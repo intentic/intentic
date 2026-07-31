@@ -87,13 +87,13 @@ const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`b
     <div class="flex flex-col gap-0.5">
         <!-- The row is muted, not subtle: the target it carries (a path, a command) is the one thing a folded
              card still says, and at the meta tier subtle sits too close to the surface to read at a glance. -->
-        <div class="group/tool flex items-center gap-1.5 text-2xs text-muted">
+        <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted">
             <!-- Header doubles as the fold toggle when there's output — same chevron affordance as the
                  turn's Thinking block. Output-less calls keep a plain, non-clickable header. -->
             <button
                 v-if="hasContent"
                 type="button"
-                class="flex shrink-0 items-center gap-1.5 transition-colors hover:text-content"
+                class="flex shrink-0 items-center gap-1.5 whitespace-nowrap transition-colors hover:text-content"
                 :aria-expanded="isOpen"
                 @click="toggleOpen"
             >
@@ -102,19 +102,25 @@ const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`b
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
             </button>
             <template v-else>
-                <Icon v-bind="statusIcon" class="text-2xs" />
-                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
+                <!-- Keep the output-less header as one protected flex item too. `overflow-wrap: anywhere` is
+                     inherited by chat messages, so independent icon/name items let a long target shrink a
+                     short name to one or two characters per line. The target is the intentionally elastic
+                     part of this row. -->
+                <span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+                    <Icon v-bind="statusIcon" class="text-2xs" />
+                    <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
+                </span>
             </template>
             <button
                 v-if="location"
                 type="button"
-                class="truncate font-mono transition-colors hover:text-content hover:underline"
+                class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
                 v-tooltip.top="'Open in workspace'"
                 @click="openWorkspaceRef(location.path, location.line)"
             >
                 {{ tool.target ?? location.path }}
             </button>
-            <span v-else-if="tool.target" class="truncate font-mono">{{ tool.target }}</span>
+            <span v-else-if="tool.target" class="min-w-0 truncate font-mono">{{ tool.target }}</span>
             <!-- The result phrase stays visible while collapsed — a folded card should still say what
                  happened. Pushed right so it reads as a trailing annotation, not part of the target. A call
                  that never reported back says so, which is what the clock in its place means. -->

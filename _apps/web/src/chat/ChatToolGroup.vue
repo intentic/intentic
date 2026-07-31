@@ -37,10 +37,10 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
 
 <template>
     <div class="flex flex-col gap-0.5">
-        <div class="group/tool flex items-center gap-1.5 text-2xs text-muted">
+        <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted">
             <button
                 type="button"
-                class="flex shrink-0 items-center gap-1.5 transition-colors hover:text-content"
+                class="flex shrink-0 items-center gap-1.5 whitespace-nowrap transition-colors hover:text-content"
                 :aria-expanded="expanded"
                 @click="toggle"
             >
@@ -57,13 +57,13 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
             <button
                 v-if="location"
                 type="button"
-                class="truncate font-mono transition-colors hover:text-content hover:underline"
+                class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
                 v-tooltip.top="'Open in workspace'"
                 @click="openWorkspaceRef(location.path, location.line)"
             >
                 {{ group.target ?? location.path }}
             </button>
-            <span v-else-if="group.target" class="truncate font-mono">{{ group.target }}</span>
+            <span v-else-if="group.target" class="min-w-0 truncate font-mono">{{ group.target }}</span>
             <span class="ml-auto flex shrink-0 items-center gap-2">
                 <span v-if="summary" class="tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{ summary }}</span>
                 <span class="rounded-full bg-overlay px-1.5 py-0.5 text-subtle">×{{ group.tools.length }}</span>
