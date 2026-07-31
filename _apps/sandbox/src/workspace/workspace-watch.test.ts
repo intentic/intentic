@@ -28,6 +28,11 @@ test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not so
     // transcripts churn through every turn — watching either feeds the daemon (and every browser) its own noise.
     expect(watchIgnored(at(".intentic", "iq", "index.db-wal"))).toBe(true);
     expect(watchIgnored(at(".intentic", "claude", "projects", "-work", "session.jsonl"))).toBe(true);
+    // The landing gate's per-repo fingerprint index and its persisted verdict: written by the verdict poll and
+    // by every run, so watching them turned one click on "Re-run" into a tree + review refetch every second.
+    expect(watchIgnored(at(".intentic", "gate-index", "root"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "gate-index", "intentic"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "gate.json"))).toBe(true);
     // The manifests next to them still push: that's how another member's capability write reaches this browser.
     expect(watchIgnored(at(".intentic", "capabilities.json"))).toBe(false);
     expect(watchIgnored(at(".intentic", "environment.Dockerfile"))).toBe(false);

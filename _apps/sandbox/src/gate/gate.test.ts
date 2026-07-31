@@ -74,9 +74,11 @@ const fakeServices = (over: Partial<typeof SETTINGS> & { ending?: string } = {})
 
 // `discoverRepos` walks the real temp root and finds nothing, so every gate below sees exactly one repo ("root").
 // A git runner standing in for the fingerprint's `add -A` + `write-tree`: `state` is the tree sha it reports, so
-// moving it is how a test simulates content changing under a verdict.
-const fakeGit = (state: { value: string }): GitRunner =>
+// moving it is how a test simulates content changing under a verdict. `calls` records what git was asked to do,
+// for the tests that are about how OFTEN the gate reaches for it rather than what it learns.
+const fakeGit = (state: { value: string }, calls: string[][] = []): GitRunner =>
     (async (_dir: string, args: readonly string[]) => {
+        calls.push([...args]);
         if (args[0] === "write-tree") {
             return { stdout: `${state.value}\n`, stderr: "" };
         }
@@ -318,6 +320,32 @@ test("the gate's own state does not stale its verdict", async () => {
     await vi.waitFor(async () => expect((await gate.verdict()).status).toBe("passed"), { timeout: 5_000 });
     await wait(COALESCE_WAIT_MS);
     expect((await gate.verdict()).stale).toBe(false);
+}, 30_000);
+
+/* THE FEEDBACK LOOP GUARD, and the reason the fingerprint is skipped rather than merely ignored while running.
+ *
+ * `stale` is unconditionally false for a running verdict, so the read cost nothing but a value nobody used —
+ * except that the read IS a `git add -A` per repo, into an index under .intentic, and the panel polls the
+ * verdict every 2s for exactly as long as a check runs. Every poll rewrote a file inside the watched tree; the
+ * file watcher pushed that back to the browser as a workspace change; the browser refetched the tree and the
+ * review set. Clicking "Re-run" flickered "Loading changes…" for the length of the suite, and the gate was
+ * feeding itself the noise. Polls across the coalescing window, so a pass here is the skip and not the cache. */
+test("polling a running verdict never touches git", async () => {
+    const calls: string[][] = [];
+    const { services } = fakeServices({ gateCommand: "sleep 6" });
+    const gate = createLandingGate(services, fakeWake([]), fakeGit({ value: "clean" }, calls));
+    gate.run();
+    await vi.waitFor(async () => expect((await gate.verdict()).status).toBe("running"), { timeout: 5_000 });
+    // The run's own opening fingerprint is not what this is about — only what the polls after it cost.
+    calls.length = 0;
+    for (let poll = 0; poll < 2; poll += 1) {
+        await wait(COALESCE_WAIT_MS);
+        const verdict = await gate.verdict();
+        expect(verdict.status).toBe("running");
+        expect(verdict.stale).toBe(false);
+    }
+    expect(calls).toEqual([]);
+    gate.cancel();
 }, 30_000);
 
 test("a cleared command reads as idle whatever is on disk, so the badge disappears", async () => {

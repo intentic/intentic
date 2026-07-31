@@ -479,16 +479,19 @@ export const createLandingGate = (services: Services, wake: WakeFn, git: GitRunn
         if (stored === undefined || gateCommand === "") {
             return { status: "idle", command: gateCommand, output: "", fingerprint: "", stale: false, implicated: [] };
         }
-        const at = await coalescedFingerprint();
-        return {
-            ...stored,
-            // A verdict about the tree UNDER TEST is never stale, however long the suite runs: comparing a
-            // running verdict against a moving tree would flip the badge to "stale" the moment a fix turn
-            // touched a file. Every terminal verdict is fair game, `armed` included — it displays the previous
-            // run's result, and a land is exactly what moved the tree out from under it.
-            stale: stored.status !== "running" && stored.fingerprint !== at,
-            ...(stored.status === "running" && liveOutput !== undefined ? { output: liveOutput() } : {}),
-        };
+        /* A verdict about the tree UNDER TEST is never stale, however long the suite runs: comparing a running
+         * verdict against a moving tree would flip the badge to "stale" the moment a fix turn touched a file. So
+         * the fingerprint is not merely unused here — it must not be READ, and reading it anyway is what made
+         * clicking "Re-run" flicker the Changes panel. It is the expensive half of this route (a `git add -A`
+         * per repo, into an index under .intentic that the file watcher can see), the panel polls every 2s for
+         * exactly this state, and FINGERPRINT_COALESCE_MS is that same 2s — so every poll wrote a file in the
+         * watched tree and got the browser to refetch the tree and the review set for it. */
+        if (stored.status === "running") {
+            return { ...stored, stale: false, ...(liveOutput !== undefined ? { output: liveOutput() } : {}) };
+        }
+        // Every terminal verdict is fair game, `armed` included — it displays the previous run's result, and a
+        // land is exactly what moved the tree out from under it.
+        return { ...stored, stale: stored.fingerprint !== (await coalescedFingerprint()) };
     };
 
     const fix = async (): Promise<void> => {
