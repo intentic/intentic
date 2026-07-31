@@ -4,6 +4,7 @@ import { createAgentsRoutes } from "./agents/agents.routes.js";
 import { createTranslatorRoutes } from "./agent/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
+import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
 import { createClaudeRoutes } from "./claude/claude.routes.js";
 import { createCodexRoutes } from "./codex/codex.routes.js";
@@ -39,6 +40,7 @@ export const createRouter = (services: Services) => ({
     agents: createAgentsRoutes(services),
     automations: createAutomationsRoutes(services),
     capabilities: createCapabilitiesRoutes(services),
+    chores: createChoresRoutes(services),
     ci: createCiRoutes(services),
     claude: createClaudeRoutes(services),
     codex: createCodexRoutes(services),

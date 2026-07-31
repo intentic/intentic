@@ -489,6 +489,12 @@ const main = async (): Promise<void> => {
     // interval), so completed pipelines wake `ci` automations and freshen the Pipelines view.
     services.ciHooks.start();
 
+    // Maintenance probes: refresh expired measurements (pnpm outdated/audit, knip, jscpd) so the rail can tell
+    // the owner something they did not already know. Serialized across the sandbox, skipped entirely while any
+    // turn is live, and behind a warm-up — a probe racing the boot's `pnpm install` measures a tree that does not
+    // exist yet. See chores/probe-runner.ts for why none of it is allowed to be urgent.
+    services.probeRunner.start();
+
     // Resume scheduler: credential refusals and provider outages re-run the turn they killed — see
     // turn-resume.ts. A spent usage limit is deliberately not among them; that allowance is the user's own.
     const turnResume = createTurnResumeScheduler(services, streamAgent);

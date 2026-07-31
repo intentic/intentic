@@ -1,0 +1,26 @@
+{
+    "publisher": "intentic",
+    "name": "maintenance",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.4.0" },
+    "permissions": {
+        "sandbox": [
+            "GET /chores",
+            "POST /chores/probe",
+            "POST /chores/ledger",
+            "GET /workspace/children",
+            "GET /workspace/file",
+            "POST /workspace/upload",
+            "GET /panels",
+            "GET /automations",
+            "POST /automations",
+            "POST /agent",
+            "POST /agent/stop",
+            "GET /agents"
+        ]
+    },
+    "contributes": {
+        "views": [{ "id": "maintenance", "label": "Maintenance", "surface": "rail", "badge": true }],
+        "files": [{ "path": ".intentic/chores/", "invalidates": ["maintenance-report", "maintenance-runs"] }]
+    }
+}

@@ -54,6 +54,7 @@ export const extensionPath = (extension: ViewRegistration, activation: Activatio
  * The sequence is a narrowing from "the work" to "the machinery underneath":
  *   understand   Documentation — what this system is, read before touching it
  *   verify       Acceptance, Pipelines — what we promised, and whether it builds
+ *   maintain     Maintenance — what the code is owed, and has been owed for a while
  *   delegate     Automations — what runs without being asked
  *   inspect      Memory, Activity — what the agent remembers, and what it did
  *   operate      Infrastructure, Live status — the platform under all of it
@@ -64,7 +65,7 @@ export const extensionPath = (extension: ViewRegistration, activation: Activatio
  * An id absent from this list keeps its registration position, so a third-party extension appends rather than
  * silently jumping the queue — and adding a first-party rail view without touching this list puts it last, which
  * is the honest default rather than an arbitrary middle. */
-const RAIL_ORDER: readonly string[] = [`documentation`, `acceptance`, `pipelines`, `automations`, `memory`, `activity`, `infrastructure`, `live-status`];
+const RAIL_ORDER: readonly string[] = [`documentation`, `acceptance`, `pipelines`, `maintenance`, `automations`, `memory`, `activity`, `infrastructure`, `live-status`];
 
 const railRank = (id: string): number => {
     const at = RAIL_ORDER.indexOf(id);

@@ -1,0 +1,14 @@
+/* Source-consumed by the web app's Vite (default export → ./src/index.ts); this config exists for standalone
+ * type-checking (vue-tsc resolves the .vue views the extension registers). `bin/` is deliberately outside
+ * `include`: it is plain ESM executed directly by the agent's shell, with no build step to typecheck through. */
+{
+    "compilerOptions": {
+        "baseUrl": "./",
+        "noEmit": true,
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "resolveJsonModule": true
+    },
+    "include": ["./src/**/*.ts", "./src/**/*.vue", "./intentic-extension.json"],
+    "extends": "@intentic/tsconfig/tsconfig.vue.json"
+}

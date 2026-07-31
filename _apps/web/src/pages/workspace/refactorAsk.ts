@@ -1,4 +1,5 @@
 import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic-app/api-contract";
+import { composeAsk, REFACTOR_INVARIANTS } from "@intentic/sandbox-contract/chores";
 import type { ChurnWindow } from "./codebaseHealth";
 
 /* WHICH REFACTOR THE NUMBERS CALL FOR — and what we say to the agent.
@@ -115,20 +116,14 @@ const ARCHETYPE: Record<RefactorKind, { hint: string; diagnosis: string; goal: s
     },
 };
 
-/* The invariants, said once for every archetype, because each is a way the turn fails without it:
- *   · READ IT FIRST. Nothing here pastes the file, and a shape decided from the outside is a guess.
- *   · BEHAVIOUR IDENTICAL. Left unsaid, "refactor" quietly becomes "and I fixed what looked wrong", which is
- *     a diff nobody can review as either one.
- *   · CONFINED. The row named one file; a turn that grows into a repo-wide cleanup lands as an unreviewable
- *     diff and answers a question the user did not ask. Named as a blast RADIUS rather than "only this file",
- *     because three of the six archetypes ask for new files and must not read as forbidding them.
- *   · NO SHIMS. A re-export left behind makes every measure of the split come out clean while the coupling it
- *     was supposed to break survives — and this repository forbids them outright. */
-const INVARIANTS = `Read it first. Behaviour stays identical, and the blast radius is this file, whatever it splits into, and the importers that must follow — no re-export shims left behind.`;
-
+/* The four-part shape (subject / why / goal / done) and the refactor invariants both live in @intentic/sandbox-contract/chores:
+ * this panel's rows and the Maintenance surface's chores are the same move — a measurement turned into a turn —
+ * and phrasing them two different ways would be two different products explaining themselves to the same reader.
+ * What stays here is what is genuinely local: which archetype a row's own figures call for, and what each one asks
+ * the agent to do about it. */
 const compose = (path: string, why: string, kind: RefactorKind): string => {
     const { diagnosis, goal, done } = ARCHETYPE[kind];
-    return [`Refactor ${path}.`, `Why: ${why} ${diagnosis}`, goal, `${INVARIANTS} ${done.replace(`<path>`, path)}`].join(`\n\n`);
+    return composeAsk({ subject: `Refactor ${path}.`, why, diagnosis, goal, invariants: REFACTOR_INVARIANTS, done: done.replace(`<path>`, path) });
 };
 
 // What the row is ranked ON, in the agent's terms: the same numbers the user is looking at, so the two of them

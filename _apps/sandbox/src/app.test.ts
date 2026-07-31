@@ -3344,6 +3344,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.documentation",
         "intentic.imap",
         "intentic.logs",
+        "intentic.maintenance",
         "intentic.memory",
         "intentic.pipelines",
         "intentic.preview",

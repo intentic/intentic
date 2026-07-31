@@ -37,6 +37,8 @@ import { type AgentRequest, runAgent } from "./agent/agent.js";
 import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
+import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
+import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
@@ -186,6 +188,13 @@ export interface Services {
     readonly capabilities: CapabilitiesStore;
     // Scheduled agent wake-ups (.intentic/automations.json) — the scheduler polls it; /automations edits it.
     readonly automations: AutomationsStore;
+    // Maintenance evidence (.intentic/chores/): the probe cache the background runner fills, and the ledger of
+    // what has been done about it. /chores reads both; @intentic/sandbox-contract/chores turns them into verdicts, in the
+    // browser, where the panel and the rail badge share one computation.
+    readonly chores: ChoresStore;
+    // The background sweep that keeps the probe cache from expiring. Serialized across the whole sandbox and
+    // skipped entirely while any turn is live — maintenance is the least urgent thing this daemon does.
+    readonly probeRunner: ProbeRunner;
     // CI state (.intentic/ci.json): the webhook secret + the per repo+branch conclusion memory that makes a
     // success after a failure read as `pipeline_fixed`.
     readonly ciStore: CiStore;
@@ -501,6 +510,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
     );
     const ciStore = fileCiStore(join(workspace.root, ".intentic", "ci.json"));
+    // Hoisted: the background probe runner writes the same cache the /chores route reads, and a second store
+    // instance would answer a poll from a file the runner had already moved past.
+    const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
     // Bound once, and against the SAME registry instance above — `sessionIdOf` answers from live turn state as
     // well as the persisted entry, so a second registry would report no session for a first turn still running.
     const transcriptDeps: AgentTranscriptDeps = {
@@ -533,6 +545,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
         bridgeTokens: fileBridgeTokens(join(workspace.root, ".intentic", "bridge-tokens.json")),
         automations: fileAutomationsStore(join(workspace.root, ".intentic", "automations.json")),
+        chores,
+        probeRunner: createProbeRunner({ workspace, chores, agents, logger }),
         approvals: fileApprovalsStore(join(workspace.root, ".intentic", "approvals")),
         drafts: fileDraftsStore(join(workspace.root, ".intentic", "drafts")),
         turnJournal: fileTurnJournal(join(config.historyRoot, "turns")),

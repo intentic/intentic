@@ -1,3 +1,4 @@
+import { CHORES, choreAutomationPrompt } from "@intentic/sandbox-contract/chores";
 import type { WorkspaceEventKind } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/extension-ui";
 import type { ListenerEventType } from "./listenerSources";
@@ -9,8 +10,19 @@ import type { ListenerEventType } from "./listenerSources";
  * @intentic-app/capability-catalog: recipes are automation-UI data, so they live with the automations
  * extension, not the platform catalog.
  *
- * The `chore: true` ones are different in kind: they watch THIS workspace (a `workspace` trigger) rather than
- * the outside world, and they get a shelf of their own on the Automations page. See AutomationRecipe.chore. */
+ * The `chore: true` ones are different in kind: they watch THIS workspace rather than the outside world, and
+ * they get a shelf of their own on the Automations page. See AutomationRecipe.chore.
+ *
+ * WHERE THE CODE CHORES COME FROM. The tool-driven ones are NOT written here — they are generated from
+ * @intentic/sandbox-contract/chores, the same catalog the Maintenance surface reads. Those chores exist in two modes and both
+ * are wanted: Maintenance offers a turn against a specific finding you can read first, an automation wakes on a
+ * clock at 3am with nobody watching. Written twice, the two would drift — the panel would be recommending one
+ * thing and the nightly sweep doing another, in slightly different words, and only one of them would get fixed
+ * when we learned something about how to phrase it. So the book owns the chore and this file owns the trigger.
+ *
+ * What stays hand-written here is everything that is NOT a standing measurement: outside-world integrations, and
+ * `review-agent-work`, which is a reflex rather than a chore — it fires on a turn settling, has no evidence to
+ * accumulate, and would be meaningless as a row in a panel about what the codebase is owed. */
 
 export interface AutomationRecipe {
     // Capability config.providers (any of) — the recipe shows when one of them is enabled. Absent ⇒ always
@@ -52,20 +64,29 @@ const SPAN_NOTE =
     "`git -C <dir> diff <from>` is exactly that repo's change — committed and uncommitted both. Look at nothing else: " +
     "the rest of the workspace is not what this run is about.";
 
-// Where each tool-driven chore's guard leaves its report for the prompt to read. A guard's stdout is discarded
-// on success (only a FAILING guard's output survives, as the skip reason), so a file is how the free
-// deterministic half hands its findings to the half that costs a turn.
-const KNIP_OUT = "/tmp/intentic-knip.json";
-const JSCPD_DIR = "/tmp/intentic-jscpd";
-const AUDIT_OUT = "/tmp/intentic-audit.json";
-
-// Every tool-driven chore says this, because the failure mode is the same for all of them: a tool that reports
-// N findings is not reporting N problems, and a chore that mechanically actions the whole list is worse than no
-// chore at all — it makes noisy, confident, wrong changes at 3am.
-const TRIAGE_NOTE =
-    "The tool woke you; it did not decide anything. Read the repo before you touch it, and treat every finding as a " +
-    "claim to verify rather than a task to execute. Whatever you change lands in the workspace as uncommitted work " +
-    "for the owner to review, so keep it small, mechanical and separately explainable.";
+/* The chore book's scheduled forms, as recipes. One entry per chore that carries an `automation` — the book
+ * decides WHICH chores are worth running unattended (a survey has nothing for a guard to test, and a runtime
+ * reaching end-of-life is not something a nightly sweep can fix), and this only reshapes them. */
+const CHORE_RECIPES: readonly AutomationRecipe[] = CHORES.flatMap((chore) => {
+    const prompt = choreAutomationPrompt(chore);
+    return chore.automation === undefined || prompt === undefined
+        ? []
+        : [
+              {
+                  chore: true as const,
+                  title: chore.title,
+                  // The book leaves its icon an open string (it must not depend on the UI kit to name a glyph);
+                  // every id in it is one of the app's, and an unknown name renders the icon set's fallback.
+                  icon: chore.icon as IconName,
+                  id: chore.id,
+                  trigger: { kind: "schedule" as const, cron: chore.automation.cron },
+                  description: chore.description,
+                  guard: chore.automation.guard,
+                  prompt,
+                  note: chore.automation.note,
+              },
+          ];
+});
 
 export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
     {
@@ -106,67 +127,6 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
             `Cite file:line for each one and keep it to what you can point at. If the change is fine, say so in one line — ` +
             `do not manufacture findings to look useful.`,
         note: "skips changes under 20 lines",
-    },
-    {
-        chore: true,
-        title: "Clear out dead code",
-        icon: "trash",
-        id: "dead-code-sweep",
-        trigger: { kind: "schedule", cron: "0 3 * * *" },
-        description: "Runs knip nightly and only wakes when it finds something — unused files, exports and dependencies, removed for you.",
-        // Two gates, so the two ways to not run are distinguishable in the run history: knip absent (a repo that
-        // never adopted it) reads differently from knip clean. `pnpm exec` resolves the repo's own devDependency
-        // rather than downloading a floating version that would disagree with its knip.json.
-        guard:
-            `pnpm exec knip --version >/dev/null 2>&1 || { echo "knip is not a devDependency of this repo"; exit 1; }; ` +
-            `pnpm exec knip --reporter json > ${KNIP_OUT} && { echo "no dead code"; exit 1; }`,
-        prompt:
-            `knip's findings for this workspace are in ${KNIP_OUT} (JSON). ${TRIAGE_NOTE}\n\n` +
-            `knip is confidently wrong about anything reachable from outside the repo: a package's public entry points, ` +
-            `files a bundler or framework loads by convention, types consumed only by a downstream package. Check each ` +
-            `finding against how the file is actually used before touching it.\n\n` +
-            `Delete what is genuinely unreachable — dead files, unused exports, dependencies nothing imports — and run the ` +
-            `repo's typecheck afterwards to prove nothing broke. Leave the false positives alone and list them in one line ` +
-            `each, so the next run's reader knows they were considered rather than missed.`,
-        note: "nightly · wakes only on findings",
-    },
-    {
-        chore: true,
-        title: "Find duplication",
-        icon: "clone",
-        id: "duplication-sweep",
-        trigger: { kind: "schedule", cron: "0 3 * * 1" },
-        description: "Runs jscpd weekly and reports copy-paste worth collapsing. Reports only — deduplicating is a judgement call.",
-        // Gated on a percentage rather than "any clone at all", which every real repo has: below this the report
-        // is noise that would wake the agent every week to say nothing actionable.
-        guard:
-            `pnpm dlx jscpd --reporters json --output ${JSCPD_DIR} --min-lines 12 --threshold 100 . >/dev/null 2>&1; ` +
-            `[ "$(jq '.statistics.total.percentage // 0 | floor' ${JSCPD_DIR}/jscpd-report.json 2>/dev/null || echo 0)" -ge 5 ]`,
-        prompt:
-            `jscpd's clone report for this workspace is in ${JSCPD_DIR}/jscpd-report.json. ${TRIAGE_NOTE}\n\n` +
-            `Most duplication is not worth removing: generated files, tests that are repetitive on purpose, and two ` +
-            `things that merely look alike today but answer to different owners. Report the clones where the copies ` +
-            `genuinely have to change together — cite both file:line ranges, say what the shared concept is, and name ` +
-            `where the extraction would live. Do NOT edit anything: collapsing duplication is a design decision, not a chore.`,
-        note: "weekly · wakes above 5% duplication",
-    },
-    {
-        chore: true,
-        title: "Check dependencies",
-        icon: "shield",
-        id: "security-sweep",
-        trigger: { kind: "schedule", cron: "0 4 * * *" },
-        description: "Runs pnpm audit nightly and wakes only on high or critical advisories — patching the ones that are a version bump.",
-        guard:
-            `pnpm audit --json > ${AUDIT_OUT} 2>/dev/null; ` +
-            `[ "$(jq '(.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' ${AUDIT_OUT} 2>/dev/null || echo 0)" -gt 0 ]`,
-        prompt:
-            `pnpm audit's report is in ${AUDIT_OUT} (JSON), and it woke you because it carries a high or critical advisory. ${TRIAGE_NOTE}\n\n` +
-            `For each one, establish whether this workspace actually reaches the vulnerable code path — a transitive dependency ` +
-            `of a build-time-only tool is a different problem from one in a running service. Where the fix is a version bump the ` +
-            `lockfile can absorb, make it and run the repo's typecheck and tests to prove nothing broke. Where it needs a real ` +
-            `upgrade or has no patch yet, leave it and say what it would take. Never rewrite application code to route around a CVE.`,
-        note: "nightly · high + critical only",
     },
     {
         providers: ["github"],
@@ -241,4 +201,5 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
             `the content; never touch drafts that are not approved and due.`,
         note: "checks every 15 min",
     },
+    ...CHORE_RECIPES,
 ];

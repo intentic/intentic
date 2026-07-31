@@ -36,16 +36,25 @@ const expandGlob = (repoDir: string, glob: string): string[] => {
         .map((entry) => `${prefix}/${entry.name}`);
 };
 
-export const readPackageGraph = (repoDir: string): WorkspaceGraph => {
+// One workspace package as its manifest declares it, with the dir it was found in. Exported because the graph is
+// not the only reader of these files — the maintenance surface's signals need each package's engines and
+// dependency names — and two independent glob-expanders over one pnpm-workspace.yaml would be two chances to
+// disagree about what a package even is.
+export interface WorkspaceManifest {
+    readonly dir: string;
+    readonly name: string;
+    readonly manifest: PackageManifest;
+}
+
+export const readWorkspaceManifests = (repoDir: string): WorkspaceManifest[] => {
     const workspaceFile = join(repoDir, "pnpm-workspace.yaml");
-    // The route must answer for any repo, monorepo or not — no workspace file simply means no graph.
+    // Every caller must answer for any repo, monorepo or not — no workspace file simply means no packages.
     if (!existsSync(workspaceFile)) {
-        return { packages: [], edges: [] };
+        return [];
     }
     const globs = (parse(readFileSync(workspaceFile, "utf8")) as { packages?: string[] } | undefined)?.packages ?? [];
-
-    const packages: WorkspacePackage[] = [];
-    const manifests = new Map<string, PackageManifest>();
+    const found: WorkspaceManifest[] = [];
+    const seen = new Set<string>();
     for (const glob of globs) {
         for (const dir of expandGlob(repoDir, glob)) {
             // A dir without a parseable, named package.json isn't a workspace package (matches pnpm's view).
@@ -55,13 +64,20 @@ export const readPackageGraph = (repoDir: string): WorkspaceGraph => {
             } catch {
                 continue;
             }
-            if (typeof pkg.name !== "string" || manifests.has(pkg.name)) {
+            if (typeof pkg.name !== "string" || seen.has(pkg.name)) {
                 continue;
             }
-            packages.push({ name: pkg.name, dir, group: dir.split("/")[0] ?? dir });
-            manifests.set(pkg.name, pkg);
+            seen.add(pkg.name);
+            found.push({ dir, name: pkg.name, manifest: pkg });
         }
     }
+    return found;
+};
+
+export const readPackageGraph = (repoDir: string): WorkspaceGraph => {
+    const found = readWorkspaceManifests(repoDir);
+    const packages: WorkspacePackage[] = found.map(({ name, dir }) => ({ name, dir, group: dir.split("/")[0] ?? dir }));
+    const manifests = new Map(found.map(({ name, manifest }) => [name, manifest]));
 
     const edges: WorkspaceDepEdge[] = [];
     for (const { name } of packages) {

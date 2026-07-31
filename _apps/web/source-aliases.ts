@@ -39,6 +39,11 @@ export const sourceAliases = (): Record<string, string> => ({
     // is a dependency-free leaf that the daemon, the app and an extension all reach for, so it is exported off
     // the barrel (a unit test that only wants a session name must not resolve the whole wire contract).
     "@intentic/sandbox-contract/session-names": here("../../_libs/sandbox-contract/src/session-names.ts"),
+    // The chore book — what routine maintenance a repository is owed, and the verdict logic the Maintenance
+    // surface, its rail badge and the codebase-health panel's refactor asks all run. Off the barrel for the same
+    // reason as the two above: it is derivation over the wire types rather than the wire itself, and a caller
+    // that only wants to compose an ask must not resolve every schema in the contract to get there.
+    "@intentic/sandbox-contract/chores": here("../../_libs/sandbox-contract/src/chores/index.ts"),
     "@intentic/sandbox-contract": here("../../_libs/sandbox-contract/src/index.ts"),
     "@intentic/extension-api": here("../../_libs/extension-api/src/index.ts"),
     ...extensionAliases,

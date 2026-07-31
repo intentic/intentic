@@ -5,6 +5,7 @@ import { agentContract } from "./contracts/agent.contract.js";
 import { agentsContract } from "./contracts/agents.contract.js";
 import { automationsContract } from "./contracts/automations.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
+import { choresContract } from "./contracts/chores.contract.js";
 import { ciContract } from "./contracts/ci.contract.js";
 import { claudeContract } from "./contracts/claude.contract.js";
 import { codexContract } from "./contracts/codex.contract.js";
@@ -37,6 +38,7 @@ export { agentContract } from "./contracts/agent.contract.js";
 export { agentsContract } from "./contracts/agents.contract.js";
 export { automationsContract } from "./contracts/automations.contract.js";
 export { capabilitiesContract } from "./contracts/capabilities.contract.js";
+export { choresContract } from "./contracts/chores.contract.js";
 export { ciContract } from "./contracts/ci.contract.js";
 export { claudeContract } from "./contracts/claude.contract.js";
 export { codexContract } from "./contracts/codex.contract.js";
@@ -86,6 +88,7 @@ export const sandboxContract = {
     agents: agentsContract,
     automations: automationsContract,
     capabilities: capabilitiesContract,
+    chores: choresContract,
     ci: ciContract,
     claude: claudeContract,
     codex: codexContract,

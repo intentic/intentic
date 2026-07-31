@@ -26,6 +26,7 @@
         "@intentic/ext-automations": "workspace:*",
         "@intentic/ext-documentation": "workspace:*",
         "@intentic/ext-logs": "workspace:*",
+        "@intentic/ext-maintenance": "workspace:*",
         "@intentic/ext-memory": "workspace:*",
         "@intentic/ext-pipelines": "workspace:*",
         "@intentic/ext-preview": "workspace:*",

@@ -3082,3 +3082,181 @@ export const PushConfigQuerySchema = z.object({ endpoint: z.string().url().optio
 // the question being asked. A count separates "your OS swallowed it" from "nothing was sent at all".
 export const PushTestSchema = z.object({ delivered: z.number().int().nonnegative() });
 export type PushTest = z.infer<typeof PushTestSchema>;
+
+// ---- maintenance: the standing evidence a chore is decided from ----
+
+/* THE DAEMON SERVES FACTS; THE BROWSER DECIDES. Everything below is measurement — what a tool reported, what the
+ * manifests say, when a chore last ran. Not one field here says "you should do something", and that is the whole
+ * boundary: which chore is DUE is computed by @intentic/sandbox-contract/chores, which both the Maintenance view and its rail
+ * badge run, so the number on the tile and the reason in the panel can never disagree. Put the verdict on the wire
+ * instead and a daemon one image behind would be quietly arguing with the browser about what needs doing.
+ *
+ * The split inside the evidence is by COST, not by subject:
+ *   probes   subprocesses (pnpm outdated, pnpm audit, knip, jscpd) — minutes, so they are cached on disk with a
+ *            TTL and refreshed by a background runner. A route hit never waits on one.
+ *   signals  things the daemon already knows — the resident iq index's health ranking, the package manifests it
+ *            reads for the dependency graph, its own node version. Recomputed per request; all of it is cheap. */
+
+export const PROBE_IDS = ["outdated", "audit", "knip", "jscpd"] as const;
+export const ProbeIdSchema = z.enum(PROBE_IDS);
+export type ProbeId = z.infer<typeof ProbeIdSchema>;
+
+// One dependency the registry has moved past. `kind` is the SEMVER distance, which is the whole reason this is
+// not one number: forty patch releases behind is a morning's work and one major is a project.
+export const OutdatedPackageSchema = z.object({
+    name: z.string(),
+    current: z.string(),
+    latest: z.string(),
+    kind: z.enum(["major", "minor", "patch"]),
+    // "dependencies" / "devDependencies" / "optionalDependencies" — a dev-only major is a different risk.
+    section: z.string(),
+});
+export type OutdatedPackage = z.infer<typeof OutdatedPackageSchema>;
+
+// One advisory, reduced to what a decision needs. No CVSS vector and no reference list: those are for reading on
+// the advisory page, and carrying them would put a kilobyte of prose per finding on every poll of this route.
+export const AdvisorySchema = z.object({
+    name: z.string(),
+    severity: z.enum(["critical", "high", "moderate", "low", "info"]),
+    title: z.string(),
+    // The range that fixes it, when the advisory names one. Absent ⇒ no patch published yet, which is the case
+    // where a chore must NOT offer to bump and say so instead.
+    patched: z.string().optional(),
+    // Whether it reaches a production dependency path. A build-time-only tool's transitive CVE is a different
+    // problem, and the chore's prompt says so rather than treating every advisory alike.
+    dev: z.boolean(),
+});
+export type Advisory = z.infer<typeof AdvisorySchema>;
+
+// knip's counts, by the kind of thing it found unreachable. Counts plus a sample rather than the full list: the
+// agent re-runs knip itself against the live tree (a list from a probe hours old would send it at files that are
+// already gone), so what travels here only has to be enough to decide whether the turn is worth starting.
+export const DeadCodeSchema = z.object({
+    files: z.number().int().nonnegative(),
+    exports: z.number().int().nonnegative(),
+    types: z.number().int().nonnegative(),
+    dependencies: z.number().int().nonnegative(),
+    devDependencies: z.number().int().nonnegative(),
+    // A handful of the unreferenced files, for the panel to show instead of asking the reader to take "31" on faith.
+    sample: z.array(z.string()),
+});
+export type DeadCode = z.infer<typeof DeadCodeSchema>;
+
+// jscpd's headline plus the biggest clones. `percentage` is of scanned lines, which is the figure a threshold is
+// worth setting against — a clone COUNT grows with the repo and would mean something different every quarter.
+export const DuplicationSchema = z.object({
+    percentage: z.number(),
+    clones: z.number().int().nonnegative(),
+    top: z.array(z.object({ lines: z.number().int().nonnegative(), first: z.string(), second: z.string() })),
+});
+export type Duplication = z.infer<typeof DuplicationSchema>;
+
+/* One probe's cached result. The three states are deliberately distinct, because a panel that collapses them
+ * lies about the most important case:
+ *   ok           the tool ran and reported. `facts` carries its findings — including "nothing found", which is
+ *                a real answer and the one that keeps a chore quiet.
+ *   unavailable  the tool is not part of this repo (knip is not a devDependency, there is no lockfile to audit).
+ *                Not a failure and not evidence of health: the chore renders as unmeasured, and can never badge.
+ *   failed       the tool ran and broke — a network-less audit, a jscpd that ran out of memory. Says so, with
+ *                the tail of what it printed, rather than reading as "clean".
+ * Merging `unavailable` into `ok`-with-zeros is how a maintenance surface ends up reporting a green repository
+ * it has never actually measured. */
+export const ProbeStateSchema = z.enum(["ok", "unavailable", "failed"]);
+export type ProbeState = z.infer<typeof ProbeStateSchema>;
+
+// The findings, discriminated by which probe produced them. Absent while the probe has never completed, and on
+// `unavailable`/`failed` — a reader must go through `state` to reach facts, so there is no shape in which a
+// missing measurement can be mistaken for a zero.
+export const ProbeFactsSchema = z.discriminatedUnion("id", [
+    z.object({ id: z.literal("outdated"), packages: z.array(OutdatedPackageSchema) }),
+    z.object({ id: z.literal("audit"), advisories: z.array(AdvisorySchema) }),
+    z.object({ id: z.literal("knip"), deadCode: DeadCodeSchema }),
+    z.object({ id: z.literal("jscpd"), duplication: DuplicationSchema }),
+]);
+export type ProbeFacts = z.infer<typeof ProbeFactsSchema>;
+
+export const ProbeResultSchema = z.object({
+    id: ProbeIdSchema,
+    state: ProbeStateSchema,
+    // When the probe last COMPLETED — the age the panel shows, and what the runner's TTL is measured from.
+    ranAt: z.number(),
+    // How long it took. Shown because a seven-minute jscpd is why the tier-2 refresh is weekly, and a reader
+    // deciding whether to force a refresh deserves to know what they are asking for.
+    tookMs: z.number().int().nonnegative(),
+    facts: ProbeFactsSchema.optional(),
+    // Why it is unavailable, or how it failed — the tail of the tool's own output. Never invented here.
+    reason: z.string().optional(),
+});
+export type ProbeResult = z.infer<typeof ProbeResultSchema>;
+
+// One workspace package as its manifest declares it — what the daemon already reads to build the dependency
+// graph, carried through so chores can reason about the repo's own shape without a probe. `documented` is the
+// one derived field: whether docs/architecture/<dir>/doc.md exists, a stat per package.
+export const ChorePackageSchema = z.object({
+    dir: z.string(),
+    name: z.string(),
+    // The manifest's `engines` map, verbatim — the runtime chore compares it against what the daemon is running.
+    engines: z.record(z.string(), z.string()).optional(),
+    dependencies: z.array(z.string()),
+    devDependencies: z.array(z.string()),
+    documented: z.boolean(),
+});
+export type ChorePackage = z.infer<typeof ChorePackageSchema>;
+
+/* The cheap half of the evidence: what the daemon knows without starting anything. `hotspots` and `keyModules`
+ * are the same rankings GET /workspace/health serves, capped tighter — a chore only ever asks whether a file has
+ * ENTERED the top of the ranking, so a leaderboard is enough and a full report per repo per poll is not. */
+export const ChoreSignalsSchema = z.object({
+    packages: z.array(ChorePackageSchema),
+    hotspots: z.array(WorkspaceHotspotSchema),
+    keyModules: z.array(WorkspaceKeyModuleSchema),
+    totals: z.object({ files: z.number(), symbols: z.number(), complexity: z.number(), hotspots: z.number() }),
+    // Whether the index these rankings came from is current. A chore must not fire on a half-built index, and
+    // this is how the browser knows to hold its verdict rather than act on a partial ranking.
+    indexed: z.boolean(),
+});
+export type ChoreSignals = z.infer<typeof ChoreSignalsSchema>;
+
+// What a finished chore turn left behind — written by the agent, read back to decide whether the chore is still
+// due. `clean` is the load-bearing one: an agent that looked and found the tool's findings to be false positives
+// must be able to say so, or the next poll starts the same turn again forever.
+export const ChoreOutcomeSchema = z.enum(["acted", "reported", "clean"]);
+export type ChoreOutcome = z.infer<typeof ChoreOutcomeSchema>;
+
+/* One chore's history in one repo. The DIGEST is what makes this a debounce rather than a suppression: it is a
+ * hash of the evidence that was standing when the turn ran, so a chore whose evidence has since changed is due
+ * again on its own merits while one whose evidence is unchanged stays quiet — with the run still visible in the
+ * panel, saying when it ran and what it concluded. Nothing here can hide a chore from the view; it only decides
+ * whether the rail is allowed to speak. */
+export const ChoreLedgerEntrySchema = z.object({
+    repo: z.string(),
+    chore: z.string(),
+    ranAt: z.number(),
+    runId: z.string(),
+    outcome: ChoreOutcomeSchema,
+    digest: z.string(),
+    // Set by the owner from the panel — the chore stays visible and stays out of the badge until this passes.
+    // Distinct from opting out, which is the absence of the chore from `enabled` in the sandbox's settings.
+    snoozedUntil: z.number().optional(),
+});
+export type ChoreLedgerEntry = z.infer<typeof ChoreLedgerEntrySchema>;
+
+// GET /chores — every discovered repo's standing evidence, plus the ledger, in one read. One route rather than
+// one per repo because the rail badge scans ALL of them on a timer, and N requests a minute to answer "is
+// anything due" is the kind of poll that shows up in a battery graph.
+export const ChoresReportSchema = z.object({
+    repos: z.array(z.object({ repo: z.string(), probes: z.array(ProbeResultSchema), signals: ChoreSignalsSchema })),
+    ledger: z.array(ChoreLedgerEntrySchema),
+    // The daemon's own runtime, for the chore that asks whether this sandbox is running something end-of-life.
+    // Read off the process rather than a manifest: what is INSTALLED is the fact that matters, and an `engines`
+    // range is a wish.
+    node: z.string(),
+});
+export type ChoresReport = z.infer<typeof ChoresReportSchema>;
+
+// POST /chores/probe — force one probe to re-run now, ahead of its TTL. Returns immediately; the runner does the
+// work and the next GET /chores carries the result, the same shape the panel already polls.
+export const ChoreProbeRequestSchema = z.object({ repo: z.string().min(1), id: ProbeIdSchema });
+// POST /chores/ledger — record a run, or snooze. Written daemon-side rather than by the browser so a chore turn
+// started from anywhere (the panel, an automation, the agent itself) lands in one ledger.
+export const ChoreLedgerWriteSchema = ChoreLedgerEntrySchema;
