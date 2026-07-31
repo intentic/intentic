@@ -1,6 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { z } from "zod";
+import { type JsonFile, jsonFile } from "../store/json-file.js";
 
 // Per-extension settings values (<workspace>/.intentic/extension-settings.json), keyed by the manifest-derived
 // extension id (publisher.name) — NOT the capability entry id — so values survive a remove/re-add and the
@@ -9,20 +9,26 @@ import { z } from "zod";
 const FileSchema = z.record(z.string(), z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])));
 type SettingsFile = z.infer<typeof FileSchema>;
 
-const settingsPath = (root: string): string => join(root, ".intentic", "extension-settings.json");
+/* These two are free functions taking a root rather than a store built at composition, so the file object is
+ * memoized per root instead. That memo is load-bearing, not a cache: `update`'s write queue lives on the
+ * object, so building a fresh one per call would leave two extensions saving at once each reading the old map
+ * and the second erasing the first's key — the very lost update the queue exists to stop. One root per process
+ * in practice, so this map holds exactly one entry. */
+const files = new Map<string, JsonFile<SettingsFile>>();
 
-export const readAllExtensionSettings = async (root: string): Promise<SettingsFile> => {
-    try {
-        const parsed = FileSchema.safeParse(JSON.parse(await readFile(settingsPath(root), "utf8")));
-        return parsed.success ? parsed.data : {};
-    } catch {
-        return {};
+const settingsFile = (root: string): JsonFile<SettingsFile> => {
+    const path = join(root, ".intentic", "extension-settings.json");
+    const existing = files.get(path);
+    if (existing !== undefined) {
+        return existing;
     }
+    const file = jsonFile<SettingsFile>(path, { parse: (raw) => FileSchema.safeParse(raw).data, fallback: () => ({}) });
+    files.set(path, file);
+    return file;
 };
 
+export const readAllExtensionSettings = async (root: string): Promise<SettingsFile> => settingsFile(root).read();
+
 export const writeExtensionSettings = async (root: string, extensionId: string, settings: SettingsFile[string]): Promise<void> => {
-    const all = await readAllExtensionSettings(root);
-    const path = settingsPath(root);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `${JSON.stringify({ ...all, [extensionId]: settings }, undefined, 2)}\n`);
+    await settingsFile(root).update((all) => ({ ...all, [extensionId]: settings }));
 };

@@ -1,7 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { type AccountUsage, AccountUsageSchema, type UsageWindow } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { jsonFile } from "../store/json-file.js";
 
 /* The latest plan-limit snapshot per ACCOUNT, whichever provider it belongs to (<historyRoot>/account-usage.json
  * — on the /history volume beside agents.json, so the agent can't rewrite what the account picker reports, and
@@ -56,46 +55,37 @@ export const accountLimitReset = async (store: AccountUsageStore, account: strin
 };
 
 export const fileAccountUsageStore = (path: string): AccountUsageStore => {
-    // One in-memory record is the authority (the daemon is the only writer); the file is its durable echo.
-    let loaded: Promise<Record<string, AccountUsage>> | undefined;
-    const load = (): Promise<Record<string, AccountUsage>> => {
-        loaded ??= readFile(path, "utf8")
-            .then((raw) => StoredUsageSchema.parse(JSON.parse(raw)))
-            .catch(() => ({}) as Record<string, AccountUsage>);
-        return loaded;
-    };
-
-    // Writes are serialized because turns on different accounts finish concurrently and node makes no promise
-    // about overlapping writeFile calls to one path — each truncates then writes, so two in flight can leave a
-    // torn file. `then(flush, flush)` also means one failed write doesn't poison every write after it.
-    let writes: Promise<void> = Promise.resolve();
-    const persist = async (mutate: (current: Record<string, AccountUsage>) => void): Promise<void> => {
-        const current = await load();
-        mutate(current);
-        const flush = async (): Promise<void> => {
-            await mkdir(dirname(path), { recursive: true });
-            await writeFile(path, `${JSON.stringify(current, undefined, 2)}\n`);
-        };
-        writes = writes.then(flush, flush);
-        return writes;
-    };
+    /* The FILE is the authority, not an in-memory record it echoes. This used to load once and answer every
+     * read from that copy, which was defensible while the daemon was the only writer — but the two writers
+     * here (a Claude turn's stream, the translator's pull) are exactly the concurrency `update`'s queue is
+     * for, and reading through means a snapshot one of them just recorded is never served stale. Turns on
+     * different accounts do finish at the same moment, and a bare writeFile truncates before it fills, so
+     * the atomic swap is what stops one of those overlaps from leaving a torn file behind. */
+    const file = jsonFile<Record<string, AccountUsage>>(path, {
+        parse: (raw) => StoredUsageSchema.safeParse(raw).data,
+        fallback: () => ({}),
+    });
 
     return {
         read: async () => {
             const now = Date.now();
             return Object.fromEntries(
-                Object.entries(await load())
+                Object.entries(await file.read())
                     .map(([id, usage]): [string, AccountUsage] => [id, { ...usage, windows: liveWindows(usage, now) }])
                     .filter(([, usage]) => usage.windows.length > 0),
             );
         },
-        record: (account, usage) =>
-            persist((current) => {
-                current[account] = usage;
-            }),
-        clear: (account) =>
-            persist((current) => {
-                delete current[account];
-            }),
+        record: async (account, usage) => {
+            await file.update((current) => ({ ...current, [account]: usage }));
+        },
+        clear: async (account) => {
+            await file.update((current) => {
+                if (!(account in current)) {
+                    return current;
+                }
+                const { [account]: _dropped, ...rest } = current;
+                return rest;
+            });
+        },
     };
 };

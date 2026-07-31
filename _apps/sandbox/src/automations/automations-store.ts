@@ -1,7 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { type Automation, type AutomationRun, AutomationRunSchema, AutomationSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { jsonFile } from "../store/json-file.js";
 
 // The sandbox-owned automations manifest (<workspace>/.intentic/automations.json): the user's automations plus
 // their daemon-recorded run history. The scheduler polls it; the /automations routes edit it. Mirrors the
@@ -26,43 +25,38 @@ export interface AutomationsStore {
 
 // A JSON file store, used in production at <workspace>/.intentic/automations.json.
 export const fileAutomationsStore = (path: string): AutomationsStore => {
-    const read = async (): Promise<AutomationRecord[]> => {
-        try {
-            const parsed = z.array(AutomationRecordSchema).safeParse(JSON.parse(await readFile(path, "utf8")));
-            return parsed.success ? parsed.data : [];
-        } catch {
-            return [];
-        }
-    };
-    const write = async (automations: AutomationRecord[]): Promise<void> => {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, `${JSON.stringify(automations, undefined, 2)}\n`);
-    };
+    const file = jsonFile<AutomationRecord[]>(path, {
+        parse: (raw) => z.array(AutomationRecordSchema).safeParse(raw).data,
+        fallback: () => [],
+    });
     return {
-        list: read,
-        get: async (id) => (await read()).find((automation) => automation.id === id),
+        list: file.read,
+        get: async (id) => (await file.read()).find((automation) => automation.id === id),
         upsert: async (automation) => {
-            const automations = await read();
-            const existing = automations.find((record) => record.id === automation.id);
-            await write([...automations.filter((record) => record.id !== automation.id), { ...automation, runs: existing?.runs ?? [] }]);
+            await file.update((automations) => {
+                const existing = automations.find((record) => record.id === automation.id);
+                return [...automations.filter((record) => record.id !== automation.id), { ...automation, runs: existing?.runs ?? [] }];
+            });
         },
         remove: async (id) => {
-            const automations = await read();
-            const next = automations.filter((automation) => automation.id !== id);
-            if (next.length === automations.length) {
-                return false;
-            }
-            await write(next);
-            return true;
+            let removed = false;
+            await file.update((automations) => {
+                const next = automations.filter((automation) => automation.id !== id);
+                removed = next.length !== automations.length;
+                // Unchanged by reference when nothing matched, so removing an absent id writes nothing.
+                return removed ? next : automations;
+            });
+            return removed;
         },
         recordRun: async (id, run) => {
-            const automations = await read();
-            const record = automations.find((automation) => automation.id === id);
-            if (record === undefined) {
-                return;
-            }
-            record.runs = [run, ...record.runs].slice(0, RUNS_KEPT);
-            await write(automations);
+            await file.update((automations) =>
+                automations.some((automation) => automation.id === id)
+                    ? automations.map((automation) =>
+                          automation.id === id ? { ...automation, runs: [run, ...automation.runs].slice(0, RUNS_KEPT) } : automation,
+                      )
+                    : // A run for a just-removed automation is dropped — and writes nothing.
+                      automations,
+            );
         },
     };
 };

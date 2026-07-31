@@ -1,6 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract";
+import { jsonFile } from "../store/json-file.js";
 
 // The sandbox-owned manifest of active capabilities (<workspace>/.intentic/capabilities.json). Source of truth
 // for what's active; mcp entries also feed the agent's MCP servers. On the secret denylist (an mcp token lives
@@ -32,17 +31,13 @@ const rawId = (entry: unknown): string | undefined => {
 // A JSON file store, used in production at <workspace>/.intentic/capabilities.json. `onInvalid` reports an
 // entry that could not be read, so a capability disappearing from the UI is never silent.
 export const fileCapabilitiesStore = (path: string, onInvalid?: (id: string, reason: string) => void): CapabilitiesStore => {
-    // The file's entries, unvalidated — what the writes preserve.
-    const readRaw = async (): Promise<unknown[]> => {
-        try {
-            const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
-            return Array.isArray(parsed) ? parsed : [];
-        } catch {
-            return [];
-        }
-    };
+    // Typed as the RAW array the writes preserve, not as Capability[] — per-entry validation happens in `read`
+    // below so one unreadable entry costs itself and not the manifest. The schema check here is only "is this
+    // a JSON array at all"; anything else reads as empty, which is also what a torn file used to read as
+    // before jsonFile made torn files unobservable.
+    const file = jsonFile<unknown[]>(path, { parse: (raw) => (Array.isArray(raw) ? raw : undefined), fallback: () => [] });
     const read = async (): Promise<Capability[]> =>
-        (await readRaw()).flatMap((entry) => {
+        (await file.read()).flatMap((entry) => {
             const parsed = CapabilitySchema.safeParse(entry);
             if (parsed.success) {
                 return [parsed.data];
@@ -50,24 +45,21 @@ export const fileCapabilitiesStore = (path: string, onInvalid?: (id: string, rea
             onInvalid?.(rawId(entry) ?? "<unnamed>", parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "));
             return [];
         });
-    const write = async (entries: unknown[]): Promise<void> => {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, `${JSON.stringify(entries, undefined, 2)}\n`);
-    };
     return {
         list: read,
         get: async (id) => (await read()).find((capability) => capability.id === id),
         upsert: async (capability) => {
-            await write([...(await readRaw()).filter((entry) => rawId(entry) !== capability.id), capability]);
+            await file.update((entries) => [...entries.filter((entry) => rawId(entry) !== capability.id), capability]);
         },
         remove: async (id) => {
-            const entries = await readRaw();
-            const next = entries.filter((entry) => rawId(entry) !== id);
-            if (next.length === entries.length) {
-                return false;
-            }
-            await write(next);
-            return true;
+            let removed = false;
+            await file.update((entries) => {
+                const next = entries.filter((entry) => rawId(entry) !== id);
+                removed = next.length !== entries.length;
+                // Unchanged by reference when nothing matched, so a remove of an absent id writes nothing.
+                return removed ? next : entries;
+            });
+            return removed;
         },
     };
 };

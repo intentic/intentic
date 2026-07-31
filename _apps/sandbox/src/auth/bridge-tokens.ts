@@ -1,8 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
+import { jsonFile } from "../store/json-file.js";
 import { tokenEquals } from "./auth.js";
 
 /* Bridge tokens: the credential the ACP editor bridge (`intentic-acp`, spawned by Zed/JetBrains on the
@@ -34,24 +33,15 @@ export interface BridgeTokens {
 }
 
 export const fileBridgeTokens = (path: string): BridgeTokens => {
-    const read = async (): Promise<StoredTokens> => {
-        try {
-            const parsed = StoredTokensSchema.safeParse(JSON.parse(await readFile(path, "utf8")));
-            return parsed.success ? parsed.data : { tokens: [] };
-        } catch {
-            return { tokens: [] };
-        }
-    };
-    const write = async (stored: StoredTokens): Promise<void> => {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, `${JSON.stringify(stored, undefined, 2)}\n`);
-    };
+    const file = jsonFile<StoredTokens>(path, {
+        parse: (raw) => StoredTokensSchema.safeParse(raw).data,
+        fallback: () => ({ tokens: [] }),
+    });
     return {
         mint: async (label) => {
             const token = `ibt_${randomBytes(32).toString("base64url")}`;
             const id = randomUUID();
-            const stored = await read();
-            await write({ tokens: [...stored.tokens, { id, label, hash: sha256Hex(token), createdAt: Date.now() }] });
+            await file.update((stored) => ({ tokens: [...stored.tokens, { id, label, hash: sha256Hex(token), createdAt: Date.now() }] }));
             return { id, token };
         },
         verify: async (presented) => {
@@ -60,17 +50,18 @@ export const fileBridgeTokens = (path: string): BridgeTokens => {
             }
             const hash = sha256Hex(presented);
             // Comparing fixed-length hex digests keeps the comparison timing-safe regardless of input length.
-            return (await read()).tokens.some((entry) => tokenEquals(entry.hash, hash));
+            return (await file.read()).tokens.some((entry) => tokenEquals(entry.hash, hash));
         },
-        list: async () => (await read()).tokens.map(({ id, label, createdAt }) => ({ id, label, createdAt })),
+        list: async () => (await file.read()).tokens.map(({ id, label, createdAt }) => ({ id, label, createdAt })),
         revoke: async (id) => {
-            const stored = await read();
-            const next = stored.tokens.filter((entry) => entry.id !== id);
-            if (next.length === stored.tokens.length) {
-                return false;
-            }
-            await write({ tokens: next });
-            return true;
+            let revoked = false;
+            await file.update((stored) => {
+                const next = stored.tokens.filter((entry) => entry.id !== id);
+                revoked = next.length !== stored.tokens.length;
+                // Unchanged by reference when nothing matched, so revoking an absent id writes nothing.
+                return revoked ? { tokens: next } : stored;
+            });
+            return revoked;
         },
     };
 };

@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { z } from "zod";
+import { jsonFile } from "../store/json-file.js";
 
 // The CI module's daemon-recorded state (<workspace>/.intentic/ci.json): the per-sandbox webhook secret and
 // the last TERMINAL conclusion per repo+branch — what makes a success after a failure read as `pipeline_fixed`
@@ -40,49 +39,38 @@ export interface CiStore {
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
 
+// Fill the webhook secret if the file had none. Applied inside `update`, so two concurrent first callers can't
+// mint two different secrets — hook registrations and the signature check have to agree on one value.
+const minted = (state: CiState): CiState => (state.secret === "" ? { ...state, secret: randomBytes(32).toString("hex") } : state);
+
 export const fileCiStore = (path: string): CiStore => {
-    const read = async (): Promise<CiState | undefined> => {
-        try {
-            const parsed = CiStateSchema.safeParse(JSON.parse(await readFile(path, "utf8")));
-            return parsed.success ? parsed.data : undefined;
-        } catch {
-            return undefined;
-        }
-    };
-    const write = async (state: CiState): Promise<void> => {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, `${JSON.stringify(state, undefined, 2)}\n`, { mode: 0o600 });
-    };
-    const readOrInit = async (): Promise<CiState> => {
-        const current = await read();
-        if (current !== undefined) {
-            return current;
-        }
-        const fresh: CiState = { secret: randomBytes(32).toString("hex"), conclusions: {} };
-        await write(fresh);
-        return fresh;
-    };
+    const file = jsonFile<CiState>(path, {
+        parse: (raw) => CiStateSchema.safeParse(raw).data,
+        // An EMPTY secret is the in-memory marker for "no file yet" — the schema requires a non-empty one, so
+        // this shape is never written. `minted` below fills it inside the update queue, which is what stops two
+        // concurrent first callers from minting two different secrets; hook registrations and the signature
+        // check have to agree on one value across boots.
+        fallback: () => ({ secret: "", conclusions: {} }),
+        mode: 0o600,
+    });
     return {
-        secret: async () => (await readOrInit()).secret,
-        lastConclusion: async (repo, branch) => (await read())?.conclusions[keyOf(repo, branch)]?.status,
+        secret: async () => (await file.update(minted)).secret,
+        lastConclusion: async (repo, branch) => (await file.read()).conclusions[keyOf(repo, branch)]?.status,
         recordConclusion: async (repo, branch, status, at) => {
-            const state = await readOrInit();
-            state.conclusions[keyOf(repo, branch)] = { status, at };
-            const keys = Object.keys(state.conclusions);
-            if (keys.length > CONCLUSIONS_KEPT) {
+            await file.update((state) => {
+                const conclusions = { ...state.conclusions, [keyOf(repo, branch)]: { status, at } };
+                const keys = Object.keys(conclusions);
                 for (const stale of keys
-                    .toSorted((a, b) => (state.conclusions[a]?.at ?? 0) - (state.conclusions[b]?.at ?? 0))
-                    .slice(0, keys.length - CONCLUSIONS_KEPT)) {
-                    delete state.conclusions[stale];
+                    .toSorted((a, b) => (conclusions[a]?.at ?? 0) - (conclusions[b]?.at ?? 0))
+                    .slice(0, Math.max(0, keys.length - CONCLUSIONS_KEPT))) {
+                    delete conclusions[stale];
                 }
-            }
-            await write(state);
+                return { ...minted(state), conclusions };
+            });
         },
-        seenAt: async () => (await read())?.seenAt,
+        seenAt: async () => (await file.read()).seenAt,
         markSeen: async (at) => {
-            const state = await readOrInit();
-            state.seenAt = at;
-            await write(state);
+            await file.update((state) => ({ ...minted(state), seenAt: at }));
         },
     };
 };

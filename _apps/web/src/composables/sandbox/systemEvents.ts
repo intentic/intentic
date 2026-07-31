@@ -1,11 +1,11 @@
-import type { SystemEvent } from "@intentic/sandbox-contract";
+import { staleQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { setAgents } from "../agents/useAgents";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { throttleTrailing } from "../throttleTrailing";
 import { setPresenceUsers } from "../usePresence";
 import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
-import { daemonRebuilt, manifestQueryKeys, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
+import { daemonRebuilt, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 import { setDaemonBoot } from "./useDaemonBoot";
 import { setDaemonRoutes } from "./useDaemonRoutes";
 
@@ -70,7 +70,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             return;
         case `workspaceChanged`: {
             markWorkspaceChanged(event.paths);
-            for (const key of manifestQueryKeys(event.paths)) {
+            for (const key of staleQueryKeys(event.paths)) {
                 void queryClient.invalidateQueries({ queryKey: [key] });
             }
             // Any worktree write surfaces in the Changes review — but not during a streaming turn, whose

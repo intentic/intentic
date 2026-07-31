@@ -5,27 +5,11 @@
  * Keeping it dependency-free is the point: these are the rules a cross-user cache-freshness bug lives in, and
  * they are now readable and testable on their own. The dispatcher that ACTS on them is systemEvents.ts. */
 
-// Which .intentic/ manifest backs which queries. The daemon-internal churn under .intentic/ (its iq index, the
-// agent transcripts) is unwatched at the source now, but this stays a per-file map rather than a prefix test:
-// one stray write under .intentic/ must never cost every one of these queries a refetch — that amplification is
-// what turned an index rebuild into an endless request storm. Prefixes, so environment.{,custom.,approved.}
-// Dockerfile and the one-file-per-approval dir each match with a single entry.
-const MANIFEST_QUERIES: readonly { readonly prefix: string; readonly keys: readonly string[] }[] = [
-    // A capability add/remove recomposes the environment overlay and can add or drop a repo's panel.
-    { prefix: `.intentic/capabilities.json`, keys: [`capabilities`, `environment`, `panels`] },
-    { prefix: `.intentic/environment.`, keys: [`environment`] },
-    { prefix: `.intentic/automations.json`, keys: [`automations`] },
-    { prefix: `.intentic/approvals/`, keys: [`automation-approvals`] },
-    { prefix: `.intentic/settings.json`, keys: [`settings`] },
-];
-
-// The query keys a batch of changed paths makes stale, deduped. Cross-user freshness for the .intentic/-backed
-// views: another member's capability/automation/setting write lands here as a plain file change, but those
-// queries only refetch on their OWN mutations — so without this every connected browser would sit on state the
-// sandbox has already moved past until it remounted.
-export const manifestQueryKeys = (paths: readonly string[]): readonly string[] => [
-    ...new Set(MANIFEST_QUERIES.filter(({ prefix }) => paths.some((path) => path.startsWith(prefix))).flatMap(({ keys }) => keys)),
-];
+/* Which .intentic/ manifest backs which queries used to be declared HERE, in a copy maintained separately from
+ * the paths the daemon actually writes — and the two drifted: `.intentic/drafts/` is written by the agent's own
+ * file tools and rendered by the Drafts view, and was simply never added. It now lives once in
+ * @intentic/sandbox-contract (workspace-state.ts), where both sides derive from it; callers import
+ * `staleQueryKeys` from there directly. */
 
 /* The two identities a hello frame carries that the persisted cache is only valid against, each remembered per
  * sandbox. Both follow one rule: RECORD on every hello and report a change only against something previously
