@@ -19,6 +19,12 @@ export interface OpenCodeService {
     // (the ground truth a device sign-in writes), NOT provider.list().connected, which OpenCode computes once at
     // server-init and never refreshes after a runtime auth.set() on our long-lived server.
     readonly connected: (providerID: string) => Promise<boolean>;
+    // Whether OpenCode still holds this session — the resume pre-flight every other provider already had (see
+    // turn-plan.ts). Without it a chat whose session OpenCode lost (its storage cleared, a sandbox rebuild) sent
+    // its prompt at a dead id and got the raw rejection back, forever: nothing told the client the id was the
+    // problem, so every retry re-sent the same one. False on an unreachable server too — the turn that follows
+    // starts a fresh session, which is the same recovery and a better failure than a wedged conversation.
+    readonly sessionExists: (sessionId: string, directory: string) => Promise<boolean>;
     // xAI's model catalog (id + humanized label) plus a default id — ALWAYS non-empty, so the picker is never
     // blank and a send always resolves a model. Source, in order: live xAI discovery with the persisted OAuth
     // token (best, when the token is unexpired), else the last-known-good catalog persisted by recordModels, else
@@ -150,6 +156,14 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
             // `opencode serve` a just-completed device sign-in never flips it. auth.json is what the flow writes.
             const entry = (await readAuth())[providerID];
             return entry?.type === "oauth" && typeof entry.access === "string";
+        },
+        sessionExists: async (sessionId, directory) => {
+            try {
+                const client = await ensure();
+                return (await client.session.get({ path: { id: sessionId }, query: { directory } })).data !== undefined;
+            } catch {
+                return false;
+            }
         },
         xaiModels: async () => {
             if (modelsCache !== undefined && Date.now() < modelsCache.expiresAt) {

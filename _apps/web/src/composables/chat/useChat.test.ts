@@ -689,7 +689,7 @@ describe(`abandoned drafts`, () => {
  *
  * There is no provider gate here at all, and that is the fix rather than an omission. It was `provider ===
  * 'claude'` once, which opened a finished Gemini (or Kimi) agent as an empty "start a conversation with Google"
- * panel; widening it to `runsClaudeCode` fixed those two and left codex/grok NATIVE and every ACP agent blank
+ * panel; widening it to "runs the Claude Code loop" fixed those two and left codex/grok NATIVE and every ACP blank
  * for the same reason, one provider later. Each widening asked "does this agent's provider keep a store we can
  * read?", when the answer that ends the bug is that the DAEMON keeps the store — it records what it streams
  * (sessions/transcript-record.ts), so the question no longer has to be asked. */

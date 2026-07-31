@@ -2,7 +2,7 @@
 import { useDevice, useListNavigation } from "@intentic-app/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { type AgentHarness, type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, limitationsOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady } from "../composables/chat/access";
 import { BADGE_META, relativeTime } from "../composables/chat/catalog";
 import { acpProviders, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
@@ -31,7 +31,8 @@ import ProviderLogo from "./ProviderLogo.vue";
 
 const emit = defineEmits<{ selected: [] }>();
 
-const { provider, harness, selectHarness, model, thinking, streaming, messages, account, selectAccount, accounts, selectModel } = useChat();
+const { provider, harness, selectHarness, model, thinking, streaming, messages, account, selectAccount, accounts, selectModel, capabilities } =
+    useChat();
 const { mobile } = useDevice();
 const router = useRouter();
 
@@ -210,7 +211,20 @@ const stateFor = (target: AgentProvider) => providerModelsState.value[target];
 // always highlights the one in effect, even before the user touches it.
 const activeAccountId = computed(() => account.value ?? accounts.value[0]?.id);
 
-const footerVisible = computed(() => accounts.value.length > 1 || provider.value === `claude` || harnessChoosable.value || messages.value.length > 0);
+/* What the selected provider/harness pair does NOT do, straight off its declared record. The picker is where
+ * the choice is made, so it is where the trade-off belongs: picking Grok gives up mid-turn steering and per-tool
+ * approvals, and nothing else in the app was ever going to say so — the controls simply stopped working. An
+ * empty list (the Claude Code loop, which is the ceiling) renders nothing at all. */
+const limitations = computed(() => limitationsOf(capabilities.value));
+
+const footerVisible = computed(
+    () =>
+        accounts.value.length > 1 ||
+        provider.value === `claude` ||
+        harnessChoosable.value ||
+        limitations.value.length > 0 ||
+        messages.value.length > 0,
+);
 
 // Names shared by more than one connected account — the rows a name alone cannot tell apart.
 const ambiguousLabels = computed(() => {
@@ -559,6 +573,18 @@ onMounted(() => {
                     <Icon name="bolt" class="text-2xs" />
                     <span>{{ thinking ? "On" : "Off" }}</span>
                 </button>
+            </div>
+
+            <!-- The honest half of the choice: what this runtime can't do, named before the user relies on it.
+                 Chips rather than prose — the list is short, unordered, and each item is a control that would
+                 otherwise appear to work. -->
+            <div v-if="limitations.length > 0" class="flex flex-col gap-1">
+                <span class="text-2xs font-medium uppercase tracking-wide text-muted">Not available here</span>
+                <div class="flex flex-wrap gap-1">
+                    <span v-for="limit in limitations" :key="limit" class="rounded border border-line px-1.5 py-0.5 text-2xs text-subtle">{{
+                        limit
+                    }}</span>
+                </div>
             </div>
 
             <!-- A session resumes only on its own runtime, so a mid-chat switch starts a fresh one seeded

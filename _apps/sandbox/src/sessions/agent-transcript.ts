@@ -1,4 +1,4 @@
-import { type AgentHarness, type AgentProvider, type RestoredMessage, runsClaudeCode } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, capabilitiesOf, type RestoredMessage } from "@intentic/sandbox-contract";
 import { readCodexSession } from "./codex-sessions.js";
 import type { TranscriptRecord } from "./transcript-record.js";
 
@@ -31,11 +31,14 @@ export interface AgentTranscriptDeps {
  * Empty is a legitimate answer (a conversation with no store to read, or one whose store no longer holds it),
  * and it is not an error — the record simply opens with nothing adopted. */
 export const storedTranscript = async (deps: AgentTranscriptDeps, agent: TranscriptAgent): Promise<RestoredMessage[]> => {
-    if (runsClaudeCode(agent.provider, agent.harness)) {
+    // Which store to backfill from is the RUNTIME's question, not the provider's — a codex conversation on the
+    // claude-code harness filed its turns with the SDK, not in a codex rollout (capabilitiesOf).
+    const { runtime } = capabilitiesOf(agent.provider, agent.harness);
+    if (runtime === "claude-code") {
         const sessionId = deps.sessionIdOf(agent.id);
         return sessionId === undefined ? [] : deps.readClaudeSession(deps.root, sessionId);
     }
-    if (agent.provider === "codex") {
+    if (runtime === "codex") {
         const threadId = deps.sessionIdOf(agent.id);
         return threadId === undefined ? [] : readCodexSession(deps.codexHome, threadId, deps.root);
     }

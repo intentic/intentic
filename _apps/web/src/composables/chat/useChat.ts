@@ -147,7 +147,7 @@ const restoreTab = (tab: StoredTab): Conversation => {
     conversation.registered.value = tab.registered;
     // The posture isn't part of the snapshot (it is a per-task choice, not a preference) — a restored tab
     // starts from the mode its tree calls for, same as a fresh one.
-    conversation.mode.value = startingMode(conversation.isolated.value);
+    conversation.modePick.value = startingMode(conversation.isolated.value);
     conversation.draft.value = tab.draft;
     conversation.attachments.value = tab.attachments.map((file) => ({
         id: crypto.randomUUID(),
@@ -298,6 +298,9 @@ const replaying = computed(() => active.value.replaying.value);
 const queued = computed(() => active.value.queued.value);
 const removeQueued = (id: string): void => active.value.removeQueued(id);
 const steerable = computed(() => active.value.steerable.value);
+// What the active conversation's runtime can do (the contract's declared record) — the composer reads it to
+// offer only the controls something applies, and to say what this provider can't do at all.
+const capabilities = computed(() => active.value.capabilities.value);
 
 // Open (or re-focus) the active conversation's plan preview tab in the main view — the workspace tab is keyed
 // `plan:<conversationId>`, so any plan card in the transcript reopens/replaces the same preview, and it stays
@@ -338,7 +341,7 @@ const contextUsage = computed(() => active.value.contextUsage.value);
 const mode = computed<PermissionMode>({
     get: () => active.value.liveMode.value ?? active.value.mode.value,
     set: (value) => {
-        active.value.mode.value = value;
+        active.value.modePick.value = value;
         active.value.liveMode.value = undefined;
     },
 });
@@ -1567,6 +1570,7 @@ export function useChat() {
         pendingPlanMessage,
         activeModel,
         contextUsage,
+        capabilities,
         mode,
         planApprovals,
         provider,

@@ -3,8 +3,8 @@ import {
     type AgentEvent,
     type AgentTurn,
     agentContract,
+    capabilitiesOf,
     type EditorContext,
-    runsClaudeCode,
     type WorkspaceEvent,
     USAGE_LIMIT_AUTO_RESUME_ENABLED,
 } from "@intentic/sandbox-contract";
@@ -89,10 +89,10 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     } else {
         signal?.addEventListener("abort", () => controller.abort(), { once: true });
     }
-    // Steering needs the SDK's streaming-input mode, so it exists only where the Claude Code loop runs the turn
-    // (see runsClaudeCode — which is NOT the same as the harness the client sent). A native codex/grok or an ACP
-    // turn registers abort alone — steering it reports NOT_FOUND and the client falls back.
-    const steering = runsClaudeCode(input.agent ?? "claude", input.harness ?? "native") ? new SteeringQueue() : undefined;
+    // Steering needs the SDK's streaming-input mode, so it exists only where the runtime declares it (see
+    // capabilitiesOf — which is NOT the same as the harness the client sent). A native codex/grok or an ACP turn
+    // registers abort alone — steering it reports NOT_FOUND and the client falls back.
+    const steering = capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").steering ? new SteeringQueue() : undefined;
     const unregister =
         input.conversationId !== undefined
             ? registerTurn(input.conversationId, { abort: () => controller.abort(), ...(steering !== undefined ? { steering } : {}) })
@@ -373,18 +373,20 @@ async function* runTurn(
     /* Built before anything else needs it, and torn down in this turn's finally. Undefined for a main-tree
      * turn, which means the shared checkout and says so.
      *
-     * Gated on the harness that actually ENTERS the namespace. The Claude Code loop does, through the SDK's
-     * spawn seam; a native Codex turn drives an in-process SDK with no such seam, and an ACP turn talks to a
-     * pooled connection that outlives this turn. Building an anchor for those would be worse than skipping it:
-     * `effectiveCwd` below would hand them /work — the SHARED tree — while they sit outside the namespace that
-     * makes /work mean the worktree. They keep pointing straight at their worktree instead, as they do today.
+     * Gated on the runtime that actually ENTERS the namespace — the `isolation` field of its declared record,
+     * which is "namespace" for exactly one of them. The Claude Code loop enters through the SDK's spawn seam; a
+     * native Codex turn drives an in-process SDK with no such seam, and an ACP turn talks to a pooled connection
+     * that outlives this turn. Building an anchor for those would be worse than skipping it: `effectiveCwd`
+     * below would hand them /work — the SHARED tree — while they sit outside the namespace that makes /work mean
+     * the worktree. They keep pointing straight at their worktree instead, and are TOLD so (turn-plan.ts folds
+     * the worktree note into their prompt), which is the only enforcement layer left for them.
      *
      * A container with no mount capability keeps the PLAN and loses only the anchor: the turn runs cwd'd in
      * its worktree as before, and the harness applies the same mapping to tool inputs instead
      * (agents/worktree-redirect.ts). That fallback used to be nothing at all, which is how three agents spent
      * a morning writing into the shared tree while their worktrees stayed empty. */
     const isolation: TurnPlacement | undefined =
-        worktree === undefined || !runsClaudeCode(input.agent ?? "claude", input.harness ?? "native")
+        worktree === undefined || capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").isolation !== "namespace"
             ? undefined
             : await services.turnIsolation.planFor(localCwd).then(async (plan) => {
                   if (!(await services.turnIsolation.available())) {

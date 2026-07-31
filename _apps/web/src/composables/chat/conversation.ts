@@ -5,7 +5,9 @@ import {
     type AgentProvider,
     type AgentReply,
     type AttachFrame,
+    capabilitiesOf,
     type CatalogOption,
+    clampMode,
     type ContextUsage,
     deriveTitle,
     type EditorContext,
@@ -18,7 +20,6 @@ import {
     type PermissionMode,
     providerLabel,
     type RestoredMessage,
-    runsClaudeCode,
     sseData,
     sseFrames,
     type TranslatorAccounts,
@@ -544,9 +545,16 @@ export class Conversation {
     // updated at the end of each turn. Per-conversation, so the composer shows the active chat's meter.
     readonly contextUsage = ref<ContextUsage | undefined>();
 
-    // The user's permission posture for this conversation — the composer's pick, sent as every turn's STARTING
-    // mode. Seeded by where the conversation works (startingMode); only the user writes it.
-    readonly mode = ref<PermissionMode>(startingMode(true));
+    // The user's permission posture for this conversation — the composer's pick, seeded by where the
+    // conversation works (startingMode). Only the user writes it, and nothing writes OVER it.
+    readonly modePick = ref<PermissionMode>(startingMode(true));
+
+    // The posture the next turn actually STARTS in: the pick, clamped to what this conversation's runtime can
+    // hold. Read-clamped rather than written back, exactly as `effort` is one field down and for the same
+    // reason — a native Codex/Grok/ACP turn has an approval channel for nothing, so "Manual" above one is a
+    // promise it can't keep, but a user who switches to Codex and back must get their own pick returned rather
+    // than quietly ratcheted down to the posture the other runtime happened to allow.
+    readonly mode = computed<PermissionMode>(() => clampMode(this.modePick.value, this.capabilities.value));
 
     // The posture the RUNNING turn is actually in, from the turn's `mode` frames — the agent's own
     // EnterPlanMode, or the mode a plan approval landed in. Display-only (the composer shows it so the pill
@@ -664,11 +672,16 @@ export class Conversation {
      * settles, so it can never outlive the wait it describes. */
     readonly providerRetry = ref<Extract<AgentEvent, { kind: `provider_retry` }> | undefined>();
 
-    // Whether the running turn can absorb a message mid-flight: the Claude Code loop only (see runsClaudeCode,
-    // the same predicate the daemon's streamAgent gates its SteeringQueue on). Used for WORDING alone (the
-    // composer says "steer" vs "queue"): delivery asks the daemon and falls back to the queue on a refusal, so
-    // a drift here can't lose a message.
-    readonly steerable = computed(() => runsClaudeCode(this.provider.value, this.harness.value));
+    /* What the runtime behind this conversation's provider/harness pair can actually do — the same record the
+     * daemon plans the turn against (capabilitiesOf), so the composer can't offer a control nothing applies.
+     * Every consumer reads the field it cares about: the mode menu takes `permissions`, the effort segments
+     * take `effort`, the picker footer takes the whole record via limitationsOf. */
+    readonly capabilities = computed(() => capabilitiesOf(this.provider.value, this.harness.value));
+
+    // Whether the running turn can absorb a message mid-flight — the same field the daemon's streamAgent gates
+    // its SteeringQueue on. Used for WORDING alone (the composer says "steer" vs "queue"): delivery asks the
+    // daemon and falls back to the queue on a refusal, so a drift here can't lose a message.
+    readonly steerable = computed(() => this.capabilities.value.steering);
 
     // The one unsent "switched" divider notice, upserted/removed as the user toggles provider/account and made
     // permanent by the next send (the segment cut).
@@ -841,7 +854,9 @@ export class Conversation {
         // The PICK, not what it currently clamps to — a branch inherits the user's choice, not one model's ceiling.
         this.effortPick.value = source.effortPick.value;
         this.thinking.value = source.thinking.value;
-        this.mode.value = source.mode.value;
+        // The pick again, for the same reason: a fork inherits the posture the user chose, not the one the
+        // source's runtime happened to allow it.
+        this.modePick.value = source.modePick.value;
         this.isolated.value = source.isolated.value;
         // Left null so send() names the branch after the edited message — two tabs sharing one title is the
         // one thing that makes a branch hard to find again.
@@ -881,7 +896,7 @@ export class Conversation {
         // miss it. The fleet's own open path rehydrates isolated conversations separately.
         this.isolated.value = false;
         // ...and a turn on the tree the user is looking at plans before it touches anything.
-        this.mode.value = startingMode(false);
+        this.modePick.value = startingMode(false);
         // The history menu lists Claude sessions only, so a restored conversation resumes on Claude, under the
         // current default Claude account (the transcript carries no account of its own).
         const account = rememberedAccountFor(`claude`);

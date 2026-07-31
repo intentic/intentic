@@ -267,6 +267,32 @@ describe(`Conversation`, () => {
         expect(isAcknowledgment({ id: 1, role: `assistant`, text: `continue` })).toBe(false);
     });
 
+    /* The posture is clamped at READ, like the effort scale one field up: a native Codex/Grok/ACP turn has an
+     * approval channel for nothing, so "Manual" left showing above one was a promise the runtime could not
+     * keep — it ran every tool call regardless. Clamping the pick instead would cost the user their choice the
+     * moment they browsed to another provider and back. */
+    it(`a permission mode the runtime can't hold reads as the one it runs, and the pick survives`, () => {
+        const conversation = new Conversation(`c-modes`);
+        conversation.modePick.value = `acceptEdits`;
+
+        conversation.selectProvider(`codex`);
+        expect(conversation.mode.value).toBe(`bypassPermissions`);
+
+        // Under the Claude Code harness the same provider IS the loop that honours modes — and the pick was
+        // never overwritten, so it comes back untouched.
+        conversation.selectHarness(`claude-code`);
+        expect(conversation.mode.value).toBe(`acceptEdits`);
+        expect(conversation.capabilities.value.permissions).toBe(`modes`);
+
+        // And back: the native runtime reads as autonomous again, while `plan` — which every runtime has,
+        // emulated — rides through unchanged.
+        conversation.selectHarness(`native`);
+        expect(conversation.mode.value).toBe(`bypassPermissions`);
+        conversation.modePick.value = `plan`;
+        conversation.selectProvider(`grok`);
+        expect(conversation.mode.value).toBe(`plan`);
+    });
+
     it(`selectProvider re-scopes model + effort and prevents a Claude alias reaching Codex`, async () => {
         const conversation = new Conversation(`c1`);
         // Seeded from the Claude defaults.

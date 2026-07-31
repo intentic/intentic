@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { MODES } from "../composables/chat/catalog";
+import { computed } from "vue";
+import { modeOptions } from "../composables/chat/catalog";
 import { useChat } from "../composables/chat/useChat";
 
 /* The permission-mode picker body — width-agnostic (Popover on desktop, BottomSheet on mobile). Emits
- * `selected` so the host can close its overlay. */
+ * `selected` so the host can close its overlay. Only the postures this conversation's runtime can actually be
+ * put in are offered: a plan-only runtime shows two, because that is how many it has. */
 
 const emit = defineEmits<{ selected: [] }>();
 
-const { mode } = useChat();
+const { mode, capabilities } = useChat();
+const modes = computed(() => modeOptions(capabilities.value));
 </script>
 
 <template>
     <div class="flex flex-col p-1">
         <button
-            v-for="m in MODES"
+            v-for="m in modes"
             :key="m.value"
             type="button"
             class="qopt flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors max-md:py-3"

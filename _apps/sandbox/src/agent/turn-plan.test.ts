@@ -29,6 +29,7 @@ const context: TurnContext = {
 const servicesWith = (overrides: Record<string, unknown>): Services =>
     ({
         tools: [],
+        workspace: { root: "/work" },
         capabilities: { list: async () => [] },
         config: { translator: { url: "", token: "" }, openaiApiKey: "", iqPluginDir: "", intenticAgentModel: "" },
         cliProxy: { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) },
@@ -79,6 +80,16 @@ test("Grok with no xAI sign-in is refused before a turn spawns", async () => {
 
     expect(plan.ok).toBe(false);
     expect((plan as { message: string }).message).toContain("No Grok account connected");
+});
+
+// The gate every other arm had and this one didn't: OpenCode answers a dead session id with a rejection that
+// names nothing, so the chat kept re-sending it. The code is what lets the client drop it.
+test("a Grok session OpenCode no longer holds is refused by code, not re-sent forever", async () => {
+    const services = servicesWith({ openCode: { connected: async () => true, sessionExists: async () => false } });
+
+    const plan = await planTurn(services, turn({ agent: "grok", sessionId: "ses-gone" }), context);
+
+    expect(plan).toMatchObject({ ok: false, code: "session-not-found" });
 });
 
 test("an ACP provider whose capability is gone is refused by name", async () => {
@@ -186,4 +197,71 @@ test("a translator holding the ChatGPT subscription puts CODEX_HOME and the bear
     );
 
     expect((plan as { request: AgentRequest }).request.cliEnv).toMatchObject({ CODEX_HOME: "/root/.codex", CODEX_API_KEY: "local" });
+});
+
+// --- what the runtime's declared record takes off the request ---------------------------------------------
+
+/* The composer offers every permission mode to every provider, because until an adapter is running there is
+ * nothing to ask. What must NOT happen is the request carrying a posture the adapter then drops on the floor:
+ * that is how "Ask before each file edit" came to sit above a runtime whose every tool call is pre-approved,
+ * and how the turn journal came to record it. A `plan` runtime keeps plan and nothing else. */
+const codexServices = (overrides?: Record<string, unknown>): Services =>
+    servicesWith({
+        codexThreadExists: async () => true,
+        config: { translator: { url: "http://127.0.0.1:8788", token: "local" }, openaiApiKey: "" },
+        cliProxy: { accounts: async () => ({ codex: ["sub"], grok: [], gemini: [] }) },
+        codexModels: { models: async () => ({ default: "gpt-5.6-codex" }) },
+        ...overrides,
+    });
+
+// The route has already folded the turn's posture into the request by the time an arm is picked, so these are
+// context edits rather than turn edits — the same shape planTurn sees in production.
+const asking = (overrides: Partial<AgentRequest>): TurnContext => ({ ...context, base: { ...base, ...overrides } });
+
+test("a plan-only runtime keeps `plan` and is handed no other permission mode", async () => {
+    const asked = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ permissionMode: "acceptEdits" }));
+    expect((asked as { request: AgentRequest }).request.permissionMode).toBeUndefined();
+
+    const planning = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ permissionMode: "plan" }));
+    expect((planning as { request: AgentRequest }).request.permissionMode).toBe("plan");
+});
+
+test("the Claude Code loop keeps every mode — it is the runtime that honours them", async () => {
+    const plan = await planTurn(harnessServices(), turn(), asking({ permissionMode: "acceptEdits" }));
+
+    expect((plan as { request: AgentRequest }).request.permissionMode).toBe("acceptEdits");
+});
+
+// Codex forwards reasoning effort (modelReasoningEffort); OpenCode takes a model id and a prompt and nothing
+// else, so an effort riding a Grok request is a value nobody reads.
+test("effort reaches the runtimes that forward it and no others", async () => {
+    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ effort: "high" }));
+    expect((codex as { request: AgentRequest }).request.effort).toBe("high");
+
+    const grokServices = servicesWith({
+        openCode: { connected: async () => true, xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4" }] }) },
+    });
+    const grok = await planTurn(grokServices, turn({ agent: "grok" }), asking({ effort: "high" }));
+    expect((grok as { request: AgentRequest }).request.effort).toBeUndefined();
+});
+
+/* A runtime that can't enter the turn's mount namespace is cwd'd into its worktree and nothing more, so an
+ * absolute /work path from a memory or an AGENTS.md reaches the SHARED checkout. The note is the only layer
+ * left that can keep it inside its own branch — see turn-preamble.ts on why it is second-best. */
+test("a cwd-isolated runtime is told where its worktree is; a namespaced one needs no telling", async () => {
+    const isolated: TurnContext = { ...context, localCwd: "/history/worktrees/abc/work", effectiveCwd: "/history/worktrees/abc/work" };
+
+    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), isolated);
+    const prompt = (codex as { request: AgentRequest }).request.prompt;
+    expect(prompt).toContain("/history/worktrees/abc/work");
+    expect(prompt).toContain("do the thing");
+
+    const claude = await planTurn(harnessServices(), turn(), isolated);
+    expect((claude as { request: AgentRequest }).request.prompt).not.toContain("Where this turn's files live");
+});
+
+test("a main-tree turn has no worktree to name, so it says nothing", async () => {
+    const plan = await planTurn(codexServices(), turn({ agent: "codex" }), context);
+
+    expect((plan as { request: AgentRequest }).request.prompt).toBe("do the thing");
 });

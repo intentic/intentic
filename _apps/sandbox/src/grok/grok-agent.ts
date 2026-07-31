@@ -347,8 +347,9 @@ async function* streamTurn(events: AsyncIterable<Event>, cwd: string, capture?: 
 
 // Always-plan flow over the shared skeleton: a read-only planning turn on the `plan` agent whose assistant
 // text becomes the plan, then an execution turn on the `build` agent resumed on the same session.
-// ponytail: no `question` frames — OpenCode's permission channel maps to per-tool approvals, not multiple-choice
-// clarifying questions; a dedicated ask-tool is the upgrade path.
+// No `question` frames — OpenCode's permission channel maps to per-tool approvals, not multiple-choice
+// clarifying questions; a dedicated ask-tool is the upgrade path. Declared as `questions: false` in this
+// runtime's capability row, which is what the composer says out loud.
 async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): AsyncGenerator<AgentEvent> {
     const planPhase: PlanPhase = async function* (prompt, sessionId) {
         const capture: TurnCapture = sessionId !== undefined ? { sessionId } : {};
@@ -382,8 +383,10 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): Asyn
 }
 
 // Build the Grok provider for the Services seam: AgentRequest in, AgentEvent frames out. The agent route has
-// already gated that xAI is connected. Ignores the Claude-only request fields (oauthToken, permissionMode,
-// plugins, thinking, tools).
+// already gated that xAI is connected and that OpenCode still holds the session. What this runtime does NOT do
+// is declared as `capabilitiesOf(…).runtime === "opencode"` in the contract's agent-catalog.ts rather than
+// silently dropped here: OpenCode owns its own tools, permissions and reasoning settings, so a request reaching
+// this file carries no permission mode but `plan`, and no effort at all.
 export const createGrokAgent = (runner: GrokRunner) =>
     async function* runGrokAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
         const prompt = withFileNote(request.prompt, request.attachments ?? []);

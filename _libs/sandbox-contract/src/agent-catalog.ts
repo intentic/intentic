@@ -1,4 +1,4 @@
-import type { AgentHarness, AgentProvider, Model, NativeProvider } from "./schemas.js";
+import { type AgentHarness, type AgentProvider, type Model, NATIVE_PROVIDERS, type NativeProvider, type PermissionMode } from "./schemas.js";
 
 /* The provider / harness / model catalog every picker shares (the chat menu, the automations dialog) — pure
  * data keyed by the wire vocabulary in schemas.ts, so the surfaces can't drift. Live state stays with the
@@ -69,20 +69,152 @@ export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
     { label: "Claude Code", value: "claude-code" },
 ];
 
-// Whether a turn on this provider/harness pair ACTUALLY runs the Claude Code Agent SDK loop — which is not the
-// same question as `harness === "claude-code"`. Claude is always its own Claude Code loop, and kimi/gemini have
-// no native runtime at all (both are re-served through the translator), so all three run it whatever harness the
-// client happened to send; only codex/grok have a native
-// runtime to switch away from. An ACP agent runs its own loop and is never one of these.
-//
-// Everything the SDK loop owns keys off this: the SteeringQueue that makes mid-turn injection possible, and the
-// session store `/sessions/:id` reads a finished conversation's transcript back out of. Both sides of the wire
-// answer it here so a provider that gains (or loses) a native runtime is one edit, not a hunt for the literals.
-export const runsClaudeCode = (provider: AgentProvider, harness: AgentHarness): boolean =>
-    provider === "claude" ||
-    provider === "kimi" ||
-    provider === "gemini" ||
-    ((provider === "codex" || provider === "grok") && harness === "claude-code");
+/* WHAT A PROVIDER/HARNESS PAIR CAN ACTUALLY DO — one declaration, read by both sides of the wire.
+ *
+ * Four runtimes serve turns behind one seam (AgentRequest in, AgentEvent frames out): the Claude Code Agent SDK
+ * loop, Codex's exec surface, OpenCode, and any ACP agent. They do NOT do the same things, and for a long time
+ * the only thing that said so was a comment inside each adapter — "Ignores the Claude-only request fields" —
+ * which no surface above it could read. So the composer offered "Ask before each file edit" on a runtime whose
+ * every tool call is pre-approved, and offered a reasoning-effort scale to a runtime that drops the field.
+ *
+ * A capability is listed here only if something READS it: the daemon gates a seam on it, the composer hides or
+ * clamps a control by it, or `limitationsOf` tells the user about it. That is the whole point — an ability the
+ * matrix claims and nothing consults is how the drift started.
+ *
+ * Adding a provider is a row here, not a hunt for literals; agent-catalog.test.ts walks PROVIDERS × HARNESSES
+ * and demands one, so a pair can never be silently absent. */
+export interface AgentCapabilities {
+    // Which agentic loop actually serves the turn — the question "is the harness `claude-code`" only looks like.
+    // Claude is always its own Claude Code loop, and kimi/gemini have no native runtime at all (both are
+    // re-served through the translator), so all three run it whatever harness the client sent; only codex/grok
+    // have a native runtime to switch away from. Names the session store a finished conversation's transcript is
+    // backfilled from, too.
+    readonly runtime: "claude-code" | "codex" | "opencode" | "acp";
+    // Mid-turn injection (the SteeringQueue behind /agent/steer). Needs the SDK's streaming-input mode.
+    readonly steering: boolean;
+    // How much of the permission-mode axis the runtime honours. "modes" = every PermissionMode, with per-tool
+    // permission cards and `mode` frames when the agent moves itself; "plan" = propose-then-approve or run, and
+    // nothing in between — the container is the isolation boundary and every tool call is pre-approved.
+    readonly permissions: "modes" | "plan";
+    // Can stop mid-turn and ask the user a multiple-choice question (`question` frames).
+    readonly questions: boolean;
+    // Which of the turn's tools reach the agent. "full" = http MCP tools + in-process SDK servers + plugin
+    // checkouts + the browser servers; "http" = the http MCP tools alone, and only if the agent advertises http
+    // MCP support; "none" = the runtime has no seam for them at all.
+    readonly mcp: "full" | "http" | "none";
+    // Reasoning-effort selection is forwarded to the model.
+    readonly effort: boolean;
+    // How an isolated conversation's worktree is enforced. "namespace" = the worktree IS /work inside the turn's
+    // mount namespace (with the tool-input rewrite as the fallback when the container can't build one); "cwd" =
+    // the turn is merely cwd'd into the worktree, so an absolute /work path still reaches the shared checkout —
+    // which is why those turns are told where their tree is (turn-preamble.ts).
+    readonly isolation: "namespace" | "cwd";
+    // Publishes its slash commands (`commands` frames) for the composer's `/` popover.
+    readonly commands: boolean;
+    // Runs its shell in a tmux session the terminal panel can attach to (`terminal` frames).
+    readonly terminals: boolean;
+    // Fails with the coded frames the daemon's auto-resume keys off (rate_limit, provider-outage), so a turn the
+    // provider killed is re-run once the breaker says the provider is back (turn-resume.ts).
+    readonly recovery: boolean;
+}
+
+// The Claude Code Agent SDK loop — the ceiling every other runtime is measured against, and the only one that
+// owns the whole request: permission callbacks, the ask tool, plugins, hooks, and the spawn seam a mount
+// namespace needs.
+const CLAUDE_CODE: AgentCapabilities = {
+    runtime: "claude-code",
+    steering: true,
+    permissions: "modes",
+    questions: true,
+    mcp: "full",
+    effort: true,
+    isolation: "namespace",
+    commands: true,
+    terminals: true,
+    recovery: true,
+};
+
+// Codex's exec surface: item-level events, no approval channel, no MCP seam through the SDK constructor we use.
+// Reasoning effort IS forwarded (modelReasoningEffort). `codex app-server` is the upgrade path for the first two.
+const CODEX: AgentCapabilities = {
+    runtime: "codex",
+    steering: false,
+    permissions: "plan",
+    questions: false,
+    mcp: "none",
+    effort: true,
+    isolation: "cwd",
+    commands: false,
+    terminals: false,
+    recovery: false,
+};
+
+// OpenCode (the Grok runtime): its own agentic loop, its own tools, allow-all permissions. It takes a model id
+// and a prompt — no effort scale, no tools of ours, no command list.
+const OPENCODE: AgentCapabilities = {
+    runtime: "opencode",
+    steering: false,
+    permissions: "plan",
+    questions: false,
+    mcp: "none",
+    effort: false,
+    isolation: "cwd",
+    commands: false,
+    terminals: false,
+    recovery: false,
+};
+
+// Any agent speaking the Agent Client Protocol: a documented floor rather than the native ceiling. It publishes
+// commands, runs its terminals in the conversation's tmux session, and takes our http MCP tools when it says it
+// can — but it owns its own model, effort and permission posture.
+const ACP: AgentCapabilities = {
+    runtime: "acp",
+    steering: false,
+    permissions: "plan",
+    questions: false,
+    mcp: "http",
+    effort: false,
+    isolation: "cwd",
+    commands: true,
+    terminals: true,
+    recovery: false,
+};
+
+// The pair → its record. An id that names no native provider is an installed `agent`-kind capability, served
+// over ACP.
+export const capabilitiesOf = (provider: AgentProvider, harness: AgentHarness): AgentCapabilities => {
+    if (provider === "codex") {
+        return harness === "claude-code" ? CLAUDE_CODE : CODEX;
+    }
+    if (provider === "grok") {
+        return harness === "claude-code" ? CLAUDE_CODE : OPENCODE;
+    }
+    return (NATIVE_PROVIDERS as readonly string[]).includes(provider) ? CLAUDE_CODE : ACP;
+};
+
+// Which permission modes a runtime can actually be put in. Under "plan" every other mode collapses onto the
+// autonomous posture the runtime already runs, so offering them would be offering four names for two behaviours.
+export const modesFor = (capabilities: AgentCapabilities): readonly PermissionMode[] =>
+    capabilities.permissions === "modes" ? ["default", "acceptEdits", "plan", "bypassPermissions"] : ["plan", "bypassPermissions"];
+
+// The mode a selection falls back to when the runtime can't hold it — the same shape as clampEffort, and for the
+// same reason: a provider switch must not leave the composer showing a posture nothing applies.
+export const clampMode = (mode: PermissionMode, capabilities: AgentCapabilities): PermissionMode =>
+    modesFor(capabilities).includes(mode) ? mode : "bypassPermissions";
+
+// What this pair does NOT do, phrased for the person about to send a message to it — the honest half of the
+// picker, and the reason the record carries axes the daemon itself never branches on. Empty ⇒ the full ceiling.
+export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
+    ...(capabilities.permissions === "plan" ? ["no per-tool approvals"] : []),
+    ...(capabilities.questions ? [] : ["no clarifying questions"]),
+    ...(capabilities.steering ? [] : ["no mid-turn steering"]),
+    ...(capabilities.mcp === "none" ? ["no MCP tools or plugins"] : capabilities.mcp === "http" ? ["MCP tools only — no plugins or browser"] : []),
+    ...(capabilities.effort ? [] : ["no effort control"]),
+    ...(capabilities.commands ? [] : ["no slash commands"]),
+    ...(capabilities.terminals ? [] : ["no terminal panel"]),
+    ...(capabilities.isolation === "namespace" ? [] : ["worktree by working directory only"]),
+    ...(capabilities.recovery ? [] : ["no auto-resume after an outage"]),
+];
 
 // Claude's compile-time model floor, shared by the daemon's catalog (claude-models.ts — its last rung, reached
 // only before either live source has ever answered) and by the web's pre-load list, so the two can't name

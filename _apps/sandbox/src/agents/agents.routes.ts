@@ -1,4 +1,4 @@
-import { agentsContract, type AgentChange, type AgentRepoChanges, runsClaudeCode } from "@intentic/sandbox-contract";
+import { agentsContract, type AgentChange, type AgentRepoChanges, capabilitiesOf } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
@@ -49,7 +49,7 @@ export const createAgentsRoutes = (services: Services) => {
      * `sessionIdOf` and not `entry.sessionId`: the entry is only flushed with the id at finish, so a running
      * first turn — the one most likely to be opened — would otherwise have none. */
     const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "provider" | "harness">): string | undefined =>
-        runsClaudeCode(agent.provider, agent.harness) ? services.agents.sessionIdOf(agent.id) : undefined;
+        capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? services.agents.sessionIdOf(agent.id) : undefined;
     // i.router(), not a bare object literal: it is what makes the contract EXHAUSTIVE at compile time. A plain
     // literal is structurally fine while missing a route, so a handler deleted in passing (which is how
     // `archived` was lost — the router kept compiling and the archive door quietly stopped rendering) fails no

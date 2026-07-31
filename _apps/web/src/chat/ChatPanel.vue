@@ -5,7 +5,7 @@ import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { type AgentCommand, type OauthAccount, providerLabel, USAGE_LIMIT_AUTO_RESUME_ENABLED } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
-import { MODES } from "../composables/chat/catalog";
+import { modeMeta } from "../composables/chat/catalog";
 import { effectiveAccount, effortsFor, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
 import { acksOf, type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import {
@@ -65,6 +65,7 @@ const {
     pendingPlanMessage,
     activeModel,
     contextUsage,
+    capabilities,
     mode,
     provider,
     account,
@@ -114,8 +115,11 @@ const modelHint = computed(() =>
         ? providerName.value
         : `${providerName.value} · this turn is running ${activeModel.value}`,
 );
-// An ACP provider owns its own model AND reasoning settings — effortsFor offers it no scale, so the segments hide.
-const efforts = computed(() => effortsFor(provider.value, model.value, thinking.value));
+// The scale is offered only where the runtime forwards it. An ACP agent owns its own reasoning settings, which
+// effortsFor already knows; the record adds the case it can't see — OpenCode takes a model id and a prompt and
+// nothing else, so a Grok turn dropped the effort it was sent and the segments were four buttons that changed
+// nothing. Either way the segments hide.
+const efforts = computed(() => (capabilities.value.effort ? effortsFor(provider.value, model.value, thinking.value) : []));
 
 // The mobile pickers: pill taps open bottom sheets instead of anchored popovers.
 const modelSheetOpen = ref(false);
@@ -280,9 +284,9 @@ const effortFill = (i: number) => {
     const pct = 50 + (i / top) * 45; // Low ≈ 50% brand → top level ≈ 95% brand
     return `color-mix(in oklab, var(--color-primary-500) ${pct}%, transparent)`;
 };
-const modeLabel = computed(() => MODES.find((m) => m.value === mode.value)?.label ?? mode.value);
-const modeIcon = computed(() => MODES.find((m) => m.value === mode.value)?.icon ?? `sliders-h`);
-const modeDescription = computed(() => MODES.find((m) => m.value === mode.value)?.description ?? ``);
+const modeLabel = computed(() => modeMeta(mode.value).label);
+const modeIcon = computed(() => modeMeta(mode.value).icon);
+const modeDescription = computed(() => modeMeta(mode.value).description);
 
 // Manual textarea auto-grow: reset to one line, then size to content up to the max-height.
 const grow = (): void => {

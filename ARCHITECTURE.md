@@ -105,7 +105,16 @@ survive reconnects. Its subsystems:
 - **Agent backends** — Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code, and Gemini. Kimi
   and Google's models are re-served from subscription OAuth through the bundled translator on the Claude Code
   harness
-  ([agent/](_apps/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE
+  ([agent/](_apps/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE. The four runtimes
+  behind that seam (the Claude Code loop, Codex's exec surface, OpenCode, ACP) do not do the same things, so
+  what each one *can* do is **declared**, not inferred: `capabilitiesOf(provider, harness)`
+  ([sandbox-contract/agent-catalog.ts](_libs/sandbox-contract/src/agent-catalog.ts)) is one row per runtime —
+  steering, permissions, questions, MCP, effort, isolation, commands, terminals, recovery — and both sides of
+  the wire read it. The daemon gates its seams on it and strips the controls a runtime would silently drop
+  ([agent/turn-plan.ts](_apps/sandbox/src/agent/turn-plan.ts)); the composer offers only the modes and knobs
+  something applies, and names the rest as what this provider can't do. A capability is listed only if
+  something reads it, and `agent-catalog.test.ts` walks PROVIDERS × HARNESSES so a new provider cannot arrive
+  without a row
   ([webchat/](_apps/sandbox/src/webchat/)). A chat turn executes as a **detached run**
   ([agent/turn-runs.ts](_apps/sandbox/src/agent/turn-runs.ts)): `POST /agent` acks with a run id and the
   frames land in a seq-stamped log, which any number of clients render via `/agent/attach`

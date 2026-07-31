@@ -13,9 +13,14 @@ import { decidePermission, type PermissionPhase } from "./acp-permissions.js";
 /* The ACP provider adapter: the same seam as runAgent/createCodexAgent/createGrokAgent — AgentRequest in,
  * AgentEvent frames out — over ANY agent speaking the Agent Client Protocol, resolved from an `agent`-kind
  * capability. One warm connection per agent (see acp-connection.ts); one ACP session per conversation;
- * session/update notifications map through acp-events onto the shared vocabulary. ACP-run agents get a
- * documented floor, not the native ceiling: no model picker, no rate-limit frames, no tmux terminal panel;
- * plan mode is the shared two-phase emulation with a permission-level read-only guard. */
+ * session/update notifications map through acp-events onto the shared vocabulary.
+ *
+ * ACP-run agents get a documented floor rather than the native ceiling, and "documented" now means a row in
+ * the contract's agent-catalog.ts (`capabilitiesOf(…).runtime === "acp"`) that the composer reads out loud: the
+ * agent owns its own model and reasoning settings, our http MCP tools pass through only when it advertises
+ * them, there are no rate-limit or usage-limit frames, and plan mode is the shared two-phase emulation with a
+ * permission-level read-only guard. Terminals ARE surfaced — an agent's terminal/create runs in the
+ * conversation's tmux session, which the panel attaches to exactly as it does for a Claude Bash call. */
 
 // Generalized from the Grok watchdogs: no update for our session ⇒ cancel + kill; one turn never runs
 // forever. Injectable for tests (the Grok inactivityMs precedent).

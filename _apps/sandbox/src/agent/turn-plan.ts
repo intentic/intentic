@@ -1,4 +1,4 @@
-import { type AgentEvent, type AgentTurn, type Capability, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
+import { type AgentCapabilities, type AgentEvent, type AgentTurn, type Capability, capabilitiesOf } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
@@ -14,7 +14,7 @@ import { delegationNote } from "./delegation.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
 import { retrieveTurnContext } from "./turn-context.js";
-import { LITERAL_SLASH_NOTE, withTurnPreamble } from "./turn-preamble.js";
+import { LITERAL_SLASH_NOTE, withTurnPreamble, worktreeNote } from "./turn-preamble.js";
 import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js";
 
 /* WHICH RUNTIME SERVES A TURN, AND WHAT IT IS HANDED — the one question every turn has to answer before it can
@@ -79,20 +79,52 @@ export interface TurnContext {
 export const planTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
     // Harness (agentic loop) is orthogonal to provider: "native" runs each provider on its own runtime;
     // "claude-code" forces the Claude Code Agent SDK loop for ANY provider — codex/grok then fall through to the
-    // harness plan below, which serves them by pointing the harness at the sandbox's translator.
-    const harness = input.harness ?? "native";
-    // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them.
-    const capabilities = await services.capabilities.list();
-    if (input.agent === "codex" && harness === "native") {
-        return planCodexTurn(services, input, context);
+    // harness plan below, which serves them by pointing the harness at the sandbox's translator. The pair's
+    // declared record (capabilitiesOf) names the runtime, so the arm that serves a turn and the abilities the
+    // rest of the daemon gates on can't disagree: both read the same row.
+    const provider = input.agent ?? "claude";
+    const capabilities = capabilitiesOf(provider, input.harness ?? "native");
+    // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them. NOT the
+    // record above — these are what the OWNER installed, that is what the runtime can DO.
+    const installed = await services.capabilities.list();
+    const planned: TurnContext = { ...context, base: honoured(services, context, capabilities) };
+    if (capabilities.runtime === "codex") {
+        return planCodexTurn(services, input, planned);
     }
-    if (input.agent === "grok" && harness === "native") {
-        return planGrokTurn(services, input, context);
+    if (capabilities.runtime === "opencode") {
+        return planGrokTurn(services, input, planned);
     }
-    if (input.agent !== undefined && !(NATIVE_PROVIDERS as readonly string[]).includes(input.agent)) {
-        return planAcpTurn(services, input, context, capabilities, input.agent);
+    if (capabilities.runtime === "acp") {
+        return planAcpTurn(services, input, planned, installed, provider);
     }
-    return planHarnessTurn(services, input, context, capabilities);
+    return planHarnessTurn(services, input, planned, installed);
+};
+
+/* THE REQUEST EVERY ARM BUILDS ON, with the controls this runtime does not honour already gone.
+ *
+ * An adapter that silently drops a field is how the composer came to offer "Ask before each file edit" on a
+ * runtime whose every tool call is pre-approved: the request said one thing, four hundred lines away something
+ * else did another, and the turn journal recorded the request. Dropping them HERE means an adapter only ever
+ * reads a request it fully honours, and the record is the only thing that decides which those are.
+ *
+ * The worktree note is the same idea pointed at the filesystem: a runtime that declares `isolation: "cwd"` gets
+ * neither the mount namespace nor the tool-input rewrite, so the one thing left that can keep it inside its own
+ * branch is telling it where the branch is (turn-preamble.ts explains why that is second-best and unavoidable). */
+const honoured = (services: Services, context: TurnContext, capabilities: AgentCapabilities): AgentRequest => {
+    const { permissionMode, effort, ...rest } = context.base;
+    // An isolated conversation's worktree is not the workspace root; a main-tree turn has nothing to say.
+    const isolated = context.localCwd !== services.workspace.root;
+    return {
+        ...rest,
+        prompt:
+            capabilities.isolation === "cwd" && isolated
+                ? withTurnPreamble([worktreeNote(context.localCwd, services.workspace.root)], context.base.prompt)
+                : context.base.prompt,
+        // A "plan" runtime knows two postures: propose-then-approve, or run. Every other mode names the second
+        // one, so it travels as the absence it already meant.
+        ...(permissionMode !== undefined && (capabilities.permissions === "modes" || permissionMode === "plan") ? { permissionMode } : {}),
+        ...(effort !== undefined && capabilities.effort ? { effort } : {}),
+    };
 };
 
 // Codex has no sandbox-owned OAuth: it authenticates through the translator on the user's ChatGPT SUBSCRIPTION
@@ -153,6 +185,17 @@ const planGrokTurn = async (services: Services, input: AgentTurn, context: TurnC
             message: "No Grok account connected — sign in with your xAI (SuperGrok/X Premium) account in Setup before chatting.",
         };
     }
+    // Pre-flight the resume target, exactly as the codex and harness arms do: a session OpenCode no longer holds
+    // rejects the prompt with a message that names nothing the client can act on, so the chat re-sent the same
+    // dead id on every retry. The coded refusal is what lets the UI drop it and start fresh on the next send.
+    if (input.sessionId !== undefined && !(await services.openCode.sessionExists(input.sessionId, context.effectiveCwd))) {
+        return {
+            ok: false,
+            code: "session-not-found",
+            message:
+                "This chat's Grok session no longer exists on the sandbox — it was deleted or lost in a rebuild. The next message starts a fresh session.",
+        };
+    }
     // Grok MUST ride an explicit, live-valid xAI model id: OpenCode's own default is a retired models.dev id
     // (grok-code-fast-1) xAI rejects, and its catalog is empty for xai — so an omitted model makes the turn fall
     // back to that same retired default. Resolve from the daemon's catalog (never empty — live discovery with a
@@ -179,15 +222,15 @@ const planAcpTurn = async (
     services: Services,
     input: AgentTurn,
     context: TurnContext,
-    capabilities: readonly Capability[],
+    installed: readonly Capability[],
     provider: string,
 ): Promise<TurnPlan> => {
-    const capability = capabilities.find((entry) => entry.kind === "agent" && entry.id === provider);
+    const capability = installed.find((entry) => entry.kind === "agent" && entry.id === provider);
     if (capability === undefined || capability.kind !== "agent") {
         return { ok: false, message: `Unknown agent provider "${provider}" — add it as an Agent capability first.` };
     }
     const acpConfig = capability.config;
-    const tools = [...services.tools, ...mcpToolsOf(capabilities)];
+    const tools = [...services.tools, ...mcpToolsOf(installed)];
     return {
         ok: true,
         run: (turnRequest) => services.acpAgent(provider, acpConfig, turnRequest),
@@ -199,12 +242,7 @@ const planAcpTurn = async (
  * the translator endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
  * which the quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically;
  * its refusals are values, and this is where they become the refusal the composer's connect gate reads. */
-const planHarnessTurn = async (
-    services: Services,
-    input: AgentTurn,
-    context: TurnContext,
-    capabilities: readonly Capability[],
-): Promise<TurnPlan> => {
+const planHarnessTurn = async (services: Services, input: AgentTurn, context: TurnContext, installed: readonly Capability[]): Promise<TurnPlan> => {
     const resolved = await resolveHarnessCredentials(services, {
         agent: input.agent,
         ...(input.account !== undefined ? { account: input.account } : {}),
@@ -227,7 +265,7 @@ const planHarnessTurn = async (
     }
     // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named
     // external tool overrides, matching mcpServersOf's last-wins merge.
-    const tools = [...services.tools, ...mcpToolsOf(capabilities)];
+    const tools = [...services.tools, ...mcpToolsOf(installed)];
     // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the provider
     // prompt cache survives the turn — the cross-provider delegation note then rides the user message instead of
     // the system prompt.
@@ -269,12 +307,12 @@ const planHarnessTurn = async (
     // contributes.agent manifest entry ride the same SDK plugin loader.
     const plugins = [
         ...(services.config.iqPluginDir !== "" && iqSearch ? [services.config.iqPluginDir] : []),
-        ...pluginDirsOf(capabilities, services.workspace.root),
+        ...pluginDirsOf(installed, services.workspace.root),
         ...(await extensionAgentDirsOf(services)),
     ];
     // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
     // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
-    const browser = await browserServersOf(capabilities, services.workspace.root);
+    const browser = await browserServersOf(installed, services.workspace.root);
     // Turn-scoped roots follow the effective cwd: hashline edits must anchor in the worktree an isolated turn
     // edits. Browser profiles, plugin checkouts, and attachments stay on /work — absolute-path inputs, not edit
     // targets.

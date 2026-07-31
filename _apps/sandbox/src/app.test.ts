@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
-import { HEALTH_LIMIT, portUrl, runsClaudeCode, sandboxContract } from "@intentic/sandbox-contract";
+import { capabilitiesOf, HEALTH_LIMIT, portUrl, sandboxContract } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 import { createORPCClient } from "@orpc/client";
@@ -273,6 +273,7 @@ const services = (overrides: Partial<Services> = {}): Services => {
         openCode: {
             client: async () => ({}) as never,
             connected: async () => false,
+            sessionExists: async () => true,
             xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),
             recordModels: async () => {},
             disconnect: async () => {},
@@ -366,7 +367,8 @@ const services = (overrides: Partial<Services> = {}): Services => {
         // fakes above) so a test overriding `sessions.read` or `agents` is exactly what a transcript() call sees.
         transcripts: {
             read: async (agent) => {
-                const sessionId = runsClaudeCode(agent.provider, agent.harness) ? merged.agents.sessionIdOf(agent.id) : undefined;
+                const sessionId =
+                    capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? merged.agents.sessionIdOf(agent.id) : undefined;
                 return sessionId === undefined ? [] : merged.sessions.read(merged.workspace.root, sessionId);
             },
             // Inert: `read` above already synthesizes from the SDK session that production's adoption would have
@@ -1709,6 +1711,7 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
                     openCode: {
                         client: async () => ({}) as never,
                         connected: async () => true,
+                        sessionExists: async () => true,
                         xaiModels: async () => ({
                             models: [{ id: "grok-4.20-0309-reasoning", label: "grok-4.20-0309-reasoning" }],
                             default: "grok-4.20-0309-reasoning",

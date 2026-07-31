@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic-app/ui";
-import type { ModelBadge, PermissionMode } from "@intentic/sandbox-contract";
+import { type AgentCapabilities, type ModelBadge, modesFor, type PermissionMode } from "@intentic/sandbox-contract";
 import type { ConversationStatus } from "./conversation";
 
 /* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the permission modes
@@ -16,14 +16,26 @@ export const BADGE_META: Record<ModelBadge, { label: string; icon: IconName }> =
     fast: { label: `Fast`, icon: `bolt` },
 };
 
-// Permission modes for the composer's mode selector; value mirrors the SDK permissionMode. A new conversation
-// starts in the mode its workspace calls for — see startingMode.
-export const MODES: readonly { value: PermissionMode; label: string; icon: IconName; description: string }[] = [
-    { value: `default`, label: `Manual`, icon: `question-circle`, description: `Ask before each file edit.` },
-    { value: `acceptEdits`, label: `Edit automatically`, icon: `check-square`, description: `Apply file edits automatically.` },
-    { value: `plan`, label: `Plan`, icon: `list-check`, description: `Propose a plan and wait for your approval before running.` },
-    { value: `bypassPermissions`, label: `Auto`, icon: `forward`, description: `Run everything without asking.` },
-];
+/* How each permission mode reads in the selector. WHICH of them a conversation may pick is not decided here —
+ * it is `modesFor(capabilities)` in the contract, because it is a property of the runtime rather than of the
+ * menu. This split is the fix for the composer's oldest lie: the four modes were rendered unconditionally, so
+ * "Ask before each file edit" sat above Codex, Grok and every ACP agent — none of which have an approval
+ * channel at all, and each of which ran every tool call anyway. */
+const MODE_META: Record<PermissionMode, { label: string; icon: IconName; description: string }> = {
+    default: { label: `Manual`, icon: `question-circle`, description: `Ask before each file edit.` },
+    acceptEdits: { label: `Edit automatically`, icon: `check-square`, description: `Apply file edits automatically.` },
+    plan: { label: `Plan`, icon: `list-check`, description: `Propose a plan and wait for your approval before running.` },
+    bypassPermissions: { label: `Auto`, icon: `forward`, description: `Run everything without asking.` },
+};
+
+export const modeMeta = (mode: PermissionMode): { label: string; icon: IconName; description: string } => MODE_META[mode];
+
+// The modes this conversation's runtime can actually be put in, in the contract's order, dressed for the menu.
+export const modeOptions = (capabilities: AgentCapabilities): { value: PermissionMode; label: string; icon: IconName; description: string }[] =>
+    modesFor(capabilities).map((value) => {
+        const meta = MODE_META[value];
+        return { value, label: meta.label, icon: meta.icon, description: meta.description };
+    });
 
 // The postures a plan approval can land in, and how the plan card names them. 'plan' is absent by definition:
 // approving is the exit FROM planning.

@@ -322,7 +322,8 @@ const CODEX_PLAN_PREAMBLE =
 
 // Always-plan flow over the shared skeleton (the exec surface has no ExitPlanMode hook): a read-only planning
 // turn whose trailing message becomes the plan, then a full-access execution turn resumed on the same thread.
-// ponytail: no `question` frames on Codex (no AskUserQuestion analog in exec mode); app-server adds one.
+// No `question` frames: the exec surface has no AskUserQuestion analog, which is what `questions: false` in this
+// runtime's capability row declares (and what the composer's "no clarifying questions" chip tells the user).
 async function* runCodexPlanTurn(
     request: AgentRequest,
     runner: CodexRunner,
@@ -363,10 +364,12 @@ async function* runCodexPlanTurn(
     yield* runPlanEmulation(request.signal, CODEX_PLAN_PREAMBLE + withFileNote(request.prompt, others), request.sessionId, planPhase, executePhase);
 }
 
-// Build the Codex provider for the Services seam: AgentRequest in, AgentEvent frames out. Ignores the
-// Claude-only request fields (oauthToken, permissionMode, plugins, thinking — Codex reasoning is always on).
-// ponytail: request.tools (platform MCP servers) skipped on Codex turns; the ceiling is the SDK constructor's
-// `config: { mcp_servers }` overrides.
+// Build the Codex provider for the Services seam: AgentRequest in, AgentEvent frames out. What this runtime
+// does NOT do is declared, not left to this comment — `capabilitiesOf(…).runtime === "codex"` in the contract's
+// agent-catalog.ts, which turn-plan.ts reads to strip the fields nothing here would honour (a permission mode
+// other than plan) and the composer reads to stop offering them. Two of those rows are upgrade paths rather
+// than facts of the protocol: `mcp: "none"` because the SDK constructor's `config: { mcp_servers }` is
+// unwired, and `questions: false` because the exec surface has no AskUserQuestion analog — app-server adds one.
 export const createCodexAgent = (codexHome: string, runner: CodexRunner = defaultRunner) =>
     async function* runCodexAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
         // Per-account CODEX_HOME when the turn resolved one; the constructor's base dir is the OPENAI_API_KEY

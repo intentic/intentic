@@ -26,13 +26,35 @@ export const LITERAL_SLASH_NOTE =
     "It opens with `/` but names no slash command available here — the leading token is the user's own words " +
     "(a route, a path, a filename). Read the whole message as ordinary prose.";
 
+/* WHERE A CWD-ISOLATED RUNTIME'S TREE IS, told in words because there is no seam to enforce it.
+ *
+ * An isolated conversation on the Claude Code loop has its worktree bind-mounted over /work, so every absolute
+ * path the agent inherited from a memory, an AGENTS.md or its own earlier turn already names its own space
+ * (agents/isolation.ts) — and when the container can't build that namespace, the tool-input rewrite keeps the
+ * same guarantee one layer up (agents/worktree-redirect.ts). Neither layer reaches the runtimes that declare
+ * `isolation: "cwd"`: Codex drives an SDK with no spawn seam to enter, and an ACP agent talks to a pooled
+ * connection that outlives the turn. They are cwd'd into their worktree and nothing else, so an absolute
+ * /work path lands in the SHARED checkout — which is exactly how three agents once spent a morning writing
+ * into main while their worktrees stayed empty.
+ *
+ * A note is second-best to a mechanism and says so in its own text; it is what these runtimes can be given
+ * today. It names both trees, because "don't touch /work" without "your tree is HERE" just costs a retry. */
+export const WORKTREE_NOTE_HEADER = "## Where this turn's files live";
+
+export const worktreeNote = (worktree: string, root: string): string =>
+    `${WORKTREE_NOTE_HEADER}\n\n` +
+    `This conversation works on its own git branch, checked out at \`${worktree}\` — and this runtime reaches ` +
+    `it by working directory alone, so \`${root}\` is still the SHARED checkout every other agent is editing. ` +
+    `Use relative paths, or absolute paths under \`${worktree}\`. An absolute \`${root}/…\` path (from a memory, ` +
+    `an AGENTS.md, or an earlier turn) writes outside your branch, where the work is neither reviewed nor landed.`;
+
 export const withTurnPreamble = (notes: readonly string[], prompt: string): string =>
     notes.length === 0 ? prompt : `${notes.join("\n\n")}${SEPARATOR}${prompt}`;
 
 // The restore-side inverse. Anchored, not fuzzy: only a message that STARTS with a known injected note is
 // touched, and only up to the FIRST separator — a user who typed `---` themselves keeps their text intact.
 export const stripTurnPreamble = (text: string): string => {
-    const injected = [DELEGATION_NOTE_HEADER, SETUP_NOTICE_HEADER, TURN_CONTEXT_NOTE_HEADER, LITERAL_SLASH_NOTE_HEADER];
+    const injected = [DELEGATION_NOTE_HEADER, SETUP_NOTICE_HEADER, TURN_CONTEXT_NOTE_HEADER, LITERAL_SLASH_NOTE_HEADER, WORKTREE_NOTE_HEADER];
     if (!injected.some((header) => text.startsWith(header))) {
         return text;
     }
