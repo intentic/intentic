@@ -1,6 +1,6 @@
-import type { InputSavings } from "@intentic/sandbox-contract";
+import type { InputSavings, TurnExperiment } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { compositionOf, savedByCleaner, stageLabel } from "./savingsChart";
+import { compositionOf, savedByCleaner, stageLabel, verdictOf } from "./savingsChart";
 
 // The composition bar's one invariant: its segments are a decomposition of the raw output, so they sum to it
 // exactly. Everything else on the card is read against that — a stack whose parts don't add up to the whole is
@@ -63,6 +63,47 @@ describe(`stageLabel`, () => {
         expect(stageLabel(`cap`)).toBe(`head/tail cap`);
         // An id from a newer daemon than this browser: shown as itself rather than dropped.
         expect(stageLabel(`brand-new`)).toBe(`brand-new`);
+    });
+});
+
+// The three savings cards are only scannable if every one of them puts an ANSWER in the headline slot — a
+// figure when there is one, a word when there isn't. So the states a card can be in are enumerated here rather
+// than trusted to three templates that drifted apart once already.
+
+const experiment = (overrides: Partial<TurnExperiment> = {}): TurnExperiment => ({
+    metric: `outputTokens`,
+    on: { turns: 133, mean: 38_500 },
+    off: { turns: 14, mean: 28_100 },
+    minTurns: 30,
+    ...overrides,
+});
+
+describe(`verdictOf`, () => {
+    it(`states a measured saving as a signed, arrowed delta carrying its margin`, () => {
+        const verdict = verdictOf(experiment({ deltaPct: -12, marginPct: 4, saved: 91_000 }));
+        expect(verdict).toMatchObject({ value: `↓12%`, unit: `output tokens per turn`, tone: `success` });
+        expect(verdict.detail).toBe(`±4pp (95%) · ~91K tokens saved in this range`);
+    });
+
+    it(`states an increase without alarm — an experiment that says the mechanism cost more is working`, () => {
+        expect(verdictOf(experiment({ deltaPct: 7, marginPct: 3 }))).toMatchObject({ value: `↑7%`, tone: `content` });
+    });
+
+    it(`scores the cost experiment in money, because that is the only unit its trade nets out in`, () => {
+        const verdict = verdictOf(experiment({ metric: `costUsd`, deltaPct: -5, marginPct: 2, saved: 1.2 }));
+        expect(verdict.unit).toBe(`cost per turn`);
+        expect(verdict.detail).toBe(`±2pp (95%) · ~$1.20 saved in this range`);
+    });
+
+    it(`answers "Measuring" in the same slot a delta would take, and says what it is still short of`, () => {
+        const verdict = verdictOf(experiment());
+        expect(verdict).toMatchObject({ value: `Measuring`, tone: `muted` });
+        // The shorter arm is the control's 14, against a threshold of 30.
+        expect(verdict.detail).toBe(`needs 30 turns per arm — 16 more on the shorter one`);
+    });
+
+    it(`treats an experiment that isn't running as a verdict of its own, not a missing card`, () => {
+        expect(verdictOf(undefined)).toMatchObject({ value: `Off`, unit: `not being measured`, tone: `muted` });
     });
 });
 

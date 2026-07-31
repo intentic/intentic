@@ -1,5 +1,5 @@
-import type { InputSavings } from "@intentic/sandbox-contract";
-import { seriesColor } from "./usageChart";
+import type { InputSavings, TurnExperiment } from "@intentic/sandbox-contract";
+import { formatCompact, seriesColor } from "./usageChart";
 
 /* Every number and every mark on the Savings surfaces, as pure functions over the daemon's savings report —
  * the same split as usageChart.ts, and for the same reason: the arithmetic under a "89% saved" claim should be
@@ -110,6 +110,61 @@ export const compositionOf = (input: InputSavings): Composition => {
     });
 
     return { segments, rawTokens: input.rawTokens, footerTokens: footer === undefined ? 0 : Math.max(0, -footer.savedTokens) };
+};
+
+// --- the turn experiments -------------------------------------------------------------------------------------
+
+/* Both A/B cards' HEADLINE, from one function, because the two experiments differ in nothing a reader cares
+ * about: each states a verdict, what the verdict is a verdict about, and the one line the figure is worthless
+ * without. Same three slots either way.
+ *
+ * A verdict is a WORD when there is no figure. "Measuring" sitting at the same size, in the same place, as
+ * "↓12%" is what lets the savings row be read in one scan — the version this replaces left the headline slot
+ * holding a methodology tag ("terse steer · A/B") and buried the actual state four lines down in 11px prose,
+ * so the only way to learn an experiment had no answer yet was to read a paragraph. */
+export interface ExperimentVerdict {
+    readonly value: string;
+    readonly unit: string;
+    // Down is the direction that saves money, so a measured saving is the only thing that earns success. An
+    // increase is stated, not alarmed about: an experiment reporting the mechanism cost more is working.
+    readonly tone: "success" | "content" | "muted";
+    // The qualification the figure is meaningless without — its margin and what it bought, or how far the
+    // shorter arm still has to run. Never optional: a delta without one reads differently tomorrow.
+    readonly detail: string;
+}
+
+// `undefined` ⇒ the experiment isn't running at all (its flag off, or no holdout set), which is a verdict like
+// any other and gets the same three slots. Handled here rather than by a second function at the call site, so
+// the card cannot end up saying "Off" in a shape the measured states don't share.
+export const verdictOf = (experiment: TurnExperiment | undefined): ExperimentVerdict => {
+    if (experiment === undefined) {
+        return { value: `Off`, unit: `not being measured`, tone: `muted`, detail: `` };
+    }
+
+    const unit = experiment.metric === `costUsd` ? `cost per turn` : `output tokens per turn`;
+
+    // deltaPct/marginPct/saved are present together or not at all — the daemon withholds all three until both
+    // arms clear minTurns — so one check gates the whole verdict.
+    if (experiment.deltaPct === undefined || experiment.marginPct === undefined) {
+        const shortfall = Math.max(experiment.minTurns - experiment.on.turns, experiment.minTurns - experiment.off.turns);
+        return {
+            value: `Measuring`,
+            unit,
+            tone: `muted`,
+            detail: `needs ${experiment.minTurns} turns per arm — ${shortfall} more on the shorter one`,
+        };
+    }
+
+    // Dollars to the cent, tokens compact: a turn costs cents and thousands of tokens respectively, the same
+    // split the daemon rounds on (turn-experiments.ts).
+    const saved = experiment.metric === `costUsd` ? `$${(experiment.saved ?? 0).toFixed(2)}` : `${formatCompact(experiment.saved ?? 0)} tokens`;
+    return {
+        // Direction is spelled with an arrow AND a sign, so it never rests on colour.
+        value: `${experiment.deltaPct < 0 ? `↓` : `↑`}${Math.abs(experiment.deltaPct)}%`,
+        unit,
+        tone: experiment.deltaPct < 0 ? `success` : `content`,
+        detail: `±${experiment.marginPct}pp (95%)${(experiment.saved ?? 0) > 0 ? ` · ~${saved} saved in this range` : ``}`,
+    };
 };
 
 // What each toggleable cleaner saved in this window, for the readout under its switch. Absent id ⇒ the cleaner

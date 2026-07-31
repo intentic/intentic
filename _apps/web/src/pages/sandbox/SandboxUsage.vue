@@ -8,8 +8,9 @@ import { relativeTime } from "../../composables/chat/catalog";
 import { useSavings } from "../../composables/sandbox/useSavings";
 import { useUsage } from "../../composables/sandbox/useUsage";
 import PlanLimitsPanel from "./PlanLimitsPanel.vue";
-import { compositionOf } from "./savingsChart";
+import { compositionOf, verdictOf } from "./savingsChart";
 import SavingsArmsChart from "./SavingsArmsChart.vue";
+import SavingsCard from "./SavingsCard.vue";
 import SavingsStackBar from "./SavingsStackBar.vue";
 import UsageBarChart from "./UsageBarChart.vue";
 import UsageColumnChart from "./UsageColumnChart.vue";
@@ -151,6 +152,12 @@ const hasSavings = computed(
 const savingsPeriod = computed(() =>
     savings.value?.input.windowed === false ? `all time — rtk's ledger reports no dates` : preset.value === `all` ? `all time` : `this range`,
 );
+
+// Both experiments' headlines come from one function, so "Measuring" and "Off" land in the same slot, at the
+// same size, as a delta would — see verdictOf. It takes the undefined case itself, which is what lets these be
+// two plain computeds and the cards one shape.
+const outputVerdict = computed(() => verdictOf(savings.value?.output));
+const contextVerdict = computed(() => verdictOf(savings.value?.context));
 
 // ---- the table and the export -------------------------------------------------------------------------------
 
@@ -302,90 +309,147 @@ const hasSpend = computed(() => current.value.length > 0);
                      side by side would lend the experiments the first card's confidence. They are also
                      different units of value — a saved tool-output token is saved again on every later request
                      of the conversation, an output token is saved once but costs several times as much, and
-                     pre-injection trades input tokens for turns — which is why no card totals into another. -->
-                <div v-if="hasSavings" class="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-                    <Card class="flex flex-col">
-                        <div class="mb-1 flex items-baseline justify-between gap-3">
-                            <h3 class="text-sm font-semibold text-content">Tool output → assistant</h3>
-                            <span class="text-sm tabular-nums text-success">{{ savings?.input.savedPct ?? 0 }}% saved</span>
-                        </div>
-                        <!-- Provenance on its own line, not trailing the numbers: this card once sat on a
-                             ledger nothing was writing any more, and a frozen figure reads exactly like a live
-                             one unless its source and its age are stated. -->
-                        <p class="mb-3 text-2xs text-subtle">
-                            {{ formatCompact(savings?.input.commands ?? 0) }} commands · {{ savingsPeriod }} · via
-                            {{ savings?.input.source === `rtk` ? `rtk gain` : `the output filter` }}
-                            <template v-if="savings?.input.updatedAt !== undefined"
-                                >· last command {{ relativeTime(savings.input.updatedAt) }}</template
-                            >
-                        </p>
+                     pre-injection trades input tokens for turns — which is why no card totals into another.
 
-                        <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />
-                        <p v-else :class="cmp.emptyState()">No shell output was cleaned in this range.</p>
+                     Different subjects, but ONE shape: title, verdict, evidence, provenance, in that order and
+                     those positions (SavingsCard). The cards used to be written independently and had drifted
+                     into three different ones — only the first led with a number, and the other two opened with
+                     a paragraph of method where their answer should have been — so the row could not be scanned
+                     and every card had to be read to learn whether it said anything at all. The method text is
+                     not gone; it moved behind each title's (i), which is the altitude it belongs at.
 
-                        <!-- The whole-pipeline counterfactual, and the only one on this card that isn't
-                             sequential: the held-out commands were left raw at random, so this compares two
-                             populations rather than attributing within one. -->
-                        <p v-if="savings?.input.holdout.measuredSavedPct !== undefined" class="mt-3 border-t border-line pt-2.5 text-2xs text-muted">
-                            Holdout control: {{ savings.input.holdout.heldOut }} of
-                            {{ savings.input.holdout.heldOut + savings.input.holdout.cleaned }} commands left raw, putting the measured reduction at
-                            <span class="tabular-nums text-content">{{ savings.input.holdout.measuredSavedPct }}%</span>.
-                        </p>
-                    </Card>
+                     A CONTAINER grid, not a viewport one. This section sits behind the rail, the chat panel and
+                     the tab's padding, so `xl:grid-cols-3` was asking the window a question only the card knows
+                     the answer to — and getting 215px cards on a 1280px screen, at which width every label in
+                     them truncated. The breakpoints below are the widths where three, then two, cards still
+                     clear ~330px. Same reasoning as the stat tiles' cqi type, one level up. -->
+                <section v-if="hasSavings" class="@container">
+                    <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
+                        <span :class="cmp.sectionLabel()">Token savings</span>
+                        <span class="min-w-0 text-2xs text-subtle">what the token-reduction settings were worth</span>
+                    </div>
 
-                    <Card class="flex flex-col">
-                        <div class="mb-1 flex items-baseline justify-between gap-3">
-                            <h3 class="text-sm font-semibold text-content">Assistant's own output</h3>
-                            <span class="text-2xs text-subtle">terse steer · A/B</span>
-                        </div>
-                        <p class="mb-3 text-2xs text-subtle">
-                            Mean output tokens per turn, steered against a random unsteered control — the only honest way to measure this, since a
-                            turn can't be re-run to see what it would have said.
-                        </p>
+                    <!-- items-start: a card with nothing to report stays short instead of being stretched to the
+                         tallest one's height and padded with the void that made this row look broken.
+                         Two columns ⇒ the composition card takes both rows of the left one and the two
+                         experiments stack beside it. They are the same shape as each other and roughly half its
+                         height, so the alternative — plain flow — parks the third card under the first and
+                         leaves a card-sized hole where the second one ended. -->
+                    <div class="grid items-start gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
+                        <SavingsCard
+                            class="@2xl:row-span-2 @5xl:row-auto"
+                            title="Tool output → assistant"
+                            :value="`${savings?.input.savedPct ?? 0}%`"
+                            unit="of shell output removed"
+                            tone="success"
+                        >
+                            <template #hint>
+                                Every command carries its own raw baseline, so this is realized, not estimated. Each stage is weighed against what
+                                reached it — sequential attribution, which is what makes the parts sum to the whole and lets them be stacked at all.
+                                It is not "what turning this cleaner off would cost you": the cap downstream would have eaten some of the same lines.
+                                The retrieval footers are the price of the trimming being reversible — the pointers that let the agent grep the full
+                                output back.
+                            </template>
 
-                        <SavingsArmsChart
-                            v-if="savings?.output !== undefined"
-                            :experiment="savings.output"
-                            on-label="steer on"
-                            off-label="steer off (control)"
-                        />
-                        <p v-else :class="cmp.emptyState()">
-                            Not being measured. Turn on
-                            <RouterLink :to="{ name: `sandbox`, params: { tab: `agent` } }" class="text-link hover:underline"
-                                >Terse responses</RouterLink
-                            >
-                            and give it a turn holdout — without a control group there is nothing to compare the steered turns against.
-                        </p>
-                    </Card>
+                            <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />
+                            <p v-else :class="cmp.emptyState()">No shell output was cleaned in this range.</p>
 
-                    <!-- Pre-injected search context. Judged on COST, not tokens: it spends input tokens on
-                         purpose to buy back the search turns the model would otherwise have paid for, so the
-                         only number that can settle whether it was worth it is the one with both halves in it. -->
-                    <Card class="flex flex-col">
-                        <div class="mb-1 flex items-baseline justify-between gap-3">
-                            <h3 class="text-sm font-semibold text-content">Search before the turn</h3>
-                            <span class="text-2xs text-subtle">pre-injected context · A/B</span>
-                        </div>
-                        <p class="mb-3 text-2xs text-subtle">
-                            Mean cost per turn when the daemon retrieves for the message up front, against a random control that starts cold — the
-                            injected context costs input tokens, so the trade only shows up in money.
-                        </p>
+                            <!-- The whole-pipeline counterfactual, and the only one on this card that isn't
+                                 sequential: the held-out commands were left raw at random, so this compares two
+                                 populations rather than attributing within one. One line, because it is a
+                                 second reading of the headline rather than a second subject. -->
+                            <p v-if="savings?.input.holdout.measuredSavedPct !== undefined" class="border-t border-line pt-2 text-2xs text-muted">
+                                Holdout control
+                                <span class="tabular-nums text-content">{{ savings.input.holdout.measuredSavedPct }}%</span> — measured against
+                                {{ savings.input.holdout.heldOut }} of {{ savings.input.holdout.heldOut + savings.input.holdout.cleaned }} commands
+                                left raw at random.
+                            </p>
 
-                        <SavingsArmsChart
-                            v-if="savings?.context !== undefined"
-                            :experiment="savings.context"
-                            on-label="context injected"
-                            off-label="cold start (control)"
-                        />
-                        <p v-else :class="cmp.emptyState()">
-                            Not being measured. Turn on
-                            <RouterLink :to="{ name: `sandbox`, params: { tab: `agent` } }" class="text-link hover:underline"
-                                >Retrieve before the turn</RouterLink
-                            >
-                            and give it a turn holdout — without a control group there is nothing to compare the retrieved turns against.
-                        </p>
-                    </Card>
-                </div>
+                            <!-- Provenance, never trailing the numbers: this card once sat on a ledger nothing
+                                 was writing any more, and a frozen figure reads exactly like a live one unless
+                                 its source and its age are stated. -->
+                            <template #footnote>
+                                {{ formatCompact(savings?.input.commands ?? 0) }} commands · {{ savingsPeriod }} · via
+                                {{ savings?.input.source === `rtk` ? `rtk gain` : `the output filter` }}
+                                <template v-if="savings?.input.updatedAt !== undefined"
+                                    >· last command {{ relativeTime(savings.input.updatedAt) }}</template
+                                >
+                            </template>
+                        </SavingsCard>
+
+                        <SavingsCard
+                            title="Assistant's own output"
+                            :value="outputVerdict.value"
+                            :unit="outputVerdict.unit"
+                            :tone="outputVerdict.tone"
+                        >
+                            <template #hint>
+                                Mean output tokens per turn with the terse steer appended, against a random unsteered control — the only honest way to
+                                measure it, since a turn can't be re-run to see what it would have said. Only turns the steer was eligible for count:
+                                a turn under a custom system prompt drops it along with everything else the daemon appends.
+                            </template>
+
+                            <SavingsArmsChart
+                                v-if="savings?.output !== undefined"
+                                :experiment="savings.output"
+                                :detail="outputVerdict.detail"
+                                on-label="steer on"
+                                off-label="steer off · control"
+                            />
+                            <template v-else>
+                                <p class="text-xs text-muted">
+                                    Needs the switch on and a turn holdout set — with no control arm there is nothing to compare against.
+                                </p>
+                                <RouterLink
+                                    :to="{ name: `sandbox`, params: { tab: `agent` } }"
+                                    class="flex items-center gap-1 self-start text-xs text-link hover:underline"
+                                >
+                                    Terse responses<Icon name="chevron-right" />
+                                </RouterLink>
+                            </template>
+
+                            <template #footnote>terse steer · A/B against a random holdout</template>
+                        </SavingsCard>
+
+                        <!-- Pre-injected search context. Judged on COST, not tokens: it spends input tokens on
+                             purpose to buy back the search turns the model would otherwise have paid for, so the
+                             only number that can settle whether it was worth it is the one with both halves in
+                             it — which is why this card's unit differs from its neighbour's and says so. -->
+                        <SavingsCard
+                            title="Search before the turn"
+                            :value="contextVerdict.value"
+                            :unit="contextVerdict.unit"
+                            :tone="contextVerdict.tone"
+                        >
+                            <template #hint>
+                                Mean cost per turn when the daemon retrieves for the message up front, against a random control that starts cold.
+                                Scored in money on purpose: the injected context costs input tokens to save search turns, so on output tokens it would
+                                look like a pure expense and on input tokens like a pure loss. The trade only nets out in dollars.
+                            </template>
+
+                            <SavingsArmsChart
+                                v-if="savings?.context !== undefined"
+                                :experiment="savings.context"
+                                :detail="contextVerdict.detail"
+                                on-label="context injected"
+                                off-label="cold start · control"
+                            />
+                            <template v-else>
+                                <p class="text-xs text-muted">
+                                    Needs the switch on and a turn holdout set — with no control arm there is nothing to compare against.
+                                </p>
+                                <RouterLink
+                                    :to="{ name: `sandbox`, params: { tab: `agent` } }"
+                                    class="flex items-center gap-1 self-start text-xs text-link hover:underline"
+                                >
+                                    Retrieve before the turn<Icon name="chevron-right" />
+                                </RouterLink>
+                            </template>
+
+                            <template #footnote>pre-injected context · A/B against a random holdout</template>
+                        </SavingsCard>
+                    </div>
+                </section>
 
                 <!-- Not a nice-to-have: it is how anyone reconciles a number they distrust, and it is what
                      discharges the palette's sub-3:1 fills. -->
