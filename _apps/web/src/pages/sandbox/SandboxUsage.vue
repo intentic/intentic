@@ -155,7 +155,9 @@ const { savings } = useSavings(window);
 const composition = computed(() => (savings.value === undefined ? undefined : compositionOf(savings.value.input)));
 // A section that would only say "nothing yet" is not shown at all — every other panel on this tab is about
 // turns that ran, and an empty savings card on a sandbox that never enabled a cleaner is just furniture.
-const hasSavings = computed(() => (savings.value?.input.commands ?? 0) > 0 || savings.value?.output !== undefined);
+const hasSavings = computed(
+    () => (savings.value?.input.commands ?? 0) > 0 || savings.value?.output !== undefined || savings.value?.context !== undefined,
+);
 // Under rtk the numbers cannot be windowed (its ledger reports no timestamps), so the section says which
 // calendar it is really on instead of sitting silently under a 7-day filter that does not reach it.
 const savingsPeriod = computed(() =>
@@ -336,7 +338,9 @@ const hasSpend = computed(() => current.value.length > 0);
                             <span class="min-w-0 flex-1 truncate text-2xs text-muted sm:w-40 sm:flex-none">{{ pool.label }}</span>
                             <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a
                                  pool this screen has no reading for, and those mean opposite things. -->
-                            <div class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 sm:order-none sm:basis-0">
+                            <div
+                                class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 sm:order-none sm:basis-0"
+                            >
                                 <div
                                     class="h-full rounded-full bg-current"
                                     :class="usageTone(pool.percent)"
@@ -388,15 +392,15 @@ const hasSpend = computed(() => current.value.length > 0);
                     </Card>
                 </div>
 
-                <!-- SAVINGS — what the token-reduction settings were worth. Two cards, never one ranking of
-                     all the mechanisms together: the left one is measured (every command carries its own raw
-                     baseline, so the numbers are exact), the right one is an experiment (a turn cannot be
-                     re-run unsteered, so it needs a control group, an n and a margin). Bars side by side would
-                     lend the second the first's confidence. They are also different units of value — a saved
-                     tool-output token is saved again on every later request of the conversation, an output
-                     token is saved once but costs several times as much — which is why neither card totals
-                     into the other. -->
-                <div v-if="hasSavings" class="grid gap-3 lg:grid-cols-2">
+                <!-- SAVINGS — what the token-reduction settings were worth. Separate cards, never one ranking
+                     of all the mechanisms together: the first is measured (every command carries its own raw
+                     baseline, so the numbers are exact), the two after it are experiments (a turn cannot be
+                     re-run unsteered, or uninformed, so each needs a control group, an n and a margin). Bars
+                     side by side would lend the experiments the first card's confidence. They are also
+                     different units of value — a saved tool-output token is saved again on every later request
+                     of the conversation, an output token is saved once but costs several times as much, and
+                     pre-injection trades input tokens for turns — which is why no card totals into another. -->
+                <div v-if="hasSavings" class="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
                     <Card class="flex flex-col">
                         <div class="mb-1 flex items-baseline justify-between gap-3">
                             <h3 class="text-sm font-semibold text-content">Tool output → assistant</h3>
@@ -436,13 +440,46 @@ const hasSpend = computed(() => current.value.length > 0);
                             turn can't be re-run to see what it would have said.
                         </p>
 
-                        <SavingsArmsChart v-if="savings?.output !== undefined" :output="savings.output" />
+                        <SavingsArmsChart
+                            v-if="savings?.output !== undefined"
+                            :experiment="savings.output"
+                            on-label="steer on"
+                            off-label="steer off (control)"
+                        />
                         <p v-else :class="cmp.emptyState()">
                             Not being measured. Turn on
                             <RouterLink :to="{ name: `sandbox`, params: { tab: `agent` } }" class="text-link hover:underline"
                                 >Terse responses</RouterLink
                             >
                             and give it a turn holdout — without a control group there is nothing to compare the steered turns against.
+                        </p>
+                    </Card>
+
+                    <!-- Pre-injected search context. Judged on COST, not tokens: it spends input tokens on
+                         purpose to buy back the search turns the model would otherwise have paid for, so the
+                         only number that can settle whether it was worth it is the one with both halves in it. -->
+                    <Card class="flex flex-col">
+                        <div class="mb-1 flex items-baseline justify-between gap-3">
+                            <h3 class="text-sm font-semibold text-content">Search before the turn</h3>
+                            <span class="text-2xs text-subtle">pre-injected context · A/B</span>
+                        </div>
+                        <p class="mb-3 text-2xs text-subtle">
+                            Mean cost per turn when the daemon retrieves for the message up front, against a random control that starts cold — the
+                            injected context costs input tokens, so the trade only shows up in money.
+                        </p>
+
+                        <SavingsArmsChart
+                            v-if="savings?.context !== undefined"
+                            :experiment="savings.context"
+                            on-label="context injected"
+                            off-label="cold start (control)"
+                        />
+                        <p v-else :class="cmp.emptyState()">
+                            Not being measured. Turn on
+                            <RouterLink :to="{ name: `sandbox`, params: { tab: `agent` } }" class="text-link hover:underline"
+                                >Retrieve before the turn</RouterLink
+                            >
+                            and give it a turn holdout — without a control group there is nothing to compare the retrieved turns against.
                         </p>
                     </Card>
                 </div>

@@ -24,6 +24,10 @@ const DEFAULTS: SandboxSettings = {
     // is something the owner opts into once, not a cost every sandbox pays to produce a number nobody asked for.
     terseHoldout: 0,
     iqSearch: false,
+    // Pre-injection and its own holdout, off for both of the reasons above: it spends input tokens on every
+    // eligible turn, and the control that says whether they paid for themselves costs the turns it measures.
+    iqContext: false,
+    iqContextHoldout: 0,
     outputCleaners: "off",
     outputHoldout: 0,
     filterBackend: "native",

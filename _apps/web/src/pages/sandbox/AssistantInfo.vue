@@ -4,8 +4,8 @@ import { InfoDialog, InfoTable } from "@intentic-app/ui";
 /* The (i) beside the Agent tab's "Assistant" group. These settings share nothing but a heading, so the dialog
  * opens with a what-changes/default table (the only thing that IS common) and then treats each one separately,
  * led by a visual: a real before/after reply for terse, a kept-vs-lost split for the system prompt, an
- * off-vs-on table for iq, a lifecycle strip for archiving. Most are easier to show than to describe, which is
- * why the prose is thin.
+ * off-vs-on table for iq and another for retrieving ahead of a turn, a lifecycle strip for archiving. Most are
+ * easier to show than to describe, which is why the prose is thin.
  *
  * The system prompt gets the longest section for a reason that isn't its complexity: its three options are
  * NOT three peers. Two are maintained prompts you pick between in a click; the third replaces them, and the
@@ -13,12 +13,13 @@ import { InfoDialog, InfoTable } from "@intentic-app/ui";
  * so a replacement turns them off without an error anywhere. Hence the modes table first, then the kept/lost
  * columns, and only then anything about writing one.
  *
- * Defaults quoted here come from SandboxSettingsSchema — off / intentic / off / 3 days. */
+ * Defaults quoted here come from SandboxSettingsSchema — off / intentic / off / off / 3 days. */
 
 const AT_A_GLANCE = [
     [`Terse responses`, `How much the assistant writes back`, `Off`],
     [`System prompt`, `Who the assistant is, before you say anything`, `Intentic's`],
     [`iq code search`, `How it hunts through your code`, `Off`],
+    [`Retrieve before the turn`, `Whether it starts a message already knowing where to look`, `Off`],
     [`Archive finished agents`, `How long finished work stays on the board`, `3 days`],
 ];
 
@@ -53,6 +54,14 @@ const IQ_COMPARISON = [
     [`What comes back`, `Every line that matched the text`, `Ranked answers, trimmed to a token budget`],
     [`Each result`, `A file to open and scan`, `A path:line anchor it can open directly`],
     [`When your words aren't the code's words`, `Misses`, `Still finds it`],
+];
+
+// The setting after it, and the pair is easy to confuse: iq teaches the assistant to search, this one searches
+// before it decides to. Framed as when the searching happens, because that IS the whole difference.
+const PREFETCH_COMPARISON = [
+    [`How a message starts`, `A search or three, then the work`, `The answer is already in front of it`],
+    [`Who pays for the search`, `The assistant, a round trip at a time`, `The sandbox, once, before the turn`],
+    [`When your message names a file`, `Opens it`, `Nothing is retrieved — you already said where`],
 ];
 </script>
 
@@ -89,9 +98,9 @@ const IQ_COMPARISON = [
             Same tools, same work, same thoroughness — less narration. It's appended at a fixed spot at the very end of the standing instructions, so
             it doesn't disturb the reuse that keeps a long conversation's later turns cheap.
         </p>
-        <!-- Why this one setting has a measurement control and the others don't: it is the only one whose effect
-             cannot be observed on the turn it applies to. Said plainly, because "Measure it" next to a switch
-             otherwise reads as telemetry rather than the experiment it is. -->
+        <!-- Why the two turn-level settings carry a measurement control and the rest don't: their effect cannot
+             be observed on the turn it applies to, so it needs a control group. Said plainly, because "Measure
+             it" next to a switch otherwise reads as telemetry rather than the experiment it is. -->
         <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
             <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
             <p class="text-2xs text-muted">
@@ -165,7 +174,33 @@ const IQ_COMPARISON = [
             workspace uses iq either way — this only changes what the assistant does.
         </p>
 
-        <!-- ④ Archiving — a lifecycle, so a lifecycle strip, then the kept/released split it turns on. -->
+        <!-- ④ Retrieve before the turn — the sibling of ③, and the one thing worth being precise about is that
+             the assistant is not being told what to think: it is handed a search result and can ignore it. -->
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Retrieve before the turn</h3>
+        <p class="mt-1.5 text-2xs text-muted">
+            Every message you send is a question about your code before it is anything else. With this on, the sandbox searches for it the moment you
+            press send and hands the assistant the ranked answer along with your words — so the reply starts from
+            <span class="font-mono">path:line</span> anchors instead of spending its first few moves finding them.
+        </p>
+        <InfoTable class="mt-2" :headers="[``, `Off — it searches when it decides to`, `On — searched already`]" :rows="PREFETCH_COMPARISON" />
+        <p class="mt-1.5 text-2xs text-subtle">
+            It's a head start, not an instruction: the assistant is told the search may have missed, and its own search tools are untouched. Messages
+            with nothing to look up — "yes, do that", "thanks" — are left alone, and so are ones that already name a file. Independent of
+            <span class="font-medium text-content">iq code search</span> above, and they work well together: that one teaches it to search, this one
+            answers before it asks.
+        </p>
+        <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
+            <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+            <p class="text-2xs text-muted">
+                <span class="font-medium text-content">Measure it</span> runs a slice of messages without the head start, as a control — the same
+                arrangement the terse steer uses, and for the same reason. The figure here is
+                <span class="font-medium text-content">cost per turn</span>, not tokens: the context it hands over costs input tokens on purpose, to
+                buy back the searches that would have followed. It lands under
+                <span class="font-medium text-content">Usage → Search before the turn</span>.
+            </p>
+        </div>
+
+        <!-- ⑤ Archiving — a lifecycle, so a lifecycle strip, then the kept/released split it turns on. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Archive finished agents</h3>
         <p class="mt-1.5 text-2xs text-muted">
             Every agent works in its own checkout of your repository, so two can never trip over each other's edits. That checkout is real disk, and

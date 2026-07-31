@@ -13,6 +13,7 @@ import { withAttachmentNote } from "./attachment-note.js";
 import { delegationNote } from "./delegation.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
+import { retrieveTurnContext } from "./turn-context.js";
 import { LITERAL_SLASH_NOTE, withTurnPreamble } from "./turn-preamble.js";
 import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js";
 
@@ -52,6 +53,10 @@ export type TurnPlan =
           // It rides the plan rather than the request: the request is what the SDK is handed, and the steer has
           // already been folded into the prompt by the time one exists.
           readonly terseArm?: boolean;
+          // The same, for the pre-injected workspace context (UsageTurn.iqContext). True means the turn was
+          // ASSIGNED the retrieval, not that it found anything — see the ledger field's note on why the arms
+          // have to be the coin flip's populations rather than the ones retrieval happened to serve.
+          readonly contextArm?: boolean;
           readonly request: AgentRequest;
       };
 
@@ -230,6 +235,8 @@ const planHarnessTurn = async (
         stableSystemPrompt,
         hashlineEdits,
         iqSearch,
+        iqContext,
+        iqContextHoldout,
         outputCleaners,
         outputHoldout,
         filterBackend,
@@ -245,6 +252,17 @@ const planHarnessTurn = async (
      * "the steer was off for everyone" is not a control group. */
     const terseEligible = terseOutput && systemPromptMode !== "custom" && terseHoldout > 0;
     const terseArm = terseEligible ? Math.random() >= terseHoldout : undefined;
+    /* PRE-INJECTION'S OWN COIN FLIP, on the same terms — a fraction of otherwise-eligible turns run without the
+     * retrieved context so the two arms are populations of the same command stream. Its eligibility is simpler
+     * than terse's: the note rides the user message, so no system-prompt mode can take it away. Independent of
+     * the terse flip on purpose: two independent flips leave each experiment's other-arm turns evenly spread,
+     * where a shared one would confound them into a single four-cell design nothing here reads. */
+    const contextArm = iqContext && iqContextHoldout > 0 ? Math.random() >= iqContextHoldout : undefined;
+    /* Retrieval starts HERE and is awaited at the prompt, so its (deadline-capped) latency runs underneath the
+     * gates below — the dependency probe, the delegation lookup, the browser servers — instead of on top of
+     * them. `input.prompt` is the user's own words: `context.base.prompt` may already carry a switched
+     * conversation's history preamble, whose opening lines would then be what got searched. */
+    const contextNote = (contextArm ?? iqContext) ? retrieveTurnContext({ iq: services.iq, logger: services.logger }, input.prompt) : undefined;
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
     // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle (opt-in,
     // default off). Empty dir outside the container ⇒ skipped regardless. Extension checkouts with a
@@ -295,10 +313,17 @@ const planHarnessTurn = async (
     const literalSlash = isUnknownSlashCommand(input.agent ?? "claude", promptWithAttachments);
     // withTurnPreamble so session restore can strip these notes back out of the stored message — they are
     // protocol, not something the user said (turn-preamble.ts).
+    // The workspace context retrieved for this very message (turn-context.ts), if the flip gave this turn the
+    // treatment arm and the retrieval found something worth prepending. Awaited here, where the notes are
+    // assembled, so everything above ran while it was in flight.
+    const retrieved = await contextNote;
     const prompt = withTurnPreamble(
         [
             ...(placement.userNote !== undefined ? [placement.userNote] : []),
             ...(setupNotice !== undefined ? [setupNotice] : []),
+            // After the standing protocol notes and before the slash note: those two are about how to read the
+            // conversation, this is about the message itself, so it belongs against it.
+            ...(retrieved !== undefined ? [retrieved] : []),
             ...(literalSlash ? [LITERAL_SLASH_NOTE] : []),
         ],
         promptWithAttachments,
@@ -308,6 +333,7 @@ const planHarnessTurn = async (
         run: services.agent,
         ...(resolved.credentials.account !== undefined ? { account: resolved.credentials.account } : {}),
         ...(terseArm !== undefined ? { terseArm } : {}),
+        ...(contextArm !== undefined ? { contextArm } : {}),
         request: {
             ...context.base,
             prompt,

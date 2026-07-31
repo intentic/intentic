@@ -659,9 +659,11 @@ async function* runTurn(
                     cacheCreationTokens: usage.cacheCreationTokens ?? 0,
                     costUsd: usage.costUsd ?? 0,
                     durationMs: usage.durationMs ?? 0,
-                    // The terse experiment's arm, when this turn was in it — the ledger is the only place it is
-                    // recorded, and without it the steer's effect is unmeasurable after the fact.
+                    // The turn experiments' arms, when this turn was in them — the ledger is the only place they
+                    // are recorded, and without them the steer's and the pre-injection's effects are
+                    // unmeasurable after the fact.
                     ...(plan.terseArm !== undefined ? { terse: plan.terseArm } : {}),
+                    ...(plan.contextArm !== undefined ? { iqContext: plan.contextArm } : {}),
                 })
                 .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
         }

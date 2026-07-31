@@ -621,6 +621,11 @@ export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"
 //   iqSearch          — loads the image-baked iq Claude Code plugin (skill + SessionStart nudge) so the agent
 //                        prefers the iq CLI over grep/find/Glob; off ⇒ plugin not loaded, native search tools
 //                        only. Opt-in (default off); the browser Search box uses iq regardless.
+//   iqContext         — retrieves for the user's message BEFORE the turn starts and prepends the ranked answer
+//                        to it, so the model opens with the anchors instead of paying a search round-trip to
+//                        find them. Independent of iqSearch: that one teaches the agent to search, this one
+//                        answers ahead of it.
+//   iqContextHoldout  — measurement control for iqContext, same shape as terseHoldout (UsageTurn.iqContext).
 //   outputCleaners    — the Bash output-cleaner spec (agent-output-filter): "off" = filter disabled (default),
 //                        "" = all cleaners on, else an iq-style allow-list / default-minus
 //                        spec ("git,pnpm" = only those; "-cap" = all except). Threaded to the filter via env.
@@ -681,6 +686,21 @@ export const SandboxSettingsSchema = z.object({
      * Cap is roomy — the bases it stands in for are ~6.8k characters — but finite, because every turn pays it. */
     systemPrompt: z.string().max(20000).default(""),
     iqSearch: z.boolean().default(false),
+    /* RETRIEVE BEFORE THE TURN, don't wait to be asked. The daemon runs the user's message through the resident
+     * iq engine and prepends the ranked answer to it, so a turn that would have opened with two or three search
+     * calls opens with the anchors already in hand. Independent of `iqSearch`, which only teaches the agent to
+     * reach for the CLI once it decides to search — this one answers ahead of that decision, and the two
+     * compose: the injected capsule names the anchors, the CLI is there for what it missed.
+     *
+     * It rides the USER message (turn-context.ts), never the system prompt, for the same reason the setup
+     * notice does: it changes every turn, and the system prefix is kept byte-stable for the prompt cache.
+     * Off by default — it spends input tokens on every eligible turn, and whether that trade pays is exactly
+     * what the holdout below is for. */
+    iqContext: z.boolean().default(false),
+    // Measurement control for the pre-injection, identical in shape to `terseHoldout`: a fraction [0,1] of
+    // otherwise-eligible turns run WITHOUT the retrieved context and stamp their arm onto the ledger
+    // (UsageTurn.iqContext), so the report compares two real populations of turns instead of asserting a saving.
+    iqContextHoldout: z.number().min(0).max(1).default(0),
     outputCleaners: z.string().default("off"),
     outputHoldout: z.number().min(0).max(1).default(0),
     filterBackend: z.enum(["native", "rtk"]).default("native"),
@@ -825,13 +845,21 @@ export const InputSavingsSchema = z.object({
 });
 export type InputSavings = z.infer<typeof InputSavingsSchema>;
 
-// One arm of the turn-level experiment: the turns that ran with the steer, and the turns the holdout ran
-// without it. Mean output tokens PER TURN, because the arms never hold the same number of turns.
-export const SavingsArmSchema = z.object({ turns: z.number(), meanOutputTokens: z.number() });
+// One arm of a turn-level experiment: the turns that ran with the mechanism, and the turns the holdout ran
+// without it. A mean PER TURN, because the arms never hold the same number of turns.
+export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() });
 
-// The terse steer, as measured. Only turns where the steer was ELIGIBLE are counted — a turn under a custom
-// system prompt drops the steer along with everything else the daemon appends, so it belongs to neither arm.
-export const OutputSavingsSchema = z.object({
+/* A turn-level A/B — the one shape both of this sandbox's turn experiments report in, because they differ in
+ * nothing but which flag flips and what the turns are judged on. Only turns the mechanism was ELIGIBLE for are
+ * counted: a turn under a custom system prompt drops the terse steer along with everything else the daemon
+ * appends, so it belongs to neither arm.
+ *
+ * `metric` says what `mean` counts and what `deltaPct` is a delta in. The terse steer is judged on the model's
+ * OWN output tokens, which is the thing it steers. Pre-injection is judged on COST, because it spends input
+ * tokens deliberately to buy back search turns — scored on output tokens it would look like a pure expense,
+ * and scored on input tokens like a pure loss; the trade only nets out in money. */
+export const TurnExperimentSchema = z.object({
+    metric: z.enum(["outputTokens", "costUsd"]),
     on: SavingsArmSchema,
     off: SavingsArmSchema,
     // Turns per arm before a delta is reported at all. Carried on the wire so the screen's "measuring…" state
@@ -839,18 +867,24 @@ export const OutputSavingsSchema = z.object({
     minTurns: z.number(),
     /* The three below are present TOGETHER, and only once both arms clear `minTurns` — a schema that can't
      * express a half-measured experiment is how a 34%-that-becomes-8%-tomorrow never reaches the screen.
-     *   deltaPct   — change in mean output tokens per turn under the steer; negative is a saving.
-     *   marginPct  — ± percentage points, 95% (Welch, unequal variances and unequal arms).
-     *   savedTokens — what the delta is worth over the turns that actually ran with the steer, in this window. */
+     *   deltaPct  — change in the metric's mean per turn under the mechanism; negative is a saving.
+     *   marginPct — ± percentage points, 95% (Welch, unequal variances and unequal arms).
+     *   saved     — what the delta is worth over the turns that actually ran with it, in this window, in the
+     *               metric's own unit (tokens, or dollars). */
     deltaPct: z.number().optional(),
     marginPct: z.number().optional(),
-    savedTokens: z.number().optional(),
+    saved: z.number().optional(),
 });
-export type OutputSavings = z.infer<typeof OutputSavingsSchema>;
+export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
 
-// `output` is absent when the experiment isn't running at all (terse off, or no holdout set) — a section that
-// isn't there reads as "not measured", which is the truth, while zeros would read as "measured, worth nothing".
-export const SavingsReportSchema = z.object({ input: InputSavingsSchema, output: OutputSavingsSchema.optional() });
+// `output`/`context` are absent when that experiment isn't running at all (its flag off, or no holdout set) — a
+// section that isn't there reads as "not measured", which is the truth, while zeros would read as "measured,
+// worth nothing".
+export const SavingsReportSchema = z.object({
+    input: InputSavingsSchema,
+    output: TurnExperimentSchema.optional(),
+    context: TurnExperimentSchema.optional(),
+});
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 
 // ---- intentic CLI ----
@@ -2656,6 +2690,15 @@ export const UsageTurnSchema = z.object({
      * no control to be compared against. Pooling those into the off-arm would compare steered turns against a
      * population selected by something other than the coin flip, which is not a control at all. */
     terse: z.boolean().optional(),
+    /* Which arm of the pre-injection experiment this turn ran on (settings.iqContextHoldout), on the same terms
+     * as `terse` above: absent ⇒ outside the experiment.
+     *
+     * TRUE means the turn was ASSIGNED the retrieved context, not that a note was necessarily prepended — a
+     * treatment turn whose retrieval came back empty or unconfident injects nothing. That is deliberate: the
+     * arms have to be the coin flip's populations, and re-labelling a turn by what retrieval happened to find
+     * would sort turns by how searchable their question was, which is a property of the question. The control
+     * arm contains the same unsearchable questions in the same proportion, so they cancel. */
+    iqContext: z.boolean().optional(),
 });
 export type UsageTurn = z.infer<typeof UsageTurnSchema>;
 

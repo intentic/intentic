@@ -200,6 +200,26 @@ const toggleIqSearch = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, iqSearch: value });
 };
 
+// Pre-injection: search for the user's message before the turn starts and hand the ranked answer to the model
+// with it, so the first search is already paid for (turn-context.ts).
+const toggleIqContext = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, iqContext: value });
+};
+
+// Its measurement control, the same turn-level holdout the terse steer takes.
+const iqContextHoldoutPercent = computed<number>(() => Math.round((sandboxSettings.value?.iqContextHoldout ?? 0) * 100));
+const setIqContextHoldout = (fraction: number): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, iqContextHoldout: fraction });
+};
+
 // Dormant usage-limit auto-resume control. The shared build gate keeps this handler inert and the switch off;
 // retaining both makes re-enabling the implementation an explicit one-line product decision.
 const toggleAutoResume = (value: boolean): void => {
@@ -779,6 +799,66 @@ const importMemory = async (): Promise<void> => {
                         :disabled="sandboxSettings === undefined"
                         @update:model-value="toggleIqSearch"
                     />
+                </template>
+            </Row>
+
+            <!-- Retrieve before the turn — the daemon searches for the message and hands the ranked answer to the
+                 assistant with it, so a turn that would have opened with two or three searches opens with the
+                 anchors. Directly under iq code search because they compose and are easy to confuse: that one
+                 teaches the assistant to search, this one answers before it decides to. -->
+            <Row
+                icon="forward"
+                title="Retrieve before the turn"
+                description="Search the workspace for each message up front and hand the assistant the answer with it."
+            >
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="sandboxSettings?.iqContext ?? false"
+                        :disabled="sandboxSettings === undefined"
+                        @update:model-value="toggleIqContext"
+                    />
+                </template>
+                <template #below>
+                    <!-- Same control the terse steer takes, for the same reason: a turn cannot be re-run without
+                         the context it opened with, so the only way to know whether the injected tokens paid for
+                         themselves is to leave a slice of turns cold and compare the cost. -->
+                    <template v-if="sandboxSettings?.iqContext === true">
+                        <label class="flex items-center justify-between gap-3">
+                            <span class="flex min-w-0 flex-col">
+                                <span class="text-xs text-content">Measure it</span>
+                                <span class="text-2xs text-muted">
+                                    Run this % of turns without the retrieved context, as a control. Both arms need ~30 turns before a figure is
+                                    reported.
+                                </span>
+                            </span>
+                            <span class="flex shrink-0 items-center gap-1">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    :value="iqContextHoldoutPercent"
+                                    :class="cmp.input('w-16 text-right text-xs')"
+                                    @change="(event: Event) => commitPercent(event, iqContextHoldoutPercent, setIqContextHoldout)"
+                                />
+                                <span class="text-xs text-muted">%</span>
+                            </span>
+                        </label>
+                        <p v-if="savings?.context !== undefined" class="mt-2 border-t border-line pt-2 text-2xs">
+                            <template v-if="savings.context.deltaPct !== undefined">
+                                <span class="tabular-nums" :class="savings.context.deltaPct < 0 ? `text-success` : `text-muted`">
+                                    {{ savings.context.deltaPct < 0 ? `↓` : `↑` }}{{ Math.abs(savings.context.deltaPct) }}%
+                                </span>
+                                <span class="text-muted">
+                                    cost per turn ± {{ savings.context.marginPct }}pp, over {{ savings.context.on.turns }} retrieved vs
+                                    {{ savings.context.off.turns }} cold turns.
+                                </span>
+                            </template>
+                            <span v-else class="text-muted">
+                                Measuring — {{ savings.context.on.turns }} retrieved and {{ savings.context.off.turns }} cold turns so far, of
+                                {{ savings.context.minTurns }} needed per arm.
+                            </span>
+                        </p>
+                    </template>
                 </template>
             </Row>
 

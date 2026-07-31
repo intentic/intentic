@@ -21,6 +21,8 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
     expect(SandboxSettingsSchema.parse(older)).toEqual({
         ...older,
         terseHoldout: 0,
+        iqContext: false,
+        iqContextHoldout: 0,
         filterBackend: "native",
         systemPromptMode: "intentic",
         systemPrompt: "",
@@ -46,6 +48,10 @@ test("an empty object is the full default settings object", () => {
         // Off: the steer's turn-level control spends the tokens it measures, so measuring is opt-in.
         terseHoldout: 0,
         iqSearch: false,
+        // Off, and its holdout with it: pre-injection spends input tokens on every eligible turn, and the
+        // control that would tell you whether they paid for themselves costs the turns it measures.
+        iqContext: false,
+        iqContextHoldout: 0,
         outputCleaners: "off",
         outputHoldout: 0,
         filterBackend: "native",

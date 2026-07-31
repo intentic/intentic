@@ -100,20 +100,47 @@ to intentic's per-turn tool loop; revisit if benchmarks show model output domina
 be re-run to see what it would have said unsteered. So **`terseHoldout`** (fraction [0,1], default 0) is a
 turn-level holdout: `turn-plan.ts` flips the coin, and the arm it picked is stamped on the spend ledger
 (`UsageTurn.terse` — absent means the turn was never in the experiment, e.g. a custom system prompt, which drops
-the steer with everything else). `usage/terse-savings.ts` reads the two arms back: mean output tokens per turn,
+the steer with everything else). `usage/turn-experiments.ts` reads the two arms back: mean output tokens per turn,
 `n` per arm, and a Welch margin. Below `MIN_ARM_TURNS` (30) per arm it reports the arms and **no delta** — per-turn
 output is spread far too wide for a handful of turns to separate the steer from the work.
 
+## Retrieval before the turn — `iqContext`
+
+The other direction: instead of trimming what the agent reads, answer the question before it asks. With
+**`iqContext`** on, `turn-plan.ts` runs the user's message through the resident iq engine (the daemon's warm
+index, `composition.ts`) and prepends the ranked answer to the message as a turn preamble
+(`agent/turn-context.ts`), budget-capped at ~1200 tokens. A turn that would have opened with two or three
+searches opens with `path:line` anchors instead.
+
+**It is deliberately picky about firing**, because a miss is pure cost: a message that names its own file or
+path, a slash command, or one made only of conversational words retrieves nothing at all, and neither does a
+query that comes back with no hits or against an index still building. Retrieval is raced against a 2s deadline
+and can never fail a turn — a thrown query costs the note and is logged, nothing more.
+
+Why a preamble and not a tool: a tool costs a definition in every request plus a round trip when it fires. The
+graperoot benchmark this borrows from measured its own MCP form **15.8% more expensive** on complex prompts,
+while the pre-injection form came out **~45% cheaper**. Same retrieval; what differs is who pays to decide to run
+it.
+
+**`iqContextHoldout`** is its measurement control, the same shape as `terseHoldout` (`UsageTurn.iqContext`). The
+metric is **cost per turn**, not tokens: the injection spends input tokens on purpose to buy back search turns,
+so an output-token verdict would score the spending and miss the buying. `true` on the ledger means the turn was
+*assigned* the retrieval, not that a note was found for it — the arms have to be the coin flip's populations,
+and the control arm holds the same unsearchable questions in the same proportion.
+
 ## What the report says — `/settings/savings`
 
-`SavingsReport` is two families, deliberately never one ranking:
+`SavingsReport` is three families, deliberately never one ranking:
 
 - `input` — the cleaners, from the ledger of whichever backend is compressing (`filterBackend`). Exact, windowed
   by UTC day. `windowed: false` under rtk, whose `gain` reports no timestamps, so the UI labels it all-time.
-- `output` — the terse A/B above. Absent entirely when the experiment isn't running.
+- `output` — the terse A/B above (`metric: "outputTokens"`). Absent entirely when the experiment isn't running.
+- `context` — the pre-injection A/B (`metric: "costUsd"`). Same `TurnExperiment` shape, same Welch machinery,
+  same absence rule.
 
 The web renders `input` as one stacked bar (mechanisms + what reached the assistant) on the Usage tab, where the
-range window lives, and puts each mechanism's saving next to its own switch on the Agent tab. Note the ledger
+range window lives, and both experiments through one arms chart (`SavingsArmsChart.vue`, metric-aware), with
+each mechanism's figure repeated next to its own switch on the Agent tab. Note the ledger
 lives under `logsRoot` and is therefore pruned by `pruneLogFiles` (5 MB → newest 1 MB, 30-day idle): it is a
 window of recent commands, not a lifetime record like `usage.jsonl`.
 
