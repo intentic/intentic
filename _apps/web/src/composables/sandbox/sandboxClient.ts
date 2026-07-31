@@ -2,6 +2,7 @@ import { useSandboxSession } from "./sandboxSession";
 import { staleDaemonReason } from "./useDaemonRoutes";
 import { useEndpoint } from "./useEndpoint";
 import { useSandbox } from "./useSandbox";
+import { trackPerf } from "../perf";
 import { CHUNK_BYTES } from "../workspace/uploadChunking";
 
 // Calls the ACTIVE sandbox's daemon DIRECTLY (browser → https://sandbox-<id>.<zone>, or its loopback shortcut
@@ -14,25 +15,33 @@ const { active } = useSandbox();
 const { daemonBase } = useEndpoint();
 const { getSessionToken } = useSandboxSession();
 
+/* Timed from the caller's first instruction to the response headers — which deliberately INCLUDES
+ * `getSessionToken`, because a session renewal round-trip is time the caller waited and every previous account
+ * of a slow read left it out. The daemon's own `http.request` line covers the same call from its side, so the
+ * two together locate the cost: agree ⇒ the daemon; browser much larger ⇒ the tunnel, the token, or a queue in
+ * here. `path` is stripped of its query so a hundred distinct file reads aggregate into one row.
+ */
 export async function sandboxRequest(path: string, init?: RequestInit): Promise<Response> {
-    const base = daemonBase.value;
-    if (base === undefined || base === ``) {
-        throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
-    }
-    const token = await getSessionToken();
-    if (token === undefined) {
-        throw new Error(`Sign in with Google to reach your sandbox.`);
-    }
-    const headers = new Headers(init?.headers);
-    headers.set(`authorization`, `Bearer ${token}`);
-    // The daemon binds its owner on the FIRST authenticated request (TOFU), but only if it carries the sandbox's
-    // connection token as `x-intentic-connect`. We send the active sandbox's token on every call (the daemon
-    // ignores it once the owner is bound; members' tokens are harmless post-bind).
-    const connectToken = active.value?.token;
-    if (connectToken !== undefined) {
-        headers.set(`x-intentic-connect`, connectToken);
-    }
-    return fetch(`${base}${path}`, { ...init, headers });
+    return trackPerf(`rpc.request`, { path: path.split(`?`)[0] ?? path, method: init?.method ?? `GET` }, async () => {
+        const base = daemonBase.value;
+        if (base === undefined || base === ``) {
+            throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
+        }
+        const token = await getSessionToken();
+        if (token === undefined) {
+            throw new Error(`Sign in with Google to reach your sandbox.`);
+        }
+        const headers = new Headers(init?.headers);
+        headers.set(`authorization`, `Bearer ${token}`);
+        // The daemon binds its owner on the FIRST authenticated request (TOFU), but only if it carries the sandbox's
+        // connection token as `x-intentic-connect`. We send the active sandbox's token on every call (the daemon
+        // ignores it once the owner is bound; members' tokens are harmless post-bind).
+        const connectToken = active.value?.token;
+        if (connectToken !== undefined) {
+            headers.set(`x-intentic-connect`, connectToken);
+        }
+        return fetch(`${base}${path}`, { ...init, headers });
+    });
 }
 
 // A non-2xx daemon response, carrying the HTTP status so callers can branch on it (e.g. a 404 on a file read

@@ -24,7 +24,8 @@ import {
     type TranslatorAccounts,
     USAGE_LIMIT_AUTO_RESUME_ENABLED,
 } from "@intentic/sandbox-contract";
-import { computed, ref, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
+import { recordPerf, trackPerf } from "../perf";
 import { sandboxRequest } from "../sandbox/sandboxClient";
 import { errorMessage } from "../useAsyncAction";
 import { mentionPaths } from "./useMentions";
@@ -487,11 +488,24 @@ const OUTAGE_REATTACH_DELAY_MS = 10_000;
  * — the same stream a reload, a second window, or another device attaches, resumable by seq cursor when the
  * connection drops. */
 export class Conversation {
-    // The transcript, the turn's current bubble, the id allocator, and the typewriter's undrained buffer — one
-    // value, moved through the pure reducer in turnReducer.ts. Holding them together is what makes the frame
-    // rules testable without a conversation: every question the reducer asks (does this bubble hold prose yet,
-    // which bubble does a card attach to) is answerable from this object alone.
-    private readonly state = ref<TurnState>(emptyTurnState);
+    /* The transcript, the turn's current bubble, the id allocator, and the typewriter's undrained buffer — one
+     * value, moved through the pure reducer in turnReducer.ts. Holding them together is what makes the frame
+     * rules testable without a conversation: every question the reducer asks (does this bubble hold prose yet,
+     * which bubble does a card attach to) is answerable from this object alone.
+     *
+     * shallowRef, NOT ref — and the difference is the single largest cost in a long chat. A deep `ref` hands its
+     * value to Vue's reactive(), which lazily wraps every object REACHED THROUGH IT in a Proxy: the messages
+     * array, each message, each message's tool array, each tool, each tool's children. The reducer is pure, so
+     * it replaces that object graph on essentially every frame — which invalidates the proxy cache and makes the
+     * renderer re-wrap the reachable graph on the next read. At 60 typewriter ticks a second over a
+     * several-hundred-message transcript that is tens of thousands of proxy allocations per second, all of it
+     * to observe mutations that CANNOT HAPPEN: nothing anywhere writes through `state.value`, every transition
+     * goes through the reducer and assigns a whole new object.
+     *
+     * A shallowRef triggers on exactly the thing that does happen — the identity of `state.value` changing — and
+     * hands the renderer the raw objects. Same reactivity, none of the proxying. (useChat's `conversations` is
+     * shallow for a related reason; see its comment.) */
+    private readonly state = shallowRef<TurnState>(emptyTurnState);
 
     readonly messages = computed<readonly ChatMessage[]>(() => this.state.value.messages);
     readonly streaming = ref(false);
@@ -785,7 +799,12 @@ export class Conversation {
     // `authoritative` is the daemon's own replay, which may legitimately shrink the mirror; everything else is
     // this window reporting what it is showing, which can be a fraction of the conversation (see saveTranscript).
     private persist(authoritative = false): void {
-        void saveTranscript(this.conversationId, this.messages.value, authoritative);
+        // Timed because an unconfirmed write READS the mirror back before deciding whether it may shrink it
+        // (see saveTranscript), so this is two IndexedDB transactions plus a copy of up to 300 messages — and
+        // it fires on every turn boundary. `messages` is what its cost scales with.
+        void trackPerf(`chat.persist`, { messages: this.messages.value.length, authoritative }, () =>
+            saveTranscript(this.conversationId, this.messages.value, authoritative),
+        );
     }
 
     // Paint the locally cached transcript, if there is one and nothing has been rendered yet. Returns whether
@@ -1608,8 +1627,20 @@ export class Conversation {
         if (event.kind !== `provider_retry`) {
             this.providerRetry.value = undefined;
         }
+        /* Measured by hand rather than through `trackPerf`: this is synchronous and runs hundreds of times per
+         * answer, so it cannot afford a closure and a promise per frame.
+         *
+         * This span is where a laggy chat gets diagnosed. The reducer rebuilds the message list on most frames,
+         * so its cost scales with TRANSCRIPT LENGTH while the frame rate is set by the model — which is why a
+         * chat feels fine for the first few exchanges and turns to treacle in a long one. `messages` rides
+         * along precisely so that correlation is visible in one line instead of inferred.
+         *
+         * `kind` separates the frame types, which have genuinely different costs: a `delta` touches one bubble,
+         * a `tool_call_update` scans every bubble's tool tree to find its card. */
+        const from = performance.now();
         const { state, effects } = applyTurnFrame(this.state.value, event, { userMessageId: turn.userMessageId });
         this.state.value = state;
+        recordPerf(`chat.frame`, performance.now() - from, { kind: event.kind, messages: state.messages.length });
         this.syncTypewriter();
         for (const effect of effects) {
             this.applyEffect(effect, turn);
@@ -1974,9 +2005,16 @@ export class Conversation {
     }
 
     // One typewriter tick: reveal a slice and schedule the next frame while text remains.
+    //
+    // Timed for the same reason as handleEvent, and it is the more punishing of the two: this runs off
+    // requestAnimationFrame — up to 60 times a second for the whole length of an answer — and each tick
+    // rebuilds the message list to append a few characters to one bubble. Its budget IS a frame, so if this
+    // op's mean creeps toward 8ms the typewriter alone is what is dropping them.
     private drainType(): void {
         this.rafId = null;
+        const from = performance.now();
         this.state.value = revealPending(this.state.value);
+        recordPerf(`chat.type`, performance.now() - from, { messages: this.state.value.messages.length });
         if (this.state.value.pending !== undefined) {
             this.rafId = requestAnimationFrame(() => this.drainType());
         }

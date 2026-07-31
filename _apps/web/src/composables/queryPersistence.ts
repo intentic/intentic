@@ -2,6 +2,7 @@ import type { PersistedClient } from "@tanstack/query-persist-client-core";
 import { persistQueryClient } from "@tanstack/query-persist-client-core";
 import { defaultShouldDehydrateQuery, QueryClient } from "@tanstack/vue-query";
 import { del, get, set } from "idb-keyval";
+import { trackPerf } from "./perf";
 import { throttleTrailing } from "./throttleTrailing";
 
 /* Persists the vue-query cache to IndexedDB so a reload paints the last-known workspace (tree, history,
@@ -29,9 +30,16 @@ let uninstall: (() => void) | undefined;
 const PERSIST_WINDOW_MS = 2000;
 let latestClient: PersistedClient | undefined;
 const flushPersist = throttleTrailing(() => {
-    if (latestClient !== undefined) {
-        void set(IDB_KEY, latestClient);
+    if (latestClient === undefined) {
+        return;
     }
+    // Timed because this is the one background write big enough to be felt: idb-keyval structured-clones the
+    // whole dehydrated cache on the MAIN THREAD before it ever reaches IndexedDB, so its cost scales with
+    // everything the app has ever cached — a busy workspace's Changes payload and file tree included. If the
+    // UI stutters every couple of seconds while nothing is obviously happening, this is the first row to look
+    // at, and `queries` says whether the cache has simply grown too big to keep mirroring whole.
+    const client = latestClient;
+    void trackPerf(`query.persist`, { queries: client.clientState.queries.length }, () => set(IDB_KEY, client));
 }, PERSIST_WINDOW_MS);
 
 // Called from requireAuth AFTER the user resolves and BEFORE any route mounts, so hydration never races a

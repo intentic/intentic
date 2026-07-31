@@ -134,8 +134,11 @@ export const createGitRoutes = (services: Services) => {
             }
             return result;
         });
+    // How many repo dirs the last scan actually walked — the scan's real cost driver, and the number that makes
+    // "the review got slow" legible when the answer is "you cloned four more repos into the workspace".
+    let scannedRepos = 0;
     const scanAll = async (): Promise<GitChanges> => {
-        const repoIds = await discoverRepos(services.workspace.root);
+        const repoIds = await services.perf.track("git.discover", {}, () => discoverRepos(services.workspace.root));
         // A Changes review right after a clone must not sweep the new repo's files into the root scope —
         // converge the root excludes on the repo set we're about to scan.
         await syncRootExcludes(services.config.historyRoot, repoIds);
@@ -143,72 +146,86 @@ export const createGitRoutes = (services: Services) => {
             { repo: "root", dir: services.workspace.root },
             ...repoIds.map((id) => ({ repo: id, dir: join(services.workspace.root, id) })),
         ];
+        scannedRepos = candidates.length;
         // Each candidate is its own repo dir (own .git, no shared index.lock), so the scans run
         // concurrently — the panel waits for the slowest repo, not the sum of all of them.
         const scanned = await Promise.all(
-            candidates.map(async (candidate): Promise<RepoChanges | undefined> => {
-                try {
-                    await healPointer(candidate.repo, candidate.dir);
-                    // The change scan, the remote read and the agent attribution are independent (none touches
-                    // the index) — one round-trip for all three. `remote` is what the panel's sync bar renders
-                    // per repo; `landed` is which agent landed each path this repo has ever received.
-                    const [{ branch, conflicted, staged, unstaged }, remote, landed] = await Promise.all([
-                        services.git.changedFiles(candidate.dir),
-                        services.git.remoteState(candidate.dir),
-                        // Attribution is the only part of this scan the panel can do without: it decorates the
-                        // rows, it isn't the rows. A failure here degrades to "nobody landed anything" rather
-                        // than joining the catch below and reporting the whole repo as unreadable.
-                        services.agentOrigins.forRepo(candidate.repo, candidate.dir).catch((error: unknown) => {
-                            services.logger.debug({ err: error, repo: candidate.repo }, "git changes: origins unavailable");
-                            return {};
-                        }),
-                    ]);
-                    // A repo with a clean tree still belongs in the response whenever there is remote work to
-                    // do: ahead of or behind its upstream, or sitting on a branch that has a remote but no
-                    // upstream yet (which the panel offers to Publish). Whatever the sync controls can act on
-                    // they must be able to SEE — a repo that drops out the instant its tree goes clean is exactly
-                    // the push/publish dead-end this avoids, and the reason committing everything felt like it
-                    // took the sync affordance with it.
-                    const publishable = branch !== undefined && remote.remote !== undefined && remote.upstream === undefined;
-                    if (conflicted.length > 0 || staged.length > 0 || unstaged.length > 0 || remote.ahead > 0 || remote.behind > 0 || publishable) {
-                        const capped = capRepoChanges(conflicted, staged, unstaged);
-                        // Narrowed to the paths this scan actually reports (the capped lists — attribution
-                        // decorates rows, and a cut row isn't one): an agent's landed delta outlives the
-                        // review (the paths stay in `base..landedTip` until the branch goes), so shipping it
-                        // whole would attribute files that are no longer changed at all.
-                        const dirty = new Set(
-                            [...capped.conflicted, ...capped.staged, ...capped.unstaged].flatMap((change) =>
-                                change.from === undefined ? [change.path] : [change.path, change.from],
-                            ),
-                        );
-                        const origins = Object.fromEntries(Object.entries(landed).filter(([path]) => dirty.has(path)));
+            candidates.map(async (candidate): Promise<RepoChanges | undefined> =>
+                // Per repo, not just per scan: the repos run concurrently, so the scan's own duration is the
+                // SLOWEST repo's and says nothing about which one that was. With a row each, "the review takes
+                // four seconds" resolves to the one repo responsible — usually the biggest tree or the one whose
+                // remote is being consulted — instead of an indictment of the whole workspace.
+                services.perf.track("git.scan.repo", { repo: candidate.repo }, async (): Promise<RepoChanges | undefined> => {
+                    try {
+                        await healPointer(candidate.repo, candidate.dir);
+                        // The change scan, the remote read and the agent attribution are independent (none touches
+                        // the index) — one round-trip for all three. `remote` is what the panel's sync bar renders
+                        // per repo; `landed` is which agent landed each path this repo has ever received.
+                        const [{ branch, conflicted, staged, unstaged }, remote, landed] = await Promise.all([
+                            services.git.changedFiles(candidate.dir),
+                            services.git.remoteState(candidate.dir),
+                            // Attribution is the only part of this scan the panel can do without: it decorates the
+                            // rows, it isn't the rows. A failure here degrades to "nobody landed anything" rather
+                            // than joining the catch below and reporting the whole repo as unreadable.
+                            services.agentOrigins.forRepo(candidate.repo, candidate.dir).catch((error: unknown) => {
+                                services.logger.debug({ err: error, repo: candidate.repo }, "git changes: origins unavailable");
+                                return {};
+                            }),
+                        ]);
+                        // A repo with a clean tree still belongs in the response whenever there is remote work to
+                        // do: ahead of or behind its upstream, or sitting on a branch that has a remote but no
+                        // upstream yet (which the panel offers to Publish). Whatever the sync controls can act on
+                        // they must be able to SEE — a repo that drops out the instant its tree goes clean is exactly
+                        // the push/publish dead-end this avoids, and the reason committing everything felt like it
+                        // took the sync affordance with it.
+                        const publishable = branch !== undefined && remote.remote !== undefined && remote.upstream === undefined;
+                        if (
+                            conflicted.length > 0 ||
+                            staged.length > 0 ||
+                            unstaged.length > 0 ||
+                            remote.ahead > 0 ||
+                            remote.behind > 0 ||
+                            publishable
+                        ) {
+                            const capped = capRepoChanges(conflicted, staged, unstaged);
+                            // Narrowed to the paths this scan actually reports (the capped lists — attribution
+                            // decorates rows, and a cut row isn't one): an agent's landed delta outlives the
+                            // review (the paths stay in `base..landedTip` until the branch goes), so shipping it
+                            // whole would attribute files that are no longer changed at all.
+                            const dirty = new Set(
+                                [...capped.conflicted, ...capped.staged, ...capped.unstaged].flatMap((change) =>
+                                    change.from === undefined ? [change.path] : [change.path, change.from],
+                                ),
+                            );
+                            const origins = Object.fromEntries(Object.entries(landed).filter(([path]) => dirty.has(path)));
+                            return {
+                                repo: candidate.repo,
+                                ...(branch !== undefined ? { branch } : {}),
+                                conflicted: capped.conflicted,
+                                staged: capped.staged,
+                                unstaged: capped.unstaged,
+                                ...(capped.truncated > 0 ? { truncated: capped.truncated } : {}),
+                                remote,
+                                ...(Object.keys(origins).length > 0 ? { origins } : {}),
+                            };
+                        }
+                        return undefined;
+                    } catch (error) {
+                        // One broken repo (a deleted .git with no heal source, a repo whose .git is still uploading)
+                        // must not 500 the panel — but it must not disappear from it either, so the reason rides back
+                        // in the response. Debug, not warn: while a dropped repo's .git lands this fires on every poll
+                        // and the client is already being told.
+                        services.logger.debug({ err: error, repo: candidate.repo }, "git changes: repo unscannable");
                         return {
                             repo: candidate.repo,
-                            ...(branch !== undefined ? { branch } : {}),
-                            conflicted: capped.conflicted,
-                            staged: capped.staged,
-                            unstaged: capped.unstaged,
-                            ...(capped.truncated > 0 ? { truncated: capped.truncated } : {}),
-                            remote,
-                            ...(Object.keys(origins).length > 0 ? { origins } : {}),
+                            conflicted: [],
+                            staged: [],
+                            unstaged: [],
+                            error: gitFailureReason(error, "git could not read this repo"),
                         };
                     }
-                    return undefined;
-                } catch (error) {
-                    // One broken repo (a deleted .git with no heal source, a repo whose .git is still uploading)
-                    // must not 500 the panel — but it must not disappear from it either, so the reason rides back
-                    // in the response. Debug, not warn: while a dropped repo's .git lands this fires on every poll
-                    // and the client is already being told.
-                    services.logger.debug({ err: error, repo: candidate.repo }, "git changes: repo unscannable");
-                    return {
-                        repo: candidate.repo,
-                        conflicted: [],
-                        staged: [],
-                        unstaged: [],
-                        error: gitFailureReason(error, "git could not read this repo"),
-                    };
-                }
-            }),
+                }),
+            ),
         );
         const repos = scanned.filter((repo) => repo !== undefined);
         // The identity of every agent named anywhere in the review, resolved once against the FULL registry —
@@ -224,17 +241,32 @@ export const createGitRoutes = (services: Services) => {
     // Collapse them: callers arriving while a scan runs share it, and its result is reused for COALESCE_MS after it
     // settles, so a burst costs one scan instead of one per observer per batch. `reusableUntil` is 0 for the whole
     // time a scan is in flight, which is what makes the sharing (not just the caching) work.
+    /* How many callers this in-flight scan has been handed to, and how many repos it walked. Both are only
+     * final once the scan settles, so this is timed by hand rather than through `perf.track` — that helper
+     * evaluates its fields up front, which would have frozen the share count at 1 and reported the exact
+     * opposite of what happened.
+     *
+     * The ratio is the point. A 3s review shared by six observers and a 3s review one browser asked for alone
+     * are the same line in every other log, and they need opposite fixes: make the scan cheaper, or make the
+     * client stop asking. */
+    let shared = 0;
     const coalescedScan = (): Promise<GitChanges> => {
         if (scan !== undefined && (reusableUntil === 0 || Date.now() < reusableUntil)) {
+            shared += 1;
             return scan;
         }
         reusableUntil = 0;
+        shared = 1;
+        const from = process.hrtime.bigint();
+        const elapsed = (): number => Number(process.hrtime.bigint() - from) / 1e6;
         scan = scanAll().then(
             (result) => {
+                services.perf.record("git.scan", elapsed(), { repos: scannedRepos, changed: result.repos.length, coalesced: shared });
                 reusableUntil = Date.now() + COALESCE_MS;
                 return result;
             },
             (error: unknown) => {
+                services.perf.record("git.scan", elapsed(), { repos: scannedRepos, coalesced: shared }, true);
                 // A whole-scan failure is never worth serving to the next caller — drop it so they rescan.
                 scan = undefined;
                 throw error;

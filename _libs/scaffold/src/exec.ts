@@ -190,15 +190,57 @@ const runGit = (command: string, args: readonly string[], env: Readonly<Record<s
     });
 };
 
+/* THE MEASUREMENT SEAM. Every git this process runs passes through the loop below — both exported runners are
+ * built from it, and the 70-odd call sites that take `git: GitRunner = defaultGit` are covered by construction.
+ * That is the whole reason the hook lives here rather than being wrapped on around the daemon's service object:
+ * a wrapper there would have measured the handful of calls that go through `services.git` and silently missed
+ * every module that reaches for `defaultGit` itself, which is most of them.
+ *
+ * A callback rather than a logger import, because this package is shared with the CLI and must not acquire a
+ * pino dependency (nor an opinion about where lines go). Unset by default — nothing is measured until a host
+ * asks, and an unset hook costs one undefined check per git call.
+ *
+ * `attempts` is what the caller cannot see from outside: a read that reports 1.4s having retried six times lost
+ * that time to index.lock contention with another writer, not to git being slow, and those two have completely
+ * different fixes. */
+export interface GitObservation {
+    readonly dir: string;
+    readonly args: readonly string[];
+    readonly ms: number;
+    // 1 for a clean first-try run; higher means the lock retry loop below spun (see LOCK_CONTENTION).
+    readonly attempts: number;
+    readonly failed: boolean;
+    // Whether the resident forker served it. False means every spawn is paying the parent's page-table copy —
+    // the exact cost the forker exists to avoid, and a real regression when it shows up in a dist run.
+    readonly forked: boolean;
+}
+
+let gitObserver: ((observation: GitObservation) => void) | undefined;
+
+/** Report every subsequent git invocation to `observer`. The daemon points this at its perf tracker at boot;
+ *  the CLI and tests leave it unset. */
+export const observeGitCommands = (observer: (observation: GitObservation) => void): void => {
+    gitObserver = observer;
+};
+
 const gitRunnerVia =
     (argv: readonly string[]): GitRunner =>
     async (dir, args, env) => {
         const [command, ...rest] = argv;
+        const from = process.hrtime.bigint();
+        // Reported whether the call succeeds or throws: a git that fails after 8 seconds is the single most
+        // useful line in an incident log, and measuring only the happy path is how it stays missing.
+        const observe = (attempts: number, failed: boolean): void => {
+            gitObserver?.({ dir, args, ms: Number(process.hrtime.bigint() - from) / 1e6, attempts, failed, forked: forker !== undefined });
+        };
         for (let attempt = 1; ; attempt += 1) {
             try {
-                return await runGit(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...args], env);
+                const output = await runGit(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...args], env);
+                observe(attempt, false);
+                return output;
             } catch (error) {
                 if (attempt >= RETRY_ATTEMPTS || !isLockContention(error)) {
+                    observe(attempt, true);
                     throw error;
                 }
                 await new Promise((resolve) => setTimeout(resolve, attempt * attempt * 50));

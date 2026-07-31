@@ -98,7 +98,16 @@ async function* systemEvents(
         build: buildId(),
         boot: services.boot.progress(),
     };
-    const queue: SystemEvent[] = [];
+    /* Frames waiting to go out, each stamped with when it was produced. The stamp is what makes the browser's
+     * half of a "the UI felt stale" report answerable: a roster snapshot that sat in this array for two seconds
+     * was late leaving the daemon, and no amount of looking at the browser would ever have shown that. Queue
+     * DEPTH rides along because the two causes look identical from one frame's latency alone — a burst of
+     * workspaceChanged batches (deep queue, each frame fine) versus a consumer that stopped pulling (shallow
+     * queue, one very late frame). */
+    const queue: { readonly event: SystemEvent; readonly at: bigint }[] = [];
+    const enqueue = (event: SystemEvent): void => {
+        queue.push({ event, at: process.hrtime.bigint() });
+    };
     // Resolver of the current idle wait, so a change (or an abort) ends it immediately instead of stalling until
     // the next heartbeat tick.
     let wake: (() => void) | undefined;
@@ -111,30 +120,30 @@ async function* systemEvents(
     // subscribe's immediate snapshot then paints the full roster (self included) onto this connection.
     const unregisterPresence = member !== undefined ? registerPresence(member.clientId, member.identity) : undefined;
     const unsubscribePresence = subscribePresence((users) => {
-        queue.push({ kind: "presence", users });
+        enqueue({ kind: "presence", users });
         onWake();
     });
     // The fleet roster rides the same stream, same snapshot-not-diff contract: an immediate frame on
     // subscribe paints the fleet, then every registry change (turn lifecycle, usage, land, discard) re-frames.
     const unsubscribeAgents = services.agents.subscribe((agents, rev) => {
-        queue.push({ kind: "agents", agents, rev });
+        enqueue({ kind: "agents", agents, rev });
         onWake();
     });
     // Boot transitions, for a stream opened DURING one: the hello above carried the snapshot at connect, and
     // each step then re-frames it until the gate opens. Snapshot-not-diff like the rosters, so a browser that
     // reconnects mid-boot is consistent from its first frame.
     const unsubscribeBoot = services.boot.subscribe((progress) => {
-        queue.push({ kind: "boot", ...progress });
+        enqueue({ kind: "boot", ...progress });
         onWake();
     });
     const unsubscribe = subscribeWorkspaceChanges((paths) => {
-        queue.push({ kind: "workspaceChanged", paths });
+        enqueue({ kind: "workspaceChanged", paths });
         onWake();
     });
     // Repo-set snapshots: a clone/scaffold/delete anywhere under /work re-frames the discovered repo list
     // (the .git-blind watcher can't surface this — see repo-watch.ts).
     const unsubscribeRepos = subscribeRepoChanges((repos) => {
-        queue.push({ kind: "reposChanged", repos });
+        enqueue({ kind: "reposChanged", repos });
         onWake();
     });
     abort.addEventListener("abort", onWake);
@@ -142,7 +151,14 @@ async function* systemEvents(
         while (!abort.aborted) {
             const framed = queue.shift();
             if (framed !== undefined) {
-                yield framed;
+                // Measured at the hand-off, not after: what follows is the consumer's serialization and the
+                // socket write, and the number this line is about is how long the frame sat here waiting for
+                // its turn. `depth` is what was still behind it.
+                services.perf.record("events.frame", Number(process.hrtime.bigint() - framed.at) / 1e6, {
+                    frame: framed.event.kind,
+                    depth: queue.length,
+                });
+                yield framed.event;
                 continue;
             }
             // Idle: wait for a change (wake) or the heartbeat interval; a timeout means "nothing changed, beat".

@@ -1,5 +1,5 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { computed, ref, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type FleetLane, laneOf, turnInFlight } from "./agentStatus";
 import { openAgentConversation, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
@@ -13,7 +13,12 @@ import { errorMessage } from "../useAsyncAction";
  * status/branch/cost, agents this tab never opened) with the open Conversation tabs by conversationId (live:
  * in-browser streaming state). Module-level singleton, like useChat. */
 
-const registry = ref<AgentSummary[]>([]);
+// shallowRef, for the same reason Conversation.state is: every write below REPLACES this array (a roster is a
+// snapshot, never a patch — see the ordering note beneath), so there is no in-place mutation for deep
+// reactivity to observe. A deep ref would instead re-proxy every summary in the fleet on each snapshot, and the
+// daemon re-frames the roster about once a second for every running turn — so the board's cost scaled with
+// agents × turns × their fields, which is exactly when the /agents view was reported to get sticky.
+const registry = shallowRef<AgentSummary[]>([]);
 
 /* --- Roster ordering ----------------------------------------------------------------------------------------
  * The fleet is published as full snapshots, and THREE sources produce them: the /events stream, an explicit

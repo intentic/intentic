@@ -113,6 +113,7 @@ import { agentTranscript, type AgentTranscriptDeps, storedTranscript, type Trans
 import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
 import { type BootTracker, createBootTracker } from "./platform/boot.js";
+import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
 import { postToPlatform, type PlatformResponse } from "./platform/platform-client.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
 import { version } from "./version.js";
@@ -142,6 +143,10 @@ import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/workspace-
 export interface Services {
     readonly config: Config;
     readonly logger: Logger;
+    // Where the daemon's time goes. Every expensive path (git subprocesses, the Changes scan, repo-lock waits,
+    // HTTP requests, event fan-out) measures itself through this, so a "the panel felt slow" report has a log
+    // line naming the op instead of a stall with no attribution — see platform/perf.ts.
+    readonly perf: PerfTracker;
     // Where the boot chain is. main.ts declares its steps and drives it; app.ts gates every data route on its
     // `converged` promise, and /events streams its progress so the browser can WAIT VISIBLY instead of firing
     // a workspace's worth of reads at a daemon that will only park them (see platform/boot.ts).
@@ -454,6 +459,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
 
     const claudeStore = fileClaudeStore(join(authRoot, "claude"), logger);
 
+    // Hoisted: the members below that measure themselves (the worktree op chains, the git routes' Changes scan)
+    // must file into the SAME tracker the summary line reads, or each would rank its own slice in isolation.
+    const perf = createPerfTracker(logger);
+
     // Hoisted (not inline in the literal below): the ACP connection pool implements ACP terminal/* over the
     // same runner, so both must share one instance (and its `visible` gate).
     const terminalRun = createTerminalRunner();
@@ -473,6 +482,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             historyRoot: config.historyRoot,
             isolation: turnIsolation,
             logger,
+            perf,
         },
         // Demoted git: a worktree ensure is a whole-monorepo checkout (and several conversations start
         // together) — bulk agent-plane IO that must lose to the daemon's own loop under contention.
@@ -500,6 +510,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     return {
         config,
         logger,
+        perf,
         // Born converged — main() declares the chain and closes the gate behind it, so a services object built
         // for a test or the host-internal preview has nothing to wait for.
         boot: createBootTracker(logger),

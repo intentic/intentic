@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { observeGitCommands } from "@intentic/scaffold";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
@@ -108,6 +109,29 @@ const main = async (): Promise<void> => {
     // below the control plane so a newly introduced workload cannot compete equally with /events heartbeats.
     const workloadPriority = startWorkloadPriorityGovernor();
     const services = createServices(config, logger);
+    /* Point the scaffold's git seam at the perf tracker, so every git this daemon runs — the Changes scan's
+     * hundreds of reads, a land's checkout, the history snapshots — is attributable. Git is where the reported
+     * slowness lives and it was the one subsystem with no measurement at all.
+     *
+     * `dir` is trimmed to a workspace-relative name: absolute paths make every line wrap and the prefix is the
+     * same on all of them. `args` keeps the subcommand and its flags but drops trailing operands, which are
+     * pathspecs — a `checkout -- <400 paths>` would otherwise put 400 paths in a log line, and the subcommand
+     * is what identifies the op anyway. */
+    observeGitCommands(({ dir, args, ms, attempts, failed, forked }) => {
+        services.perf.record(
+            "git.run",
+            ms,
+            {
+                git: args.slice(0, 3).join(" "),
+                repo: dir.startsWith(services.workspace.root) ? dir.slice(services.workspace.root.length + 1) || "root" : dir,
+                ...(attempts > 1 ? { lockRetries: attempts - 1 } : {}),
+                // Only worth a field when it is FALSE: a direct exec pays the parent's page-table copy on every
+                // call (~27ms at this daemon's resident size), which is a whole class of slowness on its own.
+                ...(forked ? {} : { forked: false }),
+            },
+            failed,
+        );
+    });
 
     // The sandbox-wide CODEX_HOME's config.toml: privacy hardening plus, when a translator is baked, the
     // `translator` model_provider on the ChatGPT subscription — the default that serves the Claude agent's shell

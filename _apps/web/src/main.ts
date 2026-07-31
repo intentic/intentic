@@ -3,6 +3,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { initAnalytics } from "./composables/analytics";
+import { installPerfConsole } from "./composables/perf";
 import { queryClient } from "./composables/queryPersistence";
 // Registers the module-level watch that re-scopes chat / editor / file-action state on sandbox switch.
 import "./composables/sandbox/sandboxScope";
@@ -12,6 +13,9 @@ import { router } from "./router";
 import "./styles.css";
 
 initAnalytics();
+// Before anything mounts, so the spans of a slow first paint are in the ring buffer too. `__intenticPerf` in
+// the console is the whole interface — see composables/perf.ts.
+installPerfConsole();
 
 // Composition API + a single design-system plugin. No zone.js / providers ceremony: the router, PrimeVue
 // (via installUi), and vue-query are the only app-wide wiring; server state lives in useQuery/useMutation,

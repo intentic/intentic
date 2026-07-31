@@ -97,6 +97,12 @@ const memberEmail = async (c: Context): Promise<string | undefined> => {
  * — the failure mode where clearing site data "fixed" a sandbox that was only ever starting up.
  *
  * Everything else reads state a boot step builds (registry, git dirs, claude session links), so it waits. */
+// Long-lived streams, exempt from the request timer below. Each is SUPPOSED to stay open — /events for the
+// life of a tab, an attach for the life of a turn — so timing them would file every healthy connection as the
+// slowest thing the daemon ever did and bury the requests that genuinely stalled. The other event-iterator
+// routes (a capability install, an intentic run) are bounded operations whose duration is worth knowing.
+const STREAM_PATHS = new Set(["/events", "/agent/attach", "/intentic/apply/events"]);
+
 const READY_EXEMPT = new Set([
     "/health",
     "/events",
@@ -138,6 +144,29 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     });
 
     const app = new Hono<AppEnv>();
+
+    /* Outermost: what the BROWSER waited for. Every other measurement in this daemon times a piece of the
+     * work; this one times the answer, which is the only number the user's complaint is actually about — and
+     * the only one that also contains the parts nothing else sees (the boot gate below, auth's JWKS verify,
+     * oRPC's zod validation of a six-figure change list, the serialization of the response).
+     *
+     * A "slow git" report that lands here at 4s with `git.scan` at 300ms is a completely different bug from
+     * one where the two agree, and until this line existed there was no way to tell those apart.
+     *
+     * The streams are exempt: /events and the agent attach are long-lived by design, so timing them would log
+     * every healthy connection as the slowest thing the daemon does. */
+    app.use("*", async (c, next) => {
+        if (STREAM_PATHS.has(c.req.path)) {
+            return next();
+        }
+        const from = process.hrtime.bigint();
+        await next();
+        services.perf.record("http.request", Number(process.hrtime.bigint() - from) / 1e6, {
+            method: c.req.method,
+            path: c.req.path,
+            status: c.res.status,
+        });
+    });
 
     // The boot gate, first so nothing below runs against half-built state. Waiting is deliberate: the caller
     // already retried through the whole connection-refused window this replaces, so holding the request the

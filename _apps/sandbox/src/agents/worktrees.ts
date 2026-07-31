@@ -4,6 +4,7 @@ import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import type { PerfTracker } from "../platform/perf.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { dropAgentRef, dropOrphanParkedRefs, parkAgentRefs, unparkAgentRef } from "./agent-refs.js";
@@ -127,10 +128,11 @@ export const createAgentWorktrees = (
         readonly historyRoot: string;
         readonly isolation: TurnIsolation;
         readonly logger: Logger;
+        readonly perf: PerfTracker;
     },
     git: GitRunner = defaultGit,
 ): AgentWorktrees => {
-    const { workspace, worktreesRoot, historyRoot, isolation, logger } = options;
+    const { workspace, worktreesRoot, historyRoot, isolation, logger, perf } = options;
 
     const conversationDir = (id: string): string => join(worktreesRoot, id);
     /* An isolated turn's dependency overlays (isolation.ts) live OUTSIDE the checkout, so reclaiming the
@@ -145,9 +147,33 @@ export const createAgentWorktrees = (
     // shared admin area (<gitdir>/worktrees/) and, for land, the main-tree index. Turns themselves never come
     // through here — per-worktree index/HEAD make concurrent agent work naturally safe.
     const chains = new Map<string, Promise<unknown>>();
+    // How many tasks are queued on each repo's chain right now — measurement only, and the single number that
+    // separates the two ways this lock makes a user wait (see below).
+    const queued = new Map<string, number>();
+    /* WAIT AND HOLD ARE MEASURED SEPARATELY, because they are different problems wearing the same symptom.
+     *
+     * The user clicks Stage; it takes four seconds. Either the stage itself was slow (hold — a huge index, a
+     * contended disk), or it sat behind an agent's land checking out the monorepo (wait — the stage was
+     * instant and never got to start). Those have nothing in common: one is a git problem, the other is a
+     * scheduling one, and a single "the commit took 4s" line cannot tell you which you have. This is the
+     * likeliest explanation for "git actions feel slow" and it was completely invisible — a queued task simply
+     * had no clock on it until it ran.
+     *
+     * `depth` is what was already ahead of it in the queue, so a line reads "waited 3.2s behind 2 tasks". */
     const withRepoLock = <T>(repo: string, task: () => Promise<T>): Promise<T> => {
         const chain = chains.get(repo) ?? Promise.resolve();
-        const next = chain.then(task, task);
+        const depth = queued.get(repo) ?? 0;
+        queued.set(repo, depth + 1);
+        const from = process.hrtime.bigint();
+        const measured = async (): Promise<T> => {
+            perf.record("git.lock.wait", Number(process.hrtime.bigint() - from) / 1e6, { repo, depth });
+            try {
+                return await perf.track("git.lock.hold", { repo }, task);
+            } finally {
+                queued.set(repo, (queued.get(repo) ?? 1) - 1);
+            }
+        };
+        const next = chain.then(measured, measured);
         chains.set(
             repo,
             next.catch(() => undefined),

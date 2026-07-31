@@ -5,6 +5,7 @@ import { OpenAPILink } from "@orpc/openapi-client/fetch";
 import { useSandboxSession } from "./sandboxSession";
 import { useEndpoint } from "./useEndpoint";
 import { useSandbox } from "./useSandbox";
+import { trackPerf } from "../perf";
 
 /* The TYPED client for the active sandbox daemon, derived from the same `sandboxContract` the daemon
  * implements — the daemon-side twin of useApi's platform client.
@@ -42,7 +43,22 @@ export const sandboxRpc: ContractRouterClient<typeof sandboxContract> = createOR
         // Resolved per request rather than captured at construction: the link is built once at module load,
         // and a fetch bound then is invisible to anything that replaces it afterwards (a test's stub, an
         // instrumentation wrapper). No credentials — the daemon is cross-origin and bearer-authed, never cookied.
-        fetch: (request) => globalThis.fetch(request),
+        //
+        // The hook is also where every typed call gets its clock. Same `rpc.request` op as sandboxClient's raw
+        // fetch, so one table row covers both ways of reaching the daemon; the path is the URL's, minus origin
+        // and query, so a route aggregates instead of splitting per file/repo argument. A stream's span ends at
+        // the response HEADERS, not at the last frame — which is the right measure for /events and the attach:
+        // what matters there is how long the connection took to establish.
+        fetch: (request) => {
+            const path = ((): string => {
+                try {
+                    return new URL(request.url).pathname;
+                } catch {
+                    return request.url;
+                }
+            })();
+            return trackPerf(`rpc.request`, { path, method: request.method }, () => globalThis.fetch(request));
+        },
         // Read per request, not captured: a sandbox switch (or a daemon that re-announced a new URL after a
         // restart) must be picked up by the very next call, with no client rebuild. Same reason the loopback
         // shortcut can be adopted mid-session — this hook simply starts returning the faster base.
