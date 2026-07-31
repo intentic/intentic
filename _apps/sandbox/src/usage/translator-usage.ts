@@ -1,4 +1,4 @@
-import type { AccountUsage, KeyedProvider, UsageWindow } from "@intentic/sandbox-contract";
+import { type AccountUsage, type KeyedProvider, reportsPlanLimits, type UsageWindow } from "@intentic/sandbox-contract";
 
 /* The READER for the routed subscriptions — the counterpart to claudeUsageWindows, and the other half of what
  * fills account-usage.ts next door. Its whole job is to come back with an AccountUsage; where that snapshot is
@@ -226,16 +226,6 @@ const codexAccountId = (file: TranslatorAuthFile): string | undefined => {
     return asString(authInfo?.[`chatgpt_account_id`] ?? authInfo?.[`chatgptAccountId`]);
 };
 
-/* Which routed providers this module can actually read, stated up front so the caller never schedules a pull it
- * has no reader for. An unreadable quota is not a failure to retry — it must not enter the refresh path at all,
- * and its rows stay dots on purpose.
- *
- * Grok is absent because xAI's usable billing data needs a subject id CLIProxyAPI keeps out of its safe
- * auth-file listing, and the paid-account health probe the upstream management UI falls back on spends a token
- * to answer. Kimi is absent because no quota endpoint of its own is known yet; adding one is adding a branch
- * below and its provider here, and nothing else. */
-export const USAGE_READABLE: readonly KeyedProvider[] = ["codex", "gemini"];
-
 export const fetchTranslatorUsage = async (params: {
     readonly fetchFn: typeof fetch;
     readonly managementUrl: string;
@@ -243,8 +233,10 @@ export const fetchTranslatorUsage = async (params: {
     readonly provider: KeyedProvider;
     readonly file: TranslatorAuthFile;
 }): Promise<AccountUsage | undefined> => {
+    // A provider with no obtainable reading (reportsPlanLimits) never enters the refresh path — an unreadable
+    // quota is not a failure to retry, and its rows stay dots on purpose.
     const authIndex = asString(params.file.auth_index);
-    if (authIndex === undefined || !USAGE_READABLE.includes(params.provider)) {
+    if (authIndex === undefined || !reportsPlanLimits(params.provider)) {
         return undefined;
     }
     const measuredAt = Date.now();

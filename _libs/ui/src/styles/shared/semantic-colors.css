@@ -100,10 +100,21 @@
     --color-danger-fill-hover:  var(--role-danger-fill-hover);
     --color-fill-content:       var(--role-fill-content);
 
-    /* Chart series identity — five categorical slots plus the tail. Assign a slot to an ENTITY once
-     * and never by rank, so filtering a series out can't repaint the survivors. `series-other` is
-     * deliberately achromatic: it is the fold-to bucket past slot 5, and a sixth generated hue is the
-     * thing the fold exists to avoid. */
+}
+
+/* Chart series identity — five categorical slots plus the tail. Assign a slot to an ENTITY once and
+ * never by rank, so filtering a series out can't repaint the survivors. `series-other` is deliberately
+ * achromatic: it is the fold-to bucket past slot 5, and a sixth generated hue is the thing the fold
+ * exists to avoid.
+ *
+ * `static` is load-bearing, and its own block for that reason. Tailwind emits a theme variable only
+ * where it can SEE it used, and a chart picks its slot at runtime (`var(--color-series-${slot})` in
+ * usageChart.ts) — a name that exists in no source file. So the bundle shipped slots 1, 2 and 5 (the
+ * three whose names a component and two test files happen to spell out) and dropped 3 and 4: Kimi and
+ * Grok asked for a variable that wasn't there, `background` was invalid at computed-value time, and
+ * their segments, swatches and bars painted nothing at all. A palette that survives only where a test
+ * mentions it is not a palette. */
+@theme static {
     --color-series-1:     var(--role-series-1);
     --color-series-2:     var(--role-series-2);
     --color-series-3:     var(--role-series-3);

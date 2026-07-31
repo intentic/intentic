@@ -1,4 +1,11 @@
-import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
+import {
+    type AccountUsage,
+    type AgentProvider,
+    type OauthAccount,
+    reportsPlanLimits,
+    type TranslatorAccounts,
+    type UsageWindow,
+} from "@intentic/sandbox-contract";
 import { ref } from "vue";
 
 // The latest subscription usage snapshot PER ACCOUNT — every plan-limit window the provider reports, together.
@@ -167,3 +174,80 @@ export const usageDetail = (usage: AccountUsage): string =>
         ),
         `measured ${formatAge(usage.measuredAt)}`,
     ].join(` · `);
+
+/* ---- plan limits, as rows ---------------------------------------------------------------------------------
+ * EVERY connection this sandbox holds, drawn from the same snapshot type — the projection behind the Usage
+ * tab's meters, and the counterpart to the Agent tab's rings (AiAccountSection's rowsOf, which decorates the
+ * same two lists with the same liveUsage merge).
+ *
+ * Both lists, because a sandbox's connections come two ways and the reader has one question: a provider's own
+ * account (Claude) and a subscription the translator holds (ChatGPT, Google, Kimi, SuperGrok). The Usage tab
+ * read only the first, and only through the STREAMED map at that — so Google's headroom, which the daemon
+ * pulls and hands over on the account row, could not appear there however well it was read. One list, one
+ * merge, one shape.
+ *
+ * An account with NO reading is a row too. Absence rendered as absence is indistinguishable from an account
+ * with room to spare, and those mean opposite things — so the row is listed and says which of the two states
+ * it is in: a plan that publishes no limits at all (`readable: false` — Kimi, SuperGrok), or one that simply
+ * has not been measured yet. */
+
+export interface PlanLimitPool {
+    readonly kind: string;
+    readonly label: string;
+    // Rounded once here, so a meter's width and its printed number can't disagree.
+    readonly percent: number;
+    readonly resetsAt: number | undefined;
+}
+
+export interface PlanLimitRow {
+    // Unique across providers: a native account id is a uuid, a routed one is an auth-file name unique only
+    // within its own provider.
+    readonly id: string;
+    readonly provider: AgentProvider;
+    readonly label: string;
+    // Undefined ⇒ no reading at all; `readable` then says whether one is even obtainable.
+    readonly percent: number | undefined;
+    readonly pools: readonly PlanLimitPool[];
+    readonly measuredAt: number | undefined;
+    readonly stale: boolean;
+    readonly readable: boolean;
+}
+
+const planLimitRow = (provider: AgentProvider, key: string, label: string, attached: AccountUsage | undefined): PlanLimitRow => {
+    const usage = liveUsage(key, attached);
+    return {
+        id: `${provider}:${key}`,
+        provider,
+        label,
+        percent: usagePercent(usage),
+        pools:
+            usage === undefined
+                ? []
+                : orderedWindows(usage).map((pool) => ({
+                      kind: pool.kind,
+                      label: usageWindowLabel(pool),
+                      percent: Math.round(pool.utilization),
+                      resetsAt: pool.resetsAt,
+                  })),
+        measuredAt: usage?.measuredAt,
+        stale: usage !== undefined && isStale(usage),
+        readable: reportsPlanLimits(provider),
+    };
+};
+
+// Measured rows first, tightest of those at the top — the account about to gate a turn is the one worth seeing
+// without scrolling. Unmeasured rows sink rather than sort as 0%: unknown is not headroom.
+export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, routed: TranslatorAccounts): PlanLimitRow[] =>
+    [
+        ...Object.entries(native).flatMap(([provider, accounts]) =>
+            accounts.map((account) => planLimitRow(provider, account.id, account.label, account.usage)),
+        ),
+        ...Object.entries(routed).flatMap(([provider, accounts]) =>
+            accounts.map((account) => planLimitRow(provider, account.name, account.label, account.usage)),
+        ),
+    ].toSorted((left, right) => {
+        if (left.percent === undefined || right.percent === undefined) {
+            return left.percent === right.percent ? left.label.localeCompare(right.label) : left.percent === undefined ? 1 : -1;
+        }
+        return right.percent - left.percent || left.label.localeCompare(right.label);
+    });

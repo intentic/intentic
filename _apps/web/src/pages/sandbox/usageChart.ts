@@ -121,19 +121,6 @@ export const seriesColor = (key: string): string => {
     return slot === -1 ? `var(--color-series-other)` : `var(--color-series-${slot + 1})`;
 };
 
-export const providerLabel = (provider: string): string =>
-    provider === `codex`
-        ? `ChatGPT`
-        : provider === `claude`
-          ? `Claude`
-          : provider === `kimi`
-            ? `Kimi`
-            : provider === `grok`
-              ? `Grok`
-              : provider === `gemini`
-                ? `Gemini`
-                : provider;
-
 // The providers actually present in these rows, in slot order (unknown providers last, alphabetical). Drives
 // both the stack order and the legend, so the two can never disagree.
 export const providersIn = (rows: readonly UsageRollupRow[]): string[] => {

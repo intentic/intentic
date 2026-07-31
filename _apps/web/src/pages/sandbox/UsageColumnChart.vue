@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { providerLabel } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { formatUsd, niceMax, providerLabel, seriesColor, type SpendBucket } from "./usageChart";
+import { formatUsd, niceMax, seriesColor, type SpendBucket } from "./usageChart";
 
 /* Spend over time, as columns. One series when a single provider ran in the window (the card title names it —
  * a one-swatch legend box would only restate the title); stacked with a legend the moment there are two.

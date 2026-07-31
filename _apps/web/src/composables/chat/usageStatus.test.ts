@@ -1,4 +1,4 @@
-import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
+import type { AccountUsage, OauthAccount, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import {
     bindingWindow,
@@ -10,6 +10,7 @@ import {
     isStale,
     liveUsage,
     orderedWindows,
+    planLimitRows,
     usageDetail,
     usagePercent,
     usageRing,
@@ -179,9 +180,7 @@ describe(`usageRing`, () => {
     });
 
     it(`shows the pool that bites first, not whichever the provider listed first`, () => {
-        const ring = usageRing(
-            usage({ windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 91 })] }),
-        );
+        const ring = usageRing(usage({ windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 91 })] }));
         expect(ring?.percent).toBe(91);
         expect(ring?.tooltip).toContain(`5-hour session`);
         expect(ring?.tooltip).toContain(`Weekly · all models`);
@@ -231,6 +230,59 @@ describe(`liveUsage`, () => {
         const streamed = usage({ measuredAt: 100 });
         usageStatusByAccount.value = { "claude-1": streamed };
         expect(liveUsage(`claude-1`, undefined)).toEqual(streamed);
+        usageStatusByAccount.value = {};
+    });
+});
+
+/* The Usage tab's meters. What is being guarded here is coverage: this projection read only the NATIVE account
+ * lists, and only through the streamed map, so a Google subscription whose quota the daemon had pulled and
+ * handed over on its account row could not appear on that screen at all. */
+describe(`planLimitRows`, () => {
+    const account = (over: Partial<OauthAccount> = {}): OauthAccount => ({ id: `claude-1`, label: `Claude`, connectedAt: 0, ...over });
+    const noRouted: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
+
+    it(`draws a routed subscription's pulled reading, not just the native accounts`, () => {
+        const rows = planLimitRows(
+            {},
+            { ...noRouted, gemini: [{ name: `antigravity-1`, label: `someone@gmail.com`, usage: usage({ measuredAt: 500 }) }] },
+        );
+        expect(rows.map((row) => [row.provider, row.label, row.percent])).toEqual([[`gemini`, `someone@gmail.com`, 42]]);
+    });
+
+    it(`lists an account with no reading and says which kind of nothing it is`, () => {
+        const rows = planLimitRows({ claude: [account({ usage: usage() })] }, { ...noRouted, kimi: [{ name: `kimi-1`, label: `Kimi Code` }] });
+        expect(rows.map((row) => [row.label, row.percent, row.readable, row.pools.length])).toEqual([
+            [`Claude`, 42, true, 1],
+            [`Kimi Code`, undefined, false, 0],
+        ]);
+    });
+
+    it(`sinks an unmeasured account below every measured one — unknown is not headroom`, () => {
+        const rows = planLimitRows(
+            {
+                claude: [
+                    account({ id: `unmeasured`, label: `Never ran` }),
+                    account({ id: `busy`, label: `Nearly spent`, usage: usage({ windows: [window({ utilization: 98 })] }) }),
+                    account({ id: `idle`, label: `Plenty left`, usage: usage({ windows: [window({ utilization: 4 })] }) }),
+                ],
+            },
+            noRouted,
+        );
+        expect(rows.map((row) => row.label)).toEqual([`Nearly spent`, `Plenty left`, `Never ran`]);
+    });
+
+    it(`keys rows by provider and account, so two providers' auth files can't collide`, () => {
+        const rows = planLimitRows(
+            {},
+            { ...noRouted, codex: [{ name: `default`, label: `ChatGPT` }], kimi: [{ name: `default`, label: `Kimi Code` }] },
+        );
+        expect(rows.map((row) => row.id)).toEqual([`codex:default`, `kimi:default`]);
+    });
+
+    it(`prefers a turn's streamed frame over the account row it arrived with`, () => {
+        usageStatusByAccount.value = { "claude-1": usage({ windows: [window({ utilization: 96 })], measuredAt: 900 }) };
+        const rows = planLimitRows({ claude: [account({ usage: usage({ measuredAt: 500 }) })] }, noRouted);
+        expect(rows[0]?.percent).toBe(96);
         usageStatusByAccount.value = {};
     });
 });

@@ -1,22 +1,13 @@
 <script setup lang="ts">
+import { providerLabel } from "@intentic/sandbox-contract";
 import { Card, cmp, RowGroup, Segmented } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { useAgents } from "../../composables/agents/useAgents";
 import { relativeTime } from "../../composables/chat/catalog";
-import { providerAccounts } from "../../composables/chat/conversation";
-import {
-    formatAge,
-    formatReset,
-    formatUtilization,
-    isStale,
-    orderedWindows,
-    usagePercent,
-    usageStatusByAccount,
-    usageTone,
-    usageWindowLabel,
-} from "../../composables/chat/usageStatus";
+import { accountsLoaded, providerAccounts, translatorAccounts } from "../../composables/chat/conversation";
+import { formatAge, formatReset, formatUtilization, planLimitRows, usageTone } from "../../composables/chat/usageStatus";
 import { useSavings } from "../../composables/sandbox/useSavings";
 import { useUsage } from "../../composables/sandbox/useUsage";
 import { compositionOf } from "./savingsChart";
@@ -35,7 +26,6 @@ import {
     formatUsdHero,
     inWindow,
     previousWindow,
-    providerLabel,
     providersIn,
     RANGE_PRESETS,
     type RangePreset,
@@ -166,32 +156,10 @@ const savingsPeriod = computed(() =>
 
 // ---- plan limits --------------------------------------------------------------------------------------------
 
-// Every connected account that has reported its plan limits, across providers, with each of its pools rounded
-// once here so the meter and its label can't disagree. Claude is the only provider that reports limits today, so
-// this is short by construction — and an account that has never run a turn is absent rather than shown at a
-// confident 0%.
-const headroom = computed(() =>
-    Object.entries(providerAccounts.value)
-        .flatMap(([provider, accounts]) =>
-            accounts.flatMap((account) => {
-                const usage = usageStatusByAccount.value[account.id];
-                const percent = usagePercent(usage);
-                if (usage === undefined || percent === undefined) {
-                    return [];
-                }
-                // A row per pool, rounded once here so the meter's width and its printed number can't disagree.
-                const pools = orderedWindows(usage).map((pool) => ({
-                    kind: pool.kind,
-                    label: usageWindowLabel(pool),
-                    percent: Math.round(pool.utilization),
-                    resetsAt: pool.resetsAt,
-                }));
-                return [{ provider, account, usage, percent, pools, stale: isStale(usage) }];
-            }),
-        )
-        // Tightest first: the account about to gate a turn is the one worth seeing without scrolling.
-        .toSorted((left, right) => right.percent - left.percent),
-);
+// Every connection this sandbox holds — the provider's own accounts AND the translator's subscriptions — as one
+// list of meters. The projection (which lists, which snapshot, what order) lives in usageStatus.ts with the rest
+// of the headroom vocabulary, so this tab and the Agent tab's rings can't come to disagree about an account.
+const headroom = computed(() => planLimitRows(providerAccounts.value, translatorAccounts.value));
 
 // ---- the table and the export -------------------------------------------------------------------------------
 
@@ -318,18 +286,29 @@ const hasSpend = computed(() => current.value.length > 0);
                     v-if="headroom.length > 0"
                     id="accounts"
                     label="Plan limits"
-                    caption="your whole Claude plan, not this sandbox — every device on the account spends the same pools"
+                    caption="your whole plan, not this sandbox — every device on the account spends the same pools"
                 >
-                    <div v-for="entry in headroom" :key="entry.account.id" class="flex flex-col gap-2.5 px-4 py-3">
+                    <div v-for="entry in headroom" :key="entry.id" class="flex flex-col gap-2.5 px-4 py-3">
                         <div class="flex items-baseline gap-2">
                             <ProviderLogo :provider="entry.provider" class="shrink-0 self-center text-sm text-muted" />
-                            <span class="min-w-0 truncate text-sm text-content">{{ entry.account.label }}</span>
+                            <span class="min-w-0 truncate text-sm text-content">{{ entry.label }}</span>
                             <!-- Freshness belongs on the ACCOUNT, not on each meter: one read produced all of
                                  these, and it is the single caveat that governs every number below it. -->
-                            <span class="ml-auto shrink-0 text-2xs" :class="entry.stale ? `text-muted` : `text-subtle`">
-                                read {{ formatAge(entry.usage.measuredAt) }}
+                            <span
+                                v-if="entry.measuredAt !== undefined"
+                                class="ml-auto shrink-0 text-2xs"
+                                :class="entry.stale ? `text-muted` : `text-subtle`"
+                            >
+                                read {{ formatAge(entry.measuredAt) }}
                             </span>
                         </div>
+
+                        <!-- An account with no meters says WHICH kind of nothing it is. A blank row reads as
+                             "plenty of room", and for a plan that publishes no limits at all — or one nothing has
+                             measured yet — that is the opposite of what is known about it. -->
+                        <p v-if="entry.pools.length === 0" class="text-2xs text-subtle">
+                            {{ entry.readable ? `No reading yet.` : `This plan publishes no limits — spend is all this sandbox can tell you.` }}
+                        </p>
 
                         <!-- Narrow screens keep the reset instead of dropping it — "when does this reopen" is
                              the number a phone is pulled out for — by wrapping the meter onto its own full-width
@@ -357,17 +336,26 @@ const hasSpend = computed(() => current.value.length > 0);
                     </div>
 
                     <!-- The caveat sits INSIDE the surface, as the last row: a footnote floating below the border
-                         is read after the numbers it qualifies, if at all. A reading is taken when a turn ENDS, so
-                         an idle sandbox's is as old as its last turn while the pools keep draining elsewhere —
-                         which is the entire distance between "1%" here and 98% in a terminal on the same account. -->
+                         is read after the numbers it qualifies, if at all. Two readers, one caveat: Claude's pools
+                         come off the turn that just ended, so an idle sandbox's reading is as old as its last turn,
+                         and the routed subscriptions' are pulled on the daemon's own cadence. Either way the pools
+                         keep draining elsewhere — which is the entire distance between "1%" here and 98% in a
+                         terminal on the same account. -->
                     <p class="px-4 py-2.5 text-2xs text-subtle">
-                        Read from your plan when a turn finishes, so it can only ever be a floor: usage never falls inside a window, and other clients
-                        on this account spend the same pools without telling this sandbox. Run a turn to refresh it.
+                        Read from your plan — Claude's when a turn finishes, ChatGPT's and Google's pulled in the background — so a number here can
+                        only ever be a floor: usage never falls inside a window, and other clients on the account spend the same pools without telling
+                        this sandbox.
                     </p>
                 </RowGroup>
 
+                <!-- An unread state is not an empty one: until the connection read lands, this says nothing rather
+                     than claiming the sandbox has no accounts and taking it back a moment later. -->
                 <p v-else :class="cmp.emptyState()">
-                    No account has reported its plan limits yet. Claude publishes them when a turn finishes; other providers don't report limits.
+                    {{
+                        accountsLoaded
+                            ? `No AI account is connected yet — connect one on the Agent tab and its plan limits appear here.`
+                            : `Reading your connections…`
+                    }}
                 </p>
 
                 <Card>

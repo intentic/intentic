@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { UsageRollupRow } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import {
@@ -123,6 +124,20 @@ describe(`series identity`, () => {
 
     it(`folds an unknown provider into the achromatic tail rather than inventing a sixth hue`, () => {
         expect(seriesColor(`some-acp-agent`)).toBe(`var(--color-series-other)`);
+    });
+
+    /* Every slot the chart can ASK for must exist in the shipped stylesheet, and `@theme static` is what makes
+     * that true. Tailwind emits a theme variable only where it can see it used, and these names are assembled at
+     * runtime — so without `static` the bundle kept the three slots whose names happened to appear in some source
+     * file and dropped the rest, leaving Kimi and Grok asking for a variable that wasn't there and painting
+     * nothing. Read from the stylesheet rather than a rendered page, because that is where the guarantee lives. */
+    it(`declares a colour for every slot, in a block Tailwind cannot tree-shake`, () => {
+        const sheet = readFileSync(new URL(`../../../../../_libs/ui/src/styles/shared/semantic-colors.css`, import.meta.url), `utf8`);
+        const block = sheet.slice(sheet.indexOf(`@theme static`));
+        expect(block).not.toBe(``);
+        for (const provider of [...PROVIDER_SERIES, `some-acp-agent`]) {
+            expect(block).toContain(`${seriesColor(provider).slice(4, -1)}:`);
+        }
     });
 
     it(`orders present providers by slot, unknowns last`, () => {

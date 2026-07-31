@@ -1,11 +1,18 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { AccountUsage, KeyedProvider, Model, TranslatorAccounts } from "@intentic/sandbox-contract";
+import {
+    type AccountUsage,
+    type KeyedProvider,
+    KeyedProviderSchema,
+    type Model,
+    reportsPlanLimits,
+    type TranslatorAccounts,
+} from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
 import type { AccountUsageStore } from "../usage/account-usage.js";
-import { fetchTranslatorUsage, type TranslatorAuthFile, USAGE_READABLE } from "../usage/translator-usage.js";
+import { fetchTranslatorUsage, type TranslatorAuthFile } from "../usage/translator-usage.js";
 
 /* The bundled translator is CLIProxyAPI: a Go proxy that lets the Claude Code harness — which speaks only the
  * Anthropic Messages API — drive OpenAI (Codex), xAI (Grok), Kimi Code and Google (Gemini) models on the user's
@@ -328,13 +335,15 @@ export const createCliProxyClient = (params: {
 
     // Every auth file whose quota this client can actually read, paired with the provider it belongs to.
     const readableFiles = (files: readonly TranslatorAuthFile[]): { provider: KeyedProvider; file: TranslatorAuthFile; key: string }[] =>
-        USAGE_READABLE.flatMap((provider) =>
-            files.flatMap((file) =>
-                file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined
-                    ? [{ provider, file, key: usageKey(provider, file.name) }]
-                    : [],
-            ),
-        );
+        KeyedProviderSchema.options
+            .filter(reportsPlanLimits)
+            .flatMap((provider) =>
+                files.flatMap((file) =>
+                    file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined
+                        ? [{ provider, file, key: usageKey(provider, file.name) }]
+                        : [],
+                ),
+            );
 
     /* One sweep of upstream reads. Concurrency is bounded because a sandbox can hold dozens of Google accounts
      * and firing every request at once is how a refresh becomes a self-inflicted rate limit. A failed or
