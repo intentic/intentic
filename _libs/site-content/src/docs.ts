@@ -62,6 +62,47 @@ export const docsSections: DocsSection[] = [
         ],
     },
     {
+        label: "Extend",
+        items: [
+            {
+                id: "extensions",
+                title: "Extensions",
+                meta: {
+                    title: "Extensions — intentic docs",
+                    description:
+                        "intentic is a lean core plus an extension system. An extension is a git repo with a manifest, and it extends the agent — its skills, tools, connectors and image — as well as the UI.",
+                },
+            },
+            {
+                id: "extensions/build",
+                title: "Build an extension",
+                meta: {
+                    title: "Build an extension — intentic docs",
+                    description:
+                        "Author an intentic extension end to end: the manifest, activate(), a rail view that reads from the daemon, the single-file bundle, and a sha-pinned install into a real sandbox.",
+                },
+            },
+            {
+                id: "extensions/manifest",
+                title: "Manifest reference",
+                meta: {
+                    title: "Extension manifest reference — intentic docs",
+                    description:
+                        "Every field of intentic-extension.json — views, viewers, commands, settings, files, connectors, processes, listeners, agent plugins, PATH binaries, image fragments, and the sandbox route allowlist.",
+                },
+            },
+            {
+                id: "extensions/publish",
+                title: "Publish & marketplace",
+                meta: {
+                    title: "Publish an extension & the marketplace — intentic docs",
+                    description:
+                        "Your extension stays in your repo; a registry is a git repo of sha-pinned pointers. How listing, updates, the manifest approval gate, and the trust model work.",
+                },
+            },
+        ],
+    },
+    {
         label: "Guides",
         items: [
             {
