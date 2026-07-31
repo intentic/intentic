@@ -135,10 +135,12 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
 // core shell surface (the mobile bottom-bar "Review" tab depends on it too), so its tile is not an extension.
 const draftsTile: AreaTile = { to: `/drafts`, label: `Drafts`, icon: `send` };
 /* Browsers appears the moment a turn opens one and stays while the daemon still lists it — a rail tile that
- * tracks live work rather than a permanent surface, which is the same appear-on-content rule Drafts and the
- * extension tiles follow. The badge counts RUNNING browsers only: a finished one is still readable in the view
- * (its pages are the record of where the agent went) but it is not something happening now, and a rail count
- * that never drops to zero stops meaning anything. */
+ * tracks live work rather than a permanent surface. It renders in the rail's live-runtime cluster (next to the
+ * ports indicator and the terminal), not among the navigation tiles: a browser session is runtime state like a
+ * tmux session, not an area like Agents or Workspace. The badge counts RUNNING browsers only: a finished one is
+ * still readable in the view (its pages are the record of where the agent went) but it is not something
+ * happening now, and a rail count that never drops to zero stops meaning anything. The icon is `desktop`, not
+ * `globe` — the ports-exposure indicator it sits beside already claims the globe. */
 const browserTile = computed<AreaTile | undefined>(() => {
     if (browsers.value.length === 0) {
         return undefined;
@@ -147,7 +149,7 @@ const browserTile = computed<AreaTile | undefined>(() => {
     return {
         to: `/browsers`,
         label: `Browsers`,
-        icon: `globe`,
+        icon: `desktop`,
         ...(live > 0 ? { badge: { count: live, tooltip: `${live} agent browser${live === 1 ? `` : `s`} open` } } : {}),
     };
 });
@@ -163,11 +165,14 @@ const extensionTile = (active: ActiveExtension): AreaTile => {
         ...(badge === undefined ? {} : { badge }),
     };
 };
+// The navigation tiles: the always-present areas, Drafts when there is something to review, then one tile per
+// EXTENSION ACTIVATION (extensions detect workspace content from /panels and contribute their own areas). Live
+// runtime surfaces (browsers, forwarded ports, the terminal) are NOT here — they render in the cluster below the
+// divider, next to the "+" and account controls.
 const tiles = computed<readonly AreaTile[]>(() => {
     const base = drafts.value.length > 0 || invalidDrafts.value.length > 0 ? fixedTiles.value.toSpliced(1, 0, draftsTile) : fixedTiles.value;
     return [
         ...base,
-        ...(browserTile.value === undefined ? [] : [browserTile.value]),
         ...detectActivations(panels.value, capabilities.value)
             // Only rail-surface extensions get a tile; per-repo directory panels (Apps, UI, preview) open from
             // the Workspace tree instead, so the rail stays a short, capability-first list.
@@ -317,6 +322,29 @@ onUnmounted(() => {
                     v-if="forwardedPorts.length > 1"
                     class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-warning/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-warning"
                     >{{ forwardedPorts.length }}</span
+                >
+            </RouterLink>
+
+            <!-- The agent's browsers: a live-runtime surface like the terminal, so it sits in this cluster
+                 rather than with the navigation tiles above. Badged with the count of RUNNING sessions only
+                 (see browserTile). -->
+            <RouterLink
+                v-if="browserTile"
+                :to="browserTile.to"
+                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
+                :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(browserTile.to) }"
+                :tabindex="reachable ? undefined : -1"
+                :aria-disabled="!reachable"
+                :aria-label="browserTile.label"
+                v-tooltip.right="browserTile.label"
+            >
+                <Icon :name="browserTile.icon!" class="text-lg" />
+                <span
+                    v-if="browserTile.badge"
+                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
+                    :class="badgeClass(browserTile.badge)"
+                    v-tooltip.right="browserTile.badge.tooltip"
+                    >{{ badgeText(browserTile.badge) }}</span
                 >
             </RouterLink>
 
