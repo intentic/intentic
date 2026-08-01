@@ -89,6 +89,7 @@ export type IconName =
     | "sliders-h"
     | "sparkles"
     | "spinner"
+    | "square"
     | "star"
     | "star-fill"
     | "stop"
@@ -190,6 +191,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "sliders-h": "ph:sliders-horizontal",
         sparkles: "ph:sparkle",
         spinner: "ph:spinner-gap",
+        square: "ph:square",
         star: "ph:star",
         "star-fill": "ph:star-fill",
         stop: "ph:stop-circle",
@@ -286,6 +288,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "sliders-h": "solar:slider-horizontal-linear",
         sparkles: "solar:magic-stick-3-linear",
         spinner: "solar:refresh-linear",
+        square: "solar:stop-linear",
         star: "solar:star-linear",
         "star-fill": "solar:star-bold",
         stop: "solar:stop-circle-linear",
@@ -382,6 +385,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "sliders-h": "ri:equalizer-line",
         sparkles: "ri:sparkling-line",
         spinner: "ri:loader-4-line",
+        square: "ri:checkbox-blank-line",
         star: "ri:star-line",
         "star-fill": "ri:star-fill",
         stop: "ri:stop-circle-line",
@@ -478,6 +482,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "sliders-h": "hugeicons:sliders-horizontal",
         sparkles: "hugeicons:sparkles",
         spinner: "hugeicons:loading-03",
+        square: "hugeicons:square",
         star: "hugeicons:star",
         "star-fill": "ph:star-fill",
         stop: "hugeicons:stop-circle",
@@ -574,6 +579,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "sliders-h": "prime:sliders-h",
         sparkles: "prime:sparkles",
         spinner: "prime:spinner",
+        square: "prime:stop",
         star: "prime:star",
         "star-fill": "prime:star-fill",
         stop: "prime:stop",

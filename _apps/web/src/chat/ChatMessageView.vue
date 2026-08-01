@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic-app/ui";
+import { type IconName, useDevice } from "@intentic-app/ui";
 import { copyCodeFromEvent } from "@intentic-app/ui/markdown";
 import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
@@ -278,6 +278,23 @@ const toggleOption = (question: AskQuestion, index: number, label: string): void
         void nextTick(() => otherInputs.value[index]?.focus());
     }
 };
+
+/* HOW MANY ANSWERS THIS QUESTION TAKES, SAID THREE WAYS AT ONCE. A multi-select question rendered with round
+ * marks is a card that lies: every convention the user has ever met reads a circle as "one of these", so they
+ * pick one, submit, and never learn the other options were theirs to take too. The shape carries it first
+ * (square marks are a checkbox list everywhere else), the words carry it for anyone who reads before clicking,
+ * and the ARIA role carries it for anyone who cannot see either — one fact, three channels, no card where a
+ * reader has to click to find out which kind it is. */
+const markFor = (question: AskQuestion, selected: boolean): IconName => {
+    if (question.multiSelect) {
+        return selected ? `check-square` : `square`;
+    }
+    return selected ? `check-circle` : `circle`;
+};
+
+// The count is the second half of the promise the hint makes: pick one and it says "1 selected" rather than
+// falling silent, so a list that stayed open answers back that it is still taking picks.
+const pickedCount = (index: number): number => (selections.value[index] ?? []).length;
 
 const otherValue = (index: number): string => otherTexts.value[index] ?? ``;
 const setOther = (index: number, value: string): void => {
@@ -750,7 +767,10 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
             </div>
         </div>
-        <div v-else-if="message.role === 'notice'" class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs text-subtle">
+        <div
+            v-else-if="message.role === 'notice'"
+            class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs text-subtle"
+        >
             <!-- A notice whose wait is still running spins instead of showing the info glyph, and says how long
                  it has been waiting — the two things that tell "something is happening" from "this is stuck". It
                  settles back to the plain line the moment the wait ends (see ChatMessage.noticeWait). -->
@@ -879,62 +899,81 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         <span v-if="message.question.questions.length > 1" class="text-xs font-medium text-content">{{ question.question }}</span>
 
                         <div v-if="message.question.status === 'pending'" class="flex flex-col gap-1.5">
-                            <button
-                                v-for="option in question.options"
-                                :key="option.label"
-                                type="button"
-                                class="qopt flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
-                                :class="{ 'qopt-on': isSelected(index, option.label) }"
-                                @click="toggleOption(question, index, option.label)"
-                            >
-                                <Icon
-                                    class="mt-0.5 text-2xs"
-                                    :name="isSelected(index, option.label) ? 'check-circle' : 'circle'"
-                                    :class="isSelected(index, option.label) ? 'text-primary-500' : 'text-subtle'"
-                                />
-                                <!-- The description carries the actual trade-off between options, so it is muted
-                                     rather than subtle: it is read before choosing, not glanced past. -->
-                                <span class="flex min-w-0 flex-col gap-0.5">
-                                    <span class="text-xs font-medium text-content">{{ option.label }}</span>
-                                    <span class="text-2xs leading-snug text-muted">{{ option.description }}</span>
-                                    <!-- The preview is a MOCKUP — an ASCII layout, a diff, a config block —
-                                         which the asking side writes precisely so the options can be compared
-                                         side by side. It used to be piped into a tooltip: a 17rem strip, five
-                                         lines at most, one option at a time, and gone the instant you moved
-                                         toward the thing you were comparing it with. Preformatted and in the
-                                         card, all of them are on screen at once, which is the whole point. -->
-                                    <pre
-                                        v-if="option.preview"
-                                        class="scrollbar-thin mt-1 max-h-56 overflow-auto whitespace-pre rounded-md border border-line bg-canvas px-2 py-1.5 font-mono text-[0.65rem] leading-snug text-muted"
-                                        >{{ option.preview }}</pre
-                                    >
-                                </span>
-                            </button>
-                            <!-- "Other" is the LAST OPTION, not a text box parked beside the list: same row,
-                                 same mark, same click, and MARKUP IDENTICAL to the rows above — no wrapper of
-                                 its own, or its border, hover and selected tint drift from the siblings it
-                                 must read as one of. That sameness is what keeps this card's state a single
-                                 list of picks — writing your own answer cannot contradict the options, because
-                                 it is one of them — and it is why nothing here has to erase anything. The
-                                 field appears BELOW the row on picking it, and keeps its text when the row is
-                                 unpicked, so clicking away to re-read an option and clicking back costs
-                                 nothing. -->
-                            <button
-                                type="button"
-                                class="qopt flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
-                                :class="{ 'qopt-on': isSelected(index, OTHER_LABEL) }"
-                                @click="toggleOption(question, index, OTHER_LABEL)"
-                            >
-                                <Icon
-                                    class="mt-0.5 text-2xs"
-                                    :name="isSelected(index, OTHER_LABEL) ? 'check-circle' : 'circle'"
-                                    :class="isSelected(index, OTHER_LABEL) ? 'text-primary-500' : 'text-subtle'"
-                                />
-                                <span class="flex min-w-0 flex-col gap-0.5">
-                                    <span class="text-xs font-medium text-content">Other</span>
-                                    <span class="text-2xs leading-snug text-muted">Answer in your own words.</span>
-                                </span>
-                            </button>
+                            <!-- The one line that says out loud what the square marks below say by shape, and it
+                                 is spent only on the multi-select case: a checkbox list that does not invite the
+                                 second pick has wasted the affordance, whereas "Choose one" over round marks is
+                                 a line every card would carry to tell the reader what they already assumed.
+                                 Once picks exist it becomes the count, so the list keeps answering back. -->
+                            <span v-if="question.multiSelect" class="text-2xs text-subtle">{{
+                                pickedCount(index) > 0 ? `${pickedCount(index)} selected` : "Select all that apply"
+                            }}</span>
+                            <!-- Roles, not just paint: a radiogroup of radios and a group of checkboxes are how
+                                 a screen reader is told the same thing the marks tell everyone else. The Other
+                                 FIELD stays outside the group — it is the payload of the row above it, not
+                                 another option to move a cursor onto. -->
+                            <div class="flex flex-col gap-1.5" :role="question.multiSelect ? 'group' : 'radiogroup'" :aria-label="question.question">
+                                <button
+                                    v-for="option in question.options"
+                                    :key="option.label"
+                                    type="button"
+                                    :role="question.multiSelect ? 'checkbox' : 'radio'"
+                                    :aria-checked="isSelected(index, option.label)"
+                                    class="qopt flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
+                                    :class="{ 'qopt-on': isSelected(index, option.label) }"
+                                    @click="toggleOption(question, index, option.label)"
+                                >
+                                    <Icon
+                                        class="mt-0.5 text-2xs"
+                                        :name="markFor(question, isSelected(index, option.label))"
+                                        :class="isSelected(index, option.label) ? 'text-primary-500' : 'text-subtle'"
+                                    />
+                                    <!-- The description carries the actual trade-off between options, so it is muted
+                                         rather than subtle: it is read before choosing, not glanced past. -->
+                                    <span class="flex min-w-0 flex-col gap-0.5">
+                                        <span class="text-xs font-medium text-content">{{ option.label }}</span>
+                                        <span class="text-2xs leading-snug text-muted">{{ option.description }}</span>
+                                        <!-- The preview is a MOCKUP — an ASCII layout, a diff, a config block —
+                                             which the asking side writes precisely so the options can be compared
+                                             side by side. It used to be piped into a tooltip: a 17rem strip, five
+                                             lines at most, one option at a time, and gone the instant you moved
+                                             toward the thing you were comparing it with. Preformatted and in the
+                                             card, all of them are on screen at once, which is the whole point. -->
+                                        <pre
+                                            v-if="option.preview"
+                                            class="scrollbar-thin mt-1 max-h-56 overflow-auto whitespace-pre rounded-md border border-line bg-canvas px-2 py-1.5 font-mono text-[0.65rem] leading-snug text-muted"
+                                            >{{ option.preview }}</pre>
+                                    </span>
+                                </button>
+                                <!-- "Other" is the LAST OPTION, not a text box parked beside the list: same row,
+                                     same mark, same click, and MARKUP IDENTICAL to the rows above — no wrapper of
+                                     its own, or its border, hover and selected tint drift from the siblings it
+                                     must read as one of. That sameness is what keeps this card's state a single
+                                     list of picks — writing your own answer cannot contradict the options, because
+                                     it is one of them — and it is why nothing here has to erase anything. The
+                                     field appears BELOW the row on picking it, and keeps its text when the row is
+                                     unpicked, so clicking away to re-read an option and clicking back costs
+                                     nothing. -->
+                                <button
+                                    type="button"
+                                    :role="question.multiSelect ? 'checkbox' : 'radio'"
+                                    :aria-checked="isSelected(index, OTHER_LABEL)"
+                                    class="qopt flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
+                                    :class="{ 'qopt-on': isSelected(index, OTHER_LABEL) }"
+                                    @click="toggleOption(question, index, OTHER_LABEL)"
+                                >
+                                    <Icon
+                                        class="mt-0.5 text-2xs"
+                                        :name="markFor(question, isSelected(index, OTHER_LABEL))"
+                                        :class="isSelected(index, OTHER_LABEL) ? 'text-primary-500' : 'text-subtle'"
+                                    />
+                                    <span class="flex min-w-0 flex-col gap-0.5">
+                                        <span class="text-xs font-medium text-content">Other</span>
+                                        <span class="text-2xs leading-snug text-muted">{{
+                                            question.multiSelect ? "Add an answer in your own words." : "Answer in your own words."
+                                        }}</span>
+                                    </span>
+                                </button>
+                            </div>
                             <div v-if="isSelected(index, OTHER_LABEL)" class="flex flex-col gap-1">
                                 <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
                                 <input

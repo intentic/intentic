@@ -168,6 +168,72 @@ describe(`ChatMessageView loader`, () => {
     });
 });
 
+/* A question that takes SEVERAL answers must not read like one that takes a single pick. Mark shape, the line
+ * above the list and the ARIA roles carry that one fact together, so each case below asserts all three: a card
+ * that keeps only two of them out of three is the misleading card this suite exists to prevent. */
+describe(`ChatMessageView question card`, () => {
+    const ask = (multiSelect: boolean): ChatMessage => ({
+        id: 3,
+        role: `assistant`,
+        text: ``,
+        question: {
+            requestId: multiSelect ? `req-multi` : `req-single`,
+            status: `pending`,
+            questions: [
+                {
+                    question: `Which surfaces should the banner appear on?`,
+                    header: `Surfaces`,
+                    multiSelect,
+                    options: [
+                        { label: `Chat`, description: `The conversation panel.` },
+                        { label: `Agents`, description: `The fleet board.` },
+                    ],
+                },
+            ],
+        },
+    });
+
+    // The mark of every option row, Other's included, in the order they are shown.
+    const marks = (element: HTMLElement): (string | null)[] =>
+        [...element.querySelectorAll(`button[role="checkbox"] i, button[role="radio"] i`)].map((icon) => icon.getAttribute(`name`));
+
+    // Picks are mirrored to localStorage per requestId — each case starts from an empty card.
+    afterEach(() => localStorage.clear());
+
+    it(`offers a multi-select question as a checkbox list and counts the picks back`, async () => {
+        const element = mount(ask(true));
+        expect(element.textContent).toContain(`Select all that apply`);
+        expect(element.querySelector(`[role="group"]`)).not.toBeNull();
+        expect(marks(element)).toEqual([`square`, `square`, `square`]);
+
+        const rows = [...element.querySelectorAll<HTMLButtonElement>(`button[role="checkbox"]`)];
+        rows[0]?.click();
+        rows[1]?.click();
+        await nextTick();
+
+        // Both picks stand — and the line says so, which is what tells a user habituated to radios that the
+        // second click was not going to cost them the first.
+        expect(marks(element)).toEqual([`check-square`, `check-square`, `square`]);
+        expect(rows[0]?.getAttribute(`aria-checked`)).toBe(`true`);
+        expect(element.textContent).toContain(`2 selected`);
+    });
+
+    it(`keeps a single-select question round, silent, and one-pick-at-a-time`, async () => {
+        const element = mount(ask(false));
+        expect(element.textContent).not.toContain(`Select all that apply`);
+        expect(element.querySelector(`[role="radiogroup"]`)).not.toBeNull();
+        expect(marks(element)).toEqual([`circle`, `circle`, `circle`]);
+
+        const rows = [...element.querySelectorAll<HTMLButtonElement>(`button[role="radio"]`)];
+        rows[0]?.click();
+        rows[1]?.click();
+        await nextTick();
+
+        // The second pick REPLACES the first, which is exactly what the round mark promised it would.
+        expect(marks(element)).toEqual([`circle`, `check-circle`, `circle`]);
+    });
+});
+
 /* An errand is the app's prompt, not the user's (errands.ts): the row says what was asked for, and the words
  * the agent actually got are behind one press rather than gone — the audit trail is the whole reason this is a
  * fold rather than a suppression. */
