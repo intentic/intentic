@@ -9,19 +9,23 @@ import { cmp, Icon, Markdown, StatusBadge, timeAgo } from "@intentic/extension-u
 import type { DocAnchor, DocIndexEntry, DocProvenance } from "./docModel.js";
 import { host } from "./host.js";
 
-const { prose, anchors, provenance, staleness } = defineProps<{
+const { prose, anchors, provenance, repo, staleness } = defineProps<{
     prose: string | undefined;
     anchors: readonly DocAnchor[];
     provenance: DocProvenance | undefined;
+    // Which repository the anchors are relative to — a document's paths are repo-relative (that is what
+    // `intentic-docs validate` resolves them against), and the workspace route is root-relative.
+    repo: string;
     // This page's row in the generated index, when there is one — the tool's verdict on whether it is still true.
     staleness: DocIndexEntry | undefined;
 }>();
 
-/* An anchor opens the file in the workspace view. `line` is dropped on purpose: the workspace route addresses a
- * path, and appending a line it does not understand would produce a link that silently fails rather than one that
- * lands one screen away from the right place. */
+/* An anchor opens the file in the workspace view, under its repository: without that prefix every link on this
+ * page missed by one segment in any workspace whose repo is not the tree root. `line` is dropped on purpose —
+ * the workspace route addresses a path, and appending a line it does not understand would produce a link that
+ * silently fails rather than one that lands one screen away from the right place. */
 const open = (anchor: DocAnchor): void => {
-    host().navigate(`/workspace/${anchor.path}`);
+    host().navigate(`/workspace/${repo === `` ? `` : `${repo}/`}${anchor.path}`);
 };
 </script>
 

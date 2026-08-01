@@ -220,6 +220,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 :prose="set?.prose"
                 :anchors="[]"
                 :provenance="set?.repoDoc?.provenance"
+                :repo="repo"
                 :staleness="undefined"
             />
             <DocPage
@@ -228,6 +229,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 :prose="packageQuery.data.value?.prose"
                 :anchors="packageQuery.data.value?.doc?.keyFiles ?? []"
                 :provenance="packageQuery.data.value?.doc?.provenance"
+                :repo="repo"
                 :staleness="entries.find((entry) => entry.dir === page)"
             />
         </div>

@@ -1,15 +1,57 @@
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import { builtinModules } from "@intentic-app/web/builtins";
-import type { Environment, ExtensionSummary, UsageRollupRow } from "@intentic/sandbox-contract";
+import type { Environment, ExtensionSummary, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
 
-/* The sandbox's own furniture for the recorded workspace: what acme-shop is wired to, which extensions supply
- * that wiring, and the spend ledger behind the Usage tab.
+/* The sandbox's own furniture for the recorded workspace: what acme-shop is made of, what it is wired to, which
+ * extensions supply that wiring, and the spend ledger behind the Usage tab.
  *
  * The connector entries are copies of the real `_extensions/connectors` and `_extensions/discord` manifests —
  * same providers, same catalog copy — minus the credential guides, which only matter in an add dialog this
  * fixture can't complete. A card a visitor sees here is a card the product really contributes. */
 
 const day = (now: number, back: number): string => new Date(now - back * 86_400_000).toISOString().slice(0, 10);
+
+/* WHAT EACH REPOSITORY IS MADE OF — `GET /panels`, and the most load-bearing rows in this fixture.
+ *
+ * These are the facts every extension's `detect()` runs over, so they are what decides which tiles the rail
+ * carries at all: Documentation and Maintenance activate on there being a repository, Acceptance on one that
+ * has user stories or a dev server, Preview on `hasPanel`, Apps on `monorepo`/`vitest`. A fixture that answered
+ * this route with an empty list — as this one did — is a fixture whose sidebar is missing half the product.
+ *
+ * Evidence over identity, exactly as the daemon computes it: `web` ships a Vite dev server and carries stories
+ * under `docs/user-stories`; `api` carries stories but has no dev script to preview. Neither is a monorepo and
+ * neither runs vitest (the storefront's suite is Playwright), so neither claims an Apps panel.
+ *
+ * `running` is false for both, and that is the honest answer rather than a shy one: nothing runs in a
+ * recording. The panel's Start button reaches a refusal that says so (daemon.ts), and Acceptance's target
+ * picker shows the repo as "stopped" — which is exactly what it shows against a real sandbox before you press
+ * anything. */
+export const demoPanels = (): PanelSummary[] => [
+    {
+        repo: `web`,
+        hasPanel: true,
+        running: false,
+        healthy: false,
+        deployConfig: false,
+        desiredState: false,
+        directoryUi: false,
+        monorepo: false,
+        vitest: false,
+        userStories: true,
+    },
+    {
+        repo: `api`,
+        hasPanel: false,
+        running: false,
+        healthy: false,
+        deployConfig: false,
+        desiredState: false,
+        directoryUi: false,
+        monorepo: false,
+        vitest: false,
+        userStories: true,
+    },
+];
 
 // The installed capabilities: one per system the recorded agents operate. Configs are the secret-stripped echo
 // the daemon returns — a token never leaves the sandbox, so it never appears in a list row either.

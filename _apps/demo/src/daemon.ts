@@ -5,6 +5,7 @@ import {
     AgentReplySchema,
     type Automation,
     type BrowsersList,
+    ChoreLedgerWriteSchema,
     type CiJobsResponse,
     type CiSeenResponse,
     type Info,
@@ -19,21 +20,26 @@ import {
 } from "@intentic/sandbox-contract";
 import { BROWSER_SESSIONS } from "./browser";
 import { automationApprovals, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
+import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
 import { deleteMemoryFile, memoryFile, memoryList, saveMemoryFile } from "./fixture/memory";
-import { demoCapabilities, demoEnvironment, demoExtensions, demoUsageRollup, setExtensionEnabled } from "./fixture/sandbox";
+import { demoCapabilities, demoEnvironment, demoExtensions, demoPanels, demoUsageRollup, setExtensionEnabled } from "./fixture/sandbox";
 import {
     agentChanges,
+    deleteEntry,
     fileBody,
     fileDiff,
     gitChanges,
     landAgentDelta,
     landedPaths,
+    readFile,
     REPOS,
     searchWorkspace,
     sessions,
+    workspaceChildren,
     workspaceTree,
+    writeFile,
 } from "./fixture/workspace";
 import { eventStream } from "./sse";
 import { featuredRun, type Run, visitorRun } from "./turn";
@@ -151,9 +157,18 @@ const attach = async (request: Request): Promise<Response> => {
     });
 };
 
+/* The conversation-id prefixes the rail's own areas derive their fan-outs from: `xt-` an acceptance run, `dg-` a
+ * documentation run, `mt-` a chore turn. A visitor pressing Run there is asking for N isolated agents against a
+ * checkout that does not exist here, so the turn is refused in the daemon's own error shape and the extension
+ * shows the reason where it shows any other refusal. The visitor's OWN chat turn — no prefix — still runs. */
+const EXTENSION_RUN_PREFIXES = [`xt-`, `dg-`, `mt-`];
+
 const startTurn = async (request: Request): Promise<Response> => {
     const body = (await request.json()) as { conversationId?: string; prompt?: string };
     const conversationId = body.conversationId ?? FEATURED_AGENT_ID;
+    if (EXTENSION_RUN_PREFIXES.some((prefix) => conversationId.startsWith(prefix))) {
+        return refuse(`This is the demo workspace — a run needs your repositories and a sandbox to walk them in. Start one and this button works.`);
+    }
     runs.get(conversationId)?.stop();
     const run = visitorRun(conversationId, body.prompt ?? ``, Date.now());
     runs.set(conversationId, run);
@@ -262,9 +277,18 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/sessions`, ({ url }) => json({ sessions: searchSessions(url.searchParams.get(`query`) ?? ``) })],
     [`GET`, `/sessions/{id}`, () => json({ messages: [] })],
 
+    /* The recording's filesystem (fixture/workspace.ts), served the way the daemon serves /work: a tree, a lazy
+     * listing per directory, a read that 404s for a path that is not there — and real WRITES, because the
+     * surfaces reading these files also acknowledge, author and publish through them. What a visitor writes
+     * holds until the tab is reloaded. */
     [`GET`, `/workspace/tree`, () => json(workspaceTree())],
-    [`GET`, `/workspace/children`, () => json({ entries: [], hidden: 0 })],
-    [`GET`, `/workspace/file`, ({ url }) => json(workspaceFile(url.searchParams.get(`path`) ?? ``))],
+    [`GET`, `/workspace/children`, ({ url }) => json(workspaceChildren(url.searchParams.get(`path`) ?? ``))],
+    [`GET`, `/workspace/file`, ({ url }) => workspaceRead(url.searchParams.get(`path`) ?? ``)],
+    // The bytes behind an <img> in an acceptance report: its screenshots are files like any other, fetched
+    // through the daemon rather than from an origin, which is why they are served here and not from /public.
+    [`GET`, `/workspace/raw`, ({ url }) => workspaceRaw(url.searchParams.get(`path`) ?? ``)],
+    [`POST`, `/workspace/upload`, workspaceUpload],
+    [`DELETE`, `/workspace/entry`, workspaceDelete],
     [`GET`, `/workspace/repos`, () => json({ repos: [...REPOS] })],
     [
         `GET`,
@@ -315,7 +339,13 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/ci/runs/cancel`, () => refuse(`This is the demo workspace — there is no live pipeline to cancel.`)],
     [`POST`, `/ci/fix`, () => refuse(`This is the demo workspace — a fix agent needs your repo and its CI logs. Start a sandbox and this button opens one.`)],
 
-    [`GET`, `/chores`, () => json({ chores: [] })],
+    /* MAINTENANCE. `GET /chores` carries measurements, never verdicts — the chore book that decides what is due
+     * ships in the app, so every row a visitor reads here is computed in the browser from the numbers in
+     * fixture/chores.ts. The ledger is real state (a snooze holds, a finished run promotes into a row); what
+     * refuses is re-running a probe, because that is a subprocess in a box this recording does not have. */
+    [`GET`, `/chores`, () => json(choresReport(Date.now()))],
+    [`POST`, `/chores/ledger`, choresLedger],
+    [`POST`, `/chores/probe`, () => refuse(`This is the demo workspace — a probe runs pnpm audit or knip against a real checkout.`)],
 
     /* Automations — the sandbox working while nobody watches. Enabling, editing and deleting a row are real
      * (the fixture is the store), and so is clearing a held wake; what refuses is FIRING one, because a wake is
@@ -338,7 +368,11 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/usage/rollup`, () => json({ rows: demoUsageRollup(STARTED_AT) })],
     [`GET`, `/secrets/inventory`, () => json({ secrets: [] })],
     [`GET`, `/ports`, () => json({ ports: [] })],
-    [`GET`, `/panels`, () => json({ panels: [] })],
+    // What each repository IS — the facts every extension's detect() runs over, and therefore which tiles the
+    // rail carries. Starting a dev server refuses: there is no checkout here to run one from.
+    [`GET`, `/panels`, () => json({ panels: demoPanels() })],
+    [`POST`, `/panels/{repo}/start`, () => refuse(`This is the demo workspace — a dev server needs the repository on your own machine.`)],
+    [`POST`, `/panels/{repo}/stop`, () => refuse(`This is the demo workspace — nothing is running to stop.`)],
     [`GET`, `/extensions`, () => json({ extensions: demoExtensions() })],
     [`POST`, `/extensions/{id}/enabled`, setEnabled],
     [`GET`, `/drafts`, () => json({ drafts: [] })],
@@ -448,6 +482,38 @@ function saveAutomationRoute({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => okAfter(() => saveAutomation(Date.now(), body as Automation)));
 }
 
+/* The four filesystem handlers. A read of a path the recording does not carry answers 404 rather than a
+ * placeholder, because half the surfaces above read a file to find out whether something EXISTS — an
+ * acknowledgement, a staged document set, a run's result — and a fixture that answered every read would be
+ * telling all of them yes. */
+const workspaceRead = (path: string): Response => {
+    const file = readFile(path);
+    return file === undefined ? refuse(`No such file: ${path}`, 404) : json(file);
+};
+
+// Only the screenshots an acceptance report embeds. `svg+xml` is a deliberate choice upstream (fixture/
+// storefront.ts): a page of product UI as markup weighs a few kilobytes and stays sharp at any size.
+const workspaceRaw = (path: string): Response => {
+    const body = fileBody(path);
+    if (body === undefined) {
+        return refuse(`No such file: ${path}`, 404);
+    }
+    return new Response(body, { status: 200, headers: { "content-type": path.endsWith(`.svg`) ? `image/svg+xml` : `text/plain; charset=utf-8` } });
+};
+
+function workspaceUpload({ request, url }: RouteContext): Promise<Response> {
+    const path = url.searchParams.get(`path`) ?? ``;
+    return request.text().then((body) => okAfter(() => writeFile(path, body)));
+}
+
+function workspaceDelete({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) => okAfter(() => deleteEntry((body as { path?: string }).path ?? ``)));
+}
+
+function choresLedger({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) => okAfter(() => writeLedger(Date.now(), ChoreLedgerWriteSchema.parse(body))));
+}
+
 const memoryRead = (url: URL): Response => {
     const file = memoryFile(Date.now(), url.searchParams.get(`project`) ?? ``, url.searchParams.get(`name`) ?? ``);
     return file === undefined ? refuse(`No such memory note.`, 404) : json(file);
@@ -493,11 +559,6 @@ const searchSessions = (query: string): ReturnType<typeof sessions> => {
     const all = sessions(Date.now());
     const needle = query.trim().toLowerCase();
     return needle === `` ? all : all.filter((session) => session.title.toLowerCase().includes(needle));
-};
-
-const workspaceFile = (path: string): { path: string; content: string; size: number; offset: number; bytes: number } => {
-    const content = fileBody(path);
-    return { path, content, size: content.length, offset: 0, bytes: content.length };
 };
 
 // Match one route pattern against a path, capturing `{param}` segments.

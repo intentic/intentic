@@ -3,7 +3,7 @@ import { WorkspaceChildrenSchema, WorkspaceFileSchema } from "@intentic/sandbox-
 import { computed, type Ref } from "vue";
 import { type DocIndex, type PackageDoc, type RepoDoc, parseDocIndex, parsePackageDoc, parseRepoDoc } from "./docModel.js";
 import { host } from "./host.js";
-import { INDEX_TAIL, packageDocTail, packageProseTail, publishedPath, REPO_DOC_TAIL, REPO_PROSE_TAIL, stagingPath } from "./paths.js";
+import { INDEX_TAIL, packageDocTail, packageProseTail, publishedPath, REPO_DOC_TAIL, REPO_PROSE_TAIL, stagingDir, stagingPath } from "./paths.js";
 
 /* Reading a document set. Both trees — published (in the repo) and staged (a draft awaiting the owner) — share
  * their tails, so ONE reader serves both and the view only chooses a source. That is the payoff of making
@@ -85,12 +85,17 @@ export function useDocs(repo: Ref<string>, source: Ref<DocSource>) {
 
     /* Whether a repo has a STAGED set waiting. Read as a directory listing rather than by parsing the set,
      * because the question the banner asks is only "is there something to review", and a half-written draft (a
-     * run still in flight) must answer yes. */
+     * run still in flight) must answer yes.
+     *
+     * `has-staged` rather than `staged` in the key, and that is not cosmetic: `staged` is a value `source` takes,
+     * so this query and the SET query above collided on ["documentation", "staged", <repo>] for exactly the
+     * repos that have a draft — the set's object landed under the boolean's key, `hasStaged` read it as false,
+     * and the draft banner and the Published/Draft toggle vanished from the one case they exist for. */
     const stagedQuery = useQuery({
-        queryKey: computed(() => api.sandbox.key(`documentation`, `staged`, repo.value)),
+        queryKey: computed(() => api.sandbox.key(`documentation`, `has-staged`, repo.value)),
         enabled: computed(() => api.sandbox.reachable()),
         queryFn: async (): Promise<boolean> => {
-            const listing = await json<unknown>(`/workspace/children?path=${encodeURIComponent(pathFor(`staged`, repo.value, ``).replace(/\/$/, ``))}`);
+            const listing = await json<unknown>(`/workspace/children?path=${encodeURIComponent(stagingDir(repo.value))}`);
             return listing !== undefined && WorkspaceChildrenSchema.parse(listing).entries.length > 0;
         },
     });

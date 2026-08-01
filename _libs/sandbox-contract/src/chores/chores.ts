@@ -322,7 +322,7 @@ const deadCode: Chore = {
             return undefined;
         }
         return {
-            headline: `${plural(files, `unreferenced file`)}, ${exports + types} unused exports, ${unusedDeps + devDependencies} unused dependencies`,
+            headline: `${plural(files, `unreferenced file`)}, ${plural(exports + types, `unused export`)}, ${plural(unusedDeps + devDependencies, `unused dependency`, `unused dependencies`)}`,
             detail: sample.map((path) => `unreferenced · ${path}`),
             // The file identities carry the news (a newly-dead file is an event); the export and dependency counts
             // ride along bucketed, since they drift by one constantly as code is written.

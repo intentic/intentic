@@ -86,13 +86,30 @@ Per surface, the routes it actually calls and what the fixture answers with:
 | Chat | `POST /agent`, `POST /agent/attach` (stream), `/agent/commands`, `/agent/refusals`, `POST /agent/reply`, `/agent/steer`, `/agent/stop` | the scripted turn, below |
 | Model picker | `GET /claude/accounts`, `/grok/accounts`, `/translator/accounts`, `/{provider}/models` | a connected Claude Max and a ChatGPT subscription in the translator — without these the composer never leaves "Checking your AI accounts…" |
 | Sessions window | `GET /sessions?query=` (searchable), `GET /sessions/{id}` | 12 conversations from 90 seconds to 6 days old |
-| Workspace | `GET /workspace/tree`, `/workspace/file`, `/git/repos`, `/git/changes`, `/git/{repo}/file-diff` | `acme-shop`: a `web` and an `api` repo, ~30 files, 5 dirty ones across both |
-| Sandbox hub | `GET /info`, `/settings`, `/settings/savings`, `/system/usage`, `/secrets/inventory`, `/ports`, `/environment`, `/members`, `/extensions`, `/panels`, `/vpn`, `/chores` | a measured cleaner-savings report; the rest answer their empty shape, which is the truth about a recording |
+| Workspace | `GET /workspace/tree`, `/workspace/children`, `/workspace/file`, `/workspace/raw`, `POST /workspace/upload`, `DELETE /workspace/entry`, `/git/repos`, `/git/changes`, `/git/{repo}/file-diff` | `acme-shop`: a `web` and an `api` repo over one flat path → content table, ~60 files, 5 dirty ones across both. Reads that miss answer 404, writes land in the table |
+| Sandbox hub | `GET /info`, `/settings`, `/settings/savings`, `/system/usage`, `/secrets/inventory`, `/ports`, `/environment`, `/members`, `/extensions`, `/vpn` | a measured cleaner-savings report; the rest answer their empty shape, which is the truth about a recording |
+| Maintenance | `GET /chores`, `POST /chores/ledger`, `/chores/probe` | four probes per repo and the cheap signals behind them, chosen to produce one row of every state the book distinguishes — due, snoozed, clear, unmeasured, not-applicable. The ledger is real state (a snooze holds; a finished run promotes into a row); re-running a probe refuses |
+| Acceptance | `GET /workspace/children`, `/workspace/file`, `/workspace/raw`, `/panels`, `POST /workspace/upload` | five stories in two repos and one recorded run: a pass, a fail with a defect, a blocked story, and a fourth never tested. Its screenshots are the same storefront pages the browser view plays |
+| Documentation | `GET /workspace/children`, `/workspace/file` | `web` published (a map, a reading order, three pages, one marked stale because the fleet is editing that very directory) and `api` staged — the draft that lights the rail badge and the "nothing is in the repository until you publish it" banner |
 | Terminal | `GET /system/terminals` + the `/system/terminal` WebSocket | the featured turn's own tmux session, replaying its vitest run — xterm renders the ANSI for real |
 | Browsers | `GET /system/browsers` + the `/system/browser-view` WebSocket | the checkout agent's Chromium: the pricing page, the Stripe session it created, and the API docs it read. See below |
 | Pipelines | `GET /ci/runs`, `POST /ci/runs/jobs`, `/ci/seen` | 7 runs over two repos on two hosts (`web` on GitHub, `api` on GitLab) — one still going, one broken, and one job broken twice so the "failing repeatedly" analysis has something true to say |
 | Automations | `GET /automations`, `/automations/pending` | one of each trigger the union has — a nightly chore, a Discord listener, a Doorbell held for approval, a land-triggered doc check, a disabled CI webhook — each with the run history that makes a row honest |
 | Memory | `GET /memory`, `/memory/file` (+ PUT/DELETE) | four notes about acme-shop, editable and forgettable: the fixture is the store, so the red pen works |
+
+**`GET /panels` decides which of those rows a visitor can even reach.** It carries the per-repo facts every
+extension's `detect()` runs over, so a fixture that answered it with an empty list — as this one did at first —
+has no Documentation, Acceptance, Maintenance or Preview in the rail at all, and no way to tell that anything is
+missing: an extension that detects nothing contributes nothing, silently. `web` ships a dev server and both
+repos carry `docs/user-stories`, which is the evidence those three areas activate on.
+
+**Three of those areas are backed by files rather than by routes**, which is what makes them fixturable at all:
+a story is markdown in a repo, an acceptance run is a directory under `.intentic/acceptance/`, a document set is
+`docs/architecture/` (published) mirrored by `.intentic/docs/` (staged). So they are fixtured by adding paths to
+`fixture/workspace.ts`, and the extensions walk exactly what they would walk against a real daemon — no route
+was invented for them and none of their code knows the difference. What the demo does refuse is STARTING one:
+a `POST /agent` whose conversation id carries a run prefix (`xt-`, `dg-`, `mt-`) is a fan-out of isolated agents
+against a checkout that does not exist here, so it comes back as a refusal the extension already renders.
 
 **The scripted turn is the centrepiece.** `AgentEventSchema` (`_libs/sandbox-contract/src/events.ts:186`) is the
 whole streaming-turn protocol, and `/agent/attach` yields `{kind:"frame", seq, event}`. A recorded sequence on a

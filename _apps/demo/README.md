@@ -36,8 +36,15 @@ through `./vite-shared`. Web knows nothing about this.
 | `src/turn.ts` | the recorded `AgentEvent` run behind `/agent/attach`, with its frame log |
 | `src/sse.ts` | the event-iterator wire format |
 | `src/terminal.ts` | the recorded pty, as `TerminalServerMessage` frames |
-| `src/browser.ts` | the recorded screencast of the agent's Chromium, drawn as SVG frames |
-| `src/fixture/` | the data — `fleet.ts` (the roster), `workspace.ts` (repos, diffs, landing), `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |
+| `src/browser.ts` | the recorded screencast of the agent's Chromium, played from the pages below |
+| `src/fixture/` | the data — `fleet.ts` (the roster), `workspace.ts` (the filesystem, diffs, landing), `chores.ts`, `acceptance.ts`, `docs.ts`, `storefront.ts`, `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |
+
+`fixture/workspace.ts` holds one flat path → content table that the tree, every directory listing, every read,
+the content search and every write derive from — so the surfaces whose whole state is FILES (Acceptance's
+stories and runs, Documentation's published and staged sets, Maintenance's run history) are fixtured by adding
+paths to it, and the extensions walk exactly what they would walk against a real daemon. `sandbox.ts`'s
+`demoPanels()` is the other half of that: the per-repo facts every extension's `detect()` runs over, and
+therefore which tiles the rail carries at all.
 
 Anything the fixture does not serve answers 404 and logs one line naming the method and path. That console line
 is the tool: it is how the served routes were found, and how the next one will be.
