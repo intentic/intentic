@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Code } from "@intentic-app/ui";
+import { Code, useDevice } from "@intentic-app/ui";
 import { computed } from "vue";
 import type { ComposeArgs } from "./setupCompose";
 import { composeBootstrap, composeFile } from "./setupCompose";
@@ -10,6 +10,9 @@ import { composeBootstrap, composeFile } from "./setupCompose";
  * and cleanup keep working whichever way the sandbox is managed. */
 
 const props = defineProps<{ args: ComposeArgs }>();
+// Forty-odd lines of YAML is a file to paste into an editor, not something anyone reads down a phone — on a
+// phone it is clamped to a glimpse of what it declares, with the copy button (and "Show all") right there.
+const { mobile } = useDevice();
 
 const yaml = computed(() => composeFile(props.args));
 const bootstrap = computed(() => composeBootstrap(props.args));
@@ -17,7 +20,7 @@ const bootstrap = computed(() => composeBootstrap(props.args));
 
 <template>
     <div class="flex flex-col gap-3">
-        <Code :code="yaml" lang="yaml" label="1. Add these services to your docker-compose.yml" :wrap="false" />
+        <Code :code="yaml" lang="yaml" label="1. Add these services to your docker-compose.yml" :wrap="false" :clamp-lines="mobile ? 8 : undefined" />
         <Code
             :code="bootstrap"
             lang="bash"

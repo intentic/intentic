@@ -918,7 +918,10 @@ watch(commandReady, (ready) => {
                             </li>
                         </ul>
                         <div class="mt-3 border-t border-line pt-2 text-2xs text-subtle">
-                            <p>Docker Engine on Linux, Docker Desktop on macOS/Windows — a first Windows install may need a reboot.</p>
+                            <p>
+                                Missing Docker is installed for you — you'll be asked first. Docker Engine on Linux, Docker Desktop on macOS/Windows;
+                                a first Windows install may need a reboot.
+                            </p>
                             <a
                                 href="https://docs.docker.com/get-docker/"
                                 target="_blank"
@@ -931,9 +934,11 @@ watch(commandReady, (ready) => {
                     </InfoHint>
                 </template>
 
+                <!-- One line, because the hint beside the title carries the rest (which engine, the consent
+                     prompt, the reboot): the prerequisite belongs on the card, its footnotes do not. -->
                 <p class="flex items-start gap-2 text-xs text-muted">
                     <Icon name="box" class="mt-0.5 shrink-0 text-info" />
-                    <span>Needs Docker — installed automatically if missing (you'll be asked first).</span>
+                    <span>Needs Docker — installed for you if missing.</span>
                 </p>
 
                 <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
@@ -942,14 +947,14 @@ watch(commandReady, (ready) => {
                      Hidden on the compose tab: that path has no place to carry SYNC_DIR, so the toggle would do
                      nothing there — the compose panel points at the workspace's Desktop sync card instead. -->
                 <label v-if="runTab !== `compose`" class="flex cursor-pointer items-start gap-3 rounded-lg bg-canvas p-3 md:items-center md:p-4">
-                    <ToggleSwitch v-model="syncEnabled" class="mt-0.5 shrink-0 md:mt-0" aria-label="Also sync a local folder with this sandbox" />
+                    <ToggleSwitch v-model="syncEnabled" class="mt-0.5 shrink-0 md:mt-0" aria-label="Also sync a local folder" />
                     <div class="flex min-w-0 flex-col gap-0.5">
-                        <span class="text-sm font-semibold text-content">Also sync a local folder with this sandbox</span>
+                        <span class="text-sm font-semibold text-content">Also sync a local folder</span>
                         <span class="text-xs text-muted">
                             <template v-if="syncEnabled && syncDir !== ``"
-                                >Mirrors to <code class="break-words">{{ syncDir }}</code> so you can use your own editor.</template
+                                >Mirrors to <code class="break-words">{{ syncDir }}</code> — edit in your own editor.</template
                             >
-                            <template v-else>Mirror a local folder here so you can use your own editor.</template>
+                            <template v-else>Mirror this sandbox to a folder you can open in your own editor.</template>
                         </span>
                     </div>
                 </label>
@@ -975,18 +980,33 @@ watch(commandReady, (ready) => {
                         </div>
                         <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
                         <template v-else>
-                            <Code :code="selectedCommand" :lang="selectedCommandLang" :wrap="true" :copyable="false" />
+                            <!-- Clamped on a phone: the command is a thing to COPY, and wrapped in full it is
+                                 nine lines of env vars between the button that copies it and the step that
+                                 comes next. The dev command is the long one, but even the hosted one-liner
+                                 wraps to four lines at 390px. -->
+                            <Code
+                                :code="selectedCommand"
+                                :lang="selectedCommandLang"
+                                :wrap="true"
+                                :copyable="false"
+                                :clamp-lines="mobile ? 4 : undefined"
+                            />
                             <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
                                  rebuilds it from this checkout on every run (layer-cached), so the pasted command is
-                                 self-sufficient and never runs a stale image after sandbox edits. -->
-                            <p v-if="platformUrlOverride" class="flex items-start gap-2 text-xs text-warning">
-                                <Icon name="box" class="mt-0.5 shrink-0" />
-                                <span
-                                    >Local dev: this command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs it — every run
-                                    rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few minutes). For
-                                    a live edit loop, keep <code>pnpm dev:sandbox</code> running.</span
-                                >
-                            </p>
+                                 self-sufficient and never runs a stale image after sandbox edits. Folded shut: it is a
+                                 note to whoever is developing intentic itself, not a step in setting a sandbox up. -->
+                            <details v-if="platformUrlOverride" class="text-xs text-warning">
+                                <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+                                    <Icon name="box" class="shrink-0" />
+                                    <span class="min-w-0">Local dev: builds from your checkout</span>
+                                    <Icon name="chevron-down" class="shrink-0 text-subtle" />
+                                </summary>
+                                <p class="mt-1 pl-6 text-2xs">
+                                    This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that — every run rebuilds, so
+                                    sandbox edits are always picked up (cached when unchanged; the first build takes a few minutes). For a live edit
+                                    loop, keep <code>pnpm dev:sandbox</code> running.
+                                </p>
+                            </details>
                         </template>
                     </div>
                 </template>

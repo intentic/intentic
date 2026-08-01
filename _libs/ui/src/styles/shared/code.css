@@ -25,6 +25,17 @@
         white-space: pre-wrap;
         overflow-wrap: break-word;
     }
+
+    /* Clamped to `--ui-code-clamp-lines` visible lines (Code's `clampLines`), the block's own fade + toggle
+     * on top. The arithmetic lives here rather than in the component because every term of it does: `1lh` is
+     * the line-height set above, and the padding and border are this rule block's too. Only the TOP padding
+     * counts — an overflowing box paints through its bottom padding, so budgeting for that one shows half of
+     * the line the clamp meant to cut. */
+    .ui-code.ui-code-clamp .shiki,
+    .ui-code.ui-code-clamp pre {
+        max-height: calc(var(--ui-code-clamp-lines) * 1lh + var(--spacing) * 2 + 2px);
+        overflow-y: hidden;
+    }
 }
 
 [data-mode="dark"] .ui-code .shiki,
