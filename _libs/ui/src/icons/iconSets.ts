@@ -20,6 +20,7 @@ export type IconName =
     | "arrow-right"
     | "arrow-up-right"
     | "arrows-h"
+    | "backward"
     | "bars"
     | "bolt"
     | "box"
@@ -39,6 +40,7 @@ export type IconName =
     | "cog"
     | "collapse-all"
     | "comments"
+    | "compress"
     | "copy"
     | "credit-card"
     | "database"
@@ -48,6 +50,7 @@ export type IconName =
     | "eraser"
     | "exclamation-circle"
     | "exclamation-triangle"
+    | "expand"
     | "external-link"
     | "eye"
     | "eye-slash"
@@ -72,12 +75,15 @@ export type IconName =
     | "moon"
     | "palette"
     | "paperclip"
+    | "pause"
     | "pencil"
+    | "picture-in-picture"
     | "play"
     | "plus"
     | "plus-circle"
     | "question-circle"
     | "refresh"
+    | "repeat"
     | "save"
     | "search"
     | "send"
@@ -103,6 +109,8 @@ export type IconName =
     | "upload"
     | "user"
     | "users"
+    | "volume-off"
+    | "volume-up"
     | "wave-pulse"
     | "wifi"
     | "window-maximize"
@@ -176,6 +184,14 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         paperclip: "ph:paperclip",
         pencil: "ph:pencil-simple",
         play: "ph:play",
+        backward: "ph:skip-back",
+        compress: "ph:corners-in",
+        expand: "ph:corners-out",
+        pause: "ph:pause",
+        "picture-in-picture": "ph:picture-in-picture",
+        repeat: "ph:repeat",
+        "volume-off": "ph:speaker-slash",
+        "volume-up": "ph:speaker-high",
         plus: "ph:plus",
         "plus-circle": "ph:plus-circle",
         "question-circle": "ph:question",
@@ -273,6 +289,15 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         paperclip: "solar:paperclip-linear",
         pencil: "solar:pen-2-linear",
         play: "solar:play-linear",
+        backward: "solar:rewind-back-linear",
+        compress: "solar:minimize-square-linear",
+        expand: "solar:maximize-square-linear",
+        pause: "solar:pause-linear",
+        // Solar ships no picture-in-picture glyph; falls back to Phosphor's, like primeicons' gitlab above.
+        "picture-in-picture": "ph:picture-in-picture",
+        repeat: "solar:repeat-linear",
+        "volume-off": "solar:volume-cross-linear",
+        "volume-up": "solar:volume-loud-linear",
         plus: "solar:add-square-linear",
         "plus-circle": "solar:add-circle-linear",
         "question-circle": "solar:question-circle-linear",
@@ -370,6 +395,14 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         paperclip: "ri:attachment-line",
         pencil: "ri:pencil-line",
         play: "ri:play-line",
+        backward: "ri:rewind-mini-line",
+        compress: "ri:fullscreen-exit-line",
+        expand: "ri:fullscreen-line",
+        pause: "ri:pause-line",
+        "picture-in-picture": "ri:picture-in-picture-line",
+        repeat: "ri:repeat-2-line",
+        "volume-off": "ri:volume-mute-line",
+        "volume-up": "ri:volume-up-line",
         plus: "ri:add-line",
         "plus-circle": "ri:add-circle-line",
         "question-circle": "ri:question-line",
@@ -467,6 +500,14 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         paperclip: "hugeicons:attachment-01",
         pencil: "hugeicons:pencil-edit-01",
         play: "hugeicons:play",
+        backward: "hugeicons:backward-01",
+        compress: "hugeicons:square-arrow-shrink-02",
+        expand: "hugeicons:full-screen",
+        pause: "hugeicons:pause",
+        "picture-in-picture": "hugeicons:picture-in-picture-on",
+        repeat: "hugeicons:repeat",
+        "volume-off": "hugeicons:volume-mute-02",
+        "volume-up": "hugeicons:volume-high",
         plus: "hugeicons:add-01",
         "plus-circle": "hugeicons:add-circle",
         "question-circle": "hugeicons:help-circle",
@@ -564,6 +605,14 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         paperclip: "prime:paperclip",
         pencil: "prime:pencil",
         play: "prime:play",
+        backward: "prime:backward",
+        compress: "prime:window-minimize",
+        expand: "prime:window-maximize",
+        pause: "prime:pause",
+        "picture-in-picture": "prime:clone",
+        repeat: "prime:replay",
+        "volume-off": "prime:volume-off",
+        "volume-up": "prime:volume-up",
         plus: "prime:plus",
         "plus-circle": "prime:plus-circle",
         "question-circle": "prime:question-circle",

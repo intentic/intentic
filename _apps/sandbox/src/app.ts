@@ -47,6 +47,8 @@ import {
     isControlPlanePath,
     MAX_RAW_BYTES,
     MAX_UPLOAD_BYTES,
+    openWorkspaceFileRange,
+    parseByteRange,
     resolveWithin,
     sha256Text,
     UploadTooLargeError,
@@ -242,6 +244,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 c.req.path === "/system/browser-login" ||
                 // …and so is /system/browser-view, the same screencast pointed at the browser the AGENT drives.
                 c.req.path === "/system/browser-view" ||
+                // /workspace/media is fetched by a <video>/<audio> element, which cannot carry a header either.
+                // It checks its own path-scoped ticket (auth/media-tickets.ts) — a strictly narrower grant than
+                // the bearer, and the route refuses outright without one.
+                c.req.path === "/workspace/media" ||
                 c.req.path === "/enroll" ||
                 c.req.path === "/system/authorized-key" ||
                 eventFirePath.test(c.req.path) ||
@@ -363,6 +369,73 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         // Wrap in a fresh Uint8Array so the body type is exactly Uint8Array<ArrayBuffer> (a Buffer's backing is
         // ArrayBufferLike, which Hono's body type rejects); bounded by MAX_RAW_BYTES, so the copy is cheap.
         return c.body(new Uint8Array(bytes), 200, { "Content-Type": contentTypeForPath(target), "Content-Length": String(bytes.byteLength) });
+    });
+
+    /* THE ROUTE A <video> TALKS TO ITSELF — /workspace/raw's sibling for timed media, and separate from it
+     * because a media element is not a caller that wants a Blob.
+     *
+     * /workspace/raw answers one whole file into memory, and its 25 MiB ceiling exists precisely because it
+     * does. Under that contract a recording is either refused outright or must download in full before its
+     * first frame paints, and a seek to 40:00 can only wait for the 39 minutes in front of it. None of that is
+     * a size problem: it is the shape of the answer. So this route answers a RANGE, streamed off disk — the
+     * element asks for the header, then the index, then whatever window the user just dragged to, and each one
+     * costs a seek and a 64 KiB chunk instead of the file. There is no byte cap here for the same reason: what
+     * MAX_RAW_BYTES protects is the daemon's heap, and nothing is ever held.
+     *
+     * The credential is the other difference. Every other route on this daemon takes a bearer, and a media
+     * element cannot send one — so this one takes a ticket from the query string, minted over the ordinary
+     * authenticated contract (workspace.mediaTicket) and bound to a single path. See auth/media-tickets.ts for
+     * why that binding is what makes a longer-lived, replayable credential an acceptable trade here.
+     *
+     * Loopback mode has no `auth` and therefore no ticket to check, exactly like the WebSocket upgrades. */
+    app.get("/workspace/media", async (c) => {
+        const path = c.req.query("path");
+        const target = path === undefined ? undefined : resolveWithin(services.workspace.root, path);
+        if (path === undefined || target === undefined) {
+            return c.json({ error: "invalid path" }, 400);
+        }
+        if (services.auth !== undefined && !services.mediaTickets.valid(c.req.query("ticket") ?? "", path)) {
+            return c.json({ error: "unauthorized" }, 401);
+        }
+        if (isControlPlanePath(services.workspace.root, target)) {
+            return c.json({ error: "not found" }, 404);
+        }
+        const size = await services.files.size(target);
+        if (size === undefined) {
+            return c.json({ error: "not found" }, 404);
+        }
+        const range = parseByteRange(c.req.header("range"), size);
+        if (range === "unsatisfiable") {
+            // 416 must state the real size, or the element retries the same doomed window forever.
+            return c.body(null, 416, { "Content-Range": `bytes */${size}` });
+        }
+        const length = size === 0 ? 0 : range.end - range.start + 1;
+        const headers: Record<string, string> = {
+            "Content-Type": contentTypeForPath(target),
+            "Content-Length": String(length),
+            // Without this the element never issues a Range at all — it downloads linearly and the scrubber
+            // can only reach what has already arrived.
+            "Accept-Ranges": "bytes",
+            // The agent rewrites files under the reader's feet; a cached window of a file that has since
+            // changed is a corrupt stream, not a stale one.
+            "Cache-Control": "no-store",
+        };
+        if (range.partial) {
+            headers["Content-Range"] = `bytes ${range.start}-${range.end}/${size}`;
+        }
+        /* SAVE THIS RATHER THAN PLAY IT. The browser's own `download` attribute is no use here — the daemon is
+         * a different origin, where it is ignored and the link merely navigates — so the intent has to come
+         * from the server. Which also makes this the download path for a file /workspace/raw would refuse:
+         * nothing is buffered, so size stops mattering. RFC 5987 encoding, because a workspace filename is
+         * whatever the user called it. */
+        if (c.req.query("download") !== undefined) {
+            headers["Content-Disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(path.slice(path.lastIndexOf("/") + 1))}`;
+        }
+        // An empty file has no range to open — createReadStream(start: 0, end: -1) would throw.
+        if (length === 0) {
+            return c.body(null, 200, headers);
+        }
+        return c.body(openWorkspaceFileRange(target, range.start, range.end), range.partial ? 206 : 200, headers);
     });
 
     // Write one file under /work — the drag-drop upload AND the editor's text save both post here (bytes / utf8

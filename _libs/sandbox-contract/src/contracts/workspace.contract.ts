@@ -24,6 +24,7 @@ import {
     WorkspaceHealthSchema,
     WorkspaceInstallResultSchema,
     WorkspaceInstallSchema,
+    WorkspaceMediaTicketSchema,
     WorkspaceMoveSchema,
     WorkspaceResolveQuerySchema,
     WorkspaceResolveSchema,
@@ -43,6 +44,11 @@ export const workspaceContract = {
     // One WINDOW of a file's text (plus the file's total size), never the whole file: the browser reads text
     // through here, and an unbounded read on an HTTP route is a way for any open log to stall the daemon.
     file: oc.route({ method: "GET", path: "/workspace/file" }).input(WorkspaceFileReadQuerySchema).output(WorkspaceFileSchema),
+    /* The ticket a media element presents to GET /workspace/media (a plain Hono route, like /workspace/raw —
+     * it answers a streamed byte RANGE, which oRPC has no shape for). Minting is here rather than beside it so
+     * it rides the bearer middleware and the contract's route advertisement: a browser can tell whether the
+     * sandbox in front of it can stream video at all, instead of learning it from a 404 mid-playback. */
+    mediaTicket: oc.route({ method: "POST", path: "/workspace/media-ticket" }).input(WorkspaceFileQuerySchema).output(WorkspaceMediaTicketSchema),
     // Which file a NAMED reference means — the lookup behind every clickable path in the UI. A path an agent
     // wrote in prose is often only a suffix of the real one, so it is matched against the workspace tree rather
     // than trusted as root-relative.

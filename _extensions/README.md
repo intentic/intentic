@@ -31,7 +31,7 @@ Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/*
 | `memory` | UI view | The agent's persistent memory notes: review, edit, delete. |
 | `pipelines` | UI view | CI runs: status, rerun/cancel, agent-driven fixes. |
 | `preview` | UI view | Per-repo dev-server preview panels. |
-| `viewers` | UI viewers | File renderers (docx / xlsx / svg) via `contributes.viewers`. |
+| `viewers` | UI viewers | **Every file format the app can show that isn't source code** — images, SVG (picture + source), PDF, audio/video (a streaming player over `/workspace/media`), docx, xlsx — via `contributes.viewers`. The core resolves a path to text or to opaque bytes and stops there; switch this off and those files fall back to a download. |
 | `connectors` | data-only | CLI-tool connectors as manifest data — no code. |
 | `discord` | daemon gateway | A `process` + `listener` bridging Discord to the daemon, plus the discord connector. |
 | `slack` | daemon gateway | A `process` + `listener` bridging Slack to the daemon over Socket Mode (outbound WebSocket — no public URL, no request signing), plus the slack connector. Mention replies are painted into the thread live. |

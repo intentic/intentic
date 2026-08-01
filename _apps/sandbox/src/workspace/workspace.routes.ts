@@ -79,6 +79,15 @@ export const createWorkspaceRoutes = (services: Services) => {
             }
             return { path: input.path, ...window };
         }),
+        /* Mint the ticket a media element will present to GET /workspace/media. Guarded exactly like a read —
+         * escape, control plane, existence — so a ticket can only ever name a path this caller could already
+         * have read, and a mint for a missing file fails HERE rather than as an opaque playback error later. */
+        mediaTicket: i.mediaTicket.handler(async ({ input }) => {
+            if ((await services.files.size(contained(input.path))) === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "not found" });
+            }
+            return services.mediaTickets.mint(input.path);
+        }),
         /* Which workspace file a NAMED reference means — the lookup behind every clickable path in the UI (chat
          * prose, terminal output, a tool card's chip). The search itself is resolveReference; this wires it to
          * the workspace (through the same escape + control-plane guards as every other read) and to the iq

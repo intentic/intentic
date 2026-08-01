@@ -5,6 +5,33 @@
     "engines": { "intentic": "^0.4.0" },
     "contributes": {
         "viewers": [
+            { "id": "image", "extensions": ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico"], "fetch": "blob" },
+            { "id": "svg", "extensions": ["svg"], "fetch": "text" },
+            { "id": "pdf", "extensions": ["pdf"], "fetch": "blob" },
+            {
+                "id": "media",
+                "extensions": [
+                    "mp3",
+                    "wav",
+                    "flac",
+                    "ogg",
+                    "oga",
+                    "opus",
+                    "weba",
+                    "m4a",
+                    "aac",
+                    "mp4",
+                    "m4v",
+                    "webm",
+                    "ogv",
+                    "mov",
+                    "3gp",
+                    "mkv",
+                    "avi",
+                    "wmv"
+                ],
+                "fetch": "url"
+            },
             { "id": "docx", "extensions": ["docx"], "fetch": "blob" },
             { "id": "xlsx", "extensions": ["xlsx"], "fetch": "blob" }
         ]

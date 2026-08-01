@@ -8,6 +8,7 @@ import { createResidentEngine, type HealthRequest, type QueryRequest } from "@in
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
 import { capabilitiesOf, HEALTH_LIMIT, portUrl, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
 import { portSlotsFromToken, sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { createMediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets } from "./auth/ws-tickets.js";
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 import { createORPCClient } from "@orpc/client";
@@ -36,7 +37,7 @@ import type { AgentTool } from "./agent/agent-tools.js";
 import { listenerProvidersOf } from "./extensions/installed-extensions.js";
 import { noIsolation, testConfig, unstubbed } from "./testing.js";
 import { workspacePaths } from "./workspace/workspace.js";
-import { MAX_RAW_BYTES, sha256Text, UploadTooLargeError } from "./workspace/workspace-files.js";
+import { MAX_RAW_BYTES, sha256Text, statWorkspaceFileSize, UploadTooLargeError } from "./workspace/workspace-files.js";
 
 /* A fire route answers 200 the moment it accepts the wake and lets the turn run DETACHED, so the run it records
  * lands some time after the response. That tail is not the fake agent (which completes instantly) — it is the
@@ -237,6 +238,9 @@ const services = (overrides: ServiceOverrides = {}): Services => {
         // The real thing: pure in-memory state with no side effects, and a fake would only re-implement the
         // single-use rule the /system/ws-ticket test is there to check.
         wsTickets: createWsTickets(),
+        // Real too, for the same reason: the path binding IS what /workspace/media checks, and a fake would
+        // only restate it.
+        mediaTickets: createMediaTickets(),
         panelToken: "panel-secret",
         // The /vpn-scoped secret the in-container CLI presents. A fixed value here so a route test can present
         // it; production mints one per boot.
@@ -3037,6 +3041,77 @@ test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s e
     expect((await app.request("/workspace/raw?path=app/huge.png")).status).toBe(413);
     expect((await app.request("/workspace/raw?path=app/missing.png")).status).toBe(404);
     expect((await app.request("/workspace/raw?path=../../etc/passwd")).status).toBe(400);
+});
+
+/* /workspace/media against a REAL tmp file, because the thing under test is the byte window: the route streams
+ * off disk with createReadStream rather than through services.files, so a fake would only be testing the fake. */
+test("GET /workspace/media serves byte ranges off disk, and refuses one past the end", async () => {
+    const root = await mkdtemp(join(tmpdir(), "media-"));
+    const bytes = Buffer.from("0123456789");
+    await writeFile(join(root, "clip.mp4"), bytes);
+    // No `auth` ⇒ loopback mode, where the ticket gate passes through like the WebSocket upgrades' does. The
+    // real `size` because the route pairs it with a real read: a faked size would describe a different file.
+    const app = createApp(services({ workspace: workspacePaths(root), files: fakeFiles({ size: statWorkspaceFileSize }) }));
+    try {
+        const whole = await app.request("/workspace/media?path=clip.mp4");
+        expect(whole.status).toBe(200);
+        expect(whole.headers.get("content-type")).toBe("video/mp4");
+        expect(whole.headers.get("accept-ranges")).toBe("bytes");
+        expect(whole.headers.get("content-length")).toBe("10");
+        expect(await whole.text()).toBe("0123456789");
+
+        const middle = await app.request("/workspace/media?path=clip.mp4", { headers: { range: "bytes=2-4" } });
+        expect(middle.status).toBe(206);
+        expect(middle.headers.get("content-range")).toBe("bytes 2-4/10");
+        expect(await middle.text()).toBe("234");
+
+        // Open-ended: "from here to the end", the seek a scrubber drag issues.
+        const tail = await app.request("/workspace/media?path=clip.mp4", { headers: { range: "bytes=7-" } });
+        expect(tail.status).toBe(206);
+        expect(tail.headers.get("content-range")).toBe("bytes 7-9/10");
+        expect(await tail.text()).toBe("789");
+
+        // Suffix: the last n bytes, which is how a player finds an MP4 index written after the media data.
+        const suffix = await app.request("/workspace/media?path=clip.mp4", { headers: { range: "bytes=-3" } });
+        expect(suffix.status).toBe(206);
+        expect(suffix.headers.get("content-range")).toBe("bytes 7-9/10");
+
+        const past = await app.request("/workspace/media?path=clip.mp4", { headers: { range: "bytes=99-" } });
+        expect(past.status).toBe(416);
+        expect(past.headers.get("content-range")).toBe("bytes */10");
+
+        expect((await app.request("/workspace/media?path=missing.mp4")).status).toBe(404);
+        expect((await app.request("/workspace/media?path=../../etc/passwd")).status).toBe(400);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("a media ticket opens only the path it was minted for, and /workspace/media refuses one that wasn't", async () => {
+    const root = await mkdtemp(join(tmpdir(), "media-auth-"));
+    await writeFile(join(root, "clip.mp4"), "video");
+    await writeFile(join(root, "other.mp4"), "other");
+    // WITH auth configured — the ticket gate only exists there; loopback has no identity to bind and no gate.
+    const app = createApp(
+        services({
+            workspace: workspacePaths(root),
+            files: fakeFiles({ size: statWorkspaceFileSize }),
+            auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: async () => ({ email: "o@x.com" }), allowOrigins: [] },
+        }),
+    );
+    try {
+        const { ticket } = await clientFor(app).workspace.mediaTicket({ path: "clip.mp4" });
+        expect((await app.request(`/workspace/media?path=clip.mp4&ticket=${ticket}`)).status).toBe(200);
+        // Replayable BY DESIGN — a playback redeems the same ticket for every range it asks for.
+        expect((await app.request(`/workspace/media?path=clip.mp4&ticket=${ticket}`)).status).toBe(200);
+        // …but only for its own file: the binding is what bounds a credential that lives in a URL.
+        expect((await app.request(`/workspace/media?path=other.mp4&ticket=${ticket}`)).status).toBe(401);
+        expect((await app.request("/workspace/media?path=clip.mp4")).status).toBe(401);
+        // A mint for a file that isn't there fails at the mint, not as an opaque stall in the player.
+        expect(await errorCode(clientFor(app).workspace.mediaTicket({ path: "missing.mp4" }))).toBe("NOT_FOUND");
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
 });
 
 test("POST /workspace/upload streams any contained path to disk, 400s escape, 413s oversize", async () => {

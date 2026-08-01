@@ -2,11 +2,11 @@
 import type { WorkspaceFileResponse, WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { CopyButton, useDevice } from "@intentic-app/ui";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
-import { viewerForExtension } from "../../../core-views/viewerRegistry";
 import { sandboxBlob, SandboxHttpError } from "../../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../../composables/useAsyncAction";
 import { sha256Hex } from "../../../composables/workspace/contentHash";
 import { readFileWindow } from "../../../composables/workspace/fileWindow";
+import { mediaUrl } from "../../../composables/workspace/mediaUrl";
 import { useEditBuffers } from "../../../composables/workspace/useEditBuffers";
 import { useLayout } from "../../../composables/useLayout";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
@@ -16,18 +16,28 @@ import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
 import FileBreadcrumb from "../FileBreadcrumb.vue";
 import FileUnsupported from "./FileUnsupported.vue";
-import { highlightLangFor, resolveFile, TEXT_EDIT_MAX_BYTES, type ViewMode } from "../fileType";
-import ImageView from "./ImageView.vue";
+import { highlightLangFor, TEXT_EDIT_MAX_BYTES } from "../fileType";
 import type { LineJump } from "../workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
-import SvgViewer from "./SvgViewer.vue";
+import { resolveOpenFile, type OpenFile } from "./openFile";
 
-/* Dispatches one open file to the right renderer (code / markdown / big-text / svg / image / pdf / fallback)
- * and owns the fetch. The authenticated blob lifecycle lives here: image/pdf bytes are fetched via the sandbox
- * client (Bearer auth, so they can't go straight into <img src>), turned into a blob: object URL, and REVOKED
- * on file-change or unmount via the watcher's cleanup — leak-safe. A monotonic seq guard drops stale async
- * results when the user switches files mid-fetch, and an AbortController cancels the request itself so a
- * superseded read stops costing the daemon and the wire. <object :data> takes the blob: URL directly.
+/* Dispatches one open file to its surface and owns the fetch.
+ *
+ * There are exactly THREE surfaces here, and no format-specific branch among them: the editor (code /
+ * markdown / big-text), an extension's viewer, and the states with nothing to show (empty / binary /
+ * too-large). Every picture, PDF, spreadsheet and recording the app can display is the middle one — a
+ * `contributes.viewers` entry the host resolves at open time (openFile.ts). Adding a format is an extension,
+ * not an edit to this file; switching that extension off degrades to a download with nothing to unwind.
+ *
+ * WHAT THE HOST STILL OWNS is the fetch, because that is where the credentials are. Every daemon route is
+ * Bearer-authenticated, which a browser-issued <img>/<video> request cannot be, so the viewer never fetches:
+ *   text — a bounded window through the same read the editor uses.
+ *   blob — bytes through the sandbox client, turned into a blob: object URL and REVOKED on file-change or
+ *          unmount via the watcher's cleanup (leak-safe across a fast walk through a folder of images).
+ *   url  — a /workspace/media URL carrying a short-lived, path-scoped ticket, which the element range-reads
+ *          itself. The extension gets a string; the credential is minted and held here.
+ * A monotonic seq guard drops stale async results when the user switches files mid-fetch, and an
+ * AbortController cancels the request itself so a superseded read stops costing the daemon and the wire.
  *
  * Text is read as a bounded WINDOW (readFileWindow) whose response carries the file's true size, and that size
  * is what decides between an editable buffer and the windowed read-only view. The decision used to be made
@@ -41,17 +51,17 @@ const { path, meta, line } = defineProps<{ path: string; meta?: WorkspaceTreeEnt
 // "not found" panel. Only fires for a clean read; a dirty file's re-read is skipped (staleOnDisk) so edits survive.
 const emit = defineEmits<{ gone: [path: string] }>();
 
-// Effective render mode — starts from resolveFile(), but a `code` file whose bytes contain NUL is switched to
-// `binary` after the read (an unknown-extension binary, shown as a download instead of mojibake).
-const mode = ref<ViewMode>(`empty`);
+// Which surface is open — starts from resolveOpenFile(), but a `code` file whose bytes contain NUL is switched
+// to `binary` after the read (an unknown-extension binary, shown as a download instead of mojibake), and one
+// over the editable cap to `big-text`.
+const open = ref<OpenFile>({ kind: `empty` });
 const lang = ref<string | undefined>(undefined);
 const text = ref<string | null>(null);
-const blobUrl = ref<string | null>(null);
-// Raw bytes handed to the registered extension viewer (docx/xlsx) to parse; the viewer owns its own render
-// lifecycle, so unlike blobUrl there is no object URL to revoke here.
+// Content for the resolved extension viewer, filled per its manifest `fetch`. Nothing here needs revoking: a
+// `blob` viewer owns whatever object URL it makes of the bytes, and a `url` viewer is handed a plain string.
 const fileBlob = ref<Blob | undefined>(undefined);
-// The extension viewer component (contributes.viewers) that renders docx/xlsx — resolved from the registry on
-// open, alongside the blob. The host owns the fetch; the component only renders the bytes it's handed.
+const fileSrc = ref<string | undefined>(undefined);
+// The extension viewer component itself, lazily imported alongside its content.
 const viewerComponent = shallowRef<Component | undefined>(undefined);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -112,7 +122,7 @@ const reconcileOpenFile = (currentPath: string): void => {
             }
             // External edit, no local changes: adopt it. Reseed the uncontrolled editor from the new disk text.
             if (content.includes("\u0000")) {
-                mode.value = `binary`;
+                open.value = { kind: `binary` };
                 return;
             }
             text.value = content;
@@ -145,30 +155,25 @@ watch(
     ([currentPath], previous, onCleanup) => {
         // A same-path re-fire in an editable text view reconciles by content (no flicker, no false warning);
         // everything else (a new file, or a non-text mode) takes the destructive reset + fetch below.
-        if (previous !== undefined && currentPath === previous[0] && (mode.value === `code` || mode.value === `markdown`)) {
+        if (previous !== undefined && currentPath === previous[0] && (open.value.kind === `code` || open.value.kind === `markdown`)) {
             reconcileOpenFile(currentPath);
             return;
         }
-        const resolution = resolveFile(currentPath, meta?.size);
+        const resolution = resolveOpenFile(currentPath, meta?.size);
         const id = ++seq;
 
         staleOnDisk.value = false;
         text.value = null;
-        blobUrl.value = null;
         fileBlob.value = undefined;
+        fileSrc.value = undefined;
         viewerComponent.value = undefined;
         firstWindow.value = undefined;
         error.value = null;
         loading.value = false;
-        mode.value = resolution.mode;
-        lang.value = resolution.lang;
+        open.value = resolution;
+        lang.value = resolution.kind === `code` || resolution.kind === `markdown` ? resolution.lang : undefined;
 
-        // Owns the object URL created in this run; revoked on the next file-change and on unmount.
-        let createdUrl: string | undefined;
         onCleanup(() => {
-            if (createdUrl !== undefined) {
-                URL.revokeObjectURL(createdUrl);
-            }
             // Nobody is waiting for this file's text any more — stop paying for it mid-flight.
             reading?.abort();
         });
@@ -185,11 +190,12 @@ watch(
             error.value = errorMessage(err, `Could not load the file.`);
         };
 
-        if (resolution.mode === `code` || resolution.mode === `markdown`) {
+        if (resolution.kind === `code` || resolution.kind === `markdown`) {
             loading.value = true;
             // Warm Monaco + the file's grammar concurrently with the fetch (CodeView awaits both before painting,
             // so this just hides the load behind the fetch). Markdown renders as prose (marked), but its Source
             // toggle is the same editor, and the resolution carries a grammar for it like any other text file.
+            const textKind = resolution.kind;
             void ensureMonaco().then((monaco) => ensureLanguage(monaco, resolution.lang));
             readText(currentPath).then((window) => {
                 const content = window.content;
@@ -197,9 +203,9 @@ watch(
                     return;
                 }
                 loading.value = false;
-                // An unknown-extension file that is actually binary: NUL bytes ⇒ download fallback, not mojibake.
-                if (resolution.mode === `code` && content.includes("\u0000")) {
-                    mode.value = `binary`;
+                // An unknown-extension file that is actually binary: NUL bytes => download fallback, not mojibake.
+                if (textKind === `code` && content.includes("\u0000")) {
+                    open.value = { kind: `binary` };
                     return;
                 }
                 /* Too big to hold as an editable buffer — the editor keeps the whole text plus a baseline to diff
@@ -207,7 +213,7 @@ watch(
                  * read-only instead, seeded with the window just read: a 120MB log costs one bounded read. */
                 if (window.size > TEXT_EDIT_MAX_BYTES) {
                     firstWindow.value = window;
-                    mode.value = `big-text`;
+                    open.value = { kind: `big-text`, lang: lang.value };
                     return;
                 }
                 // With the real size in hand, settle the tokenizer: the extension table, then the shebang the way
@@ -221,49 +227,29 @@ watch(
             return;
         }
 
-        if (resolution.mode === `svg`) {
+        /* An extension viewer claimed this file. Its component and its content are resolved TOGETHER, so the
+         * pane paints once instead of flashing an empty viewer while the bytes arrive — and the fetch is
+         * whichever kind the APPROVED MANIFEST declared, never the extension's choice at call time. */
+        if (resolution.kind === `viewer`) {
+            const { viewer } = resolution;
             loading.value = true;
-            // One window is the whole picture here: an SVG past it is past RAW_MAX_BYTES too (resolveFile already
-            // sent that to `too-large`), and a partial one would render as a broken image.
-            readText(currentPath).then(({ content }) => {
-                if (id !== seq) {
-                    return;
-                }
-                loading.value = false;
-                text.value = content;
-                // Render via a blob: URL built from the text (image context → embedded scripts inert). One fetch.
-                createdUrl = URL.createObjectURL(new Blob([content], { type: `image/svg+xml` }));
-                blobUrl.value = createdUrl;
-            }, fail);
-            return;
-        }
-
-        // image / pdf / audio: byte fetch → object URL rendered by a native <img>/<object>/<audio>.
-        if (resolution.mode === `image` || resolution.mode === `pdf` || resolution.mode === `audio`) {
-            loading.value = true;
-            readBlob(currentPath).then((blob) => {
-                if (id !== seq) {
-                    return;
-                }
-                loading.value = false;
-                createdUrl = URL.createObjectURL(blob);
-                blobUrl.value = createdUrl;
-            }, fail);
-            return;
-        }
-
-        // docx / xlsx: an extension viewer (contributes.viewers) renders the bytes. The host resolves the
-        // registered component and fetches the blob in parallel, then hands the component the bytes to render.
-        if (resolution.mode === `docx` || resolution.mode === `xlsx`) {
-            loading.value = true;
-            const viewer = viewerForExtension(resolution.mode);
-            Promise.all([viewer?.component(), readBlob(currentPath)]).then(([component, blob]) => {
+            const content =
+                viewer.fetch === `text`
+                    ? readText(currentPath).then(({ content: body }) => ({ text: body }))
+                    : viewer.fetch === `blob`
+                      ? readBlob(currentPath).then((blob) => ({ blob }))
+                      : mediaUrl(currentPath).then((src) => ({ src }));
+            Promise.all([viewer.component(), content]).then(([component, loaded]) => {
                 if (id !== seq) {
                     return;
                 }
                 loading.value = false;
                 viewerComponent.value = component;
-                fileBlob.value = blob;
+                // `text` doubles as the breadcrumb's Copy-content source, which is the right behaviour for a
+                // viewer whose file IS text (an .svg): copying its markup is what that button should do there.
+                text.value = `text` in loaded ? loaded.text : null;
+                fileBlob.value = `blob` in loaded ? loaded.blob : undefined;
+                fileSrc.value = `src` in loaded ? loaded.src : undefined;
             }, fail);
             return;
         }
@@ -289,17 +275,17 @@ const reloadFromDisk = (): void => {
     );
 };
 
-// Fetch the raw bytes and save them (used by the binary/too-large/PDF fallbacks). A short-lived object URL,
-// revoked right after the click. Files over the daemon's raw cap surface its 413 message as an error.
+/* Save the file (the binary / too-large states, BigTextView, and any viewer's own can't-render fallback).
+ *
+ * Through /workspace/media rather than /workspace/raw, and NOT via a Blob: the daemon streams it and marks it
+ * as an attachment, so the browser writes it straight to disk. Nothing is held in the tab, which is what
+ * removes the 25 MiB ceiling the raw route imposes — a 700 MB recording downloads exactly like a 7 KB one, and
+ * the "too large to preview here" state finally has a working button under it. */
 const download = async (): Promise<void> => {
     try {
-        const blob = await readBlob(path);
-        const url = URL.createObjectURL(blob);
         const anchor = document.createElement(`a`);
-        anchor.href = url;
-        anchor.download = path.slice(path.lastIndexOf(`/`) + 1);
+        anchor.href = await mediaUrl(path, { download: true });
         anchor.click();
-        URL.revokeObjectURL(url);
     } catch (err) {
         error.value = errorMessage(err, `Could not download the file.`);
     }
@@ -317,8 +303,9 @@ const editorView = ref<InstanceType<typeof CodeView>>();
 // global edit mode is ignored and the Edit affordance hidden below 768px.
 const { mobile } = useDevice();
 
-const canEdit = computed(() => (mode.value === `code` || mode.value === `markdown`) && text.value !== null);
-// Global edit mode (useLayout), gated per file by canEdit so images/PDFs/binaries stay in their viewer.
+const canEdit = computed(() => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null);
+// Global edit mode (useLayout), gated per file by canEdit so a viewer's file (and every binary) stays in its
+// viewer — including one whose file is text, like an .svg: an extension viewer renders, it does not edit.
 const editingThis = computed(() => !mobile.value && layout.editMode.value && canEdit.value);
 const dirtyThis = computed(() => edit.isDirty(path));
 const editorSeed = computed(() => edit.bufferOf(path) ?? text.value ?? ``);
@@ -419,32 +406,27 @@ const onEditorSave = (value: string): void =>
                 <Icon name="spinner" class="text-xl" spin />
             </div>
             <template v-else>
-                <CodeView v-if="mode === 'code' && text !== null" :path="path" :code="text" :lang="lang" :scroll-to-line="line" />
-                <MarkdownViewer v-else-if="mode === 'markdown' && text !== null" :source="text" :path="path" :line="line" />
+                <CodeView v-if="open.kind === 'code' && text !== null" :path="path" :code="text" :lang="lang" :scroll-to-line="line" />
+                <MarkdownViewer v-else-if="open.kind === 'markdown' && text !== null" :source="text" :path="path" :line="line" />
                 <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
-                <BigTextView v-else-if="mode === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
-                <SvgViewer v-else-if="mode === 'svg' && text !== null && blobUrl" :src="blobUrl" :source="text ?? ''" />
-                <ImageView v-else-if="mode === 'image' && blobUrl" :src="blobUrl" />
-                <object v-else-if="mode === 'pdf' && blobUrl" :data="blobUrl" type="application/pdf" class="h-full w-full">
-                    <div class="flex h-full flex-col items-center justify-center gap-3 text-center text-muted">
-                        <p class="text-sm">This PDF can't be displayed inline.</p>
-                        <button
-                            type="button"
-                            class="inline-flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-xs text-content hover:bg-overlay"
-                            @click="download"
-                        >
-                            <Icon name="download" class="text-xs" /> Download
-                        </button>
-                    </div>
-                </object>
-                <div v-else-if="mode === 'audio' && blobUrl" class="flex h-full items-center justify-center p-6">
-                    <audio :src="blobUrl" controls class="w-full max-w-xl" />
-                </div>
-                <component :is="viewerComponent" v-else-if="(mode === 'docx' || mode === 'xlsx') && viewerComponent && fileBlob" :blob="fileBlob" />
-                <FileUnsupported v-else-if="mode === 'docx' || mode === 'xlsx'" mode="binary" @download="download" />
-                <FileUnsupported v-else-if="mode === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
-                <FileUnsupported v-else-if="mode === 'binary'" mode="binary" @download="download" />
-                <FileUnsupported v-else mode="empty" />
+                <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
+                <!-- Whatever a viewers extension contributed. It gets the path plus exactly one content prop,
+                     decided by its manifest's `fetch`; `download` is the host's, so every viewer's own
+                     can't-render fallback reaches the same authenticated byte fetch the states below use. -->
+                <component
+                    :is="viewerComponent"
+                    v-else-if="viewerComponent"
+                    :path="path"
+                    :text="text ?? undefined"
+                    :blob="fileBlob"
+                    :src="fileSrc"
+                    @download="download"
+                />
+                <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
+                <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
+                <!-- Everything left: a known binary, and the one shape that should be unreachable — a viewer
+                     that resolved but produced no component. Both are files whose bytes we can only hand over. -->
+                <FileUnsupported v-else mode="binary" @download="download" />
             </template>
         </div>
     </div>

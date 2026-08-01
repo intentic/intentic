@@ -13,8 +13,9 @@ export interface RegisteredViewer {
     readonly id: string;
     // Bare file extensions (no dot) this viewer handles, from its manifest.
     readonly extensions: readonly string[];
-    // Whether the host fetches the file as text or raw bytes before rendering.
-    readonly fetch: "text" | "blob";
+    // What the host puts in the viewer's hands: decoded text, the whole file's bytes, or a streaming URL it
+    // range-reads itself (audio/video). From the manifest, so the extension cannot widen its own reach.
+    readonly fetch: "text" | "blob" | "url";
     readonly component: () => Promise<Component>;
 }
 

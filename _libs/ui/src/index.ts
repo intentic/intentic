@@ -17,6 +17,11 @@ export { default as DagGraph } from "./components/DagGraph.vue";
 // DOM with it) to call one. See the note above renderMarkdown's subpath.
 export { type DagEdge, type DagNode } from "./components/dagLayout.js";
 export { default as Icon } from "./components/Icon.vue";
+// THE surface that shows a picture — the workspace file viewer's images (through the viewers extension), the
+// SVG preview, and both sides of a binary diff. In the kit rather than in either caller so zoom, pan and the
+// transparency checkerboard behave identically wherever an image appears.
+export { default as ImageView } from "./components/ImageView.vue";
+export { isRenderableImage } from "./components/imageView.js";
 export { default as InfoDialog } from "./components/InfoDialog.vue";
 export { default as InfoHint } from "./components/InfoHint.vue";
 export { default as InfoTable } from "./components/InfoTable.vue";

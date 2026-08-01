@@ -57,14 +57,24 @@ export const FileContributionSchema = z.object({
 });
 export type FileContribution = z.infer<typeof FileContributionSchema>;
 
-// A custom file viewer the extension may register at runtime (api.viewers.register): the host resolves an open
-// file to this viewer by extension, fetches its bytes (`fetch: "blob"`) or text (`fetch: "text"`), and renders
-// the registered component with them — the host keeps the fetch + open-file lifecycle; the extension only renders.
-// `extensions` are bare file extensions (no dot), e.g. ["docx"]. This is the non-sidebar contribution point.
+/* A custom file viewer the extension may register at runtime (api.viewers.register): the host resolves an open
+ * file to this viewer by extension, gets its content, and renders the registered component with it — the host
+ * keeps the fetch + open-file lifecycle and the daemon credentials; the extension only renders. `extensions`
+ * are bare file extensions (no dot), e.g. ["docx"]. This is the non-sidebar contribution point.
+ *
+ * `fetch` is how much of the file the host puts in the extension's hands, and it is a real choice:
+ *   text — decoded utf8 (`text` prop). For a format that IS text: svg, a subtitle track, a notebook.
+ *   blob — the whole file in memory (`blob` prop). For a format that must be parsed end to end before any of
+ *          it can be shown: a .docx, a spreadsheet. Bounded by the daemon's raw-read cap.
+ *   url  — a streaming URL the component points an element at (`src` prop), never the bytes. For anything
+ *          RANGE-READ rather than parsed: audio and video, where the file may be gigabytes and the player
+ *          wants the header, the index and the seconds around the playhead — not the file. The host mints
+ *          the credential on that URL and keeps it out of the extension.
+ */
 export const ViewerContributionSchema = z.object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
     extensions: z.array(z.string().regex(/^[a-z0-9]+$/)).min(1),
-    fetch: z.enum(["text", "blob"]),
+    fetch: z.enum(["text", "blob", "url"]),
 });
 export type ViewerContribution = z.infer<typeof ViewerContributionSchema>;
 

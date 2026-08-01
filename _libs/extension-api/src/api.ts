@@ -89,7 +89,8 @@ export interface ViewRegistration {
 
 // A custom file viewer's runtime registration — `id` must match a `contributes.viewers` entry in the approved
 // manifest (the host reads the file extensions + fetch kind from there). The host resolves an open file to this
-// viewer, fetches its content, and renders `component` with `{ path, text?, blob? }` bound.
+// viewer, gets its content, and renders `component` with `{ path, text?, blob?, src? }` bound — which of the
+// three content props is filled is decided by the manifest's `fetch` (see ViewerContributionSchema).
 export interface ViewerRegistration {
     readonly id: string;
     readonly component: () => Promise<Component>;

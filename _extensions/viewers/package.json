@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-viewers",
     "version": "1.0.0",
-    "description": "File viewers (docx, xlsx) — first-party intentic extension via contributes.viewers",
+    "description": "File viewers (images, SVG, PDF, audio/video, docx, xlsx) — first-party intentic extension via contributes.viewers",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -14,7 +14,8 @@
         }
     },
     "scripts": {
-        "build": "vue-tsc --noEmit"
+        "build": "vue-tsc --noEmit",
+        "test": "vitest run"
     },
     "dependencies": {
         "@intentic/extension-api": "workspace:*",
@@ -26,6 +27,7 @@
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "typescript": "catalog:",
+        "vitest": "catalog:",
         "vue": "catalog:",
         "vue-tsc": "catalog:"
     },

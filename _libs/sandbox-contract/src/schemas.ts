@@ -1317,6 +1317,11 @@ export const WorkspaceChildrenSchema = z.object({
 });
 export type WorkspaceChildren = z.infer<typeof WorkspaceChildrenSchema>;
 export const WorkspaceFileQuerySchema = z.object({ path: z.string().min(1) });
+/* The credential a <video>/<audio> element carries to GET /workspace/media, which is the one workspace route a
+ * browser cannot put a header on. Minted here, over the ordinary bearer-authenticated contract, and scoped to
+ * the single path it was asked for — see auth/media-tickets.ts for why scope rather than single-use is what
+ * bounds it. `expiresAt` is epoch ms so a player can tell a dead ticket from a dead file. */
+export const WorkspaceMediaTicketSchema = z.object({ ticket: z.string(), expiresAt: z.number() });
 /* A text read is a read of a WINDOW: `offset` is the byte to start at (negative reads that many bytes from the
  * END, which is what following a growing log means — the tail's offset isn't knowable until the size is), and
  * `limit` how many bytes to serve. The daemon clamps `limit` to its own cap, so an omitted or oversized one is

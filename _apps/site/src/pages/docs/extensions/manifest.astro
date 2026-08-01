@@ -103,7 +103,16 @@ const processes = `"processes": [
         <tbody>
             <tr><td><code>id</code></td><td>Kebab-case slug, matched to your runtime registration.</td></tr>
             <tr><td><code>extensions</code></td><td>Bare file extensions, no dot — <code>["docx", "xlsx"]</code>.</td></tr>
-            <tr><td><code>fetch</code></td><td><code>"text"</code> or <code>"blob"</code> — how the host hands you the file.</td></tr>
+            <tr>
+                <td><code>fetch</code></td>
+                <td>
+                    How the host hands you the file. <code>"text"</code> — decoded utf8, as a <code>text</code> prop.
+                    <code>"blob"</code> — the whole file's bytes, as <code>blob</code>; for a format that must be parsed end to end.
+                    <code>"url"</code> — a streaming URL to point an element at, as <code>src</code>; for audio and video, which
+                    range-read gigabytes and should never be held in memory. The host mints the credential on that URL, so your
+                    component never sees one.
+                </td>
+            </tr>
         </tbody>
     </table>
 

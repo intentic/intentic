@@ -1,29 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { codeLangForPath, highlightLangFor, langFromShebang, RAW_MAX_BYTES, rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "./fileType";
+import { codeLangForPath, highlightLangFor, langFromShebang, rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "./fileType";
 
-// Empty (0-byte) files: text types stay editable (code/markdown); non-text preview types show the "empty" fallback.
+// Empty (0-byte) files: text types stay editable (code/markdown); binary ones show the "empty" fallback.
 describe(`resolveFile empty files`, () => {
     it(`empty text files resolve to an editable mode`, () => {
         expect(resolveFile(`new.ts`, 0)).toEqual({ mode: `code`, lang: `typescript` });
         expect(resolveFile(`README.md`, 0)).toEqual({ mode: `markdown`, lang: `markdown` });
         expect(resolveFile(`.gitignore`, 0)).toEqual({ mode: `code`, lang: `gitignore` });
+        // SVG is text here too — the picture is a viewers extension's job, the markup is the core's.
+        expect(resolveFile(`icon.svg`, 0)).toEqual({ mode: `code`, lang: `xml` });
     });
 
-    it(`empty non-text files stay "empty"`, () => {
+    it(`empty binary files stay "empty"`, () => {
         expect(resolveFile(`logo.png`, 0)).toEqual({ mode: `empty` });
         expect(resolveFile(`doc.pdf`, 0)).toEqual({ mode: `empty` });
-        expect(resolveFile(`icon.svg`, 0)).toEqual({ mode: `empty` });
         expect(resolveFile(`archive.zip`, 0)).toEqual({ mode: `empty` });
         expect(resolveFile(`song.mp3`, 0)).toEqual({ mode: `empty` });
+        expect(resolveFile(`clip.mp4`, 0)).toEqual({ mode: `empty` });
         expect(resolveFile(`report.docx`, 0)).toEqual({ mode: `empty` });
         expect(resolveFile(`sheet.xlsx`, 0)).toEqual({ mode: `empty` });
     });
 });
 
-/* Every TEXT mode carries a grammar, not just `code`. Markdown and SVG render their source through the same
- * editor, so a viewer that shows source — and the DIFF surface, which is one component for all three — gets the
- * language from the resolution rather than hardcoding one per mode. Markdown used to resolve with no `lang` at
- * all, which is exactly how .md diffs ended up as uncolored plaintext while the file viewer looked fine. */
+/* Both TEXT modes carry a grammar, not just `code`. Markdown renders its source through the same editor, so a
+ * viewer that shows source — and the DIFF surface, which is one component for both — gets the language from the
+ * resolution rather than hardcoding one per mode. Markdown used to resolve with no `lang` at all, which is
+ * exactly how .md diffs ended up as uncolored plaintext while the file viewer looked fine. */
 describe(`resolveFile text modes carry a lang`, () => {
     it(`resolves a grammar for markdown`, () => {
         expect(resolveFile(`ARCHITECTURE.md`, 1000)).toEqual({ mode: `markdown`, lang: `markdown` });
@@ -32,14 +34,14 @@ describe(`resolveFile text modes carry a lang`, () => {
     });
 
     it(`resolves svg markup as xml`, () => {
-        expect(resolveFile(`icon.svg`, 1000)).toEqual({ mode: `svg`, lang: `xml` });
+        expect(resolveFile(`icon.svg`, 1000)).toEqual({ mode: `code`, lang: `xml` });
         // The same answer for a path, whichever surface asks — this is what the chat's Read card colors from too.
         expect(codeLangForPath(`icon.svg`)).toBe(`xml`);
     });
 
     it(`applies the highlight cap to every text mode, not just code`, () => {
         expect(resolveFile(`huge.md`, 1_000_000)).toEqual({ mode: `markdown` });
-        expect(resolveFile(`huge.svg`, 1_000_000)).toEqual({ mode: `svg` });
+        expect(resolveFile(`huge.svg`, 1_000_000)).toEqual({ mode: `code` });
     });
 });
 
@@ -77,21 +79,22 @@ describe(`resolveFile config dotfiles`, () => {
     });
 });
 
-// Raw-byte preview families: audio plays inline, docx/xlsx parse client-side. All fetched via /workspace/raw,
-// so the 25 MiB cap sends oversize files to the download fallback.
-describe(`resolveFile audio / docx / xlsx`, () => {
-    it(`routes each extension to its own mode`, () => {
-        for (const ext of [`mp3`, `wav`, `flac`, `ogg`, `m4a`, `aac`]) {
-            expect(resolveFile(`clip.${ext}`, 1000)).toEqual({ mode: `audio` });
+/* The formats a VIEWERS EXTENSION renders. The core's answer for all of them is `binary` — opaque bytes, and
+ * a download — with no size gate and no per-format branch: which of them is actually showable, and what the
+ * ceiling is, belongs to the extension that claims the extension (viewers/openFile.ts). Listing them here is
+ * what makes switching that extension off degrade to a download rather than to mojibake. */
+describe(`resolveFile leaves extension-owned formats binary`, () => {
+    it(`claims no picture, document, or recording for itself`, () => {
+        for (const name of [`logo.png`, `photo.jpeg`, `anim.gif`, `doc.pdf`, `report.docx`, `budget.xlsx`]) {
+            expect(resolveFile(name, 1000)).toEqual({ mode: `binary` });
         }
-        expect(resolveFile(`report.docx`, 1000)).toEqual({ mode: `docx` });
-        expect(resolveFile(`budget.xlsx`, 1000)).toEqual({ mode: `xlsx` });
+        for (const ext of [`mp3`, `wav`, `flac`, `ogg`, `opus`, `m4a`, `aac`, `mp4`, `mov`, `webm`, `mkv`, `avi`]) {
+            expect(resolveFile(`clip.${ext}`, 1000)).toEqual({ mode: `binary` });
+        }
     });
 
-    it(`falls back to a download past the raw cap`, () => {
-        expect(resolveFile(`clip.mp3`, RAW_MAX_BYTES + 1)).toEqual({ mode: `too-large` });
-        expect(resolveFile(`report.docx`, RAW_MAX_BYTES + 1)).toEqual({ mode: `too-large` });
-        expect(resolveFile(`budget.xlsx`, RAW_MAX_BYTES + 1)).toEqual({ mode: `too-large` });
+    it(`applies no size gate — a viewer that streams has no ceiling to pre-empt`, () => {
+        expect(resolveFile(`film.mp4`, 2_000_000_000)).toEqual({ mode: `binary` });
     });
 });
 
@@ -174,6 +177,8 @@ describe(`rendersAsBytes`, () => {
         expect(rendersAsBytes(`README.md`, undefined)).toBe(false);
         // SVG is text and gets a source toggle in the viewer — it is diffable as lines.
         expect(rendersAsBytes(`icon.svg`, undefined)).toBe(false);
+        // …and a recording is not, however many viewers claim it.
+        expect(rendersAsBytes(`clip.mp4`, undefined)).toBe(true);
         expect(rendersAsBytes(`LICENSE`, undefined)).toBe(false);
     });
 });

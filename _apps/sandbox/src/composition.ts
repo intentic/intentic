@@ -33,6 +33,7 @@ import type { Logger } from "pino";
 import { createAcpAgent } from "./acp/acp-agent.js";
 import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.js";
 import { type BridgeTokens, fileBridgeTokens } from "./auth/bridge-tokens.js";
+import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
@@ -177,6 +178,9 @@ export interface Services {
     // call the daemon from inside the sandbox without the browser's Google token. Never leaves the container.
     // One-shot tickets the WebSocket upgrades redeem, so a bearer never rides a query string (auth/ws-tickets.ts).
     readonly wsTickets: WsTickets;
+    // Path-scoped tickets /workspace/media accepts, for the one route the browser cannot header-authenticate:
+    // a <video>/<audio> element fetching its own byte ranges (auth/media-tickets.ts).
+    readonly mediaTickets: MediaTickets;
     readonly panelToken: string;
     // A per-boot secret the in-container `vpn` CLI presents (x-intentic-agent), written to a 0600 file at
     // AGENT_TOKEN_PATH so the agent's shell and the owner's terminals can both read it. UNLIKE panelToken it is
@@ -562,6 +566,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         scanPorts: () => scanListeningPorts(),
         terminalRun,
         wsTickets: createWsTickets(),
+        mediaTickets: createMediaTickets(),
         panelToken: randomBytes(32).toString("hex"),
         agentToken: randomBytes(32).toString("hex"),
         info,

@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { formatBytes, useDevice } from "@intentic-app/ui";
+import { formatBytes, ImageView, isRenderableImage, useDevice } from "@intentic-app/ui";
 import { computed, ref, watch } from "vue";
 import { sandboxBlob } from "../../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../../composables/useAsyncAction";
 import { useLayout } from "../../../composables/useLayout";
-import { resolveFile } from "../fileType";
-import ImageView from "./ImageView.vue";
 
 /* WHAT CHANGED, WHEN THE CHANGE ISN'T TEXT. Monaco's diff editor is the right tool for a file made of lines and
  * the wrong one for a screenshot, so every review surface used to stop at "Binary file — no text diff to show."
@@ -35,9 +33,12 @@ const { diffLayout } = useLayout();
 // obeys, set from DiffToolbar) they stack instead, so each side still gets the full column rather than two
 // unreadable thumbnails.
 const split = computed(() => !mobile.value && diffLayout.value === `split` && before !== undefined && after !== undefined);
-// The path decides how the bytes are shown — not their content. It is the same resolution the workspace file
-// view uses, so a .png in a diff and a .png in the tree are rendered by the same rule.
-const renderable = computed(() => resolveFile(path, undefined).mode === `image`);
+/* The path decides how the bytes are shown — not their content. Asked of the KIT (isRenderableImage), beside
+ * the component that would draw them, rather than of the workspace's file-type resolver: showing a picture in
+ * a diff is a review capability and must not be able to disappear because a viewers extension was switched
+ * off. A .png in a diff and a .png in the tree still agree, because the extension's manifest claims the same
+ * set the kit knows how to paint. */
+const renderable = computed(() => isRenderableImage(path));
 const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
 
 interface Side {
