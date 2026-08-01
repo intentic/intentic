@@ -2,15 +2,19 @@
   "dir": "_libs/astro-integrations",
   "keyFiles": [
     {
-      "path": "_libs/astro-integrations/src/indexnow.mjs",
-      "what": "The largest file here — usually where the real work happens."
+      "path": "_libs/astro-integrations/src/llms-text.mjs",
+      "what": "What the package is for: the llms.txt index and a Markdown mirror of every built page."
+    },
+    {
+      "path": "_libs/astro-integrations/src/html-to-markdown.mjs",
+      "what": "The machinery under it — main-content extraction and HTML→Markdown, with no DOM dependency."
     }
   ],
   "name": "@intentic-dev/astro-integrations",
-  "oneLiner": "Small build-time helpers for the website.",
+  "oneLiner": "The website's Markdown mirror for machine readers, plus a git-derived lastmod for the sitemap.",
   "provenance": {
-    "generatedAt": 1785535377531,
+    "generatedAt": 1785588675134,
     "model": "claude-opus-4-6",
-    "sourceRev": "0505c51af57a5a6a6c915373548164d1ecafa9e3"
+    "sourceRev": "9b0191b432d7260afbeb7b86e3f944fd90364313"
   }
 }

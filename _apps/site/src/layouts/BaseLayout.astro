@@ -5,6 +5,9 @@ import { ORG_DESCRIPTION, ORG_NAME, ORG_TAGLINE, SITE_URL } from "@intentic-dev/
 import type { BreadcrumbEntry, FaqEntry } from "@intentic-dev/site-content/structured-data";
 import { buildPageGraph } from "@intentic-dev/site-content/structured-data";
 import { lastModForUrl } from "@intentic-dev/astro-integrations";
+// The package's own `util.js` entry, not its root: the root pulls in the build hook, and with it satori and
+// resvg's native .node binary, which rollup then tries to bundle into the page. This subpath is pure path math.
+import { getImagePath } from "astro-opengraph-images/util.js";
 
 interface Props {
     title?: string;
@@ -32,14 +35,11 @@ const isArticle = breadcrumbs !== undefined && breadcrumbs.length > 0;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 
-function ogSlug(pathname: string): string {
-    const trimmed = pathname.replace(/\/+$/, "");
-    if (trimmed === "") return "index";
-    return trimmed.replace(/^\//, "").replace(/\//g, "-");
-}
-
+// The card astro-opengraph-images will write for this page, named by the same function the integration uses to
+// find it — the two MUST agree or the build fails, which is the point: a page can no longer advertise an image
+// nobody generated. `path` rather than Astro.url so the name is the built (always-slashed) one in dev too.
 const perPageOgAvailable = import.meta.env.PUBLIC_OG_PER_PAGE;
-const defaultOgPath = perPageOgAvailable && meta ? `/og/${ogSlug(path)}.png` : "/assets/intentic-logo-sized.png";
+const defaultOgPath = perPageOgAvailable && meta ? getImagePath({ url: new URL(path, Astro.site), site: Astro.site }) : "/assets/intentic-logo-sized.png";
 const ogImage = new URL(Astro.props.ogImage ?? defaultOgPath, Astro.site);
 
 const jsonLd = buildPageGraph({

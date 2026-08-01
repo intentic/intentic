@@ -9,9 +9,7 @@
             "types": "./src/index.d.ts",
             "default": "./src/index.mjs"
         },
-        "./og-images": "./src/og-images.mjs",
         "./git-lastmod": "./src/git-lastmod.mjs",
-        "./indexnow": "./src/indexnow.mjs",
         "./llms-text": "./src/llms-text.mjs",
         "./html-to-markdown": "./src/html-to-markdown.mjs"
     },
@@ -20,8 +18,6 @@
         "check": "node --check src/index.mjs && node --check src/llms-text.mjs && node --check src/html-to-markdown.mjs"
     },
     "peerDependencies": {
-        "@resvg/resvg-js": "catalog:",
-        "astro": "catalog:",
-        "satori": "catalog:"
+        "astro": "catalog:"
     }
 }

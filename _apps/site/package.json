@@ -14,10 +14,10 @@
         "@astrojs/sitemap": "catalog:",
         "@intentic-dev/astro-integrations": "workspace:*",
         "@intentic-dev/site-content": "workspace:*",
-        "@resvg/resvg-js": "catalog:",
         "@tailwindcss/vite": "catalog:",
         "astro": "catalog:",
-        "satori": "catalog:",
+        "astro-indexnow": "catalog:",
+        "astro-opengraph-images": "catalog:",
         "tailwindcss": "catalog:"
     },
     "devDependencies": {
