@@ -279,7 +279,6 @@ export function useChanges() {
     const count = computed(() =>
         repos.value.reduce((total, repo) => total + repo.conflicted.length + repo.staged.length + repo.unstaged.length + (repo.truncated ?? 0), 0),
     );
-    const hasChanges = computed(() => count.value > 0);
     // How much a plain Commit would record, across every repo — what the commit box reads out, and what decides
     // whether the button is "Commit" or "Commit all". Ahead/behind stay off this summary: sync is a per-repo act
     // (each has its own remote and branch), so the panel reads `repo.remote` straight off the row — for the row
@@ -294,7 +293,6 @@ export function useChanges() {
         originAgents,
         count,
         stagedCount,
-        hasChanges,
         outgoing,
         loading: query.isFetching,
         error,

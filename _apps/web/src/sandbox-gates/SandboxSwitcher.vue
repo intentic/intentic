@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic-app/api-contract";
-import { Code, Segmented, useOsPreference } from "@intentic-app/ui";
+import { Code, type IconName, Segmented, useOsPreference } from "@intentic-app/ui";
+import type { ViewBadge } from "@intentic/extension-api";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import Popover from "primevue/popover";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useMissingSecretCount } from "../composables/secrets/useSecrets";
+import { type SandboxAttentionItem, useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useAuth } from "../composables/useAuth";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
@@ -22,14 +23,29 @@ const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
 const { entitlements, upgradeOpen } = useAuth();
-const { missingRequiredCount } = useMissingSecretCount();
+// Everything the sandbox needs from its owner (sandboxAttention): a corner badge on the chip, and one routed
+// row per item inside the popover. The hub behind them has no rail tile, so without this the only way to learn
+// a rebuild is pending would be to go asking — which is the hole the bars above the app used to plug.
+const { items: attention, badge: attentionBadge } = useSandboxAttention();
 const { cmdOs } = useOsPreference();
+// ONE label for the whole control, badge included — the rail's tileLabel rule. A tooltip on the badge itself
+// would open a second box on top of this one (it is a descendant), and the badge is a glyph or a bare number,
+// so this string is the only place its sentence exists.
 const switcherLabel = computed(() => {
     const name = sandbox.active.value?.name ?? `Sandboxes`;
-    return missingRequiredCount.value === 0
-        ? name
-        : `${name} — ${missingRequiredCount.value} required secret${missingRequiredCount.value === 1 ? `` : `s`} missing`;
+    const tooltip = attentionBadge.value?.tooltip;
+    return tooltip === undefined ? name : `${name} · ${tooltip}`;
 });
+
+const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
+    info: `bg-primary-600/15 text-link`,
+    warning: `bg-warning/15 text-warning`,
+    danger: `bg-danger/15 text-danger`,
+};
+const ROW_TONE: Record<SandboxAttentionItem["tone"], string> = {
+    info: `text-link`,
+    warning: `text-warning`,
+};
 
 const panel = ref<InstanceType<typeof Popover> | null>(null);
 
@@ -44,10 +60,11 @@ const pick = (id: string): void => {
     panel.value?.hide();
 };
 
-// The sandbox management hub has no rail tile — this chip is its home (identity → tabbed settings surface).
-const openSandbox = (): void => {
+// The sandbox management hub has no rail tile — this chip is its home (identity → tabbed settings surface), and
+// it is where every attention row lands too: each names a tab of the same hub.
+const openTab = (to: string): void => {
     panel.value?.hide();
-    void router.push(`/sandbox`);
+    void router.push(to);
 };
 
 const addSandbox = (): void => {
@@ -137,14 +154,18 @@ const confirmRemove = async (): Promise<void> => {
             }}</span>
             <Icon name="server" v-else class="text-lg" />
         </button>
-        <!-- Required secrets the sandbox is missing. aria-hidden because the button's own label already says it
-             in words — a bare number read out of context tells a screen reader nothing. -->
+        <!-- What the sandbox needs from its owner, as one corner badge: the head item's count where the amount
+             is the message, its glyph otherwise. aria-hidden because the button's own label already says every
+             pending sentence in words — a bare number read out of context tells a screen reader nothing. -->
         <span
-            v-if="missingRequiredCount > 0"
-            class="pointer-events-none absolute -right-1 -top-1 min-w-4 rounded-full bg-warning/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-warning"
+            v-if="attentionBadge"
+            class="pointer-events-none absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
+            :class="BADGE_TONE[attentionBadge.tone ?? `info`]"
             aria-hidden="true"
-            >{{ missingRequiredCount > 99 ? `99+` : missingRequiredCount }}</span
         >
+            <Icon v-if="attentionBadge.mark !== undefined" :name="attentionBadge.mark as IconName" />
+            <template v-else>{{ (attentionBadge.count ?? 0) > 99 ? `99+` : attentionBadge.count }}</template>
+        </span>
         <span
             class="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card"
             :class="sandbox.reachable.value ? 'bg-success' : 'bg-subtle'"
@@ -153,6 +174,27 @@ const confirmRemove = async (): Promise<void> => {
 
     <Popover ref="panel" append-to="body">
         <div class="flex w-64 flex-col gap-0.5 p-1">
+            <!-- The badge's detail: one row per pending item, each routing to the hub tab that resolves it.
+                 First in the popover because the badge is what brought the reader here, and each row is the
+                 whole sentence its bar used to shout — said once, where it was asked for. -->
+            <template v-if="attention.length > 0">
+                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Needs you</div>
+                <button
+                    v-for="item in attention"
+                    :key="item.message"
+                    type="button"
+                    class="flex items-center gap-2.5 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-content/5"
+                    @click="openTab(item.to)"
+                >
+                    <span class="flex h-6 w-6 shrink-0 items-center justify-center" :class="ROW_TONE[item.tone]">
+                        <Icon :name="item.icon" class="text-sm" />
+                    </span>
+                    <span class="min-w-0 flex-1 text-xs text-content">{{ item.message }}</span>
+                    <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
+                </button>
+                <div class="my-1 border-t border-line"></div>
+            </template>
+
             <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Sandboxes</div>
 
             <button
@@ -203,7 +245,7 @@ const confirmRemove = async (): Promise<void> => {
             <button
                 type="button"
                 class="flex w-full items-center gap-2.5 rounded-md px-2 py-1 text-sm text-content transition-colors hover:bg-content/5"
-                @click="openSandbox"
+                @click="openTab('/sandbox')"
             >
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center">
                     <Icon name="cog" class="text-base text-muted" />

@@ -649,8 +649,8 @@ const confirmDiscard = async (): Promise<void> => {
 // Sync affordances show only for a repo that actually has a remote; a purely local repo gets no dead controls.
 // Each verb then earns its place from state: pull when behind, push when ahead, Publish when the branch has no
 // upstream at all. Fetch is the exception — it is what MAKES ahead/behind trustworthy, so it is always offered.
-// `syncable`/`ahead`/`behind`/`unpublished` come from useChanges: the rail tile and the workspace banner read
-// the same repo the same way, and a second local definition here is how those three drift apart.
+// `syncable`/`ahead`/`behind`/`unpublished` come from useChanges: the rail tile and the sidebar's Changes tab
+// read the same repo the same way, and a second local definition here is how those three drift apart.
 
 // The pills carry only a direction and a number, so the tooltip is where the whole sentence goes — including
 // WHICH ref is involved, which the folded row no longer spends a line printing.

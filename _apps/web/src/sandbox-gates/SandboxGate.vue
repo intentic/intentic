@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink } from "vue-router";
 import { useAuth } from "../composables/useAuth";
-import { useEnvironment } from "../composables/sandbox/useEnvironment";
-import { useSandboxVersion } from "../composables/sandbox/useSandboxVersion";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { showOutageGate } from "../composables/sandbox/connection";
 import { useSandboxSession } from "../composables/sandbox/sandboxSession";
@@ -14,11 +11,16 @@ import SandboxUnauthorized from "./SandboxUnauthorized.vue";
 import SandboxWarming from "./SandboxWarming.vue";
 import { daemonReady } from "../composables/sandbox/useDaemonBoot";
 
-/* The sandbox-readiness gates + global banners, shared by both shells (desktop grid, mobile tabs): the
- * pre-bind account-mismatch nudge, the denied (403) and connecting gates, and the environment action banner.
- * Renders the slot — the live view — only for a reachable daemon, so a not-ready (or just-switched-to)
- * sandbox never presents dead controls or another sandbox's data. Multi-root on purpose: the host's <main>
- * provides the flex column and the positioning context for the absolute mismatch bar. */
+/* The sandbox-readiness gates, shared by both shells (desktop grid, mobile tabs): the pre-bind
+ * account-mismatch nudge, and the denied (403) / warming / connecting gates. Renders the slot — the live view
+ * — only for a reachable daemon, so a not-ready (or just-switched-to) sandbox never presents dead controls or
+ * another sandbox's data. Multi-root on purpose: the host's <main> provides the flex column and the
+ * positioning context for the absolute mismatch bar.
+ *
+ * Every one of these is a GATE: the view behind it is unusable, which is what earns an interruption. The
+ * sandbox's non-blocking errands (rebuild, proposal, secrets, a new release) used to ride here as bars too —
+ * they now badge the rail's sandbox chip, where a standing condition belongs. The mismatch nudge stays because
+ * it fires in the pre-bind window, before there is a bound sandbox for a chip to be about. */
 
 const { user } = useAuth();
 const { clearCredential } = useGoogleIdentity();
@@ -40,12 +42,6 @@ const warming = computed(() => connection.value.phase === `online` && !daemonRea
 // A hydrated (IndexedDB-restored) tree marks the sandbox as previously visited: paint it stale-while-
 // revalidate instead of the connecting gate; the SSE connect refetches everything the moment it lands.
 const { tree } = useWorkspaceTree();
-// The sandbox's environment overlay: a pending rebuild or an unreviewed agent proposal is otherwise buried on
-// the /sandbox hub (no rail tile), so surface it as a global bar with a one-click route to where it's handled.
-const { pending: envPending, proposal: envProposal } = useEnvironment();
-// A newer sandbox image (optional, non-blocking): a gentle, dismissible nudge to /sandbox. Lower priority than
-// the env-rebuild bar — only shown when no env action is pending, so at most one bar competes for attention.
-const { bannerVisible: versionUpdateVisible, dismiss: dismissVersionUpdate } = useSandboxVersion();
 
 // Pre-check: the browser holds both the platform account email and the identity it presents to the daemon
 // (useSandboxSession). Before the daemon binds (the pre-bind window: not yet reachable, not yet 403), warn if
@@ -88,36 +84,8 @@ const switchAccount = (): void => {
          falls back to the full gate, so a dead sandbox (cleanup.sh, stopped container) never renders an
          operable-looking workspace for more than the couple of attempts that prove it dead. -->
     <SandboxConnecting v-else-if="!reachable && (tree.length === 0 || outage)" />
-    <template v-else>
-        <!-- The sandbox environment needs owner action that lives on the Sandbox ▸ Environment tab — surface it
-             everywhere, since that hub has no rail tile. Rebuild takes priority over an unreviewed proposal. -->
-        <RouterLink
-            v-if="envPending || envProposal"
-            to="/sandbox/environment"
-            class="flex shrink-0 items-center gap-3 border-b border-warning/40 bg-warning/10 px-4 py-2 text-xs text-warning hover:bg-warning/15"
-        >
-            <Icon name="exclamation-triangle" />
-            <span class="min-w-0 flex-1">
-                <template v-if="envPending">Your sandbox needs a quick rebuild to finish setting up your new capabilities.</template>
-                <template v-else>The agent proposed a change to your sandbox environment — review it.</template>
-            </span>
-            <span class="shrink-0 font-medium underline underline-offset-2">{{ envPending ? "Show me how" : "Review" }} →</span>
-        </RouterLink>
-        <!-- Lower priority than the env bar (v-else-if), so only one competes for attention. Optional + non-
-             blocking, so muted (not warning) chrome and a dismiss ×; a newer release re-shows it (per-version). -->
-        <div
-            v-else-if="versionUpdateVisible"
-            class="flex shrink-0 items-center gap-3 border-b border-line bg-overlay/60 px-4 py-2 text-xs text-muted"
-        >
-            <Icon name="arrow-circle-up" />
-            <RouterLink to="/sandbox" class="min-w-0 flex-1 hover:text-content">
-                A new sandbox version is available — update when convenient.
-                <span class="font-medium underline underline-offset-2">Show me how →</span>
-            </RouterLink>
-            <button type="button" aria-label="Dismiss" class="shrink-0 hover:text-content" @click="dismissVersionUpdate">
-                <Icon name="times" />
-            </button>
-        </div>
-        <slot />
-    </template>
+    <!-- No bar rides above the live view. A pending rebuild, an unreviewed proposal, missing secrets and a new
+         release are standing conditions rather than events, so they badge the rail's sandbox chip and list
+         themselves in its popover (sandboxAttention) instead of taking a row off every view until dismissed. -->
+    <slot v-else />
 </template>

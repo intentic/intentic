@@ -7,7 +7,7 @@ import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath } from "../core-views/registry";
 import { usePanels } from "../composables/extensions/usePanels";
-import { useMissingSecretCount } from "../composables/secrets/useSecrets";
+import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
@@ -48,7 +48,12 @@ const sandbox = useSandbox();
 const { user, plan, entitlements, upgradeOpen, signOut } = useAuth();
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
-const { missingRequiredCount } = useMissingSecretCount();
+/* What the sandbox needs from its owner. The desktop splits this across two surfaces — a badge on the rail's
+ * collapsed chip, the sentences in the popover it opens — and the phone splits it the same way: the Menu TAB
+ * carries the badge, and this page, which is what the tab opens, carries the rows. So the Sandbox row below
+ * takes no badge of its own: on desktop the chip and its popover are never on screen together, here they
+ * would be, and a chip restating the section right above it is the badge saying nothing twice. */
+const { items: sandboxAttention } = useSandboxAttention();
 
 onMounted(() => {
     if (sandbox.sandboxes.value.length === 0) {
@@ -65,14 +70,7 @@ const areas = computed<readonly AreaRow[]>(() => [
         .map(extensionRow),
     { to: `/capabilities`, label: `Add a capability`, icon: `plus` },
     { to: `/terminal`, label: `Terminal`, icon: `code` },
-    {
-        to: `/sandbox`,
-        label: `Sandbox`,
-        icon: `box`,
-        ...(missingRequiredCount.value > 0
-            ? { badge: { count: missingRequiredCount.value, tone: `warning` as const, tooltip: `${missingRequiredCount.value} missing` } }
-            : {}),
-    },
+    { to: `/sandbox`, label: `Sandbox`, icon: `box` },
     { to: `/settings`, label: `Settings`, icon: `cog` },
 ]);
 
@@ -93,6 +91,24 @@ const logout = async (): Promise<void> => {
 
 <template>
     <div class="mx-auto flex w-full max-w-lg flex-col gap-6 p-4">
+        <!-- What the badge on this page's own tab is about: one row per pending item, each tapping through to
+             the hub tab that resolves it. First on the page, because the badge is what brought the reader. -->
+        <section v-if="sandboxAttention.length > 0" class="flex flex-col gap-1">
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Needs you</h2>
+            <RouterLink
+                v-for="item in sandboxAttention"
+                :key="item.message"
+                :to="item.to"
+                class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-content transition-colors active:bg-overlay"
+            >
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center" :class="item.tone === 'warning' ? 'text-warning' : 'text-link'">
+                    <Icon :name="item.icon" class="text-base" />
+                </span>
+                <span class="min-w-0 flex-1 text-xs">{{ item.message }}</span>
+                <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
+            </RouterLink>
+        </section>
+
         <!-- Sandboxes: tap to switch; the active one shows its live status dot. -->
         <section class="flex flex-col gap-1">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Sandboxes</h2>
