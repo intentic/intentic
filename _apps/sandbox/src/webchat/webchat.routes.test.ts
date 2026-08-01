@@ -9,6 +9,7 @@ import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
+import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "../testing.js";
 import { createWebchatRoutes } from "./webchat.routes.js";
 
@@ -18,6 +19,7 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
+        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async (e) => void appends.push(e as ActivityEvent), list: async () => [] },

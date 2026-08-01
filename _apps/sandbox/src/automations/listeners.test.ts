@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentTurn, Automation } from "@intentic/sandbox-contract";
@@ -6,6 +6,7 @@ import { expect, test, vi } from "vitest";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
+import { CHANNEL_SESSION_TTL_MS, fileThreadSessionsStore, threadKey } from "../sessions/thread-sessions.js";
 import { unstubbed } from "../testing.js";
 import { fileAutomationsStore } from "./automations-store.js";
 import { createMessageBatcher, dispatchListenerMessage, type ListenerMessage, type MessageContext, reportListenerFailure } from "./listeners.js";
@@ -16,6 +17,7 @@ const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
+        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
@@ -55,6 +57,7 @@ const longLine = (tag: string): string => tag + "x".repeat(30_000);
 const context = (stream?: TurnStream): MessageContext => ({
     origin: { automationId: "a", provider: "discord", channelId: "c1", author: "alice" },
     title: "alice: hi",
+    thread: threadKey("discord", "a", "c1"),
     ...(stream !== undefined ? { stream } : {}),
 });
 
@@ -162,6 +165,70 @@ test("a dispatched message opens an isolated conversation stamped with where it 
     // Titled by the message's first line, not by the automation's prompt — every fire shares that prompt, so a
     // prompt-derived title would give a board full of identical cards.
     expect(turn.title).toBe("alice: can you look at the build?");
+});
+
+/* ---- threading: the property that makes a channel a conversation rather than a series of strangers ---- */
+
+// A wake that also mints a provider session, so the next fire has something to resume.
+const captureWithSession = (turns: AgentTurn[], sessionId: string): WakeFn =>
+    async function* (_services, input) {
+        turns.push(input);
+        yield { kind: "session", sessionId };
+        yield { kind: "done" };
+    };
+
+test("a follow-up message in the same channel reuses the conversation and resumes its session", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    // A distinct id per test: the batcher map is a module singleton keyed by automation id, so a shared id
+    // would hand this test the previous one's batcher — closed over ITS services and wake.
+    await services.automations.upsert(listenerAutomation("thread-follow-up"));
+    const turns: AgentTurn[] = [];
+    await dispatchListenerMessage(services, message(), captureWithSession(turns, "sess-1"), 5);
+    await vi.waitFor(() => expect(turns).toHaveLength(1));
+    await dispatchListenerMessage(services, message({ id: "m2", content: "and one more thing" }), captureWithSession(turns, "sess-1"), 5);
+    await vi.waitFor(() => expect(turns).toHaveLength(2));
+    const [first, second] = turns as [AgentTurn, AgentTurn];
+    // One card, one worktree, one agent that remembers — not a second stranger.
+    expect(second.conversationId).toBe(first.conversationId);
+    expect(first.sessionId).toBeUndefined();
+    expect(second.sessionId).toBe("sess-1");
+});
+
+test("two channels of one automation get two conversations", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(listenerAutomation("thread-two-channels"));
+    const turns: AgentTurn[] = [];
+    await dispatchListenerMessage(services, message(), captureWithSession(turns, "sess-1"), 5);
+    await vi.waitFor(() => expect(turns).toHaveLength(1));
+    await dispatchListenerMessage(services, message({ id: "m2", channelId: "c2" }), captureWithSession(turns, "sess-2"), 5);
+    await vi.waitFor(() => expect(turns).toHaveLength(2));
+    const [first, second] = turns as [AgentTurn, AgentTurn];
+    expect(second.conversationId).not.toBe(first.conversationId);
+    // #eng's thread must not resume #design's session.
+    expect(second.sessionId).toBeUndefined();
+});
+
+test("a channel quiet past the TTL starts a fresh conversation on the next message", async () => {
+    const root = mkdtempSync(join(tmpdir(), "listen-"));
+    const services = fakeServices(root);
+    await services.automations.upsert(listenerAutomation("thread-ttl"));
+    const turns: AgentTurn[] = [];
+    await dispatchListenerMessage(services, message(), captureWithSession(turns, "sess-1"), 5);
+    await vi.waitFor(() => expect(turns).toHaveLength(1));
+    // Age the record past the window instead of mocking the clock — the dispatcher's own TTL read is what's
+    // under test, and the store is the only thing that carries "when was this channel last active".
+    const path = join(root, "thread-sessions.json");
+    const key = threadKey("discord", "thread-ttl", "c1");
+    const aged = JSON.parse(readFileSync(path, "utf8")) as Record<string, { lastAt: number }>;
+    (aged[key] as { lastAt: number }).lastAt = Date.now() - CHANNEL_SESSION_TTL_MS - 1;
+    writeFileSync(path, JSON.stringify(aged));
+
+    await dispatchListenerMessage(services, message({ id: "m2", content: "new topic" }), captureWithSession(turns, "sess-2"), 5);
+    await vi.waitFor(() => expect(turns).toHaveLength(2));
+    const [first, second] = turns as [AgentTurn, AgentTurn];
+    expect(second.conversationId).not.toBe(first.conversationId);
+    // A stale thread is a fresh start, not a resume of a session whose subject moved on hours ago.
+    expect(second.sessionId).toBeUndefined();
 });
 
 test("dispatch honors eventType — a message-only listener ignores voice transcripts but fires on messages", async () => {

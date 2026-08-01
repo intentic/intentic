@@ -30,6 +30,7 @@ import { createBootTracker } from "./platform/boot.js";
 import { createPerfTracker } from "./platform/perf.js";
 import { mintPairing } from "./platform/sync.js";
 import { userPromptsOf } from "./sessions/prompt-index.js";
+import type { ThreadSession, ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { AgentTool } from "./agent/agent-tools.js";
 import { listenerProvidersOf } from "./extensions/installed-extensions.js";
@@ -95,6 +96,34 @@ const memoryAutomationsStore = (initial: AutomationRecord[] = []): AutomationsSt
             const record = automations.find((automation) => automation.id === id);
             if (record !== undefined) {
                 record.runs = [run, ...record.runs];
+            }
+        },
+    };
+};
+
+// An in-memory thread-session store, so the routes that turn an inbound message into a CONVERSATION (the
+// Doorbell, a listener gateway's dispatch) are testable without the fs. Honours the TTL, because "a quiet
+// thread starts over" is behaviour and not bookkeeping.
+const memoryThreadSessionsStore = (): ThreadSessionsStore => {
+    const sessions = new Map<string, ThreadSession>();
+    const live = (key: string, ttlMs: number, now: number): ThreadSession | undefined => {
+        const record = sessions.get(key);
+        return record !== undefined && now - record.lastAt <= ttlMs ? record : undefined;
+    };
+    return {
+        get: async (key, ttlMs, now) => live(key, ttlMs, now),
+        open: async (key, mintConversationId, ttlMs, now) => {
+            const existing = live(key, ttlMs, now);
+            const record: ThreadSession = existing
+                ? { ...existing, lastAt: now, messages: existing.messages + 1 }
+                : { conversationId: mintConversationId(), startedAt: now, lastAt: now, messages: 1 };
+            sessions.set(key, record);
+            return record;
+        },
+        settle: async (key, sessionId, now) => {
+            const existing = sessions.get(key);
+            if (existing !== undefined) {
+                sessions.set(key, { ...existing, lastAt: now, ...(sessionId !== undefined ? { sessionId } : {}) });
             }
         },
     };
@@ -231,6 +260,9 @@ const services = (overrides: ServiceOverrides = {}): Services => {
             clearTurn: async () => {},
             clearFire: async () => {},
         },
+        // In-memory thread sessions: every inbound-message fire (Doorbell, listener gateway) resolves which
+        // conversation it belongs to through this, and these suites only need it to answer consistently.
+        threadSessions: memoryThreadSessionsStore(),
         activity: { append: async () => {}, list: async () => [] },
         usage: unstubbed("usage", { record: async () => {}, rollup: async () => [], turns: async () => [], ...usage }),
         // The schema's own defaults, not a copy of them — every flag is opt-in, so parsing an empty object is
@@ -3519,6 +3551,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.pipelines",
         "intentic.preview",
         "intentic.repo-apps",
+        "intentic.slack",
         "intentic.viewers",
     ]);
 });

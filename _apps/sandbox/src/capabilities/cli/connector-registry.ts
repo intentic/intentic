@@ -39,8 +39,16 @@ export const connectorEnv = (spec: ConnectorContribution, config: Record<string,
     return env;
 };
 
-// The single field a connector marks `secret` — the /secrets inventory key. Install-time validation caps it at
-// one; undefined when a connector carries no secret.
+/* Every field a connector marks `secret` — what must never be echoed back to the browser (see echoConfig). A
+ * connector can carry more than one: Slack needs an app-level token to open its socket AND a bot token for the
+ * Web API, and neither belongs in a CapabilitySummary. */
+export const connectorSecretFields = (spec: ConnectorContribution): Set<string> =>
+    new Set(spec.fields.filter((field) => field.secret === true).map((field) => field.key));
+
+// The credential a user ROTATES — the /secrets inventory key, revealed and replaced through that page. The
+// FIRST secret field when a connector declares several (Slack's bot token, the one that expires in practice);
+// rotating a secondary one is a re-add of the capability, as it is for an ipsec tunnel's PSK. undefined when a
+// connector carries no secret.
 export const connectorSecretField = (spec: ConnectorContribution): string | undefined => spec.fields.find((field) => field.secret === true)?.key;
 
 // The checkout-relative skill/fragment paths as absolute.

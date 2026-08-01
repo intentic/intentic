@@ -6,7 +6,7 @@ import { type ConfigStore, createConfigStore } from "../inventory/config-store.j
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";
-import { connectorSecretField, type ResolvedConnector } from "./cli/connector-registry.js";
+import { connectorSecretField, connectorSecretFields, type ResolvedConnector } from "./cli/connector-registry.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
 // The narrow slice of the daemon a capability handler may touch — deliberately no agent/auth/sessions surface.
@@ -145,19 +145,23 @@ export const echoConfig = (capability: Capability, connectors: Map<string, Resol
         case "integration":
             return { provider: capability.config.provider };
         case "cli": {
-            // Echo the non-secret fields (url etc.) for display; the secret one becomes hasSecret. The web
-            // renders the card's label/logo from the connector manifest, not from this echo.
+            // Echo the non-secret fields (url etc.) for display; the rotatable secret becomes hasSecret. EVERY
+            // declared secret is withheld, not just that one — a two-token connector (Slack: an app-level token
+            // to open the socket, a bot token for the Web API) must not ship its second credential to the
+            // browser by not being the one /secrets happens to rotate. The web renders the card's label/logo
+            // from the connector manifest, not from this echo.
             const spec = connectors.get(capability.config.provider)?.spec;
-            const secretKey = spec === undefined ? undefined : connectorSecretField(spec);
+            const secretKeys = spec === undefined ? new Set<string>() : connectorSecretFields(spec);
+            const rotatable = spec === undefined ? undefined : connectorSecretField(spec);
             const echo: Record<string, string | number | boolean> = {};
             for (const [key, value] of Object.entries(capability.config)) {
-                if (key !== secretKey) {
+                if (!secretKeys.has(key)) {
                     echo[key] = value;
                 }
             }
             return {
                 ...echo,
-                hasSecret: secretKey !== undefined && capability.config[secretKey] !== undefined && capability.config[secretKey] !== "",
+                hasSecret: rotatable !== undefined && capability.config[rotatable] !== undefined && capability.config[rotatable] !== "",
             };
         }
         case "ssh":

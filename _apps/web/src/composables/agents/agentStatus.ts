@@ -255,6 +255,7 @@ export const effectiveAutoLand = (agent: { readonly autoLand?: boolean } | undef
 // extension-declared), so an unknown one degrades to its own name rather than disappearing.
 const ORIGIN_SOURCES: Record<string, { icon: IconName; label: string }> = {
     discord: { icon: `comments`, label: `Discord` },
+    slack: { icon: `comments`, label: `Slack` },
     imap: { icon: `envelope`, label: `Email` },
     webchat: { icon: `globe`, label: `Doorbell` },
     webhook: { icon: `bolt`, label: `Webhook` },

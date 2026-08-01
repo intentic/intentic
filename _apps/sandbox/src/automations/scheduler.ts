@@ -66,7 +66,7 @@ const AUTOMATION_ID_IN_CONVERSATION = 40;
 // Two fires of one automation can't share a millisecond (fires are serialized per automation), but the counter
 // costs nothing and makes the id unique per PROCESS regardless of who calls this.
 let fireSeq = 0;
-const mintConversationId = (automationId: string, now: number): string =>
+export const mintConversationId = (automationId: string, now: number): string =>
     `a-${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-${now.toString(36)}${(fireSeq++).toString(36)}`;
 
 // Everything a fire needs beyond the automation itself. An options object rather than five positional flags:
@@ -207,11 +207,13 @@ export const fireAutomation = async (
         const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- Event payload ---\n${capped}` : automation.prompt;
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
-        // Every fire opens a CONVERSATION and therefore a fleet card. Outside messages are isolated so the user
-        // can open, follow live, and keep talking in after the wake ends. One per FIRE, not per channel
-        // — each mention is its own agent with its own branch, which is what makes two of them reviewable
-        // separately. Schedule and chore wakes work in the shared workspace but keep the same registry,
-        // transcript and restart lifecycle; placement no longer decides whether a conversation exists.
+        // Every fire lands in a CONVERSATION and therefore on a fleet card. Outside messages are isolated so the
+        // user can open, follow live, and keep talking in after the wake ends. WHICH conversation is the
+        // dispatcher's call: a listener channel and a Doorbell visitor each own one for as long as they stay
+        // active (thread-sessions.ts), so a run of messages is one reviewable agent; a schedule or chore wake
+        // has no thread and mints a fresh one below. Schedule and chore wakes work in the shared workspace but
+        // keep the same registry, transcript and restart lifecycle; placement no longer decides whether a
+        // conversation exists.
         const turn: AgentTurn & { conversationId: string } = {
             // STREAM_NOTE is applied here rather than folded into `body`, so it belongs to THIS fire and not to
             // the journal entry above. A re-fire has no live sink to write into — the Discord message the deltas

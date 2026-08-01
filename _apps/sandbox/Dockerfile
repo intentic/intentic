@@ -1,5 +1,5 @@
 # The per-project AI-agent sandbox image (published as registry.gitlab.com/radarsu/intentic/sandbox). The
-# monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the six baked packages
+# monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the seven baked packages
 # (turbo, warm cache) and prunes their production trees + the iq models into .image-out/, which enters this
 # build as the named context `trees`. Every layer here is a pinned tool install (registry-cache-stable) or a
 # cheap tree COPY, so a source change rebuilds in seconds — no pnpm install / turbo run inside a cacheless
@@ -281,7 +281,8 @@ RUN npm install -g node-gyp \
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors is data-only (manifest + connector skills + client image fragments) so it copies straight
-# from context; discord and imap ship their deployed gateway trees from the trees context (node_modules included).
+# from context; discord, imap and slack ship their deployed gateway trees from the trees context (node_modules
+# included).
 COPY _extensions/connectors /opt/extensions/connectors
 COPY --from=trees extensions/discord /opt/extensions/discord
 # Same glibc rationale as the sandbox rebuild above — the discord gateway's voice stack compiles opus from source.
@@ -289,6 +290,8 @@ RUN cd /opt/extensions/discord/node_modules/.pnpm/@discordjs+opus@*/node_modules
     && rm -rf prebuild build-tmp-napi-v3 \
     && npm run install
 COPY --from=trees extensions/imap /opt/extensions/imap
+# The slack gateway is pure JS (Socket Mode over undici) — no native build step to redo after the COPY.
+COPY --from=trees extensions/slack /opt/extensions/slack
 # documentation is a UI extension with daemon-side contributions, so it sits between the two groups: its views are
 # compiled into the web bundle like the manifest-only ones below, but `contributes.bin` (the intentic-docs CLI the
 # agent runs) and `contributes.agent` (the documenting skill) are read from the image, so those two directories have
@@ -300,7 +303,7 @@ COPY _extensions/documentation/bin /opt/extensions/documentation/bin
 COPY _extensions/documentation/plugin /opt/extensions/documentation/plugin
 # The web-builtin UI extensions bake their MANIFEST ONLY — their code is compiled into the web bundle
 # (extension-host/builtins.ts), so there is nothing daemon-side to ship. The manifest is what makes them exist
-# for the daemon: `GET /extensions` then enumerates all fifteen first-party extensions through one enumerator,
+# for the daemon: `GET /extensions` then enumerates all sixteen first-party extensions through one enumerator,
 # so the Extensions tab is a complete list with a working on/off switch instead of a view of one load path.
 # The pairing is checked both ways — a manifest here with no compiled-in module shows as "missing" in the tab
 # (image and web bundle built from different commits), and a module with no manifest shows as "unlisted".

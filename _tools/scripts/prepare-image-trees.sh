@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the sandbox image's payload OUTSIDE Docker: compile the six baked packages with turbo (warm cache —
+# Build the sandbox image's payload OUTSIDE Docker: compile the seven baked packages with turbo (warm cache —
 # in CI this replays release:verify's work instead of re-compiling the monorepo inside a cacheless container),
 # prune each to a production tree under .image-out/, and fetch the iq models once (.image-out/iq-models is
 # CI-cached keyed on the fetch script, and survives re-runs here). The Dockerfile consumes .image-out as the
@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli --filter=@intentic/iq \
-    --filter=@intentic/lsp --filter=@intentic/ext-discord --filter=@intentic/ext-imap
+    --filter=@intentic/lsp --filter=@intentic/ext-discord --filter=@intentic/ext-imap --filter=@intentic/ext-slack
 
 out=.image-out
 # Regenerate the deploy trees but PRESERVE the cached model dir (and its completeness marker).
@@ -20,6 +20,7 @@ pnpm --filter @intentic/iq deploy --prod "$out/iq"
 pnpm --filter @intentic/lsp deploy --prod "$out/lsp"
 pnpm --filter @intentic/ext-discord deploy --prod "$out/extensions/discord"
 pnpm --filter @intentic/ext-imap deploy --prod "$out/extensions/imap"
+pnpm --filter @intentic/ext-slack deploy --prod "$out/extensions/slack"
 
 # The Dockerfile bakes Chromium from a layer that sits ABOVE the tree COPYs (so a source change can't evict a
 # ~180 MiB download), which means it cannot read the deployed tree's playwright to decide what to install.

@@ -34,6 +34,7 @@ Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/*
 | `viewers` | UI viewers | File renderers (docx / xlsx / svg) via `contributes.viewers`. |
 | `connectors` | data-only | CLI-tool connectors as manifest data — no code. |
 | `discord` | daemon gateway | A `process` + `listener` bridging Discord to the daemon, plus the discord connector. |
+| `slack` | daemon gateway | A `process` + `listener` bridging Slack to the daemon over Socket Mode (outbound WebSocket — no public URL, no request signing), plus the slack connector. Mention replies are painted into the thread live. |
 | `imap` | daemon gateway | A `process` + `listener` watching an IMAP mailbox (new-mail / flags / expunge wakes), plus the imap connector. |
 | `rtk` | environment fragment | Ships the rtk binary into the sandbox image overlay (output-filter benchmarking); git-install opt-in. |
 
@@ -53,7 +54,7 @@ renders and what the on/off switch acts on. The paths differ only in where the *
   miss the middle one and it shows as `missing`. (Note the three *core* view contributions in
   `_apps/web/src/core-views/coreViews.ts` are **not** extensions — they're privileged in-app views coupled to
   platform internals; see that file and ARCHITECTURE.md.)
-- **Baked into the sandbox image** (`connectors`, `discord`, `imap`): the whole checkout copied to
+- **Baked into the sandbox image** (`connectors`, `discord`, `slack`, `imap`): the whole checkout copied to
   `/opt/extensions` by the sandbox [Dockerfile](../_apps/sandbox/Dockerfile) and read via `EXTENSIONS_DIR` —
   present in every sandbox, `builtin: true` on `GET /extensions`, not removable, no capability entry. This is
   how connector capability cards exist out of the box.

@@ -2,7 +2,8 @@ import type { AgentOrigin } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
-import { fireAutomation, PAYLOAD_MAX, TITLE_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
+import { CHANNEL_SESSION_TTL_MS, threadKey } from "../sessions/thread-sessions.js";
+import { fireAutomation, mintConversationId, PAYLOAD_MAX, TITLE_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 
 // Realtime agent wake-ups: provider sources hold a live connection (e.g. the Discord gateway) and dispatch
 // normalized messages here; `listener`-kind automations fire from them through the same guard/wake/run-history
@@ -10,11 +11,17 @@ import { fireAutomation, PAYLOAD_MAX, TITLE_MAX, type TurnStream, type WakeFn } 
 // tick, so the daemon holds a provider connection ONLY while an enabled listener automation and the
 // provider's capability both exist.
 //
-// Each fire opens a real CONVERSATION (see FireOptions.origin): the message rides in as the opening context of
-// an isolated agent that shows up on the fleet board and opens as a chat tab, so an inbound Discord mention is
-// the same object as a chat the user started — only the first prompt comes from the automation's config and
-// the message rather than from a person. That's why the batcher carries provenance and a title alongside the
-// payload: they are what the conversation is created with.
+// Each fire opens or CONTINUES a real conversation (see FireOptions.origin): the message rides in as the
+// opening context of an isolated agent that shows up on the fleet board and opens as a chat tab, so an inbound
+// Discord mention is the same object as a chat the user started — only the first prompt comes from the
+// automation's config and the message rather than from a person. That's why the batcher carries provenance, a
+// title and a thread key alongside the payload: they are what the conversation is created with, and which one
+// it is.
+//
+// A channel is a THREAD (sessions/thread-sessions.ts), not a series of strangers: every message in it resumes
+// the same conversation and provider session until the channel goes quiet past CHANNEL_SESSION_TTL_MS, after
+// which the next one starts fresh. Without that, tagging the bot five times in #eng was five fleet cards, five
+// worktrees, and five agents that had never heard of each other.
 
 // How long a quiet gap ends a burst — rapid-fire messages batch into one wake. The timer restarts on
 // every message, so bursts still coalesce; a lone mention just stops paying dead time before it fires.
@@ -54,11 +61,16 @@ export const ListenerMessageSchema = z.object({
 });
 export type ListenerMessage = z.infer<typeof ListenerMessageSchema>;
 
-// What the message that triggers a fire contributes to the conversation that fire opens: where it came from,
-// what to call it on the board, and (when the source wants the turn streamed back) the live reply sink.
+// What the message that triggers a fire contributes to the conversation that fire opens or CONTINUES: where it
+// came from, what to call it on the board, which thread it belongs to, and (when the source wants the turn
+// streamed back) the live reply sink.
 export interface MessageContext {
     readonly origin: AgentOrigin;
     readonly title: string;
+    // The channel this message arrived in, as a thread-sessions key. Computed at push time (where the message
+    // is) rather than at fire time, because one automation can watch every channel — the batch's key is the
+    // newest message's, exactly as its origin and title are.
+    readonly thread: string;
     readonly stream?: TurnStream;
 }
 
@@ -187,12 +199,28 @@ export const dispatchListenerMessage = async (
                         context.stream?.end();
                         return;
                     }
-                    await fireAutomation(services, fresh, wake, {
+                    /* The channel's LIVE conversation, or a fresh one when it has been quiet past the TTL. This
+                     * is what makes a run of mentions in one channel one agent that remembers what it just said,
+                     * instead of a fleet card and a worktree per message: the same shape the Doorbell gives a
+                     * visitor's chat, keyed by channel instead of by visitor. */
+                    const openedAt = Date.now();
+                    const session = await services.threadSessions.open(
+                        context.thread,
+                        () => mintConversationId(id, openedAt),
+                        CHANNEL_SESSION_TTL_MS,
+                        openedAt,
+                    );
+                    const settled = await fireAutomation(services, fresh, wake, {
                         payload,
+                        conversationId: session.conversationId,
+                        // Resume the provider session the last message in this channel ran on, so a follow-up
+                        // continues the thread rather than meeting the same people again.
+                        ...(session.sessionId !== undefined ? { sessionId: session.sessionId } : {}),
                         origin: context.origin,
                         title: context.title,
                         ...(context.stream !== undefined ? { stream: context.stream } : {}),
                     });
+                    await services.threadSessions.settle(context.thread, settled.sessionId, Date.now());
                 },
                 (error) => {
                     services.logger.error({ err: error, automation: id }, "automation run failed");
@@ -220,6 +248,7 @@ export const dispatchListenerMessage = async (
                 author: message.author.name,
             },
             title: titleOf(message),
+            thread: threadKey(message.provider, automation.id, message.channelId),
             ...(stream !== undefined ? { stream } : {}),
         });
         matched.push(automation.id);

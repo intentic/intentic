@@ -112,6 +112,7 @@ import {
     workspaceSessionExists,
 } from "./sessions/sessions.js";
 import { readSessionPrompts } from "./sessions/prompt-index.js";
+import { fileThreadSessionsStore, type ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import {
     agentTranscript,
     type AgentTranscriptDeps,
@@ -213,6 +214,10 @@ export interface Services {
     // Wakes from `requireApproval` automations, held for the owner (.intentic/approvals/, one file per wake) —
     // the /automations pending routes approve (run the held wake) or reject them.
     readonly approvals: ApprovalsStore;
+    // Which sandbox conversation each inbound THREAD owns (.intentic/thread-sessions.json) — a Doorbell
+    // visitor's chat, a Discord or Slack channel. What makes a stream of messages one agent that remembers
+    // instead of one fresh worktree per message; a thread past its TTL starts over.
+    readonly threadSessions: ThreadSessionsStore;
     // Agent-proposed post drafts (.intentic/drafts/, one file per draft) — the agent writes them; /drafts is
     // the owner's approve/edit/reject side.
     readonly drafts: DraftsStore;
@@ -571,6 +576,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         chores,
         probeRunner: createProbeRunner({ workspace, chores, agents, logger }),
         approvals: fileApprovalsStore(join(workspace.root, ".intentic", "approvals")),
+        threadSessions: fileThreadSessionsStore(join(workspace.root, ".intentic", "thread-sessions.json")),
         drafts: fileDraftsStore(join(workspace.root, ".intentic", "drafts")),
         turnJournal: fileTurnJournal(join(config.historyRoot, "turns")),
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),

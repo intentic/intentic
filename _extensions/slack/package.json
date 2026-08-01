@@ -1,0 +1,23 @@
+{
+    "name": "@intentic/ext-slack",
+    "version": "1.0.0",
+    "description": "Slack — the connected workspace as an agent tool, plus the Socket Mode gateway as a baked extension process",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@slack/socket-mode": "catalog:",
+        "@slack/web-api": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

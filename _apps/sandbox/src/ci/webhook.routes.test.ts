@@ -11,6 +11,7 @@ import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Services } from "../composition.js";
+import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "../testing.js";
 import { fileCiStore } from "./ci-store.js";
 import type { FetchFn } from "./providers.js";
@@ -35,6 +36,7 @@ const harness = async (automationId: string) => {
         automations,
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
         ciRuns: createRunsCache(60_000),
+        threadSessions: fileThreadSessionsStore(join(root, ".intentic", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
@@ -150,6 +152,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         automations,
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
         ciRuns: createRunsCache(60_000),
+        threadSessions: fileThreadSessionsStore(join(root, ".intentic", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },

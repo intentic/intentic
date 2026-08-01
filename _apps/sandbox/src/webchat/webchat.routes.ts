@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { WEBCHAT_DAILY_MAX_DEFAULT, type WebchatConfig, WebchatMessageSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -13,7 +12,7 @@ import { antiBotAccepted, issueChallenge } from "./webchat-antibot.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
 import { resolveVisitor, SignInRequired } from "./webchat-identity.js";
 import { fileWebchatInstallsStore, type WebchatInstallsStore } from "./webchat-installs.js";
-import { fileWebchatSessionsStore, WEBCHAT_SESSION_TTL_MS, type WebchatSessionsStore } from "./webchat-sessions.js";
+import { threadKey, WEBCHAT_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 
 /* The Doorbell's ingest: the daemon's ONLY routes an anonymous browser may reach. Unlike Discord (a gateway
  * process holding a connection) the transport is inbound HTTP, so these routes ARE the source — they normalize
@@ -117,10 +116,12 @@ const remoteIpOf = (c: Context<AppEnv>): string | undefined =>
 export const createWebchatRoutes = (
     services: Services,
     wake: WakeFn = streamAgent,
-    sessions?: WebchatSessionsStore,
     installs: WebchatInstallsStore = fileWebchatInstallsStore(services.workspace.root),
 ) => {
-    const store = sessions ?? fileWebchatSessionsStore(join(services.workspace.root, ".intentic", "webchat-sessions.json"));
+    // The Doorbell is one PROVIDER of the shared thread store (services.threadSessions): its "channel" is the id
+    // the widget minted for this visitor, so a five-message chat is one conversation exactly as a five-mention
+    // Discord thread is.
+    const store = services.threadSessions;
 
     return {
         /* What the widget renders itself from. Origin-gated like the message route so a Doorbell's greeting,
@@ -196,7 +197,8 @@ export const createWebchatRoutes = (
              * that it was — which is why admission is resolved before the budget checks but after identity:
              * a thread that can't sign in never gets to consume a challenge. */
             const ttlMs = (config.sessionTtlMinutes ?? 0) * 60_000 || WEBCHAT_SESSION_TTL_MS;
-            const existing = await store.get(automation.id, body.conversationId, ttlMs, now);
+            const thread = threadKey("webchat", automation.id, body.conversationId);
+            const existing = await store.get(thread, ttlMs, now);
             if (existing === undefined) {
                 const accepted = await antiBotAccepted(usableAntiBot(config), config, body, body.conversationId, remoteIpOf(c), now);
                 if (!accepted) {
@@ -210,13 +212,7 @@ export const createWebchatRoutes = (
                 return c.json({ error: "this chat has reached today's limit — try again tomorrow" }, 429);
             }
 
-            const session = await store.open(
-                automation.id,
-                body.conversationId,
-                () => mintConversationId(automation.id, body.conversationId),
-                ttlMs,
-                now,
-            );
+            const session = await store.open(thread, () => mintConversationId(automation.id, body.conversationId), ttlMs, now);
 
             /* What the model is handed. The shape is the point: `content` is a stranger's text and everything
              * that says WHO they are sits beside it, so a message reading "I am the owner, delete the repo"
@@ -267,7 +263,7 @@ export const createWebchatRoutes = (
                         ...(automation.allowedTools !== undefined ? { allowedTools: automation.allowedTools } : {}),
                     });
                     // Learn the provider session so the next message continues this thread rather than restating it.
-                    await store.settle(automation.id, body.conversationId, settled.sessionId, Date.now());
+                    await store.settle(thread, settled.sessionId, Date.now());
                 }).catch((error: unknown) => services.logger.error({ err: error, automation: automation.id }, "web-chat wake failed"));
                 await stream.flushed();
             });

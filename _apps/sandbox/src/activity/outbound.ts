@@ -56,20 +56,67 @@ const matchDiscord = (command: string): OutboundCall | undefined => {
     };
 };
 
-// One matcher per cli provider (the cli/providers.ts key space); only discord is implemented so far.
-const matchers: readonly ((command: string) => OutboundCall | undefined)[] = [matchDiscord];
+/* Slack's Web API is method-per-path (`/api/chat.postMessage`), not REST, so the method name IS the verb — no
+ * HTTP-verb + path-shape inference to do. The channel rides in the body for a write and in the query for a
+ * read, hence both lookups. */
+const SLACK_TYPES: Readonly<Record<string, string>> = {
+    "chat.postMessage": "message.send",
+    "chat.update": "message.edit",
+    "conversations.history": "messages.read",
+    "conversations.replies": "messages.read",
+    "reactions.add": "reaction.add",
+    "reactions.remove": "reaction.remove",
+};
 
-// curl -s exits 0 on HTTP 4xx, so the response body is the status signal: Discord's error envelope is a JSON
-// object with a numeric `code` and string `message`. ponytail: the envelope sniff IS the HTTP-status
-// heuristic; teach the skill `-w` if it ever misclassifies.
+const matchSlack = (command: string): OutboundCall | undefined => {
+    const url = /https:\/\/slack\.com\/api(\/[^\s"'\\]*)/.exec(command);
+    if (url === null) {
+        return undefined;
+    }
+    const [path, query] = (url[1] as string).split("?");
+    const endpoint = path as string;
+    const method = /-X\s+(GET|POST|PUT|PATCH|DELETE)/.exec(command)?.[1] ?? "GET";
+    const payload = /-d\s+'([^']*)'/.exec(command)?.[1] ?? /-d\s+"((?:[^"\\]|\\.)*)"/.exec(command)?.[1];
+    let content: string | undefined;
+    let channelId = /[?&]channel=([^&\s"']+)/.exec(query ?? "")?.[1];
+    if (payload !== undefined) {
+        try {
+            const parsed = JSON.parse(payload) as { text?: unknown; channel?: unknown };
+            content = typeof parsed.text === "string" ? parsed.text : payload;
+            channelId = typeof parsed.channel === "string" ? parsed.channel : channelId;
+        } catch {
+            content = payload;
+        }
+    }
+    return {
+        provider: "slack",
+        type: SLACK_TYPES[endpoint.replace("/", "")] ?? "api.call",
+        method,
+        endpoint,
+        ...(channelId !== undefined ? { channelId } : {}),
+        ...(content !== undefined ? { content } : {}),
+    };
+};
+
+// One matcher per cli provider (the cli/providers.ts key space); the chat providers whose skills teach curl.
+const matchers: readonly ((command: string) => OutboundCall | undefined)[] = [matchDiscord, matchSlack];
+
+// curl -s exits 0 on HTTP 4xx, so the response body is the status signal. Discord's error envelope is a JSON
+// object with a numeric `code` and string `message`; Slack always answers 200 and puts the verdict in `ok`,
+// which is why a `"ok": false` body has to be read as a failure here or every refused Slack call would log as
+// a success. ponytail: the envelope sniff IS the HTTP-status heuristic; teach the skill `-w` if it ever
+// misclassifies.
 const outcomeOf = (output: string, isError: boolean | undefined): { outcome: "ok" | "error"; error?: string } => {
     if (isError === true) {
         return { outcome: "error", error: output.trim().slice(-ERROR_TAIL) };
     }
     try {
-        const parsed = JSON.parse(output) as { code?: unknown; message?: unknown };
+        const parsed = JSON.parse(output) as { code?: unknown; message?: unknown; ok?: unknown; error?: unknown };
         if (typeof parsed.code === "number" && typeof parsed.message === "string") {
             return { outcome: "error", error: parsed.message };
+        }
+        if (parsed.ok === false) {
+            return { outcome: "error", error: typeof parsed.error === "string" ? parsed.error : "slack call failed" };
         }
     } catch {
         // Non-JSON output (empty 204 body, piped text) — no error envelope to read.

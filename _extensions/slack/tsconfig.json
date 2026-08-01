@@ -1,0 +1,14 @@
+/* The gateway runtime is a real emitting build (unlike the source-consumed web extensions): `tsc` → dist/,
+ * run by the daemon as `node dist/gateway.js`. Tests are excluded from the emit. */
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}
