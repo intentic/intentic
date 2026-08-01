@@ -2,7 +2,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
-import { useDevice } from "@intentic-app/ui";
+import { clipboardOf, useDevice } from "@intentic-app/ui";
 import { boundCommand } from "../commands/useCommands";
 import { isApplePlatform } from "../commands/keybindings";
 import { useSandbox } from "../sandbox/useSandbox";
@@ -413,13 +413,17 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     // tmux runs with `set-clipboard on`, so a copy in copy-mode (`y`, …) arrives here as OSC 52
     // with a base64 payload — land it in the browser clipboard, which xterm otherwise ignores. `?` asks to
     // READ the clipboard; that stays unanswered. Guarded: the payload is arbitrary program output.
+    // Both writes below go through the TERMINAL's own window (clipboardOf): popped out, this realm's document
+    // is the unfocused one behind, and Chrome refuses a clipboard write from it.
     term.parser.registerOscHandler(52, (data) => {
         const payload = data.slice(data.indexOf(`;`) + 1);
         if (payload === `?`) {
             return true;
         }
         try {
-            void navigator.clipboard.writeText(new TextDecoder().decode(Uint8Array.from(atob(payload), (c) => c.charCodeAt(0)))).catch(() => {});
+            void clipboardOf(term.element)
+                .writeText(new TextDecoder().decode(Uint8Array.from(atob(payload), (c) => c.charCodeAt(0))))
+                .catch(() => {});
         } catch {
             // not valid base64 — drop it rather than kill the parser
         }
@@ -434,7 +438,9 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         const selection = term.getSelection();
         if (selection !== `` && selection !== lastCopied) {
             lastCopied = selection;
-            void navigator.clipboard.writeText(selection).catch(() => {});
+            void clipboardOf(term.element)
+                .writeText(selection)
+                .catch(() => {});
         }
     });
     if (spawnWithin !== undefined && spawnWithin.clientWidth > 0 && spawnWithin.clientHeight > 0) {

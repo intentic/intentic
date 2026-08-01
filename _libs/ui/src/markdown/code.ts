@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import { clipboardOf } from "../clipboard.js";
 
 /* Fenced code blocks inside rendered markdown: Shiki colouring plus a copy button.
  *
@@ -218,7 +219,10 @@ export const codeBlockHtml = (block: CodeBlock, index: number, colour: boolean):
  * and a live turn replaces the block's DOM every frame it grows: the button pressed was gone by the time the
  * mouse came up, the click resolved to some ancestor div instead, and copying a block out of an answer still
  * being written did nothing at all. Pressing is over before a frame can intervene. `click` stays bound because
- * a keyboard activation raises nothing else — copying the same text twice is what `copiedCode` absorbs. */
+ * a keyboard activation raises nothing else — copying the same text twice is what `copiedCode` absorbs.
+ *
+ * The write goes through the BUTTON's own window rather than this module's `navigator` — in a popped-out panel
+ * those are different windows and only the button's is focused, which is the whole of clipboardOf. */
 export const copyCodeFromEvent = (event: Event): void => {
     // Not `instanceof MouseEvent`: a popped-out panel's events come from another window, whose constructors
     // are different objects. Absent on a keyboard-raised click, which is a primary activation by definition.
@@ -230,8 +234,10 @@ export const copyCodeFromEvent = (event: Event): void => {
     if (code === null || code === undefined || code === copiedCode) {
         return;
     }
-    void navigator.clipboard.writeText(code).then(
-        () => markCopied(code),
-        () => undefined, // Clipboard unavailable (insecure context); the text is still selectable.
-    );
+    void clipboardOf(button)
+        .writeText(code)
+        .then(
+            () => markCopied(code),
+            () => undefined, // Clipboard unavailable (insecure context); the text is still selectable.
+        );
 };

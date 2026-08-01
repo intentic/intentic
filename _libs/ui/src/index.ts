@@ -1,3 +1,4 @@
+export { clipboardOf } from "./clipboard.js";
 export { cmp } from "./cmp.js";
 export { default as AnchoredOverlay } from "./components/AnchoredOverlay.vue";
 export { type Cross, placeAnchored, type Side } from "./composables/anchorPlacement.js";

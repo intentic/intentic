@@ -294,6 +294,32 @@ describe(`code block copy`, () => {
         expect(written).toEqual([]);
     });
 
+    /* THE POP-OUT. A popped-out panel's DOM is teleported into a second real window while this realm keeps
+     * running the JS, so the module-global `navigator` belongs to a document the user is NOT focused on — and
+     * Chrome refuses a clipboard write from an unfocused document, silently, which is exactly what "the Copy
+     * button does nothing out here" was. The write must therefore go through the button's OWN window. An
+     * iframe stands in for the pop-out: a second same-origin realm with its own document and navigator. */
+    it(`writes through the window the button lives in, not this realm's`, async () => {
+        const frame = document.createElement(`iframe`);
+        document.body.appendChild(frame);
+        const other = frame.contentWindow as Window & typeof globalThis;
+        const outThere: string[] = [];
+        Object.defineProperty(other.navigator, `clipboard`, {
+            configurable: true,
+            value: { writeText: (text: string): Promise<void> => (outThere.push(text), Promise.resolve()) },
+        });
+        const container = other.document.createElement(`div`);
+        container.innerHTML = renderMarkdown("```ts\nexport const poppedOut = 7;\n```");
+        container.addEventListener(`pointerdown`, copyCodeFromEvent);
+        other.document.body.replaceChildren(container);
+
+        (container.querySelector(`.md-code-copy`) as HTMLElement).dispatchEvent(new other.MouseEvent(`pointerdown`, { bubbles: true }));
+        await Promise.resolve();
+
+        expect(outThere).toEqual([`export const poppedOut = 7;`]);
+        expect(written).toEqual([]);
+    });
+
     it(`works from the keyboard, where a click is the only event raised`, async () => {
         const container = surface(renderMarkdown("```ts\nexport const keyed = 6;\n```"));
         (container.querySelector(`.md-code-copy`) as HTMLElement).dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
