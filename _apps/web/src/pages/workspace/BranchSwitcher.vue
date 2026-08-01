@@ -130,7 +130,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 <!-- "gone" is not the same as "no upstream": the branch WAS tracking something
                                      that has since been deleted on the remote, which is the usual sign a PR
                                      merged and this local copy is safe to drop. -->
-                                <span v-if="branch.gone" class="shrink-0 text-2xs text-warning" v-tooltip.left="'Upstream branch was deleted'"
+                                <span v-if="branch.gone" class="shrink-0 text-2xs text-warning" v-tooltip.top="'Upstream branch was deleted'"
                                     >gone</span
                                 >
                                 <span v-if="branch.behind > 0" class="shrink-0 text-2xs text-subtle">↓{{ branch.behind }}</span>
@@ -144,7 +144,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 :class="{ 'text-danger opacity-100': armedDelete === branch.name }"
                                 :disabled="busy"
                                 @click="askDelete(branch.name)"
-                                v-tooltip.left="'Delete branch'"
+                                v-tooltip.top="'Delete branch'"
                                 aria-label="Delete branch"
                             >
                                 <Icon name="trash" class="text-2xs" />

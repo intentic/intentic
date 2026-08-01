@@ -115,9 +115,11 @@ const changesMark = computed(() => {
     return changes.count.value > 0 || work === undefined ? {} : { mark: outgoingMark(work), markTitle: outgoingSummary(work) };
 });
 const segmentOptions = computed(() => [
-    { label: `Files`, value: `files` as const, title: `Browse the workspace files` },
-    { label: `Changes`, value: `changes` as const, title: `Review uncommitted changes`, badge: changes.count.value, ...changesMark.value },
-    { label: `Checkpoints`, value: `history` as const, title: `Workspace checkpoints` },
+    // Touch has no hover, so no hint here says anything a finger can reach — see the desktop twin. The mark
+    // spread stays: `markTitle` is inert on this form factor, but the CHIP is what the tab is here for.
+    { label: `Files`, value: `files` as const },
+    { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
+    { label: `Checkpoints`, value: `history` as const },
 ]);
 
 const filter = ref(``);
@@ -351,9 +353,9 @@ const onPick = (event: Event): void => {
                         v-model="searchScope"
                         size="xs"
                         :options="[
-                            { label: `Name`, value: `name`, title: `Filter by file name` },
-                            { label: `Text`, value: `text`, title: `Search file contents for this exact text` },
-                            { label: `Smart`, value: `smart`, title: `Search by meaning — ranked across the indexed workspace` },
+                            { label: `Name`, value: `name` },
+                            { label: `Text`, value: `text` },
+                            { label: `Smart`, value: `smart` },
                         ]"
                     />
                 </div>

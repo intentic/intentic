@@ -139,17 +139,13 @@ const building = computed(() => health.value?.freshness.state === `building`);
                             <li v-for="(row, index) in rows" :key="row.path" class="row-line group/row rounded px-1 py-1 hover:bg-overlay">
                                 <!-- One hue for every bar: length is the whole message, and a colour keyed to the
                                      bar's own size would double-encode it. Text keeps text tokens throughout. -->
-                                <button
-                                    type="button"
-                                    class="hs-row min-w-0 flex-1 text-left"
-                                    v-tooltip.top="`${row.path} — +${row.adds} -${row.dels} lines`"
-                                    @click="emit('open-file', row.path)"
-                                >
+                                <button type="button" class="hs-row min-w-0 flex-1 text-left" @click="emit('open-file', row.path)">
                                     <span class="text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>
                                     <!-- The DIRECTORY takes the truncation; the filename is what identifies the
-                                         row, so it never shrinks. -->
+                                         row, so it never shrinks — and it is the directory, not the row, that
+                                         earns a tooltip, and only while it is actually cut off. -->
                                     <span class="flex min-w-0 overflow-hidden text-xs">
-                                        <span class="truncate text-subtle">{{ row.dir }}</span>
+                                        <span class="truncate text-subtle" v-tooltip.top.overflow="row.dir">{{ row.dir }}</span>
                                         <span class="shrink-0 text-content">{{ row.name }}</span>
                                     </span>
                                     <span class="h-1.5 rounded-full bg-overlay">
@@ -191,15 +187,10 @@ const building = computed(() => health.value?.freshness.state === `building`);
                     <!-- No bar here: the RANK is the claim, and export counts are not a magnitude worth drawing. -->
                     <ul v-else class="mt-2 flex flex-col">
                         <li v-for="(module, index) in modules" :key="module.path" class="row-line group/row rounded px-1 py-1 hover:bg-overlay">
-                            <button
-                                type="button"
-                                class="flex min-w-0 flex-1 items-center gap-2 text-left"
-                                v-tooltip.top="module.path"
-                                @click="emit('open-file', module.path)"
-                            >
+                            <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="emit('open-file', module.path)">
                                 <span class="w-5 shrink-0 text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>
                                 <span class="flex min-w-0 flex-1 overflow-hidden text-xs">
-                                    <span class="truncate text-subtle">{{ module.dir }}</span>
+                                    <span class="truncate text-subtle" v-tooltip.top.overflow="module.dir">{{ module.dir }}</span>
                                     <span class="shrink-0 text-content">{{ module.name }}</span>
                                 </span>
                                 <span class="shrink-0 text-2xs tabular-nums text-muted">{{ formatCount(module.exports) }} exports</span>

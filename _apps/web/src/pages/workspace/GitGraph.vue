@@ -286,9 +286,7 @@ const runPending = async (): Promise<void> => {
             <!-- The checked-out branch, and the switch/create/delete popover behind it. A detached HEAD has
                  no branch to show as a pill, but the switcher is still the way BACK onto one. -->
             <BranchSwitcher :repo="repo" />
-            <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted" v-tooltip.bottom="'Commits shown'">{{
-                commits.length
-            }}</span>
+            <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ commits.length }}</span>
             <span class="flex-1"></span>
             <Icon v-if="loading" name="spinner" class="shrink-0 text-2xs text-subtle" spin />
         </div>
@@ -345,7 +343,6 @@ const runPending = async (): Promise<void> => {
                         :key="ref"
                         class="shrink-0 rounded px-1 text-[0.6rem]"
                         :class="refBadge(ref).tag ? 'bg-warning/15 text-warning' : 'bg-overlay text-muted'"
-                        v-tooltip.bottom="refBadge(ref).tag ? 'tag' : 'branch'"
                         >{{ refBadge(ref).label }}</span
                     >
                     <span class="min-w-0 flex-1 truncate text-xs" :class="commit.sha === openSha ? 'text-content' : 'text-content/90'">{{

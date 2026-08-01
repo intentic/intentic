@@ -43,7 +43,9 @@ export interface ViewBadge {
     // `warning` marks a risk the user is carrying (an exposed port); `danger` means something is BROKEN.
     // Reach for danger sparingly — its whole value is that it is rare enough to still mean something.
     readonly tone?: "info" | "warning" | "danger" | undefined;
-    // Hover text. Say what happened and how much, not just the number the user can already see.
+    // Say what happened and how much, not just the number the user can already see. The host renders it
+    // AFTER the view's own name — "Agents · 3 need you" on the rail, the chip's text in the mobile menu — so
+    // phrase it as the continuation of a label, not as a standalone sentence that repeats the view.
     readonly tooltip?: string | undefined;
 }
 

@@ -127,7 +127,7 @@ const close = (name: string): void => void closeBrowser(name);
                     type="button"
                     class="flex min-w-0 shrink-0 items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors"
                     :class="page.id === activePage?.id ? 'bg-primary-600/15 text-link' : 'text-muted hover:text-content'"
-                    :title="page.url"
+                    v-tooltip.bottom="page.url"
                     @click="pickPage(page)"
                 >
                     <Icon name="globe" class="shrink-0 text-2xs" />
@@ -143,7 +143,7 @@ const close = (name: string): void => void closeBrowser(name);
                     type="button"
                     class="ml-auto shrink-0 rounded border border-line px-1.5 py-0.5 transition-colors hover:text-content"
                     :class="{ 'text-link': view.driving.value }"
-                    :title="
+                    v-tooltip.bottom="
                         view.driving.value
                             ? 'Stop sending your clicks and keystrokes to the agent\'s browser'
                             : 'Send your clicks and keystrokes to the agent\'s browser'
@@ -157,7 +157,7 @@ const close = (name: string): void => void closeBrowser(name);
                     v-if="current?.running"
                     type="button"
                     class="shrink-0 rounded border border-line px-1.5 py-0.5 transition-colors hover:text-danger"
-                    title="Close this browser — the agent's next browser tool call will fail"
+                    v-tooltip.bottom="`Close this browser — the agent's next browser tool call will fail`"
                     @click="close(current.name)"
                 >
                     Close

@@ -27,7 +27,29 @@ import type { Directive, DirectiveBinding } from "vue";
  * title>`, which is a required accessible name rather than a hint, and the panel resize handles, where the
  * browser's ~1s delay is the point — these open instantly, and a handle you sweep past on the way somewhere
  * else should not flash a box each time. Everything else that hints belongs here, so it can be restyled,
- * re-measured and kept out of the wrong window from one file. */
+ * re-measured and kept out of the wrong window from one file.
+ *
+ * WHEN A CONTROL EARNS ONE. A tooltip is a LABEL FOR A CONTROL THAT HAS NO VISIBLE LABEL — not a place to
+ * park prose that didn't fit. The audit that produced this list found 241 call sites, a third of them
+ * telling the user something already on their screen, so the bar is written down rather than re-litigated:
+ *
+ *   1. An icon-only button, link or rail tile: yes. Three words or fewer, naming the action.
+ *   2. `.overflow` on the element that actually clips: yes, always — that is text the user asked for and
+ *      cannot read.
+ *   3. A disabled control may say why it is disabled.
+ *   4. A NON-INTERACTIVE element does not get a hover label. If a glyph or a number needs decoding, decode
+ *      it on screen or drop the glyph — hovering a chip to be told the word you are reading is the kind of
+ *      hint that teaches people to stop hovering anything. The one exception is a mark carrying a VALUE
+ *      that exists nowhere else: an error string, a status detail, the name behind a bare dot.
+ *   5. ONE TOOLTIP PER HOVER TARGET. Never put one on a descendant of a tooltipped element — `mouseenter`
+ *      fires on both and the two boxes open on top of each other (the rail's tile-plus-badge did exactly
+ *      this). Fold the child's text into the parent's label instead.
+ *   6. Placement follows the layout: `.top`/`.bottom` inside a horizontal cluster, `.right`/`.left` inside
+ *      a vertical stack. Sideways is for a narrow column spilling into the wide area next door, never for a
+ *      button spilling onto the button beside it.
+ *   7. Consequence disclosure belongs BESIDE the control as muted text, not in here. A hover paragraph
+ *      never reaches a touch device, and it is gone the moment the pointer moves — see AgentConflictReport,
+ *      which pairs every button with the sentence that qualifies it. */
 
 const GAP = 6; // px between the anchor and the box — leaves room for the arrow
 const EDGE = 8; // px of viewport kept clear on every side

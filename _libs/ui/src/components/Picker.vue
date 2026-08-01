@@ -109,7 +109,6 @@ const applyPick = (option: PickerOption<T>): void => {
         aria-haspopup="listbox"
         :aria-expanded="popoverOpen || sheetOpen"
         :aria-label="ariaLabel"
-        :title="selected?.label"
         @click="toggle"
         @keydown.down.prevent="openFromKey"
         @keydown.up.prevent="openFromKey"
@@ -119,7 +118,14 @@ const applyPick = (option: PickerOption<T>): void => {
                 <Icon v-if="selected.icon !== undefined" :name="selected.icon" class="shrink-0 text-xs text-muted" aria-hidden="true" />
             </slot>
         </template>
-        <span class="min-w-0 flex-1 truncate text-left" :class="[selected === undefined ? `text-subtle` : ``, selected?.mono === true ? `font-mono` : ``]">
+        <!-- The label reveals itself only when this span actually clips it. A native `title` on the BUTTON said
+             the same words the button was already showing, in the browser's own box, a second behind the rest of
+             the app's hints — and stayed silent in the one case worth a hover, a name too long for the trigger. -->
+        <span
+            class="min-w-0 flex-1 truncate text-left"
+            :class="[selected === undefined ? `text-subtle` : ``, selected?.mono === true ? `font-mono` : ``]"
+            v-tooltip.bottom.overflow="selected?.label"
+        >
             {{ selected?.label ?? placeholder }}
         </span>
         <Icon name="chevron-down" class="shrink-0 text-subtle" :class="variant === `ghost` ? `text-[0.5rem]` : `text-2xs`" aria-hidden="true" />

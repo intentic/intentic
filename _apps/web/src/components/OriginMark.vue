@@ -18,7 +18,14 @@ const meta = computed(() => (props.origin !== undefined ? originMeta(props.origi
 </script>
 
 <template>
-    <span v-if="meta !== undefined" v-tooltip.top="meta.hint" class="flex min-w-0 items-center gap-1.5 text-2xs text-muted" :aria-label="meta.hint">
+    <!-- The hint only in `compact`, where the glyph stands alone. Beside the label and detail it duplicated,
+         it was the row saying itself twice — once in the line the user is reading, once in a box on top of it. -->
+    <span
+        v-if="meta !== undefined"
+        v-tooltip.top="compact === true ? meta.hint : undefined"
+        class="flex min-w-0 items-center gap-1.5 text-2xs text-muted"
+        :aria-label="meta.hint"
+    >
         <Icon :name="meta.icon" class="shrink-0 text-2xs" />
         <template v-if="compact !== true">
             <span class="shrink-0 font-medium">{{ meta.label }}</span>

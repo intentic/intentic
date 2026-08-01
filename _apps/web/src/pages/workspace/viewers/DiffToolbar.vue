@@ -58,14 +58,17 @@ const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
              the file you clicked on the left and the file named up here are recognisably the same thing. Only
              the DIRECTORY truncates: a bar that ellipsises the file name has printed the least useful half of
              the path, which is what a single `truncate` over the whole string does on any narrow column. -->
-        <span class="flex min-w-0 flex-1 items-baseline text-2xs max-md:text-xs" v-tooltip.bottom.overflow="path">
-            <span v-if="parentDir(path) !== ''" class="min-w-0 truncate text-subtle">{{ parentDir(path) }}/</span>
+        <!-- The tooltip hangs off the DIRECTORY span, which is the element that truncates. On the flex wrapper
+             it never fired: a wrapper whose child does its own truncating never overflows, so the one path the
+             user could not read was the one case with no way to read it. -->
+        <span class="flex min-w-0 flex-1 items-baseline text-2xs max-md:text-xs">
+            <span v-if="parentDir(path) !== ''" class="min-w-0 truncate text-subtle" v-tooltip.bottom.overflow="path">{{ parentDir(path) }}/</span>
             <span class="shrink-0 font-medium text-content">{{ basename(path) }}</span>
         </span>
         <span
             v-if="from !== undefined"
             class="hidden max-w-40 truncate font-mono text-2xs text-subtle md:inline-block"
-            v-tooltip.bottom="`renamed from ${from}`"
+            v-tooltip.bottom.overflow="from"
         >
             ← {{ from }}
         </span>

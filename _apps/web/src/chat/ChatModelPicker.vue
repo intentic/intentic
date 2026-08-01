@@ -444,7 +444,7 @@ onMounted(() => {
                                 :key="badge"
                                 :name="BADGE_META[badge].icon"
                                 class="shrink-0 text-2xs text-subtle"
-                                v-tooltip.top="BADGE_META[badge].label"
+                                :aria-label="BADGE_META[badge].label"
                             />
                             <!-- The per-row lock. Redundant with the section chip while browsing, but search is
                                  one flat list across every provider, where the row is all there is to go on. -->

@@ -1096,16 +1096,18 @@ watch(
                                     >The model provider failed this turn — retrying by itself in {{ formatWait(outageResume.retryAt) }} (attempt
                                     {{ outageResume.attempt }} of {{ outageResume.maxAttempts }}). Sending again yourself works too.</span
                                 >
+                                <!-- The button turns on a SANDBOX-WIDE setting, not just this chat's, which is the
+                                     one thing about it worth saying — so it is said in the sentence the card is
+                                     already made of rather than in a box only a pointer can open. -->
                                 <span v-else class="min-w-0 flex-1"
-                                    >The model provider failed this turn. Auto-resume is off — turn it on and this chat continues from here by
-                                    itself.</span
+                                    >The model provider failed this turn. Auto-resume is off — turn it on (a standing setting for the whole sandbox)
+                                    and this chat continues from here by itself.</span
                                 >
                                 <button
                                     v-if="!outageResume.scheduled"
                                     type="button"
                                     class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
                                     :disabled="sandboxSettings === undefined || saveSandboxSettings.isPending.value"
-                                    v-tooltip.top="'Also turns on the standing toggle in Sandbox ▸ Agent'"
                                     @click="enableOutageResume"
                                 >
                                     Enable auto-resume

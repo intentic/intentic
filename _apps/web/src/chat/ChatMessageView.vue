@@ -663,7 +663,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
                         { 'text-danger opacity-100': confirmRestore },
                     ]"
-                    v-tooltip.left="
+                    v-tooltip.top="
                         confirmRestore ? 'Click again to restore the workspace to before this message' : 'Restore workspace to before this message'
                     "
                     aria-label="Restore workspace to before this message"
@@ -677,7 +677,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     type="button"
                     class="composer-ghost h-6 w-6 shrink-0 transition-opacity"
                     :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
-                    v-tooltip.left="'Edit & branch from here'"
+                    v-tooltip.top="'Edit & branch from here'"
                     aria-label="Edit message"
                     @click="startEdit"
                 >
@@ -735,7 +735,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
             </div>
         </div>
-        <div v-else-if="message.role === 'notice'" class="flex items-center gap-2 self-center py-0.5 text-2xs text-subtle">
+        <div v-else-if="message.role === 'notice'" class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs text-subtle">
             <!-- A notice whose wait is still running spins instead of showing the info glyph, and says how long
                  it has been waiting — the two things that tell "something is happening" from "this is stuck". It
                  settles back to the plain line the moment the wait ends (see ChatMessage.noticeWait). -->
@@ -744,29 +744,20 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <span>{{ message.text }}</span>
             <span v-if="pendingWait" class="shrink-0 tabular-nums">{{ formatElapsed(pendingWait.since, now) }}</span>
             <!-- The quiet follow-up some notices carry — see holdOffer. A link, not a button: the notice line
-                 is the most muted thing in the transcript, and the offer must not outshout the turn it trails. -->
-            <button
-                v-if="holdOffer"
-                type="button"
-                class="shrink-0 font-medium text-link hover:underline"
-                v-tooltip.top="
-                    'Turns auto-land off for this agent: from now on its finished work waits on its branch as “Ready to land”, and you land it from the board or its review.'
-                "
-                @click="holdFutureLands"
-            >
-                Keep future work on the branch
-            </button>
-            <button
-                v-if="outageOptOutOffer"
-                type="button"
-                class="shrink-0 font-medium text-link hover:underline"
-                v-tooltip.top="
-                    'Turns off auto-resume after provider outages for this sandbox: a turn the provider kills will stop and wait for you instead of retrying itself.'
-                "
-                @click="stopResumingOutages"
-            >
-                Don't auto-resume
-            </button>
+                 is the most muted thing in the transcript, and the offer must not outshout the turn it trails.
+                 What the offer CHANGES trails it as a clause rather than hiding in a hover box: this is a
+                 standing setting the click turns on, and a paragraph nobody hovers is not consent. The line
+                 wraps, so the clause costs a second row at worst. -->
+            <template v-if="holdOffer">
+                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="holdFutureLands">
+                    Keep future work on the branch
+                </button>
+                <span class="shrink-0">— it waits as “Ready to land” until you land it.</span>
+            </template>
+            <template v-if="outageOptOutOffer">
+                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stopResumingOutages">Don't auto-resume</button>
+                <span class="shrink-0">— a turn the provider kills stops and waits for you.</span>
+            </template>
         </div>
         <template v-else>
             <div v-if="message.thinking" class="w-full overflow-hidden rounded-lg border-l-2 border-line-strong bg-overlay/60">
@@ -879,7 +870,6 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                 type="button"
                                 class="qopt flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
                                 :class="{ 'qopt-on': isSelected(index, option.label) }"
-                                v-tooltip.left="option.preview ?? ''"
                                 @click="toggleOption(question, index, option.label)"
                             >
                                 <Icon
@@ -892,6 +882,17 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                 <span class="flex min-w-0 flex-col gap-0.5">
                                     <span class="text-xs font-medium text-content">{{ option.label }}</span>
                                     <span class="text-2xs leading-snug text-muted">{{ option.description }}</span>
+                                    <!-- The preview is a MOCKUP — an ASCII layout, a diff, a config block —
+                                         which the asking side writes precisely so the options can be compared
+                                         side by side. It used to be piped into a tooltip: a 17rem strip, five
+                                         lines at most, one option at a time, and gone the instant you moved
+                                         toward the thing you were comparing it with. Preformatted and in the
+                                         card, all of them are on screen at once, which is the whole point. -->
+                                    <pre
+                                        v-if="option.preview"
+                                        class="scrollbar-thin mt-1 max-h-56 overflow-auto whitespace-pre rounded-md border border-line bg-canvas px-2 py-1.5 font-mono text-[0.65rem] leading-snug text-muted"
+                                        >{{ option.preview }}</pre
+                                    >
                                 </span>
                             </button>
                             <!-- "Other" is the LAST OPTION, not a text box parked beside the list: same row,
@@ -938,7 +939,9 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         </div>
                         <!-- Decided (answered or dismissed): the same options, frozen. Nothing here may read as
                              a control — no button, no hover, no focus stop, and no empty radio, which is the
-                             one mark that says "still yours to pick". Only the check moves. -->
+                             one mark that says "still yours to pick". Only the check moves. No preview either:
+                             a mockup is an aid to CHOOSING, and once the choice is made, keeping every option's
+                             block in the transcript would spend a screen on a question already answered. -->
                         <div v-else class="flex flex-col gap-1.5" role="list">
                             <div
                                 v-for="option in decidedOptions(question)"
@@ -946,7 +949,6 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                 role="listitem"
                                 class="flex items-start gap-2 rounded-lg border border-transparent px-2.5 py-2"
                                 :class="{ 'qopt-picked': option.picked }"
-                                v-tooltip.left="option.preview ?? ''"
                             >
                                 <span class="mt-0.5 flex w-3 shrink-0 justify-center">
                                     <Icon v-if="option.picked" name="check" class="text-2xs text-primary-500" />

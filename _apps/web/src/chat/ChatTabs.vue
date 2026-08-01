@@ -165,15 +165,23 @@ const railStatus = (entry: RailEntry): { icon: IconName; spin?: boolean; label: 
     return { icon: icon.name, spin: icon.spin, label: statusLabel(status), class: icon.class };
 };
 
-/* TWO FACTS THE RAIL CARD SHOWS AS A MARK RATHER THAN A LINE — their words live in these tooltips.
+/* TWO FACTS THE RAIL CARD SHOWS AS A MARK RATHER THAN A LINE — their words ride the card's hover preview.
  * The model: the provider glyph already carries it, and a fleet is usually one model deep, so the name was a
  * column of identical text down the rail. What the turn is doing right now: the glyph says "it is working",
  * which is the actionable half — the command itself was the noisiest, least stable line on a card (a path that
- * changes every few seconds), and it cost a whole row of a rail whose cards are read as a stack. */
-const modelTooltip = (agent: FleetAgent): string =>
-    agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : providerLabel(agent.provider);
-const activityTooltip = (activity: NonNullable<FleetAgent["activity"]>): string =>
-    activity.todo ?? [activity.tool, activity.target].filter(Boolean).join(` · `);
+ * changes every few seconds), and it cost a whole row of a rail whose cards are read as a stack.
+ *
+ * They used to be two `v-tooltip`s on two glyphs INSIDE a card that already opens a HoverCard on the same
+ * hover — three boxes for one pointer, two of them landing in the strip the third had just claimed. This is
+ * what HoverCard.note is for, and what the Changes panel's chips already do with it. */
+const railNote = (agent: FleetAgent | undefined): string | undefined => {
+    if (agent === undefined) {
+        return undefined;
+    }
+    const model = agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : providerLabel(agent.provider);
+    const doing = agent.activity === undefined ? undefined : (agent.activity.todo ?? [agent.activity.tool, agent.activity.target].filter(Boolean).join(` `));
+    return [model, doing].filter((part) => part !== undefined && part !== ``).join(` · `);
+};
 
 /* What the query found that ISN'T open in this window — the whole point of the rail's filter reaching past its
  * own list. Live fleet agents first (the likeliest thing to want), then the archive, each as a row that opens
@@ -330,10 +338,10 @@ const focusedTabId = (): string | undefined => {
 // HoverCard — the Changes panel's agent chips raise the same one for the same session.
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
 
-const showPreview = (event: MouseEvent, conversation: Conversation): void => {
+const showPreview = (event: MouseEvent, conversation: Conversation, agent?: FleetAgent): void => {
     const firstUser = conversation.messages.value.find((message) => message.role === `user`);
     // A fresh "New chat"/"New agent" tab has neither, and the card declines to open on empty content.
-    hoverCard.value?.show(event, { title: conversation.title.value ?? undefined, body: firstUser?.text });
+    hoverCard.value?.show(event, { title: conversation.title.value ?? undefined, note: railNote(agent), body: firstUser?.text });
 };
 const hidePreview = (): void => {
     hoverCard.value?.hide();
@@ -675,8 +683,10 @@ const openHistory = (event: Event): void => {
                         <Icon v-bind="statusIcon(c.status.value)" :aria-label="statusLabel(c.status.value)" class="shrink-0" />
                         <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
                         <OriginMark :origin="originOf(c)" compact />
-                        <!-- Archived: the agent is off the board, but its conversation is still right here. -->
-                        <span v-if="isArchived(c)" v-tooltip.bottom="'Archived — off the agents board'" class="flex shrink-0 items-center">
+                        <!-- Archived: the agent is off the board, but its conversation is still right here. The
+                             box glyph is the whole message; the three places that drew it used to each raise the
+                             same sentence, which is a caption on a mark the user meets everywhere. -->
+                        <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
                             <Icon name="box" class="text-2xs text-subtle" />
                         </span>
                         <!-- One noun with the fleet: an untitled isolated conversation IS a draft agent card there. -->
@@ -748,14 +758,14 @@ const openHistory = (event: Event): void => {
                                 @click="emit('select', c.conversationId)"
                                 @dblclick.prevent.stop="beginRename(c.conversationId)"
                                 @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
-                                @mouseenter="showPreview($event, c)"
+                                @mouseenter="showPreview($event, c, agent)"
                                 @mouseleave="hidePreview"
                             >
                                 <span class="flex w-full min-w-0 items-start gap-1.5">
                                     <!-- Status leads the TITLE row, where the docked tabs wear it — it is the
                                          first thing a glance at the rail asks. Sideways for the same reason the
                                          title below is: under a rail card is the next rail card. -->
-                                    <span class="flex h-4 shrink-0 items-center" v-tooltip.right="railStatus({ conversation: c, agent }).label">
+                                    <span class="flex h-4 shrink-0 items-center">
                                         <Icon
                                             :name="railStatus({ conversation: c, agent }).icon"
                                             :spin="railStatus({ conversation: c, agent }).spin"
@@ -764,13 +774,7 @@ const openHistory = (event: Event): void => {
                                         />
                                     </span>
                                     <OriginMark :origin="originOf(c)" compact />
-                                    <!-- Sideways, not down: the rail is a stack of cards, so a tooltip under one
-                                         covers the next. Right of it is the transcript, which has room to spare. -->
-                                    <span
-                                        v-if="isArchived(c)"
-                                        v-tooltip.right="'Archived — off the agents board'"
-                                        class="mt-px flex shrink-0 items-center"
-                                    >
+                                    <span v-if="isArchived(c)" class="mt-px flex shrink-0 items-center" aria-label="Archived">
                                         <Icon name="box" class="text-2xs text-subtle" />
                                     </span>
                                     <!-- Two lines before the clamp — a card has the width for most titles whole.
@@ -815,7 +819,7 @@ const openHistory = (event: Event): void => {
                                             class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
                                             >{{ attentionReason(agent) }}</span
                                         >
-                                        <span class="flex shrink-0 items-center" v-tooltip.right="modelTooltip(agent)">
+                                        <span class="flex shrink-0 items-center">
                                             <ProviderLogo :provider="agent.provider" class="text-2xs" />
                                         </span>
                                         <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
@@ -838,7 +842,6 @@ const openHistory = (event: Event): void => {
                                                 v-if="turnInFlight(agent) && agent.activity !== undefined"
                                                 :name="activityIcon(agent.activity.tool)"
                                                 class="text-2xs text-subtle"
-                                                v-tooltip.right="activityTooltip(agent.activity)"
                                             />
                                             <span v-if="turnInFlight(agent) && agent.startedAt !== undefined">{{
                                                 formatElapsed(agent.startedAt, now)
@@ -891,12 +894,7 @@ const openHistory = (event: Event): void => {
                             <ProviderLogo :provider="agent.provider" class="mt-px shrink-0 text-2xs text-muted" />
                             <!-- Off the board but not gone: the branch, the diff and the transcript all survive
                                  an archive, so a hit here is a real destination rather than a tombstone. -->
-                            <Icon
-                                v-if="agent.archivedAt !== undefined"
-                                name="box"
-                                class="mt-px shrink-0 text-2xs text-subtle"
-                                v-tooltip.bottom="'Archived — off the agents board'"
-                            />
+                            <Icon v-if="agent.archivedAt !== undefined" name="box" class="mt-px shrink-0 text-2xs text-subtle" aria-label="Archived" />
                             <span class="line-clamp-2 min-w-0 flex-1 leading-4 text-muted">
                                 <span
                                     v-for="(run, at) in markSegments(agent.title ?? 'Untitled agent', needle)"

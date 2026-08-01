@@ -469,10 +469,10 @@ const endResize = (event: PointerEvent): void => {
                          gone: the Code/Tests filter options above already carry that division in files, and
                          saying it twice in two units is how a header becomes something you stop reading. -->
                     <DiffStat :additions="changes.additions.value" :deletions="changes.deletions.value" />
-                    <span
-                        class="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-2xs text-subtle"
-                        v-tooltip.bottom="'Files you have marked reviewed · ↑/↓ or j/k to move, v marks viewed and advances'"
-                    >
+                    <!-- A check and "3/12" beside a file list reads as reviewed-of-total without being told.
+                         The keyboard map it used to smuggle in here reached nobody: a hover on a counter is not
+                         where anyone looks for shortcuts. -->
+                    <span class="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-2xs text-subtle">
                         <Icon name="check" class="text-2xs" />{{ changes.viewedCount.value }}/{{ changes.count.value }}
                     </span>
                 </div>
@@ -491,7 +491,6 @@ const endResize = (event: PointerEvent): void => {
                             <span
                                 v-if="group.blocked > 0"
                                 class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1.5 py-px text-2xs font-medium text-warning"
-                                v-tooltip.right="`${group.blocked} file${group.blocked === 1 ? '' : 's'} here blocked the land`"
                             >
                                 <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
                             </span>

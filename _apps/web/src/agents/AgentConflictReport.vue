@@ -137,15 +137,8 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             >
                 Watch
             </button>
-            <button
-                v-if="streaming"
-                type="button"
-                :class="QUIET_BUTTON"
-                @click="emit('stop')"
-                v-tooltip.bottom="'The conflict stays exactly as it is'"
-            >
-                Stop
-            </button>
+            <button v-if="streaming" type="button" :class="QUIET_BUTTON" @click="emit('stop')">Stop</button>
+            <span v-if="streaming" class="text-2xs text-subtle">The conflict stays exactly as it is.</span>
         </div>
 
         <template v-else>
@@ -177,11 +170,12 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     type="button"
                     :class="mine.length === 0 ? cmp.buttonPrimary('gap-0 whitespace-nowrap px-2.5 py-1 text-2xs') : QUIET_BUTTON"
                     @click="emit('commit')"
-                    v-tooltip.bottom="'Opens the Changes panel'"
                 >
                     <Icon name="file-edit" class="mr-1 text-2xs" />Commit or stash yours
                 </button>
-                <span class="text-2xs text-subtle">Then land again — git cannot merge through unstaged work.</span>
+                <!-- "Opens the Changes panel" was a tooltip on a button that already had this sentence beside
+                     it — two hints for one press, one of them reachable only by pointer. -->
+                <span class="text-2xs text-subtle">Opens the Changes panel. Then land again — git cannot merge through unstaged work.</span>
             </div>
 
             <!-- Last, and quiet: the only option in this block that writes to the user's tree on failure. -->

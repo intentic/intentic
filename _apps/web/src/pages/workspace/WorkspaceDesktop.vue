@@ -108,9 +108,12 @@ const changesMark = computed(() => {
 // zero, the outgoing mark, so the tab does not read as "nothing here" over a panel holding a Push button.
 const sidebarMode = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, set: (value) => layout.setSidebarPanel(value) });
 const sidebarModeOptions = computed(() => [
-    { label: `Files`, value: `files` as const, title: `Browse the workspace files` },
-    { label: `Changes`, value: `changes` as const, title: `Review uncommitted changes`, badge: changes.count.value, ...changesMark.value },
-    { label: `Checkpoints`, value: `history` as const, title: `Workspace checkpoints — restore files to any earlier point` },
+    // No hint on Files/Changes: "Browse the workspace files" under a pill reading "Files" is the label again in
+    // a smaller font. Checkpoints keeps one because the word alone doesn't say what it restores, and Changes
+    // gets one only while the mark is up — there the chip is a glyph, and the amount has nowhere else to go.
+    { label: `Files`, value: `files` as const },
+    { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
+    { label: `Checkpoints`, value: `history` as const, title: `Restore files to any earlier point` },
 ]);
 
 const filter = ref(``);
@@ -641,7 +644,7 @@ const endResize = (event: PointerEvent): void => {
                             type="button"
                             class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                             @click="openGraph('root')"
-                            v-tooltip.right="'Git history'"
+                            v-tooltip.bottom="'Git history'"
                             aria-label="Open git history"
                         >
                             <Icon name="sitemap" class="text-xs" />
@@ -650,7 +653,7 @@ const endResize = (event: PointerEvent): void => {
                             type="button"
                             class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                             @click="changes.refresh()"
-                            v-tooltip.right="'Refresh'"
+                            v-tooltip.bottom="'Refresh'"
                             aria-label="Refresh changes"
                             :disabled="changes.actionBusy.value || changes.loading.value"
                         >
@@ -767,7 +770,7 @@ const endResize = (event: PointerEvent): void => {
                         <button
                             type="button"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
-                            v-tooltip.right="rootHistoryTooltip"
+                            v-tooltip.bottom="rootHistoryTooltip"
                             aria-label="Open git history of the workspace root"
                             @click="openGraph('root')"
                         >
@@ -791,7 +794,7 @@ const endResize = (event: PointerEvent): void => {
                             type="button"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content disabled:cursor-default disabled:opacity-40 disabled:hover:text-muted"
                             :disabled="filter.trim() !== '' || expanded.size === 0"
-                            v-tooltip.right="'Collapse all folders'"
+                            v-tooltip.bottom="'Collapse all folders'"
                             aria-label="Collapse all folders"
                             @click="collapseAll"
                         >
@@ -860,7 +863,7 @@ const endResize = (event: PointerEvent): void => {
                         }}</span>
                         <!-- The lone remaining status: one spinner for both a running file action and a tree
                              (re)load — the Refresh button that used to spin is now only the command. -->
-                        <Icon name="spinner" v-if="busy || isLoading" v-tooltip.bottom="'Working…'" class="text-sm text-muted" spin />
+                        <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin aria-label="Working" />
                         <span v-if="error" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{ error }}</span>
                         <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
                     </div>

@@ -122,7 +122,9 @@ const unread = computed(() =>
     !props.agent.unread
         ? undefined
         : props.agent.seenAt === undefined
-          ? { label: `New`, hint: `You haven't opened this agent yet` }
+          ? // "New" already says you have not opened it; a hint repeating that is the badge in a smaller font.
+            // "Updated" is the one that hides a fact — WHEN you last looked — so only it earns a hover.
+            { label: `New`, hint: undefined }
           : { label: `Updated`, hint: `Worked since you last opened it — ${relativeTime(props.agent.seenAt)}` },
 );
 
@@ -293,7 +295,12 @@ const grab = (event: PointerEvent): void => {
                 v-if="agent.inputTokens !== undefined || agent.costUsd !== undefined || agent.diff !== undefined || agent.turns !== undefined"
                 class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs text-muted"
             >
-                <span v-if="agent.inputTokens !== undefined" v-tooltip.top="'Tokens in / out'">
+                <!-- No hover labels on this row. Five chips side by side each raising its own box turned a
+                     glance across the card's numbers into a strip of pop-ups, and every label was the legend
+                     for a glyph the reader had already decoded: the arrow is tokens, the pages are files, the
+                     speech bubbles are turns, the ring is context. A stat you cannot name from its icon does
+                     not belong in a chip row. -->
+                <span v-if="agent.inputTokens !== undefined">
                     <Icon name="arrow-circle-up" class="mr-0.5 text-2xs" />{{ formatTokens(agent.inputTokens)
                     }}<template v-if="agent.outputTokens !== undefined"> / {{ formatTokens(agent.outputTokens) }}</template>
                 </span>
@@ -304,19 +311,19 @@ const grab = (event: PointerEvent): void => {
                     v-if="agent.costUsd !== undefined"
                     type="button"
                     class="cursor-pointer transition-colors hover:text-content hover:underline"
-                    v-tooltip.top="'Cost across this agent\'s turns — open the usage breakdown'"
+                    v-tooltip.top="'Open the usage breakdown'"
                     @click.stop="router.push({ name: `sandbox`, params: { tab: `usage` }, query: { agent: agent.id } })"
                 >
                     {{ formatCost(agent.costUsd) }}
                 </button>
-                <span v-if="agent.diff !== undefined && agent.diff.files > 0" v-tooltip.top="'Files the agent changed'">
+                <span v-if="agent.diff !== undefined && agent.diff.files > 0">
                     <Icon name="copy" class="mr-0.5 text-2xs" />{{ agent.diff.files }}
                 </span>
                 <span v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)" class="font-mono">
                     <span class="text-success">+{{ agent.diff.insertions }}</span>
                     <span class="text-danger"> −{{ agent.diff.deletions }}</span>
                 </span>
-                <span v-if="agent.turns !== undefined && agent.turns > 0" v-tooltip.top="'Completed turns'">
+                <span v-if="agent.turns !== undefined && agent.turns > 0">
                     <Icon name="comments" class="mr-0.5 text-2xs" />{{ agent.turns }}
                 </span>
                 <!-- THE AGENTS THIS AGENT STARTED. A card is the answer to "what is this agent up to", and one
@@ -329,18 +336,14 @@ const grab = (event: PointerEvent): void => {
                     type="button"
                     class="cursor-pointer transition-colors hover:text-content hover:underline"
                     :class="{ 'text-link': agent.subagents.running > 0 }"
-                    v-tooltip.top="
-                        agent.subagents.running > 0
-                            ? `${agent.subagents.running} of ${agent.subagents.total} agents this agent started are still working`
-                            : `${agent.subagents.total} agent${agent.subagents.total === 1 ? `` : `s`} this agent started`
-                    "
+                    v-tooltip.top="agent.subagents.running > 0 ? `${agent.subagents.running} of ${agent.subagents.total} still working` : 'Agents it started'"
                     @click.stop="router.push({ name: `subagents` })"
                 >
                     <Icon name="users" class="mr-0.5 text-2xs" />{{
                         agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total
                     }}
                 </button>
-                <span v-if="context !== undefined" class="inline-flex items-center gap-1" v-tooltip.top="'Context window fill'">
+                <span v-if="context !== undefined" class="inline-flex items-center gap-1">
                     <ProgressRing :value="context" :class="context >= 80 ? 'text-warning' : 'text-primary-500'" />
                     <span>{{ context }}%</span>
                 </span>
@@ -367,38 +370,38 @@ const grab = (event: PointerEvent): void => {
                  review panel, whose button this borrows its exact wording from. One vocabulary for one action.
                  A real button rather than the hover-revealed link below: this is the press the card exists to
                  collect, and an affordance that appears on hover is not one a touch device or a scanning eye
-                 ever finds. Its tooltip carries the mechanics the review panel states in prose beside its own
-                 copy of this button — which is what makes the press deliberate enough to skip the drop's
-                 confirmation dialog (see useAgentDrag.resolveNow). -->
-            <div v-if="resolvable" class="flex min-w-0">
+                 ever finds. The mechanics sit UNDER the button as a line of muted prose — the same shape, and
+                 the same sentence, the conflict report uses beside its own copy of this button. They were a
+                 35-word tooltip, which is what makes the press deliberate enough to skip the drop's
+                 confirmation dialog (see useAgentDrag.resolveNow) and so had to be readable without a pointer:
+                 hover reaches no touch device, and a paragraph in a box that closes on the first click is not
+                 disclosure, it is a formality. -->
+            <div v-if="resolvable" class="flex min-w-0 flex-col gap-0.5">
                 <button
                     type="button"
-                    :class="cmp.buttonPrimary('gap-0 whitespace-nowrap px-2 py-0.5 text-2xs')"
-                    v-tooltip.top="
-                        'Starts a turn: it rebases onto your workspace, resolves in its own worktree, and lands the result. Nothing is written to your workspace unless it succeeds — and you can stop the turn any time.'
-                    "
+                    :class="cmp.buttonPrimary('gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs')"
                     @click.stop="emit('resolve')"
                 >
                     <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" class="mr-1 text-2xs" />{{
                         handingOver ? "Handing it over…" : "Have the agent resolve it"
                     }}
                 </button>
+                <span class="text-2xs leading-snug text-subtle">It merges in its own worktree — nothing reaches your workspace unless it succeeds.</span>
             </div>
 
             <!-- The READY card's press — the deliberate land the user opted into by turning auto-land off (see
                  `landable`). Success-styled with the check glyph exactly like the review panel's "Land now":
-                 the two are the same action on the same work, and must read as such. -->
-            <div v-if="landable" class="flex min-w-0">
+                 the two are the same action on the same work, and must read as such. What landing DOES follows
+                 it in prose rather than on hover, like the resolve button above. -->
+            <div v-if="landable" class="flex min-w-0 flex-col gap-0.5">
                 <button
                     type="button"
-                    :class="cmp.buttonSuccess('gap-0 whitespace-nowrap px-2 py-0.5 text-2xs')"
-                    v-tooltip.top="
-                        'Applies this agent\'s finished work to your workspace as uncommitted changes — your own commit stays the review step.'
-                    "
+                    :class="cmp.buttonSuccess('gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs')"
                     @click.stop="emit('land')"
                 >
                     <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" class="mr-1 text-2xs" />{{ landing ? "Landing…" : "Land now" }}
                 </button>
+                <span class="text-2xs leading-snug text-subtle">Arrives as uncommitted changes — your own commit stays the review step.</span>
             </div>
 
             <div class="flex min-w-0 items-center gap-2 text-2xs text-subtle" :class="dense ? 'min-w-32 flex-1' : ''">
@@ -408,7 +411,6 @@ const grab = (event: PointerEvent): void => {
                 <button
                     v-if="review !== undefined"
                     type="button"
-                    v-tooltip.top="'Open the review detail (or double-click the card)'"
                     class="inline-flex shrink-0 items-center gap-1 rounded font-medium text-link transition-opacity hover:underline"
                     :class="lane === 'attention' ? '' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
                     @click.stop="reviewCard"
@@ -423,9 +425,7 @@ const grab = (event: PointerEvent): void => {
                 <!-- An archived card is read as a record, so it dates itself by when it LEFT the board — "last
                      active 3d ago" is the same fact its neighbours already show and answers a question nobody in
                      an archive is asking. -->
-                <span v-else-if="agent.archivedAt !== undefined" class="shrink-0" v-tooltip.top="`Last active ${relativeTime(agent.updatedAt)}`">
-                    Archived {{ relativeTime(agent.archivedAt) }}
-                </span>
+                <span v-else-if="agent.archivedAt !== undefined" class="shrink-0"> Archived {{ relativeTime(agent.archivedAt) }} </span>
                 <span v-else-if="agent.updatedAt > 0" class="shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
             </div>
         </div>

@@ -1164,7 +1164,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="SYNC_PILL"
                         :disabled="changes.actionBusy.value"
                         @click="changes.pullRepo(group.repo)"
-                        v-tooltip.right="pullHint(group)"
+                        v-tooltip.top="pullHint(group)"
                         :aria-label="`Pull ${group.repo}`"
                     >
                         <Icon name="arrow-down-left" class="text-[0.6rem]" />{{ behind(group) }}
@@ -1178,7 +1178,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded border border-line px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
                         :disabled="changes.actionBusy.value"
                         @click="askPushRepo(group)"
-                        v-tooltip.right="'Push and start tracking this branch on the remote'"
+                        v-tooltip.top="'Push and start tracking this branch on the remote'"
                     >
                         <Icon name="cloud-upload" class="mr-1 text-[0.6rem]" />Publish
                     </button>
@@ -1188,7 +1188,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="SYNC_PILL"
                         :disabled="changes.actionBusy.value"
                         @click="askPushRepo(group)"
-                        v-tooltip.right="pushHint(group)"
+                        v-tooltip.top="pushHint(group)"
                         :aria-label="`Push ${group.repo}`"
                     >
                         <Icon name="arrow-up-right" class="text-[0.6rem]" />{{ ahead(group) }}
@@ -1204,7 +1204,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value"
                         @click="changes.fetchRepo(group.repo)"
-                        v-tooltip.right="'Fetch — refresh what this repo knows about its remote'"
+                        v-tooltip.top="'Fetch — refresh what this repo knows about its remote'"
                         :aria-label="`Fetch ${group.repo}`"
                     >
                         <Icon name="sync" class="text-2xs" />
@@ -1214,7 +1214,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value || repoCount(group) === 0"
                         @click="askDiscardRepo(group)"
-                        v-tooltip.right="'Discard all changes in this repo'"
+                        v-tooltip.top="'Discard all changes in this repo'"
                         aria-label="Discard all changes in this repo"
                     >
                         <Icon name="trash" class="text-2xs" />
@@ -1348,7 +1348,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
                                     :disabled="changes.actionBusy.value"
                                     @click="stageRow({ repo: group.repo, side: section.side, path: change.path })"
-                                    v-tooltip.right="INDEX_VERB[section.side].one"
+                                    v-tooltip.top="INDEX_VERB[section.side].one"
                                     :aria-label="`${INDEX_VERB[section.side].one}: ${change.path}`"
                                 >
                                     <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
@@ -1358,7 +1358,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
                                     :disabled="changes.actionBusy.value"
                                     @click="askDiscardRow({ repo: group.repo, side: section.side, path: change.path }, change)"
-                                    v-tooltip.right="'Discard'"
+                                    v-tooltip.top="'Discard'"
                                     :aria-label="`Discard ${change.path}`"
                                 >
                                     <Icon name="trash" class="text-2xs" />

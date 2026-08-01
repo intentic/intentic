@@ -187,7 +187,7 @@ watch(messages, () => {
                             v-if="current.terminal"
                             type="button"
                             class="rounded border border-line px-1.5 py-0.5 transition-colors hover:text-content"
-                            title="Watch the shell this agent runs in"
+                            v-tooltip.bottom="`Watch the shell this agent runs in`"
                             @click="openWorkTerminal(current.terminal)"
                         >
                             Terminal

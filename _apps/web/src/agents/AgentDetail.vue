@@ -172,9 +172,13 @@ const confirmDiscard = (): void => {
             <span
                 v-if="fleetAgent?.branch !== undefined"
                 class="hidden max-w-[16rem] shrink-0 items-center gap-1 rounded bg-overlay px-1.5 py-px font-mono text-2xs text-subtle md:inline-flex"
-                v-tooltip.bottom="'The isolated branch this agent works on'"
             >
-                <Icon name="code" class="text-2xs" /><span class="truncate">{{ fleetAgent.branch }}</span>
+                <!-- The hint this chip used to carry explained what a branch chip IS, once, forever. What it
+                     could not do was show the branch NAME when the chip cut it off — which is the only thing
+                     hovering it was ever going to be for. -->
+                <Icon name="code" class="text-2xs" /><span class="truncate" v-tooltip.bottom.overflow="fleetAgent.branch">{{
+                    fleetAgent.branch
+                }}</span>
             </span>
             <!-- No tooltip: the chip prints status.label already, and hovering it to be told the word you are
                  reading is the kind of hint that teaches people not to hover anything. -->

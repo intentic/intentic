@@ -195,7 +195,7 @@ const roster = computed(() => {
                 v-if="group.refusal"
                 class="line-clamp-2 text-2xs"
                 :class="refusalIsCurrent(group.refusal, group.rows) ? `text-warning` : `text-subtle`"
-                :title="refusalLine(group.refusal)"
+                v-tooltip.top.overflow="refusalLine(group.refusal)"
             >
                 {{ refusalLine(group.refusal) }}
             </p>

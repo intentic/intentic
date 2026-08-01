@@ -33,7 +33,7 @@ const hideBrokenImage = (event: Event): void => {
             class="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full ring-2 ring-card transition-opacity"
             :class="{ 'opacity-50 grayscale': member.idle }"
             :style="{ backgroundColor: `hsl(${presenceHue(member.email)} 55% 42%)` }"
-            v-tooltip.right="tooltipFor(member)"
+            :aria-label="tooltipFor(member)"
         >
             <span class="text-[0.6rem] font-semibold text-white">{{ presenceInitials(member) }}</span>
             <img
@@ -48,7 +48,7 @@ const hideBrokenImage = (event: Event): void => {
         <span
             v-if="overflow > 0"
             class="flex h-7 w-7 items-center justify-center rounded-full bg-overlay text-[0.6rem] font-semibold text-muted ring-2 ring-card"
-            v-tooltip.right="overflowNames"
+            :aria-label="overflowNames"
             >+{{ overflow }}</span
         >
     </div>

@@ -87,8 +87,9 @@ const removeKey = async (): Promise<void> => {
     <div>
         <!-- Collapsed row: one line — status dot, disclosure (chevron + key), then the action cluster. -->
         <div class="flex items-center gap-2.5 px-4 py-2 transition-colors hover:bg-canvas">
+            <!-- No hover label: the row already prints "Not set" in words next to the key, so the dot is the
+                 same fact in a colour and hovering it says the sentence a third time. -->
             <span
-                v-tooltip.top="statusTooltip"
                 class="h-2 w-2 shrink-0 rounded-full"
                 :class="entry.status === `missing` ? `bg-warning` : `bg-success`"
                 role="img"

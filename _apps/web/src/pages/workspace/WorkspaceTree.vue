@@ -927,13 +927,12 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         row.entry.name
                     }}</span>
                     <!-- The reference shelf: dimmed like every out-of-focus dir, but it must not read as junk —
-                         the badge names what it is, the tooltip says how to use it. -->
+                         the badge names what it is. What the shelf is FOR was a 29-word paragraph hanging off a
+                         tree row, which is neither where anyone reads documentation nor anywhere a touch device
+                         can reach; the workspace README owns that. -->
                     <span
                         v-if="row.entry.path === REFERENCE_DIR"
                         class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
-                        v-tooltip.right="
-                            'Reference shelf — drop material the agent consults on request (docs, specs, repos to compare against). Out of search, sync, and the agent\'s focus until you point at it.'
-                        "
                         >reference</span
                     >
                     <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->

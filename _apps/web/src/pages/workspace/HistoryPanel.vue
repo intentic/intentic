@@ -84,7 +84,7 @@ const confirmRestore = (id: string): void => {
         <div class="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
             <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Checkpoints</span>
             <span class="flex-1"></span>
-            <Icon name="spinner" v-if="busy" v-tooltip.right="'Working…'" class="text-xs text-muted" spin />
+            <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin aria-label="Working" />
             <button
                 type="button"
                 class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"

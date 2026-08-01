@@ -52,6 +52,13 @@ const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
 };
 const badgeClass = (badge: ViewBadge): string => BADGE_TONE[badge.tone ?? `info`];
 const badgeText = ({ count = 0 }: ViewBadge): string => (count > 99 ? `99+` : String(count));
+// ONE label per tile, badge included. The badge used to carry a tooltip of its own, nested inside the tile's —
+// and `mouseenter` fires on an element AND every ancestor it entered, so hovering the count opened both boxes,
+// one over the other ("Browsers" behind "1 agent browser open"). What the badge says is a fact ABOUT the tile,
+// so it belongs in the tile's own label rather than on a second anchor 16px wide. It matters more since the
+// badge grew a `mark`: a glyph states only THAT something is waiting, and the sentence carrying how much is
+// then the only place the amount exists.
+const tileLabel = (tile: AreaTile): string => (tile.badge?.tooltip === undefined ? tile.label : `${tile.label} · ${tile.badge.tooltip}`);
 
 /* The desktop chrome of the post-login shell: a square-tile rail, the shared Claude Code chat panel, and a
  * workspace outlet for the active area. Layout is a three-column CSS grid; the chat width is driven by a
@@ -141,7 +148,8 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
             ? {
                   badge: {
                       count: agentAttention.value,
-                      tooltip: `${agentAttention.value} agent${agentAttention.value === 1 ? `` : `s`} need${agentAttention.value === 1 ? `s` : ``} you`,
+                      // Phrased to follow the tile's name, which tileLabel puts in front of it: "Agents · 3 need you".
+                      tooltip: `${agentAttention.value} need${agentAttention.value === 1 ? `s` : ``} you`,
                   },
               }
             : {}),
@@ -173,7 +181,7 @@ const browserTile = computed<AreaTile | undefined>(() => {
         to: `/browsers`,
         label: `Browsers`,
         icon: `desktop`,
-        ...(live > 0 ? { badge: { count: live, tooltip: `${live} agent browser${live === 1 ? `` : `s`} open` } } : {}),
+        ...(live > 0 ? { badge: { count: live, tooltip: `${live} open` } } : {}),
     };
 });
 /* Subagents, on exactly the browsers' terms above: it appears when a turn starts an agent, and its badge counts
@@ -188,7 +196,7 @@ const subagentTile = computed<AreaTile | undefined>(() => {
         to: `/subagents`,
         label: `Subagents`,
         icon: `users`,
-        ...(live > 0 ? { badge: { count: live, tooltip: `${live} agent${live === 1 ? `` : `s`} working` } } : {}),
+        ...(live > 0 ? { badge: { count: live, tooltip: `${live} still working` } } : {}),
     };
 });
 // The live-runtime cluster below the divider — the same AreaTile shape and the same markup as the navigation
@@ -313,19 +321,20 @@ onUnmounted(() => {
                 :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
                 :tabindex="reachable ? undefined : -1"
                 :aria-disabled="!reachable"
-                :aria-label="tile.label"
-                v-tooltip.right="tile.label"
+                :aria-label="tileLabel(tile)"
+                v-tooltip.right="tileLabel(tile)"
             >
                 <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initials(tile.label) }}</span>
                 <Icon v-else :name="tile.icon!" class="text-lg" />
                 <!-- One badge for every tile, core or extension — see AreaTile.badge. A `mark` replaces the
                      number outright rather than sitting beside it: the chip is four pixels of glance, and a
-                     glyph AND a digit in it would be two claims competing for the same read. -->
+                     glyph AND a digit in it would be two claims competing for the same read. No tooltip of its
+                     own either: it would nest inside the tile's and open a second box on top of it — its
+                     sentence rides the tile instead (see tileLabel). -->
                 <span
                     v-if="tile.badge"
                     class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
                     :class="badgeClass(tile.badge)"
-                    v-tooltip.right="tile.badge.tooltip"
                 >
                     <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
                     <template v-else>{{ badgeText(tile.badge) }}</template>
@@ -382,15 +391,15 @@ onUnmounted(() => {
                 :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
                 :tabindex="reachable ? undefined : -1"
                 :aria-disabled="!reachable"
-                :aria-label="tile.label"
-                v-tooltip.right="tile.label"
+                :aria-label="tileLabel(tile)"
+                v-tooltip.right="tileLabel(tile)"
             >
                 <Icon :name="tile.icon!" class="text-lg" />
+                <!-- No tooltip on the badge, for the same reason as the navigation tiles above. -->
                 <span
                     v-if="tile.badge"
                     class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
                     :class="badgeClass(tile.badge)"
-                    v-tooltip.right="tile.badge.tooltip"
                 >
                     <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
                     <template v-else>{{ badgeText(tile.badge) }}</template>

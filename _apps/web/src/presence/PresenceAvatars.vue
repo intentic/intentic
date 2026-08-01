@@ -26,7 +26,7 @@ const hideBrokenImage = (event: Event): void => {
 </script>
 
 <template>
-    <span v-if="shown.length > 0" class="inline-flex shrink-0 items-center -space-x-1" v-tooltip.bottom="tooltip">
+    <span v-if="shown.length > 0" class="inline-flex shrink-0 items-center -space-x-1" :aria-label="tooltip">
         <span
             v-for="member in shown"
             :key="member.email"
