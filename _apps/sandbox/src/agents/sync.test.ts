@@ -52,11 +52,33 @@ const setup = async (): Promise<{ work: string; worktree: string; worktrees: Age
     return { work, worktree: worktrees.worktreeDir("c1", "root"), worktrees };
 };
 
-const sync = (worktrees: AgentWorktrees): ReturnType<typeof syncConversation> => syncConversation(worktrees, "c1", [{ repo: "root" }], "fix the thing");
+const sync = (worktrees: AgentWorktrees): ReturnType<typeof syncConversation> =>
+    syncConversation(worktrees, "c1", [{ repo: "root" }], "fix the thing");
 
 test("reports nothing when the branch already sits on the main line", async () => {
     const { worktrees } = await setup();
     expect(await sync(worktrees)).toEqual([]);
+});
+
+/* THE COLLISION A RENAME HIDES. `--name-only` reports a rename at its destination and nowhere else (git
+ * detects renames by default — omitting `-M` does not turn that off), so main renaming a file the agent is
+ * editing produced two path lists that could not intersect: `moved` named the destination, `mine` named the
+ * source, and `overlap` came back empty. The turn preamble then told the agent main had moved underneath it
+ * and named nothing — on the one file where its work was about to be replayed onto a path that no longer
+ * exists. Same defect origins.ts carried on the attribution side. */
+test("a main-line RENAME of a file the agent edited is reported as an overlap", async () => {
+    const { work, worktree, worktrees } = await setup();
+    await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n");
+    await sh(worktree, "add", "-A");
+    await commit(worktree, "agent work");
+    // Main moves the very file the agent is holding, verbatim — a 100% rename, the case that collapses.
+    await sh(work, "mv", "app.ts", "renamed.ts");
+    await commit(work, "user renamed it");
+
+    const [root] = await sync(worktrees);
+    // Both halves of the rename are what main did, and the source is where the agent's work sits.
+    expect(root?.moved).toEqual(["app.ts", "renamed.ts"]);
+    expect(root?.overlap).toEqual(["app.ts"]);
 });
 
 test("replays the agent's commits onto a main line that moved, and says what moved", async () => {

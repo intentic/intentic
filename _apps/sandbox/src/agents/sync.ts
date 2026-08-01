@@ -71,8 +71,16 @@ const exists = async (path: string): Promise<boolean> => {
     }
 };
 
+/* Every path a span touches — `--no-renames` because the two lists below are INTERSECTED, and a rename that
+ * collapses to its destination cannot intersect anything on the source side.
+ *
+ * Concretely: main renames a file the agent is editing. `moved` names the destination, `mine` names the
+ * source, `overlap` comes back empty, and the turn preamble tells the agent main moved underneath it while
+ * naming nothing — on the one file whose work is about to be replayed onto a path that no longer exists.
+ * Detection has to be disabled EXPLICITLY: git has defaulted diff.renames to true since 2.9, so leaving `-M`
+ * off does not leave detection off. (agents/origins.ts carried the same defect on the attribution side.) */
 const pathsOf = async (dir: string, args: readonly string[], git: GitRunner): Promise<string[]> => {
-    const { stdout } = await git(dir, ["diff", "--name-only", "-z", ...args]);
+    const { stdout } = await git(dir, ["diff", "--name-only", "--no-renames", "-z", ...args]);
     return stdout.split("\0").filter((path) => path !== "");
 };
 

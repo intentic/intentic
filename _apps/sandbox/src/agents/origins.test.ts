@@ -121,6 +121,47 @@ test("committing one agent's work leaves another agent's landed files attributed
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
 });
 
+/* A RENAME IS ONE CHANGE ACROSS TWO PATHS, and attribution has to name both — the bug this test exists for.
+ *
+ * land.ts already learned this the hard way (see DeltaChange there): `--name-only` reports a rename at its
+ * destination and NOWHERE ELSE, so a delta read that way carries the add and drops the delete. Origins read
+ * its spans the same way, and the consequence landed on the user rather than on the tree: the land correctly
+ * deleted the source, but nothing could attribute that deletion, so the Changes panel counted the `D` row as
+ * "yours". Filter to the agent that did the rename and the row VANISHES from the list — "Stage all" under that
+ * filter cannot stage what it is not showing, the commit goes in carrying only the add, and the deletion is
+ * left sitting in the tree for the user to find and commit by hand. Which is exactly what happened. */
+test("a rename credits BOTH paths to the agent — the deletion is its work as much as the addition", async () => {
+    const { work, worktrees, conversation } = await setup();
+    // Moved verbatim, so git scores it a 100% rename — the case that collapses to one path.
+    await rm(join(conversation.cwd, "app.ts"));
+    await mkdir(join(conversation.cwd, "moved"), { recursive: true });
+    await writeFile(join(conversation.cwd, "moved/app.ts"), `${LINES.join("\n")}\n`);
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+
+    // The land itself gets this right — both halves are in the tree.
+    expect(await sh(work, "status", "--porcelain")).toContain("app.ts");
+
+    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger });
+    expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"], "moved/app.ts": ["c1"] });
+});
+
+/* The expiry's own half of the same rule. The comment on committedSince has always said a commit that renames
+ * a landed path must retire BOTH names — but OMITTING `-M` does not turn rename detection off, because git has
+ * defaulted diff.renames to true since 2.9. So the source name went on being claimed by an agent, on a path
+ * that no longer exists, until something else retired it. */
+test("committing a rename of a landed path retires BOTH of its names", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+
+    // The user takes the agent's file and commits it under a new name — history has now absorbed both.
+    await sh(work, "mv", "app.ts", "renamed.ts");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed and renamed");
+
+    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger });
+    expect(await origins.forRepo("root", work)).toEqual({});
+});
+
 test("identify names an ARCHIVED agent — the roster the client mirrors no longer carries it", async () => {
     // The whole reason identity rides the response: archiving a finished agent takes it off the fleet roster
     // (AgentsRegistry.list drops archived entries) but does NOT commit its landed lines, so the panel is

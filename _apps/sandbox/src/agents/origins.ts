@@ -90,26 +90,45 @@ export const createAgentOrigins = (
      */
     const spent = new Set<string>();
 
+    /* EVERY PATH A SPAN TOUCHES — and for a rename that is TWO, which is why `--no-renames` is here rather
+     * than at any one call site.
+     *
+     * Attribution is a question about PATHS IN A WORKING TREE: which rows of the Changes panel is this agent
+     * answerable for. A rename produces two of those rows — the source is deleted, the destination is added —
+     * and the agent did both. But `--name-only` reports a rename at its destination and nowhere else, so a
+     * span read with detection on names one row and orphans the other.
+     *
+     * That orphan is not cosmetic. A row with no origin reads as YOURS, and the panel's origin filter HIDES
+     * it while the user is looking at that agent's work — so "Stage all" cannot stage what it is not showing,
+     * the commit records the addition alone, and the deletion is left in the tree for the user to find and
+     * commit by hand. land.ts hit the identical trap from the other end and documents it at DeltaChange; this
+     * is the same lesson on the reporting side.
+     *
+     * Detection has to be turned OFF EXPLICITLY. Omitting `-M` does not do it — git has defaulted
+     * diff.renames to true since 2.9, so a span with no flag at all still collapses renames.
+     *
+     * All three spans below want this, and want it identically: the two that are INTERSECTED must name a
+     * rename alike or the intersection drops it, and the third (the expiry) has always said in its own comment
+     * that a commit renaming a landed path must retire both names. One flag, one place, no caller to forget. */
     const pathsBetween = async (dir: string, key: string, args: readonly string[]): Promise<readonly string[]> => {
         const hit = cache.get(key);
         if (hit !== undefined) {
             return hit;
         }
-        const { stdout } = await git(dir, ["diff", "--name-only", "-z", ...args]);
+        const { stdout } = await git(dir, ["diff", "--name-only", "--no-renames", "-z", ...args]);
         const paths = stdout.split("\0").filter((path) => path !== "");
         cache.set(key, paths);
         return paths;
     };
 
-    // What the agent wrote, read as it wrote it — rename detection on.
+    // What the agent wrote, read as it wrote it.
     const landedPaths = (dir: string, repo: string, anchor: string, tip: string): Promise<readonly string[]> =>
-        pathsBetween(dir, `landed ${repo} ${anchor} ${tip}`, ["-M", anchor, tip]);
+        pathsBetween(dir, `landed ${repo} ${anchor} ${tip}`, [anchor, tip]);
 
     // What the land actually put in the tree: the branch against the main line the patch went in on. Both ends
     // are shas fixed at land time, so this is read once per landing and never again, however far HEAD runs.
-    // Rename detection on to match landedPaths — the two are intersected, so they must name a rename alike.
     const appliedPaths = (dir: string, repo: string, landedHead: string, tip: string): Promise<readonly string[]> =>
-        pathsBetween(dir, `applied ${repo} ${landedHead} ${tip}`, ["-M", landedHead, tip]);
+        pathsBetween(dir, `applied ${repo} ${landedHead} ${tip}`, [landedHead, tip]);
 
     /* Where the branch left the main line, so the claim is the agent's own work and not the main-line commits a
      * rebase pulled into its branch (see the header). Falls back to the recorded base when there is no common
@@ -142,9 +161,9 @@ export const createAgentOrigins = (
         return anchor;
     };
 
-    // What history has done to those paths since the land — the claim's expiry, one path at a time. Rename
-    // detection OFF on purpose: a commit that renamed a landed path has to retire BOTH names, and `-M` would
-    // report only the new one.
+    // What history has done to those paths since the land — the claim's expiry, one path at a time. A commit
+    // that renamed a landed path has to retire BOTH names, which is one of the reasons pathsBetween turns
+    // rename detection off; leave the source claimed and an agent keeps a chip on a path that no longer exists.
     const committedSince = (dir: string, repo: string, landedHead: string, head: string): Promise<readonly string[]> =>
         pathsBetween(dir, `since ${repo} ${landedHead} ${head}`, [landedHead, head]);
 
