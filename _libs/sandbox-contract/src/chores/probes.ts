@@ -148,26 +148,29 @@ const parseAudit = (stdout: string): ProbeFacts | undefined => {
     return { id: `audit`, advisories };
 };
 
-/* knip's JSON reporter prints `{ files: [...], issues: [...] }` — `files` are wholly unreferenced, and each issue
- * entry carries per-kind arrays for one file. Counts plus a sample of the file paths, not the full list: the
- * agent re-runs knip itself against the live tree (a list from a probe hours old would send it at files that are
- * already gone), so what travels here only has to be enough to decide whether the turn is worth starting. */
+/* knip's JSON reporter prints `{ issues: [...] }` — one row per file that has findings, carrying a per-kind array
+ * of what it found there. A wholly unreferenced file is a row whose own `files` array names it, which is why that
+ * count is a sum like every other kind rather than a list of its own. Counts plus a sample of the file paths, not
+ * the full list: the agent re-runs knip itself against the live tree (a list from a probe hours old would send it
+ * at files that are already gone), so what travels here only has to be enough to decide whether the turn is worth
+ * starting. */
 const DEAD_CODE_SAMPLE = 8;
 
 const parseKnip = (stdout: string): ProbeFacts | undefined => {
-    const root = asObject(stdout);
-    if (root === undefined || !Array.isArray(root[`files`])) {
+    const raw = asObject(stdout)?.[`issues`];
+    // `issues` is the whole report in this reporter, so its absence means we are not reading knip's output at all.
+    if (!Array.isArray(raw)) {
         return undefined;
     }
-    const issues = Array.isArray(root[`issues`]) ? (root[`issues`] as Record<string, unknown>[]) : [];
+    const issues = raw.filter((issue): issue is Record<string, unknown> => typeof issue === `object` && issue !== null);
     const sum = (key: string): number => issues.reduce((total, issue) => total + countOf(issue[key]), 0);
     const deadCode: DeadCode = {
-        files: root[`files`].length,
+        files: sum(`files`),
         exports: sum(`exports`),
         types: sum(`types`),
         dependencies: sum(`dependencies`),
         devDependencies: sum(`devDependencies`),
-        sample: (root[`files`] as unknown[]).filter((file): file is string => typeof file === `string`).slice(0, DEAD_CODE_SAMPLE),
+        sample: issues.flatMap((issue) => (countOf(issue[`files`]) === 0 ? [] : (asString(issue[`file`]) ?? []))).slice(0, DEAD_CODE_SAMPLE),
     };
     return { id: `knip`, deadCode };
 };

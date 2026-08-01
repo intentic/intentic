@@ -89,14 +89,15 @@ describe(`audit`, () => {
 });
 
 describe(`knip`, () => {
-    test(`sums the per-file issue arrays and samples the unreferenced files`, () => {
+    test(`sums the per-file issue arrays and samples the wholly unreferenced files`, () => {
         const facts = parse(
             `knip`,
             JSON.stringify({
-                files: [`src/old.ts`, `src/older.ts`],
                 issues: [
-                    { file: `src/a.ts`, exports: [{ name: `x` }, { name: `y` }], types: [{ name: `T` }], dependencies: [{ name: `lodash` }], devDependencies: [] },
-                    { file: `src/b.ts`, exports: [{ name: `z` }], types: [], dependencies: [], devDependencies: [{ name: `jest` }] },
+                    { file: `src/a.ts`, exports: [{ name: `x` }, { name: `y` }], types: [{ name: `T` }], dependencies: [{ name: `lodash` }], devDependencies: [], files: [] },
+                    { file: `src/b.ts`, exports: [{ name: `z` }], types: [], dependencies: [], devDependencies: [{ name: `jest` }], files: [] },
+                    { file: `src/old.ts`, exports: [], files: [{ name: `src/old.ts` }] },
+                    { file: `src/older.ts`, exports: [], files: [{ name: `src/older.ts` }] },
                 ],
             }),
         );
@@ -107,15 +108,23 @@ describe(`knip`, () => {
     });
 
     test(`missing per-kind arrays count as zero rather than throwing`, () => {
-        expect(parse(`knip`, JSON.stringify({ files: [], issues: [{ file: `src/a.ts` }] }))).toMatchObject({
-            deadCode: { files: 0, exports: 0, types: 0, dependencies: 0, devDependencies: 0 },
+        expect(parse(`knip`, JSON.stringify({ issues: [{ file: `src/a.ts` }, null] }))).toMatchObject({
+            deadCode: { files: 0, exports: 0, types: 0, dependencies: 0, devDependencies: 0, sample: [] },
         });
     });
 
-    // Without a `files` array this is not knip's report, whatever else it contains — and reporting zero dead code
+    // A clean run still prints the envelope, and an empty one is the answer that keeps the chore quiet.
+    test(`an empty issue list is a clean repository, not an unrecognisable one`, () => {
+        expect(parse(`knip`, JSON.stringify({ issues: [] }))).toEqual({
+            id: `knip`,
+            deadCode: { files: 0, exports: 0, types: 0, dependencies: 0, devDependencies: 0, sample: [] },
+        });
+    });
+
+    // Without an `issues` array this is not knip's report, whatever else it contains — and reporting zero dead code
     // from a shape we do not recognise is exactly the lie the state machine exists to prevent.
-    test(`a shape without a files array is a failure`, () => {
-        expect(parse(`knip`, JSON.stringify({ issues: [] }))).toBeUndefined();
+    test(`a shape without an issues array is a failure`, () => {
+        expect(parse(`knip`, JSON.stringify({ files: [`src/old.ts`] }))).toBeUndefined();
     });
 });
 
