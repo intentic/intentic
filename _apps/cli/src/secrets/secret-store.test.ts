@@ -28,7 +28,7 @@ const createFakeHost = (initial?: Record<string, string>) => {
                     const written = command.match(/<<'INTENTIC_SECRETS_EOF'\n([\s\S]*?)\nINTENTIC_SECRETS_EOF/);
                     if (written !== null) {
                         writes++;
-                        files.set(HOST_PATH, written[1]);
+                        files.set(HOST_PATH, written[1] ?? "");
                     }
                     return Promise.resolve({ stdout: "", stderr: "", code: 0 });
                 },

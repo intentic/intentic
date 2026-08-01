@@ -35,19 +35,19 @@
             "id": "def-hono-request",
             "verb": "def",
             "query": "HonoRequest",
-            "expected": [{ "file": "src/request.ts", "line": 36, "tolerance": 5 }]
+            "expected": [{ "file": "src/request.ts" }]
         },
         {
             "id": "def-set-cookie",
             "verb": "def",
             "query": "setCookie",
-            "expected": [{ "file": "src/helper/cookie/index.ts", "line": 99, "tolerance": 10 }]
+            "expected": [{ "file": "src/helper/cookie/index.ts" }]
         },
         {
             "id": "sym-trie-router",
             "verb": "sym",
             "query": "TrieRouter",
-            "expected": [{ "file": "src/router/trie-router/router.ts", "line": 5, "tolerance": 5 }]
+            "expected": [{ "file": "src/router/trie-router/router.ts" }]
         },
         {
             "id": "find-get-path",
@@ -152,19 +152,19 @@
             "id": "def-smart-router",
             "verb": "def",
             "query": "SmartRouter",
-            "expected": [{ "file": "src/router/smart-router/router.ts", "line": 4, "tolerance": 5 }]
+            "expected": [{ "file": "src/router/smart-router/router.ts" }]
         },
         {
             "id": "def-body-limit",
             "verb": "def",
             "query": "bodyLimit",
-            "expected": [{ "file": "src/middleware/body-limit/index.ts", "line": 50, "tolerance": 10 }]
+            "expected": [{ "file": "src/middleware/body-limit/index.ts" }]
         },
         {
             "id": "sym-etag-matches",
             "verb": "sym",
             "query": "etagMatches",
-            "expected": [{ "file": "src/middleware/etag/index.ts", "line": 32, "tolerance": 5 }]
+            "expected": [{ "file": "src/middleware/etag/index.ts" }]
         },
         {
             "id": "refs-get-path",

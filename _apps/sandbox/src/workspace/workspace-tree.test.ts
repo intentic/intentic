@@ -193,10 +193,10 @@ test("walkWorkspaceTree leaves a dir it never reached UNLISTED (no children) ins
     const dirA = result.tree.find((entry) => entry.name === "a");
     const dirB = result.tree.find((entry) => entry.name === "b");
     expect(dirA?.children?.map((entry) => entry.name)).toEqual(["inner"]);
-    expect(dirA?.hidden).toBeUndefined();
-    // Unlisted, NOT truncated: no phantom "more items" claim — the client lazy-loads it on expand.
+    // Unlisted, NOT truncated: no phantom "more items" claim — the client lazy-loads it on expand. The count
+    // is on the ENVELOPE, so a claim of hidden entries would show up there; both root entries were listed.
     expect(dirB?.children).toBeUndefined();
-    expect(dirB?.hidden).toBeUndefined();
+    expect(result.hidden).toBe(0);
     expect((await listWorkspaceChildren(root, "b")).entries.map((entry) => entry.name)).toEqual(["kept.txt"]);
 });
 

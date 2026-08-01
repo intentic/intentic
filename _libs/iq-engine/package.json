@@ -43,6 +43,7 @@
     },
     "scripts": {
         "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
         "test": "tsgo && vitest run",
         "test:watch": "vitest"

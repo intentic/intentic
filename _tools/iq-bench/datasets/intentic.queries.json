@@ -37,19 +37,19 @@
             "id": "def-parse-features",
             "verb": "def",
             "query": "parseFeatures",
-            "expected": [{ "file": "_libs/iq-engine/src/features.ts", "line": 24, "tolerance": 3 }]
+            "expected": [{ "file": "_libs/iq-engine/src/features.ts" }]
         },
         {
             "id": "def-create-engine",
             "verb": "def",
             "query": "createEngine",
-            "expected": [{ "file": "_libs/iq-engine/src/index.ts", "line": 99, "tolerance": 5 }]
+            "expected": [{ "file": "_libs/iq-engine/src/index.ts" }]
         },
         {
             "id": "sym-related-of",
             "verb": "sym",
             "query": "relatedOf",
-            "expected": [{ "file": "_libs/iq-engine/src/verbs/dispatch.ts", "line": 149, "tolerance": 10 }]
+            "expected": [{ "file": "_libs/iq-engine/src/verbs/dispatch.ts" }]
         },
         {
             "id": "refs-prf-terms",
@@ -154,25 +154,25 @@
             "id": "def-estimate-tokens",
             "verb": "def",
             "query": "estimateTokens",
-            "expected": [{ "file": "_libs/iq-engine/src/render/budget.ts", "line": 3, "tolerance": 3 }]
+            "expected": [{ "file": "_libs/iq-engine/src/render/budget.ts" }]
         },
         {
             "id": "def-chunk-file",
             "verb": "def",
             "query": "chunkFile",
-            "expected": [{ "file": "_libs/iq-engine/src/indexer/chunker.ts", "line": 17, "tolerance": 5 }]
+            "expected": [{ "file": "_libs/iq-engine/src/indexer/chunker.ts" }]
         },
         {
             "id": "def-revalidate",
             "verb": "def",
             "query": "revalidate",
-            "expected": [{ "file": "_libs/iq-engine/src/indexer/indexer.ts", "line": 84, "tolerance": 5 }]
+            "expected": [{ "file": "_libs/iq-engine/src/indexer/indexer.ts" }]
         },
         {
             "id": "sym-load-embedder",
             "verb": "sym",
             "query": "loadEmbedder",
-            "expected": [{ "file": "_libs/iq-engine/src/embed/embedder.ts", "line": 17, "tolerance": 5 }]
+            "expected": [{ "file": "_libs/iq-engine/src/embed/embedder.ts" }]
         },
         {
             "id": "refs-estimate-tokens",

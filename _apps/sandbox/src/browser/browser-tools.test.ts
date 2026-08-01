@@ -39,7 +39,7 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
     expect(spec.args).toContain("/tmp/cfg.json");
     // Headed, not the fingerprinted headless shell, and rendering to the shared Xvfb.
     expect(spec.args).not.toContain("--headless");
-    expect(spec.env.DISPLAY).toBe(":99");
+    expect(spec.env["DISPLAY"]).toBe(":99");
 });
 
 /* The deadline, on both server kinds. Without it a browser tool call is unbounded — and one of these tools

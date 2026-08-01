@@ -1,27 +1,11 @@
 import { expect, test } from "vitest";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
+import { unstubbed } from "../testing.js";
 import type { CloudflareApi, IngressRule } from "./cloudflare-api.js";
 import { createTunnelProvider } from "./tunnel.js";
 
-const NOT_USED = async (): Promise<never> => {
-    throw new Error("unused by the tunnel provider");
-};
-const api = (overrides: Partial<CloudflareApi>): CloudflareApi => ({
-    getZone: NOT_USED,
-    listZones: NOT_USED,
-    findTunnel: NOT_USED,
-    createTunnel: NOT_USED,
-    getTunnelToken: NOT_USED,
-    getTunnelStatus: NOT_USED,
-    getTunnelIngress: NOT_USED,
-    putTunnelIngress: NOT_USED,
-    findDnsRecord: NOT_USED,
-    createDnsRecord: NOT_USED,
-    updateDnsRecord: NOT_USED,
-    deleteTunnel: NOT_USED,
-    deleteDnsRecord: NOT_USED,
-    ...overrides,
-});
+// Only the calls a suite asserts on are stubbed; anything else the provider reaches names itself.
+const api = (overrides: Partial<CloudflareApi>): CloudflareApi => unstubbed("cloudflare", overrides);
 
 const IMAGE = "cloudflare/cloudflared:2026.7.2@sha256:aaaa";
 
@@ -158,7 +142,7 @@ test("apply reuses an existing tunnel rather than creating a new one", async () 
         fakeSsh().executor,
     );
 
-    expect((await provider.apply(inputs, undefined, ctx())).tunnelId).toBe("tunnel-existing");
+    expect((await provider.apply(inputs, undefined, ctx()))["tunnelId"]).toBe("tunnel-existing");
     expect(created).toBe(false);
 });
 

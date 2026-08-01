@@ -1,11 +1,11 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DesiredStateGraph } from "@intentic/graph";
+import type { DesiredStateGraph, ResourceNode } from "@intentic/graph";
 import { describe, expect, it } from "vitest";
 import { collectAccess, formatAccessSummary, writeAccessFile } from "./access.js";
 
-const node = (id: string, type: string, inputs: Record<string, unknown>) => ({ id, type, inputs, dependsOn: [] });
+const node = (id: string, type: string, inputs: ResourceNode["inputs"]): ResourceNode => ({ id, type, inputs, dependsOn: [] });
 const gen = (key: string) => ({ $secret: { source: "generated" as const, key } });
 const env = (key: string) => ({ $secret: { source: "env" as const, key } });
 

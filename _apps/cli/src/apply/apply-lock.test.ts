@@ -27,7 +27,7 @@ const createFakeFleet = (options: { unreachable?: ReadonlySet<string>; cannotWri
             }
             return Promise.resolve({
                 exec: (command: string) => {
-                    const [, op, nonce, ttlRaw] = command.split("\n")[0].split(" ");
+                    const [, op = "", nonce = "", ttlRaw] = (command.split("\n")[0] ?? "").split(" ");
                     const ttl = Number(ttlRaw);
                     commands.push({ host, op });
                     const cur = locks.get(host);

@@ -15,6 +15,7 @@
     },
     "scripts": {
         "build": "vue-tsc --noEmit",
+        "typecheck": "vue-tsc --noEmit",
         "test": "vitest run"
     },
     "dependencies": {

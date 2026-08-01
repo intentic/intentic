@@ -211,7 +211,7 @@ for (const svc of cases) {
 
     test(`${svc.kind}: delete tears the stack down and removes the state dir`, async () => {
         const ssh = fakeSsh();
-        await svc.make(ssh.executor).delete(svc.inputs, ctx());
+        await svc.make(ssh.executor).delete?.(svc.inputs, ctx());
         expect(ssh.commands.some((c) => c.includes(`docker compose -p ${svc.kind}`) && c.includes("down -v"))).toBe(true);
         expect(ssh.commands.some((c) => c.includes(`rm -rf /opt/intentic/${svc.kind}`))).toBe(true);
     });

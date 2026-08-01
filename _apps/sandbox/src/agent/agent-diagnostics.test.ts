@@ -1,5 +1,6 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { expect, test } from "vitest";
+import { syncHookOutput } from "../testing.js";
 import { type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";
 
 const RESOLVABLE: ModulesProbe = async () => true;
@@ -25,7 +26,7 @@ const withErrors: DiagRunner = async () => [
 
 test("compile errors ride back as additionalContext; warnings are dropped", async () => {
     const result = await runHook(withErrors, { file_path: "/work/src/app.ts" });
-    const context = (result.hookSpecificOutput as { additionalContext?: string }).additionalContext;
+    const context = (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext;
     expect(context).toContain("error TS2304");
     expect(context).not.toContain("TS6133");
 });
@@ -74,13 +75,17 @@ test("with no resolvable node_modules the type-check never runs", async () => {
         MISSING,
     );
     expect(ran).toBe(false);
-    expect((result.hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain("dependencies are not installed");
+    expect((syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain(
+        "dependencies are not installed",
+    );
 });
 
 test("the missing-dependency reason is told ONCE per turn, not stapled to every edit", async () => {
     const hooks = editDiagnosticsHooks("/work", undefined, withErrors, MISSING);
     const first = await fire(hooks, { file_path: "/work/src/a.ts" });
     const second = await fire(hooks, { file_path: "/work/src/b.ts" });
-    expect((first.hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain("dependencies are not installed");
+    expect((syncHookOutput(first).hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain(
+        "dependencies are not installed",
+    );
     expect(second).toEqual({});
 });

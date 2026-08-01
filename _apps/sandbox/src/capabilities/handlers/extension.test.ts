@@ -133,5 +133,5 @@ test("the config schema requires a full 40-character sha ref", () => {
 test("echoConfig echoes url/ref/path and hasToken, never the token", () => {
     const sha = "b".repeat(40);
     const full: Capability = { id: "e", kind: "extension", config: { url: "https://x/y.git", ref: sha, path: "packages/e", token: "secret" } };
-    expect(echoConfig(full)).toEqual({ url: "https://x/y.git", ref: sha, path: "packages/e", hasToken: true });
+    expect(echoConfig(full, new Map())).toEqual({ url: "https://x/y.git", ref: sha, path: "packages/e", hasToken: true });
 });

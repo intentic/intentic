@@ -10,7 +10,7 @@ import { readTemplateManifest, type TemplateManifest } from "./template-manifest
 
 // Runs against the real canonical template repo (the injector's whole job is to copy its packages into a repo),
 // so it only runs where that checkout is present — otherwise there is nothing to inject.
-const CANONICAL = process.env.INTENTIC_CANONICAL_DIR ?? "/home/radarsu/radarsu/repositories/00-canonical-repo";
+const CANONICAL = process.env["INTENTIC_CANONICAL_DIR"] ?? "/home/radarsu/radarsu/repositories/00-canonical-repo";
 const hasCanonical = existsSync(join(CANONICAL, "templates.json"));
 const readJson = async (path: string): Promise<{ name: string; scripts?: Record<string, string> }> => JSON.parse(await readFile(path, "utf8"));
 

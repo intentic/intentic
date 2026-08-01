@@ -845,6 +845,9 @@ importers:
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.13(@opentelemetry/api@1.9.1)
+      '@orpc/contract':
+        specifier: 'catalog:'
+        version: 1.14.13(@opentelemetry/api@1.9.1)
       '@orpc/openapi-client':
         specifier: 'catalog:'
         version: 1.14.13(@opentelemetry/api@1.9.1)

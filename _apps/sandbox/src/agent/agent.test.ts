@@ -153,21 +153,20 @@ test("a subagent's prose block closes its own bubble, not the parent turn's", as
 });
 
 test("the SDK env always marks the sandbox and carries the per-turn oauth token only when given", async () => {
-    let captured: Options | undefined;
+    const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
-        captured = args.options;
+        captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
     // IS_SANDBOX is always set so the CLI accepts --dangerously-skip-permissions under root.
     await collect({ ...request, oauthToken: "tok-xyz" }, capture);
-    expect(captured?.env?.["IS_SANDBOX"]).toBe("1");
-    expect(captured?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("tok-xyz");
+    expect(captured.at(-1)?.env?.["IS_SANDBOX"]).toBe("1");
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("tok-xyz");
 
-    captured = undefined;
     await collect(request, capture);
-    expect(captured?.env?.["IS_SANDBOX"]).toBe("1");
-    expect(captured?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
+    expect(captured.at(-1)?.env?.["IS_SANDBOX"]).toBe("1");
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
 });
 
 /* The env token is a SNAPSHOT taken at spawn: a turn that outlives it — or one caught by an account-wide
@@ -175,31 +174,29 @@ test("the SDK env always marks the sandbox and carries the per-turn oauth token 
  * "Failed to authenticate. API Error: 401 ...". getOAuthToken is how the CLI asks for a replacement and
  * carries on, and it is the option the VSCode extension's equivalent machinery stands in for. */
 test("a native Claude turn hands the SDK a way to re-mint its token mid-turn", async () => {
-    let captured: OauthRecoveryOptions | undefined;
+    const captured: OauthRecoveryOptions[] = [];
     const capture: QueryFn = async function* (args) {
-        captured = args.options;
+        captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
     const refreshOauthToken = async (): Promise<string> => "tok-2";
     await collect({ ...request, oauthToken: "tok-1", refreshOauthToken }, capture);
-    expect(await captured?.getOAuthToken?.({ signal: new AbortController().signal })).toBe("tok-2");
+    expect(await captured.at(-1)?.getOAuthToken?.({ signal: new AbortController().signal })).toBe("tok-2");
 
     // A routed turn authenticates with the translator's own bearer, and the container-env fallback has no
     // refresh token behind it — neither has anything to re-mint, so neither offers the callback.
-    captured = undefined;
     await collect({ ...request, baseUrl: "http://127.0.0.1:8788", authToken: "router-key", refreshOauthToken }, capture);
-    expect(captured?.getOAuthToken).toBeUndefined();
+    expect(captured.at(-1)?.getOAuthToken).toBeUndefined();
 
-    captured = undefined;
     await collect(request, capture);
-    expect(captured?.getOAuthToken).toBeUndefined();
+    expect(captured.at(-1)?.getOAuthToken).toBeUndefined();
 });
 
 test("a custom endpoint points the SDK at ANTHROPIC_BASE_URL and withholds the subscription OAuth token", async () => {
-    let captured: Options | undefined;
+    const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
-        captured = args.options;
+        captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
@@ -207,18 +204,18 @@ test("a custom endpoint points the SDK at ANTHROPIC_BASE_URL and withholds the s
     // subscription token must NEVER leave for a foreign endpoint — even if an oauthToken is also present, baseUrl
     // wins and CLAUDE_CODE_OAUTH_TOKEN is dropped.
     await collect({ ...request, baseUrl: "http://127.0.0.1:8788", authToken: "router-key", oauthToken: "tok-xyz", model: "gpt-5-codex" }, capture);
-    expect(captured?.env?.["ANTHROPIC_BASE_URL"]).toBe("http://127.0.0.1:8788");
-    expect(captured?.env?.["ANTHROPIC_AUTH_TOKEN"]).toBe("router-key");
-    expect(captured?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
-    expect(captured?.model).toBe("gpt-5-codex");
+    expect(captured.at(-1)?.env?.["ANTHROPIC_BASE_URL"]).toBe("http://127.0.0.1:8788");
+    expect(captured.at(-1)?.env?.["ANTHROPIC_AUTH_TOKEN"]).toBe("router-key");
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
+    expect(captured.at(-1)?.model).toBe("gpt-5-codex");
 });
 
 // What the turn hands the SDK. The composition RULES are system-prompt.test.ts's; what matters here is that
 // the runner reaches for them at all, and that both shapes survive the trip into the options object.
 test("a request with no mode runs Intentic's prompt, and each mode reaches the SDK in its own shape", async () => {
-    let captured: Options | undefined;
+    const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
-        captured = args.options;
+        captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
@@ -226,28 +223,25 @@ test("a request with no mode runs Intentic's prompt, and each mode reaches the S
     // (the bench) must get the same agent the app ships. And the model has to be TOLD the widgets exist —
     // otherwise it writes "A) … B) …" as prose.
     await collect(request, capture);
-    const intentic = captured?.systemPrompt as string;
+    const intentic = captured.at(-1)?.systemPrompt as string;
     expect(intentic).toContain("You are a Claude agent on Claude Agent SDK.");
     expect(intentic).toContain("AskUserQuestion");
     expect(intentic).toContain("TaskCreate");
     expect(intentic).toContain("mcp__web__browser_take_screenshot");
 
-    captured = undefined;
     await collect({ ...request, systemPromptMode: "claude" }, capture);
-    const preset = captured?.systemPrompt as { type: string; preset: string; append: string };
+    const preset = captured.at(-1)?.systemPrompt as { type: string; preset: string; append: string };
     expect(preset).toMatchObject({ type: "preset", preset: "claude_code" });
     expect(preset.append).toContain("AskUserQuestion");
 
-    captured = undefined;
     await collect({ ...request, systemPromptMode: "claude", systemAppend: "## Delegating\nUse codex exec." }, capture);
-    const withAppend = captured?.systemPrompt as { append: string };
+    const withAppend = captured.at(-1)?.systemPrompt as { append: string };
     expect(withAppend.append).toBe(`${preset.append}\n\n## Delegating\nUse codex exec.`);
 
     // A custom prompt is handed over as a bare STRING, which is how the SDK is told to drop the preset. Its
     // arrival must take the harness guidance with it — the owner replaced the prompt, not merely prefixed it.
-    captured = undefined;
     await collect({ ...request, systemPromptMode: "custom", systemPrompt: "You are a release-notes writer." }, capture);
-    expect(captured?.systemPrompt).toBe("You are a release-notes writer.");
+    expect(captured.at(-1)?.systemPrompt).toBe("You are a release-notes writer.");
 });
 
 // Two producers register PreToolUse:Bash — the tmux wrapper and the install steer. Merged with a plain object
@@ -262,80 +256,80 @@ test("hook sets are concatenated per event, not overwritten", () => {
 });
 
 test("every turn registers the install steer and the post-edit diagnostics hook", async () => {
-    let captured: Options | undefined;
+    const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
-        captured = args.options;
+        captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
     await collect(request, capture);
-    expect(captured?.hooks?.PreToolUse?.some((matcher) => matcher.matcher === "Bash")).toBe(true);
-    expect(captured?.hooks?.PostToolUse?.some((matcher) => matcher.matcher === "Edit|Write")).toBe(true);
+    expect(captured.at(-1)?.hooks?.PreToolUse?.some((matcher) => matcher.matcher === "Bash")).toBe(true);
+    expect(captured.at(-1)?.hooks?.PostToolUse?.some((matcher) => matcher.matcher === "Edit|Write")).toBe(true);
 });
 
 test("every turn wires the ui ask server, the AskUserQuestion alias, and the permission gate", async () => {
-    let captured: Options | undefined;
+    const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
-        captured = args.options;
+        captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
     // The autonomous posture is the one the composer defaults away from plan mode into — it used to get no
     // question tool at all, which is why the model fell back to prose options.
     await collect(request, capture);
-    expect(captured?.mcpServers?.["ui"]).toBeDefined();
-    expect(captured?.toolAliases).toEqual({ AskUserQuestion: "mcp__ui__ask" });
-    expect(captured?.canUseTool).toBeTypeOf("function");
-    expect(captured?.permissionMode).toBe("bypassPermissions");
-    expect(captured?.allowDangerouslySkipPermissions).toBe(true);
+    expect(captured.at(-1)?.mcpServers?.["ui"]).toBeDefined();
+    expect(captured.at(-1)?.toolAliases).toEqual({ AskUserQuestion: "mcp__ui__ask" });
+    expect(captured.at(-1)?.canUseTool).toBeTypeOf("function");
+    expect(captured.at(-1)?.permissionMode).toBe("bypassPermissions");
+    expect(captured.at(-1)?.allowDangerouslySkipPermissions).toBe(true);
 });
 
 test("the request's tools become remote http MCP servers alongside the ui server, in every mode", async () => {
-    let captured: Options | undefined;
+    const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
-        captured = args.options;
+        captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
     const obs = { type: "http", url: "https://signoz.example.com/mcp", alwaysLoad: true, headers: { Authorization: "Bearer tok" } };
     const tools = [{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }];
 
     await collect({ ...request, tools }, capture);
-    expect(captured?.mcpServers?.["obs"]).toEqual(obs);
-    expect(captured?.mcpServers?.["ui"]).toBeDefined();
+    expect(captured.at(-1)?.mcpServers?.["obs"]).toEqual(obs);
+    expect(captured.at(-1)?.mcpServers?.["ui"]).toBeDefined();
 
-    captured = undefined;
     await collect({ ...request, permissionMode: "plan" as const, tools }, capture);
-    expect(captured?.mcpServers?.["obs"]).toEqual(obs);
-    expect(captured?.mcpServers?.["ui"]).toBeDefined();
-    expect(captured?.permissionMode).toBe("plan");
+    expect(captured.at(-1)?.mcpServers?.["obs"]).toEqual(obs);
+    expect(captured.at(-1)?.mcpServers?.["ui"]).toBeDefined();
+    expect(captured.at(-1)?.permissionMode).toBe("plan");
     // bypassPermissions is the only mode that skips the SDK's permission machinery — plan must not.
-    expect(captured?.allowDangerouslySkipPermissions).toBe(false);
+    expect(captured.at(-1)?.allowDangerouslySkipPermissions).toBe(false);
 });
 
 test("plugin checkout dirs are passed to the SDK as local plugins", async () => {
-    let captured: Options | undefined;
+    const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
-        captured = args.options;
+        captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
     await collect({ ...request, plugins: ["/work/.intentic/plugins/x"] }, capture);
-    expect(captured?.plugins).toEqual([{ type: "local", path: "/work/.intentic/plugins/x" }]);
+    expect(captured.at(-1)?.plugins).toEqual([{ type: "local", path: "/work/.intentic/plugins/x" }]);
 
-    captured = undefined;
     await collect(request, capture);
-    expect(captured?.plugins).toBeUndefined();
+    expect(captured.at(-1)?.plugins).toBeUndefined();
 });
 
 // Drive the permission gate end-to-end: the fake query calls `canUseTool` mid-stream, the test answers the card
 // the way the browser does (POST /agent/reply → resolveRequest), and the gate's decision comes back to assert on.
+type DecidableCard = Extract<AgentEvent, { kind: "permission" | "plan" }>;
+
 const decide = async (
     turn: Parameters<typeof runAgent>[0],
     call: { tool: string; input?: Record<string, unknown>; suggestions?: PermissionUpdate[] },
-    answer: (event: AgentEvent) => AgentReply,
-): Promise<{ result: PermissionResult; card: AgentEvent; frames: AgentEvent[] }> => {
-    let result: PermissionResult | undefined;
-    let card: AgentEvent | undefined;
+    answer: (event: DecidableCard) => AgentReply,
+): Promise<{ result: PermissionResult; card: DecidableCard; frames: AgentEvent[] }> => {
+    let result: PermissionResult | null | undefined;
+    let card: DecidableCard | undefined;
     const frames: AgentEvent[] = [];
     const query: QueryFn = async function* (args) {
         const gate = args.options.canUseTool!;
@@ -403,7 +397,7 @@ test("a decided card is recorded in the frame log, so a replay freezes it instea
 });
 
 test("an approved plan returns to the posture the turn started in when the reply names none", async () => {
-    const approve = (event: AgentEvent): AgentReply => ({ kind: "plan", requestId: event.requestId, approve: true });
+    const approve = (event: DecidableCard): AgentReply => ({ kind: "plan", requestId: event.requestId, approve: true });
 
     // The agent put ITSELF into plan mode (EnterPlanMode) on a turn the user started in Auto — approving must
     // hand those permissions back, not demote the rest of the session to per-command prompts.

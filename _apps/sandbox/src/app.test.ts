@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
-import { capabilitiesOf, HEALTH_LIMIT, portUrl, sandboxContract } from "@intentic/sandbox-contract";
+import { capabilitiesOf, HEALTH_LIMIT, portUrl, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 import { createORPCClient } from "@orpc/client";
@@ -18,6 +18,8 @@ import { afterEach, expect, test, vi } from "vitest";
 import { createAgentsRegistry } from "./agents/agents-registry.js";
 import { createApp } from "./app.js";
 import { ForbiddenError } from "./auth/auth.js";
+import type { StoredAccount } from "./claude/claude-credentials.js";
+import type { AppEnv } from "./context.js";
 import type { AutomationRecord, AutomationsStore } from "./automations/automations-store.js";
 import type { CapabilitiesStore } from "./capabilities/capabilities-store.js";
 import type { Services } from "./composition.js";
@@ -32,6 +34,7 @@ import { userPromptsOf } from "./sessions/prompt-index.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { AgentTool } from "./agent/agent-tools.js";
 import { listenerProvidersOf } from "./extensions/installed-extensions.js";
+import { noIsolation, unstubbed } from "./testing.js";
 import { workspacePaths } from "./workspace/workspace.js";
 import { MAX_RAW_BYTES, sha256Text, UploadTooLargeError } from "./workspace/workspace-files.js";
 
@@ -103,19 +106,20 @@ const memoryAutomationsStore = (initial: AutomationRecord[] = []): AutomationsSt
 const fakeProcesses = (ports: Record<string, number> = {}): ManagedProcesses & { started: { repo: string; cwd: string }[]; stopped: string[] } => {
     const started: { repo: string; cwd: string }[] = [];
     const stopped: string[] = [];
-    return {
-        started,
-        stopped,
-        start: async (repo, spec) => {
-            started.push({ repo, cwd: spec.cwd });
-        },
-        stop: (repo) => {
-            stopped.push(repo);
-        },
-        running: (repo) => repo in ports,
-        portOf: (repo) => ports[repo],
-        stopAll: () => {},
-    };
+    return Object.assign(
+        unstubbed<ManagedProcesses>("processes", {
+            start: async (repo, spec) => {
+                started.push({ repo, cwd: spec.cwd });
+            },
+            stop: (repo) => {
+                stopped.push(repo);
+            },
+            running: (repo) => repo in ports,
+            portOf: (repo) => ports[repo],
+            stopAll: () => {},
+        }),
+        { started, stopped },
+    );
 };
 
 // A temp workspace on disk (repo discovery reads it): each entry names a repo — a dir owning a .git, role and
@@ -134,32 +138,34 @@ const tempWorkspace = (repos: { name: string; panel?: boolean }[]): ReturnType<t
 };
 
 // Inert history — no snapshots recorded, every id unknown; a test overrides just the members it asserts on.
-const fakeHistory = (overrides: Partial<Services["history"]> = {}): Services["history"] => ({
-    start: () => {},
-    stop: () => {},
-    snapshot: async () => undefined,
-    notifyUserWrite: () => {},
-    list: async () => [],
-    diff: async () => undefined,
-    fileDiff: async () => undefined,
-    restore: async () => false,
-    ...overrides,
-});
+const fakeHistory = (overrides: Partial<Services["history"]> = {}): Services["history"] =>
+    unstubbed("history", {
+        start: () => {},
+        stop: () => {},
+        snapshot: async () => undefined,
+        notifyUserWrite: () => {},
+        list: async () => [],
+        diff: async () => undefined,
+        fileDiff: async () => undefined,
+        restore: async () => false,
+        ...overrides,
+    });
 
 // The files seam with every method a no-op by default; a test overrides just the ones it asserts on.
-const fakeFiles = (overrides: Partial<Services["files"]> = {}): Services["files"] => ({
-    read: async () => undefined,
-    readWindow: async () => undefined,
-    write: async () => {},
-    writeStream: async () => {},
-    readBytes: async () => undefined,
-    size: async () => undefined,
-    mkdir: async () => {},
-    remove: async () => {},
-    move: async () => {},
-    copy: async () => {},
-    ...overrides,
-});
+const fakeFiles = (overrides: Partial<Services["files"]> = {}): Services["files"] =>
+    unstubbed("files", {
+        read: async () => undefined,
+        readWindow: async () => undefined,
+        write: async () => {},
+        writeStream: async () => {},
+        readBytes: async () => undefined,
+        size: async () => undefined,
+        mkdir: async () => {},
+        remove: async () => {},
+        move: async () => {},
+        copy: async () => {},
+        ...overrides,
+    });
 
 // All config fields at their schema defaults; the routes only read claudeCodeOauthToken / anthropicApiKey
 // (the agent guard) and the workspace paths (via services.workspace), so the rest are inert here.
@@ -185,12 +191,35 @@ const baseConfig: Config = {
     openaiApiKey: "",
     cloudflareApiToken: "",
     translator: { url: "", token: "" },
-    sandbox: { port: 8787, host: "0.0.0.0", publicUrl: "", name: "", image: "", environmentHash: "" },
+    sandbox: { port: 8787, host: "0.0.0.0", publicUrl: "", name: "", image: "", baseImage: "", environmentHash: "" },
     preview: { port: 5173 },
     google: { clientId: "" },
+    acmeDirectoryUrl: "",
+    intenticAgentModel: "",
+    iqModelDir: "",
+    iqRgPath: "",
+    iqPluginDir: "",
+    local: { port: 8788 },
 };
 
-const services = (overrides: Partial<Services> = {}): Services => {
+/* The seams a route test names but never exhausts. `auth` has four members and a test cares about one; `git`
+ * has thirty-seven and a route touches two. Spelling the rest out per call site is what rotted: each new
+ * method landed in the daemon, none landed in the fakes, and the gap only spoke as a 500 from whichever route
+ * reached it first. Declared Partial here and completed by `unstubbed`, so a test still says exactly what it
+ * relies on, an unstubbed call names ITSELF, and growing one of these interfaces stops touching this file.
+ */
+interface WideSeamOverrides {
+    readonly auth?: Partial<NonNullable<Services["auth"]>>;
+    readonly git?: Partial<Services["git"]>;
+    readonly usage?: Partial<Services["usage"]>;
+    readonly claudeStore?: Partial<Services["claudeStore"]>;
+    readonly cliProxy?: Partial<Services["cliProxy"]>;
+    readonly sandboxSettings?: Partial<Services["sandboxSettings"]>;
+}
+type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> & WideSeamOverrides;
+
+const services = (overrides: ServiceOverrides = {}): Services => {
+    const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, ...rest } = overrides;
     const merged: Services = {
         config: baseConfig,
         logger: createLogger(baseConfig),
@@ -208,6 +237,9 @@ const services = (overrides: Partial<Services> = {}): Services => {
         scanPorts: async () => [],
         terminalRun: createTerminalRunner(),
         panelToken: "panel-secret",
+        // The /vpn-scoped secret the in-container CLI presents. A fixed value here so a route test can present
+        // it; production mints one per boot.
+        agentToken: "agent-secret",
         // In-memory bridge-token fake: one fixed valid token, so middleware tests need no store file.
         bridgeTokens: {
             mint: async (label) => ({ id: "bt-1", token: `ibt_minted-${label}` }),
@@ -228,38 +260,38 @@ const services = (overrides: Partial<Services> = {}): Services => {
             clearFire: async () => {},
         },
         activity: { append: async () => {}, list: async () => [] },
-        usage: { record: async () => {}, rollup: async () => [] },
-        sandboxSettings: {
-            get: async () => ({
-                stableSystemPrompt: false,
-                skills: [],
-                hashlineEdits: false,
-                terseOutput: false,
-                iqSearch: false,
-                outputCleaners: "",
-                outputHoldout: 0,
-                filterBackend: "native" as const,
-            }),
+        usage: unstubbed("usage", { record: async () => {}, rollup: async () => [], turns: async () => [], ...usage }),
+        // The schema's own defaults, not a copy of them — every flag is opt-in, so parsing an empty object is
+        // exactly what the daemon reads from a workspace that has never written a settings file.
+        sandboxSettings: unstubbed("sandboxSettings", {
+            get: async () => SandboxSettingsSchema.parse({}),
             set: async () => {},
-        },
+            ...sandboxSettings,
+        }),
         // A connected account by default, so the /agent guard (no token + no env creds) doesn't short-circuit
         // turns under test. Tests that exercise the disconnected path override this.
-        claudeStore: {
+        claudeStore: unstubbed("claudeStore", {
             read: async (id) => (id === "default" ? { id: "default", label: "Claude", connectedAt: 0, accessToken: "tok-xyz" } : undefined),
             write: async () => {},
             clear: async () => {},
             list: async () => [{ id: "default", label: "Claude", connectedAt: 0 }],
-        },
+            withRefreshLock: async (_id, act) => act(),
+            logger: createLogger(baseConfig),
+            ...claudeStore,
+        }),
         // No usage measured by default — an account that hasn't run a turn since its window reset reports none.
         accountUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
         // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
-        cliProxy: {
+        cliProxy: unstubbed("cliProxy", {
             accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }),
             connect: async () => ({ url: "", code: "", state: "", flow: "device" as const }),
             complete: async () => {},
             disconnect: async () => {},
             models: async () => [],
-        },
+            refreshUsage: async () => {},
+            reopensAt: async () => undefined,
+            ...cliProxy,
+        }),
         codexHome: "/work/.intentic/codex",
         codexThreadExists: async () => true,
         // Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model.
@@ -286,7 +318,9 @@ const services = (overrides: Partial<Services> = {}): Services => {
             disconnect: async () => {},
         },
         intentic: async function* () {},
-        git: {
+        // Thirty-seven methods, of which the routes below reach a dozen; the rest stay unstubbed and name
+        // themselves if a route ever does reach one.
+        git: unstubbed("git", {
             init: async () => {},
             status: async () => ({ branch: "main", dirty: false, files: [] }),
             listFiles: async () => [],
@@ -307,7 +341,8 @@ const services = (overrides: Partial<Services> = {}): Services => {
             stagedFileDiff: async () => ({}),
             unstagedFileDiff: async () => ({}),
             fileDiff: async () => ({}),
-        },
+            ...git,
+        }),
         // A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
         // worktree git mechanics are stubbed — the worktree suites cover them against real git.
         // No land standings to derive here: these suites drive the routes, and where a card's work stands is
@@ -334,7 +369,7 @@ const services = (overrides: Partial<Services> = {}): Services => {
         // The isolation.test.ts suite covers the plan these routes would build when it IS available.
         // No mount capability, like a container launched without CAP_SYS_ADMIN — the plan still describes where
         // the worktree is, and the harness enforces it by redirecting tool paths instead of by mounting.
-        turnIsolation: { available: async () => false, planFor: async (worktree: string) => ({ worktree, root: "/work", mirrors: [] }) },
+        turnIsolation: noIsolation("/work"),
         // No agent has landed anything into these fake repos, so every changed file is the user's — and with no
         // ids to attribute, `identify` has nobody to resolve.
         agentOrigins: { forRepo: async () => ({}), identify: () => ({}) },
@@ -355,7 +390,7 @@ const services = (overrides: Partial<Services> = {}): Services => {
             }),
             markDirty: () => {},
             warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh" as const, ageMs: 0 } }),
-            close: () => {},
+            close: async () => {},
         },
         sessions: {
             list: async () => [],
@@ -367,7 +402,41 @@ const services = (overrides: Partial<Services> = {}): Services => {
         platformHostTunnel: async () => ({ status: 200, json: { hostname: "ssh-abc.example.com", tunnelToken: "tok" } }),
         ensurePreviewRoutes: async () => {},
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
-        auth: undefined,
+        /* Loopback mode unless a test asks for the exposed daemon — `auth: undefined` is the mode, so it is the
+         * ABSENCE of the key that means loopback, not an override that happens to be undefined. Spelled out
+         * rather than left to `unstubbed` because `allowOrigin` is a DATA member: a stand-in that answers every
+         * unread key with a throwing function would make it read as set, and the CORS branch turn on. */
+        auth:
+            auth === undefined
+                ? undefined
+                : {
+                      authorize: rejectAuth,
+                      authorizeOwner: rejectAuth,
+                      mintSession: async () => ({ token: "sess-token", expiresAt: 0 }),
+                      ...auth,
+                  },
+        /* Seams no suite in this file drives. They were absent altogether until the tests joined a type-check
+         * program — a spread of `Partial<Services>` tells the compiler every key might be supplied, so a fake
+         * missing fourteen REQUIRED members still read as a Services. Present and unstubbed is the honest
+         * state: a route that starts reading one of them names it here instead of answering 500. */
+        chores: unstubbed("chores", {}),
+        probeRunner: unstubbed("probeRunner", {}),
+        ciStore: unstubbed("ciStore", {}),
+        ciRuns: unstubbed("ciRuns", {}),
+        ciHooks: unstubbed("ciHooks", {}),
+        approvals: unstubbed("approvals", {}),
+        drafts: unstubbed("drafts", {}),
+        push: unstubbed("push", {}),
+        pushSender: unstubbed("pushSender", {}),
+        providerRefusals: unstubbed("providerRefusals", {}),
+        acpAgent: () => {
+            throw new Error("acpAgent was called, and this test did not stub it");
+        },
+        acpConnections: unstubbed("acpConnections", {}),
+        workspaceChildren: async () => {
+            throw new Error("workspaceChildren was called, and this test did not stub it");
+        },
+        authRoot: "/work/.intentic",
         // A conversation's transcript defaults to the same claude-code-only shape production reads before a
         // provider-native record exists: the SDK session `sessions.read` already stands in for (agent-transcript.ts),
         // keyed off the same registry `sessionIdOf` the route asks. Reads through `merged` (not the pre-override
@@ -389,15 +458,15 @@ const services = (overrides: Partial<Services> = {}): Services => {
             // a test double re-reading per call is exactly the behavior the cache exists to avoid paying for.
             prompts: async (agent) => userPromptsOf(await merged.transcripts.read(agent)),
         },
-        ...overrides,
+        ...rest,
     };
     return merged;
 };
 
 // A typed oRPC client over the in-process Hono app — the same OpenAPILink the browser uses, so streams round-
 // trip through the real SSE encode/decode. JSON routes resolve to their output; thrown ORPCErrors carry `.code`.
-const clientFor = (app: Hono): ContractRouterClient<typeof sandboxContract> =>
-    createORPCClient(new OpenAPILink(sandboxContract, { url: "http://sandbox", fetch: (request) => app.request(request) }));
+const clientFor = (app: Hono<AppEnv>): ContractRouterClient<typeof sandboxContract> =>
+    createORPCClient(new OpenAPILink(sandboxContract, { url: "http://sandbox", fetch: async (request) => app.request(request) }));
 
 // Without a vitest config there is no unstubEnvs, so a stubbed var would outlive the test that set it.
 afterEach(() => vi.unstubAllEnvs());
@@ -415,7 +484,7 @@ const rejectForbidden = async (): Promise<never> => {
 };
 
 // A JSON POST against the in-process app, for the plain (non-oRPC) routes.
-const postJson = (app: Hono, path: string, body?: unknown): Promise<Response> =>
+const postJson = async (app: Hono<AppEnv>, path: string, body?: unknown): Promise<Response> =>
     app.request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) });
 
 const errorCode = async (run: Promise<unknown>): Promise<string | undefined> => {
@@ -486,10 +555,11 @@ test("the boot gate holds data routes and lets the probe and the session exchang
 
     // A data route parks until the chain converges — an early request WAITS instead of reading half-built state.
     let settled = false;
-    const held = app.request("/settings").then((response) => {
+    const held = (async (): Promise<Response> => {
+        const response = await app.request("/settings");
         settled = true;
         return response;
-    });
+    })();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(settled).toBe(false);
 
@@ -567,12 +637,12 @@ test("workspace.search runs the resident engine in-process, mapping the wire que
                     }),
                     markDirty: () => {},
                     warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh", ageMs: 0 } }),
-                    close: () => {},
+                    close: async () => {},
                 },
             }),
         ),
     );
-    const result = await client.workspace.search({ query: "createWidget", mode: "find", includeIgnored: true, limit: 3 });
+    const result = await client.workspace.search({ query: "createWidget", mode: "find", includeIgnored: "true", limit: 3 });
     expect(result.groups).toEqual(groups);
     expect(requests).toEqual([
         {
@@ -1140,7 +1210,7 @@ test("events: the first frame is the workspace-identity hello, stable across con
             files: fakeFiles({
                 read: async (path) => disk.get(path),
                 write: async (path, content) => {
-                    disk.set(path, content);
+                    disk.set(path, typeof content === "string" ? content : new TextDecoder().decode(content));
                 },
             }),
         }),
@@ -1219,7 +1289,7 @@ test("POST /system/authorized-key authorizes via the pairing token alone (no bea
 test("POST /system/authorized-key is single-holder: a rival machine needs takeover (423), which replaces the key", async () => {
     // Enrollment writes the store under historyRoot and derives ~/.ssh/authorized_keys from it — point both at
     // temp dirs so neither lands on the real /history nor in the real home.
-    process.env.HOME = mkdtempSync(join(tmpdir(), "sync-enroll-home-"));
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-enroll-home-"));
     // connectToken + publicUrl make syncSshHostname resolve, so enrollment gets past the tunnel-configured check.
     const app = createApp(
         services({
@@ -1254,7 +1324,7 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
 });
 
 test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll — no single-holder lock", async () => {
-    process.env.HOME = mkdtempSync(join(tmpdir(), "sync-mirror-multi-"));
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-mirror-multi-"));
     const app = createApp(
         services({
             config: {
@@ -1296,7 +1366,7 @@ test("POST /system/sync/pair: the owner may mint a sync pairing, a member is cap
 });
 
 test("DELETE /system/authorized-key: a sync token self-revokes just its own enrollment", async () => {
-    process.env.HOME = mkdtempSync(join(tmpdir(), "sync-revoke-"));
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-revoke-"));
     const app = createApp(
         services({
             config: {
@@ -1323,7 +1393,7 @@ test("DELETE /system/authorized-key: a sync token self-revokes just its own enro
 });
 
 test("the enrollment-minted sync token reads /ports and nothing else", async () => {
-    process.env.HOME = mkdtempSync(join(tmpdir(), "sync-token-home-"));
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-token-home-"));
     // Bearer auth rejects everything, so a 200 proves the sync-token branch authorized the read.
     const app = createApp(
         services({
@@ -1951,7 +2021,7 @@ test("agent.run pre-flights a dead resume target with a coded error instead of s
 });
 
 test("Claude OAuth: accounts reflect the store, disconnect clears the named one", async () => {
-    const accounts = new Map<string, { id: string; label: string; connectedAt: number; accessToken: string; scope?: string }>();
+    const accounts = new Map<string, StoredAccount>();
     const client = clientFor(
         createApp(
             services({
@@ -1997,7 +2067,7 @@ test("Claude OAuth: accounts reflect the store, disconnect clears the named one"
 // able to name them: an identity the provider never reported (or one the user calls something else) leaves
 // renaming as the only answer.
 test("Claude OAuth: rename writes the label through, and 404s on an account that is gone", async () => {
-    const accounts = new Map<string, { id: string; label: string; connectedAt: number; accessToken: string; email?: string }>([
+    const accounts = new Map<string, StoredAccount>([
         ["a", { id: "a", label: "Claude", connectedAt: 1, accessToken: "tok", email: "a@example.com" }],
     ]);
     const client = clientFor(
@@ -2126,7 +2196,7 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
 test("a workspace turn follows the same registry lifecycle without inventing a branch", async () => {
     let cwd: string | undefined;
     const snapshots: string[] = [];
-    const spend: { conversationId?: string }[] = [];
+    const spend: Parameters<Services["usage"]["record"]>[0][] = [];
     const client = clientFor(
         createApp(
             services({
@@ -2142,7 +2212,7 @@ test("a workspace turn follows the same registry lifecycle without inventing a b
                         return undefined;
                     },
                 }),
-                usage: { record: async (entry) => void spend.push(entry), rollup: async () => [] },
+                usage: { record: async (entry) => void spend.push(entry) },
             }),
         ),
     );
@@ -2773,7 +2843,7 @@ test("workspace.file passes the requested window through and reports the range i
             services({
                 files: fakeFiles({
                     readWindow: async (_absPath, offset, limit) => {
-                        asked.push({ offset, limit });
+                        asked.push({ ...(offset === undefined ? {} : { offset }), ...(limit === undefined ? {} : { limit }) });
                         return { content: "tail\n", size: 4096, offset: 4091, bytes: 5 };
                     },
                 }),
@@ -3086,7 +3156,7 @@ test("workspace.addApps launches `intentic scaffold add-app` as a one-shot tmux 
     const repoDir = join(workspace.root, "shop");
     const jobs: { key: string; spec: ProcessSpec }[] = [];
     const ensured: string[] = [];
-    const processes: ManagedProcesses = {
+    const processes = unstubbed<ManagedProcesses>("processes", {
         start: async (key, spec) => {
             jobs.push({ key, spec });
         },
@@ -3094,7 +3164,7 @@ test("workspace.addApps launches `intentic scaffold add-app` as a one-shot tmux 
         running: () => false,
         portOf: () => undefined,
         stopAll: () => {},
-    };
+    });
     const client = clientFor(
         createApp(
             services({
@@ -3154,7 +3224,9 @@ test("environment: members read the state, approve/reject are owner-gated, appro
 
     // A member (bearer passes, owner check refuses as Forbidden) sees the state but can't approve or reject —
     // a verified non-owner is 403, not 401.
-    const memberApp = createApp(services({ files: memoryFiles, auth: { authorize: async () => {}, authorizeOwner: rejectForbidden } }));
+    const memberApp = createApp(
+        services({ files: memoryFiles, auth: { authorize: async () => ({ email: "member@example.com" }), authorizeOwner: rejectForbidden } }),
+    );
     const seen = await memberApp.request("/environment");
     expect(seen.status).toBe(200);
     expect(await seen.json()).toEqual({ proposal: { content: proposal, hash } });
@@ -3198,7 +3270,7 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
         },
     });
     // The vpn handler writes ~/.wireguard on the real fs — point HOME at a temp dir like vpn.test.ts.
-    process.env.HOME = mkdtempSync(join(tmpdir(), "app-vpn-home-"));
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-vpn-home-"));
     const client = clientFor(createApp(services({ files: memoryFiles, capabilities: memoryCapabilitiesStore() })));
 
     const events = await collect(
@@ -3210,7 +3282,7 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
             config: { provider: "wireguard", config: "[Interface]\nPrivateKey = P\n", autoConnect: "on" },
         }),
     );
-    expect(events.some((event) => "message" in event && (event as { message: string }).message.includes("rebuild"))).toBe(true);
+    expect(events.some((event) => "message" in event && typeof event["message"] === "string" && event["message"].includes("rebuild"))).toBe(true);
     const approvedFile = disk.get("/work/.intentic/environment.approved.Dockerfile");
     expect(approvedFile).toContain("wireguard-tools");
     expect(approvedFile).toContain("# intentic:runtime --device=/dev/net/tun");
@@ -3247,7 +3319,7 @@ test("GET /diff/raw streams a diff side's bytes: blob for the index side, disk f
                 }),
             }),
         );
-        const raw = (query: string): Promise<Response> => app.request(`/diff/raw?source=working&repo=root&path=logo.png&${query}`);
+        const raw = async (query: string): Promise<Response> => app.request(`/diff/raw?source=working&repo=root&path=logo.png&${query}`);
 
         // Unstaged: before is the index blob, after is the file on disk — the same pair unstagedFileDiff reads.
         const before = await raw("side=unstaged&which=before");
@@ -3293,7 +3365,8 @@ test("GET /diff/raw serves a commit's before/after blobs and refuses a sha that 
         const sha = (await git("rev-parse", "HEAD")).stdout.trim();
 
         const app = createApp(services({ workspace: workspacePaths(root) }));
-        const raw = (which: string): Promise<Response> => app.request(`/diff/raw?source=commit&repo=root&sha=${sha}&path=icon.png&which=${which}`);
+        const raw = async (which: string): Promise<Response> =>
+            app.request(`/diff/raw?source=commit&repo=root&sha=${sha}&path=icon.png&which=${which}`);
         expect(new Uint8Array(await (await raw("before")).arrayBuffer())).toEqual(new Uint8Array(first));
         expect(new Uint8Array(await (await raw("after")).arrayBuffer())).toEqual(new Uint8Array(second));
         expect((await app.request(`/diff/raw?source=commit&repo=root&sha=HEAD~1&path=icon.png&which=after`)).status).toBe(400);

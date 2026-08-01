@@ -48,7 +48,10 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
         { type: "item.completed", item: { id: "f1", type: "file_change", changes: [{ path: "src/app.ts", kind: "update" }], status: "completed" } },
         { type: "item.updated", item: { id: "t1", type: "todo_list", items: [{ text: "add route", completed: false }] } },
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Added the route." } },
-        { type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 3, output_tokens: 5, reasoning_output_tokens: 2 } },
+        {
+            type: "turn.completed",
+            usage: { input_tokens: 10, cached_input_tokens: 3, cache_write_input_tokens: 0, output_tokens: 5, reasoning_output_tokens: 2 },
+        },
     ]);
     const events = await collect(createCodexAgent("/work/.intentic/codex", runner), request);
     expect(events).toEqual([

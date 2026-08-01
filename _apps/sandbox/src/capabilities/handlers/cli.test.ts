@@ -34,7 +34,7 @@ const EXTENSIONS_DIR = fileURLToPath(new URL("../../../../../_extensions", impor
 // git-access hook never touches the real home.
 const tempCtx = (capabilities: Capability[] = []): { ctx: CapabilityCtx; root: string } => {
     const root = mkdtempSync(join(tmpdir(), "cli-cap-"));
-    process.env.HOME = mkdtempSync(join(tmpdir(), "cli-cap-home-"));
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "cli-cap-home-"));
     const ctx = {
         workspace: { root },
         files: { write: writeWorkspaceFile, read: readWorkspaceFile, remove: removeWorkspacePath, mkdir: makeWorkspaceDir },
@@ -173,7 +173,7 @@ test("echoConfig never leaks the secret — the token becomes hasSecret", async 
 
 const gitHome = (): string => {
     const home = mkdtempSync(join(tmpdir(), "git-cap-home-"));
-    process.env.HOME = home;
+    process.env["HOME"] = home;
     return home;
 };
 const hostKey = (home: string, host: string): string => join(home, ".ssh", "intentic-hosts", `${host}.key`);

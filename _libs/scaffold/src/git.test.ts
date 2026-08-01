@@ -2,7 +2,8 @@ import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { type GitRunner, gitClone, gitCommitAll, gitInit, gitStatus, gitSync } from "./git.js";
+import type { GitRunner } from "./exec.js";
+import { gitClone, gitCommitAll, gitInit, gitStatus, gitSync } from "./git.js";
 
 // A GitRunner that returns canned stdout per joined-args key and records every invocation.
 const recordingGit = (responses: Readonly<Record<string, string>>) => {
@@ -90,7 +91,17 @@ test("gitCommitAll stages, commits with the author identity, and reports a commi
     expect(calls).toContainEqual(["/work/app", "add", "-A"]);
     // `--no-verify` is deliberate: this commit is provenance, and the repo's own hooks must not make an agent's
     // work unlandable — see gitCommitAll.
-    expect(calls).toContainEqual(["/work/app", "-c", "user.name=intentic", "-c", "user.email=agent@intentic.dev", "commit", "--no-verify", "-m", "agent edit"]);
+    expect(calls).toContainEqual([
+        "/work/app",
+        "-c",
+        "user.name=intentic",
+        "-c",
+        "user.email=agent@intentic.dev",
+        "commit",
+        "--no-verify",
+        "-m",
+        "agent edit",
+    ]);
 });
 
 // The INDEX decides, so both "clean tree" and "dirty but nothing `add -A` can stage" (modified content inside

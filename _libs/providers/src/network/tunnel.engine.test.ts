@@ -3,6 +3,7 @@ import type { DesiredStateGraph } from "@intentic/graph";
 import { expect, test } from "vitest";
 import type { SshExecutor, SshResult } from "../core/ssh.js";
 import { createHostProvider } from "../host/host.js";
+import { unstubbed } from "../testing.js";
 import { createCfRouteProvider } from "./cf-route.js";
 import { createCloudflareProvider } from "./cloudflare.js";
 import type { CloudflareApi, IngressRule } from "./cloudflare-api.js";
@@ -15,7 +16,9 @@ const fakeCloudflare = (): CloudflareApi => {
     const records = new Map<string, { id: string; content: string }>();
     let ingress: IngressRule[] | undefined;
     let seq = 0;
-    return {
+    // `satisfies` keeps the literal contextually typed (so each method's args are inferred and checked)
+    // while `unstubbed` supplies the rest of the interface — this fake models the calls the engine drives.
+    const modelled = {
         getZone: async () => ({ id: "zone-123", accountId: "acct-1" }),
         listZones: async () => [{ id: "zone-123", name: "example.com", accountId: "acct-1" }],
         findTunnel: async ({ name }) => {
@@ -42,7 +45,8 @@ const fakeCloudflare = (): CloudflareApi => {
         },
         deleteTunnel: async () => {},
         deleteDnsRecord: async () => {},
-    };
+    } satisfies Partial<CloudflareApi>;
+    return unstubbed("cloudflare", modelled);
 };
 
 // A stateful host shared by the host + tunnel providers: Docker-ready, default route -> 10.0.0.5, and it

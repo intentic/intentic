@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
+import { isolatedAgent, noIsolation } from "../testing.js";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { createLogger } from "../logger.js";
 import { createPerfTracker } from "../platform/perf.js";
 import { workspacePaths } from "../workspace/workspace.js";
-import type { PersistedAgent } from "./agents-store.js";
+import type { IsolatedAgent } from "./agents-store.js";
 import { landAgent } from "./land.js";
 import { createLandStandings } from "./standing.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";
@@ -18,8 +19,6 @@ const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exe
 const commit = (cwd: string, message: string): Promise<string> => sh(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message);
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 const perf = createPerfTracker(logger);
-const noIsolation = { available: async () => false, planFor: async () => undefined };
-
 const tempDirs: string[] = [];
 afterEach(async () => {
     for (const dir of tempDirs.splice(0)) {
@@ -31,44 +30,29 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     const base = await mkdtemp(join(tmpdir(), "intentic-standing-"));
     tempDirs.push(base);
     const work = join(base, "work");
+    const historyRoot = join(base, "history");
     const workspace = workspacePaths(work);
     await mkdir(work, { recursive: true });
-    await ensureRootRepo(workspace, join(base, "history"));
+    await ensureRootRepo(workspace, historyRoot);
     await writeFile(join(work, "app.ts"), "line one\nline two\nline three\n");
     await sh(work, "add", "-A");
     await commit(work, "baseline");
     const worktrees = createAgentWorktrees({
         workspace,
-        worktreesRoot: join(base, "history", "worktrees"),
-        historyRoot: join(base, "history"),
-        isolation: noIsolation,
+        worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
+        isolation: noIsolation(work, historyRoot),
         logger,
         perf,
     });
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 
-const entryFor = (repos: PersistedAgent["repos"], overrides: Partial<PersistedAgent> = {}): PersistedAgent => ({
-    id: "c1",
-    branch: "agent/c1",
-    title: "fix the thing",
-    provider: "claude",
-    harness: "native",
-    repos: [...repos],
-    status: "idle",
-    costUsd: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    createdAt: 0,
-    updatedAt: 0,
-    ...overrides,
-});
-
 // One conflict report, shaped like the one a refused land records. What it SAYS never matters here — only
 // whether the standing lets it speak.
 const report = [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" as const }], clean: 0 }];
 
-const standingOf = async (worktrees: AgentWorktrees, entry: PersistedAgent): Promise<string> => {
+const standingOf = async (worktrees: AgentWorktrees, entry: IsolatedAgent): Promise<string> => {
     const standings = createLandStandings(worktrees);
     await standings.refresh([entry]);
     return standings.of(entry.id);
@@ -77,11 +61,11 @@ const standingOf = async (worktrees: AgentWorktrees, entry: PersistedAgent): Pro
 test("an agent with nothing on its branch is idle; one whose work landed reads landed", async () => {
     const { worktrees, conversation } = await setup();
     // A turn that produced nothing — answered a question, read some files. The most archivable card there is.
-    expect(await standingOf(worktrees, entryFor(conversation.repos))).toBe("idle");
+    expect(await standingOf(worktrees, isolatedAgent(conversation.repos))).toBe("idle");
 
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
-    const landed = await landAgent(worktrees, entryFor(conversation.repos));
-    expect(await standingOf(worktrees, entryFor(landed.repos))).toBe("landed");
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    expect(await standingOf(worktrees, isolatedAgent(landed.repos))).toBe("landed");
 });
 
 test("work held on the branch reads ready, and a refused land makes the same delta a conflict", async () => {
@@ -91,10 +75,10 @@ test("work held on the branch reads ready, and a refused land makes the same del
     await commit(conversation.cwd, "agent work");
 
     // Outstanding, nothing refused: the deliberate-land queue.
-    expect(await standingOf(worktrees, entryFor(conversation.repos))).toBe("ready");
+    expect(await standingOf(worktrees, isolatedAgent(conversation.repos))).toBe("ready");
     // The SAME delta, with the last land's refusal on the entry. The report explains a conflict; the delta is
     // what makes there be one.
-    expect(await standingOf(worktrees, entryFor(conversation.repos, { conflicts: report }))).toBe("conflict");
+    expect(await standingOf(worktrees, isolatedAgent(conversation.repos, { conflicts: report }))).toBe("conflict");
 });
 
 /* THE REGRESSION. A conflict verdict used to be written onto the entry and read back forever, so an agent
@@ -110,7 +94,7 @@ test("a conflict report cannot outlive its delta: work merged into main by hand 
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
     await sh(conversation.cwd, "add", "-A");
     await commit(conversation.cwd, "agent work");
-    const stranded = entryFor(conversation.repos, { conflicts: report });
+    const stranded = isolatedAgent(conversation.repos, { conflicts: report });
     expect(await standingOf(worktrees, stranded)).toBe("conflict");
 
     // The user gives up on the button and merges the branch in a terminal. The daemon sees none of it, and the
@@ -125,7 +109,7 @@ test("a conflict report cannot outlive its delta: work merged into main by hand 
 test("a standing is re-derived when either the branch or the main tree moves", async () => {
     const { work, worktrees, conversation } = await setup();
     const standings = createLandStandings(worktrees);
-    const entry = entryFor(conversation.repos);
+    const entry = isolatedAgent(conversation.repos);
     await standings.refresh([entry]);
     expect(standings.of("c1")).toBe("idle");
 
@@ -159,14 +143,14 @@ test("a land re-derives on the spot, even though neither sha moved", async () =>
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
     await sh(conversation.cwd, "add", "-A");
     await commit(conversation.cwd, "agent work");
-    const entry = entryFor(conversation.repos);
+    const entry = isolatedAgent(conversation.repos);
     await standings.refresh([entry]);
     expect(standings.of("c1")).toBe("ready");
 
     const landed = await landAgent(worktrees, entry);
     expect(landed.landed).toBe(true);
 
-    expect(await standings.refresh([entryFor(landed.repos)])).toBe(true);
+    expect(await standings.refresh([isolatedAgent(landed.repos)])).toBe(true);
     expect(standings.of("c1")).toBe("landed");
 });
 
@@ -179,7 +163,7 @@ test("a refused land arms the conflict against the same shas", async () => {
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
     await sh(conversation.cwd, "add", "-A");
     await commit(conversation.cwd, "agent work");
-    const entry = entryFor(conversation.repos);
+    const entry = isolatedAgent(conversation.repos);
     await standings.refresh([entry]);
     expect(standings.of("c1")).toBe("ready");
 
@@ -188,7 +172,7 @@ test("a refused land arms the conflict against the same shas", async () => {
     const refused = await landAgent(worktrees, entry);
     expect(refused.landed).toBe(false);
 
-    expect(await standings.refresh([entryFor(refused.repos, { conflicts: refused.conflicts })])).toBe(true);
+    expect(await standings.refresh([isolatedAgent(refused.repos, { conflicts: refused.conflicts })])).toBe(true);
     expect(standings.of("c1")).toBe("conflict");
 });
 
@@ -198,7 +182,7 @@ test("forget drops an agent's standing, and an unprobed one reads idle", async (
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
     await sh(conversation.cwd, "add", "-A");
     await commit(conversation.cwd, "agent work");
-    await standings.refresh([entryFor(conversation.repos)]);
+    await standings.refresh([isolatedAgent(conversation.repos)]);
     expect(standings.of("c1")).toBe("ready");
 
     standings.forget(["c1"]);
@@ -214,7 +198,7 @@ test("a repo whose branch has been deleted contributes nothing outstanding", asy
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
     await sh(conversation.cwd, "add", "-A");
     await commit(conversation.cwd, "agent work");
-    const entry = entryFor(conversation.repos, { conflicts: report });
+    const entry = isolatedAgent(conversation.repos, { conflicts: report });
     expect(await standingOf(worktrees, entry)).toBe("conflict");
 
     await worktrees.remove("c1", conversation.repos);

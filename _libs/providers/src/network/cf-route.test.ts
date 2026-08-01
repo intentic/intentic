@@ -1,27 +1,11 @@
 import { expect, test } from "vitest";
 
+import { unstubbed } from "../testing.js";
 import { createCfRouteProvider } from "./cf-route.js";
 import type { CloudflareApi } from "./cloudflare-api.js";
 
-const NOT_USED = async (): Promise<never> => {
-    throw new Error("unused by the cf-route provider");
-};
-const api = (overrides: Partial<CloudflareApi>): CloudflareApi => ({
-    getZone: NOT_USED,
-    listZones: NOT_USED,
-    findTunnel: NOT_USED,
-    createTunnel: NOT_USED,
-    getTunnelToken: NOT_USED,
-    getTunnelStatus: NOT_USED,
-    getTunnelIngress: NOT_USED,
-    putTunnelIngress: NOT_USED,
-    findDnsRecord: NOT_USED,
-    createDnsRecord: NOT_USED,
-    updateDnsRecord: NOT_USED,
-    deleteTunnel: NOT_USED,
-    deleteDnsRecord: NOT_USED,
-    ...overrides,
-});
+// Only the calls a suite asserts on are stubbed; anything else the provider reaches names itself.
+const api = (overrides: Partial<CloudflareApi>): CloudflareApi => unstubbed("cloudflare", overrides);
 
 const ctx = () => ({
     env: {},
@@ -65,8 +49,8 @@ test("read returns undefined on a PENDING zoneId — the zone is itself a pendin
 test("diff on a PENDING cname reports drift with a reason instead of crashing", () => {
     const provider = createCfRouteProvider(api({}));
     const result = provider.diff({ ...inputs, cname: PENDING_LIKE }, { outputs: {}, detail: { content: "old.cfargotunnel.com" } });
-    expect(result.action).toBe("update");
-    expect(result.reason).toContain("not derivable");
+    expect(result).toMatchObject({ action: "update" });
+    expect(result.action === "update" && result.reason).toContain("not derivable");
 });
 
 test("diff is noop when the CNAME already targets the tunnel", () => {

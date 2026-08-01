@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createEngine, estimateTokens, type QueryRequest, type Scope } from "@intentic/iq-engine";
+import { anchorsOf } from "./anchors.js";
 import { type BenchConfig, CONFIGS, needsModels } from "./configs.js";
 import { ensureIndex, ensureModels, headSha, indexDirFor, packageRoot, repoRoot } from "./repos.js";
 import { type CaseRow, type CaseScope, type QueryCase, type QueryDataset, QueryDatasetSchema } from "./schema.js";
@@ -56,7 +57,7 @@ const runConfig = async (dataset: QueryDataset, root: string, config: BenchConfi
         const start = performance.now();
         const outcome = await engine.run(requestOf(dataset, queryCase));
         const latencyMs = performance.now() - start;
-        const score = scoreCase(queryCase.expected, rankedAnchors(outcome.result));
+        const score = scoreCase(anchorsOf(queryCase, root), rankedAnchors(outcome.result));
         rows.push({ ...base, caseId: queryCase.id, verb: queryCase.verb, score: { ...score, tokens: estimateTokens(outcome.text), latencyMs } });
     }
     return rows;

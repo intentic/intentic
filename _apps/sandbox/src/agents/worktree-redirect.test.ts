@@ -7,6 +7,7 @@ const plan: IsolationPlan = {
     worktree: "/history/worktrees/abc",
     root: "/work",
     mirrors: ["node_modules", "intentic/node_modules", "intentic/_apps/web/node_modules", "intentic/_apps/web/dist"],
+    overlays: "/history/overlays/abc",
 };
 
 // The tool input a PreToolUse hook actually returns, or undefined when it declined to rewrite anything.

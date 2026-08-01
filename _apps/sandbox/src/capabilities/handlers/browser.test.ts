@@ -66,6 +66,6 @@ test("every platform has a non-empty skill with front-matter", () => {
 });
 
 test("echoConfig exposes only the platform; browser holds no manifest secret", () => {
-    expect(echoConfig(reddit)).toEqual({ platform: "reddit" });
-    expect(secretField(reddit)).toBeUndefined();
+    expect(echoConfig(reddit, new Map())).toEqual({ platform: "reddit" });
+    expect(secretField(reddit, new Map())).toBeUndefined();
 });

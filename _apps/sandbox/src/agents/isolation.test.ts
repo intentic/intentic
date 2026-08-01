@@ -154,7 +154,7 @@ test("dependency and build-output dirs are discovered shallowest-first so a pare
     // that the mirrored dist already covers sources the turn has since changed.
     await mkdir(join(root, "_libs", "ui", ".cache"), { recursive: true });
 
-    expect(await mirroredDirs(root, await checkout(root), { intoNestedRepos: true })).toEqual([
+    expect(await mirroredDirs(root, await checkout(), { intoNestedRepos: true })).toEqual([
         "node_modules",
         "_apps/web/node_modules",
         "_libs/ui/dist",
@@ -170,7 +170,7 @@ test("a dir the checkout fills is never mirrored — a tracked build output stay
 
     // The repo TRACKS its dist, so the checkout carries it. Mounting the main tree's over it would hide the
     // very files the agent's branch exists to change.
-    const worktree = await checkout(root);
+    const worktree = await checkout();
     await mkdir(join(worktree, "_libs", "ui", "dist"), { recursive: true });
     await writeFile(join(worktree, "_libs", "ui", "dist", "index.js"), "the agent's own\n");
 
@@ -184,7 +184,7 @@ test("a nested repo's dirs belong to its own worktree, not the parent's", async 
     await mkdir(join(root, "intent", ".git"), { recursive: true });
     await mkdir(join(root, "intent", "node_modules"), { recursive: true });
 
-    const worktree = await checkout(root);
+    const worktree = await checkout();
     // The PLAN spans the workspace: each nested worktree is mounted under the same root, so it wants both.
     expect(await mirroredDirs(root, worktree, { intoNestedRepos: true })).toEqual(["node_modules", "intent/node_modules"]);
     // The symlink mirror runs per repo, and planting `intent/node_modules` from here would put the nested

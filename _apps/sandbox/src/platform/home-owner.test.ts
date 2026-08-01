@@ -2,14 +2,14 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pino } from "pino";
+import { type Logger, pino } from "pino";
 import { expect, test } from "vitest";
 import { claimContainerHome } from "./home-owner.js";
 
 const CONTAINER = { workspaceRoot: "/work", historyRoot: "/history" };
 const DEV_RUN = { workspaceRoot: "/tmp/sbx/work", historyRoot: "/tmp/sbx/history" };
 
-const setup = async (): Promise<{ home: string; lines: object[]; logger: ReturnType<typeof pino> }> => {
+const setup = async (): Promise<{ home: string; lines: object[]; logger: Logger }> => {
     const home = await mkdtemp(join(tmpdir(), "home-owner-"));
     const lines: object[] = [];
     const logger = pino({ level: "debug" }, { write: (line: string) => void lines.push(JSON.parse(line) as object) });

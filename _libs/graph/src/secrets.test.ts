@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { collectSecretUsage } from "./secrets.js";
-import type { DesiredStateGraph } from "./types.js";
+import type { DesiredStateGraph, ResourceNode } from "./types.js";
 
-const node = (id: string, type: string, inputs: Record<string, unknown>) => ({ id, type, inputs, dependsOn: [] });
+const node = (id: string, type: string, inputs: ResourceNode["inputs"]): ResourceNode => ({ id, type, inputs, dependsOn: [] });
 const env = (key: string) => ({ $secret: { source: "env" as const, key } });
 const gen = (key: string) => ({ $secret: { source: "generated" as const, key } });
 

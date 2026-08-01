@@ -1,5 +1,6 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { expect, test } from "vitest";
+import { syncHookOutput } from "../testing.js";
 import { browserArtifactHooks, browserOutputDir, screenshotImage } from "./browser-artifacts.js";
 
 const OUTPUT = browserOutputDir("/work");
@@ -18,7 +19,7 @@ const fire = async (toolName: string, toolInput: Record<string, unknown>) => {
 };
 
 const rewritten = (result: Awaited<ReturnType<typeof fire>>): string | undefined =>
-    (result.hookSpecificOutput as { updatedInput?: { filename?: string } } | undefined)?.updatedInput?.filename;
+    (syncHookOutput(result).hookSpecificOutput as { updatedInput?: { filename?: string } } | undefined)?.updatedInput?.filename;
 
 test("the output dir is the one place browser artifacts live", () => {
     expect(OUTPUT).toBe("/work/.intentic/browser/output");
@@ -33,7 +34,7 @@ test("a model-named screenshot is redirected out of the agent's cwd", async () =
 
 test("the rest of the tool input rides along untouched", async () => {
     const result = await fire("mcp__web__browser_take_screenshot", { filename: "shot.png", type: "png", fullPage: true });
-    expect((result.hookSpecificOutput as { updatedInput?: Record<string, unknown> }).updatedInput).toEqual({
+    expect((syncHookOutput(result).hookSpecificOutput as { updatedInput?: Record<string, unknown> }).updatedInput).toEqual({
         filename: "/work/.intentic/browser/output/shot.png",
         type: "png",
         fullPage: true,
@@ -42,7 +43,9 @@ test("the rest of the tool input rides along untouched", async () => {
 
 test("the agent is told the absolute path, since the tool answers with a relative one", async () => {
     const result = await fire("mcp__web__browser_take_screenshot", { filename: "shot.png" });
-    expect((result.hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain("/work/.intentic/browser/output/shot.png");
+    expect((syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain(
+        "/work/.intentic/browser/output/shot.png",
+    );
 });
 
 // A logged-in capability's browser gets no --output-dir at all, so its named files need this even more.

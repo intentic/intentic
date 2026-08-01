@@ -157,7 +157,7 @@ test("apply throws when the host has no docker CLI", async () => {
 
 test("delete removes the container + state dir but never runs restic forget / deletes the repo", async () => {
     const ssh = fakeSsh({ running: true });
-    await createBackupProvider(ssh.executor).delete(inputs, ctx());
+    await createBackupProvider(ssh.executor).delete?.(inputs, ctx());
     expect(ssh.commands.some((c) => c.includes("docker rm -f intentic-backup"))).toBe(true);
     expect(ssh.commands.some((c) => c.includes("rm -rf /opt/intentic/backup"))).toBe(true);
     expect(ssh.commands.some((c) => c.includes("restic") && (c.includes("forget") || c.includes("unlock") || c.includes("prune")))).toBe(false);

@@ -14,7 +14,7 @@ const listPanes = (...panes: Pane[]): string =>
     panes.map(([session, attached, agoMs, dead]) => `${session} ${attached} ${at(agoMs)} ${dead}`).join("\n");
 
 const nothingWorking = (): boolean => false;
-const reap = (stdout: string, keep = nothingWorking): string[] => reapableSessions(stdout, NOW, keep);
+const reap = (stdout: string, keep: (session: string) => boolean = nothingWorking): string[] => reapableSessions(stdout, NOW, keep);
 
 test("finished agent and job sessions age out; the ones that just finished stay", () => {
     const stdout = listPanes(["agent-old", 0, 3 * HOUR, 1], ["job-capability-demo", 0, 5 * HOUR, 1], ["agent-recent", 0, 10 * 60_000, 1]);

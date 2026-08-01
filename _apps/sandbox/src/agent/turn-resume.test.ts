@@ -1,12 +1,13 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn, RestoredMessage } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { fileApprovalsStore } from "../automations/approvals-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
+import type { TranscriptAgent } from "../sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../settings/settings-store.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
@@ -32,8 +33,8 @@ const fakeServices = (root: string): Services => {
         logger: { info: () => {}, warn: () => {}, error: () => {} },
         workspace: { root },
         transcripts: {
-            open: (agent) => record.open(agent.id, async () => []),
-            append: (agent, messages) => record.append(agent.id, messages),
+            open: (agent: TranscriptAgent) => record.open(agent.id, async () => []),
+            append: (agent: TranscriptAgent, messages: readonly RestoredMessage[]) => record.append(agent.id, messages),
         },
     } as unknown as Services;
 };
@@ -327,7 +328,7 @@ test("an interrupted chat turn is re-run under the restart note, on the session 
     const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     await services.turnJournal.recordTurn(journalled("rs-1", { sessionId: "s-partial" }));
     const prompts: string[] = [];
-    const inputs: (AgentTurn & { conversationId?: string })[] = [];
+    const inputs: AgentTurn[] = [];
     const capture: WakeFn = async function* (_services, input) {
         prompts.push(input.prompt);
         inputs.push(input);

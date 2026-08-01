@@ -15,14 +15,18 @@ import {
 
 const turn = (): SubagentTurn => ({ conversationId: "conv-1", cwd: "/work", sessionId: "sess-1" });
 
-const started = (over: Partial<SubagentTaskMessage> = {}): SubagentTaskMessage => ({
-    subtype: "task_started",
-    task_id: "task-a",
-    tool_use_id: "call-1",
-    description: "Locate claimIndexer",
-    subagent_type: "Explore",
-    ...over,
-});
+// A `task_started` as the SDK delivers it. An override spelled out as `undefined` states that the SDK sent the
+// task WITHOUT that field — the case two of these suites are about — which is why the override map admits
+// undefined where SubagentTaskMessage's own optional fields do not.
+const started = (over: { [K in keyof SubagentTaskMessage]?: SubagentTaskMessage[K] | undefined } = {}): SubagentTaskMessage =>
+    ({
+        subtype: "task_started",
+        task_id: "task-a",
+        tool_use_id: "call-1",
+        description: "Locate claimIndexer",
+        subagent_type: "Explore",
+        ...over,
+    }) as SubagentTaskMessage;
 
 const update = (frame: AgentEvent | undefined): Extract<AgentEvent, { kind: "subagent_update" }> => {
     if (frame?.kind !== "subagent_update") {
@@ -63,7 +67,9 @@ describe("the SDK's own subagents", () => {
      * a child does — and the area filled up with shell commands listed as agents, each opening on an empty
      * transcript because no per-child JSONL exists for something that was never a child. */
     it("files agent tasks only, not the shell/monitor/workflow work the same stream carries", () => {
-        expect(noteSubagentTask(turn(), started({ subagent_type: undefined, task_type: "shell", description: "Run full web suite" }))).toBeUndefined();
+        expect(
+            noteSubagentTask(turn(), started({ subagent_type: undefined, task_type: "shell", description: "Run full web suite" })),
+        ).toBeUndefined();
         expect(noteSubagentTask(turn(), started({ tool_use_id: "call-2", subagent_type: undefined, task_type: "monitor" }))).toBeUndefined();
         expect(noteSubagentTask(turn(), started({ tool_use_id: "call-3", subagent_type: undefined, task_type: "local_workflow" }))).toBeUndefined();
         // An unlabelled task is left off too: unknown task types are the SDK's to add, and guessing is what put

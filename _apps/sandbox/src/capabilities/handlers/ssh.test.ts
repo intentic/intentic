@@ -12,7 +12,7 @@ import { sshHandler } from "./ssh.js";
 const tempCtx = (remaining: Capability[] = []): { ctx: CapabilityCtx; root: string; home: string } => {
     const root = mkdtempSync(join(tmpdir(), "ssh-cap-ws-"));
     const home = mkdtempSync(join(tmpdir(), "ssh-cap-home-"));
-    process.env.HOME = home;
+    process.env["HOME"] = home;
     const ctx = {
         workspace: { root },
         files: { write: writeWorkspaceFile, read: readWorkspaceFile, remove: removeWorkspacePath },

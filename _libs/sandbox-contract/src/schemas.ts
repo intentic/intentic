@@ -1268,24 +1268,37 @@ export type FileDiff = z.infer<typeof FileDiffSchema>;
 
 // ---- workspace tree + files ----
 
-// One node of the full /work filesystem tree the agent sees (untracked + generated files included), distinct
-// from the git-tracked listing. `path` is root-relative with forward slashes so it feeds straight back to the
-// file route. Recursive via zod's getter form (so the type is inferred, not hand-annotated).
-export const WorkspaceTreeEntrySchema = z.object({
+/* One node of the full /work filesystem tree the agent sees (untracked + generated files included), distinct
+ * from the git-tracked listing. `path` is root-relative with forward slashes so it feeds straight back to the
+ * file route.
+ *
+ * Recursive, and the type is declared rather than inferred. Zod's getter form does infer one, but it collapses
+ * to `{}` below the first level of nesting — so `entry.children[0].name` type-checked as an index-signature
+ * read on both sides of the wire, and the tree walker's own suite was reading a `hidden` field off entries
+ * that has never existed there without the compiler minding. The interface is the contract; the schema
+ * validates against it, and z.ZodType makes a divergence between the two an error here. */
+export interface WorkspaceTreeEntry {
+    readonly name: string;
+    readonly path: string;
+    readonly type: "file" | "dir";
+    readonly size?: number | undefined;
+    // Ignored-by-tooling (node_modules, .git, .gitignore'd paths, browser profiles): the client grays the row.
+    readonly ignored?: boolean | undefined;
+    // A DIR without `children` was listed but not descended into — because it's ignored, or because the walk's
+    // breadth-first budget stopped above it. Either way the client lazy-loads it via /workspace/children on
+    // expand, so "not loaded yet" and "empty directory" (`children: []`) stay distinguishable.
+    readonly children?: readonly WorkspaceTreeEntry[] | undefined;
+}
+export const WorkspaceTreeEntrySchema: z.ZodType<WorkspaceTreeEntry> = z.object({
     name: z.string(),
     path: z.string(),
     type: z.enum(["file", "dir"]),
     size: z.number().optional(),
-    // Ignored-by-tooling (node_modules, .git, .gitignore'd paths, browser profiles): the client grays the row.
     ignored: z.boolean().optional(),
-    // A DIR without `children` was listed but not descended into — because it's ignored, or because the walk's
-    // breadth-first budget stopped above it. Either way the client lazy-loads it via /workspace/children on
-    // expand, so "not loaded yet" and "empty directory" (`children: []`) stay distinguishable.
     get children() {
         return z.array(WorkspaceTreeEntrySchema).optional();
     },
 });
-export type WorkspaceTreeEntry = z.infer<typeof WorkspaceTreeEntrySchema>;
 export const WorkspaceTreeSchema = z.object({
     root: z.string(),
     tree: z.array(WorkspaceTreeEntrySchema),

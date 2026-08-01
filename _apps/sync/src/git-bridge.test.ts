@@ -171,6 +171,9 @@ describe("bridgeRepo", () => {
 
 describe("runGitBridge", () => {
     const config: SyncConfig = { sandboxUrl: "https://s.example.dev", sandboxId: "x", sshHostname: "ssh.example.dev", mode: "sync", localDir: LOCAL };
+    // A mirror-only enrollment has no localDir AT ALL — the key is absent, not present-and-undefined, which
+    // is the distinction the config type draws and the bridge reads.
+    const { localDir: _localDir, ...withoutLocalDir } = config;
 
     it("reuses a repo list an earlier pass returned instead of re-listing over ssh", () => {
         const { calls, exec } = scripted({});
@@ -191,7 +194,7 @@ describe("runGitBridge", () => {
 
     it("does nothing for a mirror-only enrollment, which has no local tree to bridge into", () => {
         const { calls, exec } = scripted({ ssh: "intentic\n" });
-        expect(runGitBridge(exec, { ...config, mode: "mirror", localDir: undefined }, () => undefined, undefined)).toBeUndefined();
+        expect(runGitBridge(exec, { ...withoutLocalDir, mode: "mirror" as const }, () => undefined, undefined)).toBeUndefined();
         expect(calls).toEqual([]);
     });
 });

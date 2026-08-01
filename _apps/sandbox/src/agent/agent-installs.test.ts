@@ -1,5 +1,6 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { expect, test } from "vitest";
+import { syncHookOutput } from "../testing.js";
 import { installSteeringHooks } from "./agent-installs.js";
 
 const fire = async (hooks: ReturnType<typeof installSteeringHooks>, command: string) => {
@@ -9,7 +10,7 @@ const fire = async (hooks: ReturnType<typeof installSteeringHooks>, command: str
 };
 
 const context = (result: Awaited<ReturnType<typeof fire>>): string | undefined =>
-    (result.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;
+    (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;
 
 test.each([
     "apt-get install -y imagemagick",

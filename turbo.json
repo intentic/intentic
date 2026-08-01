@@ -10,6 +10,14 @@
             "dependsOn": ["^build"],
             "outputs": []
         },
+        // Type-checks each package INCLUDING its test files, which `build` cannot: an emitting package excludes
+        // *.test.ts to keep test code out of dist, so without this task the tests are the one part of the repo
+        // no type checker ever reads. Same `^build` dependency as `test` — a package resolves its workspace
+        // imports through the referenced projects' emitted declarations.
+        "typecheck": {
+            "dependsOn": ["^build"],
+            "outputs": []
+        },
         "check": {
             "dependsOn": ["^build"],
             "outputs": []

@@ -2,6 +2,7 @@ import { apply } from "@intentic/engine";
 import { env } from "@intentic/graph";
 import { defineStack } from "@intentic/sdk";
 import { expect, test } from "vitest";
+import { unstubbed } from "./testing.js";
 import type { SshExecutor, SshResult } from "./core/ssh.js";
 import type { ForgejoApi, ForgejoHook, ForgejoRepo } from "./forgejo/forgejo-api.js";
 import type { GitLabApi } from "./gitlab/gitlab-api.js";
@@ -144,7 +145,9 @@ const fakeCloudflare = (): CloudflareApi => {
     const records = new Map<string, { id: string; content: string }>();
     let ingress: IngressRule[] | undefined;
     let seq = 0;
-    return {
+    // `satisfies` keeps the literal contextually typed (so each method's args are inferred and checked)
+    // while `unstubbed` supplies the rest of the interface — this fake models the calls the engine drives.
+    const modelled = {
         getZone: async () => ({ id: "zone-123", accountId: "acct-1" }),
         listZones: async () => [{ id: "zone-123", name: "example.com", accountId: "acct-1" }],
         findTunnel: async ({ name }) => {
@@ -171,7 +174,8 @@ const fakeCloudflare = (): CloudflareApi => {
         },
         deleteTunnel: async () => {},
         deleteDnsRecord: async () => {},
-    };
+    } satisfies Partial<CloudflareApi>;
+    return unstubbed("cloudflare", modelled);
 };
 
 const fakeForgejoApi = (): ForgejoApi => {
@@ -179,7 +183,9 @@ const fakeForgejoApi = (): ForgejoApi => {
     const hooks = new Map<string, ForgejoHook[]>();
     const files = new Map<string, string>();
     let seq = 0;
-    return {
+    // `satisfies` keeps the literal contextually typed (so each method's args are inferred and checked)
+    // while `unstubbed` supplies the rest of the interface — this fake models the calls the engine drives.
+    const modelled = {
         findRepo: async ({ name }) => repos.get(name),
         createRepo: async ({ name }) => {
             const repo = { cloneUrl: `https://git.example.com/admin/${name}.git`, sshUrl: `git@git.example.com:admin/${name}.git` };
@@ -189,14 +195,14 @@ const fakeForgejoApi = (): ForgejoApi => {
         listHooks: async ({ name }) => hooks.get(name) ?? [],
         createHook: async ({ name, type, config, events }) => {
             const list = hooks.get(name) ?? [];
-            list.push({ id: seq++, type, config, events, active: true });
+            list.push({ id: seq++, type, config, events: [...events], active: true });
             hooks.set(name, list);
         },
         updateHook: async ({ name, id, config, events }) => {
             hooks.set(
                 name,
                 (hooks.get(name) ?? []).map((hook) =>
-                    hook.id === id ? { id: hook.id, type: hook.type, config, events, active: hook.active } : hook,
+                    hook.id === id ? { id: hook.id, type: hook.type, config, events: [...events], active: hook.active } : hook,
                 ),
             );
         },
@@ -207,7 +213,8 @@ const fakeForgejoApi = (): ForgejoApi => {
             files.set(`${name}@${branch}:${path}`, content);
         },
         setRepoSecret: async () => {},
-    };
+    } satisfies Partial<ForgejoApi>;
+    return unstubbed("forgejo", modelled);
 };
 
 const fakeGitlabApi = (): GitLabApi => {
@@ -244,7 +251,9 @@ const fakeKomodoApi = (): KomodoApi => {
     const deployments = new Map<string, { id: string; config: DeploymentConfig }>();
     const alerters = new Map<string, { id: string; config: AlerterConfig }>();
     let seq = 0;
-    return {
+    // `satisfies` keeps the literal contextually typed (so each method's args are inferred and checked)
+    // while `unstubbed` supplies the rest of the interface — this fake models the calls the engine drives.
+    const modelled = {
         login: async () => "jwt",
         listDeployments: async () => [...deployments].map(([name, value]) => ({ id: value.id, name })),
         getDeployment: async ({ deployment }) => {
@@ -283,7 +292,8 @@ const fakeKomodoApi = (): KomodoApi => {
                 }
             }
         },
-    };
+    } satisfies Partial<KomodoApi>;
+    return unstubbed("komodo", modelled);
 };
 
 const fullEnv = {

@@ -57,7 +57,7 @@ test("discoverXaiModels falls back to /v1/language-models when /v1/models is emp
 test("discoverXaiModels probes the chat endpoint and parses 'Did you mean' when the catalogs are empty", async () => {
     const seen: { url: string; method?: string }[] = [];
     const fake = (async (url: string | URL, init?: RequestInit) => {
-        seen.push({ url: String(url), method: init?.method });
+        seen.push({ url: String(url), ...(init?.method === undefined ? {} : { method: init.method }) });
         if (String(url).endsWith("/v1/models") || String(url).endsWith("/v1/language-models")) {
             return jsonResponse({ data: [] });
         }

@@ -8,7 +8,7 @@ const jsonResponse = (body: unknown, status = 200): Response => new Response(JSO
 const translator = (models: { id: string; owned_by: string }[], names: { name: string; displayName: string }[] = []) =>
     (async (url: string | URL, init?: RequestInit) => {
         const target = String(url);
-        expect((init?.headers as Record<string, string> | undefined)?.authorization).toBe("Bearer local-bearer");
+        expect((init?.headers as Record<string, string> | undefined)?.["authorization"]).toBe("Bearer local-bearer");
         if (target.endsWith("/v1beta/models")) {
             return jsonResponse({ models: names });
         }

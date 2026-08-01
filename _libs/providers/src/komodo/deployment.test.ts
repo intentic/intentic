@@ -1,7 +1,8 @@
 import { expect, test } from "vitest";
 import type { SshExecutor } from "../core/ssh.js";
+import { unstubbed } from "../testing.js";
 import { createDeploymentProvider } from "./deployment.js";
-import type { KomodoApi } from "./komodo-api.js";
+import type { DeploymentConfig, KomodoApi } from "./komodo-api.js";
 
 const sshForward: SshExecutor = {
     connect: async () => ({
@@ -11,28 +12,12 @@ const sshForward: SshExecutor = {
     }),
 };
 
-const NOT_USED = async (): Promise<never> => {
-    throw new Error("unused by the deployment provider");
-};
-const api = (overrides: Partial<KomodoApi>): KomodoApi => ({
-    login: async () => "jwt",
-    listDeployments: NOT_USED,
-    getDeployment: NOT_USED,
-    createDeployment: NOT_USED,
-    updateDeployment: NOT_USED,
-    listUsers: NOT_USED,
-    createUser: NOT_USED,
-    enableUser: NOT_USED,
-    setPermissionOnTarget: NOT_USED,
-    listAlerters: NOT_USED,
-    getAlerter: NOT_USED,
-    createAlerter: NOT_USED,
-    updateAlerter: NOT_USED,
-    deleteDeployment: NOT_USED,
-    deleteUser: NOT_USED,
-    deleteAlerter: NOT_USED,
-    ...overrides,
-});
+// Only the calls a suite asserts on are stubbed; anything else the provider reaches names itself.
+const api = (overrides: Partial<KomodoApi>): KomodoApi =>
+    unstubbed("komodo", {
+        login: async () => "jwt",
+        ...overrides,
+    });
 
 const ctx = () => ({
     env: {},
@@ -72,7 +57,7 @@ const observedConfig = {
     server_id: "Local",
     image: { type: "Image", params: { image: "127.0.0.1:3000/admin/my-app:staging" } },
     environment: [],
-} as const;
+} satisfies DeploymentConfig;
 
 test("read returns the deterministic url + an internalUrl on the host ip when the deployment exists", async () => {
     const observed = await createDeploymentProvider(

@@ -21,6 +21,7 @@
     },
     "scripts": {
         "build": "vite build",
+        "typecheck": "tsgo --noEmit",
         "watch": "vite build --watch",
         "test": "vitest run",
         "test:watch": "vitest"

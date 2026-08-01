@@ -18,6 +18,7 @@ const fakeApi = (overrides: Partial<CloudflareApi> = {}): CloudflareApi => ({
     updateDnsRecord: async () => {},
     deleteTunnel: async () => {},
     deleteDnsRecord: async () => {},
+    listStampedDnsRecords: async () => [],
     ...overrides,
 });
 

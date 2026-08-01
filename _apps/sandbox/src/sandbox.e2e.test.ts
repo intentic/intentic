@@ -109,7 +109,7 @@ describe.skipIf(!enabled)("sandbox daemon end-to-end (real container, loopback)"
             { name: "tree/sub/b.txt", content: "beta" },
             { name: "tree/.env", content: "SECRET=1" },
         ]);
-        const response = await fetch(`${base}/workspace/upload-archive`, { method: "POST", body: archive });
+        const response = await fetch(`${base}/workspace/upload-archive`, { method: "POST", body: new Uint8Array(archive) });
         expect(response.status).toBe(200);
 
         expect((await inContainer("cat", "/work/tree/a.txt")).output).toBe("alpha");
@@ -123,7 +123,7 @@ describe.skipIf(!enabled)("sandbox daemon end-to-end (real container, loopback)"
         // offset + declared length overshoots MAX_UPLOAD_BYTES (10 GiB) without sending 10 GiB.
         expect((await fetch(`${base}/workspace/upload?path=notes/big.txt&offset=${10 * 1024 ** 3}`, { method: "POST", body: "x" })).status).toBe(413);
         const escaping = await tarBuffer([{ name: "../outside.txt", content: "x" }]);
-        expect((await fetch(`${base}/workspace/upload-archive`, { method: "POST", body: escaping })).status).toBe(400);
+        expect((await fetch(`${base}/workspace/upload-archive`, { method: "POST", body: new Uint8Array(escaping) })).status).toBe(400);
     }, 60_000);
 
     it("desktop-sync pairing lifecycle: mint → enroll → real sshd handshake → takeover → revoke", async () => {

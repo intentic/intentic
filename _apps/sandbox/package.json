@@ -1,7 +1,7 @@
 {
     "name": "@intentic/sandbox",
     "version": "0.0.0",
-    "description": "Remote AI-agent dev workspace daemon \u2014 runs inside a per-project sandbox container on the customer's host",
+    "description": "Remote AI-agent dev workspace daemon — runs inside a per-project sandbox container on the customer's host",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -12,6 +12,7 @@
     },
     "scripts": {
         "build": "tsgo && tsgo -p tsconfig.bench.json",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
         "dev": "tsx watch ./src/main.ts",
         "test": "vitest run",
@@ -65,6 +66,7 @@
         "@huggingface/hub": "catalog:",
         "@intentic/tsconfig": "workspace:*",
         "@orpc/client": "catalog:",
+        "@orpc/contract": "catalog:",
         "@orpc/openapi-client": "catalog:",
         "@types/node": "catalog:",
         "@types/ssh2": "catalog:",

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { MAX_TEXT_BYTES, readWorkspaceFileWindow, resolveWithin, UploadTooLargeError, writeWorkspaceFileStream } from "./workspace-files.js";
 
-const streamOf = (bytes: Uint8Array): ReadableStream<Uint8Array> => new Blob([bytes]).stream();
+const streamOf = (bytes: Uint8Array): ReadableStream<Uint8Array> => new Blob([new Uint8Array(bytes)]).stream();
 
 // A temp file holding `content`, and the dir to clean up after.
 const fileWith = async (name: string, content: string | Uint8Array): Promise<{ dir: string; path: string }> => {

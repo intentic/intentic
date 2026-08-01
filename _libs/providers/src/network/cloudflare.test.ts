@@ -1,27 +1,10 @@
 import { expect, test } from "vitest";
+import { unstubbed } from "../testing.js";
 import { createCloudflareProvider } from "./cloudflare.js";
 import type { CloudflareApi } from "./cloudflare-api.js";
 
-// A CloudflareApi whose every method throws unless overridden — the zone provider only calls getZone.
-const NOT_USED = async (): Promise<never> => {
-    throw new Error("unused by the cloudflare provider");
-};
-const api = (overrides: Partial<CloudflareApi>): CloudflareApi => ({
-    getZone: NOT_USED,
-    listZones: NOT_USED,
-    findTunnel: NOT_USED,
-    createTunnel: NOT_USED,
-    getTunnelToken: NOT_USED,
-    getTunnelStatus: NOT_USED,
-    getTunnelIngress: NOT_USED,
-    putTunnelIngress: NOT_USED,
-    findDnsRecord: NOT_USED,
-    createDnsRecord: NOT_USED,
-    updateDnsRecord: NOT_USED,
-    deleteTunnel: NOT_USED,
-    deleteDnsRecord: NOT_USED,
-    ...overrides,
-});
+// Only the calls a suite asserts on are stubbed; anything else the provider reaches names itself.
+const api = (overrides: Partial<CloudflareApi>): CloudflareApi => unstubbed("cloudflare", overrides);
 
 const ctx = (log: (message: string) => void = () => {}) => ({
     env: {},

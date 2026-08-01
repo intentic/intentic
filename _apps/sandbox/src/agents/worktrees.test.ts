@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { gitInit } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
+import { noIsolation } from "../testing.js";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { repoGitDir } from "../history/history.js";
 import { createLogger } from "../logger.js";
@@ -17,10 +18,6 @@ const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 const perf = createPerfTracker(logger);
-
-// No mount namespace here: these suites assert the SYMLINK mirroring, which is what a container without
-// CAP_SYS_ADMIN (and every test runner) actually gets. The bind-mount branch is isolation.test.ts's.
-const noIsolation = { available: async () => false, planFor: async () => undefined };
 
 const tempDirs: string[] = [];
 afterEach(async () => {
@@ -54,7 +51,7 @@ const setup = async (): Promise<{ work: string; historyRoot: string; worktrees: 
         workspace,
         worktreesRoot: join(historyRoot, "worktrees"),
         historyRoot,
-        isolation: noIsolation,
+        isolation: noIsolation(work, historyRoot),
         logger,
         perf,
     });
@@ -197,7 +194,7 @@ test("re-ensure converts pre-namespace symlinks into mount points once isolation
         workspace: workspacePaths(work),
         worktreesRoot: join(historyRoot, "worktrees"),
         historyRoot,
-        isolation: { available: async () => true, planFor: async () => undefined },
+        isolation: { ...noIsolation(work, historyRoot), available: async () => true },
         logger,
         perf,
     });
@@ -219,7 +216,7 @@ test("re-ensure restores the symlink when isolation is lost, but never over a re
         workspace: workspacePaths(work),
         worktreesRoot: join(historyRoot, "worktrees"),
         historyRoot,
-        isolation: { available: async () => true, planFor: async () => undefined },
+        isolation: { ...noIsolation(work, historyRoot), available: async () => true },
         logger,
         perf,
     });

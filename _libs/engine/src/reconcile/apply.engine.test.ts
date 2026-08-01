@@ -92,7 +92,7 @@ test("a missing secret throws", async () => {
 test("a node whose type has no provider throws", async () => {
     const graph = buildGraph();
     const { providers } = createFakeProviders();
-    const withoutKomodo = { ...providers, komodo: undefined };
+    const { komodo: _komodo, ...withoutKomodo } = providers;
     await expect(apply(graph, { providers: withoutKomodo, env: fullEnv, probe: trueProbe, log: silent })).rejects.toThrow(
         'no provider registered for type "komodo"',
     );

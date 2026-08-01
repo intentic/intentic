@@ -15,7 +15,7 @@ import { vpnHandler } from "./vpn.js";
 const tempCtx = (remaining: Capability[] = []): { ctx: CapabilityCtx; root: string; home: string } => {
     const root = mkdtempSync(join(tmpdir(), "vpn-cap-ws-"));
     const home = mkdtempSync(join(tmpdir(), "vpn-cap-home-"));
-    process.env.HOME = home;
+    process.env["HOME"] = home;
     const ctx = {
         workspace: { root },
         files: { write: writeWorkspaceFile, read: readWorkspaceFile, remove: removeWorkspacePath },
@@ -44,12 +44,12 @@ const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
 // The tooling is absent on the test host, so a probe reads "unavailable" → the capability's "needs a rebuild"
 // pending state. Runs the assertion with an empty PATH so the result is host-independent either way.
 const withoutTooling = async <T>(body: () => Promise<T>): Promise<T> => {
-    const path = process.env.PATH;
-    process.env.PATH = mkdtempSync(join(tmpdir(), "vpn-nopath-"));
+    const path = process.env["PATH"];
+    process.env["PATH"] = mkdtempSync(join(tmpdir(), "vpn-nopath-"));
     try {
         return await body();
     } finally {
-        process.env.PATH = path;
+        process.env["PATH"] = path;
     }
 };
 

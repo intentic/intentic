@@ -1,11 +1,11 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pino } from "pino";
+import { type Logger, pino } from "pino";
 import { expect, test } from "vitest";
 import { claimBootMarker } from "./boot-marker.js";
 
-const setup = async (): Promise<{ dir: string; lines: object[]; logger: ReturnType<typeof pino> }> => {
+const setup = async (): Promise<{ dir: string; lines: object[]; logger: Logger }> => {
     const dir = await mkdtemp(join(tmpdir(), "boot-marker-"));
     const lines: object[] = [];
     const logger = pino({ level: "debug" }, { write: (line: string) => void lines.push(JSON.parse(line) as object) });

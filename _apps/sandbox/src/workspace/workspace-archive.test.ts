@@ -21,7 +21,7 @@ const tarOf = async (
     for await (const chunk of p) {
         chunks.push(chunk as Uint8Array);
     }
-    return new Blob(chunks).stream();
+    return new Blob(chunks.map((chunk) => new Uint8Array(chunk))).stream();
 };
 
 test("extractTarToWorkspace materializes a nested tree under the root", async () => {

@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
 import { describe, expect, it, vi } from "vitest";
+import type { JournalEntry } from "./turn-journal.js";
 import { commandsOf, resetCommands } from "./agent-commands.js";
 import { startTurnRun, type TurnFn, turnRunOf } from "./turn-runs.js";
 
@@ -201,7 +202,8 @@ describe(`turn runs`, () => {
             calls,
             journal: {
                 list: async () => [],
-                recordTurn: (entry: { sessionId?: string }) => after(writeMs, entry.sessionId === undefined ? `record` : `record:${entry.sessionId}`),
+                recordTurn: (entry: JournalEntry & { kind: "turn" }) =>
+                    after(writeMs, entry.sessionId === undefined ? `record` : `record:${entry.sessionId}`),
                 recordFire: async () => undefined,
                 clearTurn: (conversationId: string) => after(clearMs, `clear:${conversationId}`),
                 clearFire: async () => undefined,

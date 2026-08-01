@@ -638,7 +638,7 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.turns).toBe(1);
         expect(registry.get("c1")?.toolUses).toBe(2);
         // A manual land finishes OUTSIDE any turn — must not count as a turn.
-        await registry.finish("c1", 3_000, "landed");
+        await registry.finish("c1", 3_000);
         expect(registry.get("c1")?.turns).toBe(1);
         await registry.begin(turn({ prompt: "again" }), 4_000);
         registry.observe("c1", { kind: "tool_call", id: "t3", name: "Read", category: "read", status: "in_progress" });

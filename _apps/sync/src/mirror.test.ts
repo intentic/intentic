@@ -10,8 +10,8 @@ import type { ForwardExecutor } from "./mirror.js";
 
 // config.ts derives its paths from homedir() at import time, so point HOME at a throwaway dir BEFORE importing
 // (dynamic import, after the env is set) — then mirror.pid lands in temp, not the real ~/.intentic/sync.
-process.env.HOME = mkdtempSync(join(tmpdir(), "sync-mirror-"));
-process.env.USERPROFILE = process.env.HOME;
+process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-mirror-"));
+process.env["USERPROFILE"] = process.env["HOME"];
 const { mirrorPidPath } = await import("./config.js");
 const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, retireMirror, SyncAuthError } = await import("./mirror.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");

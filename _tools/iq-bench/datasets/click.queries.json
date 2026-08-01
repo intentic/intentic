@@ -35,19 +35,19 @@
             "id": "def-command",
             "verb": "def",
             "query": "Command",
-            "expected": [{ "file": "src/click/core.py", "line": 960, "tolerance": 10 }]
+            "expected": [{ "file": "src/click/core.py" }]
         },
         {
             "id": "def-param-type",
             "verb": "def",
             "query": "ParamType",
-            "expected": [{ "file": "src/click/types.py", "line": 42, "tolerance": 10 }]
+            "expected": [{ "file": "src/click/types.py" }]
         },
         {
             "id": "sym-shell-complete",
             "verb": "sym",
             "query": "ShellComplete",
-            "expected": [{ "file": "src/click/shell_completion.py", "line": 216, "tolerance": 10 }]
+            "expected": [{ "file": "src/click/shell_completion.py" }]
         },
         {
             "id": "find-echo-def",
@@ -156,19 +156,19 @@
             "id": "def-group",
             "verb": "def",
             "query": "Group",
-            "expected": [{ "file": "src/click/core.py", "line": 1643, "tolerance": 10 }]
+            "expected": [{ "file": "src/click/core.py" }]
         },
         {
             "id": "def-lazy-file",
             "verb": "def",
             "query": "LazyFile",
-            "expected": [{ "file": "src/click/utils.py", "line": 112, "tolerance": 5 }]
+            "expected": [{ "file": "src/click/utils.py" }]
         },
         {
             "id": "sym-help-formatter",
             "verb": "sym",
             "query": "HelpFormatter",
-            "expected": [{ "file": "src/click/formatting.py", "line": 110, "tolerance": 5 }]
+            "expected": [{ "file": "src/click/formatting.py" }]
         },
         {
             "id": "refs-param-type",

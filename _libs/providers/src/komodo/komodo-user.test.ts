@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import type { SshExecutor } from "../core/ssh.js";
+import { unstubbed } from "../testing.js";
 import type { KomodoApi } from "./komodo-api.js";
 import { createKomodoUserProvider } from "./komodo-user.js";
 
@@ -11,28 +12,12 @@ const sshForward: SshExecutor = {
     }),
 };
 
-const NOT_USED = async (): Promise<never> => {
-    throw new Error("unused by the komodo-user provider");
-};
-const api = (overrides: Partial<KomodoApi>): KomodoApi => ({
-    login: async () => "jwt",
-    listDeployments: NOT_USED,
-    getDeployment: NOT_USED,
-    createDeployment: NOT_USED,
-    updateDeployment: NOT_USED,
-    listUsers: NOT_USED,
-    createUser: NOT_USED,
-    enableUser: NOT_USED,
-    setPermissionOnTarget: NOT_USED,
-    listAlerters: NOT_USED,
-    getAlerter: NOT_USED,
-    createAlerter: NOT_USED,
-    updateAlerter: NOT_USED,
-    deleteDeployment: NOT_USED,
-    deleteUser: NOT_USED,
-    deleteAlerter: NOT_USED,
-    ...overrides,
-});
+// Only the calls a suite asserts on are stubbed; anything else the provider reaches names itself.
+const api = (overrides: Partial<KomodoApi>): KomodoApi =>
+    unstubbed("komodo", {
+        login: async () => "jwt",
+        ...overrides,
+    });
 
 const ctx = (log: (message: string) => void = () => {}) => ({
     env: {},

@@ -26,7 +26,8 @@ test("lastError rides only a disconnected connection", () => {
 
 // A down connection with nothing in the error log stays a bare "Not listening" — no lastError key at all.
 test("a disconnected connection with no recorded error carries no lastError", () => {
-    const [resolved] = resolveConnections([conn("disconnected")], false, undefined);
-    expect(resolved).toEqual({ capabilityId: "discord", provider: "discord", gateway: "disconnected" });
-    expect("lastError" in resolved).toBe(false);
+    const resolved = resolveConnections([conn("disconnected")], false, undefined);
+    expect(resolved).toEqual([{ capabilityId: "discord", provider: "discord", gateway: "disconnected" }]);
+    // Absent, not present-and-undefined: the browser renders the key's presence.
+    expect(resolved.flatMap((row) => Object.keys(row))).not.toContain("lastError");
 });

@@ -13,6 +13,7 @@ node dist/cli.js retrieval --repo hono --config no-rerank # filtered
 ```
 
 - Golden datasets in `datasets/*.queries.json`: query → expected `path[:line]` anchors. Repos: the intentic monorepo itself plus external repos pinned in `datasets/repos.lock.json` (cloned shallow at the locked SHA into `.cache/repos/`).
+- `def`/`sym` anchors name a file only — their line is resolved from the tree at scoring time (`src/anchors.ts`), so refactoring the corpus cannot silently turn a hit into a miss. Anchors for the judgement verbs (`q`, `find`, `refs`) carry the line the dataset author picked.
 - Configs in `src/configs.ts`: `full`, one single-stage ablation per ranking- or budget-affecting stage (`-semantic`, `-rerank`, `-prf`, `-defboost`, `-pathboost`, `-recency`, `-symctx`, `-graph`, `-srcfirst`, `-pack`) so a delta attributes to exactly one stage, plus the `lexical` and `bm25-only` floors — swept in-process against one shared index per repo (features are query-time only).
 - Metrics: recall@{1,5,10}, MRR@10, nDCG@10 over ranked file groups (+`related` and `candidates` anchors — everything the one response hands back openable), output tokens/query (iq's own estimator), p50 latency (includes the revalidation sweep — the honest CLI-equivalent number), index build time.
 - Embedding models auto-fetch to `.cache/models` (~57 MB); if unavailable, semantic/rerank configs are **skipped**, never silently degraded.

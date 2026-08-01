@@ -8,7 +8,7 @@ import { hostKeyPath, hostsDir, linkSshHosts, writeSshHost } from "./ssh-hosts.j
 // is a brand-new HOME pointed at the same history dir.
 const tempHome = (): string => {
     const home = mkdtempSync(join(tmpdir(), "ssh-hosts-home-"));
-    process.env.HOME = home;
+    process.env["HOME"] = home;
     return home;
 };
 
