@@ -103,14 +103,73 @@ export const headSha = async (dir: string, git: GitRunner = defaultGit): Promise
 // Merge per-file +/- line counts onto a change list from a `git diff --numstat -z` variant (rename detection
 // on, so a rename's counts key on the new path — the shape parseNumstatZ handles). `scope` is the diff's own
 // arguments, so the counts always come from the SAME comparison the name-status list did: index-vs-HEAD for the
-// staged side, worktree-vs-index for the unstaged side. A change with no numstat entry (an untracked file with
-// no blob on either side, or a binary file) keeps undefined counts, which the UI omits.
+// staged side, worktree-vs-index for the unstaged side. A change with no numstat entry keeps undefined counts,
+// which the UI omits — a binary file (git reports `-\t-`), or a conflict, which gets no numstat pass at all.
+// Untracked files are absent from every numstat because they have no blob on either side; withUntrackedLineStats
+// answers for those.
 const withLineStats = async (dir: string, scope: readonly string[], changes: GitChange[], git: GitRunner): Promise<GitChange[]> => {
     if (changes.length === 0) {
         return changes;
     }
     const { stdout } = await git(dir, ["diff", "--numstat", "-z", "--find-renames", ...scope]);
     const stats = parseNumstatZ(stdout);
+    return changes.map((change) => {
+        const stat = stats.get(change.path);
+        return stat === undefined ? change : { ...change, ...stat };
+    });
+};
+
+/* THE LINE COUNT OF A FILE GIT HAS NEVER SEEN.
+ *
+ * An untracked file has no blob on either side, so no `git diff --numstat` names it — and the row that
+ * ls-files put in the list therefore carried no counts. That reads as a cosmetic gap on one row and is not:
+ * the review header and the fleet card SUM these counts, so every file an agent had newly written counted as
+ * zero until the moment it was committed. The same work read "+805 −861" while a new 89-line file sat
+ * untracked and "+894 −861" one commit later, with nothing about the work itself having changed.
+ *
+ * The whole content of a new file is an addition, so the count is its line count — measured the way git
+ * measures one, where a trailing partial line still counts (`printf 'a\nb'` is two additions).
+ *
+ * Read here rather than shelled to `git diff --no-index`, which would give the same numbers: that is one
+ * process per file, and this list is a whole dropped project's worth of paths on the Changes panel. The size
+ * cap and the NUL test for binary are the ones worktreeSide already applies to the diff BODY, so a row's badge
+ * and the diff it opens never disagree about what is renderable. */
+const untrackedLineStats = async (dir: string, path: string): Promise<{ additions: number; deletions: number } | undefined> => {
+    const abs = join(dir, path);
+    const size = await statWorkspaceFileSize(abs);
+    // Gone since the ls-files walk, or past what one read may hold (see workspace-files' MAX_TEXT_BYTES note —
+    // whole-file reads are what once blocked the daemon's only loop). No counts, exactly as before.
+    if (size === undefined || size > MAX_FILE_DIFF_BYTES) {
+        return undefined;
+    }
+    const content = await readWorkspaceFile(abs);
+    if (content === undefined || content.includes("\0")) {
+        return undefined;
+    }
+    return { additions: content === "" ? 0 : content.split("\n").length - (content.endsWith("\n") ? 1 : 0), deletions: 0 };
+};
+
+// A whole dropped project can be thousands of untracked paths, and each read holds its file in memory for as
+// long as it takes to count — so they run a few at a time off a shared cursor rather than all at once (the
+// archive teardown pool's shape). Files not in `untracked` are left exactly as the numstat pass returned them.
+const UNTRACKED_READ_CONCURRENCY = 8;
+const withUntrackedLineStats = async (dir: string, untracked: readonly string[], changes: GitChange[]): Promise<GitChange[]> => {
+    if (untracked.length === 0) {
+        return changes;
+    }
+    const stats = new Map<string, { additions: number; deletions: number }>();
+    let cursor = 0;
+    await Promise.all(
+        Array.from({ length: Math.min(UNTRACKED_READ_CONCURRENCY, untracked.length) }, async () => {
+            for (let index = cursor++; index < untracked.length; index = cursor++) {
+                const path = untracked[index] ?? "";
+                const stat = await untrackedLineStats(dir, path);
+                if (stat !== undefined) {
+                    stats.set(path, stat);
+                }
+            }
+        }),
+    );
     return changes.map((change) => {
         const stat = stats.get(change.path);
         return stat === undefined ? change : { ...change, ...stat };
@@ -169,16 +228,18 @@ export const changedFiles = async (
     // Untracked files are unstaged by definition (nothing about them is in the index yet). Guarded against a
     // path either tracked list already reported, which can't normally happen but would double a row if it did.
     const seen = new Set([...unstagedNames.map((change) => change.path), ...conflicted.keys()]);
+    const untracked: string[] = [];
     for (const path of untrackedOut.stdout.split("\0")) {
         if (path !== "" && !seen.has(path)) {
             unstagedNames.push({ path, status: "added" });
+            untracked.push(path);
         }
     }
     // No numstat for a conflict: "how many lines changed" has no answer across three stages, and the row shows
     // no diffstat rather than an invented one.
     const [staged, unstaged] = await Promise.all([
         withLineStats(dir, ["--cached", base], stagedNames, git),
-        withLineStats(dir, [], unstagedNames, git),
+        withLineStats(dir, [], unstagedNames, git).then((changes) => withUntrackedLineStats(dir, untracked, changes)),
     ]);
     return { ...(branch !== "" ? { branch } : {}), conflicted: [...conflicted.values()], staged, unstaged };
 };
@@ -188,17 +249,25 @@ export const changedFiles = async (
 // worktree with this: `base` is the sha the worktree branched from, so the result is exactly what landing
 // would bring to the main tree, in the same GitChange shape the Changes panel renders.
 export const changesAgainstBase = async (dir: string, base: string, git: GitRunner = defaultGit): Promise<GitChange[]> => {
-    const { stdout } = await git(dir, ["diff", "--name-status", "-z", base]);
+    // --find-renames on BOTH passes, or they describe different diffs: withLineStats always asks for it, so a
+    // name-status pass without it splits a rename into a delete + an add that the numstat map (one record, keyed
+    // on the new path) can only answer half of. Invisible under git's default diff.renames=true, which is
+    // exactly what makes it worth pinning rather than leaving to a config this daemon does not own.
+    const { stdout } = await git(dir, ["diff", "--name-status", "-z", "--find-renames", base]);
     const changes = new Map(parseNameStatusZ(stdout).map((change) => [change.path, change]));
-    const untracked = (await git(dir, ["ls-files", "--others", "--exclude-standard", "-z"])).stdout.split("\0");
-    for (const path of untracked) {
+    const untrackedOut = (await git(dir, ["ls-files", "--others", "--exclude-standard", "-z"])).stdout.split("\0");
+    const untracked: string[] = [];
+    for (const path of untrackedOut) {
         if (path !== "" && !changes.has(path)) {
             changes.set(path, { path, status: "added" });
+            untracked.push(path);
         }
     }
-    // Same numstat pass as the working-tree review, keyed to the worktree's base — untracked files (added above)
-    // carry no counts, matching the Changes panel.
-    return withLineStats(dir, [base], [...changes.values()], git);
+    // Same numstat pass as the working-tree review, keyed to the worktree's base; the untracked files added
+    // above are in no numstat at all, so they are counted from disk — see withUntrackedLineStats for why the
+    // totals over this list are wrong without it.
+    const counted = await withLineStats(dir, [base], [...changes.values()], git);
+    return withUntrackedLineStats(dir, untracked, counted);
 };
 
 // The same cumulative delta as changesAgainstBase, read from two REFS instead of a checkout — what an ARCHIVED

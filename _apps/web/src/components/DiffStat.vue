@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /* The +additions / −deletions line-count badge shown on a changed-file row — the Changes panel, the agent
  * review, the git-graph commit detail, and the chat tool diff all render it, so the +/- idiom stays identical
- * across every review surface. Renders nothing when neither count is known (a binary or untracked file — git
- * reports no numstat), so callers can drop it in unconditionally. A zero count is omitted (a pure rename shows
- * neither side); when both are zero the whole badge is empty and collapses. */
+ * across every review surface. Renders nothing when neither count is known — a binary file, or a conflict,
+ * where "how many lines changed" has no answer across three stages — so callers can drop it in
+ * unconditionally. A zero count is omitted (a pure rename shows neither side); when both are zero the whole
+ * badge is empty and collapses. */
 const { additions, deletions } = defineProps<{ additions?: number; deletions?: number }>();
 </script>
 

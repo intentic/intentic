@@ -93,10 +93,11 @@ test("changedFiles maps porcelain states, expands untracked dirs, and skips igno
     expect(branch).not.toBe("");
     // Nothing was `git add`ed, so every change is on the worktree side and the index side is empty.
     expect(staged).toEqual([]);
-    // Tracked changes carry numstat line counts; the untracked file has none (no blob on either side).
+    // Tracked changes carry numstat line counts; an untracked file is in no numstat at all, so its count comes
+    // from the file itself — the whole thing is an addition.
     expect(unstaged).toContainEqual({ path: "a.txt", status: "modified", additions: 1, deletions: 1 });
     expect(unstaged).toContainEqual({ path: "old.txt", status: "deleted", additions: 0, deletions: 1 });
-    expect(unstaged).toContainEqual({ path: "new/b.txt", status: "added" });
+    expect(unstaged).toContainEqual({ path: "new/b.txt", status: "added", additions: 1, deletions: 0 });
     expect(unstaged.some((change) => change.path.includes(".env"))).toBe(false);
 });
 
@@ -362,7 +363,7 @@ test("changedFiles treats everything as added on an unborn HEAD", async () => {
     await sh(dir, "init", "-q");
     await writeFile(join(dir, "a.txt"), "one\n");
     // Untracked, so it is unstaged — there is no index entry yet.
-    expect((await changedFiles(dir)).unstaged).toEqual([{ path: "a.txt", status: "added" }]);
+    expect((await changedFiles(dir)).unstaged).toEqual([{ path: "a.txt", status: "added", additions: 1, deletions: 0 }]);
 
     // Staging it on an unborn HEAD must still report it: the index is diffed against the EMPTY TREE, not
     // against a HEAD that does not exist, so a repo composing its very first commit is not reported as clean.
@@ -382,7 +383,7 @@ test("commitIndex commits what is staged and leaves unstaged work untouched", as
     expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).toContain("ready.txt");
     const { staged, unstaged } = await changedFiles(dir);
     expect(staged).toEqual([]);
-    expect(unstaged).toEqual([{ path: "later.txt", status: "added" }]);
+    expect(unstaged).toEqual([{ path: "later.txt", status: "added", additions: 1, deletions: 0 }]);
 });
 
 test("commitIndex is a no-op false when nothing is staged, even with a dirty worktree", async () => {
@@ -427,7 +428,7 @@ test("unstagePaths on an unborn HEAD returns the file to untracked instead of fa
     await unstagePaths(dir, ["a.txt"]);
     const { staged, unstaged } = await changedFiles(dir);
     expect(staged).toEqual([]);
-    expect(unstaged).toEqual([{ path: "a.txt", status: "added" }]);
+    expect(unstaged).toEqual([{ path: "a.txt", status: "added", additions: 1, deletions: 0 }]);
     expect(existsSync(join(dir, "a.txt"))).toBe(true);
 });
 
@@ -440,7 +441,7 @@ test("discardPaths restores a tracked file, deletes an untracked one, and leaves
     await discardPaths(dir, ["a.txt", "junk.txt"]);
     expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("one\n");
     expect(existsSync(join(dir, "junk.txt"))).toBe(false);
-    expect(await bothSides(dir)).toEqual([{ path: "kept.txt", status: "added" }]);
+    expect(await bothSides(dir)).toEqual([{ path: "kept.txt", status: "added", additions: 1, deletions: 0 }]);
 });
 
 test("discardPaths undoes both legs of a staged rename from either path", async () => {
@@ -551,12 +552,57 @@ test("changesAgainstBase folds committed + staged + unstaged + untracked into on
     await writeFile(join(dir, ".env"), "SECRET=x\n");
 
     const changes = await changesAgainstBase(dir, base);
-    // Tracked deltas vs base carry counts (one numstat pass); the untracked file has none.
+    // Tracked deltas vs base carry counts (one numstat pass); the untracked file, which no numstat names, is
+    // counted from disk so it weighs the same as the identical file one commit later.
     expect(changes).toContainEqual({ path: "a.txt", status: "modified", additions: 1, deletions: 1 });
     expect(changes).toContainEqual({ path: "staged.txt", status: "added", additions: 1, deletions: 0 });
-    expect(changes).toContainEqual({ path: "fresh.txt", status: "added" });
+    expect(changes).toContainEqual({ path: "fresh.txt", status: "added", additions: 1, deletions: 0 });
     expect(changes.some((change) => change.path.includes(".env"))).toBe(false);
     expect(changes).toHaveLength(3);
+});
+
+/* The property the review header and the fleet card actually depend on: those surfaces SUM these counts, so an
+ * untracked file counting as zero made the same work read one total before the agent committed and a bigger one
+ * after. Committing must move a file between lists, never change what it weighs. */
+test("an untracked file weighs the same as the identical file one commit later", async () => {
+    const dir = await tempRepo();
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await writeFile(join(dir, "fresh.txt"), "one\ntwo\nthree\n");
+
+    const untracked = await changesAgainstBase(dir, base);
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "commit it");
+    const committed = await changesAgainstBase(dir, base);
+
+    expect(untracked).toEqual([{ path: "fresh.txt", status: "added", additions: 3, deletions: 0 }]);
+    expect(committed).toEqual(untracked);
+});
+
+// git counts a trailing partial line, so the count is not simply "how many newlines". A binary file has no
+// count at all (git's own numstat says `-\t-`), and an empty one is a real zero rather than a missing number.
+test("untracked line counts follow git's own rules for partial lines, empty and binary files", async () => {
+    const dir = await tempRepo();
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await writeFile(join(dir, "partial.txt"), "one\ntwo"); // no trailing newline
+    await writeFile(join(dir, "empty.txt"), "");
+    await writeFile(join(dir, "blob.bin"), Buffer.from([0x61, 0x00, 0x62]));
+
+    const byPath = new Map((await changesAgainstBase(dir, base)).map((change) => [change.path, change]));
+    expect(byPath.get("partial.txt")).toEqual({ path: "partial.txt", status: "added", additions: 2, deletions: 0 });
+    expect(byPath.get("empty.txt")).toEqual({ path: "empty.txt", status: "added", additions: 0, deletions: 0 });
+    expect(byPath.get("blob.bin")).toEqual({ path: "blob.bin", status: "added" });
+});
+
+// Both of changesAgainstBase's passes ask for rename detection, so the name-status list and the numstat map
+// describe the same diff. Without the flag on the first, a repo that turns diff.renames off splits the rename
+// into a delete + an add and only the add can be given counts.
+test("changesAgainstBase detects a rename even where the repo has diff.renames off", async () => {
+    const dir = await tempRepo();
+    await sh(dir, "config", "diff.renames", "false");
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await sh(dir, "mv", "a.txt", "b.txt");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "rename");
+    expect(await changesAgainstBase(dir, base)).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt", additions: 0, deletions: 0 }]);
 });
 
 test("changesAgainstBase reports a committed rename with its original path", async () => {
