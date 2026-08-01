@@ -20,6 +20,8 @@ import AgentsView from "./AgentsView.vue";
 // ResizeObserver at all, and the board measures itself with one to choose its layout — a stub that never
 // reports leaves it on its unmeasured default (three columns), which is the desktop case anyway.
 vi.hoisted(() => {
+    // Focusing a tab makes the strip scroll it into view, which jsdom does not implement.
+    globalThis.Element.prototype.scrollIntoView ??= (): void => {};
     globalThis.ResizeObserver ??= class {
         observe(): void {}
         unobserve(): void {}
@@ -56,13 +58,24 @@ const mount = (component: unknown): HTMLElement => {
     return el;
 };
 
+// The chat's open sessions are cards in the sheet its header drops, so the strip is asked to show them first.
+// Idempotent, because a press must not toggle the sheet shut halfway through the run.
+const openSheet = async (el: HTMLElement): Promise<void> => {
+    if (el.querySelector(`[data-chat-tab]`) === null) {
+        el.querySelector<HTMLElement>(`[data-chat-switcher]`)!.click();
+        await nextTick();
+    }
+};
 const tabs = (el: HTMLElement): HTMLElement[] => [...el.querySelectorAll<HTMLElement>(`[data-chat-tab]`)];
 // The "New agent" control on a surface — the board's labelled-by-its-text header button, the strip's
-// aria-labelled "+". Tabs are excluded by construction: an untitled draft tab reads "New agent" too.
+// aria-labelled "+". Everything that merely SAYS "New agent" is excluded by construction, and after the first
+// press that is most of the strip: an untitled draft is called "New agent" on its card AND in the header line
+// naming it, so both the cards and the switcher have to be ruled out or the press lands on one of them.
 const newAgentButton = (el: HTMLElement): HTMLButtonElement =>
     [...el.querySelectorAll(`button`)].find(
         (button) =>
             button.dataset[`chatTab`] === undefined &&
+            button.dataset[`chatSwitcher`] === undefined &&
             (button.getAttribute(`aria-label`) === `New agent` || button.textContent?.trim() === `New agent`),
     )!;
 
@@ -70,6 +83,7 @@ it(`opens, focuses and hands the composer a tab from the fleet board and from th
     const strip = mount(ChatTabs);
     const board = mount(AgentsView);
     await nextTick();
+    await openSheet(strip);
 
     const { conversations, activeId, composerFocus, draft } = useChat();
     // The tab a press moves focus OFF has to hold something, or the one-untouched-draft invariant (an empty New

@@ -77,7 +77,7 @@
 }
 
 /* The bar at the top of a shell column: the workspace's explorer switch and its file-tab row, the fleet board's
- * title row, an agent's detail row, the chat's tab strip. The desktop shell stands those columns side by side,
+ * title row, an agent's detail row, the chat's switcher bar. The desktop shell stands those columns side by side,
  * so their bottom borders read as ONE line across the window — which only holds while every bar is exactly as
  * tall as its neighbours, border included. That invariant lived nowhere before (each view picked its own h-8 /
  * h-9 / py-1.5 and they drifted a few pixels apart), so it lives here now: one height, one class, every bar.
@@ -89,10 +89,11 @@
         /* Never stretched or squeezed by the column it sits in — a shrunk bar is a broken line. */
         flex: none;
     }
-    /* The one bar whose content is a LIST that may not fit: the chat tab strip, which wraps to a second row
-     * rather than shaving every tab down to an unreadable sliver. The unified height still governs the common
-     * case — one row is exactly a .view-header, so the line across the window is unbroken — and only a strip
-     * that has actually wrapped stands taller than its neighbours. */
+    /* The one bar whose content is a LIST that may not fit: the fleet board's filter row, which wraps rather
+     * than shaving its controls down to unreadable slivers. The unified height still governs the common case —
+     * one row is exactly a .view-header, so the line across the window is unbroken — and only a bar that has
+     * actually wrapped stands taller than its neighbours. (The chat's bar was the other user of this until it
+     * stopped being a wrapping tab strip; it is a single switcher line now, so it is a plain .view-header.) */
     .view-header-wrap {
         height: auto;
         min-height: 2.25rem;

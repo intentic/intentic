@@ -1,10 +1,11 @@
 import { createPopout, type Popout } from "../usePopout";
 import { useLayout } from "../useLayout";
 
-/* The chat panel's pop-out window (an option in the tab strip's right-click menu) — a module-level singleton
- * like the rest of the layout/chat state. While popped out the shell collapses the chat grid column, and the
- * strip moves to the window's left edge (a real window is wide enough to spend 11rem on tabs; the docked
- * column is not). The floor keeps the window usable even when the docked panel is at its narrowest. */
+/* The chat panel's pop-out window (its own button on the chat bar, plus a row in that bar's right-click menu)
+ * — a module-level singleton like the rest of the layout/chat state. While popped out the shell collapses the
+ * chat grid column, and the bar's chat list moves to the window's left edge as a permanent rail: a real window
+ * has the width to keep the list open beside the transcript, where the docked column can only afford to drop
+ * it as a sheet. The floor keeps the window usable even when the docked panel is at its narrowest. */
 
 const layout = useLayout();
 

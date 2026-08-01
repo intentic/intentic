@@ -967,12 +967,19 @@ export const focusComposer = (): void => {
     composerFocus.value++;
 };
 
+// "Put the focused tab on screen", the counterpart of composerFocus and a counter for the same reason: the tab
+// list is store state, but the SCROLL belongs to whichever strip is mounted, and asking again for the tab that
+// is already focused — clicking its card on the fleet board while the strip is scrolled elsewhere — is still a
+// distinct request. A plain activeId watch cannot see that one, since the id doesn't move.
+const tabReveal = ref(0);
+
 // Focus a tab, through the one writer — so leaving an untouched draft takes it with the same write that moves
 // the focus. An id that names no open conversation is ignored rather than written: setConversations would seat
 // the focus on the last tab instead, and a stale click would silently surface a chat the user didn't ask for.
 const setActive = (conversationId: string): void => {
     if (conversations.value.some((conversation) => conversation.conversationId === conversationId)) {
         setConversations(conversations.value, conversationId);
+        tabReveal.value++;
     }
 };
 
@@ -1652,6 +1659,7 @@ export function useChat() {
         translatorKey,
         newChat,
         composerFocus,
+        tabReveal,
         setActive,
         closeTabs,
         send,

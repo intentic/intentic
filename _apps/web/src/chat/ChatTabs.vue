@@ -1,230 +1,166 @@
 <script setup lang="ts">
-import { AnchoredOverlay, cmp, ContextMenu, type IconName } from "@intentic-app/ui";
+import { AnchoredOverlay, cmp, ContextMenu } from "@intentic-app/ui";
 import type { Disposable } from "@intentic/extension-api";
-import { type AgentOrigin, providerLabel } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
+import { turnInFlight } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
-import { markSegments, useAgentFilter } from "../composables/agents/useAgentFilter";
-import { type FleetAgent, useAgents } from "../composables/agents/useAgents";
-import FilterField from "../components/FilterField.vue";
-import HoverCard from "../components/HoverCard.vue";
+import { useAgents } from "../composables/agents/useAgents";
 import OriginMark from "../components/OriginMark.vue";
-import ProviderLogo from "./ProviderLogo.vue";
-import {
-    activityIcon,
-    agentStatusMeta,
-    attentionReason,
-    type FleetLane,
-    formatCost,
-    formatElapsed,
-    laneOf,
-    turnInFlight,
-} from "../composables/agents/agentStatus";
-import { relativeTime, statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
-import { type Conversation, modelLabelFor } from "../composables/chat/conversation";
+import { statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
+import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { inTabSurface } from "../composables/commands/tabSurface";
 import { commandShortcut, registerCommand, type RegisteredCommand, withShortcut } from "../composables/commands/useCommands";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
+import ChatTabList from "./ChatTabList.vue";
 import PastChatList from "./PastChatList.vue";
 
-/* The tab strip + history menu. Reads the conversation list from the useChat singleton and emits select /
- * close / open rather than writing it: the strip is a view of the tabs, and the panel it lives in is what
- * hands each verb to the store. "New agent" is not one of them: it means the same thing here as on the fleet
- * board, so both call the one startAgent action (agents/agentActions.ts) instead of each surface assembling
- * its own half of it. */
+/* THE CHAT PANEL'S OWN BAR — one line that says which conversation you are in, and drops the list of every
+ * other one on click. Docked it is a header across the top of the chat column; popped out it stands up the
+ * window's left edge as a rail, with that same list permanently open in it.
+ *
+ * IT USED TO BE A TAB STRIP, and the strip was the wrong shape for this column. Tabs wrapped to a second row
+ * and then scrolled, so a fleet of a dozen showed two or three truncated titles ("Migrate the users tab…",
+ * "Migrate the users tab…" — derived titles share their prefixes), the rows reflowed on every open and close
+ * so no tab kept its place, and the whole thing cost up to 96px of the narrowest column in the app to be a
+ * strictly worse version of the switcher /agents already is. What the strip really earned was the other two
+ * jobs: saying which chat the transcript below belongs to, and being the one place outside /agents that knows
+ * you have other sessions running at all. Both fit on one 2.25rem line — the same line mobile has always used
+ * — with the counts as marks (`spinner 2`, `! 1`) rather than as three shrunken titles.
+ *
+ * So the switcher wears: status glyph · origin · title · viewers · running / attention counts · chevron. The
+ * list it opens is ChatTabList, the fleet board's three lanes in miniature — the same component the rail
+ * shows, so the docked sheet and the pop-out rail cannot drift apart.
+ *
+ * The strip reads the conversation list from the useChat singleton and emits select / close / open rather
+ * than writing it: this bar is a view of the tabs, and the panel it lives in is what hands each verb to the
+ * store. "New agent" is not one of them: it means the same thing here as on the fleet board, so both call the
+ * one startAgent action (agents/agentActions.ts) instead of each surface assembling its own half of it. */
 
 const emit = defineEmits<{
     select: [id: string];
-    // A SET, not an id: the tab × closes one, the right-click menu's Close Others / to the Right / All close many.
+    // A SET, not an id: a card's × closes one, the menus close many.
     close: [ids: ReadonlySet<string>];
     open: [id: string];
 }>();
 
-const { conversations, activeId, sessions, loadSessions } = useChat();
-const { agentById, fleet, archived, loadArchived } = useAgents();
+const { conversations, active, activeId, sessions, loadSessions } = useChat();
+const { agentById } = useAgents();
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
 // The toolbar button's tooltip AND its accessible name, one string: the control the pointer finds is what
 // teaches the chord that makes the trip unnecessary. Docked-only, so it never has to say the way back.
 const popoutHint = computed(() => withShortcut(`Move chat into new window`, `chat.togglePopout`));
 
-/* Undocked, the strip stands up the window's LEFT EDGE as a resizable rail of CARDS instead of wrapping pill
- * tabs across the top. A pop-out window is as wide as the user drags it, so a top strip spends the one axis
- * the chat is short of (height) on a row that has width to burn — while a rail has room to be a slice of the
- * fleet board: the same Attention | Active | Finished lanes, each open tab a compact card wearing the crucial
- * facts (provider mark, a two-line title, the attention chip, cost / diff / elapsed, the live activity line).
- * Docked, the chat column is ~22rem: a card rail there would halve the transcript, so the flat strip stays. */
+/* Undocked, the bar stands up the window's LEFT EDGE as a resizable rail with the chat list always open in
+ * it. A pop-out window is as wide as the user drags it, so a top bar there would spend the one axis the chat
+ * is short of (height) on a row that has width to burn — while a rail has room to be a slice of the fleet
+ * board. Docked, the chat column is ~22rem: a permanent rail there would halve the transcript, so the list
+ * lives in a sheet the header drops and takes back. */
 const vertical = computed(() => poppedOut.value);
 
-// --- Undocked rail: the board's lanes in miniature ----------------------------------------------
-interface RailEntry {
-    readonly conversation: Conversation;
-    readonly agent: FleetAgent | undefined;
-}
-const fleetById = computed(() => new Map(fleet.value.map((agent) => [agent.id, agent])));
-const lastActive = (entry: RailEntry): number => entry.agent?.updatedAt ?? 0;
-
-/* Which lane a TAB belongs to. laneOf is the board's own projection, so a tab can never sit in a different lane
- * here than its card does on /agents. A conversation the fleet has never carded (a plain non-isolated chat, or
- * the roster briefly down) still needs a shelf: streaming or empty reads as Active, anything else as Finished.
- * The rail groups its cards by this, and the right-click menu's "Close Finished" takes exactly the lane it
- * names — one definition of "finished", so the row can't close a card the rail is still showing as Active. */
-const laneOfTab = (conversation: Conversation): FleetLane => {
-    const agent = fleetById.value.get(conversation.conversationId);
-    if (agent !== undefined) {
-        return laneOf(agent);
-    }
-    return conversation.streaming.value || conversation.messages.value.length === 0 ? `active` : `finished`;
-};
-
-/* --- The rail's filter -------------------------------------------------------------------------
- * The same field, the same rule and the same evidence as the fleet board's (useAgentFilter): match what the
- * USER wrote — the title, which is their sanitized first prompt, and every later prompt in the transcript.
- * Two search boxes in one product that disagree about what "matches" means is worse than one of them not
- * existing, so both mount the one composable rather than each rolling its own.
- *
- * What differs is the SET. The board filters the fleet; this rail lists the OPEN TABS, which is a much
- * smaller thing to be looking through — a user in a popped-out window asking "where did I say X" is almost
- * never asking only about the eight tabs they happen to have open. So the query reaches the whole fleet here
- * too, and everything it finds that ISN'T open lands in a group below the lanes that opens on click. The
- * history popover keeps its own box for browsing; this one is for finding.
- *
- * Its state is per-INSTANCE, which for a rail means per-window: a query typed on the board must not narrow a
- * pop-out the user isn't looking at.
- */
-const {
-    query: filterQuery,
-    needle,
-    active: filtering,
-    matches: agentMatches,
-    snippetOf,
-    archivedMatches,
-    sessionMatches,
-    searching,
-} = useAgentFilter();
-
-// A tab with no fleet entry (a plain chat, or the roster briefly down) has no transcript the daemon can
-// search under an agent id, so it is matched on what this browser holds: its title and its own user messages.
-const tabMatches = (entry: RailEntry): boolean => {
-    if (!filtering.value) {
-        return true;
-    }
-    if (entry.agent !== undefined) {
-        return agentMatches(entry.agent);
-    }
-    const title = entry.conversation.title.value;
-    return (
-        title?.toLowerCase().includes(needle.value) === true ||
-        entry.conversation.messages.value.some((message) => message.role === `user` && message.text.toLowerCase().includes(needle.value))
-    );
-};
-
-const railLanes = computed<Record<FleetLane, RailEntry[]>>(() => {
-    const grouped: Record<FleetLane, RailEntry[]> = { attention: [], active: [], finished: [] };
-    for (const conversation of conversations.value) {
-        grouped[laneOfTab(conversation)].push({ conversation, agent: fleetById.value.get(conversation.conversationId) });
-    }
-    // The board's own orderings (useAgents.lanes): fresh drafts lead Active, then turn start — fixed for the
-    // turn's life, so a running card holds its slot; the other two lanes read newest-first.
-    grouped.active.sort(
-        (a, b) =>
-            Number(b.agent?.status === `draft`) - Number(a.agent?.status === `draft`) ||
-            (a.agent?.startedAt ?? lastActive(a)) - (b.agent?.startedAt ?? lastActive(b)),
-    );
-    grouped.attention.sort((a, b) => lastActive(b) - lastActive(a));
-    grouped.finished.sort((a, b) => lastActive(b) - lastActive(a));
-    return grouped;
-});
-const RAIL_LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
-    { key: `attention`, label: `Attention`, dot: `bg-warning` },
-    { key: `active`, label: `Active`, dot: `bg-success` },
-    { key: `finished`, label: `Finished`, dot: `bg-line-strong` },
-];
-
-// A lane's visible tabs, and how many of its own it is showing. Same `n of m` the board's lane headers carry,
-// for the same reason: a lane that silently shrinks is a lane that has stopped saying anything.
-const railCards = (lane: FleetLane): RailEntry[] => railLanes.value[lane].filter(tabMatches);
-const railCount = (lane: FleetLane): string =>
-    filtering.value ? `${railCards(lane).length} of ${railLanes.value[lane].length}` : String(railLanes.value[lane].length);
-
-// The card's status glyph, worn ON THE TITLE ROW like the docked tabs wear theirs — status is the first
-// question a rail answers, so it doesn't belong buried in the numbers line. Fleet-carded tabs read the
-// agent's own status (the richer machine: landed, conflict…); a plain chat degrades to what its
-// conversation is doing right now, through the same statusIcon the docked strip draws.
-const railStatus = (entry: RailEntry): { icon: IconName; spin?: boolean; label: string; class: string } => {
-    if (entry.agent !== undefined) {
-        const meta = agentStatusMeta(entry.agent.status);
-        return { ...meta, class: `text-2xs ${meta.class}` };
-    }
-    const status = entry.conversation.status.value;
-    const icon = statusIcon(status);
-    return { icon: icon.name, spin: icon.spin, label: statusLabel(status), class: icon.class };
-};
-
-/* TWO FACTS THE RAIL CARD SHOWS AS A MARK RATHER THAN A LINE — their words ride the card's hover preview.
- * The model: the provider glyph already carries it, and a fleet is usually one model deep, so the name was a
- * column of identical text down the rail. What the turn is doing right now: the glyph says "it is working",
- * which is the actionable half — the command itself was the noisiest, least stable line on a card (a path that
- * changes every few seconds), and it cost a whole row of a rail whose cards are read as a stack.
- *
- * They used to be two `v-tooltip`s on two glyphs INSIDE a card that already opens a HoverCard on the same
- * hover — three boxes for one pointer, two of them landing in the strip the third had just claimed. This is
- * what HoverCard.note is for, and what the Changes panel's chips already do with it. */
-const railNote = (agent: FleetAgent | undefined): string | undefined => {
-    if (agent === undefined) {
-        return undefined;
-    }
-    const model = agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : providerLabel(agent.provider);
-    const doing = agent.activity === undefined ? undefined : (agent.activity.todo ?? [agent.activity.tool, agent.activity.target].filter(Boolean).join(` `));
-    return [model, doing].filter((part) => part !== undefined && part !== ``).join(` · `);
-};
-
-/* What the query found that ISN'T open in this window — the whole point of the rail's filter reaching past its
- * own list. Live fleet agents first (the likeliest thing to want), then the archive, each as a row that opens
- * the conversation. Conversations no agent owns come from `sessionMatches` and open the same way.
- *
- * The archive is off the live roster, so its contents have to be asked for; the board does that at mount, but
- * a user who popped the chat out and never opened /agents has no reason to have paid for it. Asked for once,
- * the first time a query is typed here.
- */
-const openIds = computed(() => new Set(conversations.value.map((conversation) => conversation.conversationId)));
-const notOpen = computed<FleetAgent[]>(() => {
-    if (!filtering.value) {
-        return [];
-    }
-    return [...fleet.value.filter((agent) => agentMatches(agent)), ...archivedMatches.value].filter((agent) => !openIds.value.has(agent.id));
-});
-const notOpenCount = computed(() => notOpen.value.length + sessionMatches.value.length);
-
-let archiveAsked = false;
-watch(filtering, (on) => {
-    if (on && !archiveAsked) {
-        archiveAsked = true;
-        void loadArchived();
-    }
-});
-
-// One second ticks every running card's elapsed readout together (the board's `now` pattern) — armed only
-// while the rail is up, so the docked strip pays for no timer it doesn't render.
-const now = ref(Date.now());
-let ticker: ReturnType<typeof setInterval> | undefined;
-watch(
-    vertical,
-    (on) => {
-        clearInterval(ticker);
-        ticker = on
-            ? setInterval(() => {
-                  now.value = Date.now();
-              }, 1000)
-            : undefined;
-    },
-    { immediate: true },
+/* --- The counts the header carries -------------------------------------------------------------
+ * The one thing the strip did that /agents cannot: from inside the workspace, a terminal or settings, say
+ * that other sessions are alive. Two numbers, over the chats open in THIS window (the set this bar switches
+ * between) — how many are working, and how many have stopped to ask you something. Each is absent at zero, so
+ * a quiet fleet leaves a quiet header and the marks mean something when they do appear. */
+const runningCount = computed(
+    () =>
+        conversations.value.filter((conversation) => {
+            const agent = agentById(conversation.conversationId);
+            return agent !== undefined ? turnInFlight(agent) : conversation.streaming.value;
+        }).length,
 );
-onBeforeUnmount(() => clearInterval(ticker));
+const attentionCount = computed(
+    () => conversations.value.filter((conversation) => laneOfTab(conversation, agentById(conversation.conversationId)) === `attention`).length,
+);
+
+/* --- The sheet ---------------------------------------------------------------------------------
+ * Docked, the list drops out of the header as a panel pinned to the chat column's own width — the shape the
+ * composer's pickers already use (see ComposerPopover), and for the same reason: this is not a menu hanging
+ * off a small trigger with room to flip around, it is a sheet the width of the column it belongs to. It also
+ * keeps the row menus working, which an <AnchoredOverlay> would not: that closes on any pointerdown outside
+ * its own box, and a right-click menu is teleported outside by construction — so choosing "Rename" would
+ * dismiss the sheet a beat before the row it renames could show its input.
+ *
+ * Dismissal is therefore ours: Escape, a second press on the header, picking a chat, or a pointerdown outside
+ * the header — except inside an open context menu, which is the one "outside" that is still this sheet. */
+const listOpen = ref(false);
+// The sheet is a child of the bar, so one ref answers both "is this click ours" and "which document are we in".
+const bar = ref<HTMLElement | null>(null);
+// The rail's list, for the one thing the host has to reach into it for — see the rename command below.
+const rail = ref<InstanceType<typeof ChatTabList> | null>(null);
+
+const onDocumentPointerDown = (event: Event): void => {
+    const target = event.target;
+    if (!(target instanceof Node)) {
+        return;
+    }
+    if (bar.value?.contains(target) === true || (target instanceof Element && target.closest(`.p-contextmenu`) !== null)) {
+        return;
+    }
+    listOpen.value = false;
+};
+const onDocumentKeydown = (event: KeyboardEvent): void => {
+    if (event.key === `Escape`) {
+        listOpen.value = false;
+    }
+};
+// Armed on the bar's OWN document, so a docked panel and a popped-out one can never listen in the wrong window.
+let armedDocument: Document | undefined;
+const disarmSheet = (): void => {
+    armedDocument?.removeEventListener(`pointerdown`, onDocumentPointerDown, true);
+    armedDocument?.removeEventListener(`keydown`, onDocumentKeydown);
+    armedDocument = undefined;
+};
+watch(listOpen, (open) => {
+    disarmSheet();
+    if (!open) {
+        return;
+    }
+    armedDocument = bar.value?.ownerDocument;
+    // Capture, so a panel that stops its own clicks from bubbling cannot also stop this from closing.
+    armedDocument?.addEventListener(`pointerdown`, onDocumentPointerDown, true);
+    armedDocument?.addEventListener(`keydown`, onDocumentKeydown);
+});
+onBeforeUnmount(disarmSheet);
+
+// Picking from the sheet is the end of the errand: switch, and give the column back to the transcript. The
+// rail is not a sheet and stays put — out there the list IS the surface.
+const pick = (id: string): void => {
+    listOpen.value = false;
+    emit(`select`, id);
+};
+const pickNotOpen = (id: string): void => {
+    listOpen.value = false;
+    emit(`open`, id);
+};
+
+/* --- Renaming the active chat --------------------------------------------------------------------
+ * The header's title is the rename surface for the chat you are IN (F2, the app-wide rename key, and the
+ * header's own double-click); a card in the list renames itself in place, where the pointer already is. Same
+ * createTitleEdit both times, so a chat renamed on either surface renames its agent registry entry too. */
+const renaming = ref(false);
+const edit = createTitleEdit(
+    () => active.value.conversationId,
+    () => active.value.title.value ?? undefined,
+);
+const beginRename = (): void => {
+    renaming.value = true;
+    edit.begin();
+};
+// The input is torn down by the edit's own end (commit, cancel, blur), not by a second flag to keep in sync.
+watch(
+    () => edit.editing,
+    (editing) => {
+        if (!editing) {
+            renaming.value = false;
+        }
+    },
+);
 
 // --- Rail width ---------------------------------------------------------------------------------
 // The rail resizes off its right edge (pointer capture, double-click resets) and persists like the panel
@@ -272,25 +208,10 @@ const endRailResize = (event: PointerEvent): void => {
     }
 };
 
-// What a tab calls a conversation: its derived title, else the noun for where it
-// works — an untitled isolated conversation IS a draft agent card on the fleet board.
-const tabLabel = (conversation: Conversation): string => conversation.title.value ?? (conversation.isolated.value ? `New agent` : `New chat`);
-
-// Which tabs were opened by an outside message rather than by the user (the registry entry is where that
-// fact lives, so it's read from the fleet). The strip wears the source glyph alone — the title of such a tab
-// already leads with who sent the message.
-const originOf = (conversation: Conversation): AgentOrigin | undefined => agentById(conversation.conversationId)?.origin;
-
-// Off the board, still open. Archiving CLOSES an agent's tab (see the archive note in useAgents), so what lands
-// here is the other way round: a tab opened FROM the archive, or one whose agent the daemon's retention sweep
-// filed away. The strip is what says so for a BACKGROUND tab — the panel's own line only speaks for the active
-// one, and a tab that looks identical to a live agent is how "didn't I just archive that?" starts.
-const isArchived = (conversation: Conversation): boolean => agentById(conversation.conversationId)?.archivedAt !== undefined;
-
-/* The history panel and WHICH button it is hanging off — the docked strip's glyph or the rail's "Past chats…"
+/* The history panel and WHICH button it is hanging off — the docked header's glyph or the rail's "Past chats…"
  * row, whichever was pressed. The anchor is also what decides the window it opens in (AnchoredOverlay derives
  * document, viewport and dismissal from it), and those two buttons live in different ones: the rail's is in the
- * pop-out window, the strip's in the app. */
+ * pop-out window, the header's in the app. */
 const historyOpen = ref(false);
 const historyAnchor = ref<HTMLElement>();
 const searchInput = ref<HTMLInputElement | null>(null);
@@ -305,89 +226,19 @@ watch(query, (value) => {
 });
 onBeforeUnmount(() => clearTimeout(searchTimer));
 
-// --- Inline tab rename -------------------------------------------------------------------------
-// One edit state for the whole strip (only one tab renames at a time), pointed at a tab by `renamingId`. The
-// write goes through the same createTitleEdit the fleet cards use, so a chat renamed here renames the agent
-// registry entry too — the tab and its card are one thing under two skins. Reached by double-clicking a tab
-// (the terminal strip's gesture) or F2, the app-wide rename key.
-const strip = ref<HTMLElement | null>(null);
-const renamingId = ref<string | undefined>(undefined);
-const renaming = computed(() => conversations.value.find((conversation) => conversation.conversationId === renamingId.value));
-const edit = createTitleEdit(
-    () => renaming.value?.conversationId ?? ``,
-    () => renaming.value?.title.value ?? undefined,
-);
-const beginRename = (id: string): void => {
-    renamingId.value = id;
-    edit.begin();
-};
-
-// F2 targets the tab the focus is actually ON (Tab-navigating the strip lands on tabs that aren't active),
-// falling back to the active conversation for a press from anywhere else in the panel — the composer, the
-// transcript. Read off the strip's own document so a popped-out chat resolves ITS focus, not the main window's.
-const focusedTabId = (): string | undefined => {
-    const focused = strip.value?.ownerDocument.activeElement;
-    const tab = focused instanceof Element ? focused.closest(`[data-chat-tab]`) : null;
-    return tab instanceof HTMLElement ? tab.dataset[`chatTab`] : undefined;
-};
-
-// --- Hover preview --------------------------------------------------------------------------------
-// A tab wears its title clipped to whatever width its row gave it, on top of the 40-char derivation, so
-// hovering reveals the FULL
-// derived title and, under it, the first message that title was derived from. The card itself is the shared
-// HoverCard — the Changes panel's agent chips raise the same one for the same session.
-const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
-
-const showPreview = (event: MouseEvent, conversation: Conversation, agent?: FleetAgent): void => {
-    const firstUser = conversation.messages.value.find((message) => message.role === `user`);
-    // A fresh "New chat"/"New agent" tab has neither, and the card declines to open on empty content.
-    hoverCard.value?.show(event, { title: conversation.title.value ?? undefined, note: railNote(agent), body: firstUser?.text });
-};
-const hidePreview = (): void => {
-    hoverCard.value?.hide();
-};
-
-// --- Closing ------------------------------------------------------------------------------------
-// The close sets the strip can ask for, named the way the menu names them. Read off the live list from inside the
-// menu's own computed, so a tab that arrives while the menu sits open (an inbound Discord mention opens one) is
-// folded into the set rather than escaping a snapshot taken at right-click time.
-const othersOf = (id: string): ReadonlySet<string> =>
-    new Set(conversations.value.filter((c) => c.conversationId !== id).map((c) => c.conversationId));
-const toRightOf = (id: string): ReadonlySet<string> => {
-    const index = conversations.value.findIndex((c) => c.conversationId === id);
-    return new Set(index === -1 ? [] : conversations.value.slice(index + 1).map((c) => c.conversationId));
-};
-const allTabs = (): ReadonlySet<string> => new Set(conversations.value.map((c) => c.conversationId));
-
-/* Every tab that has stopped working — the Finished lane, whatever the strip's orientation. This is the sweep a
- * long session actually wants: a dozen tabs accumulate, two are still running, and neither Close Others nor
- * Close to the Right can express "clear the done ones" without hunting for them one × at a time. The ACTIVE tab
- * is not spared if it is finished; being the tab you are looking at is not a reason to keep a landed agent open,
- * and closing it selects the last survivor the way every other close here does. */
-const finishedTabs = computed<ReadonlySet<string>>(
-    () => new Set(conversations.value.filter((c) => laneOfTab(c) === `finished`).map((c) => c.conversationId)),
-);
-
-// No close asks for a confirm, mass or single — unlike the workspace's file tabs, where closing discards unsaved
-// edits, closing a chat destroys nothing. A running agent's turn is detached daemon-side (Conversation.abort is
-// soft by design), so it keeps working and lands its work with the tab gone; the conversation stays in the
-// sandbox's store, and reopening it from the history menu reattaches to the still-live turn.
-
-// --- Right-click menu -----------------------------------------------------------------------------
-// The same close set the workspace's file tabs carry, plus this strip's own rename and the pop-out toggle. One
-// menu serves both right-click targets: on a tab it acts on the RIGHT-CLICKED one (`menuTabId`), while on the
-// strip's empty space (`menuTabId` undefined) only the rows that need no tab survive. The commands further down
-// act on the ACTIVE tab instead — the split the workspace makes.
-const tabMenu = ref<{ show: (event: Event) => void } | undefined>();
-const menuTabId = ref<string>();
-
-// The rows that name no particular tab: they tail a tab's menu and they ARE the empty-space one.
-const stripItems = computed<MenuItem[]>(() => [
+/* --- Right-click menu on the bar's chrome ----------------------------------------------------------
+ * A right-click anywhere on this bar that isn't a text field opens the sweeps that name no particular chat
+ * (Close Finished, Close All, the pop-out toggle) rather than popping the chat out on the spot — an
+ * accidental right-click near the header shouldn't tear the panel into its own window. A CARD's menu is the
+ * list's own and acts on the card under the pointer; this one is the chrome's, and the keyboard commands
+ * below act on the ACTIVE chat — the split the workspace's file tabs make. */
+const barMenu = ref<{ show: (event: Event) => void } | undefined>();
+const barMenuItems = computed<MenuItem[]>(() => [
     {
         label: `Close Finished`,
-        disabled: finishedTabs.value.size === 0,
+        disabled: finishedTabs().size === 0,
         shortcut: commandShortcut(`chat.closeFinishedTabs`),
-        command: () => emit(`close`, finishedTabs.value),
+        command: () => emit(`close`, finishedTabs()),
     },
     { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
     { separator: true },
@@ -397,64 +248,34 @@ const stripItems = computed<MenuItem[]>(() => [
         command: togglePopout,
     },
 ]);
-
-const tabMenuItems = computed<MenuItem[]>(() => {
-    const id = menuTabId.value;
-    if (id === undefined) {
-        return stripItems.value;
+const onBarContextMenu = (event: MouseEvent): void => {
+    if (event.target instanceof Element && event.target.closest(`input, textarea`) !== null) {
+        return; // a text field keeps the browser's own editing menu (the rename box, the list's filter)
     }
-    if (!conversations.value.some((c) => c.conversationId === id)) {
-        return []; // the right-clicked tab closed under the open menu
-    }
-    const others = othersOf(id);
-    const toRight = toRightOf(id);
-    return [
-        { label: `Rename`, icon: `pencil`, shortcut: commandShortcut(`chat.rename`), command: () => beginRename(id) },
-        { separator: true },
-        { label: `Close`, icon: `times`, shortcut: commandShortcut(`chat.closeTab`), command: () => emit(`close`, new Set([id])) },
-        {
-            label: `Close Others`,
-            disabled: others.size === 0,
-            shortcut: commandShortcut(`chat.closeOtherTabs`),
-            command: () => emit(`close`, others),
-        },
-        {
-            label: `Close to the Right`,
-            disabled: toRight.size === 0,
-            shortcut: commandShortcut(`chat.closeTabsToRight`),
-            command: () => emit(`close`, toRight),
-        },
-        { separator: true },
-        ...stripItems.value, // Close All, then the pop-out toggle behind its own separator
-    ];
-});
-
-const openTabMenu = (id: string, event: Event): void => {
-    // The pointer stays on the tab, so the hover card would never leave on its own — and it floats exactly where
-    // the menu is about to open.
-    hidePreview();
-    menuTabId.value = id;
-    tabMenu.value?.show(event);
+    event.preventDefault();
+    barMenu.value?.show(event);
 };
 
-// Registered while THIS strip is mounted — the desktop strip and the mobile one are exclusive, so the ids can't
-// double-register.
-//
-// Every chord here is the SHELL-WIDE tab family (tabSurface.ts): the same Ctrl+Shift+{X , . Backspace} the
-// workspace's file tabs carry and the same Alt+PageUp/PageDown cycling, claimed only while the focus is inside
-// the chat panel. Three strips are on screen at once, so one chord per verb resolved by focus beats three
-// chords per verb memorized — it's what F2/rename has always done here. Each is rebindable in
-// Settings → Keybindings, per surface: remapping Close Chat leaves Close Tab where it was.
-//
-// Cycling emits `select` rather than writing activeId, so it takes the same road as a click on a tab: through
-// the panel, which routes it to the store's one writer of the tab list and of the focus (see useChat.setActive).
+/* --- Commands ------------------------------------------------------------------------------------
+ * Registered while THIS bar is mounted — the desktop bar and the mobile one are exclusive, so the ids can't
+ * double-register.
+ *
+ * Every chord here is the SHELL-WIDE tab family (tabSurface.ts): the same Ctrl+Shift+{X , . Backspace} the
+ * workspace's file tabs carry and the same Alt+PageUp/PageDown cycling, claimed only while the focus is inside
+ * the chat panel. Two surfaces are on screen at once, so one chord per verb resolved by focus beats two chords
+ * per verb memorized — it's what F2/rename has always done here. Each is rebindable in Settings →
+ * Keybindings, per surface: remapping Close Chat leaves Close Tab where it was.
+ *
+ * They all act on the ACTIVE chat, which is the one this header names. Cycling emits `select` rather than
+ * writing activeId, so it takes the same road as a click on a card: through the panel, which routes it to the
+ * store's one writer of the tab list and of the focus (see useChat.setActive). */
 let commandDisposables: readonly Disposable[] = [];
 const cycleTab = (delta: number): void => {
     const list = conversations.value;
     if (list.length < 2) {
         return;
     }
-    const index = list.findIndex((c) => c.conversationId === activeId.value);
+    const index = list.findIndex((conversation) => conversation.conversationId === activeId.value);
     const next = list[(index + delta + list.length) % list.length];
     if (next !== undefined) {
         emit(`select`, next.conversationId);
@@ -472,10 +293,13 @@ onMounted(() => {
                 if (edit.editing) {
                     return; // already renaming — a second F2 would wipe the draft
                 }
-                const target = focusedTabId() ?? activeId.value;
-                if (target !== ``) {
-                    beginRename(target);
+                // Renamed where the user can see it happen: the header line docked, and the active card itself
+                // out in the rail, which has no header to put an input in.
+                if (vertical.value) {
+                    rail.value?.beginRename(activeId.value);
+                    return;
                 }
+                beginRename();
             },
         },
         {
@@ -522,8 +346,9 @@ onMounted(() => {
             icon: `times`,
             when: inTabSurface(`chat`),
             handler: (): void => {
-                if (finishedTabs.value.size > 0) {
-                    emit(`close`, finishedTabs.value);
+                const finished = finishedTabs();
+                if (finished.size > 0) {
+                    emit(`close`, finished);
                 }
             },
         },
@@ -537,6 +362,21 @@ onMounted(() => {
         },
         { command: `chat.nextTab`, title: `Next Chat`, keybinding: `Alt+PageDown`, when: inTabSurface(`chat`), handler: () => cycleTab(1) },
         { command: `chat.previousTab`, title: `Previous Chat`, keybinding: `Alt+PageUp`, when: inTabSurface(`chat`), handler: () => cycleTab(-1) },
+        {
+            // Unbound by default, like Close Finished: every chord this surface could claim is either taken
+            // (Mod+Shift+P is the palette this command is reached FROM) or worth more to the file tabs. The
+            // pointer trip is one click on a header that is always on screen.
+            command: `chat.switchTab`,
+            title: `Switch Chat…`,
+            icon: `comments`,
+            when: inTabSurface(`chat`),
+            handler: (): void => {
+                if (vertical.value) {
+                    return; // the rail is already the list — there is nothing to open
+                }
+                listOpen.value = !listOpen.value;
+            },
+        },
     ];
     commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
 });
@@ -546,31 +386,6 @@ onBeforeUnmount(() => {
     }
     commandDisposables = [];
 });
-
-// Close a tab without selecting it (the × sits inside the tab button, so stop the bubble).
-const closeTab = (event: Event, id: string): void => {
-    event.stopPropagation();
-    emit(`close`, new Set([id]));
-};
-
-/* Right-click anywhere on the strip that ISN'T a tab opens the tab-less menu (Close Finished, Close All, the
- * pop-out toggle) rather than popping the chat out on the spot — an accidental right-click near the tabs shouldn't
- * tear the panel into its own window.
- *
- * The handler sits on the whole header, not on the scroll box the tabs live in: the ✚ and history buttons are
- * SIBLINGS of that box (they stay put while the tabs scroll), and so is the rename error line, so a right-click
- * on or around them used to fall through to the browser's own menu — the one bit of the strip that looked like
- * tab chrome and behaved like a web page. Tab and rail-card right-clicks stop the event themselves, so anything
- * arriving here is chrome by construction; the only thing spared is a text field, which keeps the browser's
- * editing menu (the rename input, the rail's filter box). */
-const onStripContextMenu = (event: MouseEvent): void => {
-    if (event.target instanceof Element && event.target.closest(`input, textarea`) !== null) {
-        return;
-    }
-    event.preventDefault();
-    menuTabId.value = undefined;
-    tabMenu.value?.show(event);
-};
 
 const openHistory = (event: Event): void => {
     query.value = ``;
@@ -584,18 +399,20 @@ const openHistory = (event: Event): void => {
 </script>
 
 <template>
-    <!-- Docked: a header across the top of the chat column. Undocked: a resizable rail of lane-grouped cards
-         down the window's left edge, over a foot that carries the same ✚ / history pair the docked strip wears
-         beside it — there as two bare glyphs, here as a labelled "Past chats" row and a filled "New agent". -->
+    <!-- Docked: one line across the top of the chat column, with the list on a sheet beneath it. Undocked: a
+         resizable rail down the window's left edge with the list always open, over a foot that carries the
+         same ✚ / history pair the header wears beside it — there as two bare glyphs, here as a labelled
+         "Past chats" row and a filled "New agent". -->
     <component
         :is="vertical ? 'aside' : 'header'"
-        class="flex gap-1 border-line"
+        ref="bar"
+        class="relative flex gap-1 border-line"
         :class="[
-            vertical ? 'relative h-full shrink-0 flex-col items-stretch border-r p-1.5' : 'view-header view-header-wrap items-center border-b px-1.5',
+            vertical ? 'h-full shrink-0 flex-col items-stretch border-r p-1.5' : 'view-header items-center border-b px-1.5',
             { 'rail-resizing': railResizing },
         ]"
         :style="vertical ? { width: `${railWidth}px` } : undefined"
-        @contextmenu="onStripContextMenu"
+        @contextmenu="onBarContextMenu"
     >
         <div
             v-if="vertical"
@@ -606,349 +423,100 @@ const openHistory = (event: Event): void => {
             @dblclick="setRailWidth(DEFAULT_RAIL_WIDTH)"
             title="Drag to resize · double-click to reset"
         ></div>
-        <!-- The rail's filter, pinned above the list. Only undocked: the docked strip is a row of pill tabs in
-             a ~22rem column that already fights for width, and a field there would cost more than the handful
-             of tabs it could narrow. The rail reads top-down as narrow it (filter) → pick one (the lanes) →
-             leave it (the foot's two doors out). -->
-        <FilterField
+
+        <!-- THE SWITCHER. Docked only: the rail below already IS the list, and a header naming the active chat
+             above it would say a third time what the ringed card and the transcript already say.
+             Renaming REPLACES it rather than nesting a field inside it: an input in a button is neither valid
+             markup nor a usable caret. Enter commits, Esc cancels, blur commits, an empty or unchanged name
+             silently cancels — the WorkspaceTree convention, via createTitleEdit. -->
+        <template v-if="!vertical">
+            <input
+                v-if="edit.editing && renaming"
+                v-model="edit.draft"
+                type="text"
+                maxlength="80"
+                aria-label="Chat title"
+                :placeholder="active.isolated.value ? 'New agent' : 'New chat'"
+                class="h-7 min-w-0 flex-1 select-text rounded-md bg-overlay px-2 text-2xs text-content outline-none ring-1 ring-primary-500/50 placeholder:text-subtle"
+                @keydown.enter.stop.prevent="edit.commit()"
+                @keydown.esc.stop.prevent="edit.cancel()"
+                @blur="edit.blurCommit()"
+                @vue:mounted="edit.focusInput"
+            />
+            <button
+                v-else
+                type="button"
+                data-chat-switcher
+                class="chat-tab group flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-2xs"
+                :class="{ 'chat-tab-on': listOpen }"
+                :aria-expanded="listOpen"
+                aria-haspopup="dialog"
+                :aria-label="`Switch chat — ${conversations.length} open`"
+                @click="listOpen = !listOpen"
+                @dblclick.prevent.stop="beginRename()"
+            >
+                <!-- What THIS chat is doing, in the leading slot every surface gives it. Rendered for idle too
+                     (a dim dot, not nothing) so the row's left edge never shifts as a turn starts and ends. -->
+                <Icon v-bind="statusIcon(active.status.value)" :aria-label="statusLabel(active.status.value)" class="shrink-0" />
+                <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
+                <OriginMark :origin="originOf(active)" compact />
+                <!-- Off the board, still open: the box glyph is the whole message, the same one the cards wear. -->
+                <span v-if="isArchived(active)" class="flex shrink-0 items-center" aria-label="Archived">
+                    <Icon name="box" class="text-2xs text-subtle" />
+                </span>
+                <span
+                    class="min-w-0 flex-1 truncate text-left font-medium"
+                    :class="statusTabClass(active.status.value)"
+                    v-tooltip.bottom.overflow="tabLabel(active)"
+                    >{{ tabLabel(active) }}</span
+                >
+                <!-- Members with this same conversation active right now. -->
+                <PresenceAvatars
+                    v-if="active.session.value !== undefined"
+                    :members="viewersOfSession(active.session.value.id)"
+                    label="in this chat"
+                />
+                <!-- THE OTHER SESSIONS, as two marks. This is the whole of what the old tab strip told you from
+                     inside the workspace or a terminal, in the space one truncated title used to take. -->
+                <span
+                    v-if="runningCount > 0"
+                    class="flex shrink-0 items-center gap-1 text-subtle"
+                    :aria-label="`${runningCount} running`"
+                    v-tooltip.bottom="`${runningCount} running`"
+                >
+                    <Icon name="spinner" spin class="text-2xs" />{{ runningCount }}
+                </span>
+                <span
+                    v-if="attentionCount > 0"
+                    class="flex shrink-0 items-center gap-1 rounded-full bg-warning/15 px-1.5 font-semibold text-warning"
+                    :aria-label="`${attentionCount} need you`"
+                    v-tooltip.bottom="`${attentionCount} waiting for you`"
+                >
+                    <Icon name="exclamation-circle" class="text-2xs" />{{ attentionCount }}
+                </span>
+                <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle transition-transform" :class="{ 'rotate-180': listOpen }" />
+            </button>
+        </template>
+
+        <!-- THE RAIL'S LIST: always open, taking the height the window gives it. -->
+        <ChatTabList
             v-if="vertical"
-            v-model="filterQuery"
-            :busy="searching"
-            label="Filter chats by your messages"
-            placeholder="Filter by your messages…"
-            class="shrink-0"
+            ref="rail"
+            class="min-h-0 flex-1"
+            @select="emit('select', $event)"
+            @close="emit('close', $event)"
+            @open="emit('open', $event)"
         />
-        <!-- Tabs fill one row, then wrap to a second; only past two rows does the strip scroll vertically. It
-             never scrolls sideways, so no tab hides off the right edge.
-             A tab is elastic, not a fixed 10rem box: basis-40 is what it ASKS for (so tabs wrap at the same
-             counts they always did), and `grow` then hands each row's leftover width back to the tabs ON THAT
-             ROW instead of leaving a gap between the last tab and the ✚ / history pair. Rows therefore differ
-             in tab width — a row of two divides more slack than a row of four — which is the trade for every
-             row spending its width on TITLE rather than on emptiness. max-w-72 is the ceiling: a derived title
-             is 40 chars, which fits inside 18rem at text-2xs, so past that a lone tab would only stretch its
-             own whitespace. Below it, min-w-20 still floors a squeezed strip.
-             One row still measures exactly a
-             .view-header (a 26px tab row plus its py-1 is under the 2.25rem floor), so the shell-wide header
-             line reads unbroken until there are genuinely more tabs than fit; from the second row on, this bar
-             alone stands taller (.view-header-wrap, styles.css). max-h-16 is those two rows WITH the padding —
-             the strip is the scroll box, so its own py counts against the cap.
-             A tab has no fixed height, so the row tracks the meta tier (text-2xs): at 0.6875rem/1rem it
-             measures 26px, which is why the strip's own padding is py-0.5 and not more — one row then comes
-             to 30px and still clears the 2.25rem floor (measured: the header lands on exactly 36px), while
-             two rows plus the gap come to 60px, just inside max-h-16, and a third (90px) is well outside.
-             All three numbers move together with --text-2xs; retune them together, never one alone.
-             The ✚ and history buttons sit outside the strip, so they never move; their h-7 rides inside the
-             floor with no header padding.
-             None of that applies down the side: the rail owns the window's full height, so the lanes and their
-             cards simply stack, and the list scrolls only when it outgrows the window. -->
-        <div
-            ref="strip"
-            class="scrollbar-thin flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
-            :class="vertical ? 'min-h-0 flex-col items-stretch gap-1.5' : 'max-h-16 flex-wrap items-center gap-1 py-0.5'"
-        >
-            <template v-if="!vertical">
-                <template v-for="c in conversations" :key="c.conversationId">
-                    <!-- Renaming REPLACES the tab rather than nesting a field inside it: an input in a button is
-                         neither valid markup nor a usable caret. Enter commits, Esc cancels, blur commits, an empty
-                         or unchanged name silently cancels — the WorkspaceTree convention, via createTitleEdit. -->
-                    <input
-                        v-if="edit.editing && renamingId === c.conversationId"
-                        v-model="edit.draft"
-                        type="text"
-                        maxlength="80"
-                        aria-label="Chat title"
-                        :placeholder="c.isolated.value ? 'New agent' : 'New chat'"
-                        class="w-40 shrink-0 select-text rounded-md bg-overlay px-2 py-1 text-2xs text-content outline-none ring-1 ring-primary-500/50 placeholder:text-subtle"
-                        @keydown.enter.stop.prevent="edit.commit()"
-                        @keydown.esc.stop.prevent="edit.cancel()"
-                        @blur="edit.blurCommit()"
-                        @vue:mounted="edit.focusInput"
-                    />
-                    <button
-                        v-else
-                        type="button"
-                        :data-chat-tab="c.conversationId"
-                        class="chat-tab group flex min-w-20 max-w-72 shrink-0 grow basis-40 items-center gap-1.5 rounded-md px-2 py-1 text-2xs"
-                        :class="{ 'chat-tab-on': activeId === c.conversationId }"
-                        @click="emit('select', c.conversationId)"
-                        @dblclick.prevent.stop="beginRename(c.conversationId)"
-                        @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
-                        @mouseenter="showPreview($event, c)"
-                        @mouseleave="hidePreview"
-                    >
-                        <!-- What this tab is doing, in the leading slot the mobile strip and the rail already give
-                             it. Rendered for IDLE too (a dim dot, not nothing) so the slot's width is constant:
-                             a glyph that appears only while streaming reflows every label in the strip on each
-                             turn. `times` is a sibling, not an overlay — status never hides behind the close ×. -->
-                        <Icon v-bind="statusIcon(c.status.value)" :aria-label="statusLabel(c.status.value)" class="shrink-0" />
-                        <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
-                        <OriginMark :origin="originOf(c)" compact />
-                        <!-- Archived: the agent is off the board, but its conversation is still right here. The
-                             box glyph is the whole message; the three places that drew it used to each raise the
-                             same sentence, which is a caption on a mark the user meets everywhere. -->
-                        <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
-                            <Icon name="box" class="text-2xs text-subtle" />
-                        </span>
-                        <!-- One noun with the fleet: an untitled isolated conversation IS a draft agent card there. -->
-                        <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{ tabLabel(c) }}</span>
-                        <!-- Members with this same conversation active right now. -->
-                        <PresenceAvatars v-if="c.session.value !== undefined" :members="viewersOfSession(c.session.value.id)" label="in this chat" />
-                        <!-- The × is a HIT TARGET carrying the glyph, not the glyph itself: at text-2xs the svg
-                             is an 11px square, and a click that misses it lands on the tab — which, on the tab it
-                             is closing (the one the user is looking at), selects an already-selected tab and so
-                             reads as a close that did nothing. The span is the row's full height and wears the
-                             tab's own padding as slop, the same shape FileTabs and the mobile strip give it.
-                             -my-1 cancels the py, so the target is the tab's full 24px height for free; -mr-2
-                             spends the tab's right padding, leaving the target ~27×24 for 12px of title. It stops
-                             short of the title on purpose — reaching further left would trade this miss for the
-                             worse one, a click meant for the tab closing it. -->
-                        <span
-                            v-if="conversations.length > 1"
-                            role="button"
-                            aria-label="Close chat"
-                            class="-my-1 -mr-2 flex shrink-0 items-center px-2 py-1 opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
-                            @click="closeTab($event, c.conversationId)"
-                        >
-                            <Icon name="times" class="text-2xs" />
-                        </span>
-                    </button>
-                </template>
-            </template>
 
-            <!-- The rail: the fleet board's three lanes over the OPEN tabs, empty lanes hidden. Each card is
-                 the tab it always was (click selects, double-click renames, right-click menus, × closes) —
-                 wearing the crucial slice of its /agents card: status glyph on the title row, two lines of
-                 title, cost / diff / elapsed, and the live activity line. The cards carry the BOARD's skin
-                 (a bordered surface, AgentCard's) rather than the docked strip's transparent pill: a pill
-                 disappears into a rail of pills, and "which sessions do I have" is the rail's first job.
-                 Colour is spent the way the board spends it — status lives in the glyph and the semantic
-                 chips; the title, the numbers and the activity line stay neutral, so the accent colour means
-                 something when it does appear (the attention chip, a diff, an error). -->
-            <template v-else>
-                <template v-for="railLane in RAIL_LANES" :key="railLane.key">
-                    <!-- A lane with nothing in it is hidden as before; a lane the FILTER emptied keeps its
-                         header and says so, so the rail doesn't reshuffle under the cursor mid-keystroke. -->
-                    <template v-if="railLanes[railLane.key].length > 0">
-                        <div class="mt-2.5 flex items-center gap-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle first:mt-0">
-                            <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="railLane.dot"></span>
-                            <span>{{ railLane.label }}</span>
-                            <span class="font-normal">{{ railCount(railLane.key) }}</span>
-                        </div>
-                        <p v-if="railCards(railLane.key).length === 0" class="px-1 pb-1 text-2xs text-subtle">No matches</p>
-                        <template v-for="{ conversation: c, agent } in railCards(railLane.key)" :key="c.conversationId">
-                            <input
-                                v-if="edit.editing && renamingId === c.conversationId"
-                                v-model="edit.draft"
-                                type="text"
-                                maxlength="80"
-                                aria-label="Chat title"
-                                :placeholder="c.isolated.value ? 'New agent' : 'New chat'"
-                                class="w-full shrink-0 select-text rounded-md bg-overlay px-2 py-1 text-2xs text-content outline-none ring-1 ring-primary-500/50 placeholder:text-subtle"
-                                @keydown.enter.stop.prevent="edit.commit()"
-                                @keydown.esc.stop.prevent="edit.cancel()"
-                                @blur="edit.blurCommit()"
-                                @vue:mounted="edit.focusInput"
-                            />
-                            <button
-                                v-else
-                                type="button"
-                                :data-chat-tab="c.conversationId"
-                                class="chat-tab rail-card group flex w-full min-w-0 shrink-0 flex-col gap-1 rounded-lg px-2.5 py-2 text-left text-2xs"
-                                :class="{ 'chat-tab-on': activeId === c.conversationId, 'rail-card-attention': railLane.key === 'attention' }"
-                                @click="emit('select', c.conversationId)"
-                                @dblclick.prevent.stop="beginRename(c.conversationId)"
-                                @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
-                                @mouseenter="showPreview($event, c, agent)"
-                                @mouseleave="hidePreview"
-                            >
-                                <span class="flex w-full min-w-0 items-start gap-1.5">
-                                    <!-- Status leads the TITLE row, where the docked tabs wear it — it is the
-                                         first thing a glance at the rail asks. Sideways for the same reason the
-                                         title below is: under a rail card is the next rail card. -->
-                                    <span class="flex h-4 shrink-0 items-center">
-                                        <Icon
-                                            :name="railStatus({ conversation: c, agent }).icon"
-                                            :spin="railStatus({ conversation: c, agent }).spin"
-                                            :class="railStatus({ conversation: c, agent }).class"
-                                            :aria-label="railStatus({ conversation: c, agent }).label"
-                                        />
-                                    </span>
-                                    <OriginMark :origin="originOf(c)" compact />
-                                    <span v-if="isArchived(c)" class="mt-px flex shrink-0 items-center" aria-label="Archived">
-                                        <Icon name="box" class="text-2xs text-subtle" />
-                                    </span>
-                                    <!-- Two lines before the clamp — a card has the width for most titles whole.
-                                         Neutral, always: the status colour lives in the glyph beside it, and a
-                                         rail of orange titles is a rail where nothing stands out. -->
-                                    <span class="line-clamp-2 min-w-0 flex-1 font-medium leading-4 text-content">
-                                        <span
-                                            v-for="(run, at) in markSegments(tabLabel(c), needle)"
-                                            :key="at"
-                                            :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''"
-                                            >{{ run.text }}</span
-                                        >
-                                    </span>
-                                    <PresenceAvatars
-                                        v-if="c.session.value !== undefined"
-                                        :members="viewersOfSession(c.session.value.id)"
-                                        label="in this chat"
-                                    />
-                                    <!-- Same hit target as the flat strip's (see there): the glyph is 11px, the
-                                         span is what the pointer actually has to find. -->
-                                    <span
-                                        v-if="conversations.length > 1"
-                                        role="button"
-                                        aria-label="Close chat"
-                                        class="-mr-2 -mt-1 flex shrink-0 items-center px-2 py-1 opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
-                                        @click="closeTab($event, c.conversationId)"
-                                    >
-                                        <Icon name="times" class="mt-px text-2xs" />
-                                    </span>
-                                </span>
-                                <template v-if="agent !== undefined">
-                                    <!-- The crucial numbers, one wrapping line: cost, diff, and — right-aligned —
-                                         the running elapsed (ticking) or the last-activity age. All quiet:
-                                         these are reference numbers, not events.
-                                         The MODEL is a mark, not a word: in a rail this narrow "Claude Opus 5"
-                                         costs a quarter of the line to repeat what the provider glyph beside it
-                                         already says, and it is the same on every card in a fleet run on one
-                                         model. The name stays one hover away, on the glyph that stands for it. -->
-                                    <span class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
-                                        <span
-                                            v-if="attentionReason(agent) !== undefined"
-                                            class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
-                                            >{{ attentionReason(agent) }}</span
-                                        >
-                                        <span class="flex shrink-0 items-center">
-                                            <ProviderLogo :provider="agent.provider" class="text-2xs" />
-                                        </span>
-                                        <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
-                                        <span
-                                            v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)"
-                                            class="font-mono"
-                                        >
-                                            <span class="text-success">+{{ agent.diff.insertions }}</span>
-                                            <span class="text-danger"> −{{ agent.diff.deletions }}</span>
-                                        </span>
-                                        <!-- The now-column, right-aligned: what it is doing (the tool's glyph,
-                                             its command on hover) and how long it has been at it. Both are held
-                                             through a stop's UNWIND (turnInFlight, not `running`): the turn is
-                                             still live there, the elapsed keeps its meaning, and the glyph
-                                             freezes on what it was doing when the user stopped it. Blinking the
-                                             whole column off a beat before the card settles is the same flicker
-                                             the stopping state exists to remove. -->
-                                        <span class="ml-auto flex shrink-0 items-center gap-1.5">
-                                            <Icon
-                                                v-if="turnInFlight(agent) && agent.activity !== undefined"
-                                                :name="activityIcon(agent.activity.tool)"
-                                                class="text-2xs text-subtle"
-                                            />
-                                            <span v-if="turnInFlight(agent) && agent.startedAt !== undefined">{{
-                                                formatElapsed(agent.startedAt, now)
-                                            }}</span>
-                                            <span v-else-if="agent.updatedAt > 0">{{ relativeTime(agent.updatedAt) }}</span>
-                                        </span>
-                                    </span>
-                                    <!-- WHY this tab survived the filter, when the reason isn't its title (that
-                                         one is marked in place above). The board's cards carry the same line for
-                                         the same reason: a result the user can't see the cause of is one they
-                                         stop believing. -->
-                                    <span v-if="snippetOf(agent) !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
-                                        <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
-                                        <span class="line-clamp-2 min-w-0 flex-1 italic leading-4">
-                                            <span
-                                                v-for="(run, at) in markSegments(snippetOf(agent) ?? '', needle)"
-                                                :key="at"
-                                                :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
-                                                >{{ run.text }}</span
-                                            >
-                                        </span>
-                                    </span>
-                                </template>
-                            </button>
-                        </template>
-                    </template>
-                </template>
-
-                <!-- WHAT THE QUERY FOUND THAT ISN'T OPEN HERE. The rail lists the tabs of this window, which
-                     is almost never the set the question "where did I say X" is about — so the filter reaches
-                     the whole fleet (live agents, the archive) and the conversations no agent owns, and puts
-                     them here. A row opens the conversation, which is exactly the act the History menu below
-                     performs; the difference is that this list was found rather than browsed. -->
-                <template v-if="filtering && notOpenCount > 0">
-                    <div
-                        class="mt-2 flex items-center gap-1.5 border-t border-line px-1 pt-2 text-2xs font-semibold uppercase tracking-wide text-subtle"
-                    >
-                        <Icon name="search" class="shrink-0 text-2xs" />
-                        <span>Not open</span>
-                        <span class="font-normal">{{ notOpenCount }}</span>
-                    </div>
-                    <button
-                        v-for="agent in notOpen"
-                        :key="agent.id"
-                        type="button"
-                        class="chat-tab flex w-full min-w-0 shrink-0 flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-2xs"
-                        @click="emit('open', agent.id)"
-                    >
-                        <span class="flex w-full min-w-0 items-start gap-1.5">
-                            <ProviderLogo :provider="agent.provider" class="mt-px shrink-0 text-2xs text-muted" />
-                            <!-- Off the board but not gone: the branch, the diff and the transcript all survive
-                                 an archive, so a hit here is a real destination rather than a tombstone. -->
-                            <Icon v-if="agent.archivedAt !== undefined" name="box" class="mt-px shrink-0 text-2xs text-subtle" aria-label="Archived" />
-                            <span class="line-clamp-2 min-w-0 flex-1 leading-4 text-muted">
-                                <span
-                                    v-for="(run, at) in markSegments(agent.title ?? 'Untitled agent', needle)"
-                                    :key="at"
-                                    :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''"
-                                    >{{ run.text }}</span
-                                >
-                            </span>
-                            <span v-if="agent.updatedAt > 0" class="mt-px shrink-0 text-subtle">{{ relativeTime(agent.updatedAt) }}</span>
-                        </span>
-                        <span v-if="snippetOf(agent) !== undefined" class="line-clamp-2 pl-4 italic leading-4 text-subtle">
-                            <span
-                                v-for="(run, at) in markSegments(snippetOf(agent) ?? '', needle)"
-                                :key="at"
-                                :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
-                                >{{ run.text }}</span
-                            >
-                        </span>
-                    </button>
-                    <!-- Conversations no agent entry owns — a plain chat, or one whose entry is long gone.
-                         Nothing to draw a provider mark or a status for; the title and the matched line are
-                         the whole of what is known about them. -->
-                    <button
-                        v-for="session in sessionMatches"
-                        :key="session.id"
-                        type="button"
-                        class="chat-tab flex w-full min-w-0 shrink-0 flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-2xs"
-                        @click="emit('open', session.id)"
-                    >
-                        <span class="flex w-full min-w-0 items-start gap-1.5">
-                            <Icon name="comments" class="mt-px shrink-0 text-2xs text-subtle" />
-                            <span class="line-clamp-2 min-w-0 flex-1 leading-4 text-muted">{{ session.title }}</span>
-                            <span class="mt-px shrink-0 text-subtle">{{ relativeTime(session.updatedAt) }}</span>
-                        </span>
-                        <span v-if="session.snippet !== undefined" class="line-clamp-2 pl-4 italic leading-4 text-subtle">{{ session.snippet }}</span>
-                    </button>
-                </template>
-            </template>
-        </div>
-        <!-- A failed rename already reverted the title; this says why. Cleared by the next rename. -->
-        <span v-if="edit.error !== undefined" class="min-w-0 shrink truncate text-2xs text-danger" v-tooltip.bottom.overflow="edit.error">{{
-            edit.error
-        }}</span>
-        <!-- Docked: the ✚ / history / pop-out trio beside the strip — a header row has width to spare and no
-             room for three labels. None of them ever scrolls with the tabs.
+        <!-- Docked: the ✚ / history / pop-out trio beside the switcher — a header row has width to spare and no
+             room for three labels.
              THE THIRD GLYPH IS THE POINT OF THIS BAR HAVING A TOOLBAR AT ALL. Moving the chat into its own
              window is a several-times-an-hour act for anyone running it beside an editor or on a second screen,
-             and it lived only behind a right-click on chrome the tabs themselves keep eating: the strip's tabs
-             `grow` into every pixel of slack, so "the empty space" that opens the menu is in practice these
-             buttons and 6px of padding — an affordance that gets HARDER to hit the more sessions you have open,
-             which is exactly when you want it. It sits last, hard against the window edge where window controls
-             live, and its tooltip teaches F9 so the pointer trip is one a hand only has to make until it
-             remembers. It is absent from the rail (the popped-out strip), which is already in the window this
-             button opens — out there the way back is the window's own ×, F9, or the menu's "Dock chat back". -->
+             and it used to live only behind a right-click on chrome the tabs kept eating. It sits last, hard
+             against the window edge where window controls live, and its tooltip teaches F9 so the pointer trip
+             is one a hand only has to make until it remembers. It is absent from the rail (which is already in
+             the window this button opens — out there the way back is the window's own ×, F9, or the menu's
+             "Dock chat back"). -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent()" v-tooltip.bottom="'New agent'" aria-label="New agent">
                 <Icon name="plus" class="text-sm" />
@@ -966,6 +534,7 @@ const openHistory = (event: Event): void => {
                 <Icon name="external-link" class="text-sm" />
             </button>
         </div>
+
         <!-- FOOT OF THE RAIL: the two ways out of the list — one more session, or an older one. Both stay where
              the ✚ / history pair has always been, at the bottom of the rail, because that is where the pointer
              already is: the composer it is about to type into sits directly to the right, and the window's
@@ -976,8 +545,8 @@ const openHistory = (event: Event): void => {
              browsing the archive is the quiet ghost row, and the primary act is a full-width filled button
              wearing the fleet board's own fill, glyph and wording — one "New agent" across the product. It
              takes the last row on purpose, hard against the corner, closest to the hand.
-             Note the division of labour with the filter at the top: typing SEARCHES past the open tabs already
-             (the "Not open" group), so History is for BROWSING — recent chats, newest first, nothing typed. -->
+             Note the division of labour with the filter at the top of the list: typing SEARCHES past the open
+             chats already (the "Not open" group), so History is for BROWSING — recent chats, newest first. -->
         <div v-else class="flex shrink-0 flex-col gap-1 border-t border-line pt-1">
             <button
                 type="button"
@@ -992,6 +561,16 @@ const openHistory = (event: Event): void => {
                 <Icon name="plus" class="text-2xs" />New agent
             </button>
         </div>
+
+        <!-- THE SHEET. Pinned to the column's width under the header, capped so the transcript is never
+             completely covered by the list of things it is one of. -->
+        <div
+            v-if="listOpen && !vertical"
+            class="absolute inset-x-1.5 top-full z-30 mt-1 flex max-h-[60vh] flex-col overflow-hidden rounded-xl border border-line-strong bg-card p-1.5 shadow-lg"
+        >
+            <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen" />
+        </div>
+
         <!-- Anchored to whichever button was pressed, and capped by AnchoredOverlay to the room that button's
              own window has — the rail's trigger sits at the foot of the pop-out window, where the room above is
              whatever the user has dragged it to. The session list gives way; the search box holds its size. -->
@@ -1034,49 +613,14 @@ const openHistory = (event: Event): void => {
                 </div>
             </div>
         </AnchoredOverlay>
-    </component>
-    <!-- Full title (+ first message) on tab hover. Mounted at the overlay target so it clears the strip's
-         overflow-auto clipping, and into the pop-out window while the chat floats there. -->
-    <HoverCard ref="hoverCard" :to="overlayTarget" />
 
-    <!-- Right-click menu, for a tab and for the strip's empty space alike. Rendered into the pop-out window
-         while the chat floats there (`append-to`) — one tab menu, two strips. -->
-    <ContextMenu ref="tabMenu" :model="tabMenuItems" :append-to="overlayTarget" :min-width="13" />
+        <!-- Right-click menu for the bar's own chrome (the cards have their own, inside the list), rendered
+             into the pop-out window while the chat floats there. -->
+        <ContextMenu ref="barMenu" :model="barMenuItems" :append-to="overlayTarget" :min-width="13" />
+    </component>
 </template>
 
 <style scoped>
-/* The rail card's surface — AgentCard's skin (visible border, distinct fill) over .chat-tab's behaviour.
- * The docked strip's transparent pills blend into one column when stacked; a bordered card is what makes
- * each session a countable thing. Scoped selectors outweigh chat.css's single-class rules, so these win
- * without !important. */
-.rail-card {
-    border-color: var(--color-line);
-    background: color-mix(in srgb, var(--color-canvas) 45%, transparent);
-    /* Two independent marks on one box-shadow: the attention bar (inset, left edge) and the active ring
-       (outset, all round). Held as variables because a second box-shadow rule would REPLACE the first, which
-       is what forced the old either/or below. */
-    --rail-accent: 0 0 #0000;
-    --rail-ring: 0 0 #0000;
-    box-shadow: var(--rail-accent), var(--rail-ring);
-}
-.rail-card:hover {
-    border-color: var(--color-line-strong);
-}
-/* THE SAME TWO CHANNELS THE BOARD USES (see AgentCard): the card the transcript beside the rail is showing
- * gets a ring and a lifted fill, an agent that needs the user gets a bar down its left edge. Drawn in
- * different places, so the rail no longer has to choose between them — the old rule dropped the warning the
- * moment you opened the card, on the theory that "you are here" outranks "this needs you", which quietly cost
- * the one card most likely to be read the only mark saying why it was in that lane. An inset shadow rather
- * than a wider left border: no layout shift, so a stacked lane's cards keep their text on one axis. */
-.rail-card.chat-tab-on {
-    border-color: var(--color-primary-500);
-    background: var(--color-overlay);
-    --rail-ring: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 50%, transparent);
-}
-.rail-card-attention {
-    --rail-accent: inset 3px 0 0 0 var(--color-warning);
-}
-
 /* Drag-to-resize handle on the rail's right edge (pointer-capture, mirrors the panel's .resize-handle). */
 .rail-resize {
     position: absolute;

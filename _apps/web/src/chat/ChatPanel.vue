@@ -46,10 +46,10 @@ import ProviderLogo from "./ProviderLogo.vue";
 /* The shared assistant. Presentational only — all state lives in the useChat singleton, so the transcript
  * persists as the user moves between workspace areas. The panel owns the layout (tabs, scroller, composer,
  * resize) and says when the transcript should follow its newest content (useStickToBottom holds the rule);
- * the draft and attachments live per-tab on the active conversation. Message rendering, the tab strip, and
- * the account area are their own components. On mobile (the full-screen /chat tab) the tab strip becomes a
- * compact header, the pickers become bottom sheets, the resize handle disappears, and the footer pads itself
- * above the on-screen keyboard.
+ * the draft and attachments live per-tab on the active conversation. Message rendering, the switcher bar, and
+ * the account area are their own components. On mobile (the full-screen /chat tab) that bar becomes a taller
+ * touch header over a bottom sheet, the pickers become bottom sheets, the resize handle disappears, and the
+ * footer pads itself above the on-screen keyboard.
  *
  * The transcript column is a @container: composer/status label density keys off the width the messages get
  * (288px docked while the viewport is desktop-wide, or whatever is left beside the rail in the pop-out
@@ -972,9 +972,9 @@ watch(
 </script>
 
 <template>
-    <!-- Docked, the panel is a column: tab strip on top, transcript, composer. Undocked, the strip becomes a
-         rail down the window's left edge, so the panel's own axis flips and everything else stacks in the
-         column beside it. -->
+    <!-- Docked, the panel is a column: the switcher bar on top, transcript, composer. Undocked, that bar
+         becomes a rail of chat cards down the window's left edge, so the panel's own axis flips and everything
+         else stacks in the column beside it. -->
     <div
         class="chat-panel relative flex h-full min-h-0 overflow-hidden bg-card"
         :class="[poppedOut ? 'flex-row' : 'flex-col', { 'is-resizing': resizing }]"

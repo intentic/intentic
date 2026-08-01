@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 //
-// The strip's CLOSE surfaces, driven through the real component: the tab's own × and the right-click menu the
+// The chat bar's CLOSE surfaces, driven through the real component: a card's own × and the right-click menu the
 // workspace's file tabs have carried
-// Close / Close Others / Close to the Right / Close All for a while, and a chat tab now offers the same set —
+// Close / Close Others / Close to the Right / Close All for a while, and a chat now offers the same set —
 // plus Close Finished, which only an agent chat can mean anything by.
-// Mounted rather than unit-tested against the store, because the interesting part is the wiring — which tab the
-// menu acts on (the RIGHT-CLICKED one, not the active one), where on the strip the right-click is even heard,
-// which rows go disabled at the ends of the strip, and that a mass close fires with no confirm even over a
+// Mounted rather than unit-tested against the store, because the interesting part is the wiring — which chat the
+// menu acts on (the RIGHT-CLICKED one, not the active one), where on the bar the right-click is even heard,
+// which rows go disabled at the ends of the list, and that a mass close fires with no confirm even over a
 // running agent — closing detaches from the turn (Conversation.abort is soft), it doesn't stop it.
+// There are TWO menus now, which is the split the surfaces made: cards live in the sheet the header drops and
+// carry their own (acting on the card under the pointer), while the header's chrome carries the sweeps that
+// name no card at all.
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
 // Statically imported, not awaited inside the hook: this graph is the whole app's — PrimeVue, the router, the
@@ -27,6 +30,9 @@ import { router } from "../router";
 // window.open is stubbed to null — jsdom opens nothing, and the assertion here is only that the pop-out row
 // CALLS it; a real window handed back would send the panel teleporting into a document jsdom never laid out.
 const { open } = vi.hoisted(() => {
+    // The strip scrolls its focused tab back into view on every focus write, and jsdom implements no
+    // scrollIntoView — without this stub every tab switch below ends in an unhandled rejection.
+    globalThis.Element.prototype.scrollIntoView ??= (): void => {};
     globalThis.ResizeObserver ??= class {
         observe(): void {}
         unobserve(): void {}
@@ -72,6 +78,7 @@ beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
     resetChat();
     await nextTick();
+    await openSheet();
 });
 
 // jsdom reports no transition duration, so Vue tears a hidden overlay down on a TIMER rather than a microtask —
@@ -98,6 +105,15 @@ const openTabs = (count: number): string[] => {
 };
 
 const tabs = (): HTMLElement[] => [...strip.querySelectorAll<HTMLElement>(`[data-chat-tab]`)];
+/* Cards live in the SHEET the header drops, so every test here opens it first — the bar itself is one line
+ * naming the active chat. Idempotent, and it has to be: the component is mounted once for the whole file, so
+ * the sheet survives between tests unless something in one of them closed it. */
+const openSheet = async (): Promise<void> => {
+    if (strip.querySelector(`[data-chat-tab]`) === null) {
+        strip.querySelector<HTMLElement>(`[data-chat-switcher]`)!.click();
+        await flush();
+    }
+};
 // The menu teleports out of the strip, so it is read off the document rather than the strip's own subtree.
 const menuRows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(`.p-contextmenu-item`)];
 /* The row's own label, without the shortcut hint the same <a> carries in a <kbd>. Selected by the label span's
@@ -119,13 +135,13 @@ const openMenuOn = async (index: number): Promise<void> => {
     tabs()[index]!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
     await flush();
 };
-// The scroll box the tabs sit in: a right-click that lands on IT rather than on a tab is the empty-space gesture.
-const openStripMenu = async (): Promise<void> => {
-    strip.querySelector<HTMLElement>(`header > div`)!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
+// The bar's own chrome: a right-click that lands on IT rather than on a card is the no-card-named gesture.
+const openBarMenu = async (): Promise<void> => {
+    strip.querySelector<HTMLElement>(`header`)!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
     await flush();
 };
-// The ✚ / history pair, which lives OUTSIDE the scroll box (it must not scroll with the tabs). Right-clicking it
-// is the same tab-management gesture as right-clicking the strip's gap — it just used to land on nothing.
+// The ✚ / history pair beside the switcher. Right-clicking it is the same chat-management gesture as
+// right-clicking anywhere else on the bar — it just used to land on nothing.
 const openMenuOnNewChatButton = async (): Promise<boolean> => {
     const event = new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true });
     strip.querySelector<HTMLElement>(`[aria-label="New agent"]`)!.dispatchEvent(event);
@@ -194,7 +210,7 @@ it(`teaches the shortcut a close command is bound to, and disables the rows with
     expect(row(`Close to the Right`).className).toContain(`p-disabled`);
 });
 
-it(`offers the tab-less rows from the empty strip's menu instead of popping out on the right-click itself`, async () => {
+it(`offers the card-less rows from the bar's own menu instead of popping out on the right-click itself`, async () => {
     const chat = useChat();
     const ids = openTabs(2);
     await nextTick();
@@ -202,7 +218,7 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
     // The gesture used to toggle the pop-out on the spot, which tore the panel into its own window on a
     // right-click that only just missed a tab. It opens the menu now, carrying the rows that need no tab
     // under the pointer; the pop-out is one of them.
-    await openStripMenu();
+    await openBarMenu();
     expect(labels()).toEqual([`Close Finished`, `Close All`, `Move chat into new window`]);
     expect(open).not.toHaveBeenCalled();
 
@@ -212,7 +228,7 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
     expect(chat.conversations.value[0]!.conversationId).not.toBeOneOf(ids);
 
     // The pop-out row still pops out — the menu is a step in front of the gesture, not a replacement for it.
-    await openStripMenu();
+    await openBarMenu();
     await clickRow(`Move chat into new window`);
     expect(open).toHaveBeenCalled();
 });
@@ -267,12 +283,12 @@ it(`closes every finished tab and leaves the working ones, disabled when nothing
     chat.conversations.value[3]!.streaming.value = true;
     await nextTick();
 
-    await openStripMenu();
+    await openBarMenu();
     await clickRow(`Close Finished`);
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1], ids[3]]);
 
     // Nothing left that has finished: the row goes disabled rather than quietly closing nothing.
-    await openStripMenu();
+    await openBarMenu();
     expect(row(`Close Finished`).className).toContain(`p-disabled`);
 });
 
