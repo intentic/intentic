@@ -41,6 +41,8 @@ const rendered = computed<string>(() => renderMarkdown(source, path === undefine
 // One delegated listener for every control the rendered markdown carries — a code block's copy button and the
 // file links a mentioned path becomes. Both live inside v-html, so neither can hold a component of its own.
 // A doc that cross-references its neighbours (README → ARCHITECTURE.md) now navigates like one.
+// Copying also runs off the PRESS (see copyCodeFromEvent) — the click alone loses the button when the prose
+// re-renders under it.
 const onMarkdownClick = (event: MouseEvent): void => {
     copyCodeFromEvent(event);
     openFileRefFromEvent(event);
@@ -60,7 +62,12 @@ const onMarkdownClick = (event: MouseEvent): void => {
         </div>
         <div class="min-h-0 flex-1">
             <!-- Delegated click: the copy buttons and file links live inside v-html (see onMarkdownClick). -->
-            <div v-if="view === 'preview'" class="scrollbar-thin h-full overflow-auto bg-canvas px-6 py-5" @click="onMarkdownClick">
+            <div
+                v-if="view === 'preview'"
+                class="scrollbar-thin h-full overflow-auto bg-canvas px-6 py-5"
+                @click="onMarkdownClick"
+                @pointerdown="copyCodeFromEvent"
+            >
                 <div class="md-prose mx-auto max-w-3xl" v-html="rendered"></div>
             </div>
             <CodeView v-else :code="source" lang="markdown" :scroll-to-line="line" />

@@ -111,6 +111,8 @@ const planTitle = (request: PlanRequest): string => planParts(request.text).titl
 
 // One delegated listener for every control the rendered markdown carries — a code block's copy button and the
 // file links a mentioned path becomes. Both live inside v-html, so neither can hold a component of its own.
+// Copying is bound to the PRESS as well (see copyCodeFromEvent): a live turn rewrites its markdown every frame,
+// which destroys the button between mousedown and mouseup, and the click then never reaches it.
 const onMarkdownClick = (event: MouseEvent): void => {
     copyCodeFromEvent(event);
     openFileRefFromEvent(event);
@@ -593,6 +595,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             'chat-prompt-pinned': pinned,
         }"
         @click="onMarkdownClick"
+        @pointerdown="copyCodeFromEvent"
     >
         <!-- The errand row: one line naming what the app asked for, opening to the exact words it sent. -->
         <template v-if="errand">

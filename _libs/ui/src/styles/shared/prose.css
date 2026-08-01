@@ -212,9 +212,8 @@
     background: transparent;
     padding: 0;
 }
-/* A fenced block is the wrapper, its language bar, and the <pre> — one object. The wrapper owns the rhythm
-   around it (.md-code below), so the <pre> must not take the block gap a second time: that put a full line
-   between every code block and its own label, making the bar read as belonging to the paragraph above it. */
+/* A fenced block is the wrapper, its floating controls, and the <pre> — one object. The wrapper owns the
+   rhythm around it (.md-code below), so the <pre> must not take the block gap a second time. */
 .md-prose .md-code pre {
     margin: 0;
 }
@@ -270,20 +269,47 @@
     border-bottom: 0;
 }
 
-/* The header row markdown/code.ts puts above a fenced block: its language and the copy button. Chrome for the
-   block, so it sits at the smallest tier on the surface and never competes with the code itself. */
+/* The controls markdown/code.ts puts on a fenced block: its language and the copy button, floated over the
+   block's own top-right corner instead of sitting in a row above it. Chrome, so it costs the block no space at
+   all — a transcript of an agent's work is mostly code, and a header row spent a line of vertical rhythm on
+   every block, including the fences that carry no language to put in it.
+
+   It is revealed by hovering the block, and by focusing into it, so the button is reachable without a pointer.
+   Where there is no hover at all (touch) it is simply always visible — at full size, since a thumb has to hit
+   it. Painted on the block's own background so the first line of code never shows through it. */
 .md-code {
+    position: relative;
     /* Fallback carried because this class sits on the block itself, not under a .md-prose selector — a
        future surface could render one outside a prose container. */
     margin: var(--prose-gap, 0.85em) 0;
 }
-.md-code-bar {
+.md-code-actions {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.3rem;
+    z-index: 1;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding-bottom: 0.3rem;
+    gap: 0.4rem;
+    border-radius: var(--radius-md);
+    padding: 0.1rem 0.15rem;
+    background: var(--color-canvas);
+    /* Dragging a selection across the block used to take "powershell Copy" with it — the bar's text was in
+       flow, between the prose and the code. */
+    user-select: none;
+}
+@media (hover: hover) {
+    .md-code-actions {
+        opacity: 0;
+        transition: opacity 0.12s ease-out;
+    }
+    .md-code:hover .md-code-actions,
+    .md-code:focus-within .md-code-actions {
+        opacity: 1;
+    }
 }
 .md-code-lang {
+    padding-left: 0.2rem;
     font-size: 0.6875rem;
     font-weight: 500;
     letter-spacing: 0.02em;
@@ -303,4 +329,15 @@
 .md-code-copy:hover {
     color: var(--color-content);
     border-color: var(--color-line-strong);
+}
+/* The acknowledgment, which is state rather than a poke at the button (see markdown/code.ts): it holds while
+   the block re-renders underneath it, and it is the one thing here that shows without being hovered — a press
+   that lands as the pointer leaves still has to say so. */
+.md-code-copied,
+.md-code-copied:hover {
+    color: var(--color-success);
+    border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+}
+.md-code:has(.md-code-copied) .md-code-actions {
+    opacity: 1;
 }

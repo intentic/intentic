@@ -5,9 +5,9 @@
 // were really checking escaped raw markdown. jsdom rather than happy-dom because DOMPurify misbehaves badly
 // on the latter — it strips every tag and keeps <script> CONTENT, which would make these tests worse than
 // useless. This is the only file that needs a document; the rest of the suite stays on `node`.
-import { describe, expect, it, test } from "vitest";
+import { beforeEach, describe, expect, it, test } from "vitest";
 import { watchEffect } from "vue";
-import { escapeHtml } from "@intentic-app/ui/markdown";
+import { copyCodeFromEvent, escapeHtml } from "@intentic-app/ui/markdown";
 import { createStreamingMarkdown, markdownParseCount, renderMarkdown, settledEnd } from "./renderMarkdown";
 
 // The one invariant that keeps a streamed chat bubble alive: renderMarkdown must NEVER throw and must always
@@ -59,6 +59,14 @@ describe(`code blocks`, () => {
         const html = renderMarkdown("```\nplain\n```");
         expect(html).toContain(`md-code`);
         expect(html).toContain(`plain`);
+        // Nothing to name it with, so nothing is emitted to name it — the controls are an overlay, and an
+        // empty chip in one would still be a box hanging over the code.
+        expect(html).not.toContain(`md-code-lang`);
+        expect(html).toContain(`aria-label="Copy code"`);
+    });
+
+    it(`names the language in the button's label, where hovering is not required to reach it`, () => {
+        expect(renderMarkdown("```powershell\nGet-Service\n```")).toContain(`aria-label="Copy powershell code"`);
     });
 
     it(`keeps blocks distinct when a message has several`, () => {
@@ -207,5 +215,89 @@ describe(`code block highlighting is bounded`, () => {
         // One initial render, plus at most a couple as batches of colour settle. The storm was ~400.
         expect(renders).toBeLessThanOrEqual(5);
         expect(renders).toBeGreaterThan(0);
+    });
+});
+
+/* The copy control, wired the way a prose surface wires it: one delegated listener on the container, bound to
+ * the press AND the click, over markup that lives inside v-html.
+ *
+ * The regression these exist for: a click is only delivered to the button if the same element is under the
+ * pointer at press and at release, and a streaming turn rewrites its markdown every animation frame. The
+ * button pressed was gone before the mouse came up, so the click resolved to an ancestor and copying a block
+ * out of an answer still being written did nothing at all. */
+describe(`code block copy`, () => {
+    const surface = (html: string): HTMLElement => {
+        const container = document.createElement(`div`);
+        container.className = `md-prose`;
+        container.innerHTML = html;
+        container.addEventListener(`pointerdown`, copyCodeFromEvent);
+        container.addEventListener(`click`, copyCodeFromEvent);
+        document.body.replaceChildren(container);
+        return container;
+    };
+
+    // jsdom ships no clipboard at all. Resolves like a granted one, and records what a surface handed it.
+    const written: string[] = [];
+    beforeEach(() => {
+        written.length = 0;
+        Object.defineProperty(navigator, `clipboard`, {
+            configurable: true,
+            value: {
+                writeText: (text: string): Promise<void> => {
+                    written.push(text);
+                    return Promise.resolve();
+                },
+            },
+        });
+    });
+
+    const press = (button: Element, init: MouseEventInit = {}): void => {
+        button.dispatchEvent(new MouseEvent(`pointerdown`, { bubbles: true, ...init }));
+    };
+
+    it(`copies the block's code on the press`, async () => {
+        const container = surface(renderMarkdown("```ts\nexport const pressed = 1;\n```"));
+        press(container.querySelector(`.md-code-copy`) as Element);
+        await Promise.resolve();
+        expect(written).toEqual([`export const pressed = 1;`]);
+    });
+
+    it(`still copies when the block's DOM is replaced before the mouse comes up`, async () => {
+        const source = "```ts\nexport const streamed = 2;\n```";
+        const container = surface(renderMarkdown(source));
+        press(container.querySelector(`.md-code-copy`) as Element);
+        // The frame that lands between press and release: a new render, a whole new subtree.
+        container.innerHTML = renderMarkdown(`${source}\n\nAnd the next sentence arrives.`);
+        container.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        await Promise.resolve();
+        // Once — the click that followed the press asked for the same text, which the copied state absorbs.
+        expect(written).toEqual([`export const streamed = 2;`]);
+    });
+
+    it(`shows the acknowledgment on the renders that follow, not by poking the button`, async () => {
+        const source = "```ts\nexport const flashed = 3;\n```";
+        const container = surface(renderMarkdown(source));
+        press(container.querySelector(`.md-code-copy`) as Element);
+        await Promise.resolve();
+        // The button element pressed is long gone by now in a live turn; what carries the state is the render.
+        const after = renderMarkdown(source);
+        expect(after).toContain(`md-code-copied`);
+        expect(after).toContain(`>Copied</button>`);
+        // Only the block that was copied — a document's other blocks are untouched by it.
+        expect(renderMarkdown("```ts\nexport const other = 4;\n```")).not.toContain(`md-code-copied`);
+    });
+
+    it(`ignores a press that is not the primary button`, async () => {
+        const container = surface(renderMarkdown("```ts\nexport const rightClicked = 5;\n```"));
+        press(container.querySelector(`.md-code-copy`) as Element, { button: 2 });
+        await Promise.resolve();
+        expect(written).toEqual([]);
+    });
+
+    it(`works from the keyboard, where a click is the only event raised`, async () => {
+        const container = surface(renderMarkdown("```ts\nexport const keyed = 6;\n```"));
+        (container.querySelector(`.md-code-copy`) as HTMLElement).dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        await Promise.resolve();
+        expect(written).toEqual([`export const keyed = 6;`]);
     });
 });

@@ -155,6 +155,24 @@ const highlighted = (block: CodeBlock, index: number): string | undefined => {
     return undefined;
 };
 
+/* Which block is currently showing its "Copied" acknowledgment, held as the copied TEXT rather than written
+ * onto the button element. A prose surface re-renders its v-html whenever the source or its highlighting
+ * changes — a streaming turn does it every animation frame — and each of those replaces the block's DOM
+ * wholesale, so an acknowledgment poked into the button vanished mid-flash. As state it survives, because
+ * every render since re-derives it. Read through a ref for the same reason `highlightVersion` is one: setting
+ * it has to invalidate the markdown computeds that display it. */
+const COPIED_MS = 1500;
+const copiedVersion = ref(0);
+let copiedCode: string | undefined;
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+const markCopied = (code: string | undefined): void => {
+    copiedCode = code;
+    copiedVersion.value += 1;
+    clearTimeout(copiedTimer);
+    copiedTimer = code === undefined ? undefined : setTimeout(() => markCopied(undefined), COPIED_MS);
+};
+
 /* One code block's markup. `colour` is false for the still-being-written tail of a streaming turn: its text
  * changes every frame, so highlighting it would thrash the cache for a block that is about to settle and be
  * highlighted exactly once.
@@ -163,17 +181,29 @@ const highlighted = (block: CodeBlock, index: number): string | undefined => {
  * the blocks a reader reaches, not to the three-thousandth one in a generated report.
  *
  * The wrapper reuses `ui-code`, the class the design system's <Code> component uses, so the Shiki chrome and
- * its dark-mode token flip (code.css) govern chat code blocks and the file viewer identically. */
+ * its dark-mode token flip (code.css) govern chat code blocks and the file viewer identically.
+ *
+ * The language and the copy button are one cluster FLOATED over the block's top-right corner (prose.css), not
+ * a header row above it: a row cost every block a line of vertical rhythm in a transcript that is mostly code,
+ * and a fence with no language spent it on nothing at all. The language rides along in the button's label too,
+ * so what the cluster shows on hover is what a screen reader is told without one. */
 export const codeBlockHtml = (block: CodeBlock, index: number, colour: boolean): string => {
     const shiki = colour ? highlighted(block, index) : undefined;
     // The uncoloured fallback carries Shiki's own class so code.css gives it identical chrome — the block
     // gains colour when highlighting lands without shifting size or position.
     const body = shiki ?? `<pre class="shiki"><code>${escapeHtml(block.code)}</code></pre>`;
+    const lang = escapeHtml(block.lang.trim());
+    // Read unconditionally, exactly as `highlighted` reads its own version: the block that is NOT copied today
+    // is the one that must re-render when it becomes the one that is.
+    void copiedVersion.value;
+    const copied = block.code === copiedCode;
     return (
         `<div class="ui-code md-code">` +
-        `<div class="md-code-bar">` +
-        `<span class="md-code-lang">${escapeHtml(block.lang.trim())}</span>` +
-        `<button type="button" class="md-code-copy" aria-label="Copy code">Copy</button>` +
+        `<div class="md-code-actions">` +
+        (lang === `` ? `` : `<span class="md-code-lang">${lang}</span>`) +
+        `<button type="button" class="md-code-copy${copied ? ` md-code-copied` : ``}" aria-label="Copy ${lang === `` ? `` : `${lang} `}code">` +
+        (copied ? `Copied` : `Copy`) +
+        `</button>` +
         `</div>${body}</div>`
     );
 };
@@ -181,18 +211,27 @@ export const codeBlockHtml = (block: CodeBlock, index: number, colour: boolean):
 /* Copy handler for the buttons above. Delegated — the markup lives inside v-html, so it can hold no
  * component and no per-block listener; one handler on the prose root covers every block in it. The text
  * comes from the rendered <code> rather than a data attribute, so it costs no duplicate copy of the code and
- * reads the same whether the block is highlighted or plain. */
-export const copyCodeFromEvent = (event: MouseEvent): void => {
-    const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>(`.md-code-copy`);
+ * reads the same whether the block is highlighted or plain.
+ *
+ * Every prose surface binds this to BOTH `pointerdown` and `click`, and it is the press that does the work.
+ * A click is only delivered to the button if the SAME element is under the pointer at press and at release,
+ * and a live turn replaces the block's DOM every frame it grows: the button pressed was gone by the time the
+ * mouse came up, the click resolved to some ancestor div instead, and copying a block out of an answer still
+ * being written did nothing at all. Pressing is over before a frame can intervene. `click` stays bound because
+ * a keyboard activation raises nothing else — copying the same text twice is what `copiedCode` absorbs. */
+export const copyCodeFromEvent = (event: Event): void => {
+    // Not `instanceof MouseEvent`: a popped-out panel's events come from another window, whose constructors
+    // are different objects. Absent on a keyboard-raised click, which is a primary activation by definition.
+    if (`button` in event && event.button !== 0) {
+        return;
+    }
+    const button = (event.target as HTMLElement | null)?.closest(`.md-code-copy`);
     const code = button?.closest(`.md-code`)?.querySelector(`code`)?.textContent;
-    if (!button || code === null || code === undefined) {
+    if (code === null || code === undefined || code === copiedCode) {
         return;
     }
     void navigator.clipboard.writeText(code).then(
-        () => {
-            button.textContent = `Copied`;
-            setTimeout(() => (button.textContent = `Copy`), 1500);
-        },
+        () => markCopied(code),
         () => undefined, // Clipboard unavailable (insecure context); the text is still selectable.
     );
 };

@@ -2,8 +2,9 @@
      by prose.css, with Shiki-coloured fenced blocks whose copy buttons are wired here.
 
      A component rather than a bare `v-html`, because every caller otherwise has to remember the same three
-     things: sanitize before binding, carry the `md-prose` class, and delegate the code-block copy click (the
-     blocks live inside v-html, so they can hold no component of their own). Extension views get it through
+     things: sanitize before binding, carry the `md-prose` class, and delegate the code-block copy — on the
+     press as well as the click, since a re-render between the two loses the button (see copyCodeFromEvent);
+     the blocks live inside v-html, so they can hold no component of their own. Extension views get it through
      the kit, so third-party UI renders agent prose exactly like the chat does.
 
      Type scale and measure come from prose.css's `--prose-*` tokens — set them on this element to tune a
@@ -35,9 +36,7 @@ const { source, decorate } = defineProps<{
 const segments = computed(() => splitFigureSegments(source));
 
 // The whole document as one string when it holds no figures — the shape every existing surface renders in.
-const plain = computed(() =>
-    segments.value.length === 1 && segments.value[0]?.kind === `prose` ? renderMarkdown(source, decorate) : undefined,
-);
+const plain = computed(() => (segments.value.length === 1 && segments.value[0]?.kind === `prose` ? renderMarkdown(source, decorate) : undefined));
 
 // Each run is rendered by the same engine with the same decorator, so file links and code blocks behave
 // identically either side of a figure.
@@ -45,8 +44,8 @@ const run = (text: string): string => renderMarkdown(text, decorate);
 </script>
 
 <template>
-    <div v-if="plain !== undefined" v-bind="$attrs" class="md-prose" @click="copyCodeFromEvent" v-html="plain"></div>
-    <div v-else v-bind="$attrs" class="md-prose" @click="copyCodeFromEvent">
+    <div v-if="plain !== undefined" v-bind="$attrs" class="md-prose" @click="copyCodeFromEvent" @pointerdown="copyCodeFromEvent" v-html="plain"></div>
+    <div v-else v-bind="$attrs" class="md-prose" @click="copyCodeFromEvent" @pointerdown="copyCodeFromEvent">
         <template v-for="(segment, index) in segments" :key="index">
             <div v-if="segment.kind === `prose`" class="md-run" v-html="run(segment.text)"></div>
             <MarkdownFigure v-else :figure="segment.figure" />
