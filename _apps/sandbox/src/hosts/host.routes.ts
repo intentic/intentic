@@ -1,9 +1,11 @@
 import { upgradeWebSocket } from "@hono/node-server";
-import { type Capability, HostClientFrameSchema, type HostSummary, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract";
+import { type Capability, HostHelloSchema, type HostSummary, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract";
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/websocket";
 import type { Context } from "hono";
 import type { Services } from "../composition.js";
 import { bearerFrom, tokenEquals } from "../auth/auth.js";
-import type { HostConnection } from "./host-hub.js";
+import type { HostClient } from "./host-hub.js";
 
 /* The three surfaces of a connected computer:
  *
@@ -27,68 +29,58 @@ const AUTH_DEADLINE_MS = 10_000;
 // identity; the token was minted against one capability id and that is the id the socket gets.
 export const createHostConnectRoute = (services: Services) =>
     upgradeWebSocket(() => {
-        let id: string | undefined;
-        let connection: HostConnection | undefined;
+        let detach: (() => void) | undefined;
         let deadline: NodeJS.Timeout | undefined;
 
         return {
             onOpen: (_event, ws) => {
-                connection = {
-                    send: (frame) => ws.send(JSON.stringify(frame)),
-                    close: (code, reason) => ws.close(code, reason),
-                };
                 deadline = setTimeout(() => {
-                    if (id === undefined) {
+                    if (detach === undefined) {
                         ws.close(1008, "unauthorized");
                     }
                 }, AUTH_DEADLINE_MS);
             },
+            /* The ONLY message this handler ever reads is the hello. Once the token checks out, the socket is
+             * handed to an oRPC link and every later message belongs to it — so a second hello (a machine that
+             * reconnected without the close arriving, say) is not a re-auth but a stray frame the link will
+             * reject on its own. */
             onMessage: async (event, ws) => {
-                const frame = HostClientFrameSchema.safeParse(JSON.parse(String(event.data ?? "")));
-                if (!frame.success) {
-                    services.logger.warn({ err: frame.error }, "host: unparseable frame");
+                if (detach !== undefined) {
                     return;
                 }
-                if (frame.data.type === "hello") {
-                    // Re-hello on a live socket is how a machine reports a version change after a self-upgrade;
-                    // it re-verifies, because the token is the only thing that decides identity here.
-                    const enrolled = await services.hosts.verify(frame.data.token);
-                    if (enrolled === undefined) {
-                        services.logger.warn("host: rejected an unenrolled token");
-                        ws.close(1008, "unauthorized");
-                        return;
-                    }
-                    clearTimeout(deadline);
-                    if (id === undefined && connection !== undefined) {
-                        id = enrolled;
-                        services.hostHub.attach(enrolled, connection);
-                    }
-                    services.hostHub.hello(enrolled, frame.data.version, frame.data.facts);
-                    // The grant, immediately: the machine refuses everything until it knows what it may do, so a
-                    // reconnect after the owner tightened a scope enforces the NEW one from its first call.
-                    const capability = (await services.capabilities.list()).find((entry) => entry.id === enrolled && entry.kind === "host");
-                    if (capability?.kind === "host") {
-                        services.hostHub.pushScopes(enrolled, capability.config);
-                    }
-                    return;
-                }
-                if (id === undefined) {
+                const hello = HostHelloSchema.safeParse(JSON.parse(String(event.data ?? "")));
+                if (!hello.success) {
+                    services.logger.warn({ err: hello.error }, "host: first frame was not a hello");
                     ws.close(1008, "unauthorized");
                     return;
                 }
-                if (frame.data.type === "rpc") {
-                    services.hostHub.deliver(id, frame.data.payload);
+                const id = await services.hosts.verify(hello.data.token);
+                if (id === undefined) {
+                    services.logger.warn("host: rejected an unenrolled token");
+                    ws.close(1008, "unauthorized");
                     return;
                 }
-                if (frame.data.type === "ping") {
-                    ws.send(JSON.stringify({ type: "pong" }));
+                clearTimeout(deadline);
+                /* node-server hands the real socket on `.raw` — an `ws` WebSocket, which carries the
+                 * addEventListener/send/readyState surface oRPC's link needs. WSContext itself does not, since it
+                 * is a send/close façade for handler code. */
+                const socket = ws.raw as unknown as WebSocket;
+                const client: HostClient = createORPCClient(new RPCLink({ websocket: socket }));
+                detach = services.hostHub.attach(id, { client, close: (code, reason) => ws.close(code, reason) });
+                services.hostHub.announce(id, hello.data.version);
+
+                /* Two calls the moment the link is live, in this order for a reason: the machine refuses
+                 * everything until it knows its grant, so pushing scopes before asking anything is what makes a
+                 * reconnect after the owner tightened a switch enforce the NEW one from its first call. */
+                const capability = (await services.capabilities.list()).find((entry) => entry.id === id && entry.kind === "host");
+                if (capability?.kind === "host") {
+                    await services.hostHub.pushScopes(id, capability.config);
                 }
+                services.hostHub.observe(id, await client.describe());
             },
             onClose: () => {
                 clearTimeout(deadline);
-                if (id !== undefined && connection !== undefined) {
-                    services.hostHub.detach(id, connection);
-                }
+                detach?.();
             },
             onError: (event) => {
                 services.logger.warn({ event: String(event) }, "host: socket error");
@@ -128,7 +120,9 @@ export const createHostMcpRoute =
         }
         const request = payload as { id?: unknown; method?: unknown };
         if (request.id === undefined) {
-            services.hostHub.notify(id, payload);
+            // A notification expects no answer, so it is forwarded and forgotten — but only to a machine that is
+            // actually there; an offline one has nothing to tell.
+            void services.hostHub.mcp(id, payload).catch(() => undefined);
             return c.body(null, 202);
         }
         /* A turn loads its MCP servers before it does anything, and half the time a personal computer is asleep
@@ -154,7 +148,7 @@ export const createHostMcpRoute =
             }
         }
         try {
-            const answer = await services.hostHub.call(id, payload);
+            const answer = await services.hostHub.mcp(id, payload);
             if (request.method === "tools/list") {
                 services.hostHub.rememberTools(id, (answer as { result?: unknown }).result);
             }

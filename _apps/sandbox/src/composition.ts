@@ -594,7 +594,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         agentToken: randomBytes(32).toString("hex"),
         hostBridgeToken: randomBytes(32).toString("hex"),
         hosts: fileHostsStore(config.historyRoot),
-        hostHub: createHostHub(),
+        hostHub: createHostHub(logger),
         info,
         tools: internalTools(config.intenticAgentTools),
         capabilities,

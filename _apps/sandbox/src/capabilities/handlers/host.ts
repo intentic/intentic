@@ -24,7 +24,7 @@ export const hostHandler: CapabilityHandler = {
         // An edit of the scopes is a decision about what may happen on somebody's computer RIGHT NOW, so it
         // travels immediately rather than at the machine's next reconnect. The machine is the enforcement point;
         // this is the only thing that moves the boundary it enforces.
-        const pushed = ctx.hostHub.pushScopes(id, host);
+        const pushed = await ctx.hostHub.pushScopes(id, host);
         yield {
             kind: "log",
             message: pushed

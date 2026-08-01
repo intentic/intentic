@@ -49,6 +49,9 @@ export { geminiContract } from "./contracts/gemini.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
 export { grokContract } from "./contracts/grok.contract.js";
 export { historyContract } from "./contracts/history.contract.js";
+/* Deliberately NOT part of `sandboxContract` below: that map is the daemon's own HTTP surface, and this one is
+ * spoken the other way round — over a connected computer's WebSocket, with the MACHINE implementing it. */
+export { hostContract } from "./contracts/host.contract.js";
 export { intenticContract } from "./contracts/intentic.contract.js";
 export { inventoryContract } from "./contracts/inventory.contract.js";
 export { kimiContract } from "./contracts/kimi.contract.js";

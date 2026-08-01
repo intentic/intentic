@@ -7,10 +7,13 @@ The agent that runs on a **user's own computer** so their sandbox can work there
 your laptop                                    your sandbox
 ┌────────────────────────────┐                 ┌─────────────────────────────┐
 │ intentic-host              │  one outbound   │ /system/hosts/connect  (hub)│
-│  ├─ MCP server (tools)     │ ───── wss ────▶ │ /mcp/hosts/<id>  (bridge)   │
-│  ├─ policy (the grant)     │                 │        ▲                    │
-│  └─ audit log              │                 │   the agent's tools         │
-└────────────────────────────┘                 └─────────────────────────────┘
+│  ├─ oRPC server            │ ───── wss ────▶ │   holds the oRPC CLIENT     │
+│  │   describe/setScopes/   │  hostContract   │ /mcp/hosts/<id>  (bridge)   │
+│  │   ping/mcp              │                 │        ▲                    │
+│  ├─ MCP tools              │                 │   the agent's tools         │
+│  ├─ policy (the grant)     │                 └─────────────────────────────┘
+│  └─ audit log              │
+└────────────────────────────┘
 ```
 
 ## Why it is shaped like this
@@ -19,9 +22,16 @@ your laptop                                    your sandbox
 So it holds one ordinary outbound WebSocket and everything multiplexes over that: no open ports, no router
 configuration, no VPN.
 
-**The tools live here, not in the sandbox.** The daemon forwards MCP JSON-RPC verbatim and interprets none of
-it, so what this computer can do is decided by `src/mcp.ts` in this package. A machine that upgrades learns new
-tools without a sandbox release — and a sandbox that is compromised learns nothing about how to do more.
+**The machine is the server, though it placed the call.** After one plain-JSON `hello` carrying the enrollment
+token, the socket becomes oRPC: this package serves `hostContract`
+(`_libs/sandbox-contract/src/contracts/host.contract.ts`) and the daemon holds the client. oRPC's websocket
+adapter attaches to either peer, so who dialled and who serves are independent — and request/response
+correlation, argument validation and error shape all belong to the link rather than to hand-rolled framing.
+
+**The tools live here, not in the sandbox.** `hostContract` has exactly one deliberately untyped procedure —
+`mcp` — carrying MCP JSON-RPC verbatim in both directions. That hole is the point: if the contract described
+each tool, the daemon would have to know every schema and translate, and this computer could no longer learn a
+tool without a matching daemon release. What the machine can do is decided by `src/mcp.ts`, here.
 
 **The grant is enforced here.** `src/policy.ts` is the only place a scope is checked. The sandbox pushes the
 owner's switches down on every connect and whenever they are edited; this agent refuses everything outside them
