@@ -203,7 +203,7 @@ const baseConfig: Config = {
     local: { port: 8788 },
 };
 
-/* The seams a route test names but never exhausts. `auth` has four members and a test cares about one; `git`
+/* The seams a route test names but never exhausts. `auth` has five members and a test cares about one; `git`
  * has thirty-seven and a route touches two. Spelling the rest out per call site is what rotted: each new
  * method landed in the daemon, none landed in the fakes, and the gap only spoke as a 500 from whichever route
  * reached it first. Declared Partial here and completed by `unstubbed`, so a test still says exactly what it
@@ -417,6 +417,11 @@ const services = (overrides: ServiceOverrides = {}): Services => {
                       authorize: rejectAuth,
                       authorizeOwner: rejectAuth,
                       mintSession: async () => ({ token: "sess-token", expiresAt: 0 }),
+                      // Owner-only and destructive: a suite that reaches it without saying so is asserting on a
+                      // rotation that never happened, so the default names itself rather than answering 200.
+                      rotateSessions: async () => {
+                          throw new Error("auth.rotateSessions was called, and this test did not stub it");
+                      },
                       allowOrigins: [],
                       ...auth,
                   },

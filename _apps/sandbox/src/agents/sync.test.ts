@@ -7,6 +7,7 @@ import { afterEach, expect, test } from "vitest";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { createLogger } from "../logger.js";
 import { createPerfTracker } from "../platform/perf.js";
+import { noIsolation } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { landAgent } from "./land.js";
 import { syncConversation } from "./sync.js";
@@ -17,7 +18,6 @@ const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exe
 const commit = (cwd: string, message: string): Promise<string> => sh(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message);
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 const perf = createPerfTracker(logger);
-const noIsolation = { available: async () => false, planFor: async () => undefined };
 
 const tempDirs: string[] = [];
 afterEach(async () => {
@@ -32,18 +32,19 @@ const setup = async (): Promise<{ work: string; worktree: string; worktrees: Age
     const base = await mkdtemp(join(tmpdir(), "intentic-sync-"));
     tempDirs.push(base);
     const work = join(base, "work");
+    const historyRoot = join(base, "history");
     const workspace = workspacePaths(work);
     await mkdir(work, { recursive: true });
-    await ensureRootRepo(workspace, join(base, "history"));
+    await ensureRootRepo(workspace, historyRoot);
     await writeFile(join(work, "app.ts"), "one\ntwo\nthree\nfour\nfive\n");
     await writeFile(join(work, "other.ts"), "untouched\n");
     await sh(work, "add", "-A");
     await commit(work, "baseline");
     const worktrees = createAgentWorktrees({
         workspace,
-        worktreesRoot: join(base, "history", "worktrees"),
-        historyRoot: join(base, "history"),
-        isolation: noIsolation,
+        worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
+        isolation: noIsolation(work, historyRoot),
         logger,
         perf,
     });
