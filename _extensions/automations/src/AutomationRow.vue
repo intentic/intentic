@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { AutomationRun, AutomationSummary, Trigger } from "@intentic/sandbox-contract";
-import { CopyButton, Icon, type IconName, ToggleSwitch } from "@intentic/extension-ui";
-import { computed } from "vue";
+import { Button, cmp, CopyButton, Icon, type IconName, ToggleSwitch } from "@intentic/extension-ui";
+import { computed, ref } from "vue";
 import { formatAt, nextIn, scheduleLabel, since } from "./cronSchedule";
 import { host } from "./host";
 import { LISTENER_SOURCES } from "./listenerSources";
-import { embedSnippet, webhookUrl } from "./useAutomations";
+import AutomationFields from "./AutomationFields.vue";
+import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
+import { useAutomationForm } from "./useAutomationForm";
 
 /* One automation as ONE line: a health dot, its name, what fires it, when it last ran, when it fires next, and
  * the switch. Everything that is prose rather than state — the prompt, the guard, which agent and model the
@@ -86,6 +88,48 @@ const openRun = (run: AutomationRun): void => {
 };
 
 const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !== undefined ? nextIn(props.automation.nextRun) : undefined));
+
+/* EDITING, in the row rather than in a dialog.
+ *
+ * The form is loaded from the stored automation when Edit is pressed and thrown away on Cancel, so the row is
+ * never quietly holding a half-typed version of something the list is showing as saved. There is no
+ * save-as-you-type here, unlike the acceptance rows this borrows its shape from: a story is a document, while
+ * an automation EXECUTES — a Doorbell with half an origin typed into it would start turning visitors away
+ * between keystrokes. */
+const editing = ref(false);
+const editError = ref<string | undefined>(undefined);
+const editForm = useAutomationForm();
+const { save } = useAutomations();
+const saving = computed(() => save.isPending.value);
+
+const startEdit = (): void => {
+    editForm.load(props.automation);
+    editError.value = undefined;
+    editing.value = true;
+    // Editing implies reading what you are editing — a collapsed row would hide the form entirely.
+    if (!props.expanded) {
+        emit(`expand`);
+    }
+};
+
+const cancelEdit = (): void => {
+    editing.value = false;
+    editError.value = undefined;
+};
+
+const saveEdit = async (): Promise<void> => {
+    editForm.touchAll();
+    if (!editForm.valid.value || saving.value) {
+        return;
+    }
+    editError.value = undefined;
+    try {
+        await save.mutateAsync(editForm.build());
+        editing.value = false;
+    } catch (err) {
+        editError.value = err instanceof Error ? err.message : `Could not save the automation.`;
+    }
+};
 
 /* The Doorbell summary the expanded row shows: the snippet to paste, and the two settings that decide whether
  * it works at all. Undefined for every other automation, which is what keeps the block out of their rows.
@@ -177,6 +221,18 @@ const doorbell = computed(() => {
                 <Icon name="globe" class="mr-1 text-2xs" />Install
             </button>
 
+            <!-- Edit. Hover-revealed like Run and Delete because reading the list is the common act, but it is
+                 the one that was missing entirely: an automation could be made and deleted, never changed. -->
+            <button
+                type="button"
+                class="shrink-0 cursor-pointer text-muted transition-colors hover:text-content md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
+                :aria-label="`Edit ${automation.id}`"
+                v-tooltip.top="`Edit`"
+                @click="startEdit"
+            >
+                <Icon name="pencil" class="text-xs" />
+            </button>
+
             <!-- Fire it now. The reason this exists at all: a 3 a.m. cron, a webhook you would have to forge, a
                  Discord mention you would have to provoke — none of them testable by waiting. Hover-revealed
                  beside Delete, because it is an occasional act, not part of reading the column of states. It
@@ -214,58 +270,81 @@ const doorbell = computed(() => {
 
         <!-- The prose half, on demand: what this automation actually says and does, then what it has done. -->
         <div v-if="expanded" class="flex flex-col gap-2.5 border-t border-line bg-canvas/40 px-3 py-2.5 pl-8">
-            <p class="scrollbar-thin max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">{{ automation.prompt }}</p>
-
-            <div v-if="automation.guard" class="flex items-start gap-1.5">
-                <Icon name="shield" class="mt-0.5 shrink-0 text-2xs text-subtle" />
-                <code class="line-clamp-2 min-w-0 font-mono text-2xs break-all text-subtle" :title="automation.guard">{{ automation.guard }}</code>
+            <!-- EDITING HAPPENS HERE, not in a dialog. Same argument the acceptance rows make: a modal hides the
+                 list you are comparing against, and at 32rem it turned a form with a Doorbell's worth of fields
+                 into a column you scrolled twice. The row has the whole page width and the automation's own
+                 history under it. -->
+            <div v-if="editing" class="flex flex-col gap-3 pr-3">
+                <div v-if="editError" :class="cmp.alertDanger()">{{ editError }}</div>
+                <AutomationFields :state="editForm" :name-locked="true" />
+                <div class="flex items-center justify-end gap-2 border-t border-line pt-2.5">
+                    <Button label="Cancel" severity="secondary" :text="true" @click="cancelEdit" />
+                    <Button label="Save" :loading="saving" @click="saveEdit">
+                        <template #icon><Icon name="check" /></template>
+                    </Button>
+                </div>
             </div>
 
-            <div v-if="trigger.kind === `event`" class="flex items-center gap-1.5">
-                <Icon name="link" class="shrink-0 text-2xs text-subtle" />
-                <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
-                <CopyButton :text="webhookUrl(automation) ?? ``" :aria-label="`Copy webhook URL for ${automation.id}`" v-tooltip.top="`Copy URL`" />
-            </div>
+            <template v-else>
+                <p class="scrollbar-thin max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">{{ automation.prompt }}</p>
 
-            <!-- A Doorbell's embed snippet, where the owner will actually look for it: on the row, months after
+                <div v-if="automation.guard" class="flex items-start gap-1.5">
+                    <Icon name="shield" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                    <code class="line-clamp-2 min-w-0 font-mono text-2xs break-all text-subtle" :title="automation.guard">{{
+                        automation.guard
+                    }}</code>
+                </div>
+
+                <div v-if="trigger.kind === `event`" class="flex items-center gap-1.5">
+                    <Icon name="link" class="shrink-0 text-2xs text-subtle" />
+                    <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
+                    <CopyButton
+                        :text="webhookUrl(automation) ?? ``"
+                        :aria-label="`Copy webhook URL for ${automation.id}`"
+                        v-tooltip.top="`Copy URL`"
+                    />
+                </div>
+
+                <!-- A Doorbell's embed snippet, where the owner will actually look for it: on the row, months after
                  the create dialog that first showed it. Beside it, the two things that decide whether the widget
                  works at all — which sites may load it, and who it lets in. -->
-            <!-- State only. The snippet itself lives behind Install above rather than being repeated here: two
+                <!-- State only. The snippet itself lives behind Install above rather than being repeated here: two
                  copies of the one string the owner acts on is two places for it to be stale or disagree. -->
-            <div v-if="doorbell" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                <span v-if="doorbell.origins.length > 0">on {{ doorbell.origins.join(`, `) }}</span>
-                <span v-else class="text-danger">no sites allowed — nobody can chat</span>
-                <span>{{ doorbell.access }}</span>
-                <span>{{ doorbell.botCheck }}</span>
-            </div>
+                <div v-if="doorbell" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+                    <span v-if="doorbell.origins.length > 0">on {{ doorbell.origins.join(`, `) }}</span>
+                    <span v-else class="text-danger">no sites allowed — nobody can chat</span>
+                    <span>{{ doorbell.access }}</span>
+                    <span>{{ doorbell.botCheck }}</span>
+                </div>
 
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                <span>wakes {{ automation.agent ?? `claude` }}{{ automation.model ? ` · ${automation.model}` : `` }}</span>
-                <span v-if="automation.harness">on the {{ automation.harness }} harness</span>
-                <span v-if="automation.requireApproval">holds for approval</span>
-            </div>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+                    <span>wakes {{ automation.agent ?? `claude` }}{{ automation.model ? ` · ${automation.model}` : `` }}</span>
+                    <span v-if="automation.harness">on the {{ automation.harness }} harness</span>
+                    <span v-if="automation.requireApproval">holds for approval</span>
+                </div>
 
-            <!-- The run history, and — where the run reached a turn — a way INTO it. "It failed at 3am and I
+                <!-- The run history, and — where the run reached a turn — a way INTO it. "It failed at 3am and I
                  can't see why" is answered by a transcript, so a run with a conversation is a button that opens
                  one; a guard-skip has nothing behind it and stays plain text. -->
-            <div class="flex flex-col gap-1 border-t border-line pt-2">
-                <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">No runs yet.</p>
-                <component
-                    :is="run.conversationId ? `button` : `div`"
-                    v-for="run in automation.runs"
-                    :key="run.at"
-                    :type="run.conversationId ? `button` : undefined"
-                    class="flex items-baseline gap-2 rounded text-left text-2xs"
-                    :class="run.conversationId ? `cursor-pointer hover:bg-content/5` : undefined"
-                    :aria-label="run.conversationId ? `Open the transcript of the run from ${formatAt(run.at)}` : undefined"
-                    @click="openRun(run)"
-                >
-                    <span class="w-20 shrink-0 text-subtle" v-tooltip.top="formatAt(run.at)">{{ since(run.at) }}</span>
-                    <span class="w-14 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ OUTCOME_VERB[run.outcome] }}</span>
-                    <span v-if="run.detail" class="min-w-0 truncate text-subtle" v-tooltip.top="run.detail">{{ run.detail }}</span>
-                    <Icon v-if="run.conversationId" name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-                </component>
-            </div>
+                <div class="flex flex-col gap-1 border-t border-line pt-2">
+                    <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">No runs yet.</p>
+                    <component
+                        :is="run.conversationId ? `button` : `div`"
+                        v-for="run in automation.runs"
+                        :key="run.at"
+                        :type="run.conversationId ? `button` : undefined"
+                        class="flex items-baseline gap-2 rounded text-left text-2xs"
+                        :class="run.conversationId ? `cursor-pointer hover:bg-content/5` : undefined"
+                        :aria-label="run.conversationId ? `Open the transcript of the run from ${formatAt(run.at)}` : undefined"
+                        @click="openRun(run)"
+                    >
+                        <span class="w-20 shrink-0 text-subtle" v-tooltip.top="formatAt(run.at)">{{ since(run.at) }}</span>
+                        <span class="w-14 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ OUTCOME_VERB[run.outcome] }}</span>
+                        <span v-if="run.detail" class="min-w-0 truncate text-subtle" v-tooltip.top="run.detail">{{ run.detail }}</span>
+                        <Icon v-if="run.conversationId" name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                    </component>
+                </div>
+            </template>
         </div>
     </div>
 </template>

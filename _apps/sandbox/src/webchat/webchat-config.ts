@@ -12,8 +12,10 @@ import type { AutomationRecord } from "../automations/automations-store.js";
 // A Doorbell with nothing configured still has to look like something. These are that something.
 const DEFAULT_TITLE = "Chat";
 const DEFAULT_GREETING = "Hi! Ask me anything.";
-// Indigo — a mid-tone that stays legible against white text in both the launcher and the visitor's bubbles.
-const DEFAULT_ACCENT = "#4f46e5";
+/* Intentic's brand orange (the app's `--color-brand-600`, converted from oklch for a browser that may not speak
+ * it). A Doorbell with nothing configured should look like the product it came from rather than like the
+ * interchangeable indigo every chat widget ships with — and a customer who wants their own brand sets `accent`. */
+const DEFAULT_ACCENT = "#e47100";
 // Top-right, because a launcher there collides with fewer cookie banners and support widgets than bottom-right.
 const DEFAULT_POSITION = "top-right" as const;
 

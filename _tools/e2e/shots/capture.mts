@@ -158,7 +158,9 @@ const DOORBELL_CONFIG = {
     automationId: "website-concierge",
     title: "Ask Northwind",
     greeting: "Hi! I'm the agent that builds this site. Ask me anything about the arms.",
-    accent: "#6366f1",
+    // Left as the daemon's own default (webchat-config.ts) rather than a colour picked for the shot: the
+    // marketing image must show what an unconfigured Doorbell actually looks like.
+    accent: "#e47100",
     position: "bottom-right",
     access: "public",
     requireName: false,

@@ -1,165 +1,50 @@
 <script setup lang="ts">
-import {
-    type AgentHarness,
-    type AgentProvider,
-    type CatalogOption,
-    HARNESSES,
-    ModelsSchema,
-    modelsFor,
-    PROVIDERS,
-    WEBCHAT_DAILY_MAX_DEFAULT,
-    type WorkspaceEventKind,
-} from "@intentic/sandbox-contract";
-import { Button, cmp, CopyButton, Dialog, Icon, ToggleSwitch } from "@intentic/extension-ui";
-import { useQuery } from "@tanstack/vue-query";
-import { Cron } from "croner";
-import { computed, nextTick, reactive, ref, watch } from "vue";
-import { cronOf, defaultSchedule, formatAt, parseCron } from "./cronSchedule";
+import { Button, cmp, CopyButton, Dialog, Icon } from "@intentic/extension-ui";
+import { computed, nextTick, ref, watch } from "vue";
+import AutomationFields from "./AutomationFields.vue";
 import { host } from "./host";
-import { type ListenerEventType, LISTENER_SOURCES } from "./listenerSources";
 import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
 import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
+import { useAutomationForm } from "./useAutomationForm";
 
-/* The New-automation dialog: recipe templates → name → trigger (cron builder / webhook / live listener) →
- * prompt → Advanced (guard, provider+harness, model, approval). An event automation keeps the dialog open
- * after Create to show the daemon-minted webhook URL. Declarations run top-to-bottom at setup — keep the
- * order constants → data deps → form → catalog → UI state → derived → validation → methods. */
+/* NEW automation: the template picker, the shared fields, and the one thing creating an automation does not
+ * finish — the URL or snippet that still has to be pasted somewhere else.
+ *
+ * The fields themselves live in AutomationFields, which the row's editor renders too. What is left here is the
+ * chrome around a FIRST save: a gallery of starting points (an existing automation has no use for one) and a
+ * done-state (an edit has nothing new to paste). */
 
-const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
-
-// Small selectable pills (Repeats, Days, Model, Events, Source) — borderless; selection = a muted brand tint with readable brand text.
-const CHIP_BASE = `rounded-md px-3 py-1.5 text-xs font-medium transition-colors`;
-const CHIP_SELECTED = `bg-primary-600/15 text-link`;
-const CHIP_IDLE = `text-muted hover:bg-overlay hover:text-content`;
-// Larger tappable cards (recipe templates, Trigger) — idle sits on the overlay surface so it reads as a control without a border; selection tints and adds a brand ring.
-const CARD_SELECTED = `bg-primary-600/15 text-link ring-1 ring-inset ring-primary-500/40`;
-const CARD_IDLE = `bg-overlay text-muted hover:text-content`;
-const FREQ_OPTIONS = [
-    { value: `minutes`, label: `Minutes` },
-    { value: `hourly`, label: `Hourly` },
-    { value: `daily`, label: `Daily` },
-    { value: `weekly`, label: `Weekly` },
-    { value: `monthly`, label: `Monthly` },
-    { value: `custom`, label: `Custom` },
-] as const;
-const DAY_OPTIONS = [
-    { value: 1, label: `Mon` },
-    { value: 2, label: `Tue` },
-    { value: 3, label: `Wed` },
-    { value: 4, label: `Thu` },
-    { value: 5, label: `Fri` },
-    { value: 6, label: `Sat` },
-    { value: 0, label: `Sun` },
-] as const;
-
-// Shares useAutomations' cache with the list view — a save here invalidates and refreshes both.
-const { automations, save } = useAutomations();
-// Capability facts from the host — reactive because reading them inside a computed tracks the underlying store.
-const capabilities = computed(() => host().workspace.capabilities());
+// Wide enough for the Doorbell branch, which is the longest form here by some way: at 32rem its labelled
+// groups wrapped into a column of near-identical rows you had to scroll twice to see the shape of.
+const WIDTH = `44rem`;
 
 const visible = defineModel<boolean>(`visible`, { default: false });
 /* A recipe the OPENER already chose — the page's suggestion strip, which offers the handful of automations a
- * user won't go looking for. It prefills exactly as picking the same template inside the dialog would, so
- * there is one prefill path and the suggestion cannot drift from the gallery entry it names. */
+ * user won't go looking for. It prefills exactly as picking the same template in here would, so there is one
+ * prefill path and the suggestion cannot drift from the gallery entry it names. */
 const props = defineProps<{ prefill?: AutomationRecipe }>();
 
-const form = reactive({
-    kind: `schedule` as `schedule` | `event` | `listener` | `workspace`,
-    id: ``,
-    guard: ``,
-    prompt: ``,
-    agent: `claude` as AgentProvider,
-    harness: `native` as AgentHarness,
-    model: ``,
-    requireApproval: false,
-    provider: `discord` as keyof typeof LISTENER_SOURCES,
-    channelId: ``,
-    eventType: undefined as ListenerEventType | undefined,
-    mentioned: false,
-    // workspace triggers: which moment in this workspace's own work fires the chore, and an optional narrowing
-    // to one repo of the change span.
-    workspaceEvent: `turn.settled` as WorkspaceEventKind,
-    repo: ``,
-    // Doorbell (webchat) — the widget's settings. `origins` is edited as one line per site because that is how
-    // people hold a short allowlist in their head; it is split on save.
-    origins: ``,
-    access: `public` as `public` | `google`,
-    googleClientId: ``,
-    antiBot: `pow` as `off` | `pow` | `turnstile`,
-    turnstileSiteKey: ``,
-    turnstileSecret: ``,
-    greeting: ``,
-    // Blank ⇒ the daemon's WEBCHAT_DAILY_MAX_DEFAULT. Held as a string because it is an <input>: an empty box
-    // has to stay distinguishable from a typed 0, which the schema rejects anyway.
-    dailyMessageMax: ``,
-});
+const { automations, save } = useAutomations();
+const state = useAutomationForm();
+const { form, valid, touchAll, build, reset, loadRecipe } = state;
 
-// What a Doorbell may do while a stranger drives it. Deliberately read-only: an automation turn runs
-// bypassPermissions, so without an allowlist a support question is a shell on the sandbox. Widening it is a
-// deliberate edit of the automation, not a default.
-const DOORBELL_TOOLS = [`Read`, `Grep`, `Glob`, `WebFetch`] as const;
-
-const ACCESS_OPTIONS = [
-    { value: `public`, label: `Anyone` },
-    { value: `google`, label: `Google sign-in` },
-] as const;
-const ANTI_BOT_OPTIONS = [
-    { value: `pow`, label: `Built-in check` },
-    { value: `turnstile`, label: `Cloudflare Turnstile` },
-    { value: `off`, label: `Off` },
-] as const;
-
-// The moments a chore can wake on. Worded as the moment rather than the event id — the id is wire vocabulary,
-// and the two overlap enough (a clean turn auto-lands, firing both) that the difference has to read plainly.
-const WORKSPACE_EVENTS: readonly { value: WorkspaceEventKind; label: string; hint: string }[] = [
-    { value: `turn.settled`, label: `A turn settles`, hint: `After every isolated agent turn — including the ones that errored or conflicted.` },
-    { value: `agent.landed`, label: `Work lands`, hint: `Only when an agent's work actually reaches your workspace.` },
-];
-const schedule = reactive(defaultSchedule());
-
-// The picked provider's live model list — fetched lazily per provider, only while the form reads it. The
-// catalog is the same under either harness (codex/grok run the same subscription ids via the translator), so
-// it's keyed by provider alone.
-const liveModels = useQuery({
-    queryKey: computed(() => host().sandbox.key(`agent-models`, form.agent)),
-    queryFn: async (): Promise<CatalogOption[]> =>
-        ModelsSchema.parse(await host().sandbox.json(`/${form.agent}/models`)).models.map((model) => ({ value: model.id, label: model.label })),
-    enabled: computed(() => host().sandbox.reachable()),
-});
-
-// The wake's model chips: "Default" (empty — the daemon resolves the provider's own default) plus the pinnable
-// ids for the picked provider (with the static floor before the live load).
-const modelOptions = computed<CatalogOption[]>(() => {
-    const catalog = liveModels.data.value ?? modelsFor(form.agent);
-    return [{ value: ``, label: `Default` }, ...catalog.filter((option) => option.value !== ``)];
-});
-
-// A provider switch invalidates a pinned model — back to that provider's default. A harness switch keeps it
-// (the catalog is harness-independent).
-const setAgent = (agent: AgentProvider): void => {
-    form.agent = agent;
-    form.model = ``;
-};
-const setHarness = (harness: AgentHarness): void => {
-    form.harness = harness;
-};
-// Only codex/grok have both a native runtime and a routed one to switch between. Claude IS the Claude Code
-// loop, and kimi/gemini only ever run on it — so none of the three has a harness to choose. Same rule as
-// chat's picker (ChatModelPicker.harnessChoosable).
-const harnessChoosable = computed(() => form.agent === `codex` || form.agent === `grok`);
-
-// Guard/agent/approval fold away by default — revealed on demand or when a recipe prefills a guard.
-const advancedOpen = ref(false);
+const capabilities = computed(() => host().workspace.capabilities());
 const pickedRecipe = ref<AutomationRecipe | undefined>(undefined);
-// Templates are a shortcut INTO the form, not a field of it, so they fold away too. A gallery of cards grew
-// one card per connected capability and pushed Name below the fold; a disclosure costs one row whatever the
-// recipe count is, and what it opens is filterable and scroll-capped rather than unboundedly tall.
+// Templates are a shortcut INTO the form, not a field of it, so they fold away. A gallery of cards grew one
+// card per connected capability and pushed Name below the fold; a disclosure costs one row whatever the recipe
+// count is, and what it opens is filterable and scroll-capped rather than unboundedly tall.
 const recipesOpen = ref(false);
 const recipeFilter = ref(``);
 const recipeFilterInput = ref<HTMLInputElement>();
-// After creating an event automation the dialog stays open on this id to show the webhook URL + setup steps.
+// After creating an event or Doorbell automation the dialog stays open on this id to show what to paste.
 const savedId = ref<string | undefined>(undefined);
 const submitError = ref<string | undefined>(undefined);
+const shaking = ref(false);
+const fields = ref<InstanceType<typeof AutomationFields>>();
+
+// Larger tappable cards — idle sits on the overlay surface so it reads as a control without a border.
+const CARD_SELECTED = `bg-primary-600/15 text-link ring-1 ring-inset ring-primary-500/40`;
+const CARD_IDLE = `bg-overlay text-muted hover:text-content`;
 
 // "Start from" suggestions: provider-less recipes always show; provider-bound ones only when one of their
 // capabilities is enabled.
@@ -184,106 +69,26 @@ const recipeGroups = computed(() => {
     ].filter((group) => group.items.length > 0);
 });
 
-// The live sources the user can actually listen to: those with a connected capability behind them (the source
-// key itself, or any of its declared `providers` — CI listens on whichever git host is connected). Drives
-// both whether the "Listen (live)" trigger shows and its Source picker.
-const liveSources = computed(() => {
-    const connected = new Set(capabilities.value.map((capability) => capability.config[`provider`]));
-    return (Object.keys(LISTENER_SOURCES) as (keyof typeof LISTENER_SOURCES)[])
-        .filter(
-            (provider) =>
-                // A core source has nothing to connect (the Doorbell's "connection" is a script tag on the
-                // customer's site), so it is always offered; the rest wait for their capability.
-                LISTENER_SOURCES[provider].core === true ||
-                (LISTENER_SOURCES[provider].providers ?? [provider]).some((capability) => connected.has(capability)),
-        )
-        .map((provider) => Object.assign({ provider }, LISTENER_SOURCES[provider]));
-});
-
-// The Doorbell's own fields replace the shared listener ones (channel/events/mention say nothing about a
-// widget), and its done-state shows an embed snippet instead of a webhook URL.
-const isDoorbell = computed(() => form.kind === `listener` && form.provider === `webchat`);
-// The typed ceiling, or undefined for "leave it to the default". Anything not a positive integer reads as
-// blank — the schema would reject it, and a silently-dropped field beats a save that fails on a stray keystroke.
-const dailyMessageMax = computed<number | undefined>(() => {
-    const typed = Number(form.dailyMessageMax.trim());
-    return form.dailyMessageMax.trim() !== `` && Number.isInteger(typed) && typed > 0 ? typed : undefined;
-});
-const originList = computed(() =>
-    form.origins
-        .split(/[\n,]/)
-        .map((origin) => origin.trim().replace(/\/$/, ``))
-        .filter((origin) => origin !== ``),
-);
-// An origin must be exactly what a browser puts in the Origin header — scheme + host, no path — because that
-// is what the daemon compares against. Saying so at the point of typing beats a 403 the visitor sees.
-const originsError = computed<string | undefined>(() => {
-    if (!isDoorbell.value) {
-        return undefined;
-    }
-    if (originList.value.length === 0) {
-        return `Add at least one site — a Doorbell with no allowed sites admits nobody.`;
-    }
-    const bad = originList.value.find((origin) => !/^https?:\/\/[^/]+$/.test(origin));
-    return bad === undefined ? undefined : `"${bad}" isn't an origin — use scheme + host only, e.g. https://example.com`;
-});
-
-const effectiveCron = computed(() => cronOf(schedule));
-
-// A croner instance without a callback never schedules — it's just a queryable pattern here.
-// ponytail: preview uses the browser's timezone while the daemon fires in the sandbox's — same as the row's `next` display.
-const cronPreview = computed<{ runs: number[] } | { error: string } | undefined>(() => {
-    const cron = effectiveCron.value;
-    if (form.kind !== `schedule` || cron === undefined) {
-        return undefined;
-    }
-    try {
-        const runs = new Cron(cron).nextRuns(3).map((date) => date.getTime());
-        return runs.length > 0 ? { runs } : { error: `This schedule never fires.` };
-    } catch {
-        return { error: `Invalid cron expression.` };
-    }
-});
-
-const canSubmit = computed(
-    () =>
-        NAME_RE.test(form.id) &&
-        (form.kind !== `schedule` || (cronPreview.value !== undefined && `runs` in cronPreview.value)) &&
-        originsError.value === undefined &&
-        form.prompt.trim() !== ``,
-);
 const savedAutomation = computed(() => automations.value.find((automation) => automation.id === savedId.value));
 
-// --- inline validation (touched-on-blur) ---
-const touched = reactive(new Set<string>());
-const shaking = ref(false);
-const nameInput = ref<HTMLInputElement>();
-const promptInput = ref<HTMLTextAreaElement>();
-const markTouched = (key: string): void => {
-    touched.add(key);
+const resetAll = (): void => {
+    reset();
+    submitError.value = undefined;
+    pickedRecipe.value = undefined;
+    recipesOpen.value = false;
+    recipeFilter.value = ``;
+    savedId.value = undefined;
+    shaking.value = false;
 };
 
-const nameError = computed<string | undefined>(() => {
-    const trimmed = form.id.trim();
-    if (trimmed.length === 0) return `Name is required.`;
-    if (!NAME_RE.test(trimmed)) return `Use letters, digits, hyphens and underscores; must start with a letter or digit.`;
-    return undefined;
-});
-const promptError = computed<string | undefined>(() => (form.prompt.trim() === `` ? `Prompt is required.` : undefined));
-
-const touchAll = (): void => {
-    touched.add(`name`);
-    touched.add(`prompt`);
-};
-
-const toggleDay = (day: number): void => {
-    const at = schedule.days.indexOf(day);
-    if (at === -1) {
-        schedule.days.push(day);
-        return;
+// Applied on OPEN rather than on mount: the dialog stays mounted between openings and @hide resets the form,
+// so prefilling at mount would be erased by the first close and never come back.
+watch(visible, (open) => {
+    if (open && props.prefill !== undefined) {
+        pickedRecipe.value = props.prefill;
+        loadRecipe(props.prefill);
     }
-    schedule.days.splice(at, 1);
-};
+});
 
 // Opening the picker always starts from an empty filter and the caret in it — the list is long enough that
 // typing two letters beats scrolling it.
@@ -293,30 +98,13 @@ const toggleRecipes = (): void => {
         return;
     }
     recipeFilter.value = ``;
-    void nextTick(() => {
-        recipeFilterInput.value?.focus();
-    });
+    void nextTick(() => recipeFilterInput.value?.focus());
 };
 
 const pickRecipe = (recipe: AutomationRecipe): void => {
     pickedRecipe.value = recipe;
     recipesOpen.value = false;
-    form.kind = recipe.trigger.kind;
-    form.id = recipe.id;
-    form.guard = recipe.guard ?? ``;
-    form.prompt = recipe.prompt;
-    // A prefilled guard lives under Advanced — open it so the user sees what the recipe set.
-    advancedOpen.value = recipe.guard !== undefined;
-    if (recipe.trigger.kind === `schedule`) {
-        Object.assign(schedule, parseCron(recipe.trigger.cron));
-    }
-    if (recipe.trigger.kind === `listener`) {
-        form.provider = recipe.trigger.provider;
-        form.eventType = recipe.trigger.eventType;
-    }
-    if (recipe.trigger.kind === `workspace`) {
-        form.workspaceEvent = recipe.trigger.event;
-    }
+    loadRecipe(recipe);
 };
 
 // Enter in the filter takes the top match — and, because the picker sits inside the form, never submits it.
@@ -327,72 +115,18 @@ const pickFirstMatch = (): void => {
     }
 };
 
-// Applied on OPEN rather than on mount: the dialog stays mounted between openings and @hide resets the form,
-// so prefilling at mount would be erased by the first close and never come back.
-watch(visible, (open) => {
-    if (open && props.prefill !== undefined) {
-        pickRecipe(props.prefill);
-    }
-});
-
 // Choosing a trigger by hand detaches a prefilled recipe once it no longer matches (the user's edits stay).
-const setKind = (kind: typeof form.kind): void => {
-    form.kind = kind;
-    if (pickedRecipe.value && pickedRecipe.value.trigger.kind !== kind) {
+const onKindChange = (kind: typeof form.kind): void => {
+    if (pickedRecipe.value !== undefined && pickedRecipe.value.trigger.kind !== kind) {
         pickedRecipe.value = undefined;
     }
-    if (kind !== `listener`) {
-        return;
-    }
-    // Default to a connected live source, then give the prompt a running start without clobbering user text.
-    if (!liveSources.value.some((source) => source.provider === form.provider)) {
-        form.provider = liveSources.value[0]?.provider ?? `discord`;
-    }
-    if (form.prompt.trim() === ``) {
-        form.prompt = LISTENER_SOURCES[form.provider].starterPrompt;
-    }
-};
-
-const resetForm = (): void => {
-    form.kind = `schedule`;
-    form.id = ``;
-    form.guard = ``;
-    form.prompt = ``;
-    form.agent = `claude`;
-    form.harness = `native`;
-    form.model = ``;
-    form.requireApproval = false;
-    form.provider = `discord`;
-    form.channelId = ``;
-    form.eventType = undefined;
-    form.mentioned = false;
-    form.workspaceEvent = `turn.settled`;
-    form.repo = ``;
-    form.origins = ``;
-    form.access = `public`;
-    form.googleClientId = ``;
-    form.antiBot = `pow`;
-    form.turnstileSiteKey = ``;
-    form.turnstileSecret = ``;
-    form.greeting = ``;
-    form.dailyMessageMax = ``;
-    Object.assign(schedule, defaultSchedule());
-    submitError.value = undefined;
-    pickedRecipe.value = undefined;
-    recipesOpen.value = false;
-    recipeFilter.value = ``;
-    savedId.value = undefined;
-    touched.clear();
-    shaking.value = false;
-    advancedOpen.value = false;
 };
 
 const submit = async (): Promise<void> => {
     touchAll();
-    if (!canSubmit.value) {
+    if (!valid.value) {
         // Send the user to the first field to fix rather than only shaking the footer.
-        const target = nameError.value !== undefined ? nameInput.value : promptError.value !== undefined ? promptInput.value : undefined;
-        target?.focus();
+        (fields.value?.nameInput ?? fields.value?.promptInput)?.focus();
         shaking.value = false;
         void nextTick(() => {
             shaking.value = true;
@@ -402,74 +136,17 @@ const submit = async (): Promise<void> => {
     if (save.isPending.value) {
         return;
     }
-    const cron = form.kind === `schedule` ? effectiveCron.value : undefined;
-    if (form.kind === `schedule` && cron === undefined) {
-        return;
-    }
     submitError.value = undefined;
     try {
-        // An event trigger is sent without a token — the daemon mints the webhook's auth token on upsert.
-        await save.mutateAsync({
-            id: form.id,
-            trigger:
-                form.kind === `schedule`
-                    ? { kind: `schedule`, cron: cron as string }
-                    : form.kind === `event`
-                      ? { kind: `event` }
-                      : form.kind === `workspace`
-                        ? {
-                              kind: `workspace`,
-                              event: form.workspaceEvent,
-                              ...(form.repo.trim() !== `` ? { repo: form.repo.trim() } : {}),
-                          }
-                        : {
-                              kind: `listener`,
-                              provider: form.provider,
-                              ...(form.eventType !== undefined ? { eventType: form.eventType } : {}),
-                              ...(form.eventType === `message` && form.mentioned ? { mentioned: true } : {}),
-                              ...(form.channelId.trim() !== `` ? { channelId: form.channelId.trim() } : {}),
-                              // The Doorbell's admission list lives on the trigger, beside the provider it gates.
-                              ...(isDoorbell.value ? { allowedOrigins: originList.value } : {}),
-                          },
-            ...(form.guard.trim() !== `` ? { guard: form.guard.trim() } : {}),
-            prompt: form.prompt,
-            // Defaults stay absent (schema: absent agent = claude, absent harness = native); claude never
-            // carries a harness — the two loops are identical for it.
-            ...(form.agent !== `claude` ? { agent: form.agent } : {}),
-            ...(form.agent !== `claude` && form.harness !== `native` ? { harness: form.harness } : {}),
-            ...(form.model !== `` ? { model: form.model } : {}),
-            ...(form.requireApproval ? { requireApproval: true } : {}),
-            // A workspace trigger is a chore by definition (nothing but this codebase can fire it). A chore on a
-            // clock can't be told from an external poll by its trigger, so that one is carried from the recipe
-            // it was started from.
-            ...(form.kind === `workspace` || pickedRecipe.value?.chore === true ? { chore: true } : {}),
-            // A Doorbell's widget settings, and the toolbox a stranger's message is allowed to drive.
-            ...(isDoorbell.value
-                ? {
-                      webchat: {
-                          access: form.access,
-                          antiBot: form.antiBot === `off` ? undefined : form.antiBot,
-                          ...(form.googleClientId.trim() !== `` ? { googleClientId: form.googleClientId.trim() } : {}),
-                          ...(form.turnstileSiteKey.trim() !== `` ? { turnstileSiteKey: form.turnstileSiteKey.trim() } : {}),
-                          ...(form.turnstileSecret.trim() !== `` ? { turnstileSecret: form.turnstileSecret.trim() } : {}),
-                          ...(form.greeting.trim() !== `` ? { greeting: form.greeting.trim() } : {}),
-                          // Omitted when blank so the automation keeps tracking the default rather than freezing
-                          // today's number into its record.
-                          ...(dailyMessageMax.value === undefined ? {} : { dailyMessageMax: dailyMessageMax.value }),
-                      },
-                      allowedTools: [...DOORBELL_TOOLS],
-                  }
-                : {}),
-            enabled: true,
-        });
+        await save.mutateAsync(build());
         // Event and Doorbell automations keep the dialog open: the thing the owner still has to DO lives in the
         // done-state — paste the webhook URL into the sending system, paste the embed snippet into the site.
-        if (form.kind === `event` || isDoorbell.value) {
-            savedId.value = form.id;
+        if (form.kind === `event` || state.isDoorbell.value) {
+            savedId.value = form.id.trim();
             return;
         }
         visible.value = false;
-        resetForm();
+        resetAll();
     } catch (err) {
         submitError.value = err instanceof Error ? err.message : `Could not save the automation.`;
     }
@@ -482,9 +159,9 @@ const submit = async (): Promise<void> => {
         :modal="true"
         :draggable="false"
         :dismissable-mask="true"
-        :style="{ width: '32rem' }"
+        :style="{ width: WIDTH }"
         header="New automation"
-        @hide="resetForm"
+        @hide="resetAll"
     >
         <form id="automation-form" v-if="savedId === undefined" class="flex flex-col gap-3" @submit.prevent="submit">
             <div v-if="submitError" :class="cmp.alertDanger()">{{ submitError }}</div>
@@ -554,416 +231,7 @@ const submit = async (): Promise<void> => {
                     </div>
                 </div>
             </div>
-            <label class="ui-field">
-                <span class="ui-field-label">Name</span>
-                <input
-                    ref="nameInput"
-                    v-model="form.id"
-                    placeholder="morning-briefing"
-                    :class="[cmp.input(), touched.has('name') && nameError ? 'ui-field-input-error' : '']"
-                    @blur="markTouched('name')"
-                />
-                <span v-if="touched.has('name') && nameError" class="ui-field-error">
-                    <Icon name="exclamation-triangle" class="text-2xs" />
-                    {{ nameError }}
-                </span>
-            </label>
-            <span :class="cmp.sectionLabel('mt-1')">Trigger</span>
-            <div class="ui-field">
-                <div class="flex gap-2">
-                    <button
-                        type="button"
-                        class="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
-                        :class="form.kind === 'schedule' ? CARD_SELECTED : CARD_IDLE"
-                        :aria-pressed="form.kind === 'schedule'"
-                        @click="setKind('schedule')"
-                    >
-                        <Icon name="clock" class="mr-1.5 text-2xs" />Schedule
-                    </button>
-                    <button
-                        type="button"
-                        class="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
-                        :class="form.kind === 'event' ? CARD_SELECTED : CARD_IDLE"
-                        :aria-pressed="form.kind === 'event'"
-                        @click="setKind('event')"
-                    >
-                        <Icon name="bolt" class="mr-1.5 text-2xs" />Event (webhook)
-                    </button>
-                    <button
-                        v-if="liveSources.length > 0 || form.kind === 'listener'"
-                        type="button"
-                        class="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
-                        :class="form.kind === 'listener' ? CARD_SELECTED : CARD_IDLE"
-                        :aria-pressed="form.kind === 'listener'"
-                        @click="setKind('listener')"
-                    >
-                        <Icon name="wifi" class="mr-1.5 text-2xs" />Listen (live)
-                    </button>
-                    <button
-                        type="button"
-                        class="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
-                        :class="form.kind === 'workspace' ? CARD_SELECTED : CARD_IDLE"
-                        :aria-pressed="form.kind === 'workspace'"
-                        @click="setKind('workspace')"
-                    >
-                        <Icon name="eye" class="mr-1.5 text-2xs" />This workspace
-                    </button>
-                </div>
-            </div>
-            <!-- A chore's trigger: which moment in the fleet's own work wakes it, and optionally one repo of the
-                 change to care about. No token and no URL — nothing outside the sandbox can fire this. -->
-            <template v-if="form.kind === 'workspace'">
-                <div class="ui-field">
-                    <span class="ui-field-label">Wake when</span>
-                    <div class="flex flex-wrap gap-1.5">
-                        <button
-                            v-for="option in WORKSPACE_EVENTS"
-                            :key="option.value"
-                            type="button"
-                            :class="[CHIP_BASE, form.workspaceEvent === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                            :aria-pressed="form.workspaceEvent === option.value"
-                            @click="form.workspaceEvent = option.value"
-                        >
-                            {{ option.label }}
-                        </button>
-                    </div>
-                    <span class="text-2xs text-subtle">
-                        {{ WORKSPACE_EVENTS.find((option) => option.value === form.workspaceEvent)?.hint }}
-                    </span>
-                </div>
-                <label class="ui-field">
-                    <span class="ui-field-label">Only this repo (optional)</span>
-                    <input v-model="form.repo" placeholder="every repo the change touched" class="font-mono" :class="cmp.input()" />
-                </label>
-            </template>
-            <template v-if="form.kind === 'listener'">
-                <div class="ui-field">
-                    <span class="ui-field-label">Source</span>
-                    <div class="flex flex-wrap gap-2">
-                        <button
-                            v-for="source in liveSources"
-                            :key="source.provider"
-                            type="button"
-                            class="flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-colors"
-                            :class="form.provider === source.provider ? CARD_SELECTED : CARD_IDLE"
-                            :aria-pressed="form.provider === source.provider"
-                            @click="
-                                form.provider = source.provider;
-                                form.eventType = undefined;
-                            "
-                        >
-                            <img v-if="source.logo" :src="`https://cdn.simpleicons.org/${source.logo}`" class="h-4 w-4" alt="" />
-                            <Icon v-else :name="source.icon ?? 'bolt'" class="text-2xs" />
-                            {{ source.label }}
-                            <Icon name="check-circle" v-if="form.provider === source.provider" class="ml-auto" />
-                        </button>
-                    </div>
-                </div>
-                <!-- A Doorbell is configured by WHERE it may be embedded and WHO may talk to it — the shared
-                     listener fields (events, mention, channel) say nothing about a widget, so they fold away. -->
-                <template v-if="isDoorbell">
-                    <label class="ui-field">
-                        <span class="ui-field-label">Allowed sites</span>
-                        <textarea
-                            v-model="form.origins"
-                            rows="2"
-                            placeholder="https://example.com&#10;https://www.example.com"
-                            class="font-mono"
-                            :class="[cmp.input(), touched.has('origins') && originsError ? 'ui-field-input-error' : '']"
-                            @blur="markTouched('origins')"
-                        ></textarea>
-                        <span v-if="touched.has('origins') && originsError" class="ui-field-error">
-                            <Icon name="exclamation-triangle" class="text-2xs" />
-                            {{ originsError }}
-                        </span>
-                        <p v-else class="text-2xs text-subtle">
-                            One per line. Only these sites may embed the chat — scheme and host, no path. www and the bare domain are different
-                            origins.
-                        </p>
-                    </label>
-                    <div class="ui-field">
-                        <span class="ui-field-label">Who can chat</span>
-                        <div class="flex flex-wrap gap-1.5">
-                            <button
-                                v-for="option in ACCESS_OPTIONS"
-                                :key="option.value"
-                                type="button"
-                                :class="[CHIP_BASE, form.access === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                                :aria-pressed="form.access === option.value"
-                                @click="form.access = option.value"
-                            >
-                                {{ option.label }}
-                            </button>
-                        </div>
-                    </div>
-                    <label v-if="form.access === 'google'" class="ui-field">
-                        <span class="ui-field-label">Google client ID</span>
-                        <input
-                            v-model="form.googleClientId"
-                            placeholder="1234-abc.apps.googleusercontent.com"
-                            class="font-mono"
-                            :class="cmp.input()"
-                        />
-                        <p class="text-2xs text-subtle">
-                            Your site's own OAuth client — Google only issues a token to an origin you've authorized on it, so it can't be ours. Add
-                            each allowed site above as an authorized JavaScript origin.
-                        </p>
-                    </label>
-                    <div class="ui-field">
-                        <span class="ui-field-label">Bot check</span>
-                        <div class="flex flex-wrap gap-1.5">
-                            <button
-                                v-for="option in ANTI_BOT_OPTIONS"
-                                :key="option.value"
-                                type="button"
-                                :class="[CHIP_BASE, form.antiBot === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                                :aria-pressed="form.antiBot === option.value"
-                                @click="form.antiBot = option.value"
-                            >
-                                {{ option.label }}
-                            </button>
-                        </div>
-                        <p class="text-2xs text-subtle">
-                            <template v-if="form.antiBot === 'pow'">
-                                Costs each new visitor about a second of their browser's time, and costs a bot the same per conversation. No accounts,
-                                no keys.
-                            </template>
-                            <template v-else-if="form.antiBot === 'turnstile'"
-                                >Invisible for most visitors. Needs a Cloudflare Turnstile widget.</template
-                            >
-                            <template v-else>The allowed-sites list and the rate limit are then the only gate.</template>
-                        </p>
-                    </div>
-                    <template v-if="form.antiBot === 'turnstile'">
-                        <label class="ui-field">
-                            <span class="ui-field-label">Turnstile site key</span>
-                            <input v-model="form.turnstileSiteKey" placeholder="0x4AAA…" class="font-mono" :class="cmp.input()" />
-                        </label>
-                        <label class="ui-field">
-                            <span class="ui-field-label">Turnstile secret key</span>
-                            <input v-model="form.turnstileSecret" type="password" placeholder="0x4AAA…" class="font-mono" :class="cmp.input()" />
-                            <p class="text-2xs text-subtle">Stays in your sandbox — only the site key is ever sent to a visitor's browser.</p>
-                        </label>
-                    </template>
-                    <label class="ui-field">
-                        <span class="ui-field-label">Greeting (optional)</span>
-                        <input v-model="form.greeting" placeholder="Hi! Ask me anything." :class="cmp.input()" />
-                    </label>
-                    <label class="ui-field">
-                        <span class="ui-field-label">Daily message limit</span>
-                        <input
-                            v-model="form.dailyMessageMax"
-                            type="number"
-                            min="1"
-                            :placeholder="String(WEBCHAT_DAILY_MAX_DEFAULT)"
-                            :class="cmp.input()"
-                        />
-                        <p class="text-2xs text-subtle">
-                            Every message runs an agent turn on your account. Left blank, a Doorbell stops answering after
-                            {{ WEBCHAT_DAILY_MAX_DEFAULT }} messages a day and resumes the next day.
-                        </p>
-                    </label>
-                </template>
-                <div v-if="!isDoorbell" class="ui-field">
-                    <span class="ui-field-label">Events</span>
-                    <div class="flex flex-wrap gap-1.5">
-                        <button
-                            type="button"
-                            :class="[CHIP_BASE, form.eventType === undefined ? CHIP_SELECTED : CHIP_IDLE]"
-                            :aria-pressed="form.eventType === undefined"
-                            @click="form.eventType = undefined"
-                        >
-                            Any
-                        </button>
-                        <button
-                            v-for="eventOption in LISTENER_SOURCES[form.provider].events"
-                            :key="eventOption.value"
-                            type="button"
-                            :class="[CHIP_BASE, form.eventType === eventOption.value ? CHIP_SELECTED : CHIP_IDLE]"
-                            :aria-pressed="form.eventType === eventOption.value"
-                            @click="form.eventType = eventOption.value"
-                        >
-                            {{ eventOption.label }}
-                        </button>
-                    </div>
-                    <label v-if="form.eventType === 'message'" class="flex items-center gap-2 text-xs text-muted">
-                        <ToggleSwitch v-model="form.mentioned" :aria-label="LISTENER_SOURCES[form.provider].mentionLabel" />
-                        {{ LISTENER_SOURCES[form.provider].mentionLabel }}
-                    </label>
-                </div>
-                <label v-if="!isDoorbell" class="ui-field">
-                    <span class="ui-field-label">{{ LISTENER_SOURCES[form.provider].channel.label }}</span>
-                    <input
-                        v-model="form.channelId"
-                        :placeholder="LISTENER_SOURCES[form.provider].channel.placeholder"
-                        class="font-mono"
-                        :class="cmp.input()"
-                    />
-                </label>
-            </template>
-            <div v-if="form.kind === 'schedule'" class="ui-field">
-                <span class="ui-field-label">Repeats</span>
-                <div class="flex flex-wrap gap-1.5">
-                    <button
-                        v-for="option in FREQ_OPTIONS"
-                        :key="option.value"
-                        type="button"
-                        :class="[CHIP_BASE, schedule.freq === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                        :aria-pressed="schedule.freq === option.value"
-                        @click="schedule.freq = option.value"
-                    >
-                        {{ option.label }}
-                    </button>
-                </div>
-                <div v-if="schedule.freq === 'weekly'" class="flex flex-wrap gap-1.5">
-                    <button
-                        v-for="day in DAY_OPTIONS"
-                        :key="day.value"
-                        type="button"
-                        :class="[CHIP_BASE, schedule.days.includes(day.value) ? CHIP_SELECTED : CHIP_IDLE]"
-                        :aria-pressed="schedule.days.includes(day.value)"
-                        @click="toggleDay(day.value)"
-                    >
-                        {{ day.label }}
-                    </button>
-                </div>
-                <label v-if="schedule.freq === 'minutes'" class="flex items-center gap-2 text-xs text-muted">
-                    Every
-                    <input v-model.number="schedule.everyMinutes" type="number" min="1" max="59" class="w-20" :class="cmp.input()" /> minutes
-                </label>
-                <label v-if="schedule.freq === 'monthly'" class="flex items-center gap-2 text-xs text-muted">
-                    On day <input v-model.number="schedule.dayOfMonth" type="number" min="1" max="31" class="w-20" :class="cmp.input()" />
-                </label>
-                <label
-                    v-if="schedule.freq === 'daily' || schedule.freq === 'weekly' || schedule.freq === 'monthly'"
-                    class="flex items-center gap-2 text-xs text-muted"
-                >
-                    At <input v-model="schedule.time" type="time" class="w-28" :class="cmp.input()" />
-                </label>
-                <input v-if="schedule.freq === 'custom'" v-model="schedule.cron" placeholder="0 9 * * 1-5" :class="cmp.input('font-mono')" />
-                <p v-if="schedule.freq === 'custom'" class="text-2xs text-subtle">Standard 5-field cron: minute hour day month weekday.</p>
-                <p v-if="schedule.freq === 'weekly' && schedule.days.length === 0" class="text-xs text-danger">Pick at least one day.</p>
-                <p v-if="cronPreview" class="text-xs" :class="'error' in cronPreview ? 'text-danger' : 'text-muted'">
-                    <template v-if="'runs' in cronPreview">Next runs: {{ cronPreview.runs.map(formatAt).join(" · ") }}</template>
-                    <template v-else>{{ cronPreview.error }}</template>
-                </p>
-            </div>
-            <p v-if="form.kind === 'event'" class="text-xs text-muted">
-                Wakes when an external system POSTs its webhook URL — shown after you create it.
-            </p>
-            <p v-else-if="isDoorbell" class="text-xs text-muted">
-                Wakes when a visitor writes in the chat widget on your site. Each visitor's messages continue one conversation you can watch live and
-                take over. The agent answers with a read-only toolbox — it can look things up, not change them.
-            </p>
-            <p v-else-if="form.kind === 'listener'" class="text-xs text-muted">
-                Fires instantly over {{ LISTENER_SOURCES[form.provider].label }}'s live connection when the selected events happen — "Any" wakes on
-                every kind.
-            </p>
-            <label class="ui-field mt-3">
-                <span class="ui-field-label">
-                    Prompt
-                    <span v-if="pickedRecipe" class="ml-1 text-2xs font-normal text-subtle">· starter from {{ pickedRecipe.title }}</span>
-                </span>
-                <textarea
-                    ref="promptInput"
-                    v-model="form.prompt"
-                    rows="3"
-                    placeholder="Check the inbox and summarize anything urgent."
-                    :class="[cmp.input(), touched.has('prompt') && promptError ? 'ui-field-input-error' : '']"
-                    @blur="markTouched('prompt')"
-                ></textarea>
-                <span v-if="touched.has('prompt') && promptError" class="ui-field-error">
-                    <Icon name="exclamation-triangle" class="text-2xs" />
-                    {{ promptError }}
-                </span>
-            </label>
-            <div class="mt-1 flex flex-col gap-3">
-                <button
-                    type="button"
-                    class="flex w-full items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle"
-                    :aria-expanded="advancedOpen"
-                    @click="advancedOpen = !advancedOpen"
-                >
-                    <Icon class="text-2xs" :name="advancedOpen ? 'chevron-down' : 'chevron-right'" />
-                    <span>Advanced</span>
-                    <span v-if="!advancedOpen" class="font-normal normal-case tracking-normal">· guard, provider, model, approval</span>
-                </button>
-                <template v-if="advancedOpen">
-                    <label class="ui-field">
-                        <span class="ui-field-label">Guard command (optional)</span>
-                        <input v-model="form.guard" placeholder="test -s .intentic/queue.json" class="font-mono" :class="cmp.input()" />
-                        <p class="text-xs text-muted">
-                            <template v-if="form.kind === 'event'">
-                                Runs before each wake with the payload in <span class="font-mono">$AUTOMATION_PAYLOAD</span>: exit 0 wakes the agent,
-                                anything else skips that run.
-                            </template>
-                            <template v-else-if="form.kind === 'listener'">
-                                Runs before each wake; batched events arrive as JSON lines in <span class="font-mono">$AUTOMATION_PAYLOAD</span>: exit
-                                0 wakes the agent, anything else skips that run.
-                            </template>
-                            <template v-else>Runs in your workspace before each wake: exit 0 wakes the agent, anything else skips that run.</template>
-                        </p>
-                    </label>
-                    <div class="ui-field">
-                        <span class="ui-field-label">Provider</span>
-                        <div class="flex flex-wrap gap-1.5">
-                            <button
-                                v-for="option in PROVIDERS"
-                                :key="option.value"
-                                type="button"
-                                :class="[CHIP_BASE, form.agent === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                                :aria-pressed="form.agent === option.value"
-                                @click="setAgent(option.value)"
-                            >
-                                {{ option.label }}
-                            </button>
-                        </div>
-                    </div>
-                    <!-- Harness (the agentic loop), orthogonal to the provider — only codex/grok can switch;
-                         claude/kimi/gemini always run the Claude Code loop. Same semantics as chat's picker. -->
-                    <div v-if="harnessChoosable" class="ui-field">
-                        <span class="ui-field-label">Harness</span>
-                        <div class="flex flex-wrap gap-1.5">
-                            <button
-                                v-for="option in HARNESSES"
-                                :key="option.value"
-                                type="button"
-                                :class="[CHIP_BASE, form.harness === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                                :aria-pressed="form.harness === option.value"
-                                @click="setHarness(option.value)"
-                            >
-                                {{ option.label }}
-                            </button>
-                        </div>
-                        <p v-if="form.harness === 'claude-code'" class="text-xs text-muted">
-                            Runs this model through the Claude Code harness on your
-                            {{ form.agent === "codex" ? "ChatGPT" : "SuperGrok" }} subscription (connect it in Sandbox ▸ Agent).
-                        </p>
-                    </div>
-                    <div class="ui-field">
-                        <span class="ui-field-label">Model</span>
-                        <div class="flex flex-wrap gap-1.5">
-                            <button
-                                v-for="option in modelOptions"
-                                :key="option.value"
-                                type="button"
-                                :class="[CHIP_BASE, form.model === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                                :aria-pressed="form.model === option.value"
-                                @click="form.model = option.value"
-                            >
-                                {{ option.label }}
-                            </button>
-                        </div>
-                    </div>
-                    <label class="flex items-center gap-2 text-sm text-content">
-                        <ToggleSwitch v-model="form.requireApproval" aria-label="Require my approval before running" />
-                        Require my approval before it runs
-                    </label>
-                    <p v-if="form.requireApproval" class="-mt-1 text-2xs text-subtle">
-                        Each time this fires, the agent waits — you approve or reject it under "Pending approvals" before it acts.
-                    </p>
-                </template>
-            </div>
+            <AutomationFields ref="fields" :state="state" :recipe-note="pickedRecipe?.title" @kind-change="onKindChange" />
         </form>
         <!-- The done-state exists for the one thing creating an automation does NOT finish: something still has
              to be pasted elsewhere. Same shape for both — a copyable line and what to do with it. -->
