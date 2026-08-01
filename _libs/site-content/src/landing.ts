@@ -88,7 +88,9 @@ export interface LandingContent {
      * carry a screenshot and a paragraph per surface; those now have pages of their own, and repeating them
      * here made the page long and the pages redundant. */
     tour: LandingSectionIntro & { hero: ShotImage & { caption: string }; cta: string };
-    contrast: LandingSectionIntro & { prompt: LandingContrastColumn; agent: LandingContrastColumn };
+    /* The band makes a sweeping claim about "everyone else", so it carries the link that owns it: the
+     * comparison shelf, where those competitors are named and the case for each is written out. */
+    contrast: LandingSectionIntro & { prompt: LandingContrastColumn; agent: LandingContrastColumn; cta: string };
     anatomy: LandingSectionIntro & { pillars: LandingFact[] };
     // The sandbox-container figure: an agent on a machine you own, its tools installed and context loaded.
     sandbox: LandingSectionIntro & { boundary: string; agent: { name: string; role: string }; layers: AgentSpecRow[] };
@@ -177,6 +179,7 @@ export const landingContent: LandingContent = {
                 "Does the job end to end, shows its work as diffs.",
             ],
         },
+        cta: "Who “everyone else” is, name by name",
     },
     anatomy: {
         eyebrow: "Anatomy",

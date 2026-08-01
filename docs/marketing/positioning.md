@@ -108,19 +108,39 @@ payment event, a GitHub push, a new email — with a guard command deciding whet
 
 ## Competitive frame
 
-**vs. cloud AI dev environments (Devin, Cursor background agents, Replit Agent, Copilot Workspace,
-OpenHands cloud).** They run the agent on their infrastructure: your code, tokens, and often prod
-credentials live in their sandbox. intentic keeps the agent on your machine with a cloud-grade
-browser UX and observability on top; the hosted platform can't reach it. BYO model (Claude Code,
-Codex, or Grok) instead of a house model. *Pick them when* you want zero local footprint and don't
-handle sensitive systems.
+The public form of this section is the **comparison shelf** — `/compare/`, authored in
+`_libs/site-content/src/compare.ts` and rendered by `_apps/site/src/pages/compare/`. This section is its
+source of truth; changing a position here means changing that file in the same commit.
 
-**vs. plain local Claude Code / Codex CLI.** Same agents, but terminal-bound, single-machine,
-single-player, un-supervised, and asleep when you are. intentic gives each agent a specialized
-sandbox, a browser workspace from anywhere, the IDE + observability surfaces to configure and steer
-it, capabilities with sandbox-contained credentials, automations that wake it on events, a fleet
-board for a whole team, and team sharing. *Pick the bare CLI when* you live in one terminal and need
-none of that — the sandbox and CLI are MIT and run standalone.
+**The reframe that makes the shelf work: most of the named tools are not competitors.** Four out of five
+times someone asks "how does intentic compare to X", X is something intentic *runs* or something they *keep*.
+Saying so plainly is both truer and more persuasive than a scorecard, and it is why the shelf leads with the
+taxonomy rather than with us. The field sorts into four families on two questions — *whose machine does the
+agent run on* and *how much of the agent's environment can you change* (the same two the landing `#contrast`
+band argues).
+
+| Family | Examples | The verdict | Why |
+|---|---|---|---|
+| **Agent CLIs** | Claude Code, Codex, Grok, Kimi Code, Gemini CLI, OpenCode, Goose, Qwen Code | *intentic runs these* | A harness is the engine, not the garage. Five are native (`_libs/sandbox-contract/src/agent-catalog.ts`); any ACP agent is one capability away (`_libs/capability-catalog/src/index.ts` — `opencode-acp`, `gemini-acp`, `acp-agent`). |
+| **AI editors** | Cursor, Windsurf, VS Code + Copilot, Zed, JetBrains AI | *keep yours* | Different primary operator: they put the human at the keyboard. Composes for real via desktop sync (`_apps/sync/`) and `@intentic/acp-bridge`, not diplomatically. |
+| **Local orchestrators** | Conductor, Nimbalyst, Crystal, Vibe Kanban, Sculptor | *same instinct, wider scope* | The closest neighbours; they got ownership right. The gap is everything around the agent: the image (overlay Dockerfile), capabilities, automations, browser/phone reach, team sharing. |
+| **Cloud agent platforms** | Devin, Cursor cloud agents, Codex cloud, Claude Code on the web, Jules, Replit Agent | *the opposite trade* | The only genuine either/or, and it is P1: whose computer holds your source and your service credentials. |
+
+Rules that keep the shelf credible — it is the easiest page on the site to turn into slop:
+
+- **Every page carries a `pickThem`** — a real, usable case for the other product, in the last position and
+  at full weight. If that section is soft the whole page reads as marketing and everything above it stops
+  counting.
+- **Every table carries rows marked `theirs`**, and the caption counts them ("4 of these 11 rows go to
+  Nimbalyst"). A table with no losing rows is one nobody believes. Nimbalyst's visual editors, Conductor's
+  native Mac app and cloud workspaces, Cursor's inline editing, OpenCode's 75+ providers, a cloud platform's
+  zero setup and elastic capacity — these are real and they are on the page.
+- **Quote them, and link them.** `theirPitch` is close to their own words; `url` is their site with
+  `rel="nofollow"` so a reader can check. Nothing goes on a page that isn't on the vendor's public site today.
+- **No prices, either side.** Ours are a recorded no (landing-blueprint.md); theirs rot within a quarter.
+- **Invite the correction.** Both the hub and every page link to the issue tracker for inaccuracies. A
+  comparison page that asks to be contradicted is the only kind worth trusting — and it is the same posture
+  as MIT-on-GitLab.
 
 ## Honest maturity (say it, don't hide it)
 

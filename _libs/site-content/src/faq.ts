@@ -1,9 +1,17 @@
+import { compareHref } from "./compare";
+
 export interface FaqItem {
     /** Anchor id — a question is linkable on its own (`/#can-intentic-read-my-secrets`). */
     id: string;
     question: string;
     /** Each entry is a paragraph of the answer. */
     answer: string[];
+    /**
+     * A page carrying the long answer. Rendered under the paragraphs and deliberately absent from the
+     * FAQPage schema: the answer above has to stand on its own, because a rich result shows the text and
+     * not the link.
+     */
+    more?: { label: string; href: string };
 }
 
 /**
@@ -25,7 +33,7 @@ export const faqGroups: FaqGroup[] = [
     {
         id: "faq-what-it-is",
         label: "What it is",
-        blurb: "The product, and how it differs from a prompt.",
+        blurb: "The product, how it differs, and what it runs alongside.",
         items: [
             {
                 id: "how-is-this-different",
@@ -34,6 +42,15 @@ export const faqGroups: FaqGroup[] = [
                     "Those are a prompt: instructions on top of a generic assistant. It can describe your stack, but nothing is installed, it can't reach your code or services, and it starts from a blank context every time.",
                     "A specialized agent here gets a sandbox of its own. Its dev-tools and libraries are really installed (an environment overlay), it's wired to your repos, databases, and services (capabilities), and its skills and house style load every run — so it does the job end to end and shows its work as diffs.",
                 ],
+            },
+            {
+                id: "how-does-it-compare",
+                question: "How does this compare to Conductor, Cursor, OpenCode or Nimbalyst?",
+                answer: [
+                    "For most of that list it doesn't compete. Claude Code, Codex and OpenCode are agent harnesses — intentic runs all of them, and any agent speaking the Agent Client Protocol is one capability away. Cursor and the other AI editors put you at the keyboard; intentic puts the agent there, and desktop sync mirrors the sandbox into a folder your own editor opens.",
+                    "The real comparison is with local orchestrators like Conductor and Nimbalyst, which share the ownership stance and differ on scope: intentic also gives the agent an image whose tools are really installed, credentials for your systems, events that wake it, and a browser that reaches it from anywhere. The one genuine either/or is a cloud agent platform, because that is a question about whose computer holds your source.",
+                ],
+                more: { label: "Where intentic sits — every comparison, with the case for the other product", href: compareHref("") },
             },
             {
                 id: "run-a-fleet",

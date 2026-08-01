@@ -1,0 +1,160 @@
+---
+import { compareFamilies, compareHref, compareIndex, comparePages, familyPages } from "@intentic-dev/site-content/compare";
+import { APP_URL, DEMO_PATH, gitlabIssuesUrl } from "@intentic-dev/site-content/site";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+
+/* The comparison hub — the page "how does intentic compare to X?" resolves to.
+ *
+ * Ordered for the job a visitor actually has, which is to find X and leave: the six pages are a jump strip in
+ * the first viewport, before any argument. Only then the frame (the two questions), and then the families,
+ * which exist so the page still answers for the tools that will never have a page of their own. */
+
+// A name only links where we have written a page about it; the rest stay plain text. An outbound link per
+// competitor from the hub would be a link farm, and the per-comparison page already carries the real one.
+const pageByName = new Map(comparePages.map((page) => [page.name, page]));
+---
+
+<BaseLayout breadcrumbs={[{ name: "Compare", path: compareHref("") }]}>
+    <Nav />
+    <main class="flex-1">
+        <!-- Hero + the jump strip: find your tool without reading anything -->
+        <section class="relative overflow-hidden border-b border-line">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
+                <div class="eyebrow">{compareIndex.eyebrow}</div>
+                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{compareIndex.heading}</h1>
+                <p class="mt-4 max-w-2xl text-base leading-relaxed text-muted">{compareIndex.sub}</p>
+
+                <div class="mt-8 border-t border-line pt-6">
+                    <div class="eyebrow">Jump to one</div>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        {
+                            comparePages.map((page) => (
+                                <a
+                                    href={compareHref(page.slug)}
+                                    class="rounded-lg border border-line px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                                >
+                                    {page.navLabel}
+                                </a>
+                            ))
+                        }
+                    </div>
+                </div>
+
+                <div class="mt-8 flex flex-wrap gap-3">
+                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- The frame. Two factual axes, not a quadrant: they are the same two the landing page argues. -->
+        <section class="border-b border-line">
+            <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
+                <h2 class="max-w-2xl text-2xl font-semibold tracking-tight">{compareIndex.axes.heading}</h2>
+                <div class="mt-8 grid gap-6 lg:grid-cols-2">
+                    {
+                        compareIndex.axes.items.map((item, i) => (
+                            <div class="card p-7">
+                                <div class="text-lg font-semibold tracking-tight text-link">{i + 1}</div>
+                                <h3 class="mt-2 text-base font-medium text-content">{item.title}</h3>
+                                <p class="mt-3 text-sm leading-relaxed text-muted">{item.body}</p>
+                            </div>
+                        ))
+                    }
+                </div>
+            </div>
+        </section>
+
+        <!-- The families: the answer for every tool, including the ones without a page -->
+        <section>
+            <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
+                {/* Each family is a ruled band. The description column is naturally taller than a row of one
+                    or two cards, and without the rule that difference reads as a gap where a card failed
+                    rather than as the end of a section. */}
+                {
+                    compareFamilies.map((family, i) => (
+                        <div
+                            class:list={[
+                                "fade-in grid gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-14",
+                                i === 0 ? "pb-14" : "border-t border-line py-14",
+                            ]}
+                        >
+                            <div>
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <h2 class="text-xl font-semibold tracking-tight text-content">{family.label}</h2>
+                                    <span class="chip bg-primary-500/12 text-primary-400">{family.verdict}</span>
+                                </div>
+                                <p class="mt-4 text-sm leading-relaxed text-muted">{family.body}</p>
+                                <div class="mt-5 flex flex-wrap gap-1.5">
+                                    {family.examples.map((name) => {
+                                        const page = pageByName.get(name);
+                                        return page === undefined ? (
+                                            <span class="rounded-md border border-line px-2 py-1 text-2xs text-subtle">{name}</span>
+                                        ) : (
+                                            <a
+                                                href={compareHref(page.slug)}
+                                                class="rounded-md border border-line px-2 py-1 text-2xs text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                                            >
+                                                {name} →
+                                            </a>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* A lone comparison takes the whole column rather than half of it: at
+                                half width beside empty space it reads as a card that failed to load. */}
+                            <div class:list={["grid gap-4 lg:content-start", { "sm:grid-cols-2": familyPages(family.id).length > 1 }]}>
+                                {familyPages(family.id).map((page) => (
+                                    <a href={compareHref(page.slug)} class="card group p-6 transition-colors hover:border-primary-600/40">
+                                        <h3 class="text-base font-medium text-content group-hover:text-link">{page.navLabel}</h3>
+                                        <p class="mt-2 text-sm leading-relaxed text-muted">{page.menuBlurb}</p>
+                                        <p class="mt-4 text-2xs text-subtle">Read the comparison →</p>
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    ))
+                }
+            </div>
+        </section>
+
+        <!-- Corrections. A comparison page that invites its own contradiction is the only kind worth trusting. -->
+        <section class="border-t border-line">
+            <div class="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-14 sm:flex-row sm:items-center sm:justify-between">
+                <div class="max-w-2xl">
+                    <h2 class="text-base font-medium text-content">{compareIndex.correction.title}</h2>
+                    <p class="mt-2 text-sm leading-relaxed text-muted">{compareIndex.correction.body}</p>
+                </div>
+                <a class="btn btn-secondary shrink-0" href={gitlabIssuesUrl} target="_blank" rel="noopener">
+                    {compareIndex.correction.cta}
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <Footer />
+
+    <script>
+        const targets = document.querySelectorAll(".fade-in");
+        if ("IntersectionObserver" in window) {
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add("visible");
+                            observer.unobserve(entry.target);
+                        }
+                    }
+                },
+                { threshold: 0.12 },
+            );
+            targets.forEach((el) => observer.observe(el));
+        } else {
+            targets.forEach((el) => el.classList.add("visible"));
+        }
+    </script>
+</BaseLayout>

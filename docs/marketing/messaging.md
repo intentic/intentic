@@ -160,6 +160,14 @@ team sharing). Do not reintroduce a pricing section.
     care about — and because the agent is co-piloted (plan mode, reviewable diffs, owner-approved
     environment changes), you stay in control of every change. Verify test counts and prices at
     build time — never hardcode stale numbers.
+12. **How does this compare to Conductor, Cursor, OpenCode or Nimbalyst?** — For most of that list it
+    doesn't compete. Claude Code, Codex and OpenCode are agent harnesses and intentic runs all of
+    them; any ACP agent is one capability away. Cursor and the other AI editors put you at the
+    keyboard while intentic puts the agent there, and desktop sync mirrors the sandbox into a folder
+    your own editor opens. The real comparison is with local orchestrators (Conductor, Nimbalyst),
+    which share the ownership stance and differ on scope; the one genuine either/or is a cloud agent
+    platform. The long answer is the comparison shelf — see positioning.md's competitive frame for
+    the four families and the rules that keep those pages honest.
 
 ## SEO strings
 
@@ -174,3 +182,8 @@ team sharing). Do not reintroduce a pricing section.
 - Keywords to carry naturally: AI IDE, agent IDE, shared workspace, specialized agent, autonomous
   agent, AI employee, agent workforce, coding agent, Claude Code, Codex, Grok, agent sandbox, AI
   workspace in the browser, self-hosted AI agent, Devin alternative, own your code.
+- The **`intentic vs X` / `X alternative`** queries are served by the comparison shelf (`/compare/`),
+  one URL per competitor — that is the whole reason it isn't a single page with anchors. Each page
+  owns its own title, description, OG card and breadcrumb; the hub owns the category query. Adding a
+  competitor is an entry in `comparePages` and the nav row, footer link, page meta, OG card, sitemap
+  entry and llms.txt line all follow from it.

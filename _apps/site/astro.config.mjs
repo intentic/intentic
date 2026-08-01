@@ -1,5 +1,6 @@
 import sitemap from "@astrojs/sitemap";
 import { lastModForUrl, llmsText } from "@intentic-dev/astro-integrations";
+import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
 import { landingContent } from "@intentic-dev/site-content/landing";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
@@ -104,6 +105,7 @@ export default defineConfig({
             sections: [
                 { label: "Overview", paths: ["/"] },
                 { label: "Product", paths: ["/product/", ...productPages.map((page) => productHref(page.slug))] },
+                { label: "Compare", paths: [compareHref(""), ...comparePages.map((page) => compareHref(page.slug))] },
                 { label: "Docs", paths: docsPages.map((page) => docsHref(page.id)) },
                 { label: "Optional", paths: ["/privacy/", "/terms/"] },
             ],

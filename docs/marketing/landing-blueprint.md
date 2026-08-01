@@ -65,7 +65,9 @@ One page, one continuous scroll. Section ids in parens; copy per section in `lan
    and the depth lives on `/product/*` rather than being repeated here. (P2, P4)
 3. **The difference (`#contrast`)** — the core argument: the prompt is the one layer everyone lets you
    edit, versus the layers intentic opens (image, capabilities, per-turn context). Lands on the honest
-   line: you can't make the model smarter, you can make it better informed and better equipped. (P2)
+   line: you can't make the model smarter, you can make it better informed and better equipped. The band
+   makes a sweeping claim about "everyone else", so it carries the link that owns it — `contrast.cta`
+   into the comparison shelf, where those competitors are named. (P2)
 4. **Anatomy (`#anatomy`)** — the four layers of that environment, each one openable in the workspace:
    the sandbox, the installed toolchain, the capabilities wiring, the curated context that loads every
    turn. (P2, P5)
@@ -117,6 +119,28 @@ Rules that keep them honest:
   own rather than a number in a hero.
 - The demo fixture (`_apps/web/src/demo/`) is the world every shot is taken in, so enriching it improves
   the public demo and the marketing shots in the same commit.
+
+## The comparison shelf (`/compare/*`)
+
+The second content-driven shelf, and it works the same way: `_libs/site-content/src/compare.ts` holds the
+four families plus one `ComparePage` per competitor, and `_apps/site/src/pages/compare/` renders them with
+one hub and one template. Positioning and the rules that keep it honest live in
+[positioning.md](positioning.md#competitive-frame); do not re-argue them here.
+
+What is a *layout* decision rather than a positioning one:
+
+- **The hub leads with a jump strip, not an argument.** A visitor arrives wanting to find their tool and
+  leave; the six pages are linkable inside the first viewport, before the two-questions band and before the
+  families. The families sit last because their job is to answer for the tools that will never have a page.
+- **Nav is a bare top-level link, not a third mega-menu.** A menu of six competitor rows hands a visitor the
+  names without the sorting, and the sorting is the part that changes their mind.
+- **The verdict comes before the table.** A reader who stops after "The short answer" has still been told the
+  truth; a reader who only scans the table sees the marked rows. Overlap before differences, `pickThem` last
+  and at full weight.
+- **The table is a real `<table>` that restacks under 48rem** — `data-side` carries the column header down
+  into the stacked view, because a three-column table of sentences at 380px is one word per line.
+- No screenshots on these pages. They compare products, not surfaces; the product shelf is one click away and
+  is where the UI argument is made.
 
 ### No dedicated pricing section (deliberate — do not re-add)
 

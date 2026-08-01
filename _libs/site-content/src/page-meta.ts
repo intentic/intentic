@@ -1,3 +1,4 @@
+import { compareHref, compareIndex, comparePages } from "./compare";
 import { docsHref, docsPages } from "./docs";
 import { landingContent } from "./landing";
 import { productHref, productPages } from "./product";
@@ -25,8 +26,10 @@ export const pageMeta: Record<string, PageMeta> = {
         description: "The terms governing use of the intentic platform: accounts, billing, acceptable use, and liability.",
         datePublished: "2026-07-03",
     },
+    [compareHref("")]: compareIndex.meta,
     ...Object.fromEntries(docsPages.map((page) => [docsHref(page.id), page.meta])),
     ...Object.fromEntries(productPages.map((page) => [productHref(page.slug), page.meta])),
+    ...Object.fromEntries(comparePages.map((page) => [compareHref(page.slug), page.meta])),
 };
 
 function normalize(path: string): string {

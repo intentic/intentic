@@ -1,3 +1,4 @@
+import { compareHref } from "./compare";
 import { docsHref, docsSections } from "./docs";
 import type { ShotImage } from "./landing";
 import { productHref, productPages } from "./product";
@@ -9,6 +10,11 @@ import { DEMO_PATH } from "./site";
  * "Overview", and the product used to be five anchors into one long page — nothing you could link to, rank,
  * or illustrate. Each row now carries a line of scent, and the product rows carry the screenshot the page
  * opens on, which the mega-menu previews.
+ *
+ * Compare is a bare LINK, not a third menu. "How does this compare to X?" is the most asked question we get,
+ * and the hub's whole answer is that the field sorts into four families before any individual name matters —
+ * a menu of six competitor rows would hand a visitor the names without the sorting, which is the part that
+ * changes their mind.
  */
 
 export interface MenuItem {
@@ -67,6 +73,12 @@ export const navEntries: NavEntry[] = [
             label: section.label,
             items: section.items.map((page) => ({ label: page.title, href: docsHref(page.id), description: page.blurb })),
         })),
+    },
+    {
+        type: "link",
+        label: "Compare",
+        href: compareHref(""),
+        prefix: "/compare",
     },
     {
         type: "link",
