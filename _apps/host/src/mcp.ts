@@ -4,6 +4,7 @@ import { audit } from "./audit.js";
 import { assertScope, ScopeError } from "./policy.js";
 import { describeText } from "./tools/describe.js";
 import { listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/files.js";
+import { focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./tools/apps.js";
 import { act, describeAction, settle, type ComputerInput } from "./tools/computer.js";
 import { describeResult, runCommand } from "./tools/shell.js";
 import { HOST_VERSION } from "./version.js";
@@ -81,6 +82,41 @@ const TOOLS: readonly ToolDefinition[] = [
         inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
     },
     {
+        name: "list_windows",
+        description:
+            "Every window open on this computer: its app, title, size, position, and which one has focus. Call this before any GUI work — it is how you find the application you were asked about, and how you know where your typing will land. Requires the 'See the screen' permission.",
+        inputSchema: { type: "object", properties: {} },
+    },
+    {
+        name: "focus_window",
+        description:
+            "Bring a window to the front and give it the keyboard, by the id from list_windows. ALWAYS do this before typing: text goes to whatever window has focus, not to where the pointer is. Requires the 'Use the mouse and keyboard' permission.",
+        inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    },
+    {
+        name: "open",
+        description:
+            "Start an application, or open a URL or file with whatever this computer has registered for it — the usual first step of a task ('open the browser at this page'). Use this rather than working out the platform's own incantation. Requires the 'Run commands' permission.",
+        inputSchema: {
+            type: "object",
+            properties: { target: { type: "string", description: "An application name, a file path, or a URL." } },
+            required: ["target"],
+        },
+    },
+    {
+        name: "clipboard",
+        description:
+            "Read or replace this computer's clipboard — the reliable way to move text between applications, and often easier than reading it off a screenshot. Reading needs 'See the screen'; writing needs 'Use the mouse and keyboard'.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                action: { type: "string", enum: ["read", "write"] },
+                text: { type: "string", description: "The text to put on the clipboard (write)." },
+            },
+            required: ["action"],
+        },
+    },
+    {
         name: "computer",
         description:
             "Use this computer's mouse and keyboard: click what is on the screen, type into the focused window, press a key combination, scroll, drag. Coordinates are PIXELS IN THE LAST SCREENSHOT — take one first and read them off it. Every action answers with a fresh screenshot so you can see what happened. Requires the 'Use the mouse and keyboard' permission, which is OFF unless the user turned it on. Prefer a command over the GUI when both would work: a command is exact, and a click is a guess about where something is.",
@@ -149,7 +185,8 @@ const screenshotResult = async (scopes: HostScopes): Promise<Record<string, unkn
  * story a reader needs — "typed 24 characters into the focused window" — without becoming a second copy of the
  * secret. A key combination is not redacted: "ctrl+c" is the fact, and there is nothing in it to leak. */
 const auditDetail = (name: string, args: Record<string, unknown>): string => {
-    const safe = name === "computer" && args["action"] === "type" ? { ...args, text: `<${String(args["text"] ?? "").length} characters>` } : args;
+    const redact = (name === "computer" && args["action"] === "type") || (name === "clipboard" && args["action"] === "write");
+    const safe = redact ? { ...args, text: `<${String(args["text"] ?? "").length} characters>` } : args;
     return JSON.stringify(safe).slice(0, 500);
 };
 
@@ -186,6 +223,16 @@ const callTool = async (name: string, args: Record<string, unknown>, scopes: Hos
             return textResult(JSON.stringify(await listDirectory(asString(args["path"], "path"), scopes), undefined, 2));
         case "trash_file":
             return textResult(await trashFile(asString(args["path"], "path"), scopes));
+        case "list_windows":
+            return textResult(await listWindows(desktop(), scopes));
+        case "focus_window":
+            return textResult(await focusWindow(desktop(), asString(args["id"], "id"), scopes));
+        case "open":
+            return textResult(await openTarget(desktop(), asString(args["target"], "target"), scopes));
+        case "clipboard":
+            return args["action"] === "write"
+                ? textResult(await writeClipboard(desktop(), asString(args["text"], "text"), scopes))
+                : textResult(await readClipboard(desktop(), scopes));
         case "screenshot":
             return await screenshotResult(scopes);
         case "computer": {

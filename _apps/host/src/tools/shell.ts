@@ -28,7 +28,9 @@ const MAX_TIMEOUT_MS = 10 * 60 * 1000;
 // ended, and the megabyte of npm progress bars in between is not worth a model's context.
 const MAX_OUTPUT = 100_000;
 
-export const shellFor = (platform: NodeJS.Platform): { readonly command: string; readonly args: (script: string) => string[]; readonly label: string } => {
+export const shellFor = (
+    platform: NodeJS.Platform,
+): { readonly command: string; readonly args: (script: string) => string[]; readonly label: string } => {
     if (platform === "win32") {
         // PowerShell 7 when it is installed (a strictly better shell, and what the skill pack is written for),
         // else Windows PowerShell 5.1, which every Windows has. -NoProfile keeps a user's prompt customisations
@@ -48,7 +50,9 @@ export const shellFor = (platform: NodeJS.Platform): { readonly command: string;
 };
 
 const truncate = (text: string): string =>
-    text.length <= MAX_OUTPUT ? text : `${text.slice(0, MAX_OUTPUT / 2)}\n… [${text.length - MAX_OUTPUT} characters cut] …\n${text.slice(-MAX_OUTPUT / 2)}`;
+    text.length <= MAX_OUTPUT
+        ? text
+        : `${text.slice(0, MAX_OUTPUT / 2)}\n… [${text.length - MAX_OUTPUT} characters cut] …\n${text.slice(-MAX_OUTPUT / 2)}`;
 
 export interface CommandResult {
     readonly exitCode: number | null;
@@ -64,7 +68,7 @@ export const runCommand = async (
     assertScope(scopes, "shell");
     // The working directory is inside the roots like any other path — a command is a file operation with extra
     // steps, and starting it in a directory the user walled off is the same breach as reading from there.
-    const cwd = input.cwd === undefined ? rootsOf(scopes)[0] ?? homedir() : assertPath(input.cwd, scopes, "run a command in");
+    const cwd = input.cwd === undefined ? (rootsOf(scopes)[0] ?? homedir()) : assertPath(input.cwd, scopes, "run a command in");
     const timeout = Math.min(input.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
     const shell = shellFor(process.platform);
 

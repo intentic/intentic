@@ -101,7 +101,9 @@ export const registerAutostart = async (launcher: CliLauncher, log: Log): Promis
             );
         }
     } catch (error) {
-        log(`note: couldn't register this computer to reconnect at login (${reason(error)}); it stays connected until the machine restarts. Logs: ${runLogPath}`);
+        log(
+            `note: couldn't register this computer to reconnect at login (${reason(error)}); it stays connected until the machine restarts. Logs: ${runLogPath}`,
+        );
     }
 };
 

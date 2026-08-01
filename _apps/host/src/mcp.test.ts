@@ -26,7 +26,20 @@ test("initialize advertises tools and identifies the agent", async () => {
 test("tools/list is the machine's whole surface — and there is no delete", async () => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes)) as { result: { tools: { name: string }[] } };
     const names = response.result.tools.map((tool) => tool.name);
-    expect(names).toEqual(["describe", "run_command", "read_file", "write_file", "list_dir", "trash_file", "computer", "screenshot"]);
+    expect(names).toEqual([
+        "describe",
+        "run_command",
+        "read_file",
+        "write_file",
+        "list_dir",
+        "trash_file",
+        "list_windows",
+        "focus_window",
+        "open",
+        "clipboard",
+        "computer",
+        "screenshot",
+    ]);
     expect(names).not.toContain("delete_file");
 });
 

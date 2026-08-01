@@ -197,7 +197,9 @@ const status = buildCommand<Record<string, never>>({
         out(`Agent:        v${HOST_VERSION} — ${pid === undefined ? "NOT running (start it with `intentic-host run`)" : `running (pid ${pid})`}`);
         // The cached grant, flagged as such: the sandbox's card is the source of truth, and saying so here is
         // what stops a stale line in this output from being read as the current permissions.
-        out(`Permissions (last pushed by the sandbox): commands ${config.scopes.shell}, writes ${config.scopes.write}, screen ${config.scopes.screen}`);
+        out(
+            `Permissions (last pushed by the sandbox): commands ${config.scopes.shell}, writes ${config.scopes.write}, screen ${config.scopes.screen}`,
+        );
         out(`Folders:      ${config.scopes.roots ?? "(your home folder)"}`);
         out(`Logs:         ${runLogPath}`);
         out(`Audit:        ${auditPath}`);

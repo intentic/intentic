@@ -20,14 +20,17 @@ const exec = promisify(execFile);
 
 const osName = async (): Promise<string> => {
     if (platform() === "win32") {
-        const { stdout } = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_OperatingSystem).Caption"]).catch(
-            () => ({ stdout: "" }),
-        );
+        const { stdout } = await exec("powershell.exe", [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "(Get-CimInstance Win32_OperatingSystem).Caption",
+        ]).catch(() => ({ stdout: "" }));
         const caption = stdout.trim();
         return caption === "" ? `Windows (${release()})` : `${caption} (build ${release()})`;
     }
     // /etc/os-release is the one file every modern distribution has, and PRETTY_NAME is the line humans use.
-    const { stdout } = await exec("sh", ["-c", ". /etc/os-release 2>/dev/null && printf %s \"$PRETTY_NAME\""]).catch(() => ({ stdout: "" }));
+    const { stdout } = await exec("sh", ["-c", '. /etc/os-release 2>/dev/null && printf %s "$PRETTY_NAME"']).catch(() => ({ stdout: "" }));
     const pretty = stdout.trim();
     return pretty === "" ? `${type()} ${release()}` : `${pretty} (kernel ${release()})`;
 };
@@ -45,13 +48,15 @@ export const hostFacts = async (scopes: HostScopes): Promise<HostFacts> => ({
 export const describeText = async (scopes: HostScopes): Promise<string> => {
     const facts = await hostFacts(scopes);
     const session = platform() === "linux" ? `\nGraphical session: ${process.env["XDG_SESSION_TYPE"] ?? "none detected (headless)"}` : "";
-    return [
-        `Computer: ${hostname()}`,
-        `OS: ${facts.os}`,
-        `Architecture: ${facts.arch}`,
-        `Shell for run_command: ${facts.shell}`,
-        `Home: ${facts.home}`,
-        `Folders you may read and write: ${facts.roots.join(", ")}`,
-        `Permissions: run commands ${scopes.shell}, write files ${scopes.write}, see the screen ${scopes.screen}`,
-    ].join("\n") + session;
+    return (
+        [
+            `Computer: ${hostname()}`,
+            `OS: ${facts.os}`,
+            `Architecture: ${facts.arch}`,
+            `Shell for run_command: ${facts.shell}`,
+            `Home: ${facts.home}`,
+            `Folders you may read and write: ${facts.roots.join(", ")}`,
+            `Permissions: run commands ${scopes.shell}, write files ${scopes.write}, see the screen ${scopes.screen}`,
+        ].join("\n") + session
+    );
 };

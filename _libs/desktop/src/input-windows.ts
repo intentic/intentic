@@ -2,9 +2,24 @@ import { windowsChord } from "./keys.js";
 import { run } from "./run.js";
 import type { MouseButton, Point, ScrollDirection } from "./types.js";
 
-/* Windows input, through PowerShell into user32.dll. No native module, because the thing that ships this is a
- * single compiled binary and a node-gyp dependency would end that; PowerShell is on every Windows and can
- * P/Invoke, which is the whole trick.
+/* Windows input, through PowerShell into user32.dll. PowerShell is on every Windows and can P/Invoke, which is
+ * the whole trick.
+ *
+ * WHY NOT nut.js, which does this properly in C — this was tried, not assumed. `bun build --compile` DOES embed
+ * `.node` addons, and the cross-compile worked: bun bundled all three of libnut's platform packages and produced
+ * both a Linux and a Windows binary. The binary then cannot load the addon at all. libnut finds its `.node`
+ * through the `bindings` package, which walks up from __dirname looking for a package.json — and inside a
+ * standalone binary __dirname is `/$bunfs/root/…`, a virtual filesystem with no package.json, so it throws
+ * "Could not find module root" before it ever opens the addon. That is inside libnut's own index.js, so there is
+ * nothing to configure around it.
+ *
+ * Three more findings from the same test, any one of which would also have decided it: the Linux prebuild is
+ * x86-64 ONLY, so the linux-arm64 target would have no binary at all; libnut also needs libXtst.so.6 present on
+ * the machine, an unstated system dependency (at least `xdotool` announces itself with an install line); and the
+ * compiled artifact went from single-digit MB to 92MB.
+ *
+ * So this is not "we preferred to hand-roll". nut.js is a fine library for a normally-installed Node app and
+ * cannot survive being compiled into one file, which is how this agent ships. Revisit only if that changes.
  *
  * ONE `Add-Type` per call is the cost. It compiles a few lines of C# in-process (~150ms), which is invisible next
  * to the round trip that delivered the request and irrelevant against a human-speed UI — and it buys a backend

@@ -12,6 +12,12 @@ const png = await screen.capture();
 await screen.click({ x: 840, y: 512 }, "left");
 await screen.type("hello world");
 await screen.key("ctrl+s");
+
+// …and operating applications, not just pixels
+await screen.launch("https://example.com");
+const open = await screen.windows();          // app, title, bounds, focused
+await screen.focusWindow(open[0]!.id);        // typing goes to the FOCUSED window
+await screen.writeClipboard("some text");
 ```
 
 ## What this package is not
@@ -34,6 +40,15 @@ everything with no privileges. Wayland does not, so the pointer goes through `yd
 one-line install for the specific thing that is absent.
 
 **macOS** — capture works, input does not. The methods throw rather than silently doing nothing.
+
+**Windows enumeration** — `Get-Process` already knows every process with a main window and its title; the
+P/Invoke is only for the two things it does not carry, the window rectangle and which window is in front.
+
+**Wayland enumeration mostly cannot happen**, and that is a design decision rather than a gap: a compositor does
+not let one client enumerate another's windows, the same protection that stops it synthesising input. The
+wlroots family (sway, Hyprland) answers `swaymsg -t get_tree` to anyone who can reach the socket, so those are
+supported; everything else gets a sentence explaining why, rather than an empty list that reads as "nothing is
+open".
 
 ## Two details worth knowing
 

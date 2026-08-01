@@ -7,6 +7,6 @@
         "skipLibCheck": true
     },
     "include": ["./src/**/*"],
-    "exclude": ["./src/**/*.test.ts"],
+    "exclude": ["./src/**/*.test.ts", "./src/testing.ts"],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

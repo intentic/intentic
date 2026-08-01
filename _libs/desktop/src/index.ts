@@ -1,11 +1,14 @@
+import { linuxApps } from "./apps-linux.js";
+import { windowsApps } from "./apps-windows.js";
 import { linuxInput } from "./input-linux.js";
 import { windowsInput } from "./input-windows.js";
 import { capture, frame } from "./screen.js";
 import { type Desktop, DesktopError } from "./types.js";
 
 export { parseChord, windowsChord, wtypeArgs, xdotoolChord, type Chord, type Modifier } from "./keys.js";
+export { looksLikeUrl, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
 export { capture, frame, hasGraphicalSession, isWayland, pngSize } from "./screen.js";
-export { DesktopError, type Desktop, type MouseButton, type Point, type ScreenFrame, type ScrollDirection } from "./types.js";
+export { DesktopError, type Desktop, type MouseButton, type Point, type ScreenFrame, type ScrollDirection, type WindowInfo } from "./types.js";
 
 /* The desktop of the machine this process is running on.
  *
@@ -35,10 +38,11 @@ export const desktop = (): Desktop => {
             type: windowsInput.type,
             key: windowsInput.key,
             scroll: async (at, direction, amount) => await windowsInput.scroll(at, direction, amount, (await frame()).origin),
+            ...windowsApps,
         };
     }
     if (process.platform === "linux") {
-        return { frame, capture, ...linuxInput };
+        return { frame, capture, ...linuxInput, ...linuxApps };
     }
     return {
         frame,
@@ -50,5 +54,10 @@ export const desktop = (): Desktop => {
         type: unsupported,
         key: unsupported,
         scroll: unsupported,
+        windows: unsupported,
+        focusWindow: unsupported,
+        launch: unsupported,
+        readClipboard: unsupported,
+        writeClipboard: unsupported,
     };
 };

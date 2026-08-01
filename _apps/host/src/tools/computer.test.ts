@@ -1,7 +1,8 @@
-import { type Desktop, DesktopError, type MouseButton, type Point, type ScrollDirection } from "@intentic/desktop";
+import { DesktopError } from "@intentic/desktop";
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { ScopeError } from "../policy.js";
+import { fakeDesktop } from "../testing.js";
 import { act, describeAction } from "./computer.js";
 
 /* The policy half of GUI control, driven against a fake desktop.
@@ -11,22 +12,6 @@ import { act, describeAction } from "./computer.js";
  * called" are the parts that decide whether someone's machine does the wrong thing — and they are all here. */
 
 const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", ...overrides });
-
-const fakeDesktop = () => {
-    const calls: string[] = [];
-    const desktop: Desktop = {
-        frame: async () => ({ width: 1920, height: 1080, origin: { x: 0, y: 0 } }),
-        capture: async () => Buffer.alloc(0),
-        move: async (to: Point) => void calls.push(`move ${to.x},${to.y}`),
-        click: async (at: Point, button: MouseButton) => void calls.push(`click ${button} ${at.x},${at.y}`),
-        doubleClick: async (at: Point) => void calls.push(`double ${at.x},${at.y}`),
-        drag: async (from: Point, to: Point) => void calls.push(`drag ${from.x},${from.y}->${to.x},${to.y}`),
-        type: async (text: string) => void calls.push(`type ${text}`),
-        key: async (combo: string) => void calls.push(`key ${combo}`),
-        scroll: async (at: Point, direction: ScrollDirection, amount: number) => void calls.push(`scroll ${direction} ${amount} @${at.x},${at.y}`),
-    };
-    return { desktop, calls };
-};
 
 test("every action is refused when the machine may not be driven", async () => {
     const { desktop, calls } = fakeDesktop();

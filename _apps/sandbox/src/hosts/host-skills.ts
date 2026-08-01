@@ -30,6 +30,10 @@ you live and where the repository is; this is their own machine, reached over a 
 | \`mcp__${id}__list_dir\` | List a directory under the allowed roots. |
 | \`mcp__${id}__trash_file\` | Move a file to the recycle bin / trash — there is no delete tool, on purpose. |
 | \`mcp__${id}__screenshot\` | Capture the screen as an image, with its pixel size. |
+| \`mcp__${id}__list_windows\` | Every open window: app, title, size, position, which has focus. |
+| \`mcp__${id}__focus_window\` | Bring a window to the front and give it the keyboard. |
+| \`mcp__${id}__open\` | Start an app, or open a URL or file with its default handler. |
+| \`mcp__${id}__clipboard\` | Read or replace the clipboard. |
 | \`mcp__${id}__computer\` | Use the mouse and keyboard: click, type, press a chord, scroll, drag. |
 
 ## Rules that are not negotiable
@@ -57,11 +61,29 @@ about where something is. If the job can be done with \`run_command\`, do that i
 
 The loop is always the same:
 
-1. \`screenshot\` — it answers with the image AND its size ("Screen is 2560×1440").
-2. Read the coordinates you want off that image. **Coordinates are pixels in that screenshot**, top-left is (0,0).
-3. Call \`computer\` with an action. Every action answers with a fresh screenshot, so you see the result without
+1. \`list_windows\` — find the application. It tells you what is open, which window has focus, and where each one
+   is on screen. If what you need is not there, \`open\` it first and list again.
+2. \`focus_window\` — bring it to the front. **Typing goes to the focused window, never to where the pointer is**,
+   so skipping this is the most common way a GUI sequence silently types into the wrong place.
+3. \`screenshot\` — it answers with the image AND its size ("Screen is 2560×1440").
+4. Read the coordinates you want off that image. **Coordinates are pixels in that screenshot**, top-left is (0,0).
+5. Call \`computer\` with an action. Every action answers with a fresh screenshot, so you see the result without
    asking for one.
-4. Look at what came back before the next action. A menu that did not open means the click missed.
+6. Look at what came back before the next action. A menu that did not open means the click missed.
+
+A worked example — "check my email and tell me if the invoice arrived":
+
+\`\`\`
+open           { target: "https://mail.google.com" }
+list_windows   → [12] chrome — Inbox (3) — Gmail   (1920×1040 at 0,0)
+focus_window   { id: "12" }
+screenshot     → the inbox
+computer       { action: "left_click", coordinate: [420, 318] }   // the message
+\`\`\`
+
+Getting text OUT of an application is usually easier through the clipboard than by reading pixels: select it
+(\`computer\` with \`ctrl+a\` or a drag), copy it (\`ctrl+c\`), then \`clipboard { action: "read" }\`. That gives you
+the real characters instead of your best guess at what the screenshot said.
 
 \`\`\`
 computer { action: "left_click", coordinate: [840, 512] }
@@ -77,7 +99,8 @@ Key names are the same everywhere, whatever the OS: \`Return\`, \`Escape\`, \`Ta
 
 Things that will bite you:
 
-- **Typing goes to whatever window has focus**, not to where the pointer is. Click the field first, then type.
+- **Typing goes to whatever window has focus**, not to where the pointer is. \`focus_window\` first, then click the
+  field you want, then type.
 - **A coordinate outside the screen is refused, not clamped.** If you get that error you misread the screenshot —
   take another one rather than adjusting by feel.
 - **Nothing is undoable.** A click can confirm a dialog nobody read. Say what you are about to click and why

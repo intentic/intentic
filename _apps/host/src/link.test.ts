@@ -67,9 +67,7 @@ const connectedPair = (initial: HostScopes = scopes()) => {
         }),
     );
     handler.upgrade(machineSocket as unknown as WebSocket);
-    const client: ContractRouterClient<typeof hostContract> = createORPCClient(
-        new RPCLink({ websocket: daemonSocket as unknown as WebSocket }),
-    );
+    const client: ContractRouterClient<typeof hostContract> = createORPCClient(new RPCLink({ websocket: daemonSocket as unknown as WebSocket }));
     return { client, logged, scopesNow: () => live };
 };
 
