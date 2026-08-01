@@ -20,6 +20,7 @@ import { useKeybindings } from "../composables/commands/useKeybindings";
 import { useLayout } from "../composables/useLayout";
 import { useIconRailSize } from "../composables/useIconRailSize";
 import { usePanels } from "../composables/extensions/usePanels";
+import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
 import { useChanges } from "../composables/workspace/useChanges";
 import { usePorts } from "../composables/sandbox/usePorts";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -50,7 +51,7 @@ const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
     danger: `bg-danger/15 text-danger`,
 };
 const badgeClass = (badge: ViewBadge): string => BADGE_TONE[badge.tone ?? `info`];
-const badgeText = (badge: ViewBadge): string => (badge.count > 99 ? `99+` : String(badge.count));
+const badgeText = ({ count = 0 }: ViewBadge): string => (count > 99 ? `99+` : String(count));
 
 /* The desktop chrome of the post-login shell: a square-tile rail, the shared Claude Code chat panel, and a
  * workspace outlet for the active area. Layout is a three-column CSS grid; the chat width is driven by a
@@ -101,6 +102,31 @@ const forwardedLabel = computed(() =>
 // (a file open on /workspace, a card open on /capabilities). Prefix match, harmless for the param-less tiles.
 const isNavActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
 
+/* What the Workspace tile says, in the priority the panel behind it already uses: the commit box owns the
+ * primary slot until there is nothing left to commit, and only then does it hand that slot to the sync — so the
+ * tile is a miniature of it, and the two can never disagree about what the next move is.
+ *
+ * A COUNT, THEN A GLYPH. The count is for work whose size decides how you spend the next hour: two changed
+ * files and two hundred are different afternoons. Outgoing commits are not that — three or thirty, it is one
+ * click — so a number there would only be misread in the unit the count established one state earlier. The
+ * glyph says which KIND of work is waiting, and the tooltip says how much.
+ *
+ * That the user committed it themselves is no argument for staying silent: on this workspace an AGENT usually
+ * did, and the tree it left behind is clean. */
+const workspaceBadge = computed<ViewBadge | undefined>(() => {
+    if (changes.count.value > 0) {
+        return {
+            count: changes.count.value,
+            tooltip: `${changes.count.value} uncommitted ${changes.count.value === 1 ? `change` : `changes`}`,
+        };
+    }
+    const work = changes.outgoing.value;
+    if (work === undefined) {
+        return undefined;
+    }
+    return { mark: outgoingMark(work), tooltip: outgoingSummary(work) };
+});
+
 // The thin shell: two always-present areas, then one tile per EXTENSION ACTIVATION — extensions detect
 // workspace content (repo facts from /panels) and contribute their own sidebar elements (Infrastructure, Live
 // status, one per monorepo, …) — then the "+" Capabilities tile (rendered separately below). The Sandbox
@@ -124,14 +150,7 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
         to: `/workspace`,
         label: `Workspace`,
         icon: `folder`,
-        ...(changes.count.value > 0
-            ? {
-                  badge: {
-                      count: changes.count.value,
-                      tooltip: `${changes.count.value} uncommitted ${changes.count.value === 1 ? `change` : `changes`}`,
-                  },
-              }
-            : {}),
+        ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
 ]);
 // Slotted in between Agents and Workspace only when the agent has proposed a draft (or left an unreadable draft file) — an
@@ -172,6 +191,9 @@ const subagentTile = computed<AreaTile | undefined>(() => {
         ...(live > 0 ? { badge: { count: live, tooltip: `${live} agent${live === 1 ? `` : `s`} working` } } : {}),
     };
 });
+// The live-runtime cluster below the divider — the same AreaTile shape and the same markup as the navigation
+// tiles above, so a badge is rendered in ONE place in this file rather than once per hand-rolled RouterLink.
+const runtimeTiles = computed<readonly AreaTile[]>(() => [browserTile.value, subagentTile.value].filter((tile) => tile !== undefined));
 // Activation.icon is an open string in the public extension API; the rail trusts it names one of the app's
 // icons (an unknown name renders the icon set's fallback).
 const extensionTile = (active: ActiveExtension): AreaTile => {
@@ -296,14 +318,18 @@ onUnmounted(() => {
             >
                 <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initials(tile.label) }}</span>
                 <Icon v-else :name="tile.icon!" class="text-lg" />
-                <!-- One badge for every tile, core or extension — see AreaTile.badge. -->
+                <!-- One badge for every tile, core or extension — see AreaTile.badge. A `mark` replaces the
+                     number outright rather than sitting beside it: the chip is four pixels of glance, and a
+                     glyph AND a digit in it would be two claims competing for the same read. -->
                 <span
                     v-if="tile.badge"
-                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
+                    class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
                     :class="badgeClass(tile.badge)"
                     v-tooltip.right="tile.badge.tooltip"
-                    >{{ badgeText(tile.badge) }}</span
                 >
+                    <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
+                    <template v-else>{{ badgeText(tile.badge) }}</template>
+                </span>
             </RouterLink>
 
             <span class="my-1 icon-rail-divider h-px bg-line"></span>
@@ -344,49 +370,31 @@ onUnmounted(() => {
                 >
             </RouterLink>
 
-            <!-- The agent's browsers: a live-runtime surface like the terminal, so it sits in this cluster
-                 rather than with the navigation tiles above. Badged with the count of RUNNING sessions only
-                 (see browserTile). -->
+            <!-- The agent's browsers and subagents: live-runtime surfaces like the terminal, so they sit in
+                 this cluster rather than with the navigation tiles above. Each is badged with what is still
+                 RUNNING (see browserTile/subagentTile), and each renders through the same markup as a
+                 navigation tile — they are AreaTiles, and one badge renderer is the point of that shape. -->
             <RouterLink
-                v-if="browserTile"
-                :to="browserTile.to"
+                v-for="tile in runtimeTiles"
+                :key="tile.to"
+                :to="tile.to"
                 class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(browserTile.to) }"
+                :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
                 :tabindex="reachable ? undefined : -1"
                 :aria-disabled="!reachable"
-                :aria-label="browserTile.label"
-                v-tooltip.right="browserTile.label"
+                :aria-label="tile.label"
+                v-tooltip.right="tile.label"
             >
-                <Icon :name="browserTile.icon!" class="text-lg" />
+                <Icon :name="tile.icon!" class="text-lg" />
                 <span
-                    v-if="browserTile.badge"
-                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
-                    :class="badgeClass(browserTile.badge)"
-                    v-tooltip.right="browserTile.badge.tooltip"
-                    >{{ badgeText(browserTile.badge) }}</span
+                    v-if="tile.badge"
+                    class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
+                    :class="badgeClass(tile.badge)"
+                    v-tooltip.right="tile.badge.tooltip"
                 >
-            </RouterLink>
-
-            <!-- The agent's subagents, beside its browsers because they are the same kind of thing: work a turn
-                 spawned, watchable while it runs. Badged with the count still WORKING (see subagentTile). -->
-            <RouterLink
-                v-if="subagentTile"
-                :to="subagentTile.to"
-                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(subagentTile.to) }"
-                :tabindex="reachable ? undefined : -1"
-                :aria-disabled="!reachable"
-                :aria-label="subagentTile.label"
-                v-tooltip.right="subagentTile.label"
-            >
-                <Icon :name="subagentTile.icon!" class="text-lg" />
-                <span
-                    v-if="subagentTile.badge"
-                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
-                    :class="badgeClass(subagentTile.badge)"
-                    v-tooltip.right="subagentTile.badge.tooltip"
-                    >{{ badgeText(subagentTile.badge) }}</span
-                >
+                    <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
+                    <template v-else>{{ badgeText(tile.badge) }}</template>
+                </span>
             </RouterLink>
 
             <!-- The terminal: toggles the one global panel from any view, highlighted while it is open, badged

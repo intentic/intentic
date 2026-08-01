@@ -114,15 +114,15 @@ export const detectActivations = (repos: readonly RepoFacts[], capabilities: rea
 
 // An element's tile badge, contained the same way detect() is: a throwing badge costs its own tile a number,
 // never the whole rail. Called from the surfaces' render computeds, so the extension reading its own refs in
-// here is what makes the tile repaint. A count of 0 is "nothing to say" and normalizes to undefined, so
-// callers only ever test for presence.
+// here is what makes the tile repaint. A badge with neither a count above zero nor a mark has nothing to draw
+// and normalizes to undefined, so callers only ever test for presence.
 export const activationBadge = ({ extension, activation }: ActiveExtension): ViewBadge | undefined => {
     if (extension.badge === undefined) {
         return undefined;
     }
     try {
         const badge = extension.badge(activation);
-        return badge === undefined || badge.count <= 0 ? undefined : badge;
+        return badge === undefined || ((badge.count ?? 0) <= 0 && badge.mark === undefined) ? undefined : badge;
     } catch (error) {
         console.error(`extension view ${extension.id}: badge() failed`, error);
         return undefined;

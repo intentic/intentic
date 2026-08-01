@@ -6,6 +6,7 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { errorMessage } from "../useAsyncAction";
+import { outgoingWork } from "./outgoingWork";
 import { resetEditBuffers } from "./useEditBuffers";
 
 /* The Changes review — VSCode's SCM model over the workspace's real repos, including git's index: each repo
@@ -229,6 +230,7 @@ export interface SyncTarget {
     readonly pull: boolean; // behind its upstream — fast-forward it first
     readonly push: boolean; // ahead, or a branch with no upstream yet — send (publishing it when unpublished) after
 }
+
 const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
     runBatch(
         targets.map((target) => ({
@@ -283,6 +285,9 @@ export function useChanges() {
     // (each has its own remote and branch), so the panel reads `repo.remote` straight off the row — for the row
     // pills and for the primary button's aggregate alike, which hands syncAll the resolved per-repo targets.
     const stagedCount = computed(() => repos.value.reduce((total, repo) => total + repo.staged.length, 0));
+    // What a clean tree still owes its remotes — the other half of "is there anything to do here", which the
+    // count above deliberately says nothing about. See outgoingWork.ts for why it is outgoing-only.
+    const outgoing = computed(() => outgoingWork(repos.value));
 
     return {
         repos,
@@ -290,6 +295,7 @@ export function useChanges() {
         count,
         stagedCount,
         hasChanges,
+        outgoing,
         loading: query.isFetching,
         error,
         refresh: query.refetch,

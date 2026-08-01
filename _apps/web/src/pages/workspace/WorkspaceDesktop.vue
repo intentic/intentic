@@ -16,6 +16,7 @@ import { useMonaco } from "../../composables/workspace/useMonaco";
 import { useChat } from "../../composables/chat/useChat";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
+import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
 import { useChanges } from "../../composables/workspace/useChanges";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
@@ -59,8 +60,13 @@ const changes = useChanges();
 // the graph's repo switcher — the multi-repo axis of the workspace ("root is a repo; it may contain repos").
 const { repoDirs } = useRepos();
 
-// The active nudge: once a turn leaves uncommitted changes, show a banner until the user opens Changes or
-// dismisses it. Each finished agent turn (streaming falls) re-arms it, so every round of work surfaces once.
+/* The active nudge: once a turn leaves work in the Changes panel, show a banner until the user opens it or
+ * dismisses it. Each finished agent turn (streaming falls) re-arms it, so every round of work surfaces once.
+ *
+ * "Work" is BOTH states the panel can be in, on the panel's own priority: uncommitted files to review, or —
+ * once there are none — commits that exist on this disk alone. The second is why this banner is not redundant
+ * with the rail's badge: the sidebar panel is persisted, so a user whose last visit ended in Files lands in a
+ * file tree that shows no sign of either, having just been told by the rail that there is something here. */
 const bannerDismissed = ref(false);
 const { streaming } = useChat();
 watch(streaming, (now, was) => {
@@ -68,15 +74,42 @@ watch(streaming, (now, was) => {
         bannerDismissed.value = false;
     }
 });
-const showReviewBanner = computed(() => changes.hasChanges.value && layout.sidebarPanel.value !== `changes` && !bannerDismissed.value);
+const reviewNudge = computed<{ readonly icon: IconName; readonly message: string; readonly action: string } | undefined>(() => {
+    if (layout.sidebarPanel.value === `changes` || bannerDismissed.value) {
+        return undefined;
+    }
+    if (changes.hasChanges.value) {
+        return {
+            icon: `check-square`,
+            message: `${changes.count.value} uncommitted ${changes.count.value === 1 ? `change` : `changes`} — review before you continue.`,
+            action: `Review`,
+        };
+    }
+    const work = changes.outgoing.value;
+    if (work === undefined) {
+        return undefined;
+    }
+    // Named for the verb the panel will offer, not for the panel — the user is being sent somewhere to do one
+    // specific thing, and "Review" would promise a diff that a clean tree does not have. The glyph is the rail's
+    // and the tab's, so the same fact wears the same mark wherever it is met.
+    return { icon: outgoingMark(work), message: `${outgoingSummary(work)}.`, action: work.commits === 0 ? `Publish` : `Push` };
+});
 const openReview = (): void => layout.setSidebarPanel(`changes`);
 
+// The Changes tab's chip when there is no count to show: committed work still on this disk. Gated on a zero
+// count because the chip states ONE thing — with files to review, how many is the more urgent of the two.
+const changesMark = computed(() => {
+    const work = changes.outgoing.value;
+    return changes.count.value > 0 || work === undefined ? {} : { mark: outgoingMark(work), markTitle: outgoingSummary(work) };
+});
+
 // The sidebar's mode switch lives ON the sidebar (proximity — the control sits with what it changes). The
-// Changes tab carries the uncommitted count so pending work is visible from any mode.
+// Changes tab carries the uncommitted count so pending work is visible from any mode — and, once that count is
+// zero, the outgoing mark, so the tab does not read as "nothing here" over a panel holding a Push button.
 const sidebarMode = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, set: (value) => layout.setSidebarPanel(value) });
 const sidebarModeOptions = computed(() => [
     { label: `Files`, value: `files` as const, title: `Browse the workspace files` },
-    { label: `Changes`, value: `changes` as const, title: `Review uncommitted changes`, badge: changes.count.value },
+    { label: `Changes`, value: `changes` as const, title: `Review uncommitted changes`, badge: changes.count.value, ...changesMark.value },
     { label: `Checkpoints`, value: `history` as const, title: `Workspace checkpoints — restore files to any earlier point` },
 ]);
 
@@ -558,18 +591,12 @@ const endResize = (event: PointerEvent): void => {
              It takes the shell-wide bar height (.view-header) instead of sizing to its own text: the banner
              inserts a row above the workspace column, so an off-height one shifts the file-tab row below it a
              few pixels out of step with the chat strip's line. One header height in, one header height down. -->
-        <div
-            v-if="showReviewBanner"
-            class="view-header flex items-center gap-3 border-b border-primary-600/30 bg-primary-600/10 px-4 text-xs text-link"
-        >
-            <Icon name="check-square" />
+        <div v-if="reviewNudge" class="view-header flex items-center gap-3 border-b border-primary-600/30 bg-primary-600/10 px-4 text-xs text-link">
+            <Icon :name="reviewNudge.icon" />
             <button type="button" class="flex min-w-0 flex-1 items-center gap-3 text-left hover:underline" @click="openReview">
                 <!-- Fixed height means one line: a narrow column ellipsises the sentence rather than wrapping out of the bar. -->
-                <span class="min-w-0 flex-1 truncate">
-                    <span class="font-medium">{{ changes.count.value }}</span> uncommitted {{ changes.count.value === 1 ? "change" : "changes" }} —
-                    review before you continue.
-                </span>
-                <span class="shrink-0 font-medium underline underline-offset-2">Review →</span>
+                <span class="min-w-0 flex-1 truncate">{{ reviewNudge.message }}</span>
+                <span class="shrink-0 font-medium underline underline-offset-2">{{ reviewNudge.action }} →</span>
             </button>
             <button
                 type="button"

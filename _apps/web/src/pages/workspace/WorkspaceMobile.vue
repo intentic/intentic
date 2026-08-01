@@ -7,6 +7,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
+import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
 import { useChanges } from "../../composables/workspace/useChanges";
 import { useMonaco } from "../../composables/workspace/useMonaco";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
@@ -106,9 +107,16 @@ const fileName = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1)
 
 // --- The current directory's listing -----------------------------------------------------------
 const segment = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, set: (value) => layout.setSidebarPanel(value) });
+// The Changes tab's chip, on the desktop explorer's terms (WorkspaceDesktop documents the gating): the count
+// while there is work to review, then the outgoing mark, so a clean tree with commits still to push does not
+// read as an empty tab.
+const changesMark = computed(() => {
+    const work = changes.outgoing.value;
+    return changes.count.value > 0 || work === undefined ? {} : { mark: outgoingMark(work), markTitle: outgoingSummary(work) };
+});
 const segmentOptions = computed(() => [
     { label: `Files`, value: `files` as const, title: `Browse the workspace files` },
-    { label: `Changes`, value: `changes` as const, title: `Review uncommitted changes`, badge: changes.count.value },
+    { label: `Changes`, value: `changes` as const, title: `Review uncommitted changes`, badge: changes.count.value, ...changesMark.value },
     { label: `Checkpoints`, value: `history` as const, title: `Workspace checkpoints` },
 ]);
 

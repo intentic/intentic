@@ -31,8 +31,14 @@ export interface Activation {
 // themselves to: it must mean "something happened here that you don't already know about", never "here is a
 // statistic". A count that is lit most of the day teaches the user to stop seeing the rail.
 export interface ViewBadge {
-    // Omitted or 0 ⇒ no badge. The host renders anything above 99 as "99+".
-    readonly count: number;
+    // How many, for work whose SIZE is what the user acts on — two files to review and two hundred are
+    // different afternoons. Omitted or 0 ⇒ no number. The host renders anything above 99 as "99+".
+    readonly count?: number | undefined;
+    // A glyph from the host's icon set, rendered INSTEAD of a number, for a pending action whose size changes
+    // nothing about what the user does with it: one click either way. "There is committed work here waiting to
+    // be sent" is the whole message, and a number beside it would be read in the unit `count` established —
+    // so the amount goes in the tooltip and the glyph carries the kind. A badge with neither renders nothing.
+    readonly mark?: string | undefined;
     // `info` is the resting tone every core count uses (unread agents, uncommitted changes, live terminals);
     // `warning` marks a risk the user is carrying (an exposed port); `danger` means something is BROKEN.
     // Reach for danger sparingly — its whole value is that it is rare enough to still mean something.

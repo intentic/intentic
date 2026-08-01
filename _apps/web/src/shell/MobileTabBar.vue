@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
 import { useDrafts } from "../composables/extensions/useDrafts";
+import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
 import { useChanges } from "../composables/workspace/useChanges";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
@@ -33,6 +34,12 @@ const { drafts, invalid: invalidDrafts } = useDrafts();
 const { attention } = useAgents();
 const changes = useChanges();
 const reviewBadge = computed(() => drafts.value.length + invalidDrafts.value.length + changes.count.value);
+// What the Review tab says once that total is zero but the workspace still owes its remotes a push — the same
+// glyph the desktop rail and the Changes tab wear, so the fact looks the same on a phone as on a desk.
+const reviewMark = computed(() => {
+    const work = changes.outgoing.value;
+    return reviewBadge.value > 0 || work === undefined ? undefined : { icon: outgoingMark(work), label: outgoingSummary(work) };
+});
 
 const route = useRoute();
 // A tab is active for its route AND any sub-path (a file open on /workspace) — `active-class` compares params
@@ -59,6 +66,13 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
                     class="absolute -right-2.5 -top-1 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
                     >{{ reviewBadge > 99 ? "99+" : reviewBadge }}</span
                 >
+                <span
+                    v-else-if="tab.to === '/drafts' && reviewMark"
+                    class="absolute -right-2.5 -top-1 flex min-w-4 items-center justify-center rounded-full bg-primary-600/15 px-1 text-[0.6rem] leading-4 text-link"
+                    :aria-label="reviewMark.label"
+                >
+                    <Icon :name="reviewMark.icon" />
+                </span>
                 <span
                     v-if="tab.to === '/agents' && attention > 0"
                     class="absolute -right-2.5 -top-1 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"

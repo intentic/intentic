@@ -18,6 +18,7 @@ import { ALL_SIDES, originHue, originsOf, summarizeOrigins, YOURS } from "../../
 import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
+import { ahead, behind, syncable, unpublished } from "../../composables/workspace/outgoingWork";
 import { COMMIT_SCOPE, type RepoPaths, type SyncTarget, useChanges } from "../../composables/workspace/useChanges";
 import { usePrepush } from "../../composables/workspace/usePrepush";
 import { useRepos } from "../../composables/workspace/useRepos";
@@ -648,10 +649,8 @@ const confirmDiscard = async (): Promise<void> => {
 // Sync affordances show only for a repo that actually has a remote; a purely local repo gets no dead controls.
 // Each verb then earns its place from state: pull when behind, push when ahead, Publish when the branch has no
 // upstream at all. Fetch is the exception — it is what MAKES ahead/behind trustworthy, so it is always offered.
-const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== undefined;
-const unpublished = (repo: RepoChanges): boolean => syncable(repo) && repo.remote?.upstream === undefined;
-const ahead = (repo: RepoChanges): number => repo.remote?.ahead ?? 0;
-const behind = (repo: RepoChanges): number => repo.remote?.behind ?? 0;
+// `syncable`/`ahead`/`behind`/`unpublished` come from useChanges: the rail tile and the workspace banner read
+// the same repo the same way, and a second local definition here is how those three drift apart.
 
 // The pills carry only a direction and a number, so the tooltip is where the whole sentence goes — including
 // WHICH ref is involved, which the folded row no longer spends a line printing.
