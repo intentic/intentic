@@ -63,6 +63,23 @@ RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
 # The terminal (system/terminal.ts) launches zsh with the oh-my-zsh "bira" theme + zsh-autosuggestions, so the
 # owner gets a real prompt and history autocomplete. Installed into root's home (the daemon/terminal run as
 # root); --depth=1 tracks the default branch (pin to a commit if reproducibility matters).
+#
+# THE HISTORY LIVES ON THE VOLUME, NOT IN THE CONTAINER. zsh-autosuggestions' default strategy is `history`: it
+# can only ghost-suggest what is in $HISTFILE, and oh-my-zsh leaves that at ~/.zsh_history — inside /root, the
+# container's own writable layer. Every rebuild (docker rm -f + docker run, same named volumes) therefore
+# shipped the plugin back working and the file back empty, and the owner re-typed what they had already typed.
+# /history is the daemon's volume, already home to the pane logs (/history/logs/terminals) that this is the
+# typed half of, and outside the /work the agent writes and Mutagen syncs.
+# `:=` rather than a plain assignment so a caller that already set HISTFILE keeps it: panel sessions do exactly
+# that (processes/managed-processes.ts), which is what keeps a dev-server command the DAEMON typed out of the
+# owner's suggestions.
+# Symlinking ~/.zsh_history onto the volume — the trick that persists ~/.claude (sessions/session-store.ts) —
+# does NOT work here and must not be reintroduced: HIST_SAVE_BY_COPY (on by default) rewrites the file by
+# renaming a temp over it whenever history is trimmed to SAVEHIST, which replaces the symlink with an ordinary
+# container-local file and silently ends the persistence a few dozen commands in.
+# HISTSIZE/SAVEHIST are set because oh-my-zsh only ever RAISES them (to 50000/10000) — a ceiling sized for a
+# file that died with the container. Matched to tmux's history-limit below, since both bound the same thing:
+# how far back the owner can reach in a terminal.
 RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh \
     && git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions \
     && printf '%s\n' \
@@ -73,6 +90,9 @@ RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh 
         'plugins=(git zsh-autosuggestions)' \
         "ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=245'" \
         "PROMPT_EOL_MARK=''" \
+        ': ${HISTFILE:=${HISTORY_ROOT:-/history}/shell/zsh_history}' \
+        'HISTSIZE=100000' \
+        'SAVEHIST=100000' \
         'source $ZSH/oh-my-zsh.sh' \
         > /root/.zshrc
 # tmux backs each terminal tab (system/terminal.ts attaches one session per tab). The web UI draws the tab bar,

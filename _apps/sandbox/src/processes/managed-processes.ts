@@ -64,9 +64,22 @@ const defaultRunner: ProcessRunner = {
         // like `turbo`/`vite`/`astro` would fail with "not found" (exit 127). Prepend the run dir's bin so any dev
         // command resolves its local tools; the panel's own `env` rides underneath. `-e` sets the vars on the
         // session (the tmux server's global env — inherited from this daemon — supplies the rest).
+        // A panel's own zsh history, not the owner's. The command below is typed into an interactive shell on
+        // purpose (see the send-keys comment), and the image's zsh now shares one history file on the /history
+        // volume so terminal autosuggestions survive a rebuild — which would make every dev-server command the
+        // DAEMON typed a permanent suggestion in the owner's own tabs. Overriding HISTFILE here (the image's
+        // .zshrc assigns it only if unset) keeps the durable store to what a human typed, while ↑ still re-runs
+        // the command in this pane. Keyed by port, not session name: it is unique per launch, filename-safe
+        // without sanitizing, and container-local — this history is meant to die with the pane.
         const binDir = join(spec.cwd, "node_modules", ".bin");
         const portVars = Object.fromEntries((spec.portEnv ?? []).map((name) => [name, String(spec.port)]));
-        const env = { ...spec.env, ...portVars, PATH: `${binDir}:${process.env["PATH"] ?? ""}`, PORT: String(spec.port) };
+        const env = {
+            ...spec.env,
+            ...portVars,
+            PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
+            PORT: String(spec.port),
+            HISTFILE: `/tmp/intentic-panel-${spec.port}.zsh_history`,
+        };
         const envFlags = Object.entries(env).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
         // A lingering same-name session is a previous run's leftover — clear it before creating fresh.
         // `=` forces an exact target match (a bare `-t panel-x` would prefix-match `panel-x--api`).

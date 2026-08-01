@@ -26,6 +26,12 @@ if [ ! -f "$host_key" ]; then
 fi
 printf 'HostKey %s\n' "$host_key" > /etc/ssh/sshd_config.d/intentic-hostkey.conf
 
+# The terminal's zsh writes its history here (HISTFILE, image .zshrc) so autosuggestions survive a rebuild
+# along with everything else on this volume. zsh creates the FILE but not its directory, and the first shell
+# after a rebuild can open before anything else has touched /history — so the directory is made once, here,
+# rather than raced for by every shell.
+mkdir -p "$HISTORY_ROOT/shell"
+
 # /run/sshd may be a fresh tmpfs at runtime, so (re)create it here rather than relying on the build layer.
 mkdir -p /run/sshd
 /usr/sbin/sshd
