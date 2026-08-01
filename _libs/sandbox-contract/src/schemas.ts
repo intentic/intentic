@@ -3234,7 +3234,7 @@ export const ProbeResultSchema = z.object({
     // deciding whether to force a refresh deserves to know what they are asking for.
     tookMs: z.number().int().nonnegative(),
     facts: ProbeFactsSchema.optional(),
-    // Why it is unavailable, or how it failed — the tail of the tool's own output. Never invented here.
+    // Why it is unavailable, or how it failed — a bounded quote of the tool's own output. Never invented here.
     reason: z.string().optional(),
 });
 export type ProbeResult = z.infer<typeof ProbeResultSchema>;

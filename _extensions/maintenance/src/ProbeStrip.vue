@@ -26,6 +26,11 @@ const entries = computed(() =>
             probe,
             title: spec.title,
             measures: spec.measures,
+            /* What this probe has to say for itself: an age when it measured something, and otherwise the reason
+             * it did not. Truncated in the strip and given in full on hover — a failure carries the tool's own
+             * words, which are as long as the tool felt like being, and one of them wrapping across four lines
+             * would push every other measurement off the strip. */
+            note: probe.state === `ok` ? timeAgo(probe.ranAt) : (probe.reason ?? probe.state),
             // A tier-2 probe can run for minutes, so the reader gets told what they are asking for before they
             // press the button rather than after the sandbox goes quiet.
             cost: spec.tier === 2 ? ` · takes a few minutes` : ``,
@@ -40,16 +45,14 @@ const entries = computed(() =>
         <div v-for="entry in entries" :key="entry.probe.id" class="flex items-center gap-1.5">
             <Icon
                 :name="entry.probe.state === `ok` ? `check-circle` : entry.probe.state === `unavailable` ? `circle` : `exclamation-circle`"
-                class="text-2xs"
+                class="shrink-0 text-2xs"
                 :class="entry.probe.state === `failed` ? `text-warning` : `text-subtle`"
             />
-            <span class="text-2xs text-content">{{ entry.title }}</span>
-            <span class="text-2xs text-subtle">
-                {{ entry.probe.state === `ok` ? timeAgo(entry.probe.ranAt) : (entry.probe.reason ?? entry.probe.state) }}
-            </span>
+            <span class="shrink-0 text-2xs text-content">{{ entry.title }}</span>
+            <span class="max-w-[36ch] truncate text-2xs text-subtle" :title="entry.note">{{ entry.note }}</span>
             <button
                 type="button"
-                class="cursor-pointer text-subtle hover:text-content disabled:cursor-default disabled:opacity-40"
+                class="shrink-0 cursor-pointer text-subtle hover:text-content disabled:cursor-default disabled:opacity-40"
                 :disabled="busy"
                 :title="`Measure ${entry.measures} again now${entry.cost}`"
                 @click="emit(`refresh`, entry.probe.id)"

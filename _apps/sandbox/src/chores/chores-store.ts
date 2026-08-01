@@ -66,9 +66,22 @@ export const fileChoresStore = (probesPath: string, ledgerPath: string): ChoresS
     };
 };
 
-// A probe's result is stale once it is older than its spec's TTL. Split out because the runner and the on-demand
-// route both ask it, and "is this fresh enough" drifting between the two would mean a forced refresh that
-// silently does nothing.
-export const isStale = (result: ProbeResult | undefined, ttlMs: number, nowMs: number): boolean => result === undefined || nowMs - result.ranAt >= ttlMs;
+/* How long a result that is NOT a measurement holds its slot before the runner tries again. A `failed` or
+ * `unavailable` probe is a record of not having measured, and leasing it like a measurement is what pinned a
+ * tier-2 parse failure to the Maintenance panel for a week — long after its cause (a tool still installing, a
+ * network-less audit, output this build's parser has since learned to read) stopped being true.
+ *
+ * An hour is short enough that a cause fixed in the morning self-heals the same day, and still a real rate limit:
+ * the sweep ticks every 30 minutes and refuses to run at all while a turn is live, so the worst case on an idle
+ * machine is one retry an hour. The same lease for both — an `unavailable` probe stops after its `available`
+ * check, which is the cheapest thing the runner does, and re-checking it hourly is how a repo that just added
+ * knip gets measured today rather than next week. */
+const RETRY_MS = 3_600_000;
+
+// A probe's result is stale once it is older than its lease. Split out because the runner and the on-demand route
+// both ask it, and "is this fresh enough" drifting between the two would mean a forced refresh that silently does
+// nothing.
+export const isStale = (result: ProbeResult | undefined, ttlMs: number, nowMs: number): boolean =>
+    result === undefined || nowMs - result.ranAt >= (result.state === "ok" ? ttlMs : RETRY_MS);
 
 export const probeOf = (cache: ProbeCache, repo: string, id: ProbeId): ProbeResult | undefined => cache[repo]?.[id];

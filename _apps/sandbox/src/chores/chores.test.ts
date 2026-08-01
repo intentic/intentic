@@ -53,6 +53,18 @@ describe(`runProbe`, () => {
         expect(result.reason).toContain(`could not read the tool's output`);
     });
 
+    /* And it quotes the FRONT of what it got. These tools print JSON by the megabyte, so the last 400 characters
+     * are a fragment from the middle of an array — near-identical whatever went wrong — while the first line is
+     * the tool's own error message. Bounded either way, because the reason renders in a one-line strip. */
+    test(`an unrecognisable output is quoted from its start, and bounded`, async () => {
+        const dir = await scaffold({ "package.json": `{}` });
+        const command = `echo "ERR_KNIP_CONFIG unresolved entry"; echo '{"issues":[${`x`.repeat(500)}'`;
+        const result = await runProbe(fakeSpec({ available: `true`, command }), dir, 1000);
+        expect(result.reason).toContain(`ERR_KNIP_CONFIG unresolved entry`);
+        expect(result.reason).toMatch(/…$/);
+        expect(result.reason?.length).toBeLessThan(200);
+    });
+
     test(`a command that exits non-zero WITH usable output still succeeds — pnpm exits 1 when it has findings`, async () => {
         const dir = await scaffold({ "package.json": `{}` });
         const result = await runProbe(
@@ -126,6 +138,20 @@ describe(`the store`, () => {
         expect(isStale(undefined, 100, 1000)).toBe(true);
         expect(isStale(result({ id: `audit`, ranAt: 950 }), 100, 1000)).toBe(false);
         expect(isStale(result({ id: `audit`, ranAt: 900 }), 100, 1000)).toBe(true);
+    });
+
+    /* A result that is not a MEASUREMENT must not hold a measurement's lease. Tier 2's TTL is a week, and leasing
+     * a failed knip run for a week is how the panel kept reporting a parse error long after the parser that could
+     * not read that output had been fixed. */
+    test(`a probe that did not measure is retried on the hour, whatever its TTL`, () => {
+        const week = 7 * 86_400_000;
+        const hour = 3_600_000;
+        for (const state of [`failed`, `unavailable`] as const) {
+            expect(isStale(result({ id: `knip`, state, ranAt: 0 }), week, hour - 1)).toBe(false);
+            expect(isStale(result({ id: `knip`, state, ranAt: 0 }), week, hour)).toBe(true);
+        }
+        // While a real measurement still gets the whole week it was promised.
+        expect(isStale(result({ id: `knip`, ranAt: 0 }), week, hour)).toBe(false);
     });
 });
 
