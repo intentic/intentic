@@ -3206,8 +3206,38 @@ export type ChorePackage = z.infer<typeof ChorePackageSchema>;
 /* The cheap half of the evidence: what the daemon knows without starting anything. `hotspots` and `keyModules`
  * are the same rankings GET /workspace/health serves, capped tighter — a chore only ever asks whether a file has
  * ENTERED the top of the ranking, so a leaderboard is enough and a full report per repo per poll is not. */
+/* WHAT THIS REPOSITORY IS MADE OF — the facts that decide whether a chore is a QUESTION worth asking of it at
+ * all, as opposed to whether the answer happens to be yes.
+ *
+ * The distinction is the difference between a maintenance surface that reads as attentive and one that reads as
+ * generic. "Re-read the documentation against the code" in a repository with no documentation is not a chore
+ * that is currently clear — it is a chore that will never make sense here, and showing it teaches the owner that
+ * this list was written by someone who had not looked. Same for a Docker chore with no Dockerfile, or a CI chore
+ * with no pipeline.
+ *
+ * These are all paths, deliberately: presence of a FILE is checkable, cheap, and cannot be argued with, which is
+ * the same evidence-over-identity rule the extension activation facts follow. Every field is a list rather than a
+ * boolean where the paths themselves are worth showing — a chore that says "not applicable: no Dockerfile" is
+ * useful, and one that says "3 Dockerfiles: ./Dockerfile, _apps/web/Dockerfile, …" is more so. */
+export const ChoreShapeSchema = z.object({
+    // Architecture documents that actually exist (docs/architecture/**/doc.md), capped — the count is what
+    // matters, and the drift survey needs to know there is something to re-read.
+    docs: z.array(z.string()),
+    dockerfiles: z.array(z.string()),
+    // CI pipeline definitions: .github/workflows/*.yml, .gitlab-ci.yml, and the other single-file conventions.
+    ci: z.array(z.string()),
+    // Whether dependencies are resolved to a lockfile — what makes an audit mean anything.
+    lockfile: z.boolean(),
+    // A package.json at the repo root. The gate for every chore whose subject is the JavaScript dependency tree:
+    // a Rust or Go repository has no majors to be behind on and no engines field to be pinned by, and offering it
+    // those chores would be this surface guessing at what it is looking at.
+    packageManifest: z.boolean(),
+});
+export type ChoreShape = z.infer<typeof ChoreShapeSchema>;
+
 export const ChoreSignalsSchema = z.object({
     packages: z.array(ChorePackageSchema),
+    shape: ChoreShapeSchema,
     hotspots: z.array(WorkspaceHotspotSchema),
     keyModules: z.array(WorkspaceKeyModuleSchema),
     totals: z.object({ files: z.number(), symbols: z.number(), complexity: z.number(), hotspots: z.number() }),

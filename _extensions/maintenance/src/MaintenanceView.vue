@@ -41,12 +41,25 @@ const rowKey = (verdict: ChoreVerdict): string => `${verdict.repo}|${verdict.cho
 // a snooze that outlives the reason for it is indistinguishable from the chore being wrong.
 const SNOOZE_MS = 30 * 86_400_000;
 
-const shown = (verdicts: readonly ChoreVerdict[]): ChoreVerdict[] =>
-    filter.value === `all` ? [...verdicts] : verdicts.filter((verdict) => verdict.state === `due` || verdict.state === `snoozed`);
+/* A chore that does not APPLY here is not a row under any filter — there is no Dockerfile to slim, no pipeline to
+ * tighten, no documentation to re-read, and listing it as "clear" would claim we checked something that does not
+ * exist. It is not hidden either: the footer below names every one of them and why, so "why is there no Docker
+ * chore in this repo?" has an answer that is one glance away rather than a support question. */
+const shown = (verdicts: readonly ChoreVerdict[]): ChoreVerdict[] => {
+    const applicable = verdicts.filter((verdict) => verdict.state !== `not-applicable`);
+    return filter.value === `all` ? applicable : applicable.filter((verdict) => verdict.state === `due` || verdict.state === `snoozed`);
+};
 
 const groups = computed(() =>
     byRepo.value
-        .map((group) => ({ ...group, rows: shown(group.verdicts), due: group.verdicts.filter((verdict) => verdict.state === `due`).length }))
+        .map((group) => ({
+            ...group,
+            rows: shown(group.verdicts),
+            due: group.verdicts.filter((verdict) => verdict.state === `due`).length,
+            // Only under "Everything": someone scanning for what needs attention is not asking what was ruled out,
+            // and the footer would be noise on every repository in the list.
+            inapplicable: filter.value === `all` ? group.verdicts.filter((verdict) => verdict.state === `not-applicable`) : [],
+        }))
         // A repository with nothing to show under the current filter drops out entirely rather than rendering an
         // empty heading — under "Everything" that can never happen, so the empty state below stays meaningful.
         .filter((group) => group.rows.length > 0),
@@ -158,6 +171,14 @@ const onStart = (verdict: ChoreVerdict): void => {
                     @unsnooze="void attempt(`un-snooze that chore`, () => snooze(verdict, 0))"
                     @open="(conversationId) => api.chat.openSession(conversationId)"
                 />
+                <!-- What was considered and ruled out. Dim, last, and one line per chore: this is the answer to a
+                     question nobody asks until they ask it, and it must not compete with the rows above it. -->
+                <p v-if="group.inapplicable.length > 0" class="border-t border-line/60 px-4 py-2 text-2xs text-subtle">
+                    <span class="text-content">Not applicable here —</span>
+                    <span v-for="(verdict, index) in group.inapplicable" :key="verdict.chore.id">
+                        {{ index === 0 ? `` : `; ` }}{{ verdict.chore.title.toLowerCase() }} ({{ verdict.headline }})</span
+                    >.
+                </p>
             </RowGroup>
         </div>
     </Page>

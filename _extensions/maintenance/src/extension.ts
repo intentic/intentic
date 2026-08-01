@@ -30,9 +30,11 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             id: `maintenance`,
             label: `Maintenance`,
             surface: `rail`,
-            // `list-check` rather than a warning triangle or a cog: this is a standing list of upkeep, not an
-            // alarm and not settings. The two chores that are genuinely urgent say so with the badge's tone.
-            detect: (repos) => (repos.length === 0 ? [] : [{ key: `maintenance`, title: `Maintenance`, icon: `list-check` }]),
+            /* `cog` — machinery being kept running, which is what this is. Not `list-check`: that is Acceptance's,
+             * and two tiles sharing a glyph in a column read at a glance is worse than either being slightly less
+             * apt. Not a warning triangle either — the two chores that are genuinely urgent say so with the
+             * badge's tone, and an icon that shouts permanently says nothing. */
+            detect: (repos) => (repos.length === 0 ? [] : [{ key: `maintenance`, title: `Maintenance`, icon: `cog` }]),
             badge: maintenanceBadge,
             view: async () => (await import(`./MaintenanceView.vue`)).default,
         }),

@@ -6,8 +6,12 @@ import { probeSpec } from "./probes.js";
  * allowed to. Both the Maintenance panel and its rail badge run this function over the same report, so the number
  * on the tile and the reason in the panel are the same computation and cannot drift apart.
  *
- * Four states, and the distinctions between them are the whole design:
+ * Five states, and the distinctions between them are the whole design:
  *
+ *   not-applicable  this chore is not a QUESTION worth asking of this repository — there is no Dockerfile to
+ *                slim, no pipeline to tighten, no documentation to re-read. Dropped from the panel entirely
+ *                rather than shown as clear, because "clear" claims we checked, and there was nothing to check.
+ *                The reason survives as a footer, so "why is there no Docker chore here?" has an answer.
  *   unavailable  we have not measured this. knip is not a devDependency; there is no lockfile to audit. Rendered
  *                greyed, never badged, and never collapsed into `clear` — a maintenance surface reporting a green
  *                repository it has never actually measured is worse than one that says nothing.
@@ -16,16 +20,21 @@ import { probeSpec } from "./probes.js";
  *   snoozed      the owner said "not now". Still listed, still showing its evidence, silent until it lapses.
  *   due          there is something to do.
  *
+ * The first three are all ways of saying "no", and keeping them apart is what makes the surface trustworthy: they
+ * mean we cannot ask, we did not measure, and we measured and found nothing — three different claims, and only
+ * the last one is reassurance.
+ *
  * And one flag that is not a state: `settled`. A due chore whose evidence is UNCHANGED since a turn was already
  * spent on it stays due — because it is — but must never light the rail again. This is what stops the surface
  * repeating itself while a fix sits in review, and it is why the ledger stores a digest rather than a timestamp:
  * "ran 3 days ago" cannot tell you whether it ran against THIS.
  *
- * Nothing here can make a chore invisible. Snoozing, settling and opting out all change whether the rail SPEAKS;
- * the panel shows every chore in every repo, always, with the evidence that decided it. A maintenance surface you
- * can hide problems in is a maintenance surface nobody trusts. */
+ * Nothing here can hide a problem. Snoozing and settling change whether the rail SPEAKS; the panel still shows
+ * the chore, its evidence and its state. The one thing that removes a row entirely is `not-applicable`, and that
+ * is not hiding — it is the absence of a subject, recorded in the panel's footer with its reason. A maintenance
+ * surface you can quietly bury findings in is a maintenance surface nobody trusts. */
 
-export type ChoreState = "due" | "clear" | "snoozed" | "unavailable";
+export type ChoreState = "due" | "clear" | "snoozed" | "unavailable" | "not-applicable";
 
 export interface ChoreVerdict {
     readonly chore: Chore;
@@ -69,6 +78,15 @@ const unmeasuredDetail = (needs: readonly ProbeId[], probes: ReadonlyMap<ProbeId
 
 export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLedgerEntry | undefined): ChoreVerdict => {
     const base = { chore, repo: context.repo, lastRun: ledger, settled: false, prompt: undefined } as const;
+
+    /* APPLICABILITY FIRST, before anything is measured or any evidence is read. A chore that does not apply is
+     * not "clear" and not "unmeasured" — the question does not arise here, and every subsequent branch of this
+     * function would be answering it anyway. The reason is carried as the headline, because the panel's footer
+     * is the only place it will ever be read. */
+    const inapplicable = chore.applies?.(context.signals);
+    if (inapplicable !== undefined) {
+        return { ...base, state: `not-applicable`, severity: `info`, headline: inapplicable, detail: [], digest: `` };
+    }
 
     const unmeasured = unmeasuredDetail(chore.needs, context.probes);
     if (unmeasured.length > 0) {

@@ -64,8 +64,16 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
         <div v-if="expanded" class="border-t border-line/60 bg-canvas px-4 py-4 sm:px-6">
             <p class="max-w-[70ch] text-xs text-subtle">{{ verdict.chore.description }}</p>
 
+            <!-- THE RULE, above the evidence and phrased as what WOULD make this due, so it reads the same whether
+                 the chore is due or clear. Without it a row is asking to be taken on trust; with it, the reader
+                 can disagree with the rule rather than only with the number — which is the disagreement worth
+                 having, and the one that improves the book. -->
+            <p class="mt-3 max-w-[70ch] text-2xs text-subtle">
+                <span class="text-content">{{ verdict.state === `due` ? `Shown because` : `Shows when` }}:</span> {{ verdict.chore.criterion }}
+            </p>
+
             <!-- The evidence, verbatim from the measurement. One claim per line and never summarised further:
-                 this is the list the reader checks the headline against. -->
+                 this is the list the reader checks the rule above against. -->
             <ul v-if="verdict.detail.length > 0" class="mt-3 flex flex-col gap-1">
                 <li v-for="line in verdict.detail" :key="line" class="font-mono text-2xs text-content">{{ line }}</li>
             </ul>

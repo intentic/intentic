@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { ChorePackage, ChoreSignals } from "@intentic/sandbox-contract";
+import type { ChorePackage, ChoreShape, ChoreSignals } from "@intentic/sandbox-contract";
 import { readWorkspaceManifests } from "../workspace/package-graph.js";
 import type { Services } from "../composition.js";
 
@@ -59,10 +59,89 @@ export const packageSignals = (repoDir: string): ChorePackage[] =>
         return engines === undefined ? entry : Object.assign(entry, { engines });
     });
 
+// How deep the Dockerfile and document sweeps look, and how many paths they carry. A bound on the walk, not on
+// what exists: the question every applicability gate asks is "is there ANY", and a repo with forty Dockerfiles
+// answers that as clearly as one with three — while a route the rail badge polls must not walk a whole tree.
+const SHAPE_DEPTH = 3;
+const SHAPE_LIMIT = 20;
+
+// CI pipeline definitions, by the conventions that are a single known path. `.github/workflows` is a directory
+// (any file in it counts); the rest are files at the repo root.
+const CI_FILES = [".gitlab-ci.yml", ".circleci/config.yml", "azure-pipelines.yml", "Jenkinsfile", ".drone.yml", "bitbucket-pipelines.yml"];
+const WORKFLOWS_DIR = join(".github", "workflows");
+
+const listDir = (dir: string): string[] => {
+    try {
+        return readdirSync(dir, { withFileTypes: true })
+            .filter((entry) => entry.isFile())
+            .map((entry) => entry.name);
+    } catch {
+        return [];
+    }
+};
+
+/* Repo-relative paths matching a predicate, breadth-first to a fixed depth. Deliberately not a glob library and
+ * deliberately not recursive-without-bound: this runs per repo on every GET /chores, and the honest failure mode
+ * of a bounded walk (a Dockerfile four directories deep goes unseen, so its chore stays hidden) is far better
+ * than an unbounded one (a poll that walks node_modules). Ignored directories are skipped by name, the same
+ * shortlist the workspace tree walk uses. */
+const IGNORED = new Set(["node_modules", ".git", "dist", "build", ".cache", "coverage", ".venv", "target", "vendor"]);
+
+const findFiles = (root: string, matches: (name: string) => boolean): string[] => {
+    const found: string[] = [];
+    let frontier = [""];
+    for (let depth = 0; depth <= SHAPE_DEPTH && frontier.length > 0 && found.length < SHAPE_LIMIT; depth++) {
+        const next: string[] = [];
+        for (const relative of frontier) {
+            let entries;
+            try {
+                entries = readdirSync(join(root, relative), { withFileTypes: true });
+            } catch {
+                continue;
+            }
+            for (const entry of entries) {
+                const path = relative === "" ? entry.name : `${relative}/${entry.name}`;
+                if (entry.isDirectory() && !IGNORED.has(entry.name) && !entry.name.startsWith(".")) {
+                    next.push(path);
+                } else if (entry.isFile() && matches(entry.name) && found.length < SHAPE_LIMIT) {
+                    found.push(path);
+                }
+            }
+        }
+        frontier = next;
+    }
+    return found;
+};
+
+// A Dockerfile by either convention — `Dockerfile`, `Dockerfile.prod`, `web.Dockerfile`. Compose files are
+// deliberately not counted: they orchestrate images, they are not one to make smaller.
+const isDockerfile = (name: string): boolean => name === "Dockerfile" || name.startsWith("Dockerfile.") || name.endsWith(".Dockerfile");
+
+/* What this repository is MADE OF, for the applicability gates. Every check here is a stat or a shallow readdir,
+ * which is what lets it sit on a route the rail badge polls — anything that needed a subprocess would be a probe.
+ *
+ * `docs` looks for the architecture documents themselves rather than for the directory: an empty
+ * `docs/architecture/` is a directory somebody made and never filled, and gating the drift survey on it would put
+ * the chore back exactly where a repo with nothing to re-read cannot use it. */
+export const choreShape = (repoDir: string): ChoreShape => ({
+    docs: findFiles(join(repoDir, "docs", "architecture"), (name) => name.endsWith(".md")),
+    dockerfiles: findFiles(repoDir, isDockerfile),
+    ci: [
+        ...listDir(join(repoDir, WORKFLOWS_DIR))
+            .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
+            .map((name) => `${WORKFLOWS_DIR}/${name}`),
+        ...CI_FILES.filter((file) => existsSync(join(repoDir, file))),
+    ],
+    lockfile: ["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lockb"].some((file) => existsSync(join(repoDir, file))),
+    packageManifest: existsSync(join(repoDir, "package.json")),
+});
+
 export const choreSignals = async (services: Services, repo: string): Promise<ChoreSignals> => {
     const health = await services.iq.health({ scope: { repo }, limit: RANKING_LIMIT });
+    const repoDir = join(services.workspace.root, repo);
     return {
-        packages: packageSignals(join(services.workspace.root, repo)),
+        packages: packageSignals(repoDir),
+        shape: choreShape(repoDir),
         hotspots: health.hotspots,
         keyModules: health.modules,
         totals: health.totals,

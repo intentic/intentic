@@ -70,6 +70,31 @@ export interface Chore {
     readonly icon: string;
     // The one-line standing description, shown whether or not the chore is currently due.
     readonly description: string;
+    /* THE RULE, in words — what has to be true for this chore to be due, stated so a reader can check it against
+     * the evidence below it and disagree.
+     *
+     * This is not decoration. A row that says "4 majors waiting" and nothing else is asking to be taken on
+     * trust; the same row saying "shown because: a dependency is a major version behind" is a claim someone can
+     * argue with, and arguing with it is how the book gets better. It rides into the prompt too, so the agent is
+     * told the rule it was woken by rather than left to infer it from the numbers.
+     *
+     * Kept as prose next to the code that implements it, which means it can drift from it — the tests below
+     * cannot check English. The rule for writing one: say the THRESHOLD, not the subject. "Duplication is high"
+     * is a topic; "more than 5% of the tree is duplicated" is a criterion. */
+    readonly criterion: string;
+    /* WHETHER THIS IS A QUESTION WORTH ASKING OF THIS REPOSITORY AT ALL — returns undefined when it is, and a
+     * plain-language reason when it is not ("this repository ships no Dockerfile").
+     *
+     * Distinct from `assess`, and the distinction is the whole point: `assess` asks whether the answer is yes,
+     * this asks whether the question makes sense. "Re-read the documentation against the code" in a repository
+     * with no documentation is not a chore that is currently clear — it is one that will never apply here, and
+     * showing it as clear says we checked something we cannot check. A chore that does not apply is dropped from
+     * the panel entirely; only a footer records that it was considered.
+     *
+     * Reads `signals` rather than probes on purpose: applicability is about what the repository IS, which is a
+     * fact the daemon holds without measuring anything. If a gate needed a probe it would be describing the
+     * answer rather than the question. */
+    readonly applies?: (signals: ChoreSignals) => string | undefined;
     // Whether the turn is allowed to CHANGE anything. Not a hint — it selects the invariants block, and a
     // report-stance chore is told in words that editing would be a surprise.
     readonly stance: ChoreStance;
@@ -157,6 +182,8 @@ const security: Chore = {
     title: `Patch security advisories`,
     icon: `shield`,
     description: `Published advisories against this dependency tree, and the ones whose fix is a version bump.`,
+    criterion: `pnpm audit reports an advisory of high or critical severity against the resolved tree.`,
+    applies: (signals) => (signals.shape.lockfile ? undefined : `there is no lockfile here, so nothing resolves to a tree that could be audited`),
     stance: `act`,
     needs: [`audit`],
     cadenceMs: 0,
@@ -218,6 +245,8 @@ const dependencies: Chore = {
     title: `Update dependencies`,
     icon: `arrow-circle-up`,
     description: `How far behind the registry this tree has drifted, and which majors are waiting.`,
+    criterion: `A dependency is a major version behind, or more than 20 are behind by any amount.`,
+    applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository has no package.json, so there is no npm dependency tree to be behind`),
     stance: `act`,
     needs: [`outdated`],
     cadenceMs: 30 * DAY_MS,
@@ -265,6 +294,8 @@ const deadCode: Chore = {
     title: `Clear out dead code`,
     icon: `trash`,
     description: `Files, exports and dependencies nothing in this repository references any more.`,
+    criterion: `knip reports at least one unreferenced file, export or dependency.`,
+    applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository is not a Node project, and knip only reads those`),
     stance: `act`,
     needs: [`knip`],
     cadenceMs: 14 * DAY_MS,
@@ -327,6 +358,7 @@ const duplication: Chore = {
     title: `Find duplication worth collapsing`,
     icon: `clone`,
     description: `Copy-paste that has grown past a fifth of a percent of the tree. Reports only — extracting is a design call.`,
+    criterion: `jscpd reports more than 5% of the scanned tree duplicated.`,
     stance: `report`,
     needs: [`jscpd`],
     cadenceMs: 30 * DAY_MS,
@@ -377,6 +409,8 @@ const documentation: Chore = {
     title: `Document what nothing explains`,
     icon: `file-edit`,
     description: `Packages in this repository with no architecture document — new ones first.`,
+    criterion: `A workspace package has no docs/architecture document.`,
+    applies: (signals) => (signals.packages.length > 0 ? undefined : `this repository is not a workspace, so it has no packages to document one by one`),
     stance: `act`,
     needs: [],
     cadenceMs: 90 * DAY_MS,
@@ -430,6 +464,7 @@ const complexity: Chore = {
     title: `Simplify what everything waits on`,
     icon: `wave-pulse`,
     description: `Files that both churn and carry the repository — where edits are slow and ripple outward.`,
+    criterion: `A file in the hotspot ranking is also a key module, or its branching is three times the median of that ranking.`,
     stance: `act`,
     needs: [],
     cadenceMs: 30 * DAY_MS,
@@ -489,6 +524,8 @@ const runtime: Chore = {
     title: `Move off an end-of-life runtime`,
     icon: `bolt`,
     description: `Whether the Node this sandbox runs still receives security patches.`,
+    criterion: `The Node release this sandbox runs is past its end-of-life date, or within 90 days of it.`,
+    applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository is not a Node project, so the sandbox's runtime is not its concern`),
     stance: `act`,
     needs: [],
     cadenceMs: 0,
@@ -549,6 +586,8 @@ const libraries: Chore = {
     title: `Settle on one library per job`,
     icon: `box`,
     description: `Two dependencies solving the same problem — both shipped, both maintained, one picked at random.`,
+    criterion: `Two or more installed dependencies do the same job.`,
+    applies: (signals) => (signals.packages.length > 0 ? undefined : `this repository is not a workspace, so there are no package manifests to compare`),
     stance: `report`,
     needs: [],
     cadenceMs: 90 * DAY_MS,
@@ -579,27 +618,45 @@ const libraries: Chore = {
     done: `Done when every overlapping pair has a recommendation with a call-site count behind it, or a reason the overlap is fine.`,
 };
 
-/* THE SURVEYS. Three chores with no measurement at all, and they are here because the absence of a measurement is
- * not the absence of value — these are the reviews a codebase silently rots without, and none of them can be
- * detected by a tool. Their trigger is the calendar, and the ledger is what makes that trigger honest: a survey is
- * due because it has not been done in a quarter, which is a claim the panel can show and the reader can check.
+/* THE SURVEYS. Chores with no measurement at all, and they are here because the absence of a measurement is not
+ * the absence of value — these are the reviews a codebase silently rots without, and none of them can be detected
+ * by a tool. Their trigger is the calendar, and the ledger is what makes that trigger honest: a survey is due
+ * because it has not been done in a quarter, which is a claim the panel can show and the reader can check.
  *
- * All three are report-stance. A survey that starts editing is the most surprising thing this surface could do,
- * and none of them has a specific enough finding to justify a diff. */
-const survey = (
-    id: string,
-    title: string,
-    icon: string,
-    description: string,
-    diagnosis: string,
-    goal: string,
-    done: string,
-    cadenceDays: number,
-): Chore => ({
+ * All of them are report-stance. A survey that starts editing is the most surprising thing this surface could do,
+ * and none of them has a specific enough finding to justify a diff.
+ *
+ * A SURVEY NEEDS ITS `applies` GATE MORE THAN A MEASURED CHORE DOES, not less, and this is the trap the shape of
+ * the thing sets. A measured chore is gated by its own evidence for free: no undocumented packages, no finding,
+ * no row. A survey has no evidence to be absent — "90 days have passed" is true of every repository in the
+ * world — so without a gate it fires everywhere, forever, including in the repositories where its subject does
+ * not exist. "Re-read the documentation against the code" in a repository with no documentation is the exact
+ * failure, and it is not a hypothetical: it is what this helper did before the gate existed.
+ *
+ * An options object rather than the eight positional arguments this grew into: `id, title, icon, description,
+ * diagnosis, goal, done, 90` reads as nothing at all at the call site, and the gate would have made it nine. */
+interface SurveySpec {
+    readonly id: string;
+    readonly title: string;
+    readonly icon: string;
+    readonly description: string;
+    readonly diagnosis: string;
+    readonly goal: string;
+    readonly done: string;
+    readonly cadenceDays: number;
+    // What must exist in the repository for this review to have a subject. Required, not optional, precisely
+    // because forgetting it is the failure mode above — a survey that genuinely applies everywhere still has to
+    // say so out loud, with `() => undefined`.
+    readonly applies: (signals: ChoreSignals) => string | undefined;
+}
+
+const survey = ({ id, title, icon, description, diagnosis, goal, done, cadenceDays, applies }: SurveySpec): Chore => ({
     id,
     title,
     icon,
     description,
+    criterion: `${cadenceDays} days have passed since this review was last run.`,
+    applies,
     stance: `report`,
     needs: [],
     cadenceMs: cadenceDays * DAY_MS,
@@ -618,46 +675,105 @@ const survey = (
     done,
 });
 
-const patterns = survey(
-    `standardize-patterns`,
-    `Standardize the cross-cutting patterns`,
-    `sitemap`,
-    `Error handling, validation, logging, configuration, retries, pagination — the things every file does slightly differently.`,
-    `Cross-cutting concerns drift one file at a time, and the cost only shows up when someone has to work across several of them.`,
-    `Pick the cross-cutting concerns this repository actually has — error handling, input validation, logging, configuration, retries, ` +
+// Below this a repository is too small for cross-cutting patterns to have diverged from each other: there is one
+// way things are done because there is barely more than one place doing them. Counted in INDEXED files, so a
+// scaffold that is mostly config and lockfiles does not pass it by accident.
+const PATTERNS_FLOOR = 25;
+
+const patterns = survey({
+    id: `standardize-patterns`,
+    title: `Standardize the cross-cutting patterns`,
+    icon: `sitemap`,
+    description: `Error handling, validation, logging, configuration, retries, pagination — the things every file does slightly differently.`,
+    diagnosis: `Cross-cutting concerns drift one file at a time, and the cost only shows up when someone has to work across several of them.`,
+    goal:
+        `Pick the cross-cutting concerns this repository actually has — error handling, input validation, logging, configuration, retries, ` +
         `pagination, serialization — and for each, survey how it is done. Name the dominant pattern, the outliers, and which of the ` +
         `outliers are deliberate. Recommend ONE convention per concern with a file to point at as the reference implementation, and ` +
         `estimate the size of the conversion. Do not convert anything.`,
-    `Done when each concern has a named convention, a reference file, and a count of the sites that diverge from it.`,
-    90,
-);
+    done: `Done when each concern has a named convention, a reference file, and a count of the sites that diverge from it.`,
+    cadenceDays: 90,
+    applies: (signals) =>
+        signals.totals.files >= PATTERNS_FLOOR
+            ? undefined
+            : `this repository has ${signals.totals.files} indexed files — too few for cross-cutting patterns to have diverged`,
+});
 
-const deprecated = survey(
-    `deprecated-apis`,
-    `Audit deprecated APIs`,
-    `exclamation-triangle`,
-    `Language, runtime and framework APIs this code still uses that their own maintainers have moved on from.`,
-    `A deprecated API works right up until the upgrade that removes it, and then it is an emergency during someone else's migration.`,
-    `Survey what this repository uses that its own dependencies have deprecated: read the framework and runtime versions in use, check ` +
+const deprecated = survey({
+    id: `deprecated-apis`,
+    title: `Audit deprecated APIs`,
+    icon: `exclamation-triangle`,
+    description: `Language, runtime and framework APIs this code still uses that their own maintainers have moved on from.`,
+    diagnosis: `A deprecated API works right up until the upgrade that removes it, and then it is an emergency during someone else's migration.`,
+    goal:
+        `Survey what this repository uses that its own dependencies have deprecated: read the framework and runtime versions in use, check ` +
         `their deprecation notices, and search for the call sites. Include the repository's OWN deprecations — anything its code marks ` +
         `as deprecated and still calls. Rank by when each one actually breaks, not by how many call sites it has, and name the ` +
         `replacement for each. Change nothing.`,
-    `Done when every deprecation has call sites cited, a replacement named, and the release it is expected to break in.`,
-    90,
-);
+    done: `Done when every deprecation has call sites cited, a replacement named, and the release it is expected to break in.`,
+    cadenceDays: 90,
+    applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository declares no dependencies whose deprecations could be read`),
+});
 
-const documentationDrift = survey(
-    `documentation-drift`,
-    `Re-read the documentation against the code`,
-    `file`,
-    `Whether what the documents claim is still what the code does — the drift no tool can measure.`,
-    `Documentation is trusted in proportion to how recently it was true, and a document that is quietly wrong is worse than a missing one.`,
-    `Read this repository's architecture documents against the code they describe. Report every claim that is no longer true, citing the ` +
+/* THE CHORE THAT NAMED THE PROBLEM. Gated on documents actually EXISTING, which is the whole reason `applies`
+ * exists: without it this survey fires on its cadence in every repository, including the ones with nothing to
+ * re-read, and the first thing an owner of a fresh workspace sees is an offer to re-read documentation they have
+ * never written. That is not a chore being wrong about a threshold — it is the surface admitting it never looked.
+ *
+ * Note which fact it gates on: the DOCUMENTS, not the directory. An empty `docs/architecture/` is a directory
+ * somebody made and never filled, and a gate on the directory would put the chore back exactly where it started. */
+const documentationDrift = survey({
+    id: `documentation-drift`,
+    title: `Re-read the documentation against the code`,
+    icon: `file`,
+    description: `Whether what the documents claim is still what the code does — the drift no tool can measure.`,
+    diagnosis: `Documentation is trusted in proportion to how recently it was true, and a document that is quietly wrong is worse than a missing one.`,
+    goal:
+        `Read this repository's architecture documents against the code they describe. Report every claim that is no longer true, citing the ` +
         `document line and the file that contradicts it. Prioritise the claims someone would ACT on — where a subsystem lives, what owns ` +
         `what, which file to change — over prose that has merely aged. Do not rewrite the documents; produce the list of what is wrong.`,
-    `Done when every architecture document has been read and every false claim is listed with both sides cited.`,
-    90,
-);
+    done: `Done when every architecture document has been read and every false claim is listed with both sides cited.`,
+    cadenceDays: 90,
+    applies: (signals) => (signals.shape.docs.length > 0 ? undefined : `this repository has no architecture documents to re-read`),
+});
+
+/* THE TWO CHORES THAT ONLY EXIST WHERE THEIR SUBJECT DOES. Both are surveys — nothing here can measure whether a
+ * pipeline caches well or an image is bigger than it needs to be without running them, and running someone's CI
+ * to find out would be a strange thing for a maintenance panel to do — so both are gated on the artefact itself.
+ * Together they are the argument for `applies` being first-class rather than folded into `assess`: neither has
+ * any evidence to be absent, and in a repository with no pipeline and no image both would otherwise sit in the
+ * list forever, permanently due, describing work that cannot be done. */
+const pipelines = survey({
+    id: `ci-hygiene`,
+    title: `Tighten the CI pipeline`,
+    icon: `bolt`,
+    description: `What the pipeline re-does every run: uncached installs, rebuilt layers, jobs that could run in parallel.`,
+    diagnosis: `A slow pipeline is paid on every push by everyone, and it degrades one uncached step at a time without anyone deciding to.`,
+    goal:
+        `Read this repository's pipeline definitions and report what it pays for repeatedly: dependency installs with no cache key, ` +
+        `build outputs recomputed between jobs, steps that are serial for no reason, and matrix legs that duplicate each other's work. ` +
+        `For each, name the file and step, say roughly what it costs per run, and give the change that would fix it. Where a step is slow ` +
+        `because it genuinely has to be, say so — a pipeline that is honestly expensive is not a finding.`,
+    done: `Done when every finding names a file, a step, and a concrete change, and anything deliberately slow is called out as such.`,
+    cadenceDays: 90,
+    applies: (signals) => (signals.shape.ci.length > 0 ? undefined : `this repository defines no CI pipeline`),
+});
+
+const images = survey({
+    id: `docker-image`,
+    title: `Slim the container image`,
+    icon: `box`,
+    description: `Layer order, build context and final size — what ships in the image that did not need to.`,
+    diagnosis: `Image size is paid on every pull and every cold start, and layer order decides how much of a build is cache hits.`,
+    goal:
+        `Read this repository's Dockerfiles and report what makes the image larger or the build slower than it needs to be: layers ordered ` +
+        `so that a source edit invalidates the dependency install, build-time toolchains left in the final stage, a build context that ships ` +
+        `the whole repository, and package caches never cleaned. For each, cite the file and line, and name the change. Do not rewrite the ` +
+        `Dockerfiles — an image that fails to build is a much worse problem than one that is larger than ideal.`,
+    done: `Done when every finding cites a Dockerfile line and names the change, with the ones that would need a base-image swap called out separately.`,
+    cadenceDays: 90,
+    applies: (signals) => (signals.shape.dockerfiles.length > 0 ? undefined : `this repository ships no Dockerfile`),
+});
 
 /* THE BOOK'S ORDER, which is the panel's reading order and therefore a product decision rather than whatever
  * order these were written in. It narrows from "this is a risk you are carrying right now" to "this is worth
@@ -665,7 +781,10 @@ const documentationDrift = survey(
  *   carrying   security, runtime — someone else decides when these become urgent
  *   accruing   dependencies, dead code, complexity — cheap now, expensive later, and always getting later
  *   drifting   documentation, duplication, libraries — the shape of the thing is diverging from the idea of it
- *   surveying  the three periodic reads, which have no urgency by construction */
+ *   surveying  the periodic reads, which have no urgency by construction
+ *
+ * Ordering is by KIND, not by whether a given repository will see them: a chore that does not apply is dropped
+ * from that repository's list entirely (verdict.ts), so the reading order never has holes in it. */
 export const CHORES: readonly Chore[] = [
     security,
     runtime,
@@ -678,6 +797,8 @@ export const CHORES: readonly Chore[] = [
     patterns,
     deprecated,
     documentationDrift,
+    pipelines,
+    images,
 ];
 
 export const choreById = (id: string): Chore | undefined => CHORES.find((chore) => chore.id === id);
@@ -705,7 +826,10 @@ export const choreAutomationPrompt = (chore: Chore): string | undefined =>
 export const chorePrompt = (chore: Chore, finding: ChoreFinding, repo: string): string =>
     composeAsk({
         subject: `${chore.title} in ${repoLabel(repo)}.`,
-        why: `${finding.why} ${TRIAGE_NOTE}`,
+        // The RULE before the numbers. An agent told only "4 majors waiting" has to infer why anyone cares; told
+        // the criterion it was woken by, it can also tell us the criterion was wrong — which is the single most
+        // useful thing a chore turn can report back, and the only way the book gets better.
+        why: `${finding.why} You were woken because: ${chore.criterion} ${TRIAGE_NOTE}`,
         diagnosis: chore.diagnosis,
         goal: chore.goal,
         invariants: chore.stance === `act` ? CHORE_INVARIANTS : REPORT_INVARIANTS,

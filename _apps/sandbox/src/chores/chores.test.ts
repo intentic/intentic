@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { probeSpec } from "@intentic/sandbox-contract/chores";
 import type { ChoreLedgerEntry, ProbeResult } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, test } from "vitest";
-import { packageSignals } from "./chore-signals.js";
+import { choreShape, packageSignals } from "./chore-signals.js";
 import { fileChoresStore, isStale } from "./chores-store.js";
 import { runProbe } from "./probe-runner.js";
 
@@ -149,5 +149,55 @@ describe(`package signals`, () => {
     test(`a repo that is not a workspace reports no packages at all`, async () => {
         const dir = await scaffold({ "package.json": JSON.stringify({ name: `plain` }) });
         expect(packageSignals(dir)).toEqual([]);
+    });
+});
+
+/* WHAT THE REPOSITORY IS MADE OF — the facts the applicability gates read. Presence of a FILE, deliberately:
+ * checkable, cheap, and not arguable, which is the same evidence-over-identity rule extension activation follows.
+ * Every case below decides whether a whole chore appears, so a false negative here is a chore that silently never
+ * shows up and a false positive is one that can never be acted on. */
+describe(`repo shape`, () => {
+    test(`finds documents, Dockerfiles by either convention, workflows and the lockfile`, async () => {
+        const dir = await scaffold({
+            "package.json": `{}`,
+            "pnpm-lock.yaml": ``,
+            "Dockerfile": `FROM node`,
+            "_apps/web/web.Dockerfile": `FROM nginx`,
+            ".github/workflows/ci.yml": `on: push`,
+            ".github/workflows/release.yaml": `on: tag`,
+            "docs/architecture/repo.md": `# repo`,
+            "docs/architecture/_libs/one/doc.md": `# one`,
+        });
+        const found = choreShape(dir);
+        expect(found.lockfile).toBe(true);
+        expect(found.packageManifest).toBe(true);
+        expect(found.dockerfiles.toSorted()).toEqual([`Dockerfile`, `_apps/web/web.Dockerfile`]);
+        expect(found.ci.toSorted()).toEqual([`.github/workflows/ci.yml`, `.github/workflows/release.yaml`]);
+        expect(found.docs).toHaveLength(2);
+    });
+
+    test(`an empty repository rules everything out rather than guessing`, async () => {
+        const found = choreShape(await scaffold({ "README.md": `# hi` }));
+        expect(found).toEqual({ docs: [], dockerfiles: [], ci: [], lockfile: false, packageManifest: false });
+    });
+
+    /* An empty `docs/architecture/` is a directory somebody made and never filled. Gating the drift survey on the
+     * DIRECTORY would put the chore back exactly where a repository with nothing to re-read cannot use it, so the
+     * gate reads the documents themselves. */
+    test(`an empty docs directory is not documentation`, async () => {
+        const dir = await scaffold({ "docs/architecture/.gitkeep": `` });
+        expect(choreShape(dir).docs).toEqual([]);
+    });
+
+    test(`the single-file CI conventions count too`, async () => {
+        expect(choreShape(await scaffold({ ".gitlab-ci.yml": `stages: []` })).ci).toEqual([`.gitlab-ci.yml`]);
+        expect(choreShape(await scaffold({ Jenkinsfile: `pipeline {}` })).ci).toEqual([`Jenkinsfile`]);
+    });
+
+    // The walk is bounded so a poll cannot wander into a dependency tree; node_modules is the one that would hurt
+    // most, since half of npm ships a Dockerfile.
+    test(`the sweep does not descend into ignored directories`, async () => {
+        const dir = await scaffold({ "node_modules/some-dep/Dockerfile": `FROM node`, "dist/Dockerfile": `FROM node` });
+        expect(choreShape(dir).dockerfiles).toEqual([]);
     });
 });

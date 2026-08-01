@@ -1,6 +1,6 @@
-import type { ChoreLedgerEntry, ChorePackage, ChoresReport, ChoreSignals, ProbeResult } from "../schemas.js";
+import type { ChoreLedgerEntry, ChorePackage, ChoresReport, ChoreShape, ChoreSignals, ProbeResult } from "../schemas.js";
 import { describe, expect, test } from "vitest";
-import { choreById } from "./chores.js";
+import { choreById, CHORES } from "./chores.js";
 import { assessReport, ledgerKey, unseenVerdicts } from "./verdict.js";
 
 /* The state machine, tested at the distinctions it exists to draw. Every case below is one that a simpler design
@@ -20,11 +20,23 @@ const pkg = (over: Partial<ChorePackage> = {}): ChorePackage => ({
     ...over,
 });
 
+// A repository that is a Node workspace with documents, a pipeline and an image — so every chore APPLIES by
+// default and each applicability test can turn off exactly the one fact it is about.
+const shape = (over: Partial<ChoreShape> = {}): ChoreShape => ({
+    docs: [`docs/architecture/repo.md`],
+    dockerfiles: [`Dockerfile`],
+    ci: [`.github/workflows/ci.yml`],
+    lockfile: true,
+    packageManifest: true,
+    ...over,
+});
+
 const signals = (over: Partial<ChoreSignals> = {}): ChoreSignals => ({
     packages: [pkg()],
+    shape: shape(),
     hotspots: [],
     keyModules: [],
-    totals: { files: 10, symbols: 100, complexity: 90, hotspots: 0 },
+    totals: { files: 100, symbols: 1000, complexity: 900, hotspots: 0 },
     indexed: true,
     ...over,
 });
@@ -297,5 +309,86 @@ describe(`the prompts`, () => {
         expect(promptFor(`documentation-refresh`)).toContain(`_libs/thing`);
         expect(promptFor(`library-overlap`)).toContain(`zod`);
         expect(promptFor(`runtime-eol`)).toContain(`v18.20.0`);
+    });
+});
+
+/* APPLICABILITY — whether the chore is a QUESTION worth asking of this repository, as opposed to whether the
+ * answer is yes. Every case here is one where the previous design showed a row that could never be acted on:
+ * an offer to re-read documentation that was never written, to slim an image that does not exist, to tighten a
+ * pipeline nobody has. Each of those teaches the reader that this list was not written by someone who looked. */
+describe(`what does not apply here`, () => {
+    const withShape = (over: Partial<ChoreShape>): ChoresReport =>
+        report({ repos: [{ repo: `app`, probes: [], signals: signals({ shape: shape(over) }) }] });
+
+    test(`a repository with no documents is not asked to re-read its documentation`, () => {
+        const verdict = verdictFor(withShape({ docs: [] }), `documentation-drift`);
+        expect(verdict.state).toBe(`not-applicable`);
+        expect(verdict.headline).toBe(`this repository has no architecture documents to re-read`);
+        expect(verdict.prompt).toBeUndefined();
+    });
+
+    test(`a repository with no Dockerfile is not asked to slim its image`, () => {
+        expect(verdictFor(withShape({ dockerfiles: [] }), `docker-image`).state).toBe(`not-applicable`);
+    });
+
+    test(`a repository with no pipeline is not asked to tighten one`, () => {
+        expect(verdictFor(withShape({ ci: [] }), `ci-hygiene`).state).toBe(`not-applicable`);
+    });
+
+    test(`a repository that is not a Node project is not offered the npm-shaped chores`, () => {
+        const foreign = withShape({ packageManifest: false, lockfile: false });
+        for (const chore of [`dependencies-outdated`, `runtime-eol`, `dead-code`, `security-advisories`, `deprecated-apis`]) {
+            expect(verdictFor(foreign, chore).state, chore).toBe(`not-applicable`);
+        }
+    });
+
+    test(`a repository that is not a workspace is not asked about per-package documents or library overlap`, () => {
+        const single = report({ repos: [{ repo: `app`, probes: [], signals: signals({ packages: [] }) }] });
+        expect(verdictFor(single, `documentation-refresh`).state).toBe(`not-applicable`);
+        expect(verdictFor(single, `library-overlap`).state).toBe(`not-applicable`);
+    });
+
+    // A survey has no evidence to be absent — "90 days have passed" is true everywhere — so without a gate it
+    // fires forever in repositories where its subject does not exist. This is the regression that motivated
+    // making `applies` a required field on SurveySpec rather than an optional one.
+    test(`a tiny repository is not surveyed for cross-cutting patterns it cannot have`, () => {
+        const tiny = report({ repos: [{ repo: `app`, probes: [], signals: signals({ totals: { files: 4, symbols: 10, complexity: 5, hotspots: 0 } }) }] });
+        const verdict = verdictFor(tiny, `standardize-patterns`);
+        expect(verdict.state).toBe(`not-applicable`);
+        expect(verdict.headline).toContain(`4 indexed files`);
+    });
+
+    test(`applicability is decided before measurement, so a missing probe never masks it`, () => {
+        // dead-code needs the knip probe, which has not run; the gate still wins, because "we cannot ask this
+        // question here" outranks "we have not measured it".
+        expect(verdictFor(withShape({ packageManifest: false }), `dead-code`).state).toBe(`not-applicable`);
+    });
+
+    test(`a chore that does not apply can never reach the rail`, () => {
+        const verdicts = assessReport(withShape({ docs: [], dockerfiles: [], ci: [] }), NOW).filter((verdict) => verdict.state === `not-applicable`);
+        expect(verdicts.length).toBeGreaterThanOrEqual(3);
+        expect(unseenVerdicts(verdicts, {})).toEqual([]);
+    });
+
+    test(`a fully-equipped repository rules nothing out`, () => {
+        expect(assessReport(withShape({}), NOW).filter((verdict) => verdict.state === `not-applicable`)).toEqual([]);
+    });
+});
+
+/* THE CRITERION — the rule in words, next to the evidence that met it. A row that reports a number without the
+ * rule behind it is asking to be taken on trust, and the first row that turns out to be wrong costs the whole
+ * list its credibility. */
+describe(`every chore says what would make it due`, () => {
+    test(`every entry in the book carries a criterion`, () => {
+        for (const chore of CHORES) {
+            expect(chore.criterion, chore.id).toBeTypeOf(`string`);
+            expect(chore.criterion.length, chore.id).toBeGreaterThan(20);
+        }
+    });
+
+    test(`the criterion reaches the prompt, so the agent can tell us the rule was wrong`, () => {
+        const due = verdictFor(report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`])], signals: signals() }] }), `security-advisories`);
+        expect(due.prompt).toContain(`You were woken because:`);
+        expect(due.prompt).toContain(due.chore.criterion);
     });
 });
