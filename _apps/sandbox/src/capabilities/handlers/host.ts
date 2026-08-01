@@ -11,6 +11,19 @@ const skillDir = (root: string, id: string): string => join(root, ".claude", "sk
 const skillPath = (root: string, id: string): string => join(skillDir(root, id), "SKILL.md");
 
 export const hostHandler: CapabilityHandler = {
+    // A connected computer's credential is its enrollment token, which lives on /history (hosts-store.ts) and is
+    // never in the manifest — rotating it is re-running the installer there, not an edit in /secrets. So: no secret.
+    echo: (config) => {
+        // Every field is a permission and none is secret: the card renders the grant back to the owner.
+        const host = config as HostConfig;
+        return {
+            platform: host.platform,
+            shell: host.shell,
+            write: host.write,
+            screen: host.screen,
+            ...(host.roots !== undefined ? { roots: host.roots } : {}),
+        };
+    },
     apply: async function* (ctx, id, config) {
         const host = config as HostConfig;
         await ctx.files.write(skillPath(ctx.workspace.root, id), hostSkill(id, host.platform));

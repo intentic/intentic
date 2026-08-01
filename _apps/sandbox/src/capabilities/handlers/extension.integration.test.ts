@@ -15,7 +15,7 @@ import { extensionDir, extensionsRoot } from "../extension-dirs.js";
 import { createTerminalRunner } from "../../terminal/terminal-run.js";
 import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
-import { echoConfig } from "../capability.js";
+import { echoConfig } from "../summary.js";
 import { extensionHandler } from "./extension.js";
 
 const exec = promisify(execFile);

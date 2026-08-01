@@ -14,6 +14,16 @@ import { checkoutInto } from "../git-checkout.js";
 // goes live, so a broken extension never replaces a working one. The extensions routes serve the manifest list
 // + bundle; agent contributions ride extensionAgentDirsOf into the SDK's plugin loader.
 export const extensionHandler: CapabilityHandler = {
+    secret: (config) => ((config as ExtensionConfig).token !== undefined ? "token" : undefined),
+    echo: (config) => {
+        const extension = config as ExtensionConfig;
+        return {
+            url: extension.url,
+            ref: extension.ref,
+            ...(extension.path !== undefined ? { path: extension.path } : {}),
+            hasToken: extension.token !== undefined,
+        };
+    },
     apply: async function* (ctx, id, config) {
         const { url, ref, path, token } = config as ExtensionConfig;
         const session = capabilityJobSession(id);

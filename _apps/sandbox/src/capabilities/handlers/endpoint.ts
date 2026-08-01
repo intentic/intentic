@@ -16,6 +16,21 @@ import type { CapabilityHandler } from "../capability.js";
  * models" is the difference between a working endpoint and a server that is up but has nothing loaded — which is
  * the single most common way an Ollama install disappoints its owner. */
 export const endpointHandler: CapabilityHandler = {
+    // The one rotatable credential. The header block beside it is deliberately NOT the secret: it carries routing
+    // metadata (a tenant id, a project header) that the owner has to be able to READ to diagnose a misrouted
+    // endpoint, and a server with no auth at all is the ordinary case here.
+    secret: (config) => ((config as EndpointConfig).apiKey !== undefined ? "apiKey" : undefined),
+    // The URL and the protocol are what the card renders and what a user checks when a turn fails, so both
+    // travel; the key becomes hasSecret. Headers travel too — see `secret` above on why they are not secret.
+    echo: (config) => {
+        const endpoint = config as EndpointConfig;
+        return {
+            baseUrl: endpoint.baseUrl,
+            protocol: endpoint.protocol,
+            ...(endpoint.headers !== undefined ? { headers: endpoint.headers } : {}),
+            hasSecret: endpoint.apiKey !== undefined && endpoint.apiKey !== "",
+        };
+    },
     apply: async function* (ctx, id, config) {
         const catalog = await ctx.endpointModels.models(id, config as EndpointConfig);
         if (catalog.models.length === 0) {

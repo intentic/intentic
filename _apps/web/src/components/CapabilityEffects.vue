@@ -1,8 +1,8 @@
 <!-- The itemized "what adding this does to your sandbox" disclosure — the structured counterpart of the catalog's
-     prose hints, derived by capabilityEffects (sandbox-contract). Full mode is the pre-add panel on the "+" config
+     prose hints, derived by capabilityEffects (capability-catalog). Full mode is the pre-add panel on the "+" config
      form; `compact` is the icon-only strip under a connected instance (labels move into title tooltips). -->
 <script setup lang="ts">
-import type { CapabilityEffect } from "@intentic/sandbox-contract";
+import type { CapabilityEffect } from "@intentic-app/capability-catalog";
 import type { IconName } from "@intentic-app/ui";
 import { computed } from "vue";
 

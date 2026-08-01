@@ -4,13 +4,15 @@ import {
     CAPABILITY_CATALOG,
     CAPABILITY_CATEGORIES,
     type CapabilityCatalogEntry,
+    type CapabilityEffect,
+    capabilityEffects,
     type CapabilityField,
     connectorCard,
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace } from "@intentic-app/api-contract";
 import { cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic-app/ui";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
-import { type CapabilityEffect, capabilityEffects, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
+import { type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";

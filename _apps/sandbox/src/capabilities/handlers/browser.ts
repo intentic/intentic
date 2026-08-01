@@ -28,6 +28,7 @@ const chromiumInstalled = async (): Promise<boolean> => {
 };
 
 export const browserHandler: CapabilityHandler = {
+    echo: (config) => ({ platform: (config as BrowserConfig).platform }),
     fragment: () => BROWSER_FRAGMENT,
     apply: async function* (ctx, id, config) {
         const { platform } = config as BrowserConfig;

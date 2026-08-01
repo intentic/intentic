@@ -6,6 +6,7 @@ import type { CapabilityHandler } from "../capability.js";
 // The non-secret coordinates (url / host / port / username) are carried straight through to the entry; the secret
 // key is read from the sandbox env (e.g. STRIPE_API_KEY) at provision time — never sent over the wire. Requires DevOps.
 export const integrationHandler: CapabilityHandler = {
+    echo: (config) => ({ provider: (config as IntegrationConfig).provider }),
     requires: ["devops"],
     apply: async function* (ctx, id, config) {
         const { provider, ...values } = config as IntegrationConfig;

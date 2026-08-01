@@ -6,7 +6,13 @@ import { terminalExec } from "../../terminal/terminal-run.js";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 import { envSuffix } from "../cli-env.js";
-import { connectorRegistry, connectorSkillPath, validateConnectorConfig } from "../cli/connector-registry.js";
+import {
+    connectorRegistry,
+    connectorSecretField,
+    connectorSecretFields,
+    connectorSkillPath,
+    validateConnectorConfig,
+} from "../cli/connector-registry.js";
 import { CORE_CONNECTOR_HOOKS, gitAccessWired, gitHostOf } from "../cli/git-access.js";
 import { extensionRead } from "../extension-dirs.js";
 
@@ -27,6 +33,27 @@ const hostOf = (ctx: CapabilityCtx): ExtensionHost => ({
 });
 
 export const cliHandler: CapabilityHandler = {
+    secret: (config, connectors) => {
+        const spec = connectors.get((config as CliConfig).provider)?.spec;
+        return spec === undefined ? undefined : connectorSecretField(spec);
+    },
+    /* Echo the non-secret fields (url etc.) for display; the rotatable secret becomes hasSecret. EVERY declared
+     * secret is withheld, not just that one — a two-token connector (Slack: an app-level token to open the socket,
+     * a bot token for the Web API) must not ship its second credential to the browser by not being the one
+     * /secrets happens to rotate. The web renders the card's label/logo from the connector manifest, not this. */
+    echo: (config, connectors) => {
+        const cli = config as CliConfig;
+        const spec = connectors.get(cli.provider)?.spec;
+        const secretKeys = spec === undefined ? new Set<string>() : connectorSecretFields(spec);
+        const rotatable = spec === undefined ? undefined : connectorSecretField(spec);
+        const echo: Record<string, string | number | boolean> = {};
+        for (const [key, value] of Object.entries(cli)) {
+            if (!secretKeys.has(key)) {
+                echo[key] = value;
+            }
+        }
+        return { ...echo, hasSecret: rotatable !== undefined && cli[rotatable] !== undefined && cli[rotatable] !== "" };
+    },
     apply: async function* (ctx, id, config) {
         const cliConfig = config as CliConfig;
         const { provider } = cliConfig;

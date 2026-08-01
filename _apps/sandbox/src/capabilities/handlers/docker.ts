@@ -70,6 +70,7 @@ const startDockerd = async (ctx: CapabilityCtx): Promise<boolean> => {
 };
 
 export const dockerHandler: CapabilityHandler = {
+    echo: () => ({}),
     fragment: () => DOCKER_FRAGMENT,
     apply: async function* (ctx, id) {
         if (await cliMissing()) {

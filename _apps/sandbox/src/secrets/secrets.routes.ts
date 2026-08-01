@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseEnv } from "node:util";
 import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
-import { secretField } from "../capabilities/capability.js";
+import { secretField } from "../capabilities/summary.js";
 import { connectorRegistry } from "../capabilities/cli/connector-registry.js";
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";

@@ -35,6 +35,11 @@ connected under.
 `;
 
 export const sshHandler: CapabilityHandler = {
+    secret: (config) => ((config as SshConfig).auth === "key" ? "privateKey" : "password"),
+    echo: (config) => {
+        const ssh = config as SshConfig;
+        return { host: ssh.host, port: ssh.port, user: ssh.user, auth: ssh.auth };
+    },
     apply: async function* (ctx, id, config) {
         const ssh = config as SshConfig;
         await writeSshHost(id, { host: ssh.host, user: ssh.user, port: ssh.port, ...(ssh.auth === "key" ? { identityFile: hostKeyPath(id) } : {}) });

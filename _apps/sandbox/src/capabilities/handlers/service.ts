@@ -13,6 +13,10 @@ import type { CapabilityHandler } from "../capability.js";
 // non-zero exit. Requires DevOps (the intent repo). SigNoz's MCP is auto-wired by the resolver's service
 // catalog, so the agent gets its tools with no extra work here.
 export const serviceHandler: CapabilityHandler = {
+    echo: (config) => {
+        const service = config as ServiceConfig;
+        return { service: service.service, domain: service.domain, on: service.on, expose: service.expose };
+    },
     requires: ["devops"],
     apply: async function* (ctx, id, config) {
         const { service, domain, on, expose } = config as ServiceConfig;

@@ -11,7 +11,7 @@ import { createTerminalRunner, directExec } from "../../terminal/terminal-run.js
 import { makeWorkspaceDir, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilitiesStore } from "../capabilities-store.js";
 import type { CapabilityCtx } from "../capability.js";
-import { echoConfig } from "../capability.js";
+import { echoConfig } from "../summary.js";
 import { cliEnvOf } from "../cli-env.js";
 import { connectorRegistry } from "../cli/connector-registry.js";
 import {

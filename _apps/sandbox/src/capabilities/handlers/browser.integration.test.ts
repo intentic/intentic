@@ -6,7 +6,7 @@ import { expect, test } from "vitest";
 import { browserProviders } from "../../browser/providers.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
-import { echoConfig, secretField } from "../capability.js";
+import { echoConfig, secretField } from "../summary.js";
 import { browserHandler } from "./browser.js";
 
 // A ctx exposing only what browserHandler touches (files + workspace.root), over a fresh temp workspace.

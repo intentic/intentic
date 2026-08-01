@@ -7,6 +7,17 @@ import type { CapabilityHandler } from "../capability.js";
 // turn-serving connection lives in the acp pool; the capability route drops it on remove/edit so a config
 // change respawns cleanly.
 export const agentHandler: CapabilityHandler = {
+    // The whole pasted KEY=VALUE env block — credentials ride in it (the vpn-conf precedent).
+    secret: (config) => ((config as AcpAgentConfig).env !== undefined ? "env" : undefined),
+    echo: (config) => {
+        const agent = config as AcpAgentConfig;
+        return {
+            command: agent.command,
+            ...(agent.name !== undefined ? { name: agent.name } : {}),
+            ...(agent.loginCommand !== undefined ? { loginCommand: agent.loginCommand } : {}),
+            hasSecret: agent.env !== undefined && agent.env !== "",
+        };
+    },
     apply: async function* (ctx, id, config) {
         const probe = await probeAcpAgent(config as AcpAgentConfig, ctx.workspace.root);
         const name = probe.agentName ?? id;

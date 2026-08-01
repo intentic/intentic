@@ -9,6 +9,16 @@ import { pluginDir, pluginsRoot } from "../plugin-dirs.js";
 // upsert: re-adding re-clones, which is also how a plugin updates. The clone/checkout run in the visible job
 // session the first frame surfaces.
 export const pluginHandler: CapabilityHandler = {
+    secret: (config) => ((config as PluginConfig).token !== undefined ? "token" : undefined),
+    echo: (config) => {
+        const plugin = config as PluginConfig;
+        return {
+            url: plugin.url,
+            ...(plugin.ref !== undefined ? { ref: plugin.ref } : {}),
+            ...(plugin.path !== undefined ? { path: plugin.path } : {}),
+            hasToken: plugin.token !== undefined,
+        };
+    },
     apply: async function* (ctx, id, config) {
         const { url, ref, token } = config as PluginConfig;
         const session = capabilityJobSession(id);

@@ -1,4 +1,4 @@
-import type { Capability, CapabilityKind, CapabilityStatus, IntenticLine } from "@intentic/sandbox-contract";
+import type { CapabilityKind, CapabilityStatus, IntenticLine } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { applyEventsPath, isTerminalExit, tailIntenticEvents } from "../intentic/apply-events.js";
 import { INFRA_APPLY_KEY, startInfraApplyJob } from "../intentic/infra-apply.js";
@@ -9,7 +9,7 @@ import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold
 import type { EndpointCatalog } from "../endpoints/endpoint-catalog.js";
 import type { HostHub } from "../hosts/host-hub.js";
 import type { HostsStore } from "../hosts/hosts-store.js";
-import { connectorSecretField, connectorSecretFields, type ResolvedConnector } from "./cli/connector-registry.js";
+import type { ResolvedConnector } from "./cli/connector-registry.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
 // The narrow slice of the daemon a capability handler may touch — deliberately no agent/auth/sessions surface.
@@ -67,6 +67,18 @@ export interface CapabilityHandler {
     readonly apply: (ctx: CapabilityCtx, id: string, config: unknown) => AsyncGenerator<IntenticLine>;
     readonly status: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<CapabilityStatus>;
     readonly remove?: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<void>;
+    /* The config key holding this kind's secret, absent when it carries none (a kind with no credential, or one
+     * whose credential lives outside the manifest entirely). Drives the /secrets inventory — which capabilities
+     * appear there, what reveal reads, what setSecret merges. `connectors` is the resolved connector registry: a
+     * cli capability's secret key is DATA in its connector, not a fact this daemon knows.
+     *
+     * Here rather than in a central switch because it is a fact ABOUT ONE KIND, and the switch was the third
+     * place a new kind had to be remembered — the two before it (apply, status) are right here. */
+    readonly secret?: (config: unknown, connectors: Map<string, ResolvedConnector>) => string | undefined;
+    // The non-secret echo of a config for the list summary (an mcp token becomes hasToken). Required, not
+    // optional: "what of this may the browser see" is a question every kind has to answer out loud, and a
+    // forgotten default is how a credential reaches a browser by omission.
+    readonly echo: (config: unknown, connectors: Map<string, ResolvedConnector>) => Record<string, string | number | boolean>;
 }
 
 // Build the handler context from the full Services, wrapping the existing scaffolders as session-scoped closures.
@@ -100,161 +112,4 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
         scaffoldMonorepo: (name, session) => scaffoldAppMonorepo(services, name, session),
     };
-};
-
-// The config key holding a capability's secret, undefined when it carries none (an unset optional token, or a
-// kind with no credential — stripe's key lives in .env as a regular env secret). Drives the /secrets inventory
-// (which capabilities appear, all revealable), reveal's value lookup, and setSecret's merge. `connectors` is the
-// resolved connector registry (see connectorRegistry) — a cli capability's secret key is DATA in its connector.
-export const secretField = (capability: Capability, connectors: Map<string, ResolvedConnector>): string | undefined => {
-    switch (capability.kind) {
-        case "mcp":
-        case "plugin":
-        case "extension":
-            return capability.config.token !== undefined ? "token" : undefined;
-        case "cli": {
-            const spec = connectors.get(capability.config.provider)?.spec;
-            return spec === undefined ? undefined : connectorSecretField(spec);
-        }
-        case "ssh":
-            return capability.config.auth === "key" ? "privateKey" : "password";
-        case "vpn":
-            // The credential a user ROTATES, one per provider — /secrets reveals and replaces exactly this
-            // field. wireguard's whole conf is secret (it holds the private key); fortinet has one password.
-            // An ipsec tunnel carries two (the group PSK and, when XAuth is on, the per-user password): the
-            // per-user one is the rotatable half, so it wins when present. Rotating the PSK of an XAuth tunnel
-            // is a re-add of the capability (same name ⇒ update), not a /secrets edit.
-            if (capability.config.provider === "wireguard") {
-                return "config";
-            }
-            if (capability.config.provider === "fortinet") {
-                return "password";
-            }
-            return capability.config.username !== undefined && capability.config.password !== undefined ? "password" : "presharedKey";
-        case "agent":
-            // The whole pasted KEY=VALUE env block — credentials ride in it (the vpn-conf precedent).
-            return capability.config.env !== undefined ? "env" : undefined;
-        case "endpoint":
-            // The one rotatable credential. The header block beside it is deliberately NOT the secret: it carries
-            // routing metadata (a tenant id, a project header) that the owner has to be able to READ to diagnose a
-            // misrouted endpoint, and a server with no auth at all is the ordinary case here.
-            return capability.config.apiKey !== undefined ? "apiKey" : undefined;
-        case "devops":
-        case "monorepo":
-        case "service":
-        case "integration":
-        case "docker":
-        // The browser session lives in a Chromium profile (managed by the guided-login flow), not a manifest field.
-        case "browser":
-        // A connected computer's credential is its enrollment token, which lives on /history (hosts-store.ts) and
-        // is never in the manifest — rotating it is re-running the installer there, not an edit in /secrets.
-        case "host":
-            return undefined;
-    }
-};
-
-// Non-secret echo of a capability's config for the list summary (an mcp token becomes hasToken). `connectors`
-// resolves a cli capability's secret field (which value to withhold).
-export const echoConfig = (capability: Capability, connectors: Map<string, ResolvedConnector>): Record<string, string | number | boolean> => {
-    switch (capability.kind) {
-        case "mcp":
-            return { url: capability.config.url, hasToken: capability.config.token !== undefined };
-        case "service":
-            return {
-                service: capability.config.service,
-                domain: capability.config.domain,
-                on: capability.config.on,
-                expose: capability.config.expose,
-            };
-        case "integration":
-            return { provider: capability.config.provider };
-        case "cli": {
-            // Echo the non-secret fields (url etc.) for display; the rotatable secret becomes hasSecret. EVERY
-            // declared secret is withheld, not just that one — a two-token connector (Slack: an app-level token
-            // to open the socket, a bot token for the Web API) must not ship its second credential to the
-            // browser by not being the one /secrets happens to rotate. The web renders the card's label/logo
-            // from the connector manifest, not from this echo.
-            const spec = connectors.get(capability.config.provider)?.spec;
-            const secretKeys = spec === undefined ? new Set<string>() : connectorSecretFields(spec);
-            const rotatable = spec === undefined ? undefined : connectorSecretField(spec);
-            const echo: Record<string, string | number | boolean> = {};
-            for (const [key, value] of Object.entries(capability.config)) {
-                if (!secretKeys.has(key)) {
-                    echo[key] = value;
-                }
-            }
-            return {
-                ...echo,
-                hasSecret: rotatable !== undefined && capability.config[rotatable] !== undefined && capability.config[rotatable] !== "",
-            };
-        }
-        case "ssh":
-            return { host: capability.config.host, port: capability.config.port, user: capability.config.user, auth: capability.config.auth };
-        case "vpn":
-            // An explicit allowlist per provider — never a spread of config — so neither the wireguard conf nor
-            // either ipsec credential can reach the browser by being forgotten in a new field.
-            return {
-                provider: capability.config.provider,
-                autoConnect: capability.config.autoConnect,
-                ...(capability.config.provider === "wireguard"
-                    ? {}
-                    : capability.config.provider === "fortinet"
-                      ? { server: capability.config.server, port: capability.config.port, username: capability.config.username }
-                      : {
-                            server: capability.config.server,
-                            ikeVersion: capability.config.ikeVersion,
-                            aggressive: capability.config.aggressive,
-                            ...(capability.config.username !== undefined ? { username: capability.config.username } : {}),
-                            ...(capability.config.localId !== undefined ? { localId: capability.config.localId } : {}),
-                        }),
-            };
-        case "plugin":
-            return {
-                url: capability.config.url,
-                ...(capability.config.ref !== undefined ? { ref: capability.config.ref } : {}),
-                ...(capability.config.path !== undefined ? { path: capability.config.path } : {}),
-                hasToken: capability.config.token !== undefined,
-            };
-        case "extension":
-            return {
-                url: capability.config.url,
-                ref: capability.config.ref,
-                ...(capability.config.path !== undefined ? { path: capability.config.path } : {}),
-                hasToken: capability.config.token !== undefined,
-            };
-        case "devops":
-            return {};
-        case "monorepo":
-            return {};
-        case "docker":
-            return {};
-        case "browser":
-            return { platform: capability.config.platform };
-        case "host":
-            // The whole config is non-secret and every field is a permission — the card renders the grant back
-            // to the owner, so all four travel.
-            return {
-                platform: capability.config.platform,
-                shell: capability.config.shell,
-                write: capability.config.write,
-                screen: capability.config.screen,
-                ...(capability.config.roots !== undefined ? { roots: capability.config.roots } : {}),
-            };
-        case "agent":
-            return {
-                command: capability.config.command,
-                ...(capability.config.name !== undefined ? { name: capability.config.name } : {}),
-                ...(capability.config.loginCommand !== undefined ? { loginCommand: capability.config.loginCommand } : {}),
-                hasSecret: capability.config.env !== undefined && capability.config.env !== "",
-            };
-        case "endpoint":
-            // The URL and the protocol are what the card renders and what a user checks when a turn fails, so both
-            // travel; the key becomes hasSecret. Headers travel too — see secretField on why they are not secret.
-            return {
-                baseUrl: capability.config.baseUrl,
-                protocol: capability.config.protocol,
-                ...(capability.config.headers !== undefined ? { headers: capability.config.headers } : {}),
-                hasSecret: capability.config.apiKey !== undefined && capability.config.apiKey !== "",
-            };
-    }
 };

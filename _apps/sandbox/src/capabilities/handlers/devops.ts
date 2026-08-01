@@ -7,6 +7,7 @@ import type { CapabilityHandler } from "../capability.js";
 // depend on it. No `remove`: deleting the repos would destroy the user's declared infrastructure. The git
 // bookkeeping and the pnpm install run in the visible job session the first frame surfaces.
 export const devopsHandler: CapabilityHandler = {
+    echo: () => ({}),
     apply: async function* (ctx, id) {
         const session = capabilityJobSession(id);
         if (ctx.terminalRun.visible) {

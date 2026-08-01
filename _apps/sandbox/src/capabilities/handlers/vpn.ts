@@ -86,6 +86,41 @@ const capabilityStatus = (state: string, detail: string | undefined): Capability
 };
 
 export const vpnHandler: CapabilityHandler = {
+    /* The credential a user ROTATES, one per provider — /secrets reveals and replaces exactly this field.
+     * wireguard's whole conf is secret (it holds the private key); fortinet has one password. An ipsec tunnel
+     * carries two (the group PSK and, when XAuth is on, the per-user password): the per-user one is the rotatable
+     * half, so it wins when present. Rotating the PSK of an XAuth tunnel is a re-add of the capability (same name
+     * ⇒ update), not a /secrets edit. */
+    secret: (config) => {
+        const vpn = config as VpnConfig;
+        if (vpn.provider === "wireguard") {
+            return "config";
+        }
+        if (vpn.provider === "fortinet") {
+            return "password";
+        }
+        return vpn.username !== undefined && vpn.password !== undefined ? "password" : "presharedKey";
+    },
+    // An explicit allowlist per provider — never a spread of config — so neither the wireguard conf nor either
+    // ipsec credential can reach the browser by being forgotten in a new field.
+    echo: (config) => {
+        const vpn = config as VpnConfig;
+        return {
+            provider: vpn.provider,
+            autoConnect: vpn.autoConnect,
+            ...(vpn.provider === "wireguard"
+                ? {}
+                : vpn.provider === "fortinet"
+                  ? { server: vpn.server, port: vpn.port, username: vpn.username }
+                  : {
+                        server: vpn.server,
+                        ikeVersion: vpn.ikeVersion,
+                        aggressive: vpn.aggressive,
+                        ...(vpn.username !== undefined ? { username: vpn.username } : {}),
+                        ...(vpn.localId !== undefined ? { localId: vpn.localId } : {}),
+                    }),
+        };
+    },
     fragment: () => VPN_FRAGMENT,
     apply: async function* (ctx, id, config) {
         const vpn = config as VpnConfig;

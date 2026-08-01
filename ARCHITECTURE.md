@@ -530,9 +530,13 @@ source of a card's name/logo/fields/credential guide — nothing to drift.
 **Effects — what adding actually does, as data.** Kinds differ wildly in consequence (an extension runs
 code with your session; a vpn bakes an image fragment with runtime directives; a cli connector just writes a
 skill and stores a secret), so the consequences are a first-class taxonomy: the `CapabilityEffect` union, derived by
-`capabilityEffects()` ([effects.ts](_libs/sandbox-contract/src/effects.ts)) from kind + live config +
+`capabilityEffects()` ([effects.ts](_libs/capability-catalog/src/effects.ts)) from kind + live config +
 connector/extension contributions — the same data the handlers consume, so there is no per-card effects
-list to maintain — and rendered as the "This will add to your sandbox" panel
+list to maintain. It lives in the CATALOG, beside the cards that declare the same kinds, rather than in the wire
+contract: nothing on the wire carries an effect, only the browser computes them, so a kind's user-facing story
+(its card, its fields, what adding it does) is one package to open. A `Record<CapabilityKind, …>` table rather
+than a switch, so a new kind is one entry with the same exhaustiveness the compiler enforced before. Rendered as
+the "This will add to your sandbox" panel
 ([CapabilityEffects.vue](_apps/web/src/components/CapabilityEffects.vue)) before the add, as compact strips
 on connected instances, and as grid badges for the consequential ones (image / runtime / trusted-code).
 

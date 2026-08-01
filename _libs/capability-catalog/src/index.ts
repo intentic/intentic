@@ -145,6 +145,10 @@ export interface CapabilityGuide {
     readonly steps?: readonly string[] | undefined;
 }
 
+/* A kind's user-facing story is this package: the cards below declare what a user picks and fills in, and
+ * effects.ts declares what adding it does to their sandbox. Re-exported here so consumers import one module. */
+export * from "./effects.js";
+
 // The grid the rail's "+" renders. Every card is a capability *type*; the user names each instance (→ its id,
 // defaulted to `id`), so a provider can have N instances (two Discord bots, two databases). `requires` cards are
 // shown but gated until the prereq is active.

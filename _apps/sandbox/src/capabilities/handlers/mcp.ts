@@ -23,6 +23,8 @@ const reachable = async (url: string, token: string | undefined): Promise<boolea
 // mcp-kind capabilities — so apply just confirms and status probes the endpoint. remove is a no-op: dropping the
 // manifest entry (in the route) is what removes it from the agent.
 export const mcpHandler: CapabilityHandler = {
+    secret: (config) => ((config as McpConfig).token !== undefined ? "token" : undefined),
+    echo: (config) => ({ url: (config as McpConfig).url, hasToken: (config as McpConfig).token !== undefined }),
     apply: async function* (_ctx, _id, config) {
         const { url } = config as McpConfig;
         yield { kind: "log", message: `Registered MCP server ${url} — the agent can call it next turn.` };

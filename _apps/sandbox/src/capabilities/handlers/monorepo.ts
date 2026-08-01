@@ -10,6 +10,7 @@ import type { CapabilityHandler } from "../capability.js";
 // `remove` — deleting the repo would destroy the user's work. The scaffold is one visible `intentic scaffold monorepo`
 // command in the job session the first frame surfaces (the add-apps pattern).
 export const monorepoHandler: CapabilityHandler = {
+    echo: () => ({}),
     apply: async function* (ctx, id) {
         // `--` is the separator in an app preview's key/subdomain (<repo>--<app>), so a monorepo name can't
         // contain it without risking a collision with another monorepo's app panel.
