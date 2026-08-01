@@ -12,7 +12,12 @@ vi.mock("./queryPersistence", () => ({
     queryClient: { getQueriesData: () => queryData.map((data) => [[], data] as const) },
 }));
 
-const { renderMarkdown } = await import("./renderMarkdown");
+const { fileLinkDecorator, renderMarkdown } = await import("./renderMarkdown");
+const { renderMarkdown: renderEngine } = await import("@intentic-app/ui/markdown");
+
+// A previewed FILE renders through the kit's <Markdown> with the app's decorator (see MarkdownViewer), which is
+// the only surface that knows a directory to resolve against — so the document cases below go in the same way.
+const renderIn = (dir: string, source: string): string => renderEngine(source, fileLinkDecorator(dir));
 
 beforeEach(() => {
     queryData = [];
@@ -144,21 +149,21 @@ describe(`file mentions in agent prose`, () => {
  * not have. Resolving it wrong is worse than not linking at all: the click lands on a file that isn't there. */
 describe(`references inside a previewed document`, () => {
     it(`resolves a relative reference against the document's own directory`, () => {
-        const html = renderMarkdown(`see [b](./b.md) and docs/deep/c.md`, `docs/`);
+        const html = renderIn(`docs/`, `see [b](./b.md) and docs/deep/c.md`);
         expect(linkTo(html, `docs/b.md`)).toBeDefined();
         expect(linkTo(html, `docs/docs/deep/c.md`)).toBeDefined();
     });
 
     it(`walks ../ back up out of the document's directory`, () => {
-        expect(linkTo(renderMarkdown(`[root](../../README.md)`, `docs/guides/`), `README.md`)).toBeDefined();
+        expect(linkTo(renderIn(`docs/guides/`, `[root](../../README.md)`), `README.md`)).toBeDefined();
     });
 
     it(`leaves a root-level document's references alone`, () => {
-        expect(linkTo(renderMarkdown(`[arch](./ARCHITECTURE.md)`, ``), `ARCHITECTURE.md`)).toBeDefined();
+        expect(linkTo(renderIn(``, `[arch](./ARCHITECTURE.md)`), `ARCHITECTURE.md`)).toBeDefined();
     });
 
     it(`does not re-root an absolute container path against the document`, () => {
         queryData = [{ root: `/work`, tree: [] }];
-        expect(linkTo(renderMarkdown(`/work/src/foo.ts`, `docs/`), `src/foo.ts`)).toBeDefined();
+        expect(linkTo(renderIn(`docs/`, `/work/src/foo.ts`), `src/foo.ts`)).toBeDefined();
     });
 });

@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { clipboardOf } from "../clipboard.js";
+import { FIGURE_LANGS } from "./figures.js";
 
 /* Fenced code blocks inside rendered markdown: Shiki colouring plus a copy button.
  *
@@ -23,9 +24,15 @@ export interface CodeBlock {
 // crash fallback, which has the same job.
 export const escapeHtml = (text: string): string => text.replace(/&/g, `&amp;`).replace(/</g, `&lt;`).replace(/>/g, `&gt;`).replace(/"/g, `&quot;`);
 
-// Fence infos agents actually write, mapped onto the grammar ids the app ships (see shikiLangs.ts). Anything
-// not listed is tried as-is and, if we don't ship it, remembered as unsupported after one attempt.
+/* Fence infos agents actually write, mapped onto the grammar ids the app ships (see shikiLangs.ts). Anything
+ * not listed is tried as-is and, if we don't ship it, remembered as unsupported after one attempt.
+ *
+ * A FIGURE fence (figures.ts) is here because it is not always drawn as a figure: a surface that renders prose
+ * to one v-html string cannot hold a component, and a malformed body degrades to a code block by design. Its
+ * body is JSON either way, so it is coloured as JSON rather than left a grey blob. Derived from FIGURE_LANGS so
+ * a new figure kind cannot pick up one behaviour and miss the other. */
 const ALIASES: Record<string, string> = {
+    ...Object.fromEntries(FIGURE_LANGS.map((lang) => [lang, `json`])),
     "c++": `cpp`,
     cjs: `javascript`,
     console: `bash`,
@@ -33,6 +40,10 @@ const ALIASES: Record<string, string> = {
     env: `dotenv`,
     htm: `html`,
     js: `javascript`,
+    // Comments and trailing commas colour close enough as JSON, and the file viewer already reads a .jsonc /
+    // .json5 FILE with that grammar (fileType.ts) — a fence naming the same dialect must not read differently.
+    json5: `json`,
+    jsonc: `json`,
     kt: `kotlin`,
     makefile: `make`,
     md: `markdown`,

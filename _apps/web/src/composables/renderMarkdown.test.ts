@@ -38,8 +38,8 @@ test("renderMarkdown never throws and always returns a string for any input", ()
 
 /* The placeholder the code renderer emits and the pattern that substitutes it are two halves of one seam, in
  * two different modules, joined across a round-trip through the sanitizer's DOM — these pin all three
- * together. Highlighting itself never resolves here (the design-system barrel can't load in a test), which is
- * exactly the fallback state these assert. */
+ * together. Colour has not landed on a FIRST render (the grammar is imported on demand), which is exactly the
+ * fallback state these assert; the describe below waits for it instead. */
 describe(`code blocks`, () => {
     it(`substitutes a fenced block for the code-block markup, with its language label`, () => {
         const html = renderMarkdown("```ts\nconst a = 1;\n```");
@@ -74,6 +74,44 @@ describe(`code blocks`, () => {
         expect(html).toContain(`first();`);
         expect(html).toContain(`second()`);
         expect(html).not.toContain(`data-md-code`);
+    });
+});
+
+/* A fence info is what an author wrote, not a grammar id: a document names its dialect (`jsonc`), and a FIGURE
+ * fence (figures.ts) names a picture — which reaches this renderer as a code block whenever the surface cannot
+ * hold a component (one v-html string) or the body does not parse. Both bodies are JSON, so both are mapped onto
+ * the grammar we ship rather than left grey. Colour is what proves the mapping: it appears only once a real
+ * Shiki grammar has run over the block. */
+describe(`fence infos mapped onto a shipped grammar`, () => {
+    // Highlighting is asynchronous (the grammar is imported on demand) and lands by invalidating the render, so
+    // this re-renders until colour shows up — false means it never did.
+    const colours = async (source: string): Promise<boolean> => {
+        let html = ``;
+        const stop = watchEffect(
+            () => {
+                html = renderMarkdown(source);
+            },
+            { flush: `sync` },
+        );
+        for (let attempt = 0; attempt < 40 && !html.includes(`--shiki-dark:`); attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        stop();
+        return html.includes(`--shiki-dark:`);
+    };
+
+    it(`colours a jsonc fence with the json grammar`, async () => {
+        expect(await colours("```jsonc\n{ \"a\": 1 } // and a comment\n```")).toBe(true);
+    });
+
+    it(`colours a figure fence as the JSON its body is`, async () => {
+        expect(await colours('```stats\n{ "items": [{ "label": "Files", "value": "70" }] }\n```')).toBe(true);
+    });
+
+    // The chip names what the author wrote, so a reader can tell which fence produced the block they are looking
+    // at — aliasing decides the grammar, never the label.
+    it(`still names the fence's own info string`, () => {
+        expect(renderMarkdown('```jsonc\n{ "a": 1 }\n```')).toContain(`>jsonc</span>`);
     });
 });
 
