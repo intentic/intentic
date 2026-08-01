@@ -21,9 +21,32 @@ const SCRIPTS: Record<string, string> = {
     "/update": "recreate.sh",
 };
 
+// The Markdown mirror of /docs/quickstart/ lives at /docs/quickstart.md and is word-for-word the same
+// page, so it needs to say which of the two is the real one. A .md file can't carry <link rel=canonical>,
+// so the header does it — otherwise the pair reads as duplicate content.
+function canonicalForMarkdown(pathname: string): string | undefined {
+    if (!pathname.endsWith(".md")) return undefined;
+    const withoutExt = pathname.slice(0, -".md".length);
+    return withoutExt === "/index" ? "/" : `${withoutExt}/`;
+}
+
 export default {
     async fetch(request: Request, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
         const url = new URL(request.url);
+
+        const canonical = canonicalForMarkdown(url.pathname);
+        if (canonical !== undefined) {
+            const asset = await env.ASSETS.fetch(request);
+            if (asset.status !== 200) return asset;
+            return new Response(asset.body, {
+                status: asset.status,
+                headers: {
+                    "content-type": "text/markdown; charset=utf-8",
+                    link: `<${new URL(canonical, url).href}>; rel="canonical"`,
+                },
+            });
+        }
+
         // Match vanity paths slash-insensitively: /connect and /connect/ both serve the script. The site's Astro
         // pages use trailingSlash: "always", so a browser visit can arrive with a slash — but these worker routes
         // aren't Astro pages, so without this a trailing slash would fall through to the 404 page. Non-vanity

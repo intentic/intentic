@@ -15,10 +15,19 @@ export interface AgentSpecRow {
     items: string[];
 }
 
-/** The hero visual: the real fleet board, cropped by the frame to its Attention and Active lanes. */
-export interface HeroShot {
+/**
+ * A screenshot with its intrinsic pixel size. The dimensions are not decoration: without them the
+ * browser cannot reserve the box before the PNG arrives, and the page reflows around it.
+ */
+export interface ShotImage {
     src: string;
     alt: string;
+    width: number;
+    height: number;
+}
+
+/** The hero visual: the real fleet board, cropped by the frame to its Attention and Active lanes. */
+export interface HeroShot extends ShotImage {
     /** The pill in the frame's title bar — where in the app this shot was taken. */
     frameLabel: string;
     /** One line under the frame; carries the ownership claim the hero copy leaves out. */
@@ -58,9 +67,7 @@ export interface SharingPerson {
 }
 
 /** One captioned product screenshot in the "see it in action" tour. */
-export interface TourShot {
-    src: string;
-    alt: string;
+export interface TourShot extends ShotImage {
     title: string;
     body: string;
 }
@@ -76,7 +83,7 @@ export interface LandingContent {
     // The product tour: real screenshots of the workspace — the fleet board, the chat, diff review, and the
     // integrations catalog — so a visitor sees exactly what they'd be using, not just diagrams.
     tour: LandingSectionIntro & {
-        hero: { src: string; alt: string; caption: string };
+        hero: ShotImage & { caption: string };
         chat: TourShot;
         shots: TourShot[];
     };
@@ -107,9 +114,11 @@ export interface LandingContent {
 // (Pro = many), and automations.
 export const landingContent: LandingContent = {
     meta: {
+        // Under 160 characters: a search result truncates past that, and this one has to survive
+        // the cut with the claim and the price still in it.
         title: "intentic — An IDE for your agents. A window for you.",
         description:
-            "An IDE for your agents. A window for you. Every agent gets its own sandbox on hardware you own — its dev-tools really installed, wired to your systems, its context curated for one job — and you can see and change every layer of it. Works with Claude Code, Codex, Grok, Kimi Code, and Gemini. Free to start.",
+            "An IDE for your agents. Each gets its own sandbox on hardware you own — dev-tools really installed, wired to your systems. Claude Code, Codex, Grok. Free.",
     },
     hero: {
         headlineLines: ["An IDE for your agents.", "A window for you."],
@@ -118,6 +127,8 @@ export const landingContent: LandingContent = {
         chips: ["Free plan", "Bring your own agent", "Runs on your hardware"],
         shot: {
             src: "/assets/product/agents-fleet.png",
+            width: 2152,
+            height: 940,
             alt: "The intentic fleet board: an agent waiting on approval for a Stripe billing change and another with a question for you, beside three agents actively drafting a changelog and migrating queries — each card showing its model, branch, cost and diff stats.",
             frameLabel: "intentic · /agents",
             caption: "Five agents, five sandboxes, one board — running on hardware you own.",
@@ -129,12 +140,16 @@ export const landingContent: LandingContent = {
         sub: "Not a chat box bolted onto a model — a real IDE for a fleet of agents. Autonomy still needs a human in the loop: you configure each agent's context, watch every run, drive one, and review its diffs before anything lands. That's what the workspace is for. Works with Claude Code, Codex, Grok, Kimi Code, and Gemini.",
         hero: {
             src: "/assets/product/agents-fleet.png",
+            width: 2152,
+            height: 940,
             alt: "The intentic agent fleet board — a kanban of running agents grouped into Attention, Active and Finished lanes, each card showing its model, branch, cost and diff stats.",
             caption:
                 "The fleet board — every agent on its own isolated branch, sorted by what needs you. Run a whole team in parallel; finished work lands in your workspace.",
         },
         chat: {
             src: "/assets/product/chat.png",
+            width: 860,
+            height: 1864,
             alt: "The intentic chat surface on mobile: a Stripe-billing task with Read, Bash and Edit tool calls, a live to-do checklist, and the agent's reply.",
             title: "Chat that does the work",
             body: "Talk to it like a coworker. It reads files, runs commands, and edits code — every tool call and to-do visible as it works. Switch between Claude, Codex, Grok, Kimi, and Gemini mid-conversation, on your own subscription.",
@@ -142,24 +157,32 @@ export const landingContent: LandingContent = {
         shots: [
             {
                 src: "/assets/product/agent-review.png",
+                width: 2880,
+                height: 1800,
                 alt: "The isolated diff review: six changed files with per-file line stats, a Land now button, and the agent's live conversation docked alongside.",
                 title: "Review the diff, then land it",
                 body: "Each agent works on its own branch, so nothing touches your tree until you say so. See the full diff across every repo and land it in one click — or discard it and keep going.",
             },
             {
                 src: "/assets/product/capabilities.png",
+                width: 2152,
+                height: 1800,
                 alt: "The capability catalog: Docker, Stripe, SSH, VPN, Reddit, X, YouTube, MCP servers and Claude plugins, each with a short description.",
                 title: "Wire in your systems",
                 body: "A catalog of capabilities — GitHub, Postgres, Stripe, SSH, Docker, MCP servers, Claude plugins — added in a click. The credential is stored inside the sandbox and the agent operates the service from chat.",
             },
             {
                 src: "/assets/product/workspace.png",
+                width: 2152,
+                height: 1800,
                 alt: "The workspace: a file tree beside a syntax-highlighted editor showing a Stripe checkout module.",
                 title: "A real editor and terminal",
                 body: "Browse the tree, open files, run the terminal, watch panels come up on live preview URLs. The sandbox is a full workspace on a machine you own — not a toy.",
             },
             {
                 src: "/assets/product/sandbox.png",
+                width: 2152,
+                height: 1800,
                 alt: "The sandbox hub: the sandbox name, online status, its URL, agent account and capabilities at a glance.",
                 title: "One sandbox, fully yours",
                 body: "Every agent runs in its own container on your hardware, reached from your browser over a private tunnel. The platform stores only its URL — it can't reach in.",

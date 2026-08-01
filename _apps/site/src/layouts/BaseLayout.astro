@@ -2,14 +2,17 @@
 import "../styles/global.css";
 import { getPageMeta } from "@intentic-dev/site-content/page-meta";
 import { ORG_DESCRIPTION, ORG_NAME, ORG_TAGLINE, SITE_URL } from "@intentic-dev/site-content/site";
-import { buildFAQPageSchema, buildOrganizationSchema, buildWebPageSchema, buildWebSiteSchema } from "@intentic-dev/site-content/structured-data";
+import type { BreadcrumbEntry, FaqEntry } from "@intentic-dev/site-content/structured-data";
+import { buildPageGraph } from "@intentic-dev/site-content/structured-data";
 import { lastModForUrl } from "@intentic-dev/astro-integrations";
 
 interface Props {
     title?: string;
     description?: string;
     ogImage?: string;
-    faqQuestions?: { question: string; answer: string }[];
+    /** The trail below Home. Present ⇒ the page emits a BreadcrumbList and og:type=article. */
+    breadcrumbs?: BreadcrumbEntry[];
+    faq?: FaqEntry[];
     extraJsonLd?: Record<string, unknown>[];
     noindex?: boolean;
 }
@@ -21,6 +24,11 @@ const title = Astro.props.title ?? meta?.title ?? `${ORG_NAME} — ${ORG_TAGLINE
 const description = Astro.props.description ?? meta?.description ?? ORG_DESCRIPTION;
 const datePublished = meta?.datePublished;
 const dateModified = lastModForUrl(`${SITE_URL}${path}`) ?? undefined;
+
+// A page with a breadcrumb trail is a page inside the documentation — which is also what makes it an
+// article rather than a site page, so the two travel together instead of as two props that can disagree.
+const breadcrumbs = Astro.props.breadcrumbs;
+const isArticle = breadcrumbs !== undefined && breadcrumbs.length > 0;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 
@@ -34,14 +42,17 @@ const perPageOgAvailable = import.meta.env.PUBLIC_OG_PER_PAGE;
 const defaultOgPath = perPageOgAvailable && meta ? `/og/${ogSlug(path)}.png` : "/assets/intentic-logo-sized.png";
 const ogImage = new URL(Astro.props.ogImage ?? defaultOgPath, Astro.site);
 
-const faqQuestions = Astro.props.faqQuestions;
-const jsonLdItems: Record<string, unknown>[] = [
-    buildOrganizationSchema(),
-    buildWebSiteSchema(),
-    buildWebPageSchema({ name: title, description, path, datePublished, dateModified }),
-    ...(faqQuestions?.length ? [buildFAQPageSchema({ name: title, description, path, questions: faqQuestions })] : []),
-    ...(Astro.props.extraJsonLd ?? []),
-];
+const jsonLd = buildPageGraph({
+    name: title,
+    description,
+    path,
+    datePublished,
+    dateModified,
+    breadcrumbs,
+    article: isArticle,
+    faq: Astro.props.faq,
+    extra: Astro.props.extraJsonLd,
+});
 
 const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
 ---
@@ -55,10 +66,6 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <title>{title}</title>
         <meta name="description" content={description} />
         <meta
-            name="keywords"
-            content="intentic, AI workspace, coding agent, Claude Code, Codex, agent sandbox, self-hosted AI agent, own your code, automations"
-        />
-        <meta
             name="robots"
             content={Astro.props.noindex ? "noindex,follow" : "max-snippet:-1, max-image-preview:large, max-video-preview:-1"}
         />
@@ -69,7 +76,7 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <link rel="canonical" href={canonicalURL.href} />
         <link rel="sitemap" href="/sitemap-index.xml" />
 
-        <meta property="og:type" content="website" />
+        <meta property="og:type" content={isArticle ? "article" : "website"} />
         <meta property="og:locale" content="en_US" />
         <meta property="og:title" content={title} />
         <meta property="og:description" content={description} />
@@ -78,11 +85,15 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <meta property="og:image" content={ogImage.href} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="628" />
+        <meta property="og:image:alt" content={title} />
+        {isArticle && datePublished && <meta property="article:published_time" content={datePublished} />}
+        {isArticle && dateModified && <meta property="article:modified_time" content={dateModified} />}
 
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={title} />
         <meta name="twitter:description" content={description} />
         <meta name="twitter:image" content={ogImage.href} />
+        <meta name="twitter:image:alt" content={title} />
 
         <meta name="theme-color" content="#181614" />
         <link rel="preload" as="font" type="font/woff2" href="/fonts/inter-latin.woff2" crossorigin />
@@ -95,7 +106,7 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
             </style>
         </noscript>
 
-        {jsonLdItems.map((item) => <script is:inline type="application/ld+json" set:html={JSON.stringify(item)} />)}
+        <script is:inline type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
         {
             cfBeaconToken && (
                 <script

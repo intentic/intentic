@@ -12,7 +12,10 @@ interface Props {
 
 const { pageId, heading, lead } = Astro.props;
 const page = docsPage(pageId);
-const meta = page?.meta ?? { title: "intentic docs", description: "intentic documentation." };
+
+// The same trail the reader sees, handed to BaseLayout so the BreadcrumbList can't drift from it.
+// Title, description and dates are not passed: BaseLayout resolves them from the route.
+const breadcrumbs = [{ name: "Docs", path: docsHref("") }, ...(page && pageId ? [{ name: page.title, path: docsHref(pageId) }] : [])];
 
 const index = docsPages.findIndex((p) => p.id === pageId);
 const prev = index > 0 ? docsPages[index - 1] : undefined;
@@ -23,7 +26,7 @@ const linkBase =
 const linkActive = "border-primary-500 text-content";
 ---
 
-<BaseLayout title={meta.title} description={meta.description}>
+<BaseLayout breadcrumbs={breadcrumbs}>
     <Nav />
     <main class="flex-1">
         <div class="mx-auto grid max-w-6xl gap-10 px-6 pt-28 pb-20 lg:grid-cols-[13rem_1fr] lg:gap-14 lg:pt-32">

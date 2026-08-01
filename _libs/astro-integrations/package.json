@@ -11,11 +11,13 @@
         },
         "./og-images": "./src/og-images.mjs",
         "./git-lastmod": "./src/git-lastmod.mjs",
-        "./indexnow": "./src/indexnow.mjs"
+        "./indexnow": "./src/indexnow.mjs",
+        "./llms-text": "./src/llms-text.mjs",
+        "./html-to-markdown": "./src/html-to-markdown.mjs"
     },
     "scripts": {
-        "build": "node --check src/index.mjs",
-        "check": "node --check src/index.mjs"
+        "build": "node --check src/index.mjs && node --check src/llms-text.mjs && node --check src/html-to-markdown.mjs",
+        "check": "node --check src/index.mjs && node --check src/llms-text.mjs && node --check src/html-to-markdown.mjs"
     },
     "peerDependencies": {
         "@resvg/resvg-js": "catalog:",

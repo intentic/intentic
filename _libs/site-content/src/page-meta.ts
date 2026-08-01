@@ -1,18 +1,19 @@
+import { docsHref, docsPages } from "./docs";
+import { landingContent } from "./landing";
+
 export interface PageMeta {
     title: string;
     description: string;
+    /** Authored, not derived: the day the page went up. dateModified comes from git at build time. */
     datePublished: string;
 }
 
+// Every indexable route, keyed by canonical path. The layout resolves title, description and
+// datePublished from here, so a page's <head>, its OpenGraph card, its JSON-LD and its markdown
+// mirror can't disagree. Docs entries come straight from the docs tree; the landing page's copy
+// comes from the landing content it renders.
 export const pageMeta: Record<string, PageMeta> = {
-    // The landing page's real title/description come from the selected variant in landing.ts;
-    // this entry is the fallback and the datePublished source.
-    "/": {
-        title: "intentic — An IDE for your agents. A window for you.",
-        description:
-            "An IDE for your agents. A window for you. intentic gives each coding agent — Claude Code, Codex, or Grok — its own sandbox on hardware you own: the dev-tools its job needs really installed, wired to your systems, its context curated for one job — and every layer of that environment visible and yours to change. Run one, or ten in parallel. Free to start.",
-        datePublished: "2026-07-06",
-    },
+    "/": { ...landingContent.meta, datePublished: "2026-07-06" },
     "/privacy/": {
         title: "Privacy Policy — intentic",
         description: "What personal data the intentic platform processes, why, who it is shared with, and your rights under the GDPR.",
@@ -23,6 +24,7 @@ export const pageMeta: Record<string, PageMeta> = {
         description: "The terms governing use of the intentic platform: accounts, billing, acceptable use, and liability.",
         datePublished: "2026-07-03",
     },
+    ...Object.fromEntries(docsPages.map((page) => [docsHref(page.id), page.meta])),
 };
 
 function normalize(path: string): string {
