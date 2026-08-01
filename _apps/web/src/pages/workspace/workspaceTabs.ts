@@ -7,7 +7,10 @@ import type { GitChange, SnapshotChange } from "@intentic-app/api-contract";
  * useWorkspaceTabs.openPlan. A `directory` tab is a repository's management surface (DirectoryOperator); a
  * `graph` tab is one repo's git-history graph (GitGraph.vue) — a wide document, so it lives here in the main
  * area (not the narrow sidebar), the same division VSCode makes between its SCM list and the Git Graph tab.
- * A `health` tab is the third per-repo document: its codebase-health report (CodebaseHealth.vue). */
+ * A `health` tab is the third per-repo document: its codebase-health report (CodebaseHealth.vue). A `document`
+ * tab is the open-ended one: whatever an extension's document provider has to say about a DIRECTORY (its
+ * architecture page, today), rendered by that provider beside the code it explains rather than in a routed area
+ * away from it — see core-views/documentRegistry.ts. */
 
 // A snapshot's parent-vs-snapshot statuses plus the working tree's (which adds "renamed").
 export type ChangeStatus = SnapshotChange["status"] | GitChange["status"];
@@ -47,7 +50,20 @@ export type WorkspaceTab =
     | { readonly kind: "plan"; readonly id: string; readonly title: string; readonly text: string }
     | { readonly kind: "directory"; readonly id: string; readonly dir: string }
     | { readonly kind: "graph"; readonly id: string; readonly repo: string }
-    | { readonly kind: "health"; readonly id: string; readonly repo: string };
+    | { readonly kind: "health"; readonly id: string; readonly repo: string }
+    | {
+          readonly kind: "document";
+          readonly id: string;
+          // Which provider renders it: the owning extension's id + its provider id (documentRegistry).
+          readonly extension: string;
+          readonly provider: string;
+          // The directory the document explains, root-relative ("" = the workspace root).
+          readonly path: string;
+          // The strip draws itself from these rather than from the provider, so a restored tab has a name and a
+          // glyph before its extension has activated — and still has them if that extension never comes back.
+          readonly title: string;
+          readonly icon: string;
+      };
 
 // What the Changes/History panels hand up when a changed file is clicked; Workspace derives the diff tab's id
 // from it. `key` is the diff source's identity: a snapshot id, or `working:<repo>` for an uncommitted change.

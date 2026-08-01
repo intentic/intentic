@@ -42,7 +42,24 @@ export const packageProseTail = (dir: string): string => `${dir}/doc.md`;
 
 // A repo-relative path → workspace-root-relative. The workspace's own root repo is the empty string (the daemon
 // calls it "root" in git routes), and joining "" would produce a leading slash.
-const underRepo = (repo: string, rest: string): string => (repo === `` ? rest : `${repo}/${rest}`);
+export const underRepo = (repo: string, rest: string): string => (repo === `` ? rest : `${repo}/${rest}`);
+
+/* The inverse, against the repos the workspace actually has: a workspace path → which repo it is in and where
+ * inside it. LONGEST match wins, because the root repo ("") contains every path and would otherwise swallow a
+ * nested repo's packages — and a repo dir itself answers with an empty rest, which is the repository's own
+ * overview page rather than any package's.
+ *
+ * This is what lets a document be addressed by the path the file tree already speaks, so nothing has to carry a
+ * (repo, dir) pair around: the workspace path IS the identity, and it survives being written into a stored tab. */
+export const splitRepo = (path: string, repos: readonly string[]): { repo: string; dir: string } | undefined => {
+    const owner = repos
+        .filter((repo) => repo === `` || repo === path || path.startsWith(`${repo}/`))
+        .toSorted((left, right) => right.length - left.length)[0];
+    if (owner === undefined) {
+        return undefined;
+    }
+    return { repo: owner, dir: owner === `` ? path : path.slice(owner.length + 1) };
+};
 
 export const publishedDir = (repo: string): string => underRepo(repo, DOCS_DIR);
 export const publishedPath = (repo: string, tail: string): string => `${publishedDir(repo)}/${tail}`;

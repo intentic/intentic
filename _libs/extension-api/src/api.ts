@@ -96,6 +96,41 @@ export interface ViewerRegistration {
     readonly component: () => Promise<Component>;
 }
 
+// What a directory row offers when a provider has a document for it: the icon the Workspace tree draws on that
+// row, and what the tab it opens is called. `icon` is an open string like Activation.icon — a name outside the
+// host's set renders nothing rather than failing the registration.
+export interface DocumentOffer {
+    readonly icon: string;
+    // Names the ACTION on the row ("Open architecture doc"), since that is what a tooltip on an icon is read as.
+    readonly tooltip: string;
+    // The tab's label. Short: the strip already shows the directory's own name beside it.
+    readonly title: string;
+}
+
+/* A DOCUMENT PROVIDER — an extension's answer to "there is something to READ about this directory".
+ *
+ * PATH-KEYED, which is the whole reason it is not a `view`. `detect()` on a ViewRegistration answers per REPO
+ * off the daemon's facts, and that is the wrong grain for a document: a monorepo is one repo with fifty-five
+ * documented packages. So this asks per directory instead, and the Workspace tree — not the rail, not a routed
+ * area — is where the answer lands.
+ *
+ * The host owns the tab. A provider says "yes, and here is what to call it"; opening it mounts `view` with the
+ * path bound, in the editor area beside the files it describes. That placement is the point: documentation about
+ * a package belongs next to the package, not behind a navigation away from it. */
+export interface DocumentProviderRegistration {
+    // Must match a `contributes.documents` entry in the approved manifest.
+    readonly id: string;
+    /* Whether this provider has a document for a workspace path (root-relative; "" is the workspace root), and
+     * what the row should offer if so. Called for every visible directory row on every render of the tree, so it
+     * must be a LOOKUP and never a fetch — derive it from state the extension already keeps. Reading a ref in
+     * here is what repaints the tree when documents land, the same contract (and the same reason) as
+     * ViewRegistration.badge; and like badge, that state has to outlive the view being unmounted, so it belongs
+     * in module state owned by activate(). A throwing detect simply offers nothing for that row. */
+    readonly detect: (path: string) => DocumentOffer | undefined;
+    // Lazily imported component, rendered with `path` bound.
+    readonly view: () => Promise<Component>;
+}
+
 export type SettingValue = string | number | boolean;
 
 export interface ProcessStatus {
@@ -115,6 +150,11 @@ export interface IntenticApi {
     // registered component with the file's content; the extension only renders. See ViewerRegistration.
     readonly viewers: {
         register(viewer: ViewerRegistration): Disposable;
+    };
+    // Per-directory documents (contributes.documents) — the extension says which directories it can explain and
+    // renders one; the host draws the tree's affordance and owns the tab. See DocumentProviderRegistration.
+    readonly documents: {
+        register(provider: DocumentProviderRegistration): Disposable;
     };
     readonly commands: {
         // `command` must match a `contributes.commands` entry in the approved manifest.

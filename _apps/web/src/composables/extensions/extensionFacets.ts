@@ -73,6 +73,16 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
             surface: true,
         },
     ]);
+    // Named after the folder rather than the tab: what the reader will notice is an icon appearing on directories
+    // in their file tree, and the tab is what happens when they click it.
+    take(`documents`, (documents) => [
+        {
+            kind: `documents`,
+            label: counted(documents.length, `folder document`),
+            names: documents.map((document) => document.label),
+            surface: true,
+        },
+    ]);
     take(`commands`, (commands) => [
         { kind: `commands`, label: counted(commands.length, `command`), names: commands.map((command) => command.title), surface: true },
     ]);

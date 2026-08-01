@@ -11,14 +11,20 @@ only package (with `@intentic/extension-ui`) an extension is allowed to depend o
 - **[manifest.ts](src/manifest.ts)** — the `intentic-extension.json` schema. The manifest is the **approval
   + gating surface**: the install dialog shows exactly the declared contribution points, and the host
   refuses any runtime registration (view, command, viewer, setting, process…) the approved manifest never
-  declared. Contribution points: `views`, `viewers`, `commands`, `settings`, `processes`, `agent`,
-  `environment`, `connectors`, `listener`, `bin`, plus the `permissions.sandbox` route allowlist. Identity
-  is derived, never declared — `extensionIdOf(manifest) = ${publisher}.${name}`.
+  declared. Contribution points: `views`, `viewers`, `documents`, `commands`, `settings`, `processes`,
+  `agent`, `environment`, `connectors`, `listener`, `bin`, plus the `permissions.sandbox` route allowlist.
+  Identity is derived, never declared — `extensionIdOf(manifest) = ${publisher}.${name}`.
 - **[api.ts](src/api.ts)** — `IntenticApi`, the host surface delivered to `activate(api, context)`. There is
   no ambient global; everything an extension registers is a `Disposable` pushed onto
   `context.subscriptions`, so deactivation unwinds it.
 - **[facts.ts](src/facts.ts)** — the stable **detection** vocabulary (`RepoFacts`, `CapabilityFacts`) a
   view's `detect()` reads to decide when to activate. This is *not* the data plane.
+
+Three surfaces, at three different grains, and the grain is what picks one. A **view** activates per *repo*
+off the facts (`rail`, `directory`, `sandbox`). A **viewer** takes over a *file extension*. A **document**
+answers per *directory* — `detect(path)` marks the rows it can explain in the Workspace tree, and the host
+opens the provider's component as a tab beside the code. A monorepo is one repo with fifty-five documented
+packages, which is exactly the case a per-repo `detect()` cannot express.
 - **[stream.ts](src/stream.ts)**, **[version.ts](src/version.ts)** — SSE/ndjson helpers and the host API
   version (`engines.intentic` is checked against it before activation).
 

@@ -12,10 +12,36 @@ import {
     runIdAt,
     runPrefix,
     slugOf,
+    splitRepo,
     STAGING_ROOT,
     stagingKey,
     stagingPath,
 } from "./paths.js";
+
+/* A workspace path back to (repo, package dir) — what a tree row's icon and a stored document tab both resolve
+ * through. The root repo is "" and contains everything, so the whole correctness of this is the longest match. */
+describe(`splitRepo`, () => {
+    const repos = [``, `intentic`, `intentic/vendor`];
+
+    it(`picks the deepest repo that contains the path`, () => {
+        expect(splitRepo(`intentic/_apps/acp-bridge`, repos)).toEqual({ repo: `intentic`, dir: `_apps/acp-bridge` });
+        // Nested inside another repo — the root and `intentic` both contain it, and neither is the answer.
+        expect(splitRepo(`intentic/vendor/thing`, repos)).toEqual({ repo: `intentic/vendor`, dir: `thing` });
+    });
+
+    it(`reads a repo's own directory as that repo's overview`, () => {
+        expect(splitRepo(`intentic`, repos)).toEqual({ repo: `intentic`, dir: `` });
+        expect(splitRepo(``, repos)).toEqual({ repo: ``, dir: `` });
+    });
+
+    it(`does not mistake a sibling whose name starts the same`, () => {
+        expect(splitRepo(`intentic-site/src`, repos)).toEqual({ repo: ``, dir: `intentic-site/src` });
+    });
+
+    it(`answers nothing when no repo contains the path`, () => {
+        expect(splitRepo(`elsewhere/pkg`, [`intentic`])).toBeUndefined();
+    });
+});
 
 describe(`the two document trees`, () => {
     it(`mirrors published and staged tails so publishing is a copy, never a translation`, () => {

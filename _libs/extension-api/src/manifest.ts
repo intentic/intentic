@@ -78,6 +78,22 @@ export const ViewerContributionSchema = z.object({
 });
 export type ViewerContribution = z.infer<typeof ViewerContributionSchema>;
 
+/* A per-directory document family the extension may register at runtime (api.documents.register): the provider
+ * marks the directory rows it can explain in the Workspace tree, and the host opens its component as a tab —
+ * see DocumentProviderRegistration.
+ *
+ * Only the id is declared, deliberately. The consequential part of a viewer is which FILES it takes over, and of
+ * a command its global shortcut — both are decided here because the owner must see them. A document provider
+ * takes nothing over: it adds an icon to rows it has something for, and every one of those rows is evidence the
+ * owner can see for themselves. So the manifest gates WHETHER the extension may mark up the tree at all, and the
+ * per-row wording stays with the provider, which is the only thing that knows what it found. */
+export const DocumentContributionSchema = z.object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+    // The family's human name, shown in the install dialog beside the extension's other contributions.
+    label: z.string().min(1),
+});
+export type DocumentContribution = z.infer<typeof DocumentContributionSchema>;
+
 // A command the extension may register a handler for (api.commands.register); surfaced in the command palette.
 export const CommandContributionSchema = z.object({
     command: z.string().regex(/^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/),
@@ -233,6 +249,7 @@ export const ExtensionManifestSchema = z.object({
             // in place of a poll. See FileContributionSchema.
             files: z.array(FileContributionSchema).optional(),
             viewers: z.array(ViewerContributionSchema).optional(),
+            documents: z.array(DocumentContributionSchema).optional(),
             commands: z.array(CommandContributionSchema).optional(),
             settings: z.array(SettingContributionSchema).optional(),
             processes: z.array(ProcessContributionSchema).optional(),

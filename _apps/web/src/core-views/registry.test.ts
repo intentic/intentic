@@ -16,6 +16,9 @@ import { detectActivations, registerView } from "./registry";
 const registerApi = {
     views: { register: (view: ViewRegistration) => registerView(`test`, view) },
     viewers: { register: (): Disposable => ({ dispose: () => {} }) },
+    // The tree's per-directory documents. Accepted and dropped: this file is about what the RAIL shows, and an
+    // activate() that reaches a registry the stub is missing stops there — taking the views under test with it.
+    documents: { register: (): Disposable => ({ dispose: () => {} }) },
     commands: { register: (): Disposable => ({ dispose: () => {} }) },
 } as unknown as IntenticApi;
 apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [] });

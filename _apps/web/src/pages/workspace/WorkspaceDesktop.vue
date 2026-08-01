@@ -40,7 +40,9 @@ import UploadProgress from "./UploadProgress.vue";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import WorkspaceTree from "./WorkspaceTree.vue";
+import ExtensionDocument from "../../core-views/ExtensionDocument.vue";
 import { rendersAsBytes } from "./fileType";
+import { type RowAction, rowActionsFor } from "./rowActions";
 
 /* The Workspace area: a VSCode-like, full-height explorer + viewer of the /work filesystem the agent sees
  * ("what the LLM sees"), read DIRECTLY from the sandbox daemon (no platform state, see CLAUDE.md). A resizable
@@ -127,6 +129,7 @@ const {
     openDirectory,
     openGraph,
     openHealth,
+    openDocument,
     selectTab,
     closedTabs,
     closeTabIds,
@@ -147,6 +150,20 @@ const manageableDirs = computed(
             ),
         ),
 );
+/* What each directory row offers beside its name — its documents, its health, its history, its management panel.
+ * Composed here because this is where the openers live; the tree just draws them (see rowActions.ts). Passed as a
+ * function so only the rows actually on screen are asked, and read inside the tree's render, so an extension
+ * registering a document provider lights up the rows it serves without anything having to invalidate. */
+const rowActions = (dir: string): readonly RowAction[] =>
+    rowActionsFor(dir, {
+        repoDirs: repoDirs.value,
+        manageableDirs: manageableDirs.value,
+        openHealth,
+        openGraph,
+        openDirectory,
+        openDocument,
+    });
+
 const activeFile = computed(() => (activeTab.value?.kind === `file` ? activeTab.value : undefined));
 const openPath = computed(() => activeFile.value?.path);
 const openMeta = computed(() => entry(openPath.value));
@@ -817,11 +834,9 @@ const endResize = (event: PointerEvent): void => {
                         :filter="filter"
                         :selected-path="openPath"
                         :manageable-dirs="manageableDirs"
-                        :repo-dirs="repoDirs"
+                        :row-actions="rowActions"
                         @open-file="openFile"
                         @open-directory="openDirectory"
-                        @open-graph="openGraph"
-                        @open-health="openHealth"
                     />
                 </div>
                 <div
@@ -906,6 +921,16 @@ const endResize = (event: PointerEvent): void => {
                     <!-- Every ranked row is an anchor: clicking one opens the file it names, because a ranking
                          whose rows don't go anywhere just makes the reader retype a path. -->
                     <CodebaseHealth :repo="activeTab.repo" @open-file="openFile" @switch-repo="openHealth" />
+                </div>
+                <!-- A directory's document, rendered by the extension that has something to say about it — the
+                     open-ended member of this family, beside the code it explains. -->
+                <div v-else-if="activeTab?.kind === 'document'" class="min-h-0 flex-1">
+                    <ExtensionDocument
+                        :extension="activeTab.extension"
+                        :provider="activeTab.provider"
+                        :path="activeTab.path"
+                        :title="activeTab.title"
+                    />
                 </div>
                 <WorkspaceEmptyState v-else @pick="fileInput?.click()" />
                 <!-- Drop-to-root hint over the viewer, shown only for external file drags (an internal move is

@@ -1,0 +1,103 @@
+import type { Disposable } from "@intentic/extension-api";
+import { WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import { ref } from "vue";
+import { parseDocIndex } from "./docModel.js";
+import { host } from "./host.js";
+import { INDEX_TAIL, publishedPath, underRepo } from "./paths.js";
+import { documentedDirs, listStagedTails } from "./stagedTree.js";
+
+/* WHICH DIRECTORIES HAVE A DOCUMENT — the state behind the icon on a Workspace tree row.
+ *
+ * Module state with its own poll, for the same reason attention.ts has one and not for a different one: the host
+ * asks `detect(path)` while nothing of this extension is mounted (the reader is browsing files, not reading docs),
+ * so a vue-query inside a view could never answer. Nothing observes an unmounted view, so the file-change push
+ * cannot serve this either — it invalidates queries, and there is no query here to invalidate.
+ *
+ * Keyed by WORKSPACE path (`intentic/_apps/acp-bridge`), not by (repo, dir): that is the vocabulary the tree
+ * speaks, and it is what the tab stores. A repo's own row is in here too, under the repo's path — the repository
+ * overview (`repo.md`) is a document like any other, and the row that has health and history should have it too.
+ *
+ * Both trees count. A staged draft is something to READ, which is the question the icon answers; the tab it opens
+ * then says plainly that it is a draft. Published wins where both exist, because that is what the tab opens by
+ * default. */
+
+// Slow on purpose, like the badge's. Documents appear when a generation run finishes or a publish lands — minutes
+// apart — and the two moments that matter (publish, discard) call refresh() directly rather than waiting.
+const POLL_MS = 60_000;
+
+export interface DocumentPresence {
+    // The package's one-line description from the index, so hovering the row's icon says what the thing IS. Empty
+    // for a repo overview and for a staged document (whose index has not necessarily been generated yet).
+    readonly oneLiner: string;
+    // Only a draft exists — worth saying on the row, since it is not in the repository yet.
+    readonly draft: boolean;
+}
+
+const documents = ref<ReadonlyMap<string, DocumentPresence>>(new Map());
+
+/* The published set, as package dir → its one-liner. ONE read per repository serves every package it documents,
+ * because the derived index (`intentic-docs check` writes it; nothing authors it) already holds both the list and
+ * the descriptions — which is also why the row's tooltip can say what a package IS without a read per row.
+ *
+ * A repo whose set was hand-written and never checked has no index and therefore no icons: the same blind spot
+ * the view's own package list has, and the same fix. */
+const publishedEntries = async (repo: string): Promise<ReadonlyMap<string, string>> => {
+    try {
+        const body = await host().sandbox.json(`/workspace/file?path=${encodeURIComponent(publishedPath(repo, INDEX_TAIL))}`);
+        // An index that does not parse is an index that says nothing — the same answer as a missing one, and not
+        // this module's business to complain about: the view renders the set, and the tool regenerates it.
+        const index = parseDocIndex(WorkspaceFileSchema.parse(body).content);
+        return new Map((index?.entries ?? []).map((entry) => [entry.dir, entry.oneLiner] as const));
+    } catch {
+        // No index is the ordinary state of a repository nobody has documented yet.
+        return new Map();
+    }
+};
+
+/* Never throws and never rejects — a timer nothing awaits (attention.ts documents the reasoning). It also runs at
+ * activation, before the shell has a sandbox at all, so "not reachable yet" is an ordinary first state. */
+const scan = async (): Promise<void> => {
+    try {
+        const api = host();
+        if (!api.sandbox.reachable()) {
+            return;
+        }
+        const next = new Map<string, DocumentPresence>();
+        await Promise.all(
+            api.workspace.repos().map(async ({ repo }) => {
+                const [published, staged] = await Promise.all([publishedEntries(repo), listStagedTails(api, repo)]);
+                // Drafts first, so a published document overwrites its draft's entry rather than the other way
+                // round: the tab opens the published page, and the row should not call it a draft.
+                if (staged.includes(`repo.json`)) {
+                    next.set(repo, { oneLiner: ``, draft: true });
+                }
+                for (const dir of documentedDirs(staged)) {
+                    next.set(underRepo(repo, dir), { oneLiner: ``, draft: true });
+                }
+                if (published.size > 0) {
+                    next.set(repo, { oneLiner: ``, draft: false });
+                }
+                for (const [dir, oneLiner] of published) {
+                    next.set(underRepo(repo, dir), { oneLiner, draft: false });
+                }
+            }),
+        );
+        documents.value = next;
+    } catch {
+        // Leave the previous map standing: a transient read failure is not evidence the documents are gone.
+    }
+};
+
+export const startDocumentPresence = (): Disposable => {
+    void scan();
+    const timer = setInterval(() => void scan(), POLL_MS);
+    return { dispose: () => clearInterval(timer) };
+};
+
+// Re-read now, for the two moments that change this without waiting: publishing a draft into a repo, and
+// discarding one.
+export const refreshDocumentPresence = (): void => void scan();
+
+// What this workspace path has to read, if anything. A plain Map lookup — the host calls this for every visible
+// directory row on every render of the tree.
+export const documentAt = (path: string): DocumentPresence | undefined => documents.value.get(path);

@@ -1,4 +1,5 @@
 import { computed, ref, watch } from "vue";
+import { documentTabId } from "../../core-views/documentRegistry";
 import { closeTabs, type DiffTabPayload, diffTabId, type LineJump, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
 import { useSandbox } from "../sandbox/useSandbox";
 import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspaceSnapshot";
@@ -147,6 +148,24 @@ const openHealth = (repo: string): void => {
     }
 };
 
+/* A directory's document, contributed by an extension (documentRegistry) and opened from the row that offers it.
+ * Open-or-focus by provider + path, so re-clicking the same folder's icon focuses the tab it already has — but
+ * two providers explaining the SAME directory get a tab each, which is why the id carries both.
+ *
+ * Title and icon are copied onto the tab rather than looked up on render: the strip has to draw a restored tab
+ * before the owning extension has activated, and must not lose its label if that extension never comes back. */
+const openDocument = (extension: string, provider: string, path: string, title: string, icon: string): void => {
+    const id = documentTabId(extension, provider, path);
+    const tab: WorkspaceTab = { kind: `document`, id, extension, provider, path, title, icon };
+    openLine.value = undefined;
+    // Refreshed in place when it is already open: the offer's title can move under it (a package renamed, a draft
+    // published), and the tab should say what the row says.
+    tabs.value = tabs.value.some((existing) => existing.id === id)
+        ? tabs.value.map((existing) => (existing.id === id ? tab : existing))
+        : [...tabs.value, tab];
+    activeId.value = id;
+};
+
 const selectTab = (id: string): void => {
     openLine.value = undefined;
     activeId.value = id;
@@ -223,6 +242,7 @@ export function useWorkspaceTabs() {
         openDirectory,
         openGraph,
         openHealth,
+        openDocument,
         selectTab,
         closedTabs,
         closeTabIds,

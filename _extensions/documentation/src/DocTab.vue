@@ -1,0 +1,114 @@
+<!-- ONE DIRECTORY'S PAGE, OPENED IN THE WORKSPACE — the same document DocsView renders, next to the code it
+     explains instead of in an area you have to navigate to. This is the whole point of the document contribution:
+     the question "what is this package?" is asked while looking at the package.
+
+     It is a DIFFERENT COMPONENT from DocsView rather than a mode of it, and the reason is the URL. DocsView keeps
+     which page is open in the query (`?doc=`), which is right for a routed area and wrong here twice over: the
+     route belongs to the Workspace, and two document tabs open at once would fight over one key. A tab's subject
+     is the tab's own state, so this takes it as a prop and touches no query at all. -->
+<script setup lang="ts">
+import { Button, cmp, Icon, Segmented } from "@intentic/extension-ui";
+import { computed, ref, watch } from "vue";
+import DocPage from "./DocPage.vue";
+import { host } from "./host.js";
+import { splitRepo } from "./paths.js";
+import { useDocs, type DocSource } from "./useDocs.js";
+
+// The directory this tab explains, workspace-root-relative — the identity the tree row and the stored tab share.
+const { path } = defineProps<{ path: string }>();
+
+const api = host();
+
+// Which repository owns the path, and where inside it. Derived from the workspace's repos rather than carried on
+// the tab, so a tab restored into a workspace whose repos have moved resolves against what is there now.
+const location = computed(() =>
+    splitRepo(
+        path,
+        api.workspace.repos().map((facts) => facts.repo),
+    ),
+);
+const repo = computed(() => location.value?.repo ?? ``);
+// "" ⇒ the repository's own overview page (repo.md), which is what a repo row's icon opens.
+const dir = computed(() => (location.value === undefined || location.value.dir === `` ? undefined : location.value.dir));
+const label = computed(() => (path === `` ? `the workspace root` : path));
+
+const source = ref<DocSource>(`published`);
+const SOURCES = [
+    { label: `Published`, value: `published` as DocSource, title: `Committed in the repository` },
+    { label: `Draft`, value: `staged` as DocSource, title: `Generated, not yet published` },
+];
+
+const { set, isLoading, hasStaged, usePackage } = useDocs(repo, source);
+const packageQuery = usePackage(dir);
+
+// A page that exists only as a draft has to show the draft, or the tab renders empty for the one document that is
+// actually there. Published stays the default everywhere else — it is what the repository says.
+watch([hasStaged, set, packageQuery.data], ([staged, repoSet, page]) => {
+    const published = dir.value === undefined ? repoSet?.prose !== undefined : page?.prose !== undefined;
+    if (staged && !published && source.value === `published`) {
+        source.value = `staged`;
+    }
+});
+
+const entries = computed(() => set.value?.index?.entries ?? []);
+const staleness = computed(() => entries.value.find((entry) => entry.dir === dir.value));
+
+// The full area, for everything this tab deliberately does not carry: the map, the other packages, generation,
+// publishing. `doc` is dropped for a repo overview so the link lands on the overview rather than an empty page.
+const openArea = (): void =>
+    api.navigate(
+        `/ext/documentation?repo=${encodeURIComponent(repo.value)}${dir.value === undefined ? `` : `&doc=${encodeURIComponent(dir.value)}`}`,
+    );
+</script>
+
+<template>
+    <div class="flex h-full min-h-0 flex-col overflow-hidden">
+        <!-- A thin strip, not a PageHeader: this is a tab beside a file's tab, and a full page title on top of a
+             document would say the same thing the tab strip already says. -->
+        <div class="flex h-8 shrink-0 items-center gap-2 border-b border-line px-3">
+            <Icon name="question-circle" class="shrink-0 text-2xs text-subtle" />
+            <span class="min-w-0 truncate font-mono text-2xs text-muted">{{ label }}</span>
+            <div class="ml-auto flex shrink-0 items-center gap-2">
+                <Segmented v-if="hasStaged" v-model="source" :options="SOURCES" size="xs" />
+                <Button size="small" severity="secondary" text label="All documentation" @click="openArea" />
+            </div>
+        </div>
+
+        <div v-if="isLoading" class="flex min-h-0 flex-1 items-center justify-center text-muted"><Icon name="spinner" class="text-lg" spin /></div>
+
+        <!-- Undocumented is the ordinary state of most directories, so it is an invitation rather than an error —
+             and the invitation goes where generation actually lives, because a run needs a scope and choosing one
+             is a decision this tab has no business taking. -->
+        <div
+            v-else-if="dir === undefined ? set?.prose === undefined : packageQuery.data.value?.prose === undefined"
+            class="min-h-0 flex-1 overflow-y-auto p-6 scrollbar-thin"
+        >
+            <div :class="cmp.emptyState()">
+                <p class="text-sm">{{ label }} has no documentation yet.</p>
+                <p class="mt-1 text-xs text-muted">An agent can read this directory and write a plain-language page about it, for you to review.</p>
+                <button type="button" :class="cmp.buttonPrimary(`mt-3`)" @click="openArea">Open Documentation</button>
+            </div>
+        </div>
+
+        <div v-else class="min-h-0 flex-1 overflow-hidden px-6 py-5">
+            <DocPage
+                v-if="dir === undefined"
+                key="overview"
+                :prose="set?.prose"
+                :anchors="[]"
+                :provenance="set?.repoDoc?.provenance"
+                :repo="repo"
+                :staleness="undefined"
+            />
+            <DocPage
+                v-else
+                :key="dir"
+                :prose="packageQuery.data.value?.prose"
+                :anchors="packageQuery.data.value?.doc?.keyFiles ?? []"
+                :provenance="packageQuery.data.value?.doc?.provenance"
+                :repo="repo"
+                :staleness="staleness"
+            />
+        </div>
+    </div>
+</template>

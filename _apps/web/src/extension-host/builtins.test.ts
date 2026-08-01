@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import type { CapabilityFacts, ExtensionContext, IntenticApi, RepoFacts, ViewRegistration } from "@intentic/extension-api";
+import type {
+    CapabilityFacts,
+    DocumentProviderRegistration,
+    ExtensionContext,
+    IntenticApi,
+    RepoFacts,
+    ViewRegistration,
+} from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-api";
 import { ICON_SETS } from "@intentic-app/ui";
 import * as activity from "@intentic/ext-activity";
@@ -32,10 +39,26 @@ vi.hoisted(() => {
 
 const { builtinModules } = await import("./builtins");
 
+/* A fake host that accepts every registration an extension can make and records what it was handed. It has to
+ * accept ALL of them, not just the one a given test reads: activate() runs top to bottom, so a registry the stub
+ * is missing throws halfway through and the extension's later registrations — the ones under test — never happen.
+ * That is how adding a contribution point breaks tests that have nothing to do with it. */
+const capture = () => {
+    const views: ViewRegistration[] = [];
+    const documents: DocumentProviderRegistration[] = [];
+    const api = {
+        views: { register: (view: ViewRegistration) => (views.push(view), { dispose: () => {} }) },
+        viewers: { register: () => ({ dispose: () => {} }) },
+        documents: { register: (provider: DocumentProviderRegistration) => (documents.push(provider), { dispose: () => {} }) },
+        commands: { register: () => ({ dispose: () => {} }) },
+    } as unknown as IntenticApi;
+    return { api, views, documents };
+};
+
 const activateAndCapture = (module: { activate: (api: IntenticApi, ctx: ExtensionContext) => void }): ViewRegistration => {
-    let registered: ViewRegistration | undefined;
-    const api = { views: { register: (view: ViewRegistration) => ((registered = view), { dispose: () => {} }) } } as unknown as IntenticApi;
+    const { api, views } = capture();
     module.activate(api, { extensionId: `test`, subscriptions: [] });
+    const registered = views[0];
     if (registered === undefined) {
         throw new Error(`activate() registered no view`);
     }
@@ -65,16 +88,21 @@ const richRepo: RepoFacts = {
 describe(`every builtin`, () => {
     for (const [id, module] of builtinModules) {
         it(`registers only views its manifest declares — ${id}`, () => {
-            const registered: ViewRegistration[] = [];
-            const api = {
-                views: { register: (view: ViewRegistration) => (registered.push(view), { dispose: () => {} }) },
-                viewers: { register: () => ({ dispose: () => {} }) },
-                commands: { register: () => ({ dispose: () => {} }) },
-            } as unknown as IntenticApi;
+            const { api, views } = capture();
             module.activate(api, { extensionId: id, subscriptions: [] });
             const declared = (module.manifest.contributes?.views ?? []).map((view) => `${view.id} (${view.surface})`);
-            for (const view of registered) {
+            for (const view of views) {
                 expect(declared).toContain(`${view.id} (${view.surface})`);
+            }
+        });
+        // Same drift, same silent cost, one contribution point over: a document provider the manifest never
+        // declared is refused, and the extension loses every registration that would have followed it.
+        it(`registers only documents its manifest declares — ${id}`, () => {
+            const { api, documents } = capture();
+            module.activate(api, { extensionId: id, subscriptions: [] });
+            const declared = (module.manifest.contributes?.documents ?? []).map((document) => document.id);
+            for (const provider of documents) {
+                expect(declared).toContain(provider.id);
             }
         });
         // The map's key IS how the loader pairs a daemon-listed manifest with the code compiled in here, so a
@@ -88,12 +116,7 @@ describe(`every builtin`, () => {
          * error either: the tile just comes up blank. That shipped once (`book`, which is not in the set), and
          * a blank tile is invisible in every test that only checks structure. */
         it(`names icons that exist — ${id}`, () => {
-            const registered: ViewRegistration[] = [];
-            const api = {
-                views: { register: (view: ViewRegistration) => (registered.push(view), { dispose: () => {} }) },
-                viewers: { register: () => ({ dispose: () => {} }) },
-                commands: { register: () => ({ dispose: () => {} }) },
-            } as unknown as IntenticApi;
+            const { api, views: registered } = capture();
             module.activate(api, { extensionId: id, subscriptions: [] });
             const known = new Set(Object.keys(ICON_SETS.phosphor));
             // Facts generous enough that a detect() gated on evidence still produces its activations.

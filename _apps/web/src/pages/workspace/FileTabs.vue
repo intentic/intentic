@@ -31,6 +31,11 @@ const tabLabel = (tab: WorkspaceTab): string => {
     if (tab.kind === `directory`) {
         return basename(tab.dir);
     }
+    // A document is named for the DIRECTORY it explains, not for the document family: the strip is a list of
+    // subjects, and "Architecture" three times over would name none of them. The family is in the tooltip.
+    if (tab.kind === `document`) {
+        return basename(tab.path);
+    }
     // The two per-repo documents are named for their repo, so the icon is what tells them apart in the strip —
     // and both can be open for the same repo at once.
     return tab.kind === `graph` || tab.kind === `health` ? basename(tab.repo) : basename(tab.path);
@@ -47,6 +52,9 @@ const tabHint = (tab: WorkspaceTab): string => {
     }
     if (tab.kind === `health`) {
         return `${tab.repo} · codebase health`;
+    }
+    if (tab.kind === `document`) {
+        return `${tab.path} · ${tab.title}`;
     }
     return tab.kind === `diff` ? `${tab.label} (diff)` : tab.path;
 };
@@ -160,6 +168,9 @@ watch(
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
                 <Icon name="sitemap" v-else-if="tab.kind === 'graph'" class="text-2xs text-link" />
                 <Icon name="wave-pulse" v-else-if="tab.kind === 'health'" class="text-2xs text-link" />
+                <!-- The provider's own glyph, an open string like every extension-supplied icon (a bundle may name
+                     one this app has never heard of) — an unknown name renders the set's fallback, never an error. -->
+                <Icon v-else-if="tab.kind === 'document'" :name="(tab.icon as IconName)" class="text-2xs text-link" />
                 <ChangeStatusMark v-else :status="tab.status" />
                 <span class="max-w-40 truncate">{{ tabLabel(tab) }}</span>
                 <span class="relative flex h-3 w-3 shrink-0 items-center justify-center" @click="onClose($event, tab.id)">

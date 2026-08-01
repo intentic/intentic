@@ -10,6 +10,7 @@ import { extensionSettingsStore } from "../composables/extensions/useExtensionSe
 import { sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { sandboxKey, useSandbox } from "../composables/sandbox/useSandbox";
+import { registerDocumentProvider } from "../core-views/documentRegistry";
 import { registerView } from "../core-views/registry";
 import { registerViewer } from "../core-views/viewerRegistry";
 import { router } from "../router";
@@ -62,6 +63,7 @@ export const createExtensionApi = (
     const contributes = summary.manifest.contributes;
     const declaredViews = new Map((contributes?.views ?? []).map((view) => [view.id, view]));
     const declaredViewers = new Map((contributes?.viewers ?? []).map((viewer) => [viewer.id, viewer]));
+    const declaredDocuments = new Map((contributes?.documents ?? []).map((document) => [document.id, document]));
     const declaredCommands = new Map((contributes?.commands ?? []).map((command) => [command.command, command]));
     const declaredSettings = contributes?.settings ?? [];
     const declaredProcesses = new Set((contributes?.processes ?? []).map((process) => process.name));
@@ -139,6 +141,25 @@ export const createExtensionApi = (
                         extensions: declared.extensions,
                         fetch: declared.fetch,
                         component: viewer.component,
+                    }),
+                );
+            },
+        },
+        documents: {
+            register: (provider) => {
+                const declared = declaredDocuments.get(provider.id);
+                if (declared === undefined) {
+                    throw new Error(`document provider "${provider.id}" is not declared in the manifest's contributes.documents`);
+                }
+                // The family label is the manifest's, like a view's — it is what the install dialog showed. The
+                // per-row wording stays with the provider, which is the only thing that knows what it found.
+                return track(
+                    registerDocumentProvider({
+                        owner: extensionId,
+                        id: provider.id,
+                        label: declared.label,
+                        detect: provider.detect,
+                        component: provider.view,
                     }),
                 );
             },

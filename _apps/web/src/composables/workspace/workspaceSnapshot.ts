@@ -80,19 +80,37 @@ const readTab = (raw: Record<string, unknown>): StoredWorkspaceTab | undefined =
         return undefined;
     }
     const path = text(raw[`path`]);
+    // The /work root is a directory like any other and its path is the empty string, so the two fields that can
+    // name it read back as plain strings rather than through `text` (which treats "" as absent).
     const dir = raw[`dir`];
+    const documentPath = raw[`path`];
     const repo = text(raw[`repo`]);
     switch (raw[`kind`]) {
         case `file`:
             return path === undefined ? undefined : { kind: `file`, id, path };
-        // The /work root is a manageable dir like any other and its path is the empty string, so `dir` is the
-        // one field here that reads back as a plain string rather than through `text`.
         case `directory`:
             return typeof dir === `string` ? { kind: `directory`, id, dir } : undefined;
         case `graph`:
             return repo === undefined ? undefined : { kind: `graph`, id, repo };
         case `health`:
             return repo === undefined ? undefined : { kind: `health`, id, repo };
+        /* An extension's document. Restored on identity + the strip's own label, never on the provider being
+         * back: extensions activate after this is read, and one that has since been switched off should still
+         * leave the tab where the user left it — it renders its own "no longer available" rather than vanishing
+         * silently. */
+        case `document`: {
+            const extension = text(raw[`extension`]);
+            const provider = text(raw[`provider`]);
+            const title = text(raw[`title`]);
+            const icon = text(raw[`icon`]);
+            return extension === undefined ||
+                provider === undefined ||
+                title === undefined ||
+                icon === undefined ||
+                typeof documentPath !== `string`
+                ? undefined
+                : { kind: `document`, id, extension, provider, path: documentPath, title, icon };
+        }
         case `plan`: {
             const body = text(raw[`text`]);
             const title = text(raw[`title`]);

@@ -24,6 +24,7 @@
             { "id": "documentation", "label": "Documentation", "surface": "rail", "badge": true },
             { "id": "documentation-repo", "label": "Docs", "surface": "directory" }
         ],
+        "documents": [{ "id": "architecture", "label": "Architecture" }],
         "files": [{ "path": ".intentic/docs/", "invalidates": ["documentation", "documentation-runs"] }],
         "commands": [{ "command": "documentation.generate", "title": "Generate documentation" }],
         "bin": "bin",

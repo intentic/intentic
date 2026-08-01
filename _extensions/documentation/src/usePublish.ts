@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { GitStatusSchema, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import { refreshDocumentPresence } from "./docPresence.js";
 import { host } from "./host.js";
 import { DOCS_DIR, stagingDir, stagingPath } from "./paths.js";
 import { listStagedTails } from "./stagedTree.js";
@@ -103,6 +104,9 @@ export function usePublish() {
             body: JSON.stringify({ path: stagingDir(repo) }),
         });
         void queryClient.invalidateQueries({ queryKey: api.sandbox.key(`documentation`) });
+        // The tree's icons are module state on a slow poll, not a query — invalidation cannot reach them, and a
+        // publish is precisely when a draft icon becomes a published one.
+        refreshDocumentPresence();
     };
 
     const discard = async (repo: string): Promise<void> => {
@@ -112,6 +116,9 @@ export function usePublish() {
             body: JSON.stringify({ path: stagingDir(repo) }),
         });
         void queryClient.invalidateQueries({ queryKey: api.sandbox.key(`documentation`) });
+        // The tree's icons are module state on a slow poll, not a query — invalidation cannot reach them, and a
+        // publish is precisely when a draft icon becomes a published one.
+        refreshDocumentPresence();
     };
 
     return { preflight, publish, discard };

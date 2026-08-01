@@ -69,6 +69,28 @@ the browser would need one commit-diff request per commit.
 The real anti-rot mechanism, though, is the shipped skill: **update a package's document in the same commit as the
 change that invalidated it.** The checker is the backstop for what slips.
 
+## Three places you read a document
+
+| Surface | Subject | Why it exists |
+| --- | --- | --- |
+| Rail tile (`/ext/documentation`) | the workspace | reading the MAP — a system is rarely one repository |
+| Directory panel (a repo's cog) | one repository | its overview beside that repo's other panels |
+| **Tree row icon** | one **directory** | "what is this package?" is asked while looking at the package |
+
+The third is the one the other two cannot reach. A view's `detect()` answers per repo off the daemon's facts, and
+a document is per package — fifty-five of them in this monorepo, each mirroring a directory already sitting in the
+file tree. So it rides `contributes.documents` (a path-keyed contribution point in the extension API), and it opens
+in the Workspace's own editor area as a tab rather than navigating away from the files it describes.
+
+The presence of a document is module state on a slow poll ([src/docPresence.ts](src/docPresence.ts)), not a query:
+the host asks `detect(path)` while nothing of this extension is mounted, and nothing observes an unmounted view —
+so neither a vue-query nor the file-change push could answer. One index read per repository covers every package it
+documents, tooltips included, because `index.json` already carries the one-liners.
+
+[src/DocTab.vue](src/DocTab.vue) is a separate component from `DocsView` rather than a mode of it, for one reason:
+`DocsView` keeps the open page in the URL query, which is right for a routed area and wrong for a tab — the route
+belongs to the Workspace, and two open document tabs would fight over one key. A tab's subject is a prop.
+
 ## Key files
 
 - [src/paths.ts](src/paths.ts) — the two trees and the id scheme; the convention *is* the API
@@ -77,6 +99,7 @@ change that invalidated it.** The checker is the backstop for what slips.
 - [src/useRuns.ts](src/useRuns.ts) — map-first orchestration and the derived, idempotent advance
 - [src/usePublish.ts](src/usePublish.ts) — write → stage → commit, and the index caveat it cannot rule out
 - [src/attention.ts](src/attention.ts) — the badge, and why it is not a coverage count
+- [src/docPresence.ts](src/docPresence.ts) — which directories have a document, for the tree's row icon
 - [bin/intentic-docs](bin/intentic-docs) — facts / validate / check
 - [plugin/skills/documenting/SKILL.md](plugin/skills/documenting/SKILL.md) — the conventions, taught to every turn
 

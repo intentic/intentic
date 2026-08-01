@@ -1,5 +1,6 @@
 import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { documentationBadge, startDocumentationAttention } from "./attention.js";
+import { documentAt, startDocumentPresence } from "./docPresence.js";
 import { bindHost } from "./host.js";
 
 /* ext-documentation activation: bind the host handle, start the badge's background poll, then register the two
@@ -58,6 +59,40 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             auxiliary: true,
             detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: `Docs`, repo: repo.repo })),
             view: async () => (await import(`./DocsView.vue`)).default,
+        }),
+    );
+
+    /* THE PER-DIRECTORY SURFACE — an icon on every documented directory in the Workspace tree, opening that
+     * directory's page as a tab.
+     *
+     * This is the grain the other two surfaces cannot reach. The rail tile is workspace-wide and the directory
+     * panel is per REPO, but a document is per PACKAGE: fifty-five of them in this monorepo, each mirroring a
+     * directory that is already sitting in the tree. Reaching one meant leaving the file you were reading, opening
+     * an area, and finding the package again in a list — for an answer ("what is this thing?") that is only ever
+     * asked while looking at the thing.
+     *
+     * The row's tooltip carries the package's one-liner rather than the word "documentation": the icon already
+     * says there is something to read, so the hover is worth spending on what it SAYS. */
+    context.subscriptions.push(startDocumentPresence());
+    context.subscriptions.push(
+        api.documents.register({
+            id: `architecture`,
+            detect: (path) => {
+                const present = documentAt(path);
+                if (present === undefined) {
+                    return undefined;
+                }
+                const draft = present.draft ? ` (draft)` : ``;
+                return {
+                    // The rail tile's own glyph, so the two read as one thing. Its neighbours on a row are
+                    // `wave-pulse`, `sitemap` and `cog`, and a ring with a mark inside shares a silhouette with
+                    // none of them (see the rail registration for the alternatives that failed).
+                    icon: `question-circle`,
+                    tooltip: present.oneLiner === `` ? `Open architecture doc${draft}` : `${present.oneLiner}${draft}`,
+                    title: `Architecture`,
+                };
+            },
+            view: async () => (await import(`./DocTab.vue`)).default,
         }),
     );
 

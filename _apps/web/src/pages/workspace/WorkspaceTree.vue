@@ -17,6 +17,7 @@ import { filesToEntries } from "./dropEntries";
 import { movableInto, pastePairs } from "./explorerPaste";
 import { nestSiblings, type NestedEntry } from "./fileNesting";
 import { revealTargets } from "./revealPath";
+import type { RowAction } from "./rowActions";
 import { selectRange, stepLead } from "./treeSelect";
 import { basename, parentDir } from "@intentic-app/ui/path";
 
@@ -58,7 +59,7 @@ const {
     filter = ``,
     selectedPath,
     manageableDirs = new Set<string>(),
-    repoDirs = new Set<string>(),
+    rowActions,
 } = defineProps<{
     tree: readonly WorkspaceTreeEntry[];
     // How many of the root's own entries the daemon's entry budget cut (0 = the root listing is complete).
@@ -66,15 +67,17 @@ const {
     filter?: string;
     selectedPath?: string | null;
     // Directory paths that have a management surface (a directory-surface extension serves the repo). Activating
-    // such a row also opens its operator tab, and the row shows a cog affordance.
+    // such a row with the KEYBOARD also opens its operator tab — the row's cog is one of its rowActions.
     manageableDirs?: ReadonlySet<string>;
-    // Directory paths that are git repos (nested under /work). Each shows two affordances — its commit graph
-    // and its codebase-health report — which open as tabs (root has no row, so its own icons sit on the
-    // explorer toolbar). This is where the multi-repo axis surfaces: a repo nested in the workspace gets its
-    // own history and its own health right here.
-    repoDirs?: ReadonlySet<string>;
+    /* What this directory offers beside its name — its documents, its health, its history, its management panel
+     * (see rowActions.ts). The tree does not know what any of them mean: it draws the icons and runs the one that
+     * is clicked. That is what lets an EXTENSION put something on a row without this component learning about it.
+     *
+     * A function rather than a map, because the rows on screen are the only ones worth asking about: a monorepo's
+     * listing is lazily loaded, so nobody can enumerate the paths up front. */
+    rowActions?: (dir: string) => readonly RowAction[];
 }>();
-const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string]; openGraph: [path: string]; openHealth: [path: string] }>();
+const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string] }>();
 
 const {
     saveText,
@@ -356,23 +359,14 @@ const toggleAt = (path: string): void => {
 };
 const clipPaths = (): string[] => (selection.value.size > 0 ? [...selection.value] : lead.value !== null ? [lead.value] : []);
 
-// The cog affordance on a managed dir row: open its operator tab (and select the row so the highlight tracks it).
-const onCogClick = (entry: WorkspaceTreeEntry): void => {
-    selectSingle(entry.path);
-    emit(`openDirectory`, entry.path);
-};
+// A row's own affordances, or none when the parent supplied no source (the mobile listing, a test).
+const actionsFor = (path: string): readonly RowAction[] => rowActions?.(path) ?? [];
 
-// The git-history affordance on a repo dir row: open that repo's commit graph as a tab — the same shape as the
-// cog (select the row, open the surface), one level over at the sibling per-repo action.
-const onGraphClick = (entry: WorkspaceTreeEntry): void => {
+// Running one selects its row first, so the highlight follows what the user just opened — the behaviour all
+// three hardcoded affordances used to repeat, now stated once.
+const runAction = (entry: WorkspaceTreeEntry, action: RowAction): void => {
     selectSingle(entry.path);
-    emit(`openGraph`, entry.path);
-};
-
-// The codebase-health affordance, the third of the same family: this repo's hotspots and key modules as a tab.
-const onHealthClick = (entry: WorkspaceTreeEntry): void => {
-    selectSingle(entry.path);
-    emit(`openHealth`, entry.path);
+    action.run();
 };
 
 const onRowClick = (event: MouseEvent, row: Row): void => {
@@ -782,6 +776,15 @@ const menuItems = computed<MenuItem[]>(() => {
         { label: `New File`, icon: `file`, command: () => beginCreate(dir, `file`) },
         { label: `New Folder`, icon: `folder`, command: () => beginCreate(dir, `dir`) },
     ];
+    /* What the row's own icons offer, said in words and at the top — because the icons are revealed by HOVER, and
+     * a touch device has no hover and a keyboard user never reaches them (the row is the button; the icons inside
+     * it cannot be). This menu is the whole non-pointer route to a directory's document, health and history. */
+    if (target?.type === `dir` && !multi) {
+        const actions = actionsFor(target.path);
+        if (actions.length > 0) {
+            items.push(...actions.map((action) => ({ label: action.tooltip, icon: action.icon, command: () => runAction(target, action) })));
+        }
+    }
     if (target !== undefined) {
         items.push({ separator: true });
         if (!multi) {
@@ -881,7 +884,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     :aria-expanded="row.entry.type === 'dir' || row.nest ? row.isExpanded : undefined"
                     :tabindex="tabbablePath === row.entry.path ? 0 : -1"
                     :draggable="renamingPath !== row.entry.path"
-                    class="ui-row-select flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
+                    class="ui-row-select group flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
                     :class="{
                         'ui-row-select-on': selection.has(row.entry.path),
                         'ui-row-select-drop': row.entry.path === dragOverPath,
@@ -927,9 +930,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                          the badge names what it is. What the shelf is FOR was a 29-word paragraph hanging off a
                          tree row, which is neither where anyone reads documentation nor anywhere a touch device
                          can reach; the workspace README owns that. -->
-                    <span
-                        v-if="row.entry.path === REFERENCE_DIR"
-                        class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
+                    <span v-if="row.entry.path === REFERENCE_DIR" class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
                         >reference</span
                     >
                     <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
@@ -940,33 +941,28 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         aria-hidden="true"
                         class="shrink-0 text-2xs text-subtle"
                     />
-                    <!-- Git repo: two affordances, both opening a per-repo document as a tab — its codebase
-                         health (churn × complexity, the import graph's key modules) and its commit graph. Root
-                         has no row, so its pair sits on the explorer toolbar instead. -->
-                    <template v-if="row.entry.type === 'dir' && repoDirs.has(row.entry.path)">
-                        <Icon
-                            name="wave-pulse"
-                            aria-hidden="true"
-                            class="shrink-0 cursor-pointer text-2xs text-subtle hover:text-content"
-                            v-tooltip.right="'Open codebase health'"
-                            @click.stop="onHealthClick(row.entry)"
-                        />
-                        <Icon
-                            name="sitemap"
-                            aria-hidden="true"
-                            class="shrink-0 cursor-pointer text-2xs text-subtle hover:text-content"
-                            v-tooltip.right="'Open git history'"
-                            @click.stop="onGraphClick(row.entry)"
-                        />
-                    </template>
-                    <!-- Managed repo: its cog opens the management surface as a tab (row click only expands). -->
+                    <!-- What this directory offers beside its name: its documents, its codebase health, its commit
+                         graph, its management panel — whatever rowActions gives it (the tree doesn't know which).
+                         Root has no row, so its own pair sits on the explorer toolbar instead.
+
+                         REVEALED ON HOVER, and kept on the selected row. Always-on was affordable while only the
+                         two or three repo rows had any; a documented monorepo puts one on fifty-five package rows,
+                         and a permanent icon column is exactly the noise that stops the eye reading the names. The
+                         space is reserved either way, so nothing shifts as the pointer sweeps down the tree, and
+                         a hidden icon takes no clicks — invisible-but-clickable is worse than absent.
+
+                         An icon with a handler rather than a <button>: the ROW is the button (role="treeitem"),
+                         and an interactive element inside one is invalid. The keyboard reaches these through the
+                         row's own context menu instead. -->
                     <Icon
-                        v-if="row.entry.type === 'dir' && manageableDirs.has(row.entry.path)"
-                        name="cog"
+                        v-for="action in row.entry.type === 'dir' ? actionsFor(row.entry.path) : []"
+                        :key="action.id"
+                        :name="action.icon"
                         aria-hidden="true"
-                        class="shrink-0 cursor-pointer text-2xs text-subtle hover:text-content"
-                        v-tooltip.right="'Open management panel'"
-                        @click.stop="onCogClick(row.entry)"
+                        class="shrink-0 cursor-pointer text-2xs text-subtle transition-opacity hover:text-content group-hover:pointer-events-auto group-hover:opacity-100 group-focus:pointer-events-auto group-focus:opacity-100"
+                        :class="selection.has(row.entry.path) ? 'opacity-100' : 'pointer-events-none opacity-0'"
+                        v-tooltip.right="action.tooltip"
+                        @click.stop="runAction(row.entry, action)"
                     />
                     <!-- Other members with this file open right now — live co-presence on the row. -->
                     <PresenceAvatars v-if="row.entry.type === 'file'" :members="viewersOfPath(row.entry.path)" label="viewing this file" />
