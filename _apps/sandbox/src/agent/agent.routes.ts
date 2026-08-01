@@ -22,9 +22,11 @@ import { holdAccount } from "../claude/claude-credentials.js";
 import { accountLimitReset } from "../usage/account-usage.js";
 import { isIsolated } from "../agents/agents-store.js";
 import { landAgent } from "../agents/land.js";
+import { type RepoSync, syncConversation } from "../agents/sync.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
 import type { AgentRequest } from "./agent.js";
 import { withAttachmentNote } from "./attachment-note.js";
+import { syncNote } from "./turn-preamble.js";
 import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { mentionsSpentAllowance } from "./failure-sentences.js";
@@ -186,21 +188,70 @@ async function* runConversationTurn(
         if ((entry?.repos.length ?? 0) === 0) {
             await services.agents.recordWorktree(conversationId, worktree.repos);
         }
+        /* Then put the branch on TODAY's main line, before the model reads a line of it (agents/sync.ts). A
+         * conversation parked on a question can sit for hours while the user commits around it, and everything
+         * downstream of here — what the agent reads, what it edits, what the auto-land tries to apply — is
+         * measured against a base that went stale in the meantime. Empty on the ordinary turn whose branch is
+         * already up to date, which is one `merge-base` per repo to establish. */
+        // Tracked because it sits on the critical path and its two costs differ by orders of magnitude: one
+        // `merge-base` per repo when the branch is current, a whole checkout replay when it is not. runTurn's
+        // own preflight marks start after this, so an unmeasured rebase would read as a turn that was simply
+        // slow to begin — the exact attribution failure those marks exist to prevent.
+        const synced = await services.perf.track("agent.sync", { id: conversationId }, () =>
+            syncConversation(services.agentWorktrees, conversationId, worktree.repos, entry?.title),
+        );
+        // `base` is where the branch sits on the main line, so a rebase moves it — and a stale one is not
+        // cosmetic: standing.ts reads `tip !== base` as "this agent produced something", and would call a
+        // branch that only fast-forwarded a finished piece of work. The land bookkeeping beside it
+        // (landedTip/landedHead) is deliberately left alone: those shas are the provenance of a land that
+        // really happened, and anchorOf already knows to fall through to the merge-base once a rewrite has
+        // orphaned them (agents/agent-changes.ts).
+        const advanced = new Map(synced.filter((repo) => repo.blocked !== true).map((repo) => [repo.repo, repo.onto]));
+        if (advanced.size > 0) {
+            await services.agents.recordWorktree(
+                conversationId,
+                // oxlint-disable-next-line oxc/no-map-spread -- these are the registry's own persisted records; a fresh object per repo is the point, not a saving
+                (services.agents.entry(conversationId)?.repos ?? worktree.repos).map((composed) => ({
+                    ...composed,
+                    base: advanced.get(composed.repo) ?? composed.base,
+                })),
+            );
+        }
         branch = worktree.branch;
         // Where each repo stood BEFORE this turn — the open span a chore diffs from. Captured up front because
-        // the auto-land below advances landedTip; read afterwards, every repo would report as unchanged.
+        // the auto-land below advances landedTip; read afterwards, every repo would report as unchanged. A repo
+        // the sync moved reads from the main-line sha it moved ONTO instead of its landedTip: the rebase
+        // orphaned that sha, and diffing from it would hand the chore this agent's work plus every main-line
+        // commit underneath it. Everything at or before `onto` is in main by definition, so it is the honest
+        // start — the same rung anchorOf lands on for a rewritten branch.
         span = worktree.repos.map(({ repo, base }) => ({
             repo,
-            from: entry?.repos.find((recorded) => recorded.repo === repo)?.landedTip ?? base,
+            from: advanced.get(repo) ?? entry?.repos.find((recorded) => recorded.repo === repo)?.landedTip ?? base,
             dir: services.agentWorktrees.worktreeDir(conversationId, repo),
         }));
         const base = (worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0])?.base.slice(0, 7) ?? "";
         // Reported per turn, not once at boot: the capability is a property of how the container was launched,
         // and the only reason anyone noticed it was missing was work turning up in the main tree.
         const enforced = await services.turnIsolation.available();
-        yield { kind: "worktree", branch: worktree.branch, base, ...(enforced ? {} : { unenforced: true }) };
+        yield {
+            kind: "worktree",
+            branch: worktree.branch,
+            base,
+            ...(enforced ? {} : { unenforced: true }),
+            // The human's half of the sync (the agent's is a preamble note). It rides the frame that already
+            // announces where this turn is standing, so the transcript says why the ground moved at exactly the
+            // point it moved — a passive line, never a prompt.
+            ...(synced.length > 0
+                ? {
+                      sync: {
+                          commits: synced.filter((repo) => repo.blocked !== true).reduce((total, repo) => total + repo.commits, 0),
+                          blocked: synced.filter((repo) => repo.blocked === true).map((repo) => repo.repo),
+                      },
+                  }
+                : {}),
+        };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
-        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd }, steering)) {
+        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd, synced }, steering)) {
             services.agents.observe(conversationId, event);
             if (event.kind === "error") {
                 failed = true;
@@ -297,7 +348,7 @@ async function* runTurn(
     services: Services,
     input: AgentTurn,
     signal: AbortSignal | undefined,
-    worktree: { readonly id: string; readonly cwd: string } | undefined,
+    worktree: { readonly id: string; readonly cwd: string; readonly synced: readonly RepoSync[] } | undefined,
     steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
     // Whatever turn runs on this conversation supersedes a pending usage-limit resume — the user retrying by
@@ -382,8 +433,10 @@ async function* runTurn(
     // and config reads below instead of running strictly after them. Throttled to 60s, so it's a no-op on most
     // turns; awaited just before the snapshot, which must see the pulled files (the attribution fence below).
     // A top-level failure degrades to no advisory — per-repo errors already ride inside the outcomes.
-    // Isolated turns skip it entirely: the worktree pins a stable base by design, and fast-forwarding the main
-    // checkout mid-conversation would only manufacture land conflicts.
+    // Isolated turns skip it entirely, and this is the OTHER direction from the pre-turn rebase above
+    // (agents/sync.ts), not a contradiction of it: that one moves the agent's branch onto the main line the
+    // user already has, while this would pull a REMOTE into the user's checkout underneath a conversation
+    // nobody asked to move — manufacturing exactly the divergence the rebase just spent a turn-start removing.
     const syncPromise =
         worktree !== undefined
             ? undefined
@@ -413,7 +466,15 @@ async function* runTurn(
      * A refusal is one of them: an ordinary state of a sandbox (a session id that outlived its transcript, a
      * subscription nobody connected, an uninstalled Agent capability), reported as the error frame the
      * composer's connect gate reads. */
-    const plan = await planTurn(services, input, { base, attachmentPaths, localCwd, effectiveCwd, cliEnv, steering });
+    const plan = await planTurn(services, input, {
+        base,
+        attachmentPaths,
+        localCwd,
+        effectiveCwd,
+        cliEnv,
+        syncNote: syncNote(worktree?.synced ?? []),
+        steering,
+    });
     if (!plan.ok) {
         // The namespace anchor was built before the gates ran, so a refusal has to take it down too — it is a
         // detached `unshare` process that lives until something kills it, and every one of these refusals is a

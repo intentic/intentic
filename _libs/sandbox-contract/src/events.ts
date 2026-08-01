@@ -192,8 +192,21 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * bind-mounted over the workspace root and the harness is rewriting tool paths into it instead. That
      * fallback covers what arrives as tool input and not what a subprocess computes for itself, so the
      * operator needs to know — this state used to be one line in the daemon log at boot, and the way it got
-     * noticed was files appearing in the main tree from agents that were supposed to be on branches. */
-    z.object({ kind: z.literal("worktree"), branch: z.string(), base: z.string(), unenforced: z.boolean().optional() }),
+     * noticed was files appearing in the main tree from agents that were supposed to be on branches.
+     *
+     * `sync` reports the pre-turn rebase (agents/sync.ts), and rides here because this frame is already the
+     * turn's "where you are standing" announcement. Present only when the branch was BEHIND the main line —
+     * `commits` is how many main-line commits it gained, `blocked` names the repos whose rebase would not apply
+     * and was rolled back. Both can be non-empty at once in a multi-repo composition. It is a notice and never
+     * a question: the user is answering their agent, and the alternative to rebasing is not "stay safe" but
+     * "conflict at land time", which interrupts them harder. */
+    z.object({
+        kind: z.literal("worktree"),
+        branch: z.string(),
+        base: z.string(),
+        unenforced: z.boolean().optional(),
+        sync: z.object({ commits: z.number(), blocked: z.array(z.string()) }).optional(),
+    }),
     // Emitted after a clean isolated turn whose delta auto-landed (or failed to): landed ⇒ the work is now
     // UNCOMMITTED changes in the main tree (the Changes panel is the review); conflicts ⇒ it stayed safely in
     // the worktree, and each named path carries WHY it would not apply (see LandConflictSchema) so the report

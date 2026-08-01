@@ -112,6 +112,29 @@ export const appendMessage = (state: TurnState, message: Omit<ChatMessage, "id">
 export const appendNotice = (state: TurnState, text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): TurnState =>
     appendMessage(state, { role: `notice`, text, ...extra });
 
+/* WHY THIS AGENT'S BRANCH JUST MOVED — the human's half of the pre-turn rebase (daemon: agents/sync.ts).
+ *
+ * A conversation parked on a question goes stale while its user commits around it, so the daemon rebases the
+ * branch onto the current workspace before the turn runs. It is told, not asked: at the moment someone is
+ * answering their agent they have nothing to decide this with, and the alternative to rebasing is not "stay
+ * safe", it is a land conflict half an hour later. So this is one muted line at the top of the turn, with no
+ * button on it — the same weight as "Context compacted", and for the same reason.
+ *
+ * The blocked half is the line that earns its keep: a rebase that would not apply was rolled back, the agent is
+ * working from the older base, and the conflict report at the end of the turn is now EXPECTED rather than a
+ * surprise. Naming the repo, not the paths — the review lists those, with the fix that fits each one. */
+const syncLine = (sync: { commits: number; blocked: readonly string[] }): string => {
+    const moved =
+        sync.commits > 0
+            ? `Your workspace moved on while this agent waited — its branch was rebased onto your latest ${sync.commits} commit${sync.commits === 1 ? `` : `s`} before this turn.`
+            : undefined;
+    const blocked =
+        sync.blocked.length > 0
+            ? `Couldn't rebase onto your workspace in ${sync.blocked.join(`, `)} — the turn is running from the older base, so its land may need a resolve.`
+            : undefined;
+    return [moved, blocked].filter((line) => line !== undefined).join(` `);
+};
+
 const mapMessage = (state: TurnState, id: number, fn: (message: ChatMessage) => ChatMessage): TurnState => ({
     ...state,
     messages: state.messages.map((message) => (message.id === id ? fn(message) : message)),
@@ -438,7 +461,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         case `session`:
             return step(state, { kind: `session`, sessionId: event.sessionId });
         case `worktree`:
-            return step(state, {
+            return step(event.sync === undefined ? state : appendNotice(state, syncLine(event.sync)), {
                 kind: `worktree`,
                 branch: event.branch,
                 base: event.base,

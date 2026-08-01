@@ -336,6 +336,31 @@ describe(`effects`, () => {
         expect(state.messages).toEqual(started().messages);
     });
 
+    /* The pre-turn rebase is announced, never asked (daemon: agents/sync.ts) — one muted line where the turn
+     * begins, so the human can see why the branch moved without being stopped to approve it. */
+    it(`says the branch was rebased onto the workspace, and still reports the worktree`, () => {
+        const { state, effects } = run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 4, blocked: [] } });
+
+        expect(effects.map((effect) => effect.kind)).toEqual([`worktree`]);
+        const notice = state.messages.at(-1);
+        expect(notice?.role).toBe(`notice`);
+        expect(notice?.text).toContain(`rebased onto your latest 4 commits`);
+        // Nothing to press: the work is already done and there is no decision left to offer.
+        expect(notice?.noticeAction).toBeUndefined();
+    });
+
+    it(`says so when the rebase was rolled back, so the land's refusal is expected`, () => {
+        const { state } = run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 0, blocked: [`root`] } });
+
+        const notice = state.messages.at(-1);
+        expect(notice?.text).toContain(`Couldn't rebase onto your workspace in root`);
+        expect(notice?.text).not.toContain(`rebased onto your latest`);
+    });
+
+    it(`stays quiet on the ordinary turn whose branch was already up to date`, () => {
+        expect(run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123` }).state.messages).toEqual(started().messages);
+    });
+
     it(`skips account headroom with no account to key it by`, () => {
         // An env-token turn has no account; storing it under `undefined` would show one account's headroom
         // against another's.

@@ -75,9 +75,14 @@ export const PersistedAgentSchema = z.object({
     // visitor, a webhook) instead of the user starting it. Absent ⇒ a user-started agent.
     origin: AgentOriginSchema.optional(),
     // The worktree composition: each workspace repo ("root" or a repo id — its root-relative dir) with the full
-    // base sha its worktree branched from, and the branch tip whose delta has already LANDED into the main
+    // sha its worktree sits on the main line at, and the branch tip whose delta has already LANDED into the main
     // tree (absent ⇒ nothing landed yet — the base is the reference). Land applies `landedTip → tip`, so each
     // land carries only the new delta; the review reads `base` and flags each file against `landedTip`.
+    //
+    // `base` MOVES: the pre-turn rebase advances it whenever the main line has run ahead of the branch
+    // (agents/sync.ts), so it is where the branch stands rather than where it started. `landedTip` does not
+    // follow it — that sha is the provenance of a land that really happened, and a rewrite that orphans it is
+    // exactly the case anchorOf falls through to the merge-base for (agents/agent-changes.ts).
     //
     // `landedHead`/`landedAt` are that land's provenance in the MAIN tree: the commit HEAD stood on and when.
     // They are what lets the Changes panel say which agent an uncommitted file came from — `base → landedTip`

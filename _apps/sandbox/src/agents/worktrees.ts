@@ -23,7 +23,9 @@ export interface ConversationWorktree {
     // The agent's cwd for isolated turns — the root repo's worktree dir.
     readonly cwd: string;
     readonly branch: string;
-    // Each repo in the composition with the full sha its branch was created from.
+    // Each repo in the composition with the full sha its branch sits on the main line at. Set here at creation
+    // and moved by the pre-turn rebase whenever the main line runs ahead of it (agents/sync.ts) — so it is
+    // where the branch stands TODAY, not a record of where it started.
     readonly repos: readonly { repo: string; base: string }[];
 }
 

@@ -72,6 +72,9 @@ export interface TurnContext {
     // The workspace root as the AGENT sees it — what a session id is looked up against.
     readonly effectiveCwd: string;
     readonly cliEnv: Record<string, string>;
+    // What the pre-turn rebase moved under this branch, already written out (turn-preamble.ts syncNote).
+    // Undefined on a main-tree turn and on the ordinary isolated turn whose branch was already up to date.
+    readonly syncNote: string | undefined;
     // Mid-turn steering, present only where the Claude Code loop runs the turn.
     readonly steering: SteeringQueue | undefined;
 }
@@ -109,17 +112,26 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
  *
  * The worktree note is the same idea pointed at the filesystem: a runtime that declares `isolation: "cwd"` gets
  * neither the mount namespace nor the tool-input rewrite, so the one thing left that can keep it inside its own
- * branch is telling it where the branch is (turn-preamble.ts explains why that is second-best and unavoidable). */
+ * branch is telling it where the branch is (turn-preamble.ts explains why that is second-best and unavoidable).
+ *
+ * The SYNC note is here rather than in an arm because it is true of every runtime: the pre-turn rebase moved
+ * the files under whichever model is about to read them (agents/sync.ts). This is the one point all four arms
+ * pass through, so it is the only place a note can be added without being silently absent from three of them —
+ * the harness arm wraps its own preamble layer around whatever comes out of here, which stripTurnPreamble
+ * peels back off. */
 const honoured = (services: Services, context: TurnContext, capabilities: AgentCapabilities): AgentRequest => {
     const { permissionMode, effort, ...rest } = context.base;
     // An isolated conversation's worktree is not the workspace root; a main-tree turn has nothing to say.
     const isolated = context.localCwd !== services.workspace.root;
+    const notes = isolated
+        ? [
+              ...(capabilities.isolation === "cwd" ? [worktreeNote(context.localCwd, services.workspace.root)] : []),
+              ...(context.syncNote !== undefined ? [context.syncNote] : []),
+          ]
+        : [];
     return {
         ...rest,
-        prompt:
-            capabilities.isolation === "cwd" && isolated
-                ? withTurnPreamble([worktreeNote(context.localCwd, services.workspace.root)], context.base.prompt)
-                : context.base.prompt,
+        prompt: withTurnPreamble(notes, context.base.prompt),
         // A "plan" runtime knows two postures: propose-then-approve, or run. Every other mode names the second
         // one, so it travels as the absence it already meant.
         ...(permissionMode !== undefined && (capabilities.permissions === "modes" || permissionMode === "plan") ? { permissionMode } : {}),
