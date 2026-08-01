@@ -14,6 +14,8 @@ const SCRIPT_URLS = {
     cleanupHost: `https://intentic.dev/cleanup-host`,
     desktopSh: `https://intentic.dev/sync`,
     desktopPs1: `https://intentic.dev/sync.ps1`,
+    computerSh: `https://intentic.dev/computer`,
+    computerPs1: `https://intentic.dev/computer.ps1`,
     rebuild: `https://intentic.dev/rebuild`,
     update: `https://intentic.dev/update`,
     cleanup: `https://intentic.dev/cleanup`,
@@ -28,6 +30,8 @@ export const SCRIPT_PATHS = {
     cleanupHost: `_apps/site/public/scripts/cleanup-host.sh`,
     desktopSh: `_apps/site/public/scripts/sync.sh`,
     desktopPs1: `_apps/site/public/scripts/sync.ps1`,
+    computerSh: `_apps/site/public/scripts/computer.sh`,
+    computerPs1: `_apps/site/public/scripts/computer.ps1`,
     // One recreate script serves both flows — mode inferred from the argument shape (see recreate.sh).
     rebuild: `_apps/site/public/scripts/recreate.sh`,
     update: `_apps/site/public/scripts/recreate.sh`,

@@ -57,6 +57,8 @@ import { createCodexAgent } from "./codex/codex-agent.js";
 import { type CodexCatalog, createCodexCatalog } from "./codex/codex-catalog.js";
 import { codexThreadExists } from "./sessions/codex-sessions.js";
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
+import { createHostHub, type HostHub } from "./hosts/host-hub.js";
+import { fileHostsStore, type HostsStore } from "./hosts/hosts-store.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/turn-journal.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
@@ -199,6 +201,15 @@ export interface Services {
     // scoped hard to the /vpn routes (vpnScoped in app.ts): the agent may dial and drop the owner's tunnels,
     // never read the credentials behind them. Never leaves the container.
     readonly agentToken: string;
+    // A per-boot secret the AGENT's host tools carry (as their MCP bearer) to reach /mcp/hosts/:id — the door
+    // onto a connected computer of the user's. Deliberately NOT the machine's own enrollment token: that one
+    // lives on /history where the agent cannot read it, and this one dies with the daemon and works only from
+    // inside the container. What it opens is still bounded by the scopes that machine enforces (hosts/).
+    readonly hostBridgeToken: string;
+    // The user's own computers: enrollment (a durable per-machine token, digests on /history) …
+    readonly hosts: HostsStore;
+    // … and who is actually holding a socket right now, with the JSON-RPC correlation over it.
+    readonly hostHub: HostHub;
     // Owner-minted, hashed, revocable tokens for the ACP editor bridge (x-intentic-bridge header) — scoped to
     // the agent-conversation routes by bridgeScoped. Persisted in /work/.intentic like owner/members.
     readonly bridgeTokens: BridgeTokens;
@@ -581,6 +592,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         mediaTickets: createMediaTickets(),
         panelToken: randomBytes(32).toString("hex"),
         agentToken: randomBytes(32).toString("hex"),
+        hostBridgeToken: randomBytes(32).toString("hex"),
+        hosts: fileHostsStore(config.historyRoot),
+        hostHub: createHostHub(),
         info,
         tools: internalTools(config.intenticAgentTools),
         capabilities,

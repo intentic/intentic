@@ -36,6 +36,7 @@ import { approveEnvironment, readEnvironment, rejectEnvironment } from "./enviro
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserLoginRoute } from "./browser/browser-login.js";
+import { createHostConnectRoute, createHostMcpRoute, hostSummaries } from "./hosts/host.routes.js";
 import { createBrowserViewRoute } from "./browser/browser-view.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoutes } from "./webchat/webchat.routes.js";
@@ -81,6 +82,17 @@ const webchatPublicPath = (path: string): boolean => path === "/webchat/widget.j
 // body, gitlab echoes the token — see ci/webhook.routes.ts).
 const ciWebhookPath = /^\/ci\/webhook\/[^/]+$/;
 
+/* The two doors a connected computer opens, both exempt from the bearer middleware because neither caller has a
+ * Google identity to present:
+ *
+ *   /system/hosts/connect  the machine's WebSocket — it authenticates in its first frame instead of the URL
+ *                          (host-protocol.ts explains why), and /system/hosts/enroll redeems its one-time pairing.
+ *   /mcp/hosts/<id>        the AGENT's MCP door onto that machine, carrying the per-boot host bridge token.
+ *
+ * Anchored per segment so neither admits a route that merely starts the same way. */
+const hostPublicPath = (path: string): boolean => path === "/system/hosts/connect" || path === "/system/hosts/enroll";
+const hostMcpPath = /^\/mcp\/hosts\/[^/]+$/;
+
 // The only routes the in-container agent token opens: the live VPN surface the `vpn` CLI drives. Anchored and
 // path-segment aware so it admits /vpn and /vpn/<id>/connect but never a route that merely starts with those
 // characters — the token must not become a general-purpose daemon key.
@@ -121,6 +133,9 @@ const READY_EXEMPT = new Set([
     "/system/terminal",
     "/system/browser-login",
     "/system/browser-view",
+    // A connected computer reconnects on its own backoff, which a booting daemon would otherwise park just long
+    // enough to look like an outage on the card. Its socket needs nothing the boot chain builds.
+    "/system/hosts/connect",
 ]);
 
 // The HTTP API the browser drives DIRECTLY over the sandbox's own Cloudflare tunnel. When services.auth is set
@@ -252,7 +267,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 c.req.path === "/system/authorized-key" ||
                 eventFirePath.test(c.req.path) ||
                 webchatPublicPath(c.req.path) ||
-                ciWebhookPath.test(c.req.path)
+                ciWebhookPath.test(c.req.path) ||
+                hostPublicPath(c.req.path) ||
+                hostMcpPath.test(c.req.path)
             ) {
                 return next();
             }
@@ -780,6 +797,51 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         const mode: SyncMode = (await isOwner(c)) ? requested : "mirror";
         return c.json({ ...mintPairing(mode), mode });
     });
+
+    /* The user's own computers (hosts/). Same trust root as desktop sync — the owner mints a single-use pairing
+     * in the browser and the connect one-liner carries it — narrowed in one way that matters: a pairing is bound
+     * to ONE host capability, so a redeemed token can only ever become the machine the owner was looking at when
+     * they clicked Connect. Owner-only to mint: giving a member hands on the owner's laptop is not a collaboration
+     * feature. */
+    app.post("/system/hosts/pair", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const id = c.req.query("id") ?? "";
+        const capability = (await services.capabilities.list()).find((entry) => entry.id === id && entry.kind === "host");
+        if (capability === undefined) {
+            return c.json({ error: "no connected-computer capability with that id" }, 404);
+        }
+        return c.json(services.hosts.mintPairing(id));
+    });
+    // Redeemed by the machine's installer, authorized by the pairing alone (exempt from the bearer middleware) —
+    // so nobody signs into Google on the machine being connected.
+    app.post("/system/hosts/enroll", async (c) => {
+        const enrolled = await services.hosts.enroll(c.req.header("x-intentic-pair") ?? "");
+        if (enrolled === undefined) {
+            return c.json({ error: "pairing expired — click Connect again in your browser for a fresh command." }, 401);
+        }
+        return c.json(enrolled);
+    });
+    app.get("/system/hosts", async (c) => c.json({ hosts: await hostSummaries(services) }));
+    // Revoke: the enrollment goes, and the live socket with it. The agent binary on that machine notices its
+    // reconnect being refused and stops; what stays is the installation, which only the machine's owner can remove.
+    app.delete("/system/hosts/:id", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const id = c.req.param("id") ?? "";
+        services.hostHub.disconnect(id, "this computer's access was revoked");
+        return (await services.hosts.revoke(id)) ? c.json({ ok: true }) : c.json({ error: "no such computer" }, 404);
+    });
+    // The machine's own socket, and the agent's door onto it. Both before the oRPC catch-all, like the terminal.
+    app.get("/system/hosts/connect", createHostConnectRoute(services));
+    const hostMcp = createHostMcpRoute(services);
+    app.post("/mcp/hosts/:id", hostMcp);
+    app.get("/mcp/hosts/:id", hostMcp);
+    app.delete("/mcp/hosts/:id", hostMcp);
     // Bridge tokens for the ACP editor bridge — owner-minted (the sync-pair trust model, made durable +
     // revocable), raw value returned exactly once. Plain routes before the oRPC catch-all, like the pair block.
     app.post("/system/bridge/tokens", async (c) => {

@@ -6,6 +6,8 @@ import { type ConfigStore, createConfigStore } from "../inventory/config-store.j
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";
+import type { HostHub } from "../hosts/host-hub.js";
+import type { HostsStore } from "../hosts/hosts-store.js";
 import { connectorSecretField, connectorSecretFields, type ResolvedConnector } from "./cli/connector-registry.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
@@ -33,6 +35,12 @@ export interface CapabilityCtx {
     };
     readonly config: ConfigStore;
     readonly capabilities: CapabilitiesStore;
+    // The user's own connected computers. Both are passed whole rather than narrowed: the hub IS the handler's
+    // subject (a scope edit has to reach a live machine while the user is still looking at the card), and the
+    // store's enrollment state is the difference between "added" and "actually connected", which is the only
+    // thing this kind's status can usefully say.
+    readonly hosts: HostsStore;
+    readonly hostHub: HostHub;
     // The image-baked extensions dir (services.config.extensionsDir) — lets the cli handler build the connector
     // registry (installedExtensions) from the narrow ctx without holding Services.
     readonly extensionsDir: string;
@@ -79,6 +87,8 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         },
         config,
         capabilities: services.capabilities,
+        hosts: services.hosts,
+        hostHub: services.hostHub,
         extensionsDir: services.config.extensionsDir,
         scaffoldNeutralLedger: (session) => scaffoldNeutralLedger(services, session),
         ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
@@ -125,6 +135,9 @@ export const secretField = (capability: Capability, connectors: Map<string, Reso
         case "docker":
         // The browser session lives in a Chromium profile (managed by the guided-login flow), not a manifest field.
         case "browser":
+        // A connected computer's credential is its enrollment token, which lives on /history (hosts-store.ts) and
+        // is never in the manifest — rotating it is re-running the installer there, not an edit in /secrets.
+        case "host":
             return undefined;
     }
 };
@@ -206,6 +219,16 @@ export const echoConfig = (capability: Capability, connectors: Map<string, Resol
             return {};
         case "browser":
             return { platform: capability.config.platform };
+        case "host":
+            // The whole config is non-secret and every field is a permission — the card renders the grant back
+            // to the owner, so all four travel.
+            return {
+                platform: capability.config.platform,
+                shell: capability.config.shell,
+                write: capability.config.write,
+                screen: capability.config.screen,
+                ...(capability.config.roots !== undefined ? { roots: capability.config.roots } : {}),
+            };
         case "agent":
             return {
                 command: capability.config.command,

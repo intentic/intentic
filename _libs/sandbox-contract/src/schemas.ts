@@ -1712,6 +1712,7 @@ export const CapabilityKindSchema = z.enum([
     "vpn",
     "docker",
     "browser",
+    "host",
     "agent",
 ]);
 export type CapabilityKind = z.infer<typeof CapabilityKindSchema>;
@@ -1880,6 +1881,37 @@ export const VpnConfigSchema = z.discriminatedUnion("provider", [WireguardVpnCon
 // Dockerfile fragment, applied on an owner rebuild. One capability = one platform (the id doubles as the profile).
 export const BrowserPlatformSchema = z.enum(["reddit", "x", "youtube"]);
 export const BrowserConfigSchema = z.object({ platform: BrowserPlatformSchema });
+/* A connected COMPUTER of the user's own — the inverse of `ssh`, which reaches a server the sandbox can dial.
+ * A machine behind NAT can't be dialled, so it dials US: the @intentic/host agent (installed by a one-liner,
+ * enrolled with a single-use pairing token) holds one outbound WebSocket to this daemon and serves an MCP tool
+ * surface — shell, files, screenshots — from the far end. The daemon tunnels the agent's JSON-RPC over it and
+ * never implements a tool itself, so the machine's capabilities evolve with ITS binary, not with a daemon release.
+ *
+ * One capability = one machine. The id is the machine's name and namespaces its tools (mcp__laptop__run_command),
+ * so several connected machines never collide — the `ssh` precedent. `platform` splits the SKILL pack: a Windows
+ * machine is taught PowerShell and a Linux one systemd/D-Bus, and neither carries the other's noise.
+ *
+ * SCOPES ARE THE GRANT, and they are enforced ON THE MACHINE, never here: the daemon pushes them down on every
+ * connect, and the agent refuses out-of-scope calls itself. So a sandbox that is compromised — or an agent talked
+ * into it by something it read on the internet — still cannot exceed what the owner ticked. `roots` bounds file
+ * reads AND writes to a set of directories (empty ⇒ the user's home). */
+export const HostPlatformSchema = z.enum(["windows", "linux"]);
+export type HostPlatform = z.infer<typeof HostPlatformSchema>;
+// on/off rather than a boolean: capability configs arrive from the add form as strings (the vpn autoConnect
+// precedent), and a select is what the form renders for an enum.
+const hostScope = z.enum(["on", "off"]);
+export const HostScopesSchema = z.object({
+    // Run commands in a real shell (PowerShell on Windows, the login shell on Linux). Off ⇒ files/screen only.
+    shell: hostScope.default("on"),
+    // Create, modify and trash files under `roots`. Reads are always allowed within them; this is the write half.
+    write: hostScope.default("off"),
+    // Capture the screen. Off ⇒ screenshot refuses, and the agent is told so rather than getting a black frame.
+    screen: hostScope.default("on"),
+    // One directory per line. Empty ⇒ the machine's home directory, which is what the agent reports at connect.
+    roots: z.string().optional(),
+});
+export type HostScopes = z.infer<typeof HostScopesSchema>;
+export const HostConfigSchema = HostScopesSchema.extend({ platform: HostPlatformSchema });
 // An ACP (Agent Client Protocol) agent served as a chat provider: the daemon spawns `command` as a long-lived
 // subprocess speaking JSON-RPC over stdio, and the capability id becomes the provider id in the chat picker
 // (see AgentProviderSchema). `command` is split on whitespace — no shell quoting. `env` is a pasted KEY=VALUE
@@ -1906,6 +1938,7 @@ export type IpsecVpnConfig = z.infer<typeof IpsecVpnConfigSchema>;
 export type VpnConfig = z.infer<typeof VpnConfigSchema>;
 export type BrowserPlatform = z.infer<typeof BrowserPlatformSchema>;
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
+export type HostConfig = z.infer<typeof HostConfigSchema>;
 export type AcpAgentConfig = z.infer<typeof AcpAgentConfigSchema>;
 
 export const CapabilitySchema = z.discriminatedUnion("kind", [
@@ -1928,6 +1961,7 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     // state (/var/lib/docker) and whatever runs on it make a silent de-privilege more destructive than useful.
     z.object({ id: entryId, kind: z.literal("docker"), config: z.object({}) }),
     z.object({ id: entryId, kind: z.literal("browser"), config: BrowserConfigSchema }),
+    z.object({ id: entryId, kind: z.literal("host"), config: HostConfigSchema }),
     z.object({ id: entryId, kind: z.literal("agent"), config: AcpAgentConfigSchema }),
 ]);
 export type Capability = z.infer<typeof CapabilitySchema>;
@@ -1962,6 +1996,44 @@ export const CapabilitySecretInputSchema = z.object({ id: z.string(), value: z.s
 // POST /capabilities/{id}/login response: the interactive tmux session running the agent's loginCommand,
 // which the web surfaces in the terminal panel for the user to complete the sign-in.
 export const CapabilityLoginSchema = z.object({ session: z.string() });
+
+// ---- hosts: the user's own connected computers (the `host` capability's live half) ----
+// The manifest says which machines the user INTENDS to have connected; this says which are actually holding a
+// socket right now. Nothing here is remembered across a daemon restart except the enrollment itself: a machine
+// is "online" exactly while its WebSocket is attached, so a laptop that closed its lid reads as offline within
+// a heartbeat rather than staying green until someone asks it to do something.
+
+// What a machine reports about itself once, at connect (the agent's own `host.describe`, cached until it
+// reconnects). It is the difference between an agent guessing what is on the box and knowing: the SKILL pack
+// tells it HOW to drive Windows, this tells it WHICH Windows this is.
+export const HostFactsSchema = z.object({
+    // The OS's own name for itself — "Windows 11 Pro 24H2", "Ubuntu 24.04.1 LTS".
+    os: z.string(),
+    arch: z.string(),
+    // The shell run_command actually spawns, so the agent writes for the right one from its first command.
+    shell: z.string(),
+    // The machine's home directory, and the default root when the capability declares none.
+    home: z.string(),
+    // Roots in force right now (the capability's `roots`, or [home]) — the agent sees its own boundary.
+    roots: z.array(z.string()),
+});
+export type HostFacts = z.infer<typeof HostFactsSchema>;
+
+export const HostSummarySchema = z.object({
+    // The capability id — the machine's name, and the prefix of its tools (mcp__<id>__run_command).
+    id: z.string(),
+    platform: HostPlatformSchema,
+    online: z.boolean(),
+    // The agent binary's version, so a machine running an old build is visible rather than mysteriously lacking
+    // a tool. Absent until the machine has connected once.
+    version: z.string().optional(),
+    // Epoch ms of the last time this machine held a socket. Absent ⇒ it has not connected since this daemon
+    // booted — liveness is a fact about a socket, so a restart forgets it rather than claiming stale uptime.
+    lastSeen: z.number().optional(),
+    facts: HostFactsSchema.optional(),
+});
+export type HostSummary = z.infer<typeof HostSummarySchema>;
+export const HostsListSchema = z.object({ hosts: z.array(HostSummarySchema) });
 
 // ---- vpn: live tunnel state + connect/disconnect ----
 // The manifest says which VPNs EXIST; this says which are UP right now. Every field is read back from the OS

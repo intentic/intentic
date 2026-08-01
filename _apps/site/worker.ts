@@ -12,6 +12,10 @@ const SCRIPTS: Record<string, string> = {
     "/cleanup-host": "cleanup-host.sh",
     "/sync": "sync.sh",
     "/sync.ps1": "sync.ps1",
+    // "computer", not "host": /connect-host above enrolls a deploy TARGET, while these connect the machine the
+    // user is sitting at — and the card they are copied from calls it a computer.
+    "/computer": "computer.sh",
+    "/computer.ps1": "computer.ps1",
     "/cleanup": "cleanup.sh",
     "/cleanup.ps1": "cleanup.ps1",
     // Both vanity paths serve the ONE recreate script — the mode rides the argument shape the platform's

@@ -12,9 +12,10 @@ import { cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmente
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import { type CapabilityEffect, capabilityEffects, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
-import { computed, nextTick, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BrowserLoginDialog from "../components/BrowserLoginDialog.vue";
+import HostConnectDialog from "../components/HostConnectDialog.vue";
 import CapabilityEffects from "../components/CapabilityEffects.vue";
 import CredentialGuide from "../components/CredentialGuide.vue";
 import { devFillGet, devFillSet } from "../composables/devFill";
@@ -24,6 +25,7 @@ import { browseMarketplace, useCapabilities } from "../composables/extensions/us
 import { useExtensions } from "../composables/extensions/useExtensions";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../composables/terminal/useBackgroundProcesses";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
+import { useHostConnect } from "../composables/sandbox/useHostConnect";
 import { importForticlient, useVpn } from "../composables/sandbox/useVpn";
 
 /* The rail's "+" → the /capabilities page. Capabilities give the agent tools (GitHub, MCP servers, SSH hosts,
@@ -228,6 +230,7 @@ const openLogin = (platform: string, label: string): void => {
     loginLabel.value = label;
     loginVisible.value = true;
 };
+
 // A completed login flips the capability's status pending → active; refresh the list so it shows.
 const onLoginDone = (): void => {
     void refetch();
@@ -292,6 +295,40 @@ const instanceEffects = (instance: CapabilitySummary): readonly CapabilityEffect
         connector: connectorOf(String(instance.config[`provider`] ?? ``)),
         manifest: instance.kind === `extension` ? extensions.value.find((extension) => extension.id === instance.id)?.manifest : undefined,
     });
+
+/* Connecting a computer of the user's own (host-kind): the machine can't be reached from here, so the flow is a
+ * one-time command they run over there. This page owns the dialog's identity (which machine, which grant); the
+ * live roster + revoke live in the composable, shared with the dialog. */
+const { hostFor, revoke: revokeHost, refresh: refreshHosts, start: startHosts, stop: stopHosts } = useHostConnect();
+const connectVisible = ref(false);
+const connectId = ref(``);
+const connectPlatform = ref(``);
+const connectPermissions = ref(``);
+// The grant in the machine's own words, read from the same effects the card renders — so the dialog's sentence
+// and the card's row can never claim different permissions.
+const hostGrants = (instance: CapabilitySummary): string => {
+    const machine = instanceEffects(instance).find((effect) => effect.kind === `machine`);
+    return machine === undefined ? `read files` : machine.grants.join(`, `);
+};
+const openConnect = (instance: CapabilitySummary): void => {
+    connectId.value = instance.id;
+    connectPlatform.value = String(instance.config[`platform`] ?? `linux`);
+    connectPermissions.value = hostGrants(instance);
+    connectVisible.value = true;
+};
+// A machine coming online flips the capability pending → active; refresh so the card follows it.
+const onHostConnected = (): void => {
+    void refreshHosts();
+    void refetch();
+};
+const removeHostAccess = async (id: string): Promise<void> => {
+    await revokeHost(id);
+    void refetch();
+};
+// One read of the roster while this page is open, so a connected computer's row can say "online" without
+// waiting for a dialog to be opened. The steady polling only runs while a pairing is live (see the composable).
+onMounted(startHosts);
+onBeforeUnmount(stopHosts);
 
 const canSubmit = computed(() => {
     const entry = selected.value;
@@ -643,7 +680,39 @@ const submitLabel = computed(() =>
                             <span v-if="selected.kind === 'vpn' && vpnFacts(instance.id)" class="font-mono text-2xs text-subtle">{{
                                 vpnFacts(instance.id)
                             }}</span>
+                            <!-- A connected computer's liveness is the fact its row exists to carry: "added" and
+                                 "asleep" and "working" are three different situations for the person reading it. -->
+                            <span v-if="selected.kind === 'host'" class="text-2xs" :class="hostFor(instance.id)?.online ? 'text-success' : 'text-subtle'">
+                                {{ hostFor(instance.id)?.online ? "online" : "offline" }}
+                            </span>
+                            <span v-if="selected.kind === 'host' && hostFor(instance.id)?.facts" class="font-mono text-2xs text-subtle">{{
+                                hostFor(instance.id)?.facts?.os
+                            }}</span>
                             <div class="ml-auto flex items-center gap-1">
+                                <!-- A computer is connected by running a command ON IT — this button hands over that
+                                     command (and is also how a machine is re-connected after being revoked). -->
+                                <Button
+                                    v-if="selected.kind === 'host'"
+                                    :label="hostFor(instance.id) === undefined || !hostFor(instance.id)?.lastSeen ? 'Connect' : 'Reconnect'"
+                                    size="small"
+                                    :text="true"
+                                    @click="openConnect(instance)"
+                                >
+                                    <template #icon><Icon name="desktop" /></template>
+                                </Button>
+                                <!-- Revoke cuts this machine off without removing the capability, so the card keeps
+                                     its name and permissions and Connect re-pairs it. Removing the capability does
+                                     both, which is a different intent. -->
+                                <Button
+                                    v-if="selected.kind === 'host' && hostFor(instance.id)?.lastSeen"
+                                    label="Revoke"
+                                    size="small"
+                                    :text="true"
+                                    severity="warn"
+                                    @click="removeHostAccess(instance.id)"
+                                >
+                                    <template #icon><Icon name="sign-out" /></template>
+                                </Button>
                                 <!-- A browser capability connects via a live login window, not a form — offer it here
                                          (also the way to re-log-in once a session expires). -->
                                 <Button
@@ -705,6 +774,17 @@ const submitLabel = computed(() =>
                         >
                             <Icon name="exclamation-triangle" />
                             {{ instance.status.detail ?? "Not connected" }} — Log in →
+                        </button>
+                        <!-- A computer that was added but never connected is pending on the ONE-LINER, not on a
+                             rebuild — send the hint to the same dialog as the button rather than to /sandbox. -->
+                        <button
+                            v-else-if="instance.status.state === 'pending' && selected.kind === 'host'"
+                            type="button"
+                            class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
+                            @click="openConnect(instance)"
+                        >
+                            <Icon name="exclamation-triangle" />
+                            {{ instance.status.detail ?? "Not connected" }} — Connect →
                         </button>
                         <!-- A capability that needs a sandbox rebuild (Discord voice / a DB client / a browser whose
                                  Chromium isn't installed yet) is otherwise a dead-end "pending" — point at the Sandbox ▸
@@ -1012,5 +1092,14 @@ const submitLabel = computed(() =>
 
         <!-- Guided browser login for browser-kind capabilities (screencast a live Chromium the user signs into). -->
         <BrowserLoginDialog v-model:visible="loginVisible" :platform="loginPlatform" :label="loginLabel" @done="onLoginDone" />
+
+        <!-- The one-time command that connects a computer of the user's own (host-kind capabilities). -->
+        <HostConnectDialog
+            v-model:visible="connectVisible"
+            :id="connectId"
+            :platform="connectPlatform"
+            :permissions="connectPermissions"
+            @connected="onHostConnected"
+        />
     </Page>
 </template>

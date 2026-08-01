@@ -73,6 +73,7 @@ export * from "./sse.js";
 export * from "./routes.js";
 export * from "./workspace-state.js";
 export * from "./agent-catalog.js";
+export * from "./host-protocol.js";
 export * from "./hostnames.js";
 export * from "./model-order.js";
 export * from "./path-refs.js";

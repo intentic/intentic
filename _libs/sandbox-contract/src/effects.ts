@@ -34,7 +34,11 @@ export type CapabilityEffect =
     // Extension code runs inside the app with the owner's session — the owner-only trust decision.
     | { readonly kind: "trusted-code" }
     // Keeps a logged-in Chromium profile under .intentic/browser/<platform> that the agent drives.
-    | { readonly kind: "profile"; readonly platform: string };
+    | { readonly kind: "profile"; readonly platform: string }
+    // Gives the agent hands on a computer the user OWNS — the most consequential effect in this union, so it
+    // spells out the grant rather than naming a mechanism. `grants` is the scopes ticked on the card, in the
+    // machine's own words; the machine's agent enforces exactly these and refuses the rest.
+    | { readonly kind: "machine"; readonly platform: string; readonly grants: readonly string[] };
 
 export interface CapabilityEffectInput {
     readonly kind: CapabilityKind;
@@ -125,6 +129,21 @@ export const capabilityEffects = (input: CapabilityEffectInput): readonly Capabi
                 effects.push({ kind: "profile", platform });
             }
             return effects;
+        }
+        case "host": {
+            // Reads are the floor (a machine you cannot read is not connected to anything); the other three are
+            // the card's toggles. Unset ⇒ the schema's defaults, which is what the form posts before it is touched.
+            const grants = [
+                ...(input.config["shell"] === "off" ? [] : ["run commands"]),
+                "read files",
+                ...(input.config["write"] === "on" ? ["write and trash files"] : []),
+                ...(input.config["screen"] === "off" ? [] : ["capture the screen"]),
+            ];
+            return [
+                { kind: "machine", platform: String(input.config["platform"] ?? ""), grants },
+                { kind: "skill", name: input.id },
+                { kind: "mcp" },
+            ];
         }
         case "agent": {
             // The spawned ACP subprocess is the standing consequence; a pasted env block is a stored credential.

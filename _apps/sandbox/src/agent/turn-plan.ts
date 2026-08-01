@@ -1,6 +1,7 @@
 import { type AgentCapabilities, type AgentEvent, type AgentTurn, type Capability, capabilitiesOf } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
+import { hostToolsOf } from "../capabilities/host-tools.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
 import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import type { Services } from "../composition.js";
@@ -242,7 +243,7 @@ const planAcpTurn = async (
         return { ok: false, message: `Unknown agent provider "${provider}" — add it as an Agent capability first.` };
     }
     const acpConfig = capability.config;
-    const tools = [...services.tools, ...mcpToolsOf(installed)];
+    const tools = [...services.tools, ...mcpToolsOf(installed), ...hostToolsOf(installed, services.config.sandbox.port, services.hostBridgeToken)];
     return {
         ok: true,
         run: (turnRequest) => services.acpAgent(provider, acpConfig, turnRequest),
@@ -277,7 +278,7 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
     }
     // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named
     // external tool overrides, matching mcpServersOf's last-wins merge.
-    const tools = [...services.tools, ...mcpToolsOf(installed)];
+    const tools = [...services.tools, ...mcpToolsOf(installed), ...hostToolsOf(installed, services.config.sandbox.port, services.hostBridgeToken)];
     // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the provider
     // prompt cache survives the turn — the cross-provider delegation note then rides the user message instead of
     // the system prompt.

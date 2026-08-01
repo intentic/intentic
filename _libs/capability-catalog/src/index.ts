@@ -100,7 +100,17 @@ export interface CapabilityField {
 
 // The logical section a card sits under in the "+" grid — a display grouping (by what it's for), not the
 // technical `kind`. `platform` cards unlock a new workspace area; the rest are connectors to existing tools.
-export type CapabilityCategory = "platform" | "code" | "observability" | "data" | "communication" | "business" | "servers" | "deploy" | "extend";
+export type CapabilityCategory =
+    | "platform"
+    | "code"
+    | "observability"
+    | "data"
+    | "communication"
+    | "business"
+    | "machines"
+    | "servers"
+    | "deploy"
+    | "extend";
 
 // The grid's sections, in render order, with their headers. Cards are grouped by `category` under these.
 export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; readonly label: string; readonly hint: string }[] = [
@@ -110,6 +120,10 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     { id: "data", label: "Data", hint: "Let the agent query your SQL databases." },
     { id: "communication", label: "Communication", hint: "Let the agent read and send messages." },
     { id: "business", label: "Business & docs", hint: "Connect payments and knowledge bases." },
+    // Distinct from Servers on purpose: a server is something the sandbox DIALS, a computer of yours is
+    // something that dials the sandbox — and the difference the user feels is that one of them is the machine
+    // they are sitting at.
+    { id: "machines", label: "Your computers", hint: "Let the agent work on your own computer — run commands, handle files, see the screen." },
     { id: "servers", label: "Servers", hint: "Give the agent remote machines over SSH and private networks over VPN." },
     { id: "deploy", label: "Deploy & infra", hint: "Drive your container deployments — stacks, services and releases." },
     { id: "extend", label: "Extend", hint: "Add any MCP server or Claude Code plugin." },
@@ -152,6 +166,45 @@ export interface CapabilityCatalogEntry {
     readonly guide?: CapabilityGuide | undefined;
 }
 
+// The permission switches every connected-computer card carries, identical across platforms — the grant is about
+// what the agent may DO, which does not vary by OS. Shared so the two cards can't drift into different defaults.
+const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
+    {
+        key: "shell",
+        label: "Run commands",
+        default: "on",
+        options: [
+            { value: "on", label: "Allowed" },
+            { value: "off", label: "Blocked" },
+        ],
+    },
+    {
+        key: "write",
+        label: "Create and change files",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+    },
+    {
+        key: "screen",
+        label: "See the screen",
+        default: "on",
+        options: [
+            { value: "on", label: "Allowed" },
+            { value: "off", label: "Blocked" },
+        ],
+    },
+    {
+        key: "roots",
+        label: "Folders it may touch",
+        optional: true,
+        multiline: true,
+        placeholder: "One folder per line. Leave empty for your home folder.",
+    },
+];
+
 export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
     {
         id: "devops",
@@ -191,6 +244,55 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         description: "Run containers inside your sandbox — its own isolated Docker Engine + Compose for dev databases, stacks and builds.",
         fields: [],
         hint: "One-time rebuild required — the sandbox restarts privileged with its own isolated Docker Engine (your machine's Docker is never shared).",
+    },
+    /* The user's own computers. One card per OS rather than one card with a picker, because the OS is not a
+     * setting — it decides which skill pack the agent gets, and a Windows machine and a Linux one are different
+     * enough that a shared card would teach the agent both and confuse it about which it is on.
+     *
+     * The three switches are the grant, and their defaults are the honest ones: reading and running are what
+     * "connect my computer" means, WRITING is not — a user who has not thought about it should not discover the
+     * agent has been editing their files. `roots` is the blast radius for both reads and writes. */
+    {
+        id: "windows",
+        name: "Windows PC",
+        kind: "host",
+        category: "machines",
+        logo: "windows",
+        description: "Let the agent work on your Windows computer — PowerShell, your files, your apps, its screen.",
+        fields: [
+            { key: "platform", label: "", value: "windows" },
+            ...HOST_SCOPE_FIELDS,
+        ],
+        hint: 'The name is how you and the agent refer to this computer ("check the logs on my-laptop"). After adding it, click Connect and run the one-liner on that machine.',
+        guide: {
+            steps: [
+                "Add the computer here, then click Connect on its card to get a one-time command.",
+                "Run that command in PowerShell on the computer you want to connect — it installs a small agent that dials this sandbox.",
+                "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
+                "You can revoke it any time from this card; `intentic-host uninstall` removes the agent from the machine.",
+            ],
+        },
+    },
+    {
+        id: "linux",
+        name: "Linux PC",
+        kind: "host",
+        category: "machines",
+        logo: "linux/f5f5f5",
+        description: "Let the agent work on your Linux computer — your shell, your files, your desktop session.",
+        fields: [
+            { key: "platform", label: "", value: "linux" },
+            ...HOST_SCOPE_FIELDS,
+        ],
+        hint: 'The name is how you and the agent refer to this computer ("run the tests on my-desktop"). After adding it, click Connect and run the one-liner on that machine.',
+        guide: {
+            steps: [
+                "Add the computer here, then click Connect on its card to get a one-time command.",
+                "Run that command in a terminal on the computer you want to connect — it installs a small agent that dials this sandbox.",
+                "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
+                "You can revoke it any time from this card; `intentic-host uninstall` removes the agent from the machine.",
+            ],
+        },
     },
     {
         id: "ssh",
