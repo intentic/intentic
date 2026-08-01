@@ -480,7 +480,10 @@ const onBubbleScroll = (): void => {
 // only: a body click that FOLDED the box would fire under a reader who is still inside it, and the chip is
 // on screen throughout. Guarded on a live selection so dragging text out of a prompt doesn't unfold it.
 const onBubbleClick = (): void => {
-    if (expanded.value || !overflowing.value || window.getSelection()?.isCollapsed === false) {
+    // The selection asked of the bubble's OWN window — popped out, the drag being guarded against lives there,
+    // and this realm's selection is a different (always-collapsed) one.
+    const selection = bubble.value?.ownerDocument.defaultView?.getSelection() ?? window.getSelection();
+    if (expanded.value || !overflowing.value || selection?.isCollapsed === false) {
         return;
     }
     expanded.value = true;

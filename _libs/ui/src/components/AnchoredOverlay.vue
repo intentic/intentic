@@ -157,7 +157,9 @@ const arm = (): void => {
     view.addEventListener(`blur`, onBlur);
     // The panel's own size is live — filtering the model list, expanding a provider group, an account row
     // growing a second line. Re-placing on its resize is what keeps a growing panel off the window's edge.
-    const observer = new ResizeObserver(() => reposition());
+    // The ANCHOR's window builds it, like every listener above: an observer delivers on the rendering steps of
+    // the realm that made it, and this realm's window paints nothing while it sits behind the pop-out.
+    const observer = new view.ResizeObserver(() => reposition());
     observer.observe(box.value);
     armed = { doc, view, observer };
 };

@@ -48,7 +48,16 @@ self.addEventListener("notificationclick", (event) => {
             // open editors, so opening a second copy would be strictly worse than navigating the one that
             // already exists. `navigate` may be unavailable in some browsers — focusing is still the win.
             for (const client of windows) {
-                if (new URL(client.url).origin !== self.location.origin) {
+                const url = new URL(client.url);
+                if (url.origin !== self.location.origin) {
+                    continue;
+                }
+                // NEVER the pop-out. A popped-out panel's page is a window client on this origin too — and the
+                // most recently focused one whenever the user works in it, so matchAll lists it FIRST. Navigating
+                // it replaces the panel with a second full copy of the app in a popup-sized window (which, under
+                // the mobile breakpoint, looks exactly like the chat panel it displaced) — a realm of its own
+                // that nothing in the real app window drives ever again.
+                if (url.pathname === "/popout.html") {
                     continue;
                 }
                 await client.focus();
