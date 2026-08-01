@@ -5,6 +5,7 @@ import { computed, ref, watch } from "vue";
 import { acknowledge } from "./attention";
 import ChoreRow from "./ChoreRow.vue";
 import { host } from "./host";
+import MaintenanceSkeleton from "./MaintenanceSkeleton.vue";
 import { conversationIdOf } from "./runs";
 import ProbeStrip from "./ProbeStrip.vue";
 import { useChores } from "./useChores";
@@ -26,7 +27,7 @@ import { useRuns } from "./useRuns";
  * they were. */
 
 const api = host();
-const { byRepo, error, isLoading, refresh, refreshProbe, snooze } = useChores();
+const { byRepo, error, isPending, refresh, refreshProbe, snooze } = useChores();
 const { latestByChore, start, promote } = useRuns();
 
 type Filter = "attention" | "all";
@@ -118,7 +119,7 @@ const onStart = (verdict: ChoreVerdict): void => {
 <template>
     <Page width="wide">
         <PageHeader title="Maintenance" description="What this workspace is owed, what measured it, and what has already been done about it.">
-            <div class="flex items-center gap-2">
+            <template #actions>
                 <Segmented
                     v-model="filter"
                     size="xs"
@@ -130,21 +131,24 @@ const onStart = (verdict: ChoreVerdict): void => {
                 <Button size="small" severity="secondary" text :disabled="busy" title="Re-read the evidence" @click="void refresh()">
                     <template #icon><Icon name="refresh" /></template>
                 </Button>
-            </div>
+            </template>
         </PageHeader>
 
         <p v-if="notice" class="mb-3 text-xs text-warning">{{ notice }}</p>
         <p v-if="error" class="mb-3 text-xs text-warning">{{ error }}</p>
 
-        <p v-if="isLoading" class="text-xs text-subtle">Reading the evidence…</p>
+        <!-- Nothing has come back yet — including the window where the sandbox handshake still gates the fetch.
+             Show the book's shape rather than a sentence, so the page that arrives is the page you were already
+             looking at. -->
+        <MaintenanceSkeleton v-if="isPending" />
 
         <!-- The empty state under "Needs attention" is the one this design most wants to be reachable, so it says
              what was checked rather than congratulating anyone. -->
         <div v-else-if="groups.length === 0" class="flex flex-col items-start gap-2 py-10">
             <p class="text-sm text-content">Nothing needs attention.</p>
             <p class="max-w-[60ch] text-xs text-subtle">
-                Every chore in the book is either clear or waiting on a measurement. Switch to Everything to see what was checked, when, and
-                what could not be measured at all.
+                Every chore in the book is either clear or waiting on a measurement. Switch to Everything to see what was checked, when, and what
+                could not be measured at all.
             </p>
             <Button size="small" severity="secondary" text label="Show everything" @click="filter = `all`" />
         </div>
@@ -157,7 +161,11 @@ const onStart = (verdict: ChoreVerdict): void => {
                 :count="group.due === 0 ? undefined : group.due"
                 caption="chores are decided per repository — the evidence is this repository's"
             >
-                <ProbeStrip :probes="group.probes" :busy="busy" @refresh="(id) => void attempt(`refresh that measurement`, () => refreshProbe(group.repo, id))" />
+                <ProbeStrip
+                    :probes="group.probes"
+                    :busy="busy"
+                    @refresh="(id) => void attempt(`refresh that measurement`, () => refreshProbe(group.repo, id))"
+                />
                 <ChoreRow
                     v-for="verdict in group.rows"
                     :key="rowKey(verdict)"

@@ -90,7 +90,11 @@ export function useChores() {
         verdicts,
         byRepo,
         error: computed(() => query.error.value?.message),
-        isLoading: query.isLoading,
+        // isPending, not isLoading: true from mount until the FIRST report, INCLUDING the window where `enabled`
+        // still gates the fetch on the sandbox handshake. isLoading is false in that window (nothing is in
+        // flight), and a panel that trusts it renders "Nothing needs attention" over a report it has not read —
+        // the one sentence this surface must never say wrongly.
+        isPending: query.isPending,
         refresh: async (): Promise<void> => {
             await queryClient.invalidateQueries({ queryKey: reportKey.value });
         },
