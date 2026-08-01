@@ -462,6 +462,12 @@
 .composer-send:hover {
     background: color-mix(in srgb, var(--color-primary-fill) 22%, transparent);
 }
+/* Every send glyph in the icon sets is a paper plane pointing up-right, so its ink mass sits
+   up-right of the viewBox centre and reads off-centre inside the round button (measured ~1px
+   each way at text-sm). Nudge it back. Stop shares .composer-send but its glyph is symmetric. */
+.composer-send:not(.composer-stop) svg {
+    translate: -1px 1px;
+}
 .composer-send:disabled {
     background: var(--color-overlay);
     color: var(--color-subtle);
