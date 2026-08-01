@@ -13,7 +13,7 @@ import type { ForwardExecutor } from "./mirror.js";
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-mirror-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { mirrorPidPath } = await import("./config.js");
-const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, retireMirror, SyncAuthError } = await import("./mirror.js");
+const { detachedSpawnOptions, fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, retireMirror, SyncAuthError } = await import("./mirror.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
 // setup() creates ~/.intentic/sync via writeConfig; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(mirrorPidPath), { recursive: true });
@@ -140,6 +140,22 @@ describe("readLiveWatcherPid", () => {
         await expect(readLiveWatcherPid()).resolves.toBe(process.pid);
         await writeFile(mirrorPidPath, "not-a-pid");
         await expect(readLiveWatcherPid()).resolves.toBeUndefined();
+    });
+});
+
+// The watcher spawns git → ssh → cloudflared on every tick. On Windows, `detached` (DETACHED_PROCESS) leaves it
+// with no console, and Windows then gives each of those a console of its own — a new console window, popping up
+// and closing every five seconds. windowsHide (CREATE_NO_WINDOW) gives the watcher a console WITHOUT a window
+// for them to inherit instead. Passing both is passing neither: CREATE_NO_WINDOW is ignored with
+// DETACHED_PROCESS, which is how the popping shipped.
+describe("detachedSpawnOptions", () => {
+    it("gives Windows a windowless console and never detaches", () => {
+        expect(detachedSpawnOptions("win32")).toEqual({ windowsHide: true });
+    });
+
+    it("detaches on POSIX, where a session — not a console — is what outlives the terminal", () => {
+        expect(detachedSpawnOptions("linux")).toEqual({ detached: true });
+        expect(detachedSpawnOptions("darwin")).toEqual({ detached: true });
     });
 });
 

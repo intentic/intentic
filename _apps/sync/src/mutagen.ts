@@ -8,8 +8,12 @@ import { IGNORES, sanitizeId, sshAlias } from "./ssh.js";
 const MUTAGEN_VERSION = "0.18.1";
 const CLOUDFLARED_VERSION = "2026.7.2";
 
+// The prefix every session this agent creates carries, sync and forward alike — what makes them all findable
+// again later, whichever pairing created them (see ourSyncSessions / ourForwardSessions).
+const SESSION_PREFIX = "intentic-";
+
 // The Mutagen session name (letters/digits/dashes) so `mutagen sync {list,pause,resume,terminate}` can target it.
-export const sessionName = (sandboxId: string): string => `intentic-${sanitizeId(sandboxId)}`;
+export const sessionName = (sandboxId: string): string => `${SESSION_PREFIX}${sanitizeId(sandboxId)}`;
 
 // One port-mirror forward session per port, deterministically named so `mirror` can reconcile (terminate a
 // vanished port's session, recreate a live one) without querying Mutagen's session list. The shared prefix is
@@ -18,17 +22,29 @@ export const sessionName = (sandboxId: string): string => `intentic-${sanitizeId
 const FORWARD_PREFIX = "intentic-fwd-";
 export const forwardSessionName = (sandboxId: string, port: number): string => `${FORWARD_PREFIX}${sanitizeId(sandboxId)}-${port}`;
 
-// Session names split out of `forward list`'s output. Whitespace-separated is unambiguous because a name is a
-// sanitized id plus a port number, and anything outside our prefix belongs to the user's own Mutagen — never
-// ours to terminate.
-export const parseForwardNames = (listed: string): string[] => listed.split(/\s+/).filter((name) => name.startsWith(FORWARD_PREFIX));
+// Session names split out of a `list` listing, narrowed to the ones this agent owns. Whitespace-separated is
+// unambiguous because a name is a sanitized id (plus a port number for a forward), and anything outside our
+// prefix belongs to the user's own Mutagen — never ours to terminate.
+const oursIn = (listed: string, prefix: string): string[] => listed.split(/\s+/).filter((name) => name.startsWith(prefix));
 
-// Every forward session in the daemon that is ours, whichever sandbox created it. A daemon that isn't running
-// (or a list that fails) has no sessions of ours to report — and nothing to tear down either.
-export const ourForwardSessions = (mutagen: string): string[] => {
-    const result = spawnSync(mutagen, ["forward", "list", "--template", "{{range .}}{{.Name}} {{end}}"], { encoding: "utf8" });
-    return result.status === 0 ? parseForwardNames(result.stdout) : [];
+export const parseForwardNames = (listed: string): string[] => oursIn(listed, FORWARD_PREFIX);
+
+// Which file-sync sessions a pairing should retire: every session of ours except the one it wants to keep.
+// Forward sessions carry the same prefix but never appear in a `sync list`, so they can't be caught here.
+export const parseStaleSyncNames = (listed: string, keep: string): string[] => oursIn(listed, SESSION_PREFIX).filter((name) => name !== keep);
+
+// The raw name listing for one kind of session. A daemon that isn't running (or a list that fails) has nothing
+// of ours to report — and nothing to tear down either.
+const listSessionNames = (mutagen: string, kind: "forward" | "sync"): string => {
+    const result = spawnSync(mutagen, [kind, "list", "--template", "{{range .}}{{.Name}} {{end}}"], { encoding: "utf8" });
+    return result.status === 0 ? result.stdout : "";
 };
+
+// Every forward session in the daemon that is ours, whichever sandbox created it.
+export const ourForwardSessions = (mutagen: string): string[] => parseForwardNames(listSessionNames(mutagen, "forward"));
+
+// Every file-sync session of ours that isn't the one `keep` names.
+const staleSyncSessions = (mutagen: string, keep: string): string[] => parseStaleSyncNames(listSessionNames(mutagen, "sync"), keep);
 
 // `mutagen forward create` args: bind the SAME port on the local loopback and pipe it to the sandbox listener
 // at its recorded loopback address — `host` is the daemon-reported dial host, because a `localhost` bind inside
@@ -132,6 +148,15 @@ export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec):
 // so it costs a rescan, not a re-download. A paused session is recreated paused — drift gets fixed without
 // overriding a deliberate `intentic-sync pause`.
 export const ensureSyncSession = (mutagen: string, config: SyncConfig, log: Log): void => {
+    // One file-sync session per machine: this pairing's. An earlier pairing's session is never reused — its
+    // sandbox is gone and its ssh alias went with it — but Mutagen retries a disconnected session every 15
+    // seconds for as long as the daemon lives, so every pairing left behind another dead sandbox being dialled
+    // forever, and another line of junk in `intentic-sync status`.
+    const stale = staleSyncSessions(mutagen, sessionName(config.sandboxId));
+    if (stale.length > 0) {
+        spawnSync(mutagen, ["sync", "terminate", ...stale], { stdio: "ignore" });
+        log(`retired ${stale.length} file-sync session(s) left behind by previous pairings.`);
+    }
     if (config.mode !== "sync" || config.localDir === undefined) {
         return; // a mirror-only enrollment has no file sync at all — just port forwards
     }

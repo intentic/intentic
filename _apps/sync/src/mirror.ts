@@ -253,12 +253,27 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     }
 };
 
-// Start the watcher detached so it outlives the terminal that launched it, its stdout appended to mirror.log.
+// How the watcher outlives the command that started it — and the two platforms want OPPOSITE flags.
+//
+// POSIX: `detached` gives it its own session, so the terminal that launched it can't take it down.
+//
+// Windows: `detached` is DETACHED_PROCESS, which leaves the watcher with NO CONSOLE. Windows then gives every
+// console child of a console-less process a console of its own, and "creating a new console results in a new
+// console window" — so the git → ssh → cloudflared the git bridge runs on EVERY tick became three black
+// windows popping up and closing every five seconds, forever, on a machine that was otherwise idle. Windows
+// keeps the process alive after its parent exits by itself, so what it needs here is not detachment but a
+// console with no window: CREATE_NO_WINDOW, which every descendant inherits and stays invisible in.
+//
+// The two cannot be combined — CREATE_NO_WINDOW "is ignored ... if it is used with either CREATE_NEW_CONSOLE
+// or DETACHED_PROCESS" — so passing both, as this used to, is exactly passing neither. Mutagen meets the same
+// rule from the other side: its daemon IS detached, so it has to spawn every ssh with CREATE_NEW_CONSOLE plus
+// a hidden window (pkg/agent/transport/process_windows.go) to keep them off the screen.
+export const detachedSpawnOptions = (platform: NodeJS.Platform): { readonly detached: true } | { readonly windowsHide: true } =>
+    platform === "win32" ? { windowsHide: true } : { detached: true };
+
+// Start the watcher so it outlives the terminal that launched it, its stdout appended to mirror.log.
 // Idempotent: a live watcher already covers this machine, so a second start is a no-op (the single-holder
 // invariant means one watcher is always enough). `launcher` is how to re-invoke this CLI (see cliLauncher).
-// windowsHide keeps a detached child from getting a console window of its own — this is what the login
-// autostart runs (autostart.ts registers `mirror`, which lands here), and the watcher never exits, so without
-// it every Windows login would leave a black console parked on the desktop until shutdown.
 export const startMirrorWatcher = async (launcher: CliLauncher, log: Log): Promise<void> => {
     const existing = await readLiveWatcherPid();
     if (existing !== undefined) {
@@ -267,7 +282,10 @@ export const startMirrorWatcher = async (launcher: CliLauncher, log: Log): Promi
     }
     const logFd = openSync(mirrorLogPath, "a");
     const [command, ...leading] = launcher;
-    const child = spawn(command, [...leading, "mirror", "--watch"], { detached: true, windowsHide: true, stdio: ["ignore", logFd, logFd] });
+    const child = spawn(command, [...leading, "mirror", "--watch"], {
+        ...detachedSpawnOptions(process.platform),
+        stdio: ["ignore", logFd, logFd],
+    });
     child.unref();
     log(`mirroring the sandbox's workspace ports onto localhost (pid ${child.pid}). Details: ${mirrorLogPath}`);
 };
