@@ -1,9 +1,10 @@
 export const SITE_URL = "https://intentic.dev";
 export const APP_URL = "https://app.intentic.dev";
-// The interactive demo: the real app (_apps/web, built through vite.demo.config.ts) running against a recorded
-// fixture instead of a sandbox. Its own origin, so the hero can embed it without the app bundle ever reaching
-// this page's critical path — and so a demo deploy is never an app deploy.
-export const DEMO_URL = "https://demo.intentic.dev";
+// The interactive demo (@intentic-dev/demo): the real app running against a recorded fixture instead of a
+// sandbox. It builds into this site's own public/, so it ships in one deploy and — the part that matters — the
+// hero's iframe is SAME-ORIGIN: a cross-origin frame gets partitioned storage, and the demo seeds credentials
+// into localStorage before the app boots. Relative, so a preview deploy embeds its own copy rather than prod's.
+export const DEMO_PATH = "/demo/";
 export const ORG_NAME = "intentic";
 export const ORG_TAGLINE = "An IDE for your agents. A window for you.";
 export const ORG_DESCRIPTION =

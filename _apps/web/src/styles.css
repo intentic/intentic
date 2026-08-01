@@ -23,8 +23,15 @@
 @import "./chat/chat.css";
 
 /* Scan the @intentic-app/ui library's source for class names (it lives outside this app's tree,
- * so Tailwind won't auto-detect it). The app's own files are auto-detected. */
+ * so Tailwind won't auto-detect it). */
 @source "../../../_libs/ui/src/**/*.{ts,html,vue}";
+
+/* And this app's own — named rather than left to auto-detection, which is rooted at the BUILD's root, not at
+ * this stylesheet. That is the app's directory when the app builds itself and the demo package's directory when
+ * @intentic-dev/demo builds the same source, so relying on it produced a demo with most of its utilities
+ * missing: real markup, three-quarters of a design system. Naming it makes one stylesheet true for both. */
+@source "./**/*.{ts,html,vue}";
+@source "../index.html";
 
 /* Same reason for the compiled-in builtin extensions (extension-host/builtins.ts statically imports them, so
  * their views ARE this bundle's views) — without this, every class a builtin authors that no app file happens

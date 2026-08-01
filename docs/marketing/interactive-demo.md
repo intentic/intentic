@@ -5,7 +5,7 @@ covers what sits behind the *click* on them: the **real app**, running against a
 Every section fills with plausible data, the sessions window opens, a turn streams into the chat, a diff opens.
 Nothing is re-implemented for marketing.
 
-Run it with `pnpm -C _apps/web demo` (http://localhost:47146). The app's own dev server is untouched.
+Run it with `pnpm -C _apps/demo dev` (http://localhost:47146/demo/). The app's own dev server is untouched.
 
 The finding that shapes everything below: **the app does not need to be decoupled from its logic for this.**
 It needs its two transports pointed somewhere else. Component-level decoupling (props/events instead of
@@ -24,26 +24,30 @@ Every browser→outside call in the web app goes through one of two globals, res
 
 `sandboxRpc.ts:43` already documents why its fetch is a hook rather than a captured reference — *"a fetch bound
 then is invisible to anything that replaces it afterwards (a test's stub, an instrumentation wrapper)"*. The demo
-is that wrapper. **No production module changes.**
+is that wrapper, and it needs no branch anywhere in the app.
 
-So the demo is a second Vite entry of the same app:
+## The package
 
-```
-_apps/web
-├── demo.html                     # entry; sets a demo window.env inline, then loads src/demo/main.ts
-├── vite.demo.config.ts           # `pnpm demo` (47146) · `pnpm demo:build` → dist-demo/
-└── src/demo/
-    ├── main.ts                   # install transports → seed credentials → import the real ../main.ts
-    ├── transport.ts              # what the demo claims from fetch/WebSocket, and the socket shim
-    ├── platform.ts               # the platform, as a fetch handler (the session + the sandbox row)
-    ├── daemon.ts                 # the daemon, as a fetch handler: the route table + /events
-    ├── turn.ts                   # the scripted AgentEvent run behind /agent/attach
-    ├── sse.ts                    # the event-iterator wire format
-    ├── terminal.ts               # the recorded pty, as TerminalServerMessage frames
-    └── fixture/                  # the data: fleet.ts (the roster), workspace.ts (repos, diffs, sessions)
-```
+`@intentic-dev/demo` (`_apps/demo/`) — its own package, depending on `@intentic-app/web` and importing the app's
+entry through its `./main` export. Its [README](../../_apps/demo/README.md) has the file-by-file layout.
 
-Both handlers are plain `Request → Response` functions with contract types on every payload
+It lived inside `_apps/web/src/demo/` first, and that was wrong in three ways that are checkable rather than
+stylistic: a fixture edit matched CI's `_apps/web/**/*` glob and re-released the **product images**, `knip`
+reported all ten files as unused (web's entry list cannot see a second html), and the package emitted a second
+dist beside the one its Dockerfile assumes. The dependency now runs one way only — the demo knows the app, the
+app knows nothing — which is also what stops app code reaching the fixture by accident.
+
+**It cost the app two lines**, both of which are fixes rather than accommodations, because building the same
+source under a path prefix is what surfaced them:
+
+- `router/index.ts` now passes `import.meta.env.BASE_URL` to `createWebHistory()`. vue-router's default is a
+  `<base href>` element or `/` — it never reads Vite's base — so an app served under a prefix routed as if it
+  were at the root. `/` for the app, so nothing there changes.
+- `styles.css` now names its own source in an `@source`. Tailwind's auto-detection is rooted at the *build's*
+  root, which was the app's directory only because the app was the only thing building it; the demo's first run
+  came up as real markup with three-quarters of a design system.
+
+Both fixture handlers are plain `Request → Response` functions with contract types on every payload
 (`satisfies AgentsList`, `: SavingsReport`, …), so a shape that drifts from the wire is a build error. They are
 deliberately *not* an oRPC server: `OpenAPIHandler` would put `@orpc/server` in the bundle to re-validate
 payloads this fixture is the only writer of, and the client re-validates none of them anyway. The one piece of
@@ -132,6 +136,22 @@ Below 1024px or without a fine pointer, the button opens the demo in its own tab
 mobile shell can do a better job than any frame of ours. The iframe's `src` is set in the click handler, so until
 someone presses it this page has loaded no part of the app.
 
+## How it deploys
+
+It ships **with the marketing site, at the same origin**, and needs no host of its own:
+
+1. `_apps/demo` builds (`base: /demo/`) into `_apps/site/public/demo/` — gitignored, and Astro copies `public/`
+   into its dist verbatim, so the demo lands in the site's own asset bundle.
+2. The site's Cloudflare worker gains one rule: a navigation under `/demo/` that no asset answers serves
+   `/demo/index.html`. That is the SPA fallback its history routes need, and the same rule its dev server runs.
+3. `_apps/site` declares `@intentic-dev/demo` as a devDependency purely for ORDER — turbo's `^build` then builds
+   the demo before Astro reads `public/`. Nothing is imported across that edge, and a site built without the
+   demo present is still a valid site: `/demo/` simply isn't there.
+
+Same-origin is not just convenience. A cross-origin iframe gets **partitioned storage**, and the demo seeds
+credentials into `localStorage` before the app boots — on a separate host that seeding is one browser policy away
+from breaking the demo outright. `DEMO_PATH` is a relative `/demo/`, so a preview deploy embeds its own copy.
+
 ## What is left
 
 - **Tour deep links** — `#see-it`'s seven shots could each open the overlay at the matching route, turning the
@@ -139,8 +159,8 @@ someone presses it this page has loaded no part of the app.
 - **Screenshot regeneration** — the payoff phase: drive the demo build under Playwright (`_tools/e2e` already
   drives this app) so `public/assets/product/*.png` stop being hand-captured. This is also the mitigation for the
   drift risk below.
-- **A deploy target** — `DEMO_URL` points at `demo.intentic.dev`; `pnpm -C _apps/web demo:build` writes
-  `dist-demo/`, which is a static directory needing one SPA fallback to `demo.html`. Nothing hosts it yet.
+- **One `pnpm install`** — `_apps/demo` is a new workspace package, so the lockfile has to catch up before its
+  `dev`/`build` scripts run anywhere.
 
 ## Risks, honestly
 
@@ -148,8 +168,12 @@ someone presses it this page has loaded no part of the app.
   never on the marketing page's critical path.
 - **The demo build shares the app build's worktree limitation**: both fail to resolve `@intentic/extension-ui`
   from `_extensions/maintenance` under an agent worktree's overlaid `node_modules` (see the workspace README).
-  `demo:build` is no worse off than `build`, and the dev server is unaffected — but the demo has not yet been
-  built in an environment where the app's own build passes.
+  The demo's build is no worse off than the app's, and the dev server is unaffected — but neither the demo's
+  production bundle nor the site's `/demo/` has been built in an environment where the app's own build passes.
+- **`optimizeDeps.include` is anchored at the consuming config's root**, so `_apps/demo` declares the five
+  packages that list names (`shiki`, `@shikijs/langs`, `@shikijs/themes`, `@vue-flow/core`, `@dagrejs/dagre`)
+  even though it imports none of them directly — pnpm does not hoist. If that list in `vite.shared.ts` grows,
+  the demo's `package.json` has to grow with it or its highlighting silently degrades.
 - **Fixture drift** is the failure mode that would embarrass us. Contract-typed handlers catch shape drift at
   build time; they cannot catch *narrative* drift (a fixture that describes a feature we changed). Phase 3 is the
   mitigation — if the screenshots come from the demo, a stale demo is visible in review.

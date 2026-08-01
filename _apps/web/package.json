@@ -6,12 +6,13 @@
     "files": [
         "dist"
     ],
+    "exports": {
+        "./main": "./src/main.ts"
+    },
     "scripts": {
         "dev": "esbuild src/environments/environment.local.ts --bundle --target=es2024 --define:__API_URL__=\\\"${API_URL:-https://localhost:6480}\\\" --outfile=public/assets/js/env.js && vite",
         "watch": "esbuild src/environments/environment.local.ts --bundle --target=es2024 --define:__API_URL__=\\\"${API_URL:-https://localhost:6480}\\\" --outfile=public/assets/js/env.js && vite",
         "build": "vue-tsc --noEmit -p tsconfig.app.json && vite build && esbuild src/environments/environment.deployment.ts --bundle --minify --target=es2024 --outfile=dist/assets/js/env.js",
-        "demo": "vite --config vite.demo.config.ts",
-        "demo:build": "vite build --config vite.demo.config.ts",
         "docker:release": "bash ../../_tools/scripts/docker-release.sh web",
         "test": "vitest run",
         "typecheck": "vue-tsc --noEmit -p tsconfig.app.json"

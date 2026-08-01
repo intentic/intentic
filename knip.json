@@ -22,6 +22,9 @@
             ],
             "ignore": ["public/**"]
         },
+        "_apps/demo": {
+            "entry": ["src/main.ts", "index.html", "vite.config.ts"]
+        },
         "_apps/api": {
             "entry": ["src/main.ts", "src/**/*.test.ts"]
         },

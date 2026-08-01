@@ -1,0 +1,69 @@
+import { fileURLToPath } from "node:url";
+import { defineConfig, type Plugin } from "vite";
+// Relative, not through the package's exports: Vite bundles a config's RELATIVE imports (so the .ts sources
+// behind them are compiled with it) and leaves bare specifiers to Node, which cannot load TypeScript. The
+// package dependency in package.json is the real statement; this is how a build config reaches another one.
+import { shared } from "../web/vite.shared";
+
+/* The demo builds the SAME source as the app — `shared` above is the app's own plugin/alias/prebundle setup,
+ * imported through its package rather than copied — and differs only in where it enters (this package's
+ * index.html), where it is served from, and where it lands.
+ *
+ * `base` is what makes vue-router cooperate: createWebHistory() reads import.meta.env.BASE_URL, so the demo's
+ * history paths are `/demo/agents`, `/demo/workspace/…` — the app's own routes, under one prefix the marketing
+ * site's worker can serve with a single fallback.
+ *
+ * It builds INTO the site's `public/`, which Astro copies verbatim into its dist — so the demo ships as part of
+ * one site deploy, at the same origin as the page that embeds it. Same-origin matters beyond convenience: a
+ * cross-origin iframe gets partitioned storage, and the demo seeds its credentials into localStorage before the
+ * app boots. `public/demo/` is gitignored, and a site build with no demo in it simply has no /demo/ — the two
+ * builds are ordered (the site depends on this package) but not entangled. */
+
+const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
+
+/* Serve `index.html` for every DOCUMENT request, which is the same thing the site's worker is told for
+ * production: the demo is a history-mode SPA, so `/demo/agents` and `/demo/workspace/api/src/stripe.ts` are its
+ * routes, not its files. Keyed on `Accept: text/html` rather than on the path's shape, because a workspace route
+ * legitimately ends in `.ts` — a navigation says what it wants, and module/asset requests never ask for html. */
+const spaFallback = (): Plugin => ({
+    name: `demo-spa-fallback`,
+    configureServer: (server) => {
+        // A middleware registered here runs BEFORE Vite's own, which is before the base prefix is stripped — so
+        // the rewrite has to carry the base too, or Vite reads `/index.html` as outside the base and bounces it
+        // back to `/demo/`, forever.
+        const entry = `${server.config.base}index.html`;
+        server.middlewares.use((request, _response, next) => {
+            if (request.method === `GET` && request.headers.accept?.includes(`text/html`) === true) {
+                request.url = entry;
+            }
+            next();
+        });
+    },
+});
+
+export default defineConfig({
+    ...shared,
+    plugins: [...shared.plugins, spaFallback()],
+    resolve: {
+        alias: {
+            ...shared.resolve.alias,
+            // The app's entry, source-first — the same treatment `shared` gives every workspace lib, and the
+            // mapping this package's tsconfig `paths` already declares. `package.json` names the dependency;
+            // this is how it resolves, with no dist between an app edit and the demo showing it.
+            "@intentic-app/web/main": here(`../web/src/main.ts`),
+        },
+    },
+    base: `/demo/`,
+    // The app's own static assets — its logo, and the `ext-shims/` modules an extension bundle's bare `vue` /
+    // `@intentic/extension-api` imports resolve to through index.html's import map. The demo serves the app, so
+    // it serves the app's public dir; nothing of its own belongs here.
+    publicDir: here(`../web/public`),
+    // Plain http on its own port: the demo talks to nothing real, so there is no cross-origin cookie, no Google
+    // client and no mixed content to keep the app's dev certificate for. The app's dev server is untouched.
+    server: { host: `localhost`, port: 47146, strictPort: true },
+    build: {
+        outDir: here(`../site/public/demo`),
+        emptyOutDir: true,
+        target: `es2024`,
+    },
+});

@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "baseUrl": "./",
+        "rootDir": "../..",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "types": ["vite/client"],
+        /* The app's own path map, verbatim — this checks the app's source, so a mapping that differs from
+         * _apps/web/tsconfig.json gives one module two identities and every type crossing between them reads
+         * as "two different types with this name exist". `@intentic/sandbox-contract` is deliberately NOT here
+         * for exactly that reason: web resolves it through node_modules, so the fixture must too.
+         * `@intentic-app/web/main` is the app's entry, imported for its side effect of being the app. */
+        "paths": {
+            "@intentic-app/api-contract": ["../../_libs/api-contract/src/index.ts"],
+            "@intentic-app/ui": ["../../_libs/ui/src/index.ts"],
+            "@intentic-app/ui/markdown": ["../../_libs/ui/src/markdown/index.ts"],
+            "@intentic-app/web/main": ["../web/src/main.ts"]
+        }
+    },
+    "include": ["./src/**/*.ts", "./vite.config.ts"],
+    "extends": "@intentic/tsconfig/tsconfig.vue.json"
+}

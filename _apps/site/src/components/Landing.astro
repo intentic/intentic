@@ -1,7 +1,7 @@
 ---
 import { faqGroups } from "@intentic-dev/site-content/faq";
 import type { LandingContent } from "@intentic-dev/site-content/landing";
-import { APP_URL, DEMO_URL, gitlabIssuesUrl, gitlabUrl } from "@intentic-dev/site-content/site";
+import { APP_URL, DEMO_PATH, gitlabIssuesUrl, gitlabUrl } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "./Footer.astro";
@@ -192,7 +192,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                             <button
                                 id="hero-demo-play"
                                 type="button"
-                                data-demo-url={DEMO_URL}
+                                data-demo-url={DEMO_PATH}
                                 class="group absolute inset-0 flex cursor-pointer items-center justify-center bg-canvas/10 transition hover:bg-canvas/35 focus-visible:bg-canvas/35 focus-visible:outline-none"
                             >
                                 <span

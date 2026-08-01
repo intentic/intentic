@@ -114,7 +114,11 @@ const routes: RouteRecordRaw[] = [
 ];
 
 export const router = createRouter({
-    history: createWebHistory(),
+    /* The build's own base, not vue-router's default. Its default is a `<base href>` element or `/` — it never
+     * looks at Vite's, so an app built under a path prefix routed as if it were at the root: every path resolved
+     * one level up from where its own bundle lives. `/` for this app, which is why nothing here changes; the
+     * interactive demo (@intentic-dev/demo) builds the same source under `/demo/` and is what surfaced it. */
+    history: createWebHistory(import.meta.env.BASE_URL),
     routes,
 });
 
