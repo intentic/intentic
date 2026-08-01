@@ -1,5 +1,5 @@
 import type { AgentProvider } from "@intentic/sandbox-contract";
-import { perProvider } from "./conversation";
+import { perProvider } from "./providerCatalog";
 
 /* Which account of each provider the user last picked for a turn, per sandbox — what a new conversation's
  * account selection seeds from, and what a reloaded window comes back wearing. Without it the pick lived in

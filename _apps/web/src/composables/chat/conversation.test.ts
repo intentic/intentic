@@ -1,16 +1,10 @@
 import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-    clampEffort,
-    Conversation,
-    effortsFor,
-    providerAccounts,
-    providerModels,
-    transcriptView,
-    turnDefaults,
-    turnRequestBody,
-} from "./conversation";
+import { Conversation } from "./conversation";
+import { providerAccounts } from "./providerAccounts";
+import { transcriptView } from "./transcriptClock";
+import { turnDefaults } from "./turnDefaults";
 import { resolvePrompt } from "../agents/conflictResolution";
 import { type ChatMessage, foldsIntoTurn, isAcknowledgment, transcriptOf, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
@@ -1114,7 +1108,7 @@ describe(`Conversation`, () => {
         expect(notice.text).not.toContain(`Auto-resume`);
         // No offer banner and no opt-out: there is no automation here to describe or to regret.
         expect(notice.noticeAction).toBeUndefined();
-        expect(conversation.outageResume.value).toBeUndefined();
+        expect(conversation.failures.outageResume.value).toBeUndefined();
         expect(conversation.error.value).toBeNull();
     });
 
@@ -1146,7 +1140,7 @@ describe(`Conversation`, () => {
         expect(notice.text).toContain(`attempt 2 of 6`);
         // The moment-of-regret opt-out rides the notice the automation's own firing produced.
         expect(notice.noticeAction).toBe(`outageOptOut`);
-        expect(conversation.outageResume.value).toEqual({ retryAt, attempt: 2, maxAttempts: 6, scheduled: true });
+        expect(conversation.failures.outageResume.value).toEqual({ retryAt, attempt: 2, maxAttempts: 6, scheduled: true });
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
         conversation.abort();
@@ -1176,7 +1170,7 @@ describe(`Conversation`, () => {
         expect(notice.text).toContain(`being renewed`);
         // The spinner: the line declares which wait it describes, and the conversation says the wait is on.
         expect(notice.noticeWait).toBe(`credentialRenewal`);
-        expect(conversation.credentialRenewal.value).toBeDefined();
+        expect(conversation.failures.credentialRenewal.value).toBeDefined();
         expect(conversation.error.value).toBeNull();
         // Not a reauth: the account is fine, and lighting its badge would send the user to fix nothing.
         expect(providerAccounts.value[`claude`]?.some((account) => account.needsReauth === true)).not.toBe(true);
@@ -1194,7 +1188,7 @@ describe(`Conversation`, () => {
                 sseResponse([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` }, { kind: `done` }]),
             );
             await conversation.send(`refactor the store`, settings);
-            expect(conversation.credentialRenewal.value).toBeDefined();
+            expect(conversation.failures.credentialRenewal.value).toBeDefined();
 
             // What the daemon started a moment later: the same request, behind the note saying why it re-ran.
             sandboxRequestMock.mockImplementation(() => {
@@ -1211,7 +1205,7 @@ describe(`Conversation`, () => {
             await vi.advanceTimersByTimeAsync(2_000);
 
             // The wait is over, and the resumed answer is in the transcript under the original question.
-            expect(conversation.credentialRenewal.value).toBeUndefined();
+            expect(conversation.failures.credentialRenewal.value).toBeUndefined();
             expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
                 { role: `user`, text: `refactor the store` },
                 { role: `assistant`, text: `` },
@@ -1230,11 +1224,11 @@ describe(`Conversation`, () => {
             sseResponse([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` }, { kind: `done` }]),
         );
         await conversation.send(`hello`, settings);
-        expect(conversation.credentialRenewal.value).toBeDefined();
+        expect(conversation.failures.credentialRenewal.value).toBeDefined();
 
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `back` }, { kind: `done` }]));
         await conversation.send(`again`, settings);
-        expect(conversation.credentialRenewal.value).toBeUndefined();
+        expect(conversation.failures.credentialRenewal.value).toBeUndefined();
     });
 
     // With nothing armed the daemon is telling us this turn is NOT coming back — the one case where the user
@@ -1251,7 +1245,7 @@ describe(`Conversation`, () => {
         const notice = conversation.messages.value.at(-1)!;
         expect(notice.text).toContain(`Reconnect`);
         expect(notice.noticeWait).toBeUndefined();
-        expect(conversation.credentialRenewal.value).toBeUndefined();
+        expect(conversation.failures.credentialRenewal.value).toBeUndefined();
         expect(providerAccounts.value[`claude`]?.[0]?.needsReauth).toBe(true);
     });
 
@@ -1266,7 +1260,7 @@ describe(`Conversation`, () => {
         // The red line is now honest — and the words the user typed are back in the queue rather than lost with
         // the turn, which is the part of this failure that was ever actually ours.
         expect(conversation.error.value).toContain(`500`);
-        expect(conversation.outageResume.value).toBeUndefined();
+        expect(conversation.failures.outageResume.value).toBeUndefined();
         expect(conversation.queued.value.some((message) => message.text === `hello`)).toBe(true);
     });
 
@@ -1287,13 +1281,13 @@ describe(`Conversation`, () => {
         );
         await conversation.send(`hello`, settings);
 
-        expect(conversation.outageResume.value).toEqual({ retryAt, attempt: 1, maxAttempts: 6, scheduled: false });
+        expect(conversation.failures.outageResume.value).toEqual({ retryAt, attempt: 1, maxAttempts: 6, scheduled: false });
         // Nothing is armed, so no opt-out is offered — there is nothing to opt out of yet.
         expect(conversation.messages.value.at(-1)!.noticeAction).toBeUndefined();
 
         // Enabling the setting arms the very turn that bounced, daemon-side; this reflects it.
-        conversation.armOutageResume();
-        expect(conversation.outageResume.value?.scheduled).toBe(true);
+        conversation.failures.armOutageResume();
+        expect(conversation.failures.outageResume.value?.scheduled).toBe(true);
         expect(conversation.messages.value.at(-1)!.text).toContain(`Auto-resume enabled`);
         conversation.abort();
     });
@@ -2049,152 +2043,5 @@ describe(`the transcript's clock`, () => {
 
         conversation.stop();
         await turn;
-    });
-});
-
-/* The reasoning-effort scale, which belongs to the MODEL and not to the provider: Kimi K3 stops at 'high' where
- * Claude runs to 'max', so a pick carried across a model switch is routinely off-scale. Every read of a
- * conversation's effort goes through the clamp, because an off-scale tier both leaves the composer's segments
- * with nothing lit and sends the runtime a level it never published. */
-describe(`the effort scale`, () => {
-    const values = (options: { value: string }[]): string[] => options.map((option) => option.value);
-
-    beforeEach(() => {
-        providerModels.value = {
-            ...providerModels.value,
-            claude: [{ label: `Opus 5`, value: `claude-opus-5` }],
-            kimi: [{ label: `Kimi K3`, value: `kimi-k3`, efforts: [`low`, `high`, `max`] }],
-        };
-    });
-
-    it(`offers Max only to Claude, and only with thinking on`, () => {
-        expect(values(effortsFor(`claude`, `claude-opus-5`, true))).toContain(`max`);
-        expect(values(effortsFor(`claude`, `claude-opus-5`, false))).not.toContain(`max`);
-        expect(values(effortsFor(`codex`, `gpt-5-codex`, true))).not.toContain(`max`);
-        // Dropping the top rung must not disturb the rest of the scale.
-        expect(values(effortsFor(`claude`, `claude-opus-5`, false))).toEqual([`low`, `medium`, `high`, `xhigh`]);
-    });
-
-    // The daemon reports a model's tiers without knowing this turn's thinking setting, so the live list needs
-    // the same filter as the static fallback — otherwise the constraint only holds until a catalog loads.
-    it(`filters the daemon's live tier list by thinking too`, () => {
-        providerModels.value = { ...providerModels.value, claude: [{ label: `Opus 5`, value: `claude-opus-5`, efforts: [`high`, `xhigh`, `max`] }] };
-        expect(values(effortsFor(`claude`, `claude-opus-5`, true))).toEqual([`high`, `xhigh`, `max`]);
-        expect(values(effortsFor(`claude`, `claude-opus-5`, false))).toEqual([`high`, `xhigh`]);
-    });
-
-    // An ACP agent owns its own reasoning settings; with no scale to offer there is nothing to clamp against.
-    it(`offers an ACP provider no scale, and leaves its effort alone`, () => {
-        expect(effortsFor(`my-acp-agent`, `whatever`, true)).toEqual([]);
-        expect(clampEffort(`xhigh`, `my-acp-agent`, `whatever`, true)).toBe(`xhigh`);
-    });
-
-    it(`drops a pick to the strongest tier the model actually offers`, () => {
-        // The bug this exists for: 'xhigh' carried onto Kimi, whose scale is low/high, lit no segment at all.
-        expect(clampEffort(`xhigh`, `kimi`, `kimi-k3`, true)).toBe(`high`);
-        expect(clampEffort(`max`, `kimi`, `kimi-k3`, true)).toBe(`high`);
-        expect(clampEffort(`medium`, `kimi`, `kimi-k3`, true)).toBe(`low`);
-        // A tier the model publishes rides untouched, and one below its whole scale takes the weakest rung.
-        expect(clampEffort(`low`, `kimi`, `kimi-k3`, true)).toBe(`low`);
-        expect(clampEffort(`minimal`, `kimi`, `kimi-k3`, true)).toBe(`low`);
-    });
-
-    it(`clamps a conversation's effort at every read, and keeps the pick behind it`, () => {
-        const conversation = new Conversation(`c-effort`);
-        conversation.provider.value = `kimi`;
-        conversation.model.value = `kimi-k3`;
-        conversation.effortPick.value = `xhigh`;
-        expect(conversation.effort.value).toBe(`high`);
-
-        // Back on a model whose scale has it, the user's own pick returns — a smaller model borrows the
-        // selection, it doesn't ratchet it down.
-        conversation.provider.value = `claude`;
-        conversation.model.value = `claude-opus-5`;
-        expect(conversation.effort.value).toBe(`xhigh`);
-    });
-
-    // The catalog arrives AFTER a conversation is seeded, so no setter runs at the moment the scale changes.
-    it(`follows a catalog that loads under a seeded conversation`, () => {
-        providerModels.value = { ...providerModels.value, kimi: [] };
-        const conversation = new Conversation(`c-late-catalog`);
-        conversation.provider.value = `kimi`;
-        conversation.model.value = `kimi-k3`;
-        conversation.effortPick.value = `xhigh`;
-        // Pre-load, the static scale has 'xhigh' and nothing is wrong with the pick.
-        expect(conversation.effort.value).toBe(`xhigh`);
-
-        providerModels.value = { ...providerModels.value, kimi: [{ label: `Kimi K3`, value: `kimi-k3`, efforts: [`low`, `high`] }] };
-        expect(conversation.effort.value).toBe(`high`);
-    });
-
-    // 'max' leaves Claude's own scale the moment extended thinking goes off — the API rejects the pair with a 400.
-    it(`drops Max when thinking is switched off`, () => {
-        const conversation = new Conversation(`c-thinking`);
-        conversation.model.value = `claude-opus-5`;
-        conversation.effortPick.value = `max`;
-        conversation.thinking.value = true;
-        expect(conversation.effort.value).toBe(`max`);
-        conversation.thinking.value = false;
-        expect(conversation.effort.value).toBe(`xhigh`);
-    });
-});
-
-/* The wire body on its own. Every assertion here is about an OMISSION, because that is where the daemon's
- * defaults live: a key that isn't sent is the daemon resolving its own catalog default, running the native
- * loop, or working on /work rather than in a worktree. Sending an empty string instead would pin the turn to
- * nothing at all. */
-describe(`turnRequestBody`, () => {
-    const base = {
-        text: `do the thing`,
-        conversationId: `c1`,
-        title: null,
-        isolated: false,
-        mode: `plan`,
-        settings,
-        resume: undefined,
-        history: [],
-        attachmentPaths: [],
-        editorContext: undefined,
-    } as const;
-
-    // JSON.stringify is what actually applies the omissions, so assert on what crosses the wire.
-    const wire = (body: object): Record<string, unknown> => JSON.parse(JSON.stringify(body)) as Record<string, unknown>;
-
-    it(`drops an empty model so the daemon resolves its provider's live catalog default`, () => {
-        const sent = wire(turnRequestBody({ ...base, settings: { ...settings, model: `` } }));
-
-        expect(sent).not.toHaveProperty(`model`);
-        expect(wire(turnRequestBody(base))).toMatchObject({ model: `opus` });
-    });
-
-    it(`sends the harness only for claude-code, since native is the daemon's own default`, () => {
-        expect(wire(turnRequestBody(base))).not.toHaveProperty(`harness`);
-        expect(wire(turnRequestBody({ ...base, settings: { ...settings, harness: `claude-code` } }))).toMatchObject({ harness: `claude-code` });
-    });
-
-    it(`sends isolated only when the conversation owns a worktree`, () => {
-        expect(wire(turnRequestBody(base))).not.toHaveProperty(`isolated`);
-        expect(wire(turnRequestBody({ ...base, isolated: true }))).toMatchObject({ isolated: true });
-    });
-
-    // The two are mutually exclusive by construction: send() only builds a history when nothing resumes.
-    it(`carries a resumed session id, or the transcript seeding a fresh one — never both`, () => {
-        const resumed = wire(turnRequestBody({ ...base, resume: { id: `s-1`, provider: `claude`, account: undefined, harness: `native` } }));
-        expect(resumed).toMatchObject({ sessionId: `s-1` });
-        expect(resumed).not.toHaveProperty(`history`);
-
-        const seeded = wire(turnRequestBody({ ...base, history: [{ role: `user`, text: `earlier` }] }));
-        expect(seeded).toMatchObject({ history: [{ role: `user`, text: `earlier` }] });
-        expect(seeded).not.toHaveProperty(`sessionId`);
-    });
-
-    it(`omits an absent title, attachments and editor context rather than sending empties`, () => {
-        const bare = wire(turnRequestBody(base));
-        expect(bare).not.toHaveProperty(`title`);
-        expect(bare).not.toHaveProperty(`attachments`);
-        expect(bare).not.toHaveProperty(`editorContext`);
-
-        const full = wire(turnRequestBody({ ...base, title: `Do the thing`, attachmentPaths: [`a.png`], editorContext: { file: `src/app.ts` } }));
-        expect(full).toMatchObject({ title: `Do the thing`, attachments: [`a.png`], editorContext: { file: `src/app.ts` } });
     });
 });

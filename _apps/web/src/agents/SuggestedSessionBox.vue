@@ -4,7 +4,8 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import ChatModelPicker from "../chat/ChatModelPicker.vue";
 import ProviderLogo from "../chat/ProviderLogo.vue";
 import type { Conversation } from "../composables/chat/conversation";
-import { effortsFor, modelLabelFor } from "../composables/chat/conversation";
+import { effortsFor } from "../composables/chat/effortScale";
+import { modelLabelFor } from "../composables/chat/providerCatalog";
 
 /* THE COMPOSER, LIFTED OUT OF THE CHAT — the box a suggested session is edited in before it is started.
  *

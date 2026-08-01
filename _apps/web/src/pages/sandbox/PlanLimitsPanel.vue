@@ -3,7 +3,7 @@ import { providerLabel } from "@intentic/sandbox-contract";
 import { cmp, RowGroup } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
-import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/conversation";
+import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/providerAccounts";
 import {
     formatAge,
     formatReset,

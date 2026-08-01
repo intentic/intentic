@@ -20,7 +20,7 @@ import { createTitleEdit } from "../composables/agents/titleEdit";
 import { markSegments } from "../composables/agents/useAgentFilter";
 import { canArchive, type FleetAgent } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
-import { modelLabelFor } from "../composables/chat/conversation";
+import { modelLabelFor } from "../composables/chat/providerCatalog";
 
 /* One fleet agent, mock-level hierarchy: provider mark + title + status/attention chip; model · branch meta;
  * a self-hiding stats row (tokens ↑in/out · cost · files · +ins −dels · msgs · context ring); the live

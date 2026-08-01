@@ -2,7 +2,7 @@ import { compareCheapestFirst, NATIVE_PROVIDERS, type QuickModelChoice, quickMod
 import { computed, type ComputedRef } from "vue";
 import { useSandboxSettings } from "../sandbox/useSandboxSettings";
 import { providerReady } from "./access";
-import { endpointProviders, modelOptionsFor, providerDisplayLabel } from "./conversation";
+import { endpointProviders, modelOptionsFor, providerDisplayLabel } from "./providerCatalog";
 
 /* WHICH MODEL THE ONE-CLICK HELPERS RUN, browser-side — the same rule the daemon resolves before it spends the
  * call (contract quick-model.ts), read here for the two things only a UI needs: NAMING the model in the

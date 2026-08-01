@@ -19,28 +19,20 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
+import { Conversation, type PendingAttachment } from "./conversation";
+import { accountsLoaded, providerAccounts, providerRefusals, rememberedAccountFor, selectedAccountId, translatorAccounts } from "./providerAccounts";
 import {
-    accountsLoaded,
     acpProviders,
     type CatalogLoadState,
-    Conversation,
     endpointProviders,
     type ModelOption,
-    type PendingAttachment,
     perProvider,
-    providerAccounts,
     providerCommands,
     providerDefaultModel,
     providerModels,
     providerModelsState,
-    providerRefusals,
-    rememberedAccountFor,
-    rememberedModelFor,
-    selectedAccountId,
-    startingMode,
-    translatorAccounts,
-    turnDefaults,
-} from "./conversation";
+} from "./providerCatalog";
+import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
 import { providerReady } from "./access";
 import { type ChatAttachment, type ChatMessage, type PlanRequest } from "./transcript";
 import { approvalsFor } from "./catalog";
@@ -1522,7 +1514,9 @@ const loadCapabilityProviders = async (): Promise<void> => {
         .map((entry) => ({ id: entry.id, label: typeof entry.config[`name`] === `string` ? (entry.config[`name`] as string) : entry.id }));
     // Labelled by the name the user gave the capability — there is no vendor to name here, and the id is the
     // word they will recognise ("ollama", "gpu-box").
-    endpointProviders.value = entries.filter((entry) => entry.kind === `endpoint`).map((entry) => ({ id: endpointProvider(entry.id), label: entry.id }));
+    endpointProviders.value = entries
+        .filter((entry) => entry.kind === `endpoint`)
+        .map((entry) => ({ id: endpointProvider(entry.id), label: entry.id }));
     // Each endpoint's catalog is daemon-owned like every other provider's, so load them on the same seam. Not
     // part of loadAllProviderModels: that one runs over a fixed list, and which endpoints exist is what we have
     // only just learned.

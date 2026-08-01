@@ -1,5 +1,6 @@
 import { accessFor, type AccessKind, type AgentHarness, type AgentProvider, type ProviderAccess } from "@intentic/sandbox-contract";
-import { acpProviders, endpointProviders, providerAccounts, translatorAccounts } from "./conversation";
+import { providerAccounts, translatorAccounts } from "./providerAccounts";
+import { acpProviders, endpointProviders } from "./providerCatalog";
 
 /* CAN THIS PROVIDER ACTUALLY RUN, and what does it take to unlock it — one rule, read by every surface that
  * offers a provider (the model picker's rows and rail, the connect gate above the composer, the account panel).

@@ -3,7 +3,7 @@ import Button from "primevue/button";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { connectPitch } from "../composables/chat/access";
-import { providerTabs } from "../composables/chat/conversation";
+import { providerTabs } from "../composables/chat/providerCatalog";
 import { useChat } from "../composables/chat/useChat";
 
 /* The connect gate above the composer: shown when the active conversation's provider+harness selection has

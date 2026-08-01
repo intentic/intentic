@@ -1,6 +1,6 @@
 import { type AgentProvider, type ModelBadge, PROVIDERS, compareModelIds, familyOf, providerLabel } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor } from "./conversation";
+import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor } from "./providerCatalog";
 
 /* The unified model-picker list: every provider's models flattened into one searchable entry set. Pure
  * derivation over the live catalogs (conversation.ts) — the picker component owns only its transient UI state

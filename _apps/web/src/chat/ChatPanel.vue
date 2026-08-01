@@ -5,7 +5,11 @@ import { useRoute, useRouter } from "vue-router";
 import { type AgentCommand, providerLabel } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
 import { modeMeta } from "../composables/chat/catalog";
-import { effectiveAccount, effortsFor, modelLabelFor, type PendingAttachment, transcriptView } from "../composables/chat/conversation";
+import type { PendingAttachment } from "../composables/chat/conversation";
+import { effortsFor } from "../composables/chat/effortScale";
+import { effectiveAccount } from "../composables/chat/providerAccounts";
+import { modelLabelFor } from "../composables/chat/providerCatalog";
+import { transcriptView } from "../composables/chat/transcriptClock";
 import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import {
     bindingWindow,
@@ -163,21 +167,21 @@ const activeAccountReauth = computed(() => {
     return accounts.value.find((entry) => entry.id === id && entry.needsReauth === true);
 });
 
-/* The outage banner (Conversation.outageResume). A spent usage limit gets no equivalent: it has a known reset
+/* The outage banner (Conversation.failures.outageResume). A spent usage limit gets no equivalent: it has a known reset
  * instant and nothing anyone can do before it, so the transcript notice naming that instant says everything
  * there is to say. An outage has no known end, which is why it needs a live banner — its whole job is to answer
  * "is anything still happening?", which during an outage is the only question anyone has. When auto-resume is
  * off it is instead the offer to turn it on, which arms the very turn that bounced (the daemon remembered it
  * either way). */
 const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
-const outageResume = computed(() => active.value.outageResume.value);
+const outageResume = computed(() => active.value.failures.outageResume.value);
 const enableOutageResume = async (): Promise<void> => {
     const current = sandboxSettings.value;
     if (current === undefined) {
         return;
     }
     await saveSandboxSettings.mutateAsync({ ...current, resumeAfterOutage: true });
-    active.value.armOutageResume();
+    active.value.failures.armOutageResume();
 };
 
 /* Archiving an agent closes its chat tab (see the archive note in useAgents), but an archived agent can still be

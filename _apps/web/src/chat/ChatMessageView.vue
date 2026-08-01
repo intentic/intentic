@@ -190,7 +190,7 @@ const retryReason = computed(() => (providerRetry.value?.status === 529 ? `at ca
  * describes; the CONVERSATION says whether that wait is still on. Pairing the two is what keeps a replayed
  * transcript honest: the line stays in the record, and it only spins while there is genuinely something to wait
  * for. Undefined the rest of the time, which is also what turns the ticker below off again. */
-const pendingWait = computed(() => (props.message.noticeWait === `credentialRenewal` ? active.value.credentialRenewal.value : undefined));
+const pendingWait = computed(() => (props.message.noticeWait === `credentialRenewal` ? active.value.failures.credentialRenewal.value : undefined));
 
 // One second-ticking clock for every live readout in this view — the turn's elapsed counter, the retry
 // countdown, and a pending notice's wait. Runs whenever any of them is showing, which is why a notice's wait
