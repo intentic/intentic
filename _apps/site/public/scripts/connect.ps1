@@ -47,6 +47,8 @@ $PSNativeCommandUseErrorActionPreference = $false
 if (-not $PlatformUrl) { $PlatformUrl = if ($env:PLATFORM_URL) { $env:PLATFORM_URL } else { 'https://api.intentic.dev' } }
 if (-not $ConnectToken) { $ConnectToken = $env:CONNECT_TOKEN }
 if (-not $SetupCode) { $SetupCode = $env:SETUP_CODE }
+# The owner the daemon TOFU-binds; normally arrives with the setup-code claim (env is the headless path).
+$OwnerEmail = $env:OWNER_EMAIL
 # The latest RELEASE image via the moving `stable` tag (pulled fresh below), never :latest — see connect.sh for
 # why (the :latest/hand-tagged builds carry internal version 0.0.0, whose @intentic/* deps are unpublished, so
 # `intentic deploy init` can't resolve them; the release only ever moves `stable` onto a published release image).
@@ -167,6 +169,7 @@ if ($SetupCode) {
         elseif ($line -like 'SUBDOMAIN=*') { $Subdomain = $line.Substring('SUBDOMAIN='.Length) }
         # SYNC_DIR is NOT claimed — it's the user's local folder opt-in, carried on the command as $env:SYNC_DIR.
         elseif ($line -like 'SYNC_PAIR_TOKEN=*') { $SyncPairToken = $line.Substring('SYNC_PAIR_TOKEN='.Length) }
+        elseif ($line -like 'OWNER_EMAIL=*') { $OwnerEmail = $line.Substring('OWNER_EMAIL='.Length) }
     }
 }
 $ProvidedTunnel = [bool]$TunnelToken -and [bool]$SandboxHostname
@@ -411,6 +414,13 @@ if ($SelfHost) {
 # would shadow the workspace .env the user writes later), `intentic sandbox run-command --format json`
 # answers with the docker argv, and PowerShell splats it. Values pass as whole array elements, so spaces and
 # the multi-line HOST_SSH_KEY survive without any quoting rules of this dialect's own.
+
+# The platform as seen FROM the container, for the daemon's announce — the POST that writes daemonUrl +
+# lastSeenAt, which is the ONLY thing the setup screen waits on (it never resolves the sandbox hostname itself).
+# The daemon skips announcing entirely when PLATFORM_URL is empty, so omitting this leaves the setup screen
+# spinning forever on a sandbox that is up and reachable. A localhost dev platform is reachable from the
+# container at host.docker.internal, which Docker Desktop resolves on Windows without an --add-host.
+$PlatformUrlContainer = $PlatformUrl -replace '//localhost', '//host.docker.internal' -replace '//127\.0\.0\.1', '//host.docker.internal'
 $EnvPairs = @(
     'WORKSPACE_ROOT=/work',
     'HISTORY_ROOT=/history',
@@ -419,8 +429,10 @@ $EnvPairs = @(
     "PREVIEW_PORT=$PreviewPort",
     "GOOGLE_CLIENT_ID=$GoogleClientId",
     "CONNECT_TOKEN=$ConnectToken",
+    "OWNER_EMAIL=$OwnerEmail",
     "WEB_ORIGIN=$WebOrigin",
     "SANDBOX_PUBLIC_URL=$SandboxPublicUrl",
+    "PLATFORM_URL=$PlatformUrlContainer",
     "CLOUDFLARE_API_TOKEN=$CfToken",
     "SELF_HOST_ADDRESS=$SelfHostAddress",
     "SELF_HOST_USER=$SelfHostUser",
