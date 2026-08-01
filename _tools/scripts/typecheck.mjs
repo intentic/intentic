@@ -82,7 +82,12 @@ const configFor = (script) => /-p\s+(\S+)/.exec(script)?.[1] ?? "tsconfig.json";
  * went red on a loaded CI runner and each was repaired by hand with its own constant, after main was already
  * broken. Recognized by shape rather than by a list, like every other invariant here. `vi.mock` lines are cut
  * first — naming a module in order to REPLACE it is the opposite of reaching for it. */
-const REACHES_THE_MACHINE = /mkdtemp|node:child_process|simple-git|dockerode|testcontainers/;
+/* The last two are shared harness helpers rather than APIs: `tempWorkspace` builds a repo tree under tmpdir and
+ * `runAgentTurn` drives the real turn path (worktree compose, land pass, subprocesses). A suite reaches the
+ * machine THROUGH them without naming anything below, which is the one way a file could sit under the unit
+ * budget while doing seconds of real work. Named here rather than followed through imports: this check reads
+ * text, and a helper that opens temp trees is worth naming where the rule is written. */
+const REACHES_THE_MACHINE = /mkdtemp|node:child_process|simple-git|dockerode|testcontainers|tempWorkspace|runAgentTurn/;
 const INTEGRATION_NAME = /\.(integration|e2e)\.(test|spec)\.[cm]?[jt]sx?$/;
 const mocked = (source) => source.replace(/vi\.mock\([^)]*\)/g, "");
 

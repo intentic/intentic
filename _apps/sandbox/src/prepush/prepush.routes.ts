@@ -1,6 +1,6 @@
 import { prepushContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
-import type { Services } from "../composition.js";
+
 import type { OrpcContext } from "../context.js";
 import { type PrepushDeps, prepushCheck } from "./prepush.js";
 

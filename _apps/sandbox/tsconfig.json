@@ -7,7 +7,7 @@
         "skipLibCheck": true
     },
     "include": ["./src/**/*"],
-    "exclude": ["./src/**/*.test.ts", "./src/e2e-harness.ts", "./src/testing.ts"],
+    "exclude": ["./src/**/*.test.ts", "./src/e2e-harness.ts", "./src/testing.ts", "./src/route-testing.ts"],
     "references": [{ "path": "../../_libs/sandbox-contract" }, { "path": "../../_libs/workspace-ignore" }, { "path": "../../_libs/workspace-setup" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }
