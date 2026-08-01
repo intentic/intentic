@@ -3096,7 +3096,7 @@ test("a media ticket opens only the path it was minted for, and /workspace/media
         services({
             workspace: workspacePaths(root),
             files: fakeFiles({ size: statWorkspaceFileSize }),
-            auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: async () => ({ email: "o@x.com" }), allowOrigins: [] },
+            auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: async () => {}, allowOrigins: [] },
         }),
     );
     try {

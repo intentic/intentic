@@ -10,7 +10,7 @@
     "scripts": {
         "build": "turbo run build",
         "test": "turbo run test",
-        "typecheck": "turbo run typecheck --continue",
+        "typecheck": "turbo run typecheck --continue=dependencies-successful",
         "typecheck:declarations": "node _tools/scripts/typecheck.mjs",
         "lint": "oxlint --deny-warnings",
         "lint:fix": "oxlint --fix",
