@@ -10,6 +10,10 @@
       "what": "The whole visible widget: launcher, panel, and the two gates a visitor may have to pass."
     },
     {
+      "path": "_libs/webchat-widget/src/styles.ts",
+      "what": "The shadow root's whole stylesheet, and the colour maths that keeps it on intentic's palette."
+    },
+    {
       "path": "_libs/webchat-widget/src/transport.ts",
       "what": "The four calls it makes, and the SSE-over-POST reader that streams the reply."
     },

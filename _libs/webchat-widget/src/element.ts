@@ -86,8 +86,11 @@ export class DoorbellElement extends HTMLElement {
         <slot name="gate"></slot>
     </div>
     <div class="composer">
-        <textarea rows="1" placeholder="Write a message…" aria-label="Message"></textarea>
-        <button class="send" aria-label="Send message" disabled>${SEND_ICON}</button>
+        <!-- The shell is what takes focus and draws the edge, so the textarea inside it is bare (see .composer-shell). -->
+        <div class="composer-shell">
+            <textarea rows="1" placeholder="Write a message…" aria-label="Message"></textarea>
+            <button class="send" aria-label="Send message" disabled>${SEND_ICON}</button>
+        </div>
     </div>
     <div class="footer"><a href="${INTENTIC_URL}" target="_blank" rel="noopener">Powered by Intentic</a></div>
 </div>`;

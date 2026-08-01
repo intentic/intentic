@@ -2194,10 +2194,18 @@ export const WebchatConfigSchema = z.object({
     // The site's OWN Google OAuth web client id. It cannot be intentic's: Google Identity Services only issues
     // a token to an authorized JavaScript origin, and intentic's client can't list every customer domain.
     googleClientId: z.string().optional(),
-    // Widget chrome. `accent` is any CSS colour the host page can render; `position` picks the launcher corner.
+    /* Widget chrome. `position` picks the launcher corner.
+     *
+     * `accent` is a HEX colour, not any CSS colour, because the widget derives values from its channels rather
+     * than just painting it: a glyph step for the scheme, a 14% wash for the send button, a bubble edge, a focus
+     * ring, and the label that goes on top (see webchat-widget's styles.ts). A colour we cannot read is a widget
+     * with half its accent silently missing, so the unreadable case is rejected here instead. */
     title: z.string().max(80).optional(),
     greeting: z.string().max(500).optional(),
-    accent: z.string().max(40).optional(),
+    accent: z
+        .string()
+        .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "accent must be a hex colour, e.g. #e47100")
+        .optional(),
     position: z.enum(["top-right", "top-left", "bottom-right", "bottom-left"]).optional(),
     /* Two ceilings on top of the route's fixed per-minute window, because a public endpoint's real exposure is
      * cost, not request rate: `dailyMessageMax` caps the whole automation per UTC day, `conversationMessageMax`

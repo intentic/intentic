@@ -42,6 +42,20 @@ it lands on: a framework would be several times the size of the UI it draws, and
 stranger's stylesheet from reshaping the chat. The first line of that stylesheet is `all: initial`, because a
 shadow root blocks selectors but *not* inherited properties — without it the widget wears the host site's font.
 
+**The palette is the app's, arithmetic and all.** `styles.ts` transcribes intentic's role tokens — `card`,
+`overlay`, `line`, `content`, `muted` — from `@intentic-app/ui`'s `semantic-colors.css`, and builds the two chat
+surfaces the way `chat.css` does: an assistant bubble is `overlay` at 35% over the card, a visitor bubble the
+same at 55%. So the accent is never a bubble's background. It shows up as a tinted edge, a 14% wash under the
+send button, and the composer's focus ring, exactly as it does in the app — white on the brand orange is 3.15:1,
+and a saturated block of it is what makes an embedded chat look like every other embedded chat.
+
+Two things follow from shipping to a stranger's browser rather than to ours. Every value is literal hex, because
+neither `oklch()` nor `color-mix()` is guaranteed there and an unsupported `color-mix()` carrying a *background*
+paints nothing at all — so the mixing happens in TypeScript, once, at render. And the accent is configurable,
+which a ramp is not: the widget synthesises the two ends the app gets from `brand-400`/`brand-700` by pulling
+the configured accent 15% toward the scheme's extreme, and picks the label that sits on it by measuring both
+candidates instead of assuming white.
+
 **The gates are deliberately outside the shadow root.** Google's sign-in button and Cloudflare's Turnstile
 checkbox are third-party iframes that expect an ordinary document-connected container. They are created as
 light-DOM children of the element and projected back into the panel through a `<slot>`, so they render where
