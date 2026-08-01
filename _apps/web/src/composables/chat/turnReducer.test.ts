@@ -342,17 +342,42 @@ describe(`effects`, () => {
         const { state, effects } = run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 4, blocked: [] } });
 
         expect(effects.map((effect) => effect.kind)).toEqual([`worktree`]);
-        const notice = state.messages.at(-1);
+        const notice = state.messages[1];
         expect(notice?.role).toBe(`notice`);
         expect(notice?.text).toContain(`rebased onto your latest 4 commits`);
         // Nothing to press: the work is already done and there is no decision left to offer.
         expect(notice?.noticeAction).toBeUndefined();
     });
 
+    /* It reads as the answer to the message ABOVE it, so it sits directly under that message — not at the end
+     * of a transcript that already holds this turn's (still empty) answer bubble. Getting this wrong put a line
+     * about the turn's starting conditions below the first block of the reply. */
+    it(`places the rebase line under the user's message, above the answer it precedes`, () => {
+        const { state } = run(
+            started(),
+            { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 4, blocked: [] } },
+            { kind: `delta`, text: `on it` },
+        );
+
+        expect(settled(state).messages.map((message) => [message.role, message.text])).toEqual([
+            [`user`, `do it`],
+            [`notice`, expect.stringContaining(`rebased onto your latest 4 commits`)],
+            [`assistant`, `on it`],
+        ]);
+    });
+
+    // With no bubble to sit above (a frame arriving between turns), it still says its piece rather than vanishing.
+    it(`falls back to appending when the turn has no open bubble`, () => {
+        const between = { ...started(), bubbleId: null };
+        const { state } = run(between, { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 4, blocked: [] } });
+
+        expect(state.messages.at(-1)?.role).toBe(`notice`);
+    });
+
     it(`says so when the rebase was rolled back, so the land's refusal is expected`, () => {
         const { state } = run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 0, blocked: [`root`] } });
 
-        const notice = state.messages.at(-1);
+        const notice = state.messages[1];
         expect(notice?.text).toContain(`Couldn't rebase onto your workspace in root`);
         expect(notice?.text).not.toContain(`rebased onto your latest`);
     });

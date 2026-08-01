@@ -112,6 +112,30 @@ export const appendMessage = (state: TurnState, message: Omit<ChatMessage, "id">
 export const appendNotice = (state: TurnState, text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): TurnState =>
     appendMessage(state, { role: `notice`, text, ...extra });
 
+/** A notice that belongs to the turn's OPENING rather than its running commentary — placed directly ABOVE the
+ *  bubble this turn is writing into, which is to say directly under the message that asked for it.
+ *
+ *  Everything else a frame writes describes something that happened mid-answer, so appending files it correctly.
+ *  This one describes the ground the turn started from, and by the time any frame arrives the turn's first
+ *  assistant bubble already exists — Conversation.openBubble opens it up front so the typing indicator shows
+ *  from the first moment. Appending would therefore print a line about the turn's starting conditions BELOW the
+ *  answer it preceded, which reads as though the branch moved mid-thought.
+ *
+ *  Anchored on the open bubble, not on the user's message: a resumed turn (Conversation.reuseUserBubble without
+ *  truncation) leaves the dead run's output and its interruption notice between the two, and this line belongs
+ *  to the answer that is about to be written, not above the one that died. */
+const prependTurnNotice = (state: TurnState, text: string): TurnState => {
+    const at = state.messages.findIndex((message) => message.id === state.bubbleId);
+    if (at === -1) {
+        return appendNotice(state, text);
+    }
+    return {
+        ...state,
+        messages: [...state.messages.slice(0, at), { id: state.nextId, role: `notice`, text }, ...state.messages.slice(at)],
+        nextId: state.nextId + 1,
+    };
+};
+
 /* WHY THIS AGENT'S BRANCH JUST MOVED — the human's half of the pre-turn rebase (daemon: agents/sync.ts).
  *
  * A conversation parked on a question goes stale while its user commits around it, so the daemon rebases the
@@ -461,7 +485,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         case `session`:
             return step(state, { kind: `session`, sessionId: event.sessionId });
         case `worktree`:
-            return step(event.sync === undefined ? state : appendNotice(state, syncLine(event.sync)), {
+            return step(event.sync === undefined ? state : prependTurnNotice(state, syncLine(event.sync)), {
                 kind: `worktree`,
                 branch: event.branch,
                 base: event.base,
