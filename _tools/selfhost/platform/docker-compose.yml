@@ -11,10 +11,20 @@
 
 name: intentic-platform
 
+# Docker's json-file default keeps every line forever, and the api emits a JSON line per request at
+# LOG_LEVEL=info — on a long-lived host that fills the disk, and a full disk stops Postgres, not just logging.
+# 30 MB per service is a few days of history, which is what `docker compose logs` is actually used for.
+x-logging: &logging
+    driver: json-file
+    options:
+        max-size: 10m
+        max-file: "3"
+
 services:
     postgres:
         image: postgres:18.4-alpine3.24
         restart: unless-stopped
+        logging: *logging
         environment:
             POSTGRES_DB: intentic
             POSTGRES_USER: intentic
@@ -32,12 +42,16 @@ services:
         image: registry.gitlab.com/radarsu/intentic/api:${INTENTIC_IMAGE_TAG:-latest}
         pull_policy: always
         restart: unless-stopped
+        logging: *logging
         # The entrypoint runs `prisma migrate deploy` before serving, so the schema must be reachable first.
         depends_on:
             postgres:
                 condition: service_healthy
         environment:
             DATABASE_URL: postgresql://intentic:${POSTGRES_PASSWORD:?}@postgres:5432/intentic
+            # Per-process pg pool cap. Raise only alongside Postgres max_connections (default 100): the ceiling
+            # is replicas × this, plus headroom for the boot migration and psql.
+            DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
             # The api's own public origin (Better-Auth baseURL + the origin the SPA calls). Same-site with WEB_ORIGIN.
             API_URL: ${API_URL:?e.g. https://api.intentic.dev}
             # The SPA's origin — the CORS allow-origin and Better-Auth trusted origin. MUST be exactly this.
@@ -51,6 +65,11 @@ services:
             INTENTIC_CLOUDFLARE_API_TOKEN: ${INTENTIC_CLOUDFLARE_API_TOKEN:-}
             INTENTIC_CLOUDFLARE_ZONE: ${INTENTIC_CLOUDFLARE_ZONE:-intentic.dev}
             INTENTIC_CLOUDFLARE_POOL_SIZE: ${INTENTIC_CLOUDFLARE_POOL_SIZE:-1}
+            # Daily reaper: DELETES intentic-owned sandbox tunnels that are not connected and have been idle
+            # this long. Run a new deployment's first sweep with REAP_DRY_RUN=true, read the `tunnel reap
+            # candidate` log lines, and only then turn it off — the deletes are not recoverable.
+            INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS: ${INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS:-7}
+            INTENTIC_CLOUDFLARE_REAP_DRY_RUN: ${INTENTIC_CLOUDFLARE_REAP_DRY_RUN:-false}
             # Billing (optional — the upgrade flow 404s until set).
             STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
             STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
@@ -61,6 +80,8 @@ services:
             # Comma-separated emails always entitled to `pro` without Stripe (comp/test accounts).
             PERMANENT_PREMIUM_EMAILS: ${PERMANENT_PREMIUM_EMAILS:-}
             LOG_LEVEL: ${LOG_LEVEL:-info}
+            # OTLP traces (tracing.ts). Unset → no provider is registered and the overhead is zero.
+            OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
         healthcheck:
             test: ["CMD", "bun", "--eval", "fetch('http://127.0.0.1:6480/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
             interval: 10s
@@ -73,6 +94,7 @@ services:
         image: registry.gitlab.com/radarsu/intentic/web:${INTENTIC_IMAGE_TAG:-latest}
         pull_policy: always
         restart: unless-stopped
+        logging: *logging
         environment:
             # Substituted into the served env.js at start — the api origin the SPA calls (matches api's API_URL).
             API_URL: ${API_URL:?}
@@ -87,6 +109,7 @@ services:
     cloudflared:
         image: cloudflare/cloudflared:2026.7.3
         restart: unless-stopped
+        logging: *logging
         command: tunnel --no-autoupdate run --token ${PLATFORM_TUNNEL_TOKEN:?set PLATFORM_TUNNEL_TOKEN in .env}
         depends_on: [web, api]
         networks: [intentic-platform]

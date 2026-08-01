@@ -63,6 +63,18 @@ volume self-initializes and an image bump self-migrates — no manual db step.
   reaper + sandbox-pool top-up take a Postgres advisory lock so replicas don't duplicate the work.
 - **No host ports are published** — everything is reached over the tunnel. Add a `ports:` mapping to `api`/`web`
   only for local debugging.
+- **The tunnel reaper deletes.** Once `INTENTIC_CLOUDFLARE_API_TOKEN` is set, a daily sweep removes
+  intentic-owned sandbox tunnels that are disconnected and idle past `INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS`
+  (7). Connected tunnels and the pre-provisioned pool are spared, but the deletes are final — run a new
+  deployment's first sweep with `INTENTIC_CLOUDFLARE_REAP_DRY_RUN=true` and read the candidates:
+  ```sh
+  docker compose logs api | grep 'tunnel reap'
+  ```
+- **Back up the database yourself.** The `intentic-platform-db` volume is the stack's only state — accounts,
+  sandbox registrations and the encrypted tokens. Nothing here schedules a dump; on the deploy host:
+  ```sh
+  docker compose exec -T postgres pg_dump -U intentic intentic | gzip > intentic-$(date +%F).sql.gz
+  ```
 
 ## Continuous deploy via Komodo (optional)
 
