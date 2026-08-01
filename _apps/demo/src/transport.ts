@@ -56,6 +56,75 @@ export const installFetch = (handlers: { platform: DemoHandler; daemon: DemoHand
     };
 };
 
+/* THE THIRD TRANSPORT, and the only one the app opens by hand: `sandboxUpload` (sandboxClient.ts) posts every
+ * dropped file over XMLHttpRequest rather than fetch, because a streaming fetch body needs HTTP/2 and the
+ * daemon's loopback shortcut is HTTP/1.1. So the drop zone is the one surface the fetch shim above cannot see,
+ * and without this the tour ends at "Scanning dropped folder… 12 files" — the walk works, then every part dies
+ * against an origin that can never resolve.
+ *
+ * Subclassing the real XMLHttpRequest is what keeps the pass-through honest: an unclaimed URL never leaves the
+ * browser's own implementation (nothing is reimplemented for it), and only a claimed one takes the branch below.
+ * There `status` and `responseText` are defined as own properties — the prototype's are getters over a request
+ * that was never sent — and the upload's `progress` plus the request's `load`/`loadend` fire in the order the
+ * wire would, which is all `sendPart` listens for. */
+export const installXhr = (handlers: { platform: DemoHandler; daemon: DemoHandler }): void => {
+    globalThis.XMLHttpRequest = class DemoXhr extends XMLHttpRequest {
+        #handler: DemoHandler | undefined;
+        #url = ``;
+        #method = `GET`;
+        #headers = new Headers();
+
+        override open(method: string, url: string | URL, async = true, username?: string | null, password?: string | null): void {
+            const parsed = urlOf(url);
+            this.#handler = parsed === undefined ? undefined : claimed(parsed, handlers);
+            if (this.#handler === undefined) {
+                super.open(method, url, async, username, password);
+                return;
+            }
+            this.#url = String(parsed);
+            this.#method = method;
+            this.#headers = new Headers();
+        }
+
+        override setRequestHeader(name: string, value: string): void {
+            if (this.#handler === undefined) {
+                super.setRequestHeader(name, value);
+                return;
+            }
+            this.#headers.set(name, value);
+        }
+
+        override send(body?: Document | XMLHttpRequestBodyInit | null): void {
+            const handler = this.#handler;
+            if (handler === undefined) {
+                super.send(body);
+                return;
+            }
+            const url = new URL(this.#url);
+            const total = body instanceof Blob ? body.size : 0;
+            void handler(new Request(url, { method: this.#method, headers: this.#headers, body: body as BodyInit }), url).then(async (response) => {
+                const text = await response.text();
+                Object.defineProperties(this, {
+                    status: { value: response.status, configurable: true },
+                    responseText: { value: text, configurable: true },
+                });
+                this.upload.dispatchEvent(new ProgressEvent(`progress`, { lengthComputable: true, loaded: total, total }));
+                this.dispatchEvent(new ProgressEvent(`load`));
+                this.dispatchEvent(new ProgressEvent(`loadend`));
+            });
+        }
+
+        override abort(): void {
+            if (this.#handler === undefined) {
+                super.abort();
+                return;
+            }
+            this.dispatchEvent(new ProgressEvent(`abort`));
+            this.dispatchEvent(new ProgressEvent(`loadend`));
+        }
+    };
+};
+
 /* A socket the app drives exactly as it drives a real one: it opens on a macrotask, emits `message` events, and
  * closes. Only what the two consumers touch is implemented — addEventListener/close/send/readyState — and the
  * class constants come free, because the global is proxied rather than replaced (see installWebSocket). */

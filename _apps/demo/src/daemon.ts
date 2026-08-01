@@ -25,6 +25,7 @@ import { ciJobs, ciRunsResponse } from "./fixture/ci";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
 import { deleteMemoryFile, memoryFile, memoryList, saveMemoryFile } from "./fixture/memory";
 import { demoCapabilities, demoEnvironment, demoExtensions, demoPanels, demoUsageRollup, setExtensionEnabled } from "./fixture/sandbox";
+import { transcriptFor } from "./fixture/transcripts";
 import {
     agentChanges,
     deleteEntry,
@@ -248,7 +249,11 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // The agent's Chromium: one still being driven (its screencast is browser.ts) and one that has closed,
     // which is the state the view renders as a record of where the agent went rather than as a broken stream.
     [`GET`, `/system/browsers`, () => json({ sessions: BROWSER_SESSIONS(Date.now()) } satisfies BrowsersList)],
-    [`DELETE`, `/system/browsers/{name}`, () => refuse(`This is the demo workspace — the browser you are watching is a recording, so there is nothing to close.`)],
+    [
+        `DELETE`,
+        `/system/browsers/{name}`,
+        () => refuse(`This is the demo workspace — the browser you are watching is a recording, so there is nothing to close.`),
+    ],
     [`GET`, `/system/subagents`, () => json({ subagents: [] })],
 
     [`GET`, `/agents`, () => json({ agents: roster.agents, rev: roster.rev } satisfies AgentsList)],
@@ -256,7 +261,9 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/agents/search`, ({ url }) => json(searchAgents(url.searchParams.get(`query`) ?? ``))],
     [`POST`, `/agents/seen`, () => json({ agents: roster.agents, rev: roster.rev } satisfies AgentsList)],
     [`GET`, `/agents/{id}/diff`, ({ param }) => json(agentChanges(param(`id`)))],
-    [`GET`, `/agents/{id}/transcript`, () => json({ messages: [] })],
+    // Opening a card that is NOT mid-turn reads its transcript rather than attaching — so the one agent holding
+    // a finished delta carries the conversation that produced it (fixture/transcripts.ts).
+    [`GET`, `/agents/{id}/transcript`, ({ param }) => json(transcriptFor(param(`id`)))],
     [`GET`, `/agents/{id}/{repo}/file-diff`, ({ url, param }) => json(fileDiff(param(`repo`), url.searchParams.get(`path`) ?? ``))],
     [`POST`, `/agents/{id}/rename`, renameAgent],
     [`POST`, `/agents/{id}/seen`, ({ param }) => agentResponse(patchAgent(param(`id`), { seenAt: Date.now() }))],
@@ -287,6 +294,9 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // The bytes behind an <img> in an acceptance report: its screenshots are files like any other, fetched
     // through the daemon rather than from an origin, which is why they are served here and not from /public.
     [`GET`, `/workspace/raw`, ({ url }) => workspaceRaw(url.searchParams.get(`path`) ?? ``)],
+    // The drop's two calls: the pre-flight that asks which files the sandbox already has byte-for-byte (nothing
+    // here is ever a re-drop, so none of them), then the per-file write the upload queue makes over XHR.
+    [`POST`, `/workspace/upload-diff`, () => json({ skip: [] })],
     [`POST`, `/workspace/upload`, workspaceUpload],
     [`DELETE`, `/workspace/entry`, workspaceDelete],
     [`GET`, `/workspace/repos`, () => json({ repos: [...REPOS] })],
@@ -337,7 +347,11 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/ci/seen`, () => json({ seenAt: (ciSeenAt = Date.now()) } satisfies CiSeenResponse)],
     [`POST`, `/ci/runs/rerun`, () => refuse(`This is the demo workspace — rerunning would start a pipeline on a repo that isn't yours.`)],
     [`POST`, `/ci/runs/cancel`, () => refuse(`This is the demo workspace — there is no live pipeline to cancel.`)],
-    [`POST`, `/ci/fix`, () => refuse(`This is the demo workspace — a fix agent needs your repo and its CI logs. Start a sandbox and this button opens one.`)],
+    [
+        `POST`,
+        `/ci/fix`,
+        () => refuse(`This is the demo workspace — a fix agent needs your repo and its CI logs. Start a sandbox and this button opens one.`),
+    ],
 
     /* MAINTENANCE. `GET /chores` carries measurements, never verdicts — the chore book that decides what is due
      * ships in the app, so every row a visitor reads here is computed in the browser from the numbers in
@@ -355,7 +369,11 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/automations`, saveAutomationRoute],
     [`DELETE`, `/automations/{id}`, ({ param }) => okAfter(() => deleteAutomation(Date.now(), param(`id`)))],
     [`POST`, `/automations/{id}/run`, () => refuse(`This is the demo workspace — firing an automation runs a real turn against real systems.`)],
-    [`POST`, `/automations/pending/{id}/approve`, () => refuse(`This is the demo workspace — approving a held wake would start the turn it is holding.`)],
+    [
+        `POST`,
+        `/automations/pending/{id}/approve`,
+        () => refuse(`This is the demo workspace — approving a held wake would start the turn it is holding.`),
+    ],
     [`POST`, `/automations/pending/{id}/reject`, ({ param }) => okAfter(() => resolveApproval(Date.now(), param(`id`)))],
 
     /* Memory: what the agent carries between sessions, readable and — the point of the surface — editable. The

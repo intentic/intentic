@@ -31,14 +31,14 @@ through `./vite-shared`. Web knows nothing about this.
 | --- | --- |
 | `index.html` | the entry; sets `window.env` inline (sentinel origins) and loads `src/main.ts` |
 | `popout.html` | the window a popped-out panel is teleported into; loads `src/popout.ts`, which is the app's keeper and nothing else |
-| `src/transport.ts` | what the demo claims from `fetch`/`WebSocket`, and the socket shim |
+| `src/transport.ts` | what the demo claims from `fetch`/`WebSocket`/`XMLHttpRequest`, and the socket shim |
 | `src/platform.ts` | the platform as a fetch handler: the session and the sandbox row the gates need |
 | `src/daemon.ts` | the daemon as a fetch handler: the route table and the `/events` stream |
 | `src/turn.ts` | the recorded `AgentEvent` run behind `/agent/attach`, with its frame log |
 | `src/sse.ts` | the event-iterator wire format |
 | `src/terminal.ts` | the recorded pty, as `TerminalServerMessage` frames |
 | `src/browser.ts` | the recorded screencast of the agent's Chromium, played from the pages below |
-| `src/fixture/` | the data — `fleet.ts` (the roster), `workspace.ts` (the filesystem, diffs, landing), `chores.ts`, `acceptance.ts`, `docs.ts`, `storefront.ts`, `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |
+| `src/fixture/` | the data — `fleet.ts` (the roster), `transcripts.ts` (what a finished agent's chat holds), `workspace.ts` (the filesystem, diffs, landing), `chores.ts`, `acceptance.ts`, `docs.ts`, `storefront.ts`, `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |
 
 `fixture/workspace.ts` holds one flat path → content table that the tree, every directory listing, every read,
 the content search and every write derive from — so the surfaces whose whole state is FILES (Acceptance's

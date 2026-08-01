@@ -87,11 +87,11 @@ Per surface, the routes it actually calls and what the fixture answers with:
 | Surface | Routes | Fixture |
 | --- | --- | --- |
 | Fleet board `/agents` | `GET /agents`, `/agents/search`, `/agents/{id}/rename`, `/archive`, `/unarchive`, `/{id}/seen` | 7 agents, one in every lane state: `awaiting` (a question), `conflict`, two `running` (one delegating to subagents), `ready`, `landed`, and an automation's overnight `idle` |
-| Review panel | `GET /agents/{id}/diff`, `/{id}/transcript`, `/{id}/{repo}/file-diff` | the soft-deletes agent: 4 files over 2 repos, +210 −55, two of them with real before/after text |
+| Review panel | `GET /agents/{id}/diff`, `/{id}/transcript`, `/{id}/{repo}/file-diff` | the soft-deletes agent: 4 files over 2 repos, +210 −55, two of them with real before/after text — and the conversation that produced them, so opening the card lands on its transcript rather than on "start a conversation". Every other agent still answers an empty one |
 | Chat | `POST /agent`, `POST /agent/attach` (stream), `/agent/commands`, `/agent/refusals`, `POST /agent/reply`, `/agent/steer`, `/agent/stop` | the scripted turn, below |
 | Model picker | `GET /claude/accounts`, `/grok/accounts`, `/translator/accounts`, `/{provider}/models` | a connected Claude Max and a ChatGPT subscription in the translator — without these the composer never leaves "Checking your AI accounts…" |
 | Sessions window | `GET /sessions?query=` (searchable), `GET /sessions/{id}` | 12 conversations from 90 seconds to 6 days old |
-| Workspace | `GET /workspace/tree`, `/workspace/children`, `/workspace/file`, `/workspace/raw`, `POST /workspace/upload`, `DELETE /workspace/entry`, `/git/repos`, `/git/changes`, `/git/{repo}/file-diff` | `acme-shop`: a `web` and an `api` repo over one flat path → content table, ~60 files, 5 dirty ones across both. Reads that miss answer 404, writes land in the table |
+| Workspace | `GET /workspace/tree`, `/workspace/children`, `/workspace/file`, `/workspace/raw`, `POST /workspace/upload-diff`, `POST /workspace/upload`, `DELETE /workspace/entry`, `/git/repos`, `/git/changes`, `/git/{repo}/file-diff` | `acme-shop`: a `web` and an `api` repo over one flat path → content table, ~60 files, 5 dirty ones across both. Reads that miss answer 404, writes land in the table — including a dropped folder, which the queue walks for real and uploads file by file |
 | Sandbox hub | `GET /info`, `/settings`, `/settings/savings`, `/system/usage`, `/secrets/inventory`, `/ports`, `/environment`, `/members`, `/extensions`, `/vpn` | a measured cleaner-savings report; the rest answer their empty shape, which is the truth about a recording |
 | Maintenance | `GET /chores`, `POST /chores/ledger`, `/chores/probe` | four probes per repo and the cheap signals behind them, chosen to produce one row of every state the book distinguishes — due, snoozed, clear, unmeasured, not-applicable. The ledger is real state (a snooze holds; a finished run promotes into a row); re-running a probe refuses |
 | Acceptance | `GET /workspace/children`, `/workspace/file`, `/workspace/raw`, `/panels`, `POST /workspace/upload` | five stories in two repos and one recorded run: a pass, a fail with a defect, a blocked story, and a fourth never tested. Its screenshots are the same storefront pages the browser view plays |
@@ -154,14 +154,21 @@ button ladder is built on, so refusing here is not a dead end but the second hal
 Three classes, decided per mutation:
 
 - **Real, in memory** — rename, archive, drag between lanes, tab switches, open a file, open a diff, filter,
-  the model picker, **landing**, extension switches, automation edits and approvals, memory edits, marking the
-  pipelines board read, sending a message (advances the script). The fixture is mutable state; the UI is honest.
+  the model picker, **landing**, **dropping a folder in**, extension switches, automation edits and approvals,
+  memory edits, marking the pipelines board read, sending a message (advances the script). The fixture is
+  mutable state; the UI is honest.
 - **Inert with an invitation** — push, secrets writes, capability install, sandbox create, firing an automation,
   rerunning or cancelling someone else's pipeline. The handler answers a refusal the app already renders, and
   the demo shell shows one "this is a demo — start your own sandbox" CTA. Deliberately *not* hidden: seeing the
   button matters.
-- **Absent** — file upload (the XHR path in `sandboxUpload`) and git-installed extension bundles. Not built; the
-  drop zone is simply not part of the tour.
+- **Absent** — git-installed extension bundles, and the tar path a drop of more than 20 files takes (a streaming
+  fetch body the fixture would have to un-tar; under the threshold the per-file path serves the same drop).
+
+**The drop is the third transport, and the only one the app opens by hand.** `sandboxUpload` posts each file
+over `XMLHttpRequest` rather than fetch — a streaming fetch body needs HTTP/2, and the daemon's loopback
+shortcut is HTTP/1.1 — so `installXhr` (`src/transport.ts`) claims the same two origins the fetch shim does and
+routes them to the same handlers. What arrives is written into the flat path table, which is why the tree really
+grows the dropped repository and every file in it opens.
 
 **The extension list is read off the app build, not re-typed.** `GET /extensions` enumerates
 `@intentic-app/web`'s own `builtinModules`, because the extension host treats a compiled-in extension the daemon

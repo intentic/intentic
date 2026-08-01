@@ -2,7 +2,7 @@ import { browserSession } from "./browser";
 import { coverage, daemon } from "./daemon";
 import { DEMO_SANDBOX, DEMO_USER, platform } from "./platform";
 import { terminalSession } from "./terminal";
-import { installFetch, installWebSocket } from "./transport";
+import { installFetch, installWebSocket, installXhr } from "./transport";
 
 /* THE DEMO'S BOOT — everything that has to be true before the real app's own entry runs.
  *
@@ -44,6 +44,7 @@ const openOnFleet = (): void => {
 };
 
 installFetch({ platform, daemon });
+installXhr({ platform, daemon });
 installWebSocket((url) => SOCKETS[url.pathname]);
 seedCredentials();
 openOnFleet();
