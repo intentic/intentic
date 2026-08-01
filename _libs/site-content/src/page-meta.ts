@@ -26,6 +26,13 @@ export const pageMeta: Record<string, PageMeta> = {
         description: "The terms governing use of the intentic platform: accounts, billing, acceptable use, and liability.",
         datePublished: "2026-07-03",
     },
+    // The gallery's ROWS come from the registry repo at build time; only its framing is authored here.
+    "/extensions/": {
+        title: "Extensions — intentic",
+        description:
+            "Every published intentic extension: what it adds, who wrote it, and the exact commit you'd install. A registry of pointers to other people's repositories — intentic hosts none of the code.",
+        datePublished: "2026-08-01",
+    },
     [compareHref("")]: compareIndex.meta,
     ...Object.fromEntries(docsPages.map((page) => [docsHref(page.id), page.meta])),
     ...Object.fromEntries(productPages.map((page) => [productHref(page.slug), page.meta])),

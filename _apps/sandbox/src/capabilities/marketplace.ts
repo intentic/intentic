@@ -1,58 +1,20 @@
 import { join } from "node:path";
-import type { Marketplace, MarketplacePlugin } from "@intentic/sandbox-contract";
-import { z } from "zod";
+import { compareEntries, REGISTRY_FACTS_FILE, REGISTRY_FILE, RegistryFactsSchema, RegistryFileSchema, resolveRegistry } from "@intentic/registry";
+import type { Marketplace } from "@intentic/sandbox-contract";
 import type { CapabilityCtx } from "./capability.js";
 import { gitAuthHeader } from "./git-checkout.js";
 import { pluginsRoot } from "./plugin-dirs.js";
 
-// The slice of .claude-plugin/marketplace.json the daemon reads — unknown fields are stripped, `source` stays
-// unknown until resolveSource maps the shapes we can clone onto PluginConfig (url/ref/path).
-const MarketplaceFileSchema = z.object({
-    name: z.string(),
-    metadata: z.object({ pluginRoot: z.string().optional() }).optional(),
-    plugins: z.array(
-        z.object({
-            name: z.string(),
-            description: z.string().optional(),
-            version: z.string().optional(),
-            // intentic's own marker on a marketplace entry: "extension" installs as the sha-pinned extension
-            // capability. Claude Code ignores the field, so one marketplace repo serves both consumers.
-            kind: z.enum(["plugin", "extension"]).optional(),
-            source: z.unknown(),
-        }),
-    ),
-});
-
-// Map a marketplace entry's source onto an installable plugin-capability config. A relative path means the
-// plugin lives inside the marketplace repo itself (metadata.pluginRoot prepends, per the Claude Code spec).
-// Undefined = a source the daemon can't clone (e.g. npm) — surfaced to the UI as uninstallable, not dropped.
-const resolveSource = (source: unknown, marketplaceUrl: string, pluginRoot: string | undefined): MarketplacePlugin["install"] => {
-    if (typeof source === "string") {
-        const relative = source.replace(/^\.\//, "");
-        const path = pluginRoot !== undefined ? join(pluginRoot.replace(/^\.\//, ""), relative) : relative;
-        return { url: marketplaceUrl, path };
-    }
-    if (typeof source !== "object" || source === null) {
-        return undefined;
-    }
-    const s = source as { source?: string; repo?: string; url?: string; path?: string; ref?: string; sha?: string };
-    // An exact sha pins harder than a ref when both are present.
-    const ref = s.sha ?? s.ref;
-    if (s.source === "github" && typeof s.repo === "string") {
-        return { url: `https://github.com/${s.repo}.git`, ...(ref !== undefined ? { ref } : {}) };
-    }
-    if (s.source === "url" && typeof s.url === "string") {
-        return { url: s.url, ...(ref !== undefined ? { ref } : {}) };
-    }
-    if (s.source === "git-subdir" && typeof s.url === "string" && typeof s.path === "string") {
-        return { url: s.url, path: s.path, ...(ref !== undefined ? { ref } : {}) };
-    }
-    return undefined;
-};
-
-// Resolve a marketplace repo (a git repo with .claude-plugin/marketplace.json) into installable entries. The
-// checkout is a throwaway read under a fixed tmp name — concurrent browses on one sandbox could collide, but a
-// sandbox has one owner and the loser just retries.
+/* Resolve a registry repo into installable entries — the format and the join live in @intentic/registry, so
+ * the app's browse list and the site's gallery are the same rows in the same order.
+ *
+ * The checkout is a throwaway read under a fixed tmp name — concurrent browses on one sandbox could collide,
+ * but a sandbox has one owner and the loser just retries.
+ *
+ * Cloning to read two JSON files is the right trade for a private registry of a dozen internal extensions,
+ * which is the case this has to work for offline and behind a token. For the OFFICIAL registry at scale it is
+ * a full clone per browse of a repo that only ever grows; if that starts to bite, serve the resolved list as a
+ * static asset from the site and fetch it here for that one URL, keeping this path for everyone else. */
 export const browseMarketplace = async (ctx: CapabilityCtx, url: string, token?: string): Promise<Marketplace> => {
     const root = pluginsRoot(ctx.workspace.root);
     const tmpName = ".marketplace.tmp";
@@ -61,31 +23,15 @@ export const browseMarketplace = async (ctx: CapabilityCtx, url: string, token?:
     await ctx.files.remove(tmp);
     try {
         await ctx.git.clone(root, tmpName, url, token !== undefined ? { authHeader: gitAuthHeader(token) } : undefined);
-        const raw = await ctx.files.read(join(tmp, ".claude-plugin", "marketplace.json"));
+        const raw = await ctx.files.read(join(tmp, REGISTRY_FILE));
         if (raw === undefined) {
-            throw new Error("not a plugin marketplace: no .claude-plugin/marketplace.json in the repo");
+            throw new Error(`not a plugin marketplace: no ${REGISTRY_FILE} in the repo`);
         }
-        const file = MarketplaceFileSchema.parse(JSON.parse(raw));
-        return {
-            name: file.name,
-            plugins: file.plugins.map((plugin) => {
-                const entry: MarketplacePlugin = { name: plugin.name };
-                if (plugin.description !== undefined) {
-                    entry.description = plugin.description;
-                }
-                if (plugin.version !== undefined) {
-                    entry.version = plugin.version;
-                }
-                if (plugin.kind !== undefined) {
-                    entry.kind = plugin.kind;
-                }
-                const install = resolveSource(plugin.source, url, file.metadata?.pluginRoot);
-                if (install !== undefined) {
-                    entry.install = install;
-                }
-                return entry;
-            }),
-        };
+        const file = RegistryFileSchema.parse(JSON.parse(raw));
+        // Absent on every registry that runs no scanner — the rows then simply carry no stars.
+        const rawFacts = await ctx.files.read(join(tmp, REGISTRY_FACTS_FILE));
+        const facts = rawFacts === undefined ? undefined : RegistryFactsSchema.parse(JSON.parse(rawFacts));
+        return { name: file.name, plugins: resolveRegistry(file, facts, url).toSorted(compareEntries) };
     } finally {
         await ctx.files.remove(tmp);
     }

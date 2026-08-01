@@ -1,4 +1,5 @@
 import { ExtensionManifestSchema } from "@intentic/extension-api";
+import { RegistryEntrySchema } from "@intentic/registry";
 import { z } from "zod";
 
 // All request/response wire schemas for the sandbox daemon. Inputs that carry a `{param}` in their route path
@@ -2022,23 +2023,13 @@ export const ForticlientConnectionSchema = z.object({
 export type ForticlientConnection = z.infer<typeof ForticlientConnectionSchema>;
 export const ForticlientImportSchema = z.object({ connections: z.array(ForticlientConnectionSchema) });
 
-// Browse a Claude Code plugin marketplace (a git repo with .claude-plugin/marketplace.json). POST so the
-// optional token for a private marketplace never rides a URL or an access log.
+// Browse an extension/plugin registry (a git repo with .claude-plugin/marketplace.json — see
+// @intentic/registry for the format). POST so the optional token for a private registry never rides a URL or
+// an access log.
 export const MarketplaceRequestSchema = z.object({ url: z.string().url(), token: z.string().min(1).optional() });
-// One marketplace entry; `install` is the entry's source resolved onto PluginConfig shape (url/ref/path), so
-// picking an entry just pre-fills the plugin form. Absent = a source the daemon can't clone (e.g. npm).
-export const MarketplacePluginSchema = z.object({
-    name: z.string(),
-    description: z.string().optional(),
-    version: z.string().optional(),
-    // "extension" marks an intentic-extension entry (installs as the `extension` capability, sha-pinned);
-    // absent/"plugin" = a Claude Code plugin. Claude Code ignores unknown marketplace fields, so one
-    // marketplace repo serves both consumers.
-    kind: z.enum(["plugin", "extension"]).optional(),
-    install: z.object({ url: z.string(), ref: z.string().optional(), path: z.string().optional() }).optional(),
-});
-export type MarketplacePlugin = z.infer<typeof MarketplacePluginSchema>;
-export const MarketplaceSchema = z.object({ name: z.string(), plugins: z.array(MarketplacePluginSchema) });
+// The rows are RegistryEntry — the curated decision joined to the resolved pointer and the scanner's upstream
+// facts, exactly as the site's gallery renders them, so browsing in the app and browsing the web show one list.
+export const MarketplaceSchema = z.object({ name: z.string(), plugins: z.array(RegistryEntrySchema) });
 export type Marketplace = z.infer<typeof MarketplaceSchema>;
 
 // ---- extensions: installed extension-kind capabilities resolved to their manifests ----

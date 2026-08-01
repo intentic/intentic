@@ -1,0 +1,13 @@
+/* Type-checks this package's TESTS along with its source — see the same file in _tools/iq-bench for why the
+ * build config cannot. noEmit, so it never writes anything. */
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "tsBuildInfoFile": "./.cache/tsbuildinfo-typecheck"
+    },
+    "include": ["./src/**/*"]
+}

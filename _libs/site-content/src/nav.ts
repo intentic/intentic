@@ -74,6 +74,14 @@ export const navEntries: NavEntry[] = [
             items: section.items.map((page) => ({ label: page.title, href: docsHref(page.id), description: page.blurb })),
         })),
     },
+    // A bare link, like Compare: the gallery's contents come from the registry repo at build time, so there is
+    // no authored list here to build a menu out of.
+    {
+        type: "link",
+        label: "Extensions",
+        href: "/extensions/",
+        prefix: "/extensions",
+    },
     {
         type: "link",
         label: "Compare",

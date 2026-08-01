@@ -32,6 +32,7 @@
         "@intentic/graph": "workspace:*",
         "@intentic/iq-engine": "workspace:*",
         "@intentic/lsp": "workspace:*",
+        "@intentic/registry": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",
         "@intentic/scaffold": "workspace:*",

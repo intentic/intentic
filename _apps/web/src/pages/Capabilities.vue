@@ -7,8 +7,9 @@ import {
     type CapabilityField,
     connectorCard,
 } from "@intentic-app/capability-catalog";
-import { type CapabilitySummary, type Marketplace, type MarketplacePlugin } from "@intentic-app/api-contract";
+import { type CapabilitySummary, type Marketplace } from "@intentic-app/api-contract";
 import { cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic-app/ui";
+import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import { type CapabilityEffect, capabilityEffects, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import { computed, nextTick, reactive, ref, watch } from "vue";
@@ -303,8 +304,11 @@ const canSubmit = computed(() => {
     return visibleFields(entry).every((field) => field.optional === true || (values[field.key] ?? ``).trim().length > 0);
 });
 
-// Marketplace browse (plugin card only): resolve a marketplace repo into entries; picking one pre-fills the
-// plugin form below (install stays the ordinary plugin apply).
+/* Registry browse (the plugin and extension cards): resolve a registry repo into entries; picking one
+ * pre-fills the form below, and install stays the ordinary capability apply. The extension card defaults the
+ * field to the official registry and the plugin card starts blank — a plugin marketplace is usually somebody
+ * else's, an extension registry is usually ours — but the field is editable in both, which is the whole of
+ * "registries are plural": point it at an internal repo and this never touches intentic.dev. */
 const marketUrl = ref(``);
 const marketToken = ref(``);
 const market = ref<Marketplace | null>(null);
@@ -320,10 +324,33 @@ const browse = async (): Promise<void> => {
     try {
         market.value = await browseMarketplace(marketUrl.value.trim(), marketToken.value.trim() || undefined);
     } catch (err) {
-        error.value = errorMessage(err, `Could not browse the marketplace.`);
+        error.value = errorMessage(err, `Could not browse the registry.`);
     } finally {
         browsing.value = false;
     }
+};
+
+// Only the rows this card can actually install: a registry serves plugins and extensions from one file, and
+// offering an extension row on the plugin form would pre-fill a config the daemon then refuses.
+const marketEntries = computed<RegistryEntry[]>(() =>
+    selected.value === undefined ? [] : (market.value?.plugins.filter((entry) => entry.kind === selected.value?.kind) ?? []),
+);
+
+/* Why a row can't be clicked, in the words the reader needs — the button is disabled either way, and a
+ * disabled row with no reason reads as a broken page. Blocked leads: it is the one case where the entry is
+ * fine mechanically and the answer is still no. The sha rule bites only extensions (their code runs trusted
+ * in this browser), so a plugin row pinned to a branch stays installable. */
+const blockedReason = (entry: RegistryEntry): string | undefined => {
+    if (entry.trust === `blocked`) {
+        return entry.trustReason ?? `blocked`;
+    }
+    if (entry.install === undefined) {
+        return `not installable from here`;
+    }
+    if (entry.kind === `extension` && !isShaPinned(entry.install)) {
+        return `no pinned commit`;
+    }
+    return undefined;
 };
 
 // A connected VPN instance's live facts, compactly: the assigned address and what it routes. Undefined while
@@ -394,17 +421,17 @@ const pickForticlient = (connection: ForticlientConnection): void => {
     touched.clear();
 };
 
-const pickPlugin = (plugin: MarketplacePlugin): void => {
-    if (plugin.install === undefined) {
+const pickEntry = (entry: RegistryEntry): void => {
+    if (entry.install === undefined || blockedReason(entry) !== undefined) {
         return;
     }
-    name.value = plugin.name.replace(/[^a-zA-Z0-9_-]/g, `-`);
+    name.value = entry.name.replace(/[^a-zA-Z0-9_-]/g, `-`);
     nameEdited.value = true;
-    values[`url`] = plugin.install.url;
-    values[`ref`] = plugin.install.ref ?? ``;
-    values[`path`] = plugin.install.path ?? ``;
-    // A plugin hosted inside a private marketplace repo needs the same token to clone.
-    values[`token`] = plugin.install.url === marketUrl.value.trim() ? marketToken.value.trim() : ``;
+    values[`url`] = entry.install.url;
+    values[`ref`] = entry.install.ref ?? ``;
+    values[`path`] = entry.install.path ?? ``;
+    // Code hosted inside a private registry repo needs the same token to clone.
+    values[`token`] = entry.install.url === marketUrl.value.trim() ? marketToken.value.trim() : ``;
 };
 
 const clearForm = (): void => {
@@ -430,6 +457,10 @@ watch(
             return;
         }
         clearForm();
+        // The extension card opens on the official registry so browsing is one click, not a URL to go and find.
+        if (entry.kind === `extension`) {
+            marketUrl.value = OFFICIAL_REGISTRY_URL;
+        }
         // Pre-fill a free name: the provider id for the first connection, `<id>-2` etc. for the next — so re-adding
         // creates another connection by default instead of overwriting the first.
         name.value = suggestName(entry);
@@ -776,11 +807,11 @@ const submitLabel = computed(() =>
                     </div>
                 </RowGroup>
 
-                <!-- Marketplace browse (plugin only): resolve a marketplace repo and pre-fill the form below. -->
-                <RowGroup v-if="selected.kind === 'plugin'" label="From a marketplace (optional)">
+                <!-- Registry browse (plugin + extension): resolve a registry repo and pre-fill the form below. -->
+                <RowGroup v-if="selected.kind === 'plugin' || selected.kind === 'extension'" label="From a registry (optional)">
                     <div class="flex flex-col gap-2 px-4 py-3">
                         <div class="flex gap-2">
-                            <input v-model="marketUrl" placeholder="https://github.com/owner/marketplace" :class="cmp.input('min-w-0 flex-1')" />
+                            <input v-model="marketUrl" placeholder="https://github.com/owner/registry" :class="cmp.input('min-w-0 flex-1')" />
                             <input v-model="marketToken" type="password" autocomplete="off" placeholder="Token" :class="cmp.input('w-28')" />
                             <Button
                                 label="Browse"
@@ -792,19 +823,33 @@ const submitLabel = computed(() =>
                         </div>
                         <div v-if="market" class="scrollbar-thin flex max-h-40 flex-col gap-0.5 overflow-auto">
                             <button
-                                v-for="plugin in market.plugins"
-                                :key="plugin.name"
+                                v-for="entry in marketEntries"
+                                :key="entry.name"
                                 type="button"
                                 class="flex items-baseline gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay disabled:opacity-50"
-                                :disabled="plugin.install === undefined"
-                                @click="pickPlugin(plugin)"
+                                :disabled="blockedReason(entry) !== undefined"
+                                @click="pickEntry(entry)"
                             >
-                                <span class="font-medium text-content">{{ plugin.name }}</span>
-                                <span v-if="plugin.version" class="text-2xs text-subtle">{{ plugin.version }}</span>
-                                <span class="min-w-0 truncate text-2xs text-muted">{{ plugin.description }}</span>
-                                <span v-if="plugin.install === undefined" class="ml-auto shrink-0 text-2xs text-subtle">not installable</span>
+                                <!-- Verified is the only badge: it is the one state a human asserted, and badging
+                                     "listed" too would dress the honest default up as a review. -->
+                                <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
+                                <span class="font-medium text-content">{{ entry.name }}</span>
+                                <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
+                                <span v-if="entry.stars !== undefined" class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-subtle">
+                                    <Icon name="star" />{{ entry.stars }}
+                                </span>
+                                <span class="min-w-0 truncate text-2xs text-muted">{{ entry.description }}</span>
+                                <span
+                                    v-if="blockedReason(entry)"
+                                    :class="['ml-auto shrink-0 text-2xs', entry.trust === 'blocked' ? 'text-danger' : 'text-subtle']"
+                                >
+                                    {{ blockedReason(entry) }}
+                                </span>
                             </button>
                         </div>
+                        <p v-if="market && marketEntries.length === 0" class="text-2xs text-subtle">
+                            That registry lists no {{ selected.kind === "extension" ? "extensions" : "plugins" }}.
+                        </p>
                     </div>
                 </RowGroup>
 

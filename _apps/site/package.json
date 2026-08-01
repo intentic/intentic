@@ -8,12 +8,14 @@
         "build": "astro build",
         "preview": "astro preview",
         "check": "astro check",
-        "astro": "astro"
+        "astro": "astro",
+        "sync:registry": "node scripts/sync-registry.mjs"
     },
     "dependencies": {
         "@astrojs/sitemap": "catalog:",
         "@intentic-dev/astro-integrations": "workspace:*",
         "@intentic-dev/site-content": "workspace:*",
+        "@intentic/registry": "workspace:*",
         "@tailwindcss/vite": "catalog:",
         "astro": "catalog:",
         "astro-indexnow": "catalog:",

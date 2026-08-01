@@ -24,7 +24,6 @@ import {
     InventoryProviderSchema,
     LogFileEntrySchema,
     LogReadSchema,
-    MarketplacePluginSchema,
     MarketplaceSchema,
     PanelSummarySchema,
     PushConfigSchema,
@@ -112,7 +111,6 @@ export {
     LogFileEntrySchema,
     LogReadSchema,
     LogsListSchema,
-    MarketplacePluginSchema,
     MarketplaceSchema,
     PanelsListSchema,
     PanelSummarySchema,
@@ -143,7 +141,6 @@ export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
 export type CapabilitySummary = z.infer<typeof CapabilitySummarySchema>;
 export type CapabilityRecommendation = z.infer<typeof CapabilityRecommendationSchema>;
 export type Environment = z.infer<typeof EnvironmentSchema>;
-export type MarketplacePlugin = z.infer<typeof MarketplacePluginSchema>;
 export type Marketplace = z.infer<typeof MarketplaceSchema>;
 export type Automation = z.infer<typeof AutomationSchema>;
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;

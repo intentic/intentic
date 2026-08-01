@@ -40,6 +40,7 @@
         "@intentic/ext-viewers": "workspace:*",
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
+        "@intentic/registry": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
