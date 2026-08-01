@@ -1,10 +1,19 @@
 <!-- Per-capability credential help on the "+" config form: a deep "Create a token ↗" link straight to the
-     provider's token page, the scopes it needs, and a numbered how-to-get-it behind an (i) disclosure. Data comes
+     provider's token page, the scopes it needs, and a numbered how-to-get-it behind a disclosure. Data comes
      from the card's `guide` metadata (CAPABILITY_CATALOG). Mirrors the CloudflareConnect connect step, generalized
-     to every card. Renders nothing for cards without a guide (devops/monorepo/stripe and the browser-login ones). -->
+     to every card. Renders nothing for cards without a guide (devops/monorepo/stripe and the browser-login ones).
+
+     THE STEPS OPEN IN THE LAYOUT, NOT OVER IT. This was an InfoHint — a hover card teleported to <body> — and it
+     was the wrong shape twice over. This guide sits BETWEEN the name field and the fields it explains, so the
+     card dropped straight onto the inputs the reader had just been told how to fill: the instructions covered
+     the thing they were instructions for. And it was hover-only and pointer-events-none, so a four-step how-to
+     the user is meant to WORK THROUGH vanished the moment they reached for the field it named.
+
+     A <details> fixes both by not being an overlay: it pushes the fields down instead of hiding them, stays open
+     while the user types, and its text can be selected and copied. It is also the accessible default — summary
+     is focusable and toggles on Enter/Space with no JS and no ARIA of our own. -->
 <script setup lang="ts">
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
-import { InfoHint } from "@intentic-app/ui";
 import { computed } from "vue";
 
 const { entry, values } = defineProps<{ entry: CapabilityCatalogEntry; values: Record<string, string> }>();
@@ -33,16 +42,26 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
 </script>
 
 <template>
-    <div v-if="entry.guide" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
-        <a v-if="tokenUrl" :href="tokenUrl" target="_blank" rel="noreferrer" class="inline-flex items-center gap-1 text-link hover:underline">
-            {{ linkLabel }} <Icon name="external-link" />
-        </a>
-        <InfoHint v-if="steps.length > 0" label="How to get this credential" text="How to get it">
-            <p class="mb-2 text-sm font-semibold text-content">{{ entry.name }} — how to get the credential</p>
-            <ol class="flex list-decimal flex-col gap-1.5 pl-4 leading-relaxed text-muted">
+    <div v-if="entry.guide" class="flex flex-col gap-1.5 text-2xs">
+        <!-- Skipped entirely when a card has neither, which is the ordinary shape for anything without a token
+             page to link (the model endpoint, the ACP agents) — an empty row would still spend the column gap. -->
+        <div v-if="tokenUrl || scopes" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <a v-if="tokenUrl" :href="tokenUrl" target="_blank" rel="noreferrer" class="inline-flex items-center gap-1 text-link hover:underline">
+                {{ linkLabel }} <Icon name="external-link" />
+            </a>
+            <span v-if="scopes" class="ml-auto text-subtle">Scopes: {{ scopes }}</span>
+        </div>
+        <!-- `group` + `open:` drive the caret's rotation off the element's own state, so nothing here tracks
+             whether it is expanded. `list-none` drops the browser's default triangle in favour of our own caret. -->
+        <details v-if="steps.length > 0" class="group">
+            <summary class="inline-flex cursor-pointer list-none items-center gap-1.5 text-muted transition-colors hover:text-content">
+                <Icon name="info-circle" />
+                <span class="text-xs font-medium">How to get it</span>
+                <Icon name="angle-right" class="transition-transform group-open:rotate-90" />
+            </summary>
+            <ol class="mt-2 flex list-decimal flex-col gap-1.5 rounded-lg border border-line bg-canvas px-3 py-2.5 pl-7 leading-relaxed text-muted">
                 <li v-for="(step, index) in steps" :key="index">{{ step }}</li>
             </ol>
-        </InfoHint>
-        <span v-if="scopes" class="ml-auto text-subtle">Scopes: {{ scopes }}</span>
+        </details>
     </div>
 </template>
