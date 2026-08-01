@@ -1,8 +1,10 @@
 import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { HookJSONOutput, SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import type { IsolatedAgent, PersistedAgent } from "./agents/agents-store.js";
 import type { IsolationPlan, TurnIsolation } from "./agents/isolation.js";
 import { overlaysDir } from "./agents/isolation.js";
+import type { Config } from "./env.config.js";
 
 /* Test-support seams shared across this package's suites. Not part of the build (tsconfig `exclude`, like
  * e2e-harness.ts), but IS type-checked — tsconfig.test.json puts it and every *.test.ts in one program.
@@ -15,20 +17,75 @@ import { overlaysDir } from "./agents/isolation.js";
  * seam, and the compiler now says so at the definition instead of at a route three layers away.
  */
 
-// Every method throws, named, until the test provides it. Use for a WIDE seam the code under test barely
-// touches (37-method git, 22-field settings): enumerating no-ops for the other 35 is noise that says nothing,
-// and it goes stale the moment the interface grows. What a test does provide is checked against T as usual;
-// what it doesn't, fails loudly with the method's own name instead of as a bare 500 from the route.
+// The real first-party connectors/discord extensions, so a cli capability's image fragment and a
+// cli-capability test's provider data both resolve against the tree the daemon actually ships.
+export const EXTENSIONS_DIR = fileURLToPath(new URL("../../../_extensions", import.meta.url));
+
+/* Every config field at its schema default. Config is DATA, not a seam of methods, so it is spelled out whole
+ * rather than stood in for: `unstubbed` answers an unread key with a throwing FUNCTION, which a `if
+ * (config.publicUrl)` branch would read as set. One copy for the package — a suite that cares about a field
+ * spreads this and overrides it, and a suite that doesn't gets the same inert defaults every other one sees.
+ */
+export const testConfig: Config = {
+    workspaceRoot: "/work",
+    historyRoot: "/history",
+    extensionsDir: EXTENSIONS_DIR,
+    agentAuthDir: "",
+    logLevel: "silent",
+    logPretty: false,
+    zone: "",
+    connectToken: "",
+    owner: { email: "" },
+    syncPairToken: "",
+    webOrigin: "",
+    platform: { url: "" },
+    intenticAgentTools: "",
+    claudeCodeOauthToken: "",
+    anthropicApiKey: "",
+    openaiApiKey: "",
+    cloudflareApiToken: "",
+    translator: { url: "", token: "" },
+    sandbox: { port: 8787, host: "0.0.0.0", publicUrl: "", name: "", image: "", baseImage: "", environmentHash: "" },
+    preview: { port: 5173 },
+    google: { clientId: "" },
+    acmeDirectoryUrl: "",
+    intenticAgentModel: "",
+    iqModelDir: "",
+    iqRgPath: "",
+    iqPluginDir: "",
+    local: { port: 8788 },
+};
+
+/* `then` is the one key a stand-in must never answer, and it is worth spelling out why: a value carrying a
+ * callable `then` IS a promise as far as the language is concerned, so `await services` — or merely returning a
+ * fake from an async function — hands the resolution machinery a stand-in it then CALLS. Eight turn-resume tests
+ * died that way, all reporting `services.then was called`, none of them about `then`. Absent instead. */
+const RESERVED = "then";
+
+/* What an unprovided member answers: a value that is both callable and readable to any depth, and that names
+ * the WHOLE path it was reached by when something finally calls it. Depth is the point — `Services` is a tree
+ * of seams, so a fake that only names its top level answers a nested `services.komodoStore.seenAt()` with
+ * "seenAt is not a function", which says nothing about which fake is short. Symbols answer undefined so that
+ * `util.inspect`, `Symbol.toStringTag` and vitest's own equality probes see an ordinary function. */
+const namedThrow = (path: string): (() => never) =>
+    new Proxy(
+        () => {
+            throw new Error(`${path} was called, and this test did not stub it`);
+        },
+        { get: (_target, key) => (typeof key === "symbol" || key === RESERVED ? undefined : namedThrow(`${path}.${key}`)) },
+    );
+
+// Every member throws, named, until the test provides it. Use for a WIDE seam the code under test barely
+// touches (37-method git, 22-field settings, 70-member Services): enumerating no-ops for the other 35 is noise
+// that says nothing, and it goes stale the moment the interface grows. What a test does provide is checked
+// against T as usual; what it doesn't, fails loudly with its own name instead of as a bare 500 from the route.
+// This is what keeps a fake OFF the blast radius of its seam growing: a new required member of T needs no edit
+// here, in any suite, and the first route to actually read it says so by name.
 // NoInfer: T comes from the seam being stood in for (the annotated target), never from the subset a test
 // happens to provide — otherwise the stand-in silently narrows to exactly what was written and checks nothing.
 export const unstubbed = <T extends object>(seam: string, provided: NoInfer<Partial<T>>): T =>
     new Proxy(provided as T, {
-        get: (target, key) =>
-            key in target
-                ? target[key as keyof T]
-                : () => {
-                      throw new Error(`${seam}.${String(key)} was called, and this test did not stub it`);
-                  },
+        get: (target, key) => (key in target ? target[key as keyof T] : key === RESERVED ? undefined : namedThrow(`${seam}.${String(key)}`)),
     });
 
 /* What a hook the daemon installs actually returns. `HookJSONOutput` is a union, and only its SYNCHRONOUS side

@@ -4,20 +4,21 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { LSP_SKILL, reconcileSkills } from "./skills.js";
 
 // Minimal Services stub — reconcileSkills only reads workspace.root and calls files.write (mirrored here with a
 // real on-disk write so the test can assert the file's presence/absence).
 const stubServices = (root: string): Services =>
-    ({
-        workspace: { root },
-        files: {
-            write: async (path: string, content: string) => {
+    unstubbed<Services>("services", {
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        files: unstubbed<Services["files"]>("files", {
+            write: async (path, content) => {
                 await mkdir(dirname(path), { recursive: true });
                 await writeFile(path, content);
             },
-        },
-    }) as unknown as Services;
+        }),
+    });
 
 test("reconcile writes a skill when named and removes it when absent from the list", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));

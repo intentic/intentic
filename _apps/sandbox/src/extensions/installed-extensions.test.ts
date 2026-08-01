@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
+import { testConfig, unstubbed } from "../testing.js";
 import { extensionDir } from "../capabilities/extension-dirs.js";
 import { readWorkspaceFile } from "../workspace/workspace-files.js";
 import { enabledExtensions, extensionBinDirsOf, installedExtensions, listenerProvidersOf } from "./installed-extensions.js";
@@ -17,12 +18,12 @@ const manifest = (publisher: string, name: string): object => ({
 });
 
 const services = (root: string, extensionsDir: string, capabilities: Capability[]): Services =>
-    ({
-        workspace: { root },
-        files: { read: readWorkspaceFile },
-        capabilities: { list: async () => capabilities },
-        config: { extensionsDir },
-    }) as unknown as Services;
+    unstubbed<Services>("services", {
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
+        config: { ...testConfig, extensionsDir },
+    });
 
 const writeManifest = async (dir: string, body: object): Promise<void> => {
     await mkdir(dir, { recursive: true });

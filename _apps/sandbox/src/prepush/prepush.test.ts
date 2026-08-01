@@ -1,17 +1,17 @@
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SandboxSettings } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { createPrepushCheck } from "./prepush.js";
 
-// The check touches sandboxSettings, workspace and logger; a cast keeps the fake that small. Nothing is
+// The check touches sandboxSettings, workspace and logger; `unstubbed` keeps the fake that small. Nothing is
 // persisted — the run lives in the returned object, which is the whole point of the rewrite.
-const SETTINGS: Pick<SandboxSettings, "prepushCommand" | "prepushTimeoutMs"> = {
-    prepushCommand: "exit 0",
-    prepushTimeoutMs: 60_000,
-};
+// The schema's own defaults with the two fields this check reads set on top — what the daemon actually hands
+// `sandboxSettings.get`, rather than the two-key subset a cast used to let this fake pass off as the whole of it.
+const SETTINGS = { ...SandboxSettingsSchema.parse({}), prepushCommand: "exit 0", prepushTimeoutMs: 60_000 };
 
 interface Fakes {
     readonly services: Services;
@@ -31,11 +31,11 @@ const fakeServices = (over: Partial<typeof SETTINGS> & { ending?: string } = {})
     const settings = {
         current: { ...SETTINGS, ...fields, ...(ending !== undefined ? { prepushCommand: `echo ran >> ${log}; ${ending}` } : {}) },
     };
-    const services = {
-        workspace: { root },
-        sandboxSettings: { get: async () => settings.current },
-        logger: { info: () => {}, warn: () => {}, debug: () => {}, error: () => {} },
-    } as unknown as Services;
+    const services = unstubbed<Services>("services", {
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings.current }),
+        logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, debug: () => {}, error: () => {} }),
+    });
     return {
         services,
         settings,

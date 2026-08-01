@@ -5,6 +5,7 @@ import type { AgentEvent, Automation, WorkspaceEvent } from "@intentic/sandbox-c
 import { expect, test, vi } from "vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { fileApprovalsStore } from "./approvals-store.js";
 import { fileAutomationsStore } from "./automations-store.js";
 import type { WakeFn } from "./scheduler.js";
@@ -12,15 +13,15 @@ import { dispatchWorkspaceEvent } from "./workspace-events.js";
 
 // Same shape as scheduler.test's fake — the dispatcher reaches only automations/approvals/activity/workspace/logger.
 const fakeServices = (root: string): Services =>
-    ({
+    unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
-        workspace: { root },
-        logger: { error: () => {}, warn: () => {} },
-    }) as unknown as Services;
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+    });
 
 const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
     async function* (_services, input) {

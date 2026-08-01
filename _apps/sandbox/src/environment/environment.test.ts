@@ -6,6 +6,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/workspace-files.js";
 import {
     approvedPath,
@@ -30,16 +31,26 @@ const RELEASE = "registry.gitlab.com/radarsu/intentic/sandbox:stable";
 const EXTENSIONS_DIR = fileURLToPath(new URL("../../../../_extensions", import.meta.url));
 
 const stubServices = (environmentHashApplied = "", capabilities: Capability[] = [], image = "", baseImage = ""): Services =>
-    ({
-        config: {
-            sandbox: { environmentHash: environmentHashApplied, name: "intentic-sandbox-demo", image, baseImage },
+    unstubbed<Services>("services", {
+        config: unstubbed<Services["config"]>("config", {
+            // `sandbox` is DATA, so it is spelled out whole rather than stood in for: a stand-in answering every
+            // unread field with a throwing function would make `publicUrl` read as set.
+            sandbox: {
+                port: 8787,
+                host: "0.0.0.0",
+                publicUrl: "",
+                environmentHash: environmentHashApplied,
+                name: "intentic-sandbox-demo",
+                image,
+                baseImage,
+            },
             extensionsDir: EXTENSIONS_DIR,
-        },
-        workspace: { root: mkdtempSync(join(tmpdir(), "environment-")) },
-        files: { read: readWorkspaceFile, write: writeWorkspaceFile, remove: removeWorkspacePath },
-        logger: { warn: () => undefined },
-        capabilities: { list: async () => capabilities },
-    }) as unknown as Services;
+        }),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "environment-")) }),
+        files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile, write: writeWorkspaceFile, remove: removeWorkspacePath }),
+        logger: unstubbed<Services["logger"]>("logger", { warn: () => undefined }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
+    });
 
 const vpn = (id: string): Capability => ({
     id,

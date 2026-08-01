@@ -6,21 +6,22 @@ import { expect, test, vi } from "vitest";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { fileAutomationsStore } from "./automations-store.js";
 import { createMessageBatcher, dispatchListenerMessage, type ListenerMessage, type MessageContext, reportListenerFailure } from "./listeners.js";
 import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 
-// The listener paths touch automations/capabilities/activity/workspace/logger; a cast keeps the fake that small.
+// The listener paths touch automations/capabilities/activity/workspace/logger; `unstubbed` keeps the fake small.
 const fakeServices = (root: string): Services =>
-    ({
+    unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
-        workspace: { root },
-        logger: { error: () => {}, warn: () => {} },
-    }) as unknown as Services;
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+    });
 
 const fakeWake = (prompts: string[]): WakeFn =>
     async function* (_services, input) {

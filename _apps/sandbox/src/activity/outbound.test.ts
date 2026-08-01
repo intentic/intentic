@@ -1,16 +1,17 @@
 import type { ActivityEvent, AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { createOutboundSniffer } from "./outbound.js";
 
-// The sniffer only touches activity/logger; a cast keeps the fake that small. The fake append pushes
+// The sniffer only touches activity/logger; `unstubbed` keeps the fake that small. The fake append pushes
 // synchronously, so assertions can follow observe() directly.
 const capture = (): { appended: Partial<ActivityEvent>[]; services: Services } => {
     const appended: Partial<ActivityEvent>[] = [];
-    const services = {
-        activity: { append: async (event: Partial<ActivityEvent>) => void appended.push(event), list: async () => [] },
-        logger: { warn: () => {} },
-    } as unknown as Services;
+    const services = unstubbed<Services>("services", {
+        activity: { append: async (event) => void appended.push(event), list: async () => [] },
+        logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
+    });
     return { appended, services };
 };
 

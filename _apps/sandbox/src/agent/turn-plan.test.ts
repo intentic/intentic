@@ -1,6 +1,7 @@
-import type { AgentTurn } from "@intentic/sandbox-contract";
+import { type AgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
+import { testConfig, unstubbed } from "../testing.js";
 import type { AgentRequest } from "./agent.js";
 import { planTurn, type TurnContext } from "./turn-plan.js";
 
@@ -26,20 +27,22 @@ const context: TurnContext = {
     steering: undefined,
 };
 
-// Only the seams a given arm actually reaches for matter; each test overrides what its own gate reads.
-const servicesWith = (overrides: Record<string, unknown>): Services =>
-    ({
+// Only the seams a given arm actually reaches for matter; each test overrides what its own gate reads, and
+// every seam it doesn't name answers with its own name rather than `undefined`.
+const servicesWith = (overrides: Partial<Services> = {}): Services =>
+    unstubbed<Services>("services", {
         tools: [],
-        workspace: { root: "/work" },
-        capabilities: { list: async () => [] },
-        config: { translator: { url: "", token: "" }, openaiApiKey: "", iqPluginDir: "", intenticAgentModel: "" },
-        cliProxy: { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) },
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+        // No translator and no api key: the state both Codex gates refuse from, which most cases here start in.
+        config: testConfig,
+        cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) }),
         codexAgent: async function* () {},
         grokAgent: async function* () {},
         agent: async function* () {},
         acpAgent: async function* () {},
         ...overrides,
-    }) as unknown as Services;
+    });
 
 const turn = (overrides?: Partial<AgentTurn>): AgentTurn => ({ prompt: "do the thing", ...overrides }) as AgentTurn;
 
@@ -67,7 +70,7 @@ test("Codex with neither a translator subscription nor an api key names which of
 
     const unconnected = servicesWith({
         codexThreadExists: async () => true,
-        config: { translator: { url: "http://127.0.0.1:8788", token: "local" }, openaiApiKey: "" },
+        config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
     });
     const plan = await planTurn(unconnected, turn({ agent: "codex" }), context);
     expect(plan).toMatchObject({ ok: false, code: "subscription-required" });
@@ -75,7 +78,7 @@ test("Codex with neither a translator subscription nor an api key names which of
 });
 
 test("Grok with no xAI sign-in is refused before a turn spawns", async () => {
-    const services = servicesWith({ openCode: { connected: async () => false } });
+    const services = servicesWith({ openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }) });
 
     const plan = await planTurn(services, turn({ agent: "grok" }), context);
 
@@ -86,7 +89,9 @@ test("Grok with no xAI sign-in is refused before a turn spawns", async () => {
 // The gate every other arm had and this one didn't: OpenCode answers a dead session id with a rejection that
 // names nothing, so the chat kept re-sending it. The code is what lets the client drop it.
 test("a Grok session OpenCode no longer holds is refused by code, not re-sent forever", async () => {
-    const services = servicesWith({ openCode: { connected: async () => true, sessionExists: async () => false } });
+    const services = servicesWith({
+        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => true, sessionExists: async () => false }),
+    });
 
     const plan = await planTurn(services, turn({ agent: "grok", sessionId: "ses-gone" }), context);
 
@@ -94,7 +99,11 @@ test("a Grok session OpenCode no longer holds is refused by code, not re-sent fo
 });
 
 test("an ACP provider whose capability is gone is refused by name", async () => {
-    const services = servicesWith({ capabilities: { list: async () => [{ kind: "agent", id: "other-agent", config: {} }] } });
+    const services = servicesWith({
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", {
+            list: async () => [{ kind: "agent", id: "other-agent", config: { command: "other-agent" } }],
+        }),
+    });
 
     const plan = await planTurn(services, turn({ agent: "gemini-cli" }), context);
 
@@ -111,7 +120,7 @@ test("a harness refusal rides through with the credential resolver's own code", 
 });
 
 test("a Claude session id the sandbox no longer holds is refused by code, not spawned and failed", async () => {
-    const services = servicesWith({ sessions: { exists: async () => false } });
+    const services = servicesWith({ sessions: unstubbed<Services["sessions"]>("sessions", { exists: async () => false }) });
 
     const plan = await planTurn(services, turn({ sessionId: "s-gone" }), context);
 
@@ -128,9 +137,13 @@ test("a Claude session id the sandbox no longer holds is refused by code, not sp
 test("Codex resolves the catalog default when the turn pins no model", async () => {
     const services = servicesWith({
         codexThreadExists: async () => true,
-        config: { translator: { url: "http://127.0.0.1:8788", token: "local" }, openaiApiKey: "" },
-        cliProxy: { accounts: async () => ({ codex: ["sub"], grok: [], kimi: [], gemini: [] }) },
-        codexModels: { models: async () => ({ default: "gpt-5.6-codex" }) },
+        config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
+        cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
+            accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
+        }),
+        codexModels: unstubbed<Services["codexModels"]>("codexModels", {
+            models: async () => ({ models: [{ id: "gpt-5.6-codex", label: "GPT 5.6 Codex" }], default: "gpt-5.6-codex" }),
+        }),
     });
 
     const plan = await planTurn(services, turn({ agent: "codex" }), context);
@@ -141,10 +154,16 @@ test("Codex resolves the catalog default when the turn pins no model", async () 
 
 test("Grok replaces a model its live catalog no longer offers, and keeps one it does", async () => {
     const services = servicesWith({
-        openCode: {
+        openCode: unstubbed<Services["openCode"]>("openCode", {
             connected: async () => true,
-            xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4" }, { id: "grok-4-fast" }] }),
-        },
+            xaiModels: async () => ({
+                default: "grok-4",
+                models: [
+                    { id: "grok-4", label: "Grok 4" },
+                    { id: "grok-4-fast", label: "Grok 4 Fast" },
+                ],
+            }),
+        }),
     });
 
     const retired = await planTurn(services, turn({ agent: "grok", model: "grok-code-fast-1" }), context);
@@ -158,14 +177,13 @@ test("Grok replaces a model its live catalog no longer offers, and keeps one it 
 
 // The harness arm is the deep one — it reaches settings, plugins, browser profiles and the workspace probe —
 // so it needs the seams those touch before it can be planned at all.
-const harnessServices = (overrides?: Record<string, unknown>): Services =>
+const harnessServices = (overrides: Partial<Services> = {}): Services =>
     servicesWith({
-        workspace: { root: "/work" },
-        processes: { running: () => false, run: async () => ({ stdout: "", stderr: "", code: 0 }) },
-        extensions: { list: async () => [] },
-        sessions: { exists: async () => true },
-        sandboxSettings: { get: async () => ({ systemPromptMode: "preset", systemPrompt: "", outputCleaners: "", filterBackend: "native" }) },
-        openCode: { connected: async () => false },
+        processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
+        sessions: unstubbed<Services["sessions"]>("sessions", { exists: async () => true }),
+        // The schema's own defaults, which is what a workspace that has never written a settings file reads.
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
         codexHome: "/root/.codex",
         authRoot: "/root/.local/share",
         ...overrides,
@@ -190,8 +208,10 @@ test("no reachable Codex means neither the delegation env nor the note that prom
 test("a translator holding the ChatGPT subscription puts CODEX_HOME and the bearer in the agent's shell", async () => {
     const plan = await planTurn(
         harnessServices({
-            config: { translator: { url: "http://127.0.0.1:8788", token: "local" }, openaiApiKey: "", iqPluginDir: "", intenticAgentModel: "" },
-            cliProxy: { accounts: async () => ({ codex: ["sub"], grok: [], kimi: [], gemini: [] }) },
+            config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
+            cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
+                accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
+            }),
         }),
         turn(),
         context,
@@ -206,12 +226,16 @@ test("a translator holding the ChatGPT subscription puts CODEX_HOME and the bear
  * nothing to ask. What must NOT happen is the request carrying a posture the adapter then drops on the floor:
  * that is how "Ask before each file edit" came to sit above a runtime whose every tool call is pre-approved,
  * and how the turn journal came to record it. A `plan` runtime keeps plan and nothing else. */
-const codexServices = (overrides?: Record<string, unknown>): Services =>
+const codexServices = (overrides: Partial<Services> = {}): Services =>
     servicesWith({
         codexThreadExists: async () => true,
-        config: { translator: { url: "http://127.0.0.1:8788", token: "local" }, openaiApiKey: "" },
-        cliProxy: { accounts: async () => ({ codex: ["sub"], grok: [], gemini: [] }) },
-        codexModels: { models: async () => ({ default: "gpt-5.6-codex" }) },
+        config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
+        cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
+            accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
+        }),
+        codexModels: unstubbed<Services["codexModels"]>("codexModels", {
+            models: async () => ({ models: [{ id: "gpt-5.6-codex", label: "GPT 5.6 Codex" }], default: "gpt-5.6-codex" }),
+        }),
         ...overrides,
     });
 
@@ -240,7 +264,10 @@ test("effort reaches the runtimes that forward it and no others", async () => {
     expect((codex as { request: AgentRequest }).request.effort).toBe("high");
 
     const grokServices = servicesWith({
-        openCode: { connected: async () => true, xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4" }] }) },
+        openCode: unstubbed<Services["openCode"]>("openCode", {
+            connected: async () => true,
+            xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
+        }),
     });
     const grok = await planTurn(grokServices, turn({ agent: "grok" }), asking({ effort: "high" }));
     expect((grok as { request: AgentRequest }).request.effort).toBeUndefined();
@@ -277,10 +304,7 @@ test("every runtime hears that its branch was rebased; a main-tree turn has no b
         syncNote: "## Your branch moved onto newer main\n\nrebased onto 3 commits",
     };
 
-    for (const plan of [
-        await planTurn(harnessServices(), turn(), isolated),
-        await planTurn(codexServices(), turn({ agent: "codex" }), isolated),
-    ]) {
+    for (const plan of [await planTurn(harnessServices(), turn(), isolated), await planTurn(codexServices(), turn({ agent: "codex" }), isolated)]) {
         const prompt = (plan as { request: AgentRequest }).request.prompt;
         expect(prompt).toContain("Your branch moved onto newer main");
         expect(prompt).toContain("do the thing");

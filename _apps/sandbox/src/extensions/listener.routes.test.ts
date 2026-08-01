@@ -10,22 +10,23 @@ import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { listenerStatus } from "./listener-status.js";
 import { createListenerRoutes } from "./listener.routes.js";
 
-// The listener routes touch automations/approvals/capabilities/activity/workspace/logger; a cast keeps the fake
-// that small. The dispatch route drives fireAutomation, so approvals + a payload-guard-free automation are enough.
+// The listener routes touch automations/approvals/capabilities/activity/workspace/logger; `unstubbed` keeps the
+// fake that small. The dispatch route drives fireAutomation, so approvals + a payload-guard-free automation are enough.
 const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
-    ({
+    unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
-        activity: { append: async (e: Omit<ActivityEvent, "id" | "at">) => void appends.push(e as ActivityEvent), list: async () => [] },
-        workspace: { root },
-        logger: { error: () => {}, warn: () => {} },
-    }) as unknown as Services;
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
+        activity: { append: async (e) => void appends.push(e as ActivityEvent), list: async () => [] },
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+    });
 
 const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
     async function* (_services, input) {

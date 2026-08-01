@@ -7,6 +7,7 @@ import { fileApprovalsStore } from "../automations/approvals-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import type { TranscriptAgent } from "../sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../settings/settings-store.js";
@@ -27,16 +28,17 @@ import {
 // started turn writes its settled frames to (startConversationTurn).
 const fakeServices = (root: string): Services => {
     const record = fileTranscriptRecord(join(root, "transcripts"));
-    return {
+    return unstubbed<Services>("services", {
         sandboxSettings: fileSandboxSettingsStore(join(root, "settings.json")),
-        pushSender: { notifyIfAway: async () => {} },
-        logger: { info: () => {}, warn: () => {}, error: () => {} },
-        workspace: { root },
-        transcripts: {
+        // No device subscribed, which is what a workspace that has never granted push reports.
+        pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
+        logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", {
             open: (agent: TranscriptAgent) => record.open(agent.id, async () => []),
             append: (agent: TranscriptAgent, messages: readonly RestoredMessage[]) => record.append(agent.id, messages),
-        },
-    } as unknown as Services;
+        }),
+    });
 };
 
 const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
@@ -82,18 +84,18 @@ test("a started turn records its settled transcript, whatever provider ran it", 
 /* The store as it stands AFTER the rotation that refused the turn: it already holds the successor token, so
  * the resume adopts it without a second refresh. That is the shape of the real failure — the proactive timer
  * rotates, the store moves on, and the in-flight turns are left holding the retired token. */
-const fakeStore = (stored: { accessToken: string; revokedAt?: number }) =>
-    ({
+const fakeStore = (stored: { accessToken: string; revokedAt?: number }): Services["claudeStore"] =>
+    unstubbed<Services["claudeStore"]>("claudeStore", {
         read: async () => ({ id: "acct", label: "Claude", connectedAt: 0, refreshToken: "rt", ...stored }),
         write: async () => {},
         clear: async () => {},
         list: async () => [],
-        withRefreshLock: async <T>(_id: string, act: () => Promise<T>) => act(),
-        logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-    }) as unknown as Services["claudeStore"];
+        withRefreshLock: async (_id, act) => act(),
+        logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }),
+    });
 
 const authServices = (root: string, claudeStore: Services["claudeStore"]): Services =>
-    ({ ...fakeServices(root), claudeStore }) as unknown as Services;
+    unstubbed<Services>("services", { ...fakeServices(root), claudeStore });
 
 test("a turn the API refused mid-flight is re-minted and re-run on the next pass", async () => {
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
@@ -304,14 +306,14 @@ test("one provider's outage never gates a conversation on another", async () => 
 
 // The journal is a real one on a temp dir: what the pass leaves on disk is half of what these assert.
 const journalServices = (root: string): Services =>
-    ({
+    unstubbed<Services>("services", {
         ...fakeServices(root),
         turnJournal: fileTurnJournal(join(root, "turns")),
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
         activity: { append: async () => {}, list: async () => [] },
-        workspace: { root },
-    }) as unknown as Services;
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+    });
 
 const journalled = (conversationId: string, extra: Partial<JournalledTurn> = {}): JournalledTurn => ({
     kind: "turn",
@@ -351,7 +353,7 @@ test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kill
     // The order log is the assertion: this is a happens-before, and a test that read the file from inside the
     // wake would be racing the resumed run's own (deliberately fire-and-forget) write of a fresh entry.
     const order: string[] = [];
-    const services = {
+    const services = unstubbed<Services>("services", {
         ...journalServices(root),
         turnJournal: {
             ...real,
@@ -360,7 +362,7 @@ test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kill
                 await real.recordTurn(entry);
             },
         },
-    } as unknown as Services;
+    });
     const wake: WakeFn = async function* () {
         order.push(`wake`);
         yield { kind: "done" };

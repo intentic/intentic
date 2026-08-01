@@ -6,6 +6,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
+import { testConfig, unstubbed } from "../testing.js";
 import { readWorkspaceFile } from "../workspace/workspace-files.js";
 import { extensionProcessIndex, extensionProcessKey, reconcileListenerProcesses, startAllExtensionProcesses } from "./extension-processes.js";
 
@@ -40,26 +41,26 @@ const fakeServices = (extensionsDir: string, automations: AutomationRecord[], ca
     const started: string[] = [];
     const stopped: string[] = [];
     const running = new Set<string>();
-    const services = {
-        workspace: { root: mkdtempSync(join(tmpdir(), "ext-proc-work-")) },
-        files: { read: readWorkspaceFile },
-        automations: { list: async () => automations },
-        capabilities: { list: async () => capabilities },
-        config: { extensionsDir, sandbox: { port: 8787 } },
+    const services = unstubbed<Services>("services", {
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "ext-proc-work-")) }),
+        files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
+        automations: unstubbed<Services["automations"]>("automations", { list: async () => automations }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
+        config: { ...testConfig, extensionsDir },
         panelToken: "panel-token",
-        processes: {
-            start: async (key: string) => {
+        processes: unstubbed<Services["processes"]>("processes", {
+            start: async (key) => {
                 started.push(key);
                 running.add(key);
             },
-            stop: (key: string) => {
+            stop: (key) => {
                 stopped.push(key);
                 running.delete(key);
             },
-            running: (key: string) => running.has(key),
-        },
-        logger: { warn: () => {}, error: () => {} },
-    } as unknown as Services;
+            running: (key) => running.has(key),
+        }),
+        logger: unstubbed<Services["logger"]>("logger", { warn: () => {}, error: () => {} }),
+    });
     return { services, started, stopped, running };
 };
 

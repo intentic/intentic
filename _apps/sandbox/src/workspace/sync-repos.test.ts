@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { syncAdvisory, syncWorkspaceRepos } from "./sync-repos.js";
 import { workspacePaths } from "./workspace.js";
 
@@ -11,17 +12,17 @@ import { workspacePaths } from "./workspace.js";
 // real git — `git -C <missing> remote` throws — so a regressed (unfiltered) sync would turn a never-scaffolded
 // repo into an "error" outcome, exactly the bug this guards.
 const makeServices = (root: string): Services =>
-    ({
+    unstubbed<Services>("services", {
         workspace: workspacePaths(root),
-        git: {
-            sync: async (dir: string) => {
+        git: unstubbed<Services["git"]>("git", {
+            sync: async (dir) => {
                 if (!existsSync(dir)) {
                     throw new Error(`Command failed: git -C ${dir} remote\nfatal: cannot change to '${dir}': No such file or directory`);
                 }
                 return { status: "current" as const };
             },
-        },
-    }) as unknown as Services;
+        }),
+    });
 
 const withWorkspace = async (run: (root: string) => Promise<void>): Promise<void> => {
     const root = await mkdtemp(join(tmpdir(), "intentic-sync-test-"));

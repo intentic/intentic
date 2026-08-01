@@ -3,7 +3,6 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
@@ -24,7 +23,6 @@ import type { AppEnv } from "./context.js";
 import type { AutomationRecord, AutomationsStore } from "./automations/automations-store.js";
 import type { CapabilitiesStore } from "./capabilities/capabilities-store.js";
 import type { Services } from "./composition.js";
-import type { Config } from "./env.config.js";
 import { createLogger } from "./logger.js";
 import type { ManagedProcesses, ProcessSpec } from "./processes/managed-processes.js";
 import { createPortForwards } from "./ports/port-forwards.js";
@@ -35,7 +33,7 @@ import { userPromptsOf } from "./sessions/prompt-index.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { AgentTool } from "./agent/agent-tools.js";
 import { listenerProvidersOf } from "./extensions/installed-extensions.js";
-import { noIsolation, unstubbed } from "./testing.js";
+import { noIsolation, testConfig, unstubbed } from "./testing.js";
 import { workspacePaths } from "./workspace/workspace.js";
 import { MAX_RAW_BYTES, sha256Text, UploadTooLargeError } from "./workspace/workspace-files.js";
 
@@ -168,41 +166,6 @@ const fakeFiles = (overrides: Partial<Services["files"]> = {}): Services["files"
         ...overrides,
     });
 
-// All config fields at their schema defaults; the routes only read claudeCodeOauthToken / anthropicApiKey
-// (the agent guard) and the workspace paths (via services.workspace), so the rest are inert here.
-// The real first-party connectors/discord extensions, so cli-capability tests resolve their provider data.
-const EXTENSIONS_DIR = fileURLToPath(new URL("../../../_extensions", import.meta.url));
-
-const baseConfig: Config = {
-    workspaceRoot: "/work",
-    historyRoot: "/history",
-    extensionsDir: EXTENSIONS_DIR,
-    agentAuthDir: "",
-    logLevel: "silent",
-    logPretty: false,
-    zone: "",
-    connectToken: "",
-    owner: { email: "" },
-    syncPairToken: "",
-    webOrigin: "",
-    platform: { url: "" },
-    intenticAgentTools: "",
-    claudeCodeOauthToken: "",
-    anthropicApiKey: "",
-    openaiApiKey: "",
-    cloudflareApiToken: "",
-    translator: { url: "", token: "" },
-    sandbox: { port: 8787, host: "0.0.0.0", publicUrl: "", name: "", image: "", baseImage: "", environmentHash: "" },
-    preview: { port: 5173 },
-    google: { clientId: "" },
-    acmeDirectoryUrl: "",
-    intenticAgentModel: "",
-    iqModelDir: "",
-    iqRgPath: "",
-    iqPluginDir: "",
-    local: { port: 8788 },
-};
-
 /* The seams a route test names but never exhausts. `auth` has five members and a test cares about one; `git`
  * has thirty-seven and a route touches two. Spelling the rest out per call site is what rotted: each new
  * method landed in the daemon, none landed in the fakes, and the gap only spoke as a 500 from whichever route
@@ -221,16 +184,21 @@ type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> & WideS
 
 const services = (overrides: ServiceOverrides = {}): Services => {
     const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, ...rest } = overrides;
-    const merged: Services = {
-        config: baseConfig,
-        logger: createLogger(baseConfig),
+    /* Completed by `unstubbed`, not spelled out. What follows is only what these suites RELY on; every other
+     * member of Services answers with its own name if a route reaches it. That is what takes this file off the
+     * blast radius of the daemon growing a service: it used to enumerate all seventy members, so every feature
+     * that added one turned this fake red — always in CI, on main, after the merge, and never in the suite that
+     * cared. `komodoStore` was the last of those. */
+    const merged: Services = unstubbed<Services>("services", {
+        config: testConfig,
+        logger: createLogger(testConfig),
         // No chain declared ⇒ converged from birth, so these tests exercise the routes and not a boot gate.
         // The gate's own behaviour is covered below by a tracker with a declared chain.
-        boot: createBootTracker(createLogger(baseConfig)),
+        boot: createBootTracker(createLogger(testConfig)),
         // The real tracker, like every other suite's fake services: it is in-memory, its summary timer is
         // unref'd, and the request middleware records through it on EVERY route below — a stub would be more
         // code standing in for something that already costs nothing.
-        perf: createPerfTracker(createLogger(baseConfig)),
+        perf: createPerfTracker(createLogger(testConfig)),
         workspace: workspacePaths("/work"),
         processes: fakeProcesses(),
         // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.
@@ -280,7 +248,7 @@ const services = (overrides: ServiceOverrides = {}): Services => {
             clear: async () => {},
             list: async () => [{ id: "default", label: "Claude", connectedAt: 0 }],
             withRefreshLock: async (_id, act) => act(),
-            logger: createLogger(baseConfig),
+            logger: createLogger(testConfig),
             ...claudeStore,
         }),
         // No usage measured by default — an account that hasn't run a turn since its window reset reports none.
@@ -425,27 +393,6 @@ const services = (overrides: ServiceOverrides = {}): Services => {
                       allowOrigins: [],
                       ...auth,
                   },
-        /* Seams no suite in this file drives. They were absent altogether until the tests joined a type-check
-         * program — a spread of `Partial<Services>` tells the compiler every key might be supplied, so a fake
-         * missing fourteen REQUIRED members still read as a Services. Present and unstubbed is the honest
-         * state: a route that starts reading one of them names it here instead of answering 500. */
-        chores: unstubbed("chores", {}),
-        probeRunner: unstubbed("probeRunner", {}),
-        ciStore: unstubbed("ciStore", {}),
-        ciRuns: unstubbed("ciRuns", {}),
-        ciHooks: unstubbed("ciHooks", {}),
-        approvals: unstubbed("approvals", {}),
-        drafts: unstubbed("drafts", {}),
-        push: unstubbed("push", {}),
-        pushSender: unstubbed("pushSender", {}),
-        providerRefusals: unstubbed("providerRefusals", {}),
-        acpAgent: () => {
-            throw new Error("acpAgent was called, and this test did not stub it");
-        },
-        acpConnections: unstubbed("acpConnections", {}),
-        workspaceChildren: async () => {
-            throw new Error("workspaceChildren was called, and this test did not stub it");
-        },
         authRoot: "/work/.intentic",
         // A conversation's transcript defaults to the same claude-code-only shape production reads before a
         // provider-native record exists: the SDK session `sessions.read` already stands in for (agent-transcript.ts),
@@ -469,7 +416,7 @@ const services = (overrides: ServiceOverrides = {}): Services => {
             prompts: async (agent) => userPromptsOf(await merged.transcripts.read(agent)),
         },
         ...rest,
-    };
+    });
     return merged;
 };
 
@@ -540,7 +487,7 @@ test("GET /health reports ok, and names the sandbox so a loopback probe can tell
 
     // With one, the id is the SAME digest the tunnel hostname and the published port derive from — that
     // agreement is what makes the browser's "did I reach the right daemon" check meaningful.
-    const named = await createApp(services({ config: { ...baseConfig, connectToken: "tok" } })).request("/health");
+    const named = await createApp(services({ config: { ...testConfig, connectToken: "tok" } })).request("/health");
     expect(await named.json()).toMatchObject({ ok: true, sandboxId: sandboxIdFromToken("tok") });
 });
 
@@ -551,7 +498,7 @@ test("GET /health reports ok, and names the sandbox so a loopback probe can tell
 test("CORS names the configured origins and no others, so an arbitrary page cannot read /health", async () => {
     const app = createApp(
         services({
-            config: { ...baseConfig, connectToken: "tok" },
+            config: { ...testConfig, connectToken: "tok" },
             auth: { authorize: rejectAuth, authorizeOwner: rejectAuth, allowOrigins: ["https://app.intentic.dev", "https://localhost:47145"] },
         }),
     );
@@ -575,7 +522,7 @@ test("CORS names the configured origins and no others, so an arbitrary page cann
 });
 
 test("GET /health carries the boot progress, so a poller can tell 'starting' from 'serving'", async () => {
-    const boot = createBootTracker(createLogger(baseConfig));
+    const boot = createBootTracker(createLogger(testConfig));
     boot.declare([{ key: "registry", label: "Loading conversations" }]);
     const app = createApp(services({ boot }));
 
@@ -589,7 +536,7 @@ test("GET /health carries the boot progress, so a poller can tell 'starting' fro
 });
 
 test("the boot gate holds data routes and lets the probe and the session exchange through", async () => {
-    const boot = createBootTracker(createLogger(baseConfig));
+    const boot = createBootTracker(createLogger(testConfig));
     boot.declare([{ key: "registry", label: "Loading conversations" }]);
     const app = createApp(services({ boot }));
 
@@ -622,7 +569,7 @@ test("panels.list enumerates every repo with its operator panel + runtime status
                 workspace,
                 // The zone comes from the public URL, the hostname's sandbox id from the connect token
                 // (sha256("token")[0:12] = 3c469e9d6c58) — both are needed for a previewUrl to be advertised.
-                config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
+                config: { ...testConfig, connectToken: "token", sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
                 // "app" is running on a dead port (probe fails ⇒ healthy false); "desired-state" isn't running.
                 processes: fakeProcesses({ app: 1 }),
             }),
@@ -808,7 +755,7 @@ test("panels.list advertises no previewUrl without a connect token (loopback —
     const workspace = tempWorkspace([{ name: "app", panel: true }]);
     const client = clientFor(
         createApp(
-            services({ workspace, config: { ...baseConfig, sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } } }),
+            services({ workspace, config: { ...testConfig, sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } } }),
         ),
     );
     expect(await client.panels.list()).toEqual({
@@ -859,7 +806,7 @@ test("panels.start runs the repo's operator dir, rejects unknown repos + repos w
 });
 
 test("ports.list scans on demand, hides the daemon's own listeners, and marks forwards with their URLs", async () => {
-    const config = { ...baseConfig, zone: "example.com", connectToken: "tok" };
+    const config = { ...testConfig, zone: "example.com", connectToken: "tok" };
     const portForwards = createPortForwards(portSlotsFromToken("tok"), async () => "http");
     const client = clientFor(
         createApp(
@@ -898,7 +845,7 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
 });
 
 test("ports.forward maps a listener onto a slot, mints its route label, and refuses reserved/dead ports", async () => {
-    const config = { ...baseConfig, zone: "example.com", connectToken: "tok" };
+    const config = { ...testConfig, zone: "example.com", connectToken: "tok" };
     const ensured: string[] = [];
     const portForwards = createPortForwards(portSlotsFromToken("tok"), async () => "http");
     const client = clientFor(
@@ -1263,7 +1210,7 @@ test("POST /enroll rejects a wrong connect token and 412s until DevOps (when aut
     const app = createApp(
         services({
             auth: { authorize: async () => ({ email: "a@x.com" }), authorizeOwner: async () => {} },
-            config: { ...baseConfig, connectToken: "ct" },
+            config: { ...testConfig, connectToken: "ct" },
         }),
     );
     const enroll = (token: string) =>
@@ -1356,7 +1303,7 @@ test("events: the first frame is the workspace-identity hello, stable across con
 });
 
 test("events: the hello names the daemon's build and where its boot is, then streams every step", async () => {
-    const boot = createBootTracker(createLogger(baseConfig));
+    const boot = createBootTracker(createLogger(testConfig));
     boot.declare([{ key: "registry", label: "Loading conversations" }]);
     const client = clientFor(createApp(services({ boot })));
     const controller = new AbortController();
@@ -1418,10 +1365,10 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
     const app = createApp(
         services({
             config: {
-                ...baseConfig,
+                ...testConfig,
                 connectToken: "token",
                 historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
-                sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
             },
         }),
     );
@@ -1452,10 +1399,10 @@ test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll �
     const app = createApp(
         services({
             config: {
-                ...baseConfig,
+                ...testConfig,
                 connectToken: "token",
                 historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
-                sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
             },
         }),
     );
@@ -1494,10 +1441,10 @@ test("DELETE /system/authorized-key: a sync token self-revokes just its own enro
     const app = createApp(
         services({
             config: {
-                ...baseConfig,
+                ...testConfig,
                 connectToken: "token",
                 historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
-                sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
             },
         }),
     );
@@ -1523,10 +1470,10 @@ test("the enrollment-minted sync token reads /ports and nothing else", async () 
         services({
             auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
             config: {
-                ...baseConfig,
+                ...testConfig,
                 connectToken: "token",
                 historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
-                sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
             },
             scanPorts: async () => [{ port: 3000, host: "127.0.0.1", forwardable: true }],
         }),
@@ -1730,7 +1677,7 @@ test("agent.run selects the Claude account named on the turn and forwards its to
     expect(seen?.oauthToken).toBe("tok-b");
 });
 
-const withTranslator = { ...baseConfig, translator: { url: "http://127.0.0.1:8788", token: "local-bearer" } };
+const withTranslator = { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local-bearer" } };
 const codexConnectedProxy = {
     accounts: async () => ({ codex: [{ name: "codex-user.json", label: "user@example.com" }], grok: [], kimi: [], gemini: [] }),
     connect: async () => ({ url: "", code: "", state: "", flow: "device" as const }),

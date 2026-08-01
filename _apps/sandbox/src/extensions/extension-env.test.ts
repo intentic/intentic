@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
+import { testConfig, unstubbed } from "../testing.js";
 import { extensionDir } from "../capabilities/extension-dirs.js";
 import { readWorkspaceFile } from "../workspace/workspace-files.js";
 import { extensionEnvOf } from "./extension-env.js";
@@ -13,13 +14,13 @@ import { writeExtensionSettings } from "./extension-settings.js";
 // A Services stub exposing only what extensionEnvOf touches: the capability list, files.read, workspace.root,
 // and a no-op logger.
 const stubServices = (root: string, capabilities: Capability[]): Services =>
-    ({
-        workspace: { root },
-        files: { read: readWorkspaceFile },
-        capabilities: { list: async () => capabilities },
-        config: { extensionsDir: "" },
-        logger: { warn: () => undefined },
-    }) as unknown as Services;
+    unstubbed<Services>("services", {
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
+        config: { ...testConfig, extensionsDir: "" },
+        logger: unstubbed<Services["logger"]>("logger", { warn: () => undefined }),
+    });
 
 const installExtension = async (root: string, id: string, manifest: object): Promise<void> => {
     const dir = extensionDir(root, id);

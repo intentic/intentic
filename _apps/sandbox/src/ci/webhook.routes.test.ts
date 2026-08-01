@@ -11,13 +11,14 @@ import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { fileCiStore } from "./ci-store.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
 import { createCiWebhookRoute } from "./webhook.routes.js";
 
 // The receiver touches ciStore/ciRuns/workspace/capabilities plus the listener dispatch path
-// (automations/activity/logger); a cast keeps the fake that small — the listeners.test.ts convention.
+// (automations/activity/logger); `unstubbed` keeps the fake that small — the listeners.test.ts convention.
 const harness = async (automationId: string) => {
     const root = mkdtempSync(join(tmpdir(), "ci-webhook-"));
     const dir = join(root, "web");
@@ -28,17 +29,17 @@ const harness = async (automationId: string) => {
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T" } });
     const automations = fileAutomationsStore(join(root, ".intentic", "automations.json"));
     await automations.upsert({ id: automationId, trigger: { kind: "listener", provider: "ci" }, prompt: "handle ci", enabled: true });
-    const services = {
-        workspace: { root },
+    const services = unstubbed<Services>("services", {
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
         ciRuns: createRunsCache(60_000),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
-        logger: { error: () => {}, warn: () => {} },
-    } as unknown as Services;
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+    });
     const prompts: string[] = [];
     const wake: WakeFn = async function* (_services, input) {
         prompts.push(input.prompt);
@@ -143,17 +144,17 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         prompt: "p",
         enabled: true,
     });
-    const services = {
-        workspace: { root },
+    const services = unstubbed<Services>("services", {
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
         ciRuns: createRunsCache(60_000),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
-        logger: { error: () => {}, warn: () => {} },
-    } as unknown as Services;
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+    });
     const prompts: string[] = [];
     const wake: WakeFn = async function* (_services, input) {
         prompts.push(input.prompt);

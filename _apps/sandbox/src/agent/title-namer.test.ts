@@ -1,5 +1,6 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, expect, type Mock, test, vi } from "vitest";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { cleanSessionTitle, nameAgentTitle } from "./title-namer.js";
 
 const ask = vi.fn<() => Promise<{ text: string }>>();
@@ -62,15 +63,18 @@ const FAILURE_SENTENCES = [
 
 const servicesWith = (
     entry: { title?: string; titleSource?: "derived" | "model" | "plan" | "user" } | undefined,
-    setTitle: ReturnType<typeof vi.fn>,
-): Services => ({ agents: { entry: () => entry, setTitle } }) as unknown as Services;
+    setTitle: Mock<Services["agents"]["setTitle"]>,
+): Services =>
+    unstubbed<Services>("services", {
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => entry as ReturnType<Services["agents"]["entry"]>, setTitle }),
+    });
 
 beforeEach(() => {
     ask.mockReset();
 });
 
 test("names a still-derived conversation from the prompt that just opened its turn", async () => {
-    const setTitle = vi.fn();
+    const setTitle = vi.fn<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ text: "Fleet board broadcast · wire" });
     await nameAgentTitle(
         servicesWith({ title: "We should look at the fleet board and figure out why it…", titleSource: "derived" }, setTitle),
@@ -83,21 +87,21 @@ test("names a still-derived conversation from the prompt that just opened its tu
 test("leaves a conversation that already answers to a better name alone", async () => {
     // The gate that makes one model call per conversation: a plan heading and a rename both outrank this pass,
     // and spending the call to have promoteTitle reject it is the same title for the price of a turn's latency.
-    const setTitle = vi.fn();
+    const setTitle = vi.fn<Services["agents"]["setTitle"]>();
     await nameAgentTitle(servicesWith({ title: "Session titles · rethink", titleSource: "plan" }, setTitle), "c1", "rethink session titles");
     expect(ask).not.toHaveBeenCalled();
     expect(setTitle).not.toHaveBeenCalled();
 });
 
 test.each(FAILURE_SENTENCES)("a quick-model reply reading %s never becomes the name", async (failure) => {
-    const setTitle = vi.fn();
+    const setTitle = vi.fn<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ text: failure });
     await nameAgentTitle(servicesWith({ title: "Fix the auth tests", titleSource: "derived" }, setTitle), "c1", "fix the auth tests");
     expect(setTitle).not.toHaveBeenCalled();
 });
 
 test.each(FAILURE_SENTENCES)("a stored title stolen by %s counts as no name — the pass runs again and heals it", async (failure) => {
-    const setTitle = vi.fn();
+    const setTitle = vi.fn<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ text: "Auth test flakiness · fix" });
     await nameAgentTitle(servicesWith({ title: failure, titleSource: "model" }, setTitle), "c1", "fix the auth tests");
     expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness · fix", "model");

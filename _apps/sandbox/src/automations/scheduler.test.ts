@@ -5,23 +5,25 @@ import type { AgentEvent, AgentTurn, Automation } from "@intentic/sandbox-contra
 import { expect, test, vi } from "vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { fileApprovalsStore } from "./approvals-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import { createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
 
-// The scheduler only touches automations/approvals/activity/turnJournal/workspace/logger; a cast keeps the fake
-// that small. The journal is a real one on a temp dir — the in-flight entry is the thing several tests assert on.
+// The scheduler only touches automations/approvals/activity/turnJournal/workspace/logger; `unstubbed` keeps the
+// fake that small. The journal is a real one on a temp dir — the in-flight entry is what several tests assert on.
 const fakeServices = (root: string): Services =>
-    ({
+    unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async () => {}, list: async () => [] },
-        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
-        pushSender: { notifyIfAway: async () => {} },
-        workspace: { root },
-        logger: { error: () => {}, warn: () => {} },
-    }) as unknown as Services;
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
+        // No device subscribed, which is what a workspace that has never granted push reports.
+        pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+    });
 
 // A fake wake that records complete turn identities; `events` lets a test surface an agent error.
 const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }], turns: AgentTurn[] = []): WakeFn =>

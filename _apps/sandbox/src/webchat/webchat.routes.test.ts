@@ -9,26 +9,30 @@ import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
+import { unstubbed } from "../testing.js";
 import { createWebchatRoutes } from "./webchat.routes.js";
 
 const ORIGIN = "https://site.example";
 
 const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
-    ({
+    unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        transcripts: { read: async () => [], open: async () => {}, append: async () => {} },
-        activity: { append: async (e: Omit<ActivityEvent, "id" | "at">) => void appends.push(e as ActivityEvent), list: async () => [] },
-        workspace: { root },
-        logger: { error: () => {}, warn: () => {} },
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
+        activity: { append: async (e) => void appends.push(e as ActivityEvent), list: async () => [] },
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
         // Identity reads the workspace's authorized emails to decide the `member` tag; an empty list is the
         // ordinary case for a public Doorbell.
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
         // A held automation notifies the owner (scheduler.ts). Fire-and-forget there, so a missing stub
         // surfaces only as an unhandled rejection — loud enough to poison a later test, quiet enough to hide.
-        pushSender: { notify: async () => {}, notifyIfAway: async () => {} },
-    }) as unknown as Services;
+        pushSender: unstubbed<Services["pushSender"]>("pushSender", {
+            notify: async () => ({ delivered: 0, failed: 0 }),
+            notifyIfAway: async () => ({ delivered: 0, failed: 0 }),
+        }),
+    });
 
 const fakeWake = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
     async function* (_services, input) {
