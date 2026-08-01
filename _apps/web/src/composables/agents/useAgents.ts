@@ -199,6 +199,28 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
 // board and a TransitionGroup running FLIP over several hundred cards.
 export const FINISHED_WINDOW = 6;
 
+/* The window applied, as ONE answer: the cards on screen and the number the row beneath them collapses. They
+ * are computed together because they are rendered a line apart — "6 earlier" printed under seven cards is the
+ * lane contradicting itself — and because of the exception below, which changes both.
+ *
+ * THE CARD THE USER IS READING IS NEVER CULLED. The window caps BROWSING; it is not a claim about which agents
+ * exist. The board's selection ring is a cross-reference between two panes — this card is what the docked chat
+ * is pointing at — so applying it to a card the lane dropped leaves the ring nowhere, and the board reads as
+ * "this chat is not an agent" rather than "that card is further down". Same argument the FILTER already wins
+ * (see cardsFor): hiding a card the user themselves named is the board deciding they meant a different one.
+ *
+ * It is pinned at the TAIL — beside the row it came from, so the lane's own recency order is otherwise intact —
+ * and counted OUT of that row, which is the whole reason this is one function rather than two. */
+export const windowFinished = (finished: readonly FleetAgent[], selectedId: string | undefined): { shown: FleetAgent[]; hidden: number } => {
+    const shown = finished.slice(0, FINISHED_WINDOW);
+    const beyond = finished.slice(FINISHED_WINDOW);
+    const pinned = selectedId === undefined ? undefined : beyond.find((agent) => agent.id === selectedId);
+    if (pinned === undefined) {
+        return { shown, hidden: beyond.length };
+    }
+    return { shown: [...shown, pinned], hidden: beyond.length - 1 };
+};
+
 // Attention first, then live turns + fresh drafts, then most recently active.
 const weight = (entry: FleetAgent): number =>
     blocked(entry) ? 0 : turnInFlight(entry) || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;

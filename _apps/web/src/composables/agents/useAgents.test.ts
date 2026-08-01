@@ -22,7 +22,59 @@ import { nextTick } from "vue";
 import { Conversation } from "../chat/conversation";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
-import { canArchive, resetAgents, resetArchive, setAgents, useAgents } from "./useAgents";
+import { canArchive, FINISHED_WINDOW, type FleetAgent, resetAgents, resetArchive, setAgents, useAgents, windowFinished } from "./useAgents";
+
+/* The Finished lane's cap, and the one card it is never allowed to drop. The board draws a ring on whatever the
+ * docked chat is pointing at, so a lane that culls that card leaves the ring nowhere at all — which reads as
+ * "this chat is not an agent", not as "that card is further down". */
+describe("windowFinished", () => {
+    const lane = (count: number): FleetAgent[] =>
+        Array.from({ length: count }, (_, at) => ({
+            id: `a${at}`,
+            status: `landed` as const,
+            provider: `claude` as const,
+            harness: `native` as const,
+            updatedAt: 1_000 - at,
+            attention: { plan: false, question: false, permission: false, conflict: false },
+            open: false,
+            unread: false,
+        }));
+    const ids = (agents: readonly FleetAgent[]): string[] => agents.map((agent) => agent.id);
+
+    it("shows a short lane whole, with nothing to collapse", () => {
+        expect(windowFinished(lane(3), undefined)).toEqual({ shown: lane(3), hidden: 0 });
+    });
+
+    it("caps a long lane at the window and counts out the rest", () => {
+        const { shown, hidden } = windowFinished(lane(10), undefined);
+
+        expect(shown).toHaveLength(FINISHED_WINDOW);
+        expect(hidden).toBe(4);
+    });
+
+    it("keeps the selected card whatever its age — pinned at the tail, and counted OUT of the row that hides the rest", () => {
+        const { shown, hidden } = windowFinished(lane(10), `a8`);
+
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
+        // Seven cards on screen out of ten: the row below them may only claim the three it actually hides.
+        expect(hidden).toBe(3);
+    });
+
+    it("leaves the lane alone when the selection is already inside the window — no card is ever shown twice", () => {
+        expect(windowFinished(lane(10), `a2`)).toEqual(windowFinished(lane(10), undefined));
+    });
+
+    it("leaves it alone for a selection this lane does not hold — an active agent, an archived one, a plain chat", () => {
+        expect(windowFinished(lane(10), `nowhere`)).toEqual(windowFinished(lane(10), undefined));
+    });
+
+    it("drops the tail row entirely when the pin was the only card behind it", () => {
+        const { shown, hidden } = windowFinished(lane(7), `a6`);
+
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`]);
+        expect(hidden).toBe(0);
+    });
+});
 
 /* The board's exit gate, which is NOT the Finished lane. Gating it on the lane is what stranded a failed turn:
  * an errored card's only offered drop is a land onto Finished, so an agent that failed with nothing landable

@@ -9,7 +9,7 @@ import { dropActionLabel, dropRejection, type PendingAction } from "../composabl
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import type { FleetLane } from "../composables/agents/agentStatus";
-import { FINISHED_WINDOW, type FleetAgent, useAgents } from "../composables/agents/useAgents";
+import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { useChat } from "../composables/chat/useChat";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
@@ -138,6 +138,19 @@ const archiveOpen = ref(false);
 // me the rest" was said about a set that no longer exists.
 const showBeyond = ref(false);
 watch(needle, () => (showBeyond.value = false));
+/* WHICH CARD WEARS THE RING. Normally the docked chat's agent — desktop only, since a phone has no dock for
+ * "selected" to be about — and, for a moment after a link named one, that card on either form factor (the
+ * focus block below sets `flashId`; it owns the timer that clears it).
+ *
+ * Board-wide state rather than a paint, because the ring is not the only thing that follows it: the Finished
+ * window keeps this card whatever its age (windowFinished), and a selection made anywhere but this board
+ * scrolls it into view (revealCard). */
+const flashId = ref<string | undefined>(undefined);
+const highlightId = computed(() => flashId.value ?? (mobile.value ? undefined : active.value.conversationId));
+// The Finished window is only in force while the lane is BROWSING its own recent tail. The archive is a
+// different list entirely, and both a filter and an explicit expand lift the cap outright — see cardsFor.
+const windowed = computed(() => !archiveOpen.value && !filtering.value && !showAllFinished.value);
+const finishedWindow = computed(() => windowFinished(lanes.value.finished, windowed.value ? highlightId.value : undefined));
 // The lane's visible cards. Finished shows its window (or the archive, when open); the other two lanes are
 // self-emptying and show everything.
 //
@@ -150,9 +163,9 @@ const cardsFor = (lane: FleetLane): FleetAgent[] => {
             ? lanes.value[lane]
             : archiveOpen.value
               ? archived.value
-              : filtering.value || showAllFinished.value
-                ? lanes.value.finished
-                : lanes.value.finished.slice(0, FINISHED_WINDOW);
+              : windowed.value
+                ? finishedWindow.value.shown
+                : lanes.value.finished;
     return filtering.value ? source.filter(matches) : source;
 };
 // How many of the lane's agents the filter kept, against how many it holds — the `3 of 12` on its header. The
@@ -162,7 +175,9 @@ const laneCount = (lane: FleetLane): string => {
     const total = archiveOpen.value && lane === `finished` ? archived.value.length : lanes.value[lane].length;
     return filtering.value ? `${cardsFor(lane).length} of ${total}` : `${total}`;
 };
-const hiddenFinished = computed(() => Math.max(0, lanes.value.finished.length - FINISHED_WINDOW));
+// What the tail row collapses — the window's own count, so a card pinned into the lane is counted out of it
+// rather than being both on screen and reported as hidden.
+const hiddenFinished = computed(() => finishedWindow.value.hidden);
 // What a query found that the board isn't showing: agents in the archive, and conversations no agent owns
 // (a plain chat, or one whose registry entry is long gone). Without this the filter would answer "nothing"
 // for something sitting one click away, which is the failure a search is least forgiven for.
@@ -271,16 +286,12 @@ watch(archivedFlash, () => {
  *
  * The focus itself is exactly what a click on the card does — the docked chat points at the agent, the card
  * takes the ring, it is marked read — plus the two things a click gets for free and a link cannot: the board
- * scrolls the card into view, and it OPENS WHATEVER IS HIDING IT first. A board hides three ways (a lane
- * window, the archive, a filter), and a link that lands on none of the cards on screen is a link that silently
- * did nothing. */
+ * scrolls the card into view, and it OPENS WHATEVER IS HIDING IT first. A board hides three ways (a filter, the
+ * archive, the Finished window), and a link that lands on none of the cards on screen is a link that silently
+ * did nothing. Only two of the three are opened here: the window keeps the selected card by itself
+ * (windowFinished), on every surface that HAS a selection to keep it by. */
 const FOCUS_FLASH_MS = 4_000;
-const flashId = ref<string | undefined>(undefined);
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
-// WHICH CARD WEARS THE RING. Normally the docked chat's agent — desktop only, since a phone has no dock for
-// "selected" to be about — and, for a moment after a link named one, that card on either form factor: the eye
-// that just changed screens has to be told where to land.
-const highlightId = computed(() => flashId.value ?? (mobile.value ? undefined : active.value.conversationId));
 const cardEls = new Map<string, HTMLElement>();
 // AgentCard is a component, so the ref hands back its instance rather than an element; `$el` is its root div.
 const setCardEl = (id: string, el: unknown): void => {
@@ -291,6 +302,29 @@ const setCardEl = (id: string, el: unknown): void => {
         cardEls.delete(id);
     }
 };
+// Bring a card into the scrollport. Awaited, because the card may not be rendered on the tick it was asked
+// for: the window pins it (windowFinished) and the focus flow below uncovers it, both on this one. `nearest`
+// so a card already on screen is left exactly where it is rather than being yanked to an edge.
+const revealCard = async (id: string): Promise<void> => {
+    await nextTick();
+    cardEls.get(id)?.scrollIntoView({ block: `nearest` });
+};
+/* A SELECTION MADE OFF THE BOARD BRINGS THE BOARD WITH IT. Clicking a chat tab, or opening a conversation from
+ * History, moves the ring to a card that may be a lane and a half further down — and a ring drawn outside the
+ * scrollport is indistinguishable from the board ignoring the click. A selection made ON the board scrolls
+ * nothing: the card is already under the cursor that made it, so `selectedHere` marks it and this stands down. */
+let selectedHere: string | undefined;
+watch(highlightId, (id) => {
+    // Consumed on sight, whichever way it goes: the mark is about the ONE selection the board just made, not a
+    // claim about that agent forever. Left standing, a card clicked here once would never scroll again when the
+    // user came back to it from the tab strip — which is the exact traffic this exists for.
+    const ours = id === selectedHere;
+    selectedHere = undefined;
+    if (id === undefined || ours) {
+        return;
+    }
+    void revealCard(id);
+});
 const requestedFocus = ref<string | undefined>(undefined);
 watch(
     () => route.query[`focus`],
@@ -309,22 +343,25 @@ watch(
         }
         requestedFocus.value = undefined;
         void router.replace({ query: { ...route.query, focus: undefined } });
-        // Uncover the card, in the three ways this board covers one.
+        // Uncover the card. The filter is the user's own lens and the archive is a different list, so both have
+        // to be lifted by hand. The Finished window does it on its own — but only where a ring exists to pin the
+        // card by: a phone has no dock, so `highlightId` goes undefined the moment the flash expires and the
+        // lane would close over the very card the link was for. There, the whole lane opens instead.
         if (filtering.value && !matches(agent)) {
             query.value = ``;
         }
         if (agent.archivedAt !== undefined) {
             archiveOpen.value = true;
-        } else if (lanes.value.finished.findIndex((candidate) => candidate.id === agent.id) >= FINISHED_WINDOW) {
+        } else if (mobile.value && lanes.value.finished.findIndex((candidate) => candidate.id === agent.id) >= FINISHED_WINDOW) {
             showAllFinished.value = true;
         }
         open(agent);
         flashId.value = agent.id;
         clearTimeout(flashTimer);
         flashTimer = setTimeout(() => (flashId.value = undefined), FOCUS_FLASH_MS);
-        // After the uncovering above, the card's element may not exist yet.
-        await nextTick();
-        cardEls.get(agent.id)?.scrollIntoView({ block: `nearest` });
+        // Explicitly, not through the selection watch above: a link may name the agent the dock is ALREADY
+        // pointing at, and then the ring never moves for that watch to see.
+        await revealCard(agent.id);
     },
     { immediate: true },
 );
@@ -452,6 +489,8 @@ const focusAgent = (agent: FleetAgent): void => {
     }
     // The user is pointing the board somewhere themselves — whatever a deep link was highlighting is over.
     flashId.value = undefined;
+    // This board made this selection, so it does not also scroll to it (see the selection watch).
+    selectedHere = agent.id;
     open(agent);
     if (mobile.value) {
         void router.push(`/agents/${encodeURIComponent(agent.id)}`);
