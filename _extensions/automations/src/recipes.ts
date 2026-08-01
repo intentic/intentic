@@ -168,6 +168,19 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
         setup: "In Sentry: Alerts → your alert rule → add a webhook action pointing at this URL.",
     },
     {
+        providers: ["komodo"],
+        title: "Deployment alert",
+        icon: "box",
+        id: "komodo-alert",
+        trigger: { kind: "event" },
+        prompt:
+            "Komodo just fired an alert — the payload is in $AUTOMATION_PAYLOAD: `level` is the severity, `target` names the resource " +
+            "({type, id}), `data` carries the specifics, and `resolved` is true when this is the all-clear for an earlier alert. " +
+            "Use your Komodo capability to look up that resource and its recent container logs, then say what broke and what would fix it. " +
+            "Do not deploy, restart or stop anything unless the user asks.",
+        setup: "In Komodo: Alerters → New Alerter → endpoint type Custom → paste this URL. Narrow it with the alerter's alert-type and resource filters.",
+    },
+    {
         providers: ["stripe"],
         title: "Payment events",
         logo: "stripe",

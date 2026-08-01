@@ -100,7 +100,7 @@ export interface CapabilityField {
 
 // The logical section a card sits under in the "+" grid — a display grouping (by what it's for), not the
 // technical `kind`. `platform` cards unlock a new workspace area; the rest are connectors to existing tools.
-export type CapabilityCategory = "platform" | "code" | "observability" | "data" | "communication" | "business" | "servers" | "extend";
+export type CapabilityCategory = "platform" | "code" | "observability" | "data" | "communication" | "business" | "servers" | "deploy" | "extend";
 
 // The grid's sections, in render order, with their headers. Cards are grouped by `category` under these.
 export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; readonly label: string; readonly hint: string }[] = [
@@ -111,6 +111,7 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     { id: "communication", label: "Communication", hint: "Let the agent read and send messages." },
     { id: "business", label: "Business & docs", hint: "Connect payments and knowledge bases." },
     { id: "servers", label: "Servers", hint: "Give the agent remote machines over SSH and private networks over VPN." },
+    { id: "deploy", label: "Deploy & infra", hint: "Drive your container deployments — stacks, services and releases." },
     { id: "extend", label: "Extend", hint: "Add any MCP server or Claude Code plugin." },
 ];
 

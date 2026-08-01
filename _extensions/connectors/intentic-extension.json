@@ -191,6 +191,36 @@
                 "skill": "skills/signoz/SKILL.md"
             },
             {
+                "provider": "komodo",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Komodo",
+                    "icon": "box",
+                    "description": "Drive your Komodo deployments — stacks, deployments, servers, builds and container logs as agent tools.",
+                    "category": "deploy",
+                    "hint": "The agent talks to Komodo Core's HTTP API with curl. A Komodo API key is a key + secret pair — the secret is this card's rotatable credential, the key identifies it (like a database user). The key inherits its user's permissions, so a read-only agent wants a non-admin user.",
+                    "guide": {
+                        "urlFromField": "url",
+                        "path": "/profile",
+                        "linkLabel": "Open your Komodo profile",
+                        "scopes": "the key inherits the user's permissions",
+                        "steps": [
+                            "Set the Komodo URL above first (the address of Komodo Core).",
+                            "Open your profile (top-right) → Api Keys → New Api Key.",
+                            "Komodo shows the key and the secret once — copy both and paste them here.",
+                            "To keep the agent read-only, make the key on a user that only has Read permissions."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "url", "label": "Komodo URL", "placeholder": "https://komodo.example.com" },
+                    { "key": "apiKey", "label": "API key" },
+                    { "key": "apiSecret", "label": "API secret", "secret": true }
+                ],
+                "env": { "KOMODO_ADDRESS": "${url}", "KOMODO_API_KEY": "${apiKey}", "KOMODO_API_SECRET": "${apiSecret}" },
+                "skill": "skills/komodo/SKILL.md"
+            },
+            {
                 "provider": "postgres",
                 "kind": "cli",
                 "catalog": {
