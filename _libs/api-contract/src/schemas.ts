@@ -10,6 +10,7 @@ import {
     AutomationSummarySchema,
     BuiltinPromptTextSchema,
     CapabilityKindSchema,
+    CapabilityRecommendationSchema,
     CapabilityStateSchema,
     CapabilityStatusSchema,
     CapabilitySummarySchema,
@@ -95,6 +96,7 @@ export {
     CapabilitiesListSchema,
     BuiltinPromptTextSchema,
     CapabilityKindSchema,
+    CapabilityRecommendationSchema,
     CapabilityStateSchema,
     CapabilityStatusSchema,
     CapabilitySummarySchema,
@@ -139,6 +141,7 @@ export type CapabilityKind = z.infer<typeof CapabilityKindSchema>;
 export type CapabilityState = z.infer<typeof CapabilityStateSchema>;
 export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
 export type CapabilitySummary = z.infer<typeof CapabilitySummarySchema>;
+export type CapabilityRecommendation = z.infer<typeof CapabilityRecommendationSchema>;
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export type MarketplacePlugin = z.infer<typeof MarketplacePluginSchema>;
 export type Marketplace = z.infer<typeof MarketplaceSchema>;

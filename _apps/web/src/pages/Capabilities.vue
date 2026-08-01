@@ -36,7 +36,7 @@ import { importForticlient, useVpn } from "../composables/sandbox/useVpn";
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const URL_RE = /^https?:\/\/.+/i;
 
-const { hasCapability, capabilities, error: listError, add, remove, refetch } = useCapabilities();
+const { hasCapability, recommendationFor, capabilities, error: listError, add, remove, refetch } = useCapabilities();
 const { connectorOf, extensions, settled: extensionsSettled } = useExtensions();
 // VPN instances get live link state and connect/disconnect here too — the same daemon routes the Sandbox ▸
 // Status card drives, so a tunnel dialled from either place reads identically in both.
@@ -863,6 +863,11 @@ const submitLabel = computed(() =>
                     </span>
                 </label>
                 <CapabilityEffects :effects="liveEffects" />
+                <!-- Why the grid badged this one — named here too, so the rebuild the hint asks for has a reason attached. -->
+                <div v-if="recommendationFor(selected.kind)" class="rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-xs text-info">
+                    Recommended: your workspace has <b>{{ recommendationFor(selected.kind)?.evidence }}</b
+                    >, which needs this capability to run.
+                </div>
                 <p v-if="selected.hint" class="text-xs text-muted">{{ selected.hint }}</p>
 
                 <!-- Streamed apply progress (devops scaffolding, service provisioning). -->
@@ -920,11 +925,23 @@ const submitLabel = computed(() =>
                                             <Icon name="check-circle" />
                                             {{ instancesOf(entry).length }} connected
                                         </span>
+                                        <span
+                                            v-if="recommendationFor(entry.kind)"
+                                            class="inline-flex items-center gap-1 text-2xs text-info"
+                                            aria-label="Recommended"
+                                        >
+                                            <Icon name="sparkles" />
+                                            Recommended
+                                        </span>
                                         <CapabilityEffects :effects="badgeEffects(entry)" :compact="true" />
                                     </div>
                                     <div class="mt-0.5 text-xs text-muted">{{ entry.description }}</div>
                                     <div v-if="entry.requires?.includes('devops') && !hasCapability('devops')" class="mt-1 text-xs text-muted">
                                         Requires DevOps
+                                    </div>
+                                    <!-- Derived from what is checked out in /work, so the evidence path is shown rather than asserted. -->
+                                    <div v-if="recommendationFor(entry.kind)" class="mt-1 text-xs text-info">
+                                        Your workspace has {{ recommendationFor(entry.kind)?.evidence }}
                                     </div>
                                 </div>
                             </button>

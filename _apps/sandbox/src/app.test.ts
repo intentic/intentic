@@ -1969,14 +1969,29 @@ test("agent.run merges internal (env) tools with the mcp-kind capabilities for t
 });
 
 test("capabilities.list reports each capability with its status; devops can't be removed, unknown is NOT_FOUND", async () => {
-    const client = clientFor(createApp(services({ capabilities: memoryCapabilitiesStore([{ id: "devops", kind: "devops", config: {} }]) })));
+    // An isolated workspace, so the derived recommendations depend on this test's tree rather than on whatever
+    // the machine running it happens to have checked out under /work.
+    const client = clientFor(
+        createApp(services({ workspace: tempWorkspace([]), capabilities: memoryCapabilitiesStore([{ id: "devops", kind: "devops", config: {} }]) })),
+    );
     // devops status is derived from the repos on disk — absent under test, so it reads inactive.
     expect(await client.capabilities.list()).toEqual({
         capabilities: [{ id: "devops", kind: "devops", status: { state: "inactive" }, config: {} }],
+        recommendations: [],
     });
     // DevOps has no teardown (deleting the repos is data loss) → CONFLICT; an unknown id is NOT_FOUND.
     expect(await errorCode(client.capabilities.remove({ id: "devops" }))).toBe("CONFLICT");
     expect(await errorCode(client.capabilities.remove({ id: "ghost" }))).toBe("NOT_FOUND");
+});
+
+// The whole point of deriving recommendations: a compose-backed dev database (`pnpm db:up`) fails with a bare
+// "Cannot connect to the Docker daemon" against a sandbox whose engine is dormant, and nothing in that error
+// names the capability. The list route is where the Capabilities page learns to badge it.
+test("capabilities.list recommends docker when a repo in the workspace carries a compose file", async () => {
+    const workspace = tempWorkspace([{ name: "app" }]);
+    writeFileSync(join(workspace.root, "app", "docker-compose.yml"), "");
+    const client = clientFor(createApp(services({ workspace, capabilities: memoryCapabilitiesStore([]) })));
+    expect((await client.capabilities.list()).recommendations).toEqual([{ kind: "docker", evidence: "app/docker-compose.yml" }]);
 });
 
 test("secrets.set / list / remove / reveal refuse until DevOps is active (the desired-state repo is absent under test)", async () => {

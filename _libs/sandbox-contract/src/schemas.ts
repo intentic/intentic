@@ -1923,7 +1923,20 @@ export const CapabilitySummarySchema = z.object({
     status: CapabilityStatusSchema,
     config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
-export const CapabilitiesListSchema = z.object({ capabilities: z.array(CapabilitySummarySchema) });
+// A capability the WORKSPACE asks for but the manifest doesn't carry — derived from what is checked out under
+// /work, not from anything the user configured. It exists because the failure it prevents is illegible: a
+// compose-backed dev database (`pnpm db:up`) dies on a missing /var/run/docker.sock, and nothing on that error
+// points at the one-time privileged rebuild that fixes it. `evidence` is the workspace-relative path that
+// triggered it, rendered verbatim so the claim is checkable rather than magic.
+export const CapabilityRecommendationSchema = z.object({ kind: CapabilityKindSchema, evidence: z.string() });
+export type CapabilityRecommendation = z.infer<typeof CapabilityRecommendationSchema>;
+export const CapabilitiesListSchema = z.object({
+    capabilities: z.array(CapabilitySummarySchema),
+    // Defaulted for the daemon-older-than-browser seam: the platform's web app talks to whichever sandbox
+    // version the user has, and a required field here would fail the parse — taking the whole Capabilities page
+    // down on every sandbox predating this route, to hide a badge.
+    recommendations: z.array(CapabilityRecommendationSchema).default([]),
+});
 export const CapabilityIdParamSchema = z.object({ id: z.string() });
 // POST /capabilities/{id}/secret body: replace just the capability's secret field (its key is per-kind, see the
 // sandbox's secretField) and re-run its idempotent apply — the /secrets page's edit path.

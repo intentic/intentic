@@ -38,13 +38,21 @@ const cliMissing = async (): Promise<boolean> =>
         (error) => (error as NodeJS.ErrnoException).code === "ENOENT",
     );
 
-// dockerd needs CAP_SYS_ADMIN (mounts, namespaces, cgroups) — the effective set carries it only when the
-// container was run --privileged; the unprivileged base run never grants it. Bit 21 = CAP_SYS_ADMIN.
-export const hasSysAdmin = (procStatus: string): boolean => {
+// Was this container run --privileged? CAP_SYS_MODULE is the sentinel, because --privileged is the only thing
+// that grants it: SANDBOX_CAPABILITIES gives EVERY sandbox SYS_ADMIN + SYS_PTRACE (turn isolation needs its own
+// mount namespace), and the only other runtime directive an overlay may carry is the vpn's NET_ADMIN.
+//
+// Reading SYS_ADMIN instead — which this probe did until it was measured — is true in every sandbox, privileged
+// or not. So "rebuild required" was unreachable: an unprivileged sandbox with the capability added reported
+// `error: dockerd not running`, and apply() spent 30s waiting on a dockerd that had already died. Unprivileged,
+// dockerd gets as far as the network controller and then fails on the three things only --privileged supplies:
+// a writable /sys/fs/cgroup, NET_ADMIN for the bridge + iptables, and seccomp relief for runc's keyctl.
+// Bit 16 = CAP_SYS_MODULE.
+export const isPrivileged = (procStatus: string): boolean => {
     const hex = /^CapEff:\s*([0-9a-fA-F]+)$/m.exec(procStatus)?.[1];
-    return hex !== undefined && (BigInt(`0x${hex}`) & (1n << 21n)) !== 0n;
+    return hex !== undefined && (BigInt(`0x${hex}`) & (1n << 16n)) !== 0n;
 };
-const privileged = async (): Promise<boolean> => hasSysAdmin(await readFile("/proc/self/status", "utf8").catch(() => ""));
+const privileged = async (): Promise<boolean> => isPrivileged(await readFile("/proc/self/status", "utf8").catch(() => ""));
 
 // Start dockerd as the persistent panel-docker session and wait for it to answer. False on timeout — the
 // startup output stays in the panel's terminal either way.

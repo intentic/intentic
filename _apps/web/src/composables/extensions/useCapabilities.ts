@@ -1,5 +1,11 @@
 import { type AddCapabilityInput } from "@intentic-app/capability-catalog";
-import { CapabilitiesListSchema, type CapabilitySummary, type Marketplace, MarketplaceSchema } from "@intentic-app/api-contract";
+import {
+    CapabilitiesListSchema,
+    type CapabilityRecommendation,
+    type CapabilitySummary,
+    type Marketplace,
+    MarketplaceSchema,
+} from "@intentic-app/api-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { readIntenticLines } from "../intenticStream";
@@ -14,7 +20,10 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 const QUERY_KEY = sandboxKey(`capabilities`);
 
-const fetchCapabilities = async (): Promise<CapabilitySummary[]> => CapabilitiesListSchema.parse(await sandboxJson(`/capabilities`)).capabilities;
+// The whole payload, not just `.capabilities`: the daemon also derives which capabilities the WORKSPACE is
+// asking for (a compose file in /work ⇒ docker), and the catalog grid badges those.
+const fetchCapabilities = async (): Promise<{ capabilities: CapabilitySummary[]; recommendations: CapabilityRecommendation[] }> =>
+    CapabilitiesListSchema.parse(await sandboxJson(`/capabilities`));
 
 // Resolve a Claude Code plugin marketplace repo into installable entries — the daemon clones it, reads its
 // .claude-plugin/marketplace.json, and maps each entry's source onto plugin-capability config. POST so the
@@ -92,11 +101,15 @@ export function useCapabilities() {
         onSuccess: invalidate,
     });
 
-    const capabilities = computed<CapabilitySummary[]>(() => query.data.value ?? []);
+    const capabilities = computed<CapabilitySummary[]>(() => query.data.value?.capabilities ?? []);
+    const recommendations = computed<CapabilityRecommendation[]>(() => query.data.value?.recommendations ?? []);
     return {
         capabilities,
         // Presence of a kind = the user activated it (status reports its live health separately).
         hasCapability: (kind: string): boolean => capabilities.value.some((capability) => capability.kind === kind),
+        // What the workspace asks for but isn't activated — the evidence path is rendered, so the card can say why.
+        recommendationFor: (kind: string): CapabilityRecommendation | undefined =>
+            recommendations.value.find((recommendation) => recommendation.kind === kind),
         error,
         isLoading: query.isLoading,
         refetch: query.refetch,

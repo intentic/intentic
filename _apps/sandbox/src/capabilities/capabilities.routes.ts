@@ -13,6 +13,7 @@ import { enabledExtensions } from "../extensions/installed-extensions.js";
 import { capabilityCtx, echoConfig, secretField } from "./capability.js";
 import { connectorRegistry } from "./cli/connector-registry.js";
 import { browseMarketplace } from "./marketplace.js";
+import { capabilityRecommendations } from "./recommend.js";
 import { registry } from "./registry.js";
 
 // The unified capability manifest routes. `add` streams its apply (mirroring /intentic): the handler yields
@@ -27,15 +28,18 @@ export const createCapabilitiesRoutes = (services: Services) => {
     return {
         list: i.list.handler(async () => {
             const [capabilities, connectors] = await Promise.all([services.capabilities.list(), connectorRegistry(services)]);
-            const rows = await Promise.all(
-                capabilities.map(async (capability) => ({
-                    id: capability.id,
-                    kind: capability.kind,
-                    status: await registry[capability.kind].status(ctx, capability.id, capability.config),
-                    config: echoConfig(capability, connectors),
-                })),
-            );
-            return { capabilities: rows };
+            const [rows, recommendations] = await Promise.all([
+                Promise.all(
+                    capabilities.map(async (capability) => ({
+                        id: capability.id,
+                        kind: capability.kind,
+                        status: await registry[capability.kind].status(ctx, capability.id, capability.config),
+                        config: echoConfig(capability, connectors),
+                    })),
+                ),
+                capabilityRecommendations(services.workspace.root, capabilities),
+            ]);
+            return { capabilities: rows, recommendations };
         }),
         add: i.add.handler(async function* ({ input, context }) {
             const handler = registry[input.kind];

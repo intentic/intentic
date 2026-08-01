@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { SandboxSettingsSchema } from "./schemas.js";
+import { CapabilitiesListSchema, SandboxSettingsSchema } from "./schemas.js";
 
 /* The settings shape spans a version seam that really moves: the browser ships with the platform, the daemon
  * ships inside the user's sandbox image, so a web build routinely parses a payload from an OLDER daemon. These
@@ -88,4 +88,13 @@ test("a key of the wrong type is still a parse failure — tolerance is for abse
     expect(SandboxSettingsSchema.safeParse({ outputHoldout: 4 }).success).toBe(false);
     // The prompt cap is a real bound, not advice: the text IS the system prompt, and every turn pays for it.
     expect(SandboxSettingsSchema.safeParse({ systemPrompt: "x".repeat(20001) }).success).toBe(false);
+});
+
+/* The capability list crosses the same seam, and its failure mode is worse than a dead switch: the browser
+ * parses ONE object for the whole page, so a required key the older daemon never sends takes the Capabilities
+ * page down entirely — to hide an advisory badge. */
+
+test("a capability list from a daemon that predates recommendations parses, with none recommended", () => {
+    const older = { capabilities: [{ id: "github", kind: "cli", status: { state: "active" }, config: { provider: "github" } }] };
+    expect(CapabilitiesListSchema.parse(older).recommendations).toEqual([]);
 });
