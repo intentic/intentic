@@ -1,9 +1,9 @@
-import type { WorkspaceSearchMode, WorkspaceTreeEntry } from "@intentic-app/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import type { Ref } from "vue";
 import { computed, ref } from "vue";
-import { useLayout } from "../useLayout";
 import { rankPaths } from "./fuzzyPaths";
-import { useWorkspaceSearch } from "./useWorkspaceSearch";
+import { type SearchScope, useWorkspaceSearch } from "./useWorkspaceSearch";
+import { useSearchOptions } from "./useSearchOptions";
 import { useWorkspaceTree } from "./useWorkspaceTree";
 
 /* Ranked filename matching for the quick-open surfaces (Ctrl/Cmd+P palette, the chat @-mention picker).
@@ -19,7 +19,7 @@ const SERVER_DEBOUNCE_MS = 50;
 
 export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
     const { tree, rootHidden, error: treeError, isLoading } = useWorkspaceTree();
-    const { includeIgnored } = useLayout();
+    const { includeIgnored } = useSearchOptions();
 
     // Every non-ignored file path in the eager tree (ignored entries are listed grayed but excluded here,
     // matching the daemon's filtered sweep), plus whether the tree is INCOMPLETE anywhere — i.e. holds a dir the
@@ -47,9 +47,9 @@ export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
     });
 
     const serverMode = computed(() => includeIgnored.value || rootHidden.value > 0 || clientTree.value.cut);
-    const mode = ref<WorkspaceSearchMode>(`files`);
+    const scope = ref<SearchScope>(`files`);
     const serverActive = computed(() => active.value && serverMode.value);
-    const server = useWorkspaceSearch(query, serverActive, mode, SERVER_DEBOUNCE_MS);
+    const server = useWorkspaceSearch(query, scope, serverActive, SERVER_DEBOUNCE_MS);
 
     const trimmed = computed(() => query.value.trim());
     // The shortest query that can produce matches: the daemon's contract floors at 2 chars, client ranking at 1.

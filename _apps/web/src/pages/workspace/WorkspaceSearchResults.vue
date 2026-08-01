@@ -5,9 +5,9 @@ import { iconForEntry } from "@intentic-app/ui";
 import { codeLangForPath } from "./fileType";
 import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "./searchSnippet";
 
-/* Workspace search results for the explorer sidebar: relevance-ranked file header rows + indented hit rows (line
- * number + snippet, syntax-coloured, with the hit <mark>ed via the daemon's start/end offsets when present —
- * semantic hits carry none and render unmarked; no client-side re-matching, no v-html). Clicking a hit (or a
+/* Workspace search results for the explorer sidebar: a count line, then file header rows + indented hit rows
+ * (line number + snippet, syntax-coloured, with every matched span <mark>ed from the daemon's char offsets —
+ * semantic hits report none and render unmarked; no client-side re-matching, no v-html). Clicking a hit (or a
  * header, which stands in for its first hit) opens the file at that line. Same dense row styling and
  * roving-tabindex keyboard nav as WorkspaceTree, minus the tree logic — the list is flat.
  *
@@ -15,12 +15,17 @@ import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "
  * uses (codeLangForPath), so a row reads the way the file it points at will. The pieces, and why they are
  * pieces rather than Shiki's HTML, are searchSnippet.ts. */
 
-const { groups, truncated, searching, pending, error, query } = defineProps<{
+const { groups, total, files, truncated, searching, pending, error, note, query } = defineProps<{
     groups: readonly WorkspaceSearchGroup[];
+    // Across the WHOLE match set, not just the page below: the panel says how much there is, then shows what fits.
+    total: number;
+    files: number;
     truncated: boolean;
     searching: boolean;
     pending: boolean;
     error?: string;
+    // What the engine did that the query didn't ask for (an unparseable regex rerun as literal text, …).
+    note?: string;
     query: string;
 }>();
 const emit = defineEmits<{ openMatch: [path: string, line: number] }>();
@@ -52,6 +57,15 @@ const rows = computed<ResultRow[]>(() => {
 
 const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
+
+const plural = (count: number, noun: string): string => `${count.toLocaleString()} ${noun}${count === 1 ? `` : `s`}`;
+// The editor's "N results in M files", plus what the page below actually holds when the cap cut it — a bare
+// warning that some were dropped reads as "your search is broken" rather than "scroll less, type more".
+const summary = computed(() =>
+    truncated
+        ? `${plural(total, `result`)} in ${plural(files, `file`)} · showing the first ${groups.length}`
+        : `${plural(total, `result`)} in ${plural(files, `file`)}`,
+);
 
 const activate = (row: ResultRow): void => {
     if (row.kind === `file`) {
@@ -107,11 +121,9 @@ const onKeydown = (event: KeyboardEvent): void => {
 
 <template>
     <div class="min-h-full" role="listbox" aria-label="Search results" @keydown="onKeydown">
-        <p
-            v-if="truncated"
-            class="mx-1.5 mb-1 inline-flex items-center gap-1 rounded border border-warning/40 bg-warning/10 px-2 py-0.5 text-2xs text-warning"
-        >
-            <Icon name="exclamation-triangle" class="text-[0.6rem]" /> Showing first matches only.
+        <p v-if="rows.length > 0" class="px-2 pb-1 text-2xs text-subtle">{{ summary }}</p>
+        <p v-if="note" class="mx-1.5 mb-1 flex items-start gap-1 rounded border border-warning/40 bg-warning/10 px-2 py-0.5 text-2xs text-warning">
+            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-[0.6rem]" /><span class="min-w-0">{{ note }}</span>
         </p>
         <template v-for="row in rows" :key="row.key">
             <button

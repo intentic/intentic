@@ -1,4 +1,4 @@
-import type { WorkspaceSearchHit } from "@intentic-app/api-contract";
+import type { WorkspaceSearchHit, WorkspaceSearchSpan } from "@intentic-app/api-contract";
 import { type CodeToken, useHighlighter } from "@intentic-app/ui";
 import { ref } from "vue";
 
@@ -19,13 +19,12 @@ import { ref } from "vue";
  * re-render hits the cache. Same shape, and the same reasons, as the markdown engine's code blocks
  * (ui/markdown/code.ts). */
 
-// The visible slice of a hit line, and where the match sits inside it.
+// The visible slice of a hit line, and where its matches sit inside it.
 export interface SnippetWindow {
     readonly text: string;
-    // Offsets into `text`. Equal when there is nothing to mark — a semantic or definition hit matched the LINE
-    // rather than a span of it, and reports no offsets.
-    readonly hitFrom: number;
-    readonly hitTo: number;
+    // Offsets into `text`, in order. Empty when there is nothing to mark — a semantic or definition hit matched
+    // the LINE rather than a span of it, and reports no offsets.
+    readonly spans: readonly WorkspaceSearchSpan[];
     // Whether text was cut off the FRONT to bring the match into view, which the row shows as a leading ellipsis.
     readonly elided: boolean;
 }
@@ -53,39 +52,47 @@ const KEEP_BEFORE = 6;
 
 const clamp = (value: number, low: number, high: number): number => Math.min(Math.max(value, low), high);
 
-// What to render for one hit. The daemon's offsets are into the whole line, so they move with the cut; both are
-// clamped, since a hit whose offsets predate a file edit can point past the text we were given.
+// What to render for one hit. The daemon's offsets are into the whole line, so they move with the cut; each is
+// clamped, since a hit whose offsets predate a file edit can point past the text we were given. Every span the
+// line reported is kept: a search marks all of a line's occurrences, not just the one that framed it.
 export const snippetWindow = (hit: WorkspaceSearchHit): SnippetWindow => {
     // Indentation is structure, not content: dropping it is what lets a deeply nested match read at the same
     // density as a top-level one.
     const indent = hit.text.length - hit.text.trimStart().length;
-    const from = clamp(hit.start ?? indent, indent, hit.text.length);
-    const to = clamp(hit.end ?? from, from, hit.text.length);
-    const elided = from - indent > MAX_LEAD;
-    const cut = elided ? from - KEEP_BEFORE : indent;
-    return { text: hit.text.slice(cut, cut + MAX_TEXT), hitFrom: from - cut, hitTo: Math.min(to - cut, MAX_TEXT), elided };
+    const first = clamp(hit.spans[0]?.start ?? indent, indent, hit.text.length);
+    const elided = first - indent > MAX_LEAD;
+    const cut = elided ? first - KEEP_BEFORE : indent;
+    const text = hit.text.slice(cut, cut + MAX_TEXT);
+    const spans = hit.spans
+        .map((span) => ({ start: clamp(span.start - cut, 0, text.length), end: clamp(span.end - cut, 0, text.length) }))
+        .filter((span) => span.end > span.start);
+    return { text, spans, elided };
 };
 
-// `snippet.text` cut at every colour boundary and at both edges of the match. `tokens` are Shiki's for that
-// exact text, so their offsets are into it; without them the row comes out as up to three uncoloured pieces,
-// which is what it looked like before colour.
+// `snippet.text` cut at every colour boundary and at every match edge. `tokens` are Shiki's for that exact text,
+// so their offsets are into it; without them the row comes out as a handful of uncoloured pieces, which is what
+// it looked like before colour.
 export const snippetPieces = (snippet: SnippetWindow, tokens: readonly CodeToken[] | undefined): readonly SnippetPiece[] => {
     const pieces: SnippetPiece[] = [];
-    const spans: readonly CodeToken[] = tokens ?? [{ content: snippet.text, offset: 0 }];
-    for (const token of spans) {
-        const from = token.offset;
-        const to = from + token.content.length;
-        // The match's edges cut through whichever tokens they land in; the parts either side keep the token's
-        // colour and lose the mark. Empty ranges are the common case — most tokens are wholly one side of it.
-        const ranges = [
-            { from, to: Math.min(to, snippet.hitFrom), hit: false },
-            { from: Math.max(from, snippet.hitFrom), to: Math.min(to, snippet.hitTo), hit: true },
-            { from: Math.max(from, snippet.hitTo), to, hit: false },
-        ];
-        for (const range of ranges) {
-            if (range.to > range.from) {
-                pieces.push({ text: snippet.text.slice(range.from, range.to), style: token.htmlStyle, hit: range.hit });
+    const colours: readonly CodeToken[] = tokens ?? [{ content: snippet.text, offset: 0, htmlStyle: undefined }];
+    for (const token of colours) {
+        const to = token.offset + token.content.length;
+        // Walk the token, alternating between what precedes the next match and the match itself: a match edge
+        // cuts through whichever token it lands in, and the parts either side keep the colour and lose the mark.
+        let at = token.offset;
+        for (const span of snippet.spans) {
+            if (span.end <= at || span.start >= to) {
+                continue;
             }
+            const marked = { from: Math.max(at, span.start), to: Math.min(to, span.end) };
+            if (marked.from > at) {
+                pieces.push({ text: snippet.text.slice(at, marked.from), style: token.htmlStyle, hit: false });
+            }
+            pieces.push({ text: snippet.text.slice(marked.from, marked.to), style: token.htmlStyle, hit: true });
+            at = marked.to;
+        }
+        if (to > at) {
+            pieces.push({ text: snippet.text.slice(at, to), style: token.htmlStyle, hit: false });
         }
     }
     return pieces;

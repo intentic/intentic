@@ -11,7 +11,7 @@ import { useChanges } from "../../composables/workspace/useChanges";
 import { useMonaco } from "../../composables/workspace/useMonaco";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute";
-import { useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
+import { type SearchScope, useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import BinaryDiffView from "./viewers/BinaryDiffView.vue";
@@ -113,15 +113,21 @@ const segmentOptions = computed(() => [
 ]);
 
 const filter = ref(``);
-const searchScope = ref<"name" | "content">(`name`);
-const contentMode = computed(() => searchScope.value === `content`);
+// Same three scopes as the desktop explorer (WorkspaceDesktop.vue documents what each one means); the match
+// switches are desktop-only, since a phone's search field has no room for them and they persist across both.
+const searchScope = ref<"name" | SearchScope>(`name`);
+const contentMode = computed(() => searchScope.value !== `name`);
+const contentScope = computed<SearchScope>(() => (searchScope.value === `smart` ? `smart` : `text`));
 const {
     groups: searchGroups,
+    total: searchTotal,
+    files: searchFiles,
     truncated: searchTruncated,
     searching,
     pending: searchPending,
     error: searchError,
-} = useWorkspaceSearch(filter, contentMode);
+    note: searchNote,
+} = useWorkspaceSearch(filter, contentScope, contentMode);
 
 const clearFilter = (): void => {
     filter.value = ``;
@@ -338,7 +344,8 @@ const onPick = (event: Event): void => {
                         size="xs"
                         :options="[
                             { label: `Name`, value: `name`, title: `Filter by file name` },
-                            { label: `Content`, value: `content`, title: `Search inside file contents` },
+                            { label: `Text`, value: `text`, title: `Search file contents for this exact text` },
+                            { label: `Smart`, value: `smart`, title: `Search by meaning — ranked across the indexed workspace` },
                         ]"
                     />
                 </div>
@@ -361,10 +368,13 @@ const onPick = (event: Event): void => {
                         <WorkspaceSearchResults
                             v-if="contentMode"
                             :groups="searchGroups"
+                            :total="searchTotal"
+                            :files="searchFiles"
                             :truncated="searchTruncated"
                             :searching="searching"
                             :pending="searchPending"
                             :error="searchError"
+                            :note="searchNote"
                             :query="filter"
                             @open-match="openAtLine"
                         />

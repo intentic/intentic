@@ -20,7 +20,8 @@ import { useChanges } from "../../composables/workspace/useChanges";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute";
-import { useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
+import { type SearchScope, useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
+import { useSearchOptions } from "../../composables/workspace/useSearchOptions";
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { filesToEntries } from "./dropEntries";
@@ -80,18 +81,37 @@ const sidebarModeOptions = computed(() => [
 ]);
 
 const filter = ref(``);
-// One input, two scopes: `name` filters the loaded tree instantly (client-side), `content` searches file
-// contents on the daemon (debounced, via useWorkspaceSearch) and swaps the tree for a match list. The
-// includeIgnored toggle widens BOTH the tree and search to node_modules/.gitignore'd paths (secrets stay hidden).
-const searchScope = ref<"name" | "content">(`name`);
-const contentMode = computed(() => searchScope.value === `content`);
+/* One input, three scopes. `name` filters the loaded tree instantly (client-side); the other two search file
+ * contents on the daemon (debounced, via useWorkspaceSearch) and swap the tree for a match list:
+ *
+ *   Text  — what an editor's search box does: the query is one pattern, matched literally (or as a regex with
+ *           .*), case-insensitively unless Aa, and every occurrence is marked in the results.
+ *   Smart — iq's fused retrieval: the query is a question, its words scored separately against the index and
+ *           reranked. Finds the file that ANSWERS the words; finds nothing to underline in them.
+ *
+ * The Ignored toggle widens BOTH the tree and the search to node_modules/.gitignore'd paths (secrets stay
+ * hidden). The match switches beside it belong to Text alone — they change what the pattern means. */
+const searchScope = ref<"name" | SearchScope>(`name`);
+const contentMode = computed(() => searchScope.value !== `name`);
+const textMode = computed(() => searchScope.value === `text`);
+const contentScope = computed<SearchScope>(() => (searchScope.value === `smart` ? `smart` : `text`));
+const search = useSearchOptions();
+// One descriptor per switch so the row is a v-for instead of three near-identical buttons.
+const matchToggles = computed(() => [
+    { label: `Aa`, title: `Match case`, on: search.matchCase.value, flip: search.toggleMatchCase },
+    { label: `ab`, title: `Match whole word`, on: search.wholeWord.value, flip: search.toggleWholeWord },
+    { label: `.*`, title: `Use regular expression`, on: search.useRegex.value, flip: search.toggleRegex },
+]);
 const {
     groups: searchGroups,
+    total: searchTotal,
+    files: searchFiles,
     truncated: searchTruncated,
     searching,
     pending: searchPending,
     error: searchError,
-} = useWorkspaceSearch(filter, contentMode);
+    note: searchNote,
+} = useWorkspaceSearch(filter, contentScope, contentMode);
 // The open tabs live in the useWorkspaceTabs singleton (the chat pushes plan previews in from the shell, and
 // tabs survive navigation); this component owns closing — the dirty-confirm dialog and edit-buffer forget.
 const {
@@ -317,9 +337,9 @@ const closeAllTabs = (): void => {
 };
 const filterInput = ref<HTMLInputElement>();
 // Reveal the Files sidebar with the cursor in its search input, selecting any previous query (VSCode's find
-// flow). Plain find keeps the scope the user last chose; Search in Files forces content scope. The nextTick
+// flow). Plain find keeps the scope the user last chose; Search in Files forces the text scope. The nextTick
 // waits out the v-if that mounts the input when the sidebar mode flips.
-const focusSearch = (scope?: "name" | "content"): void => {
+const focusSearch = (scope?: "name" | SearchScope): void => {
     layout.setSidebarCollapsed(false);
     layout.setSidebarPanel(`files`);
     if (scope !== undefined) {
@@ -349,7 +369,7 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
         title: `Search in Files…`,
         icon: `search`,
         keybinding: `Mod+Shift+F`,
-        handler: () => focusSearch(`content`),
+        handler: () => focusSearch(`text`),
     },
     { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
     { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
@@ -613,10 +633,11 @@ const endResize = (event: PointerEvent): void => {
                 </div>
                 <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" />
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />
-                <!-- Search header: input hero on row 1; mode switch + ignored-scope toggle on row 2. One `filter`
-                     ref, two scopes (name = instant client-side tree filter, content = debounced daemon search). The
-                     leading icon doubles as the content-search spinner; the ✕ (and Esc) clear text AND snap scope back
-                     to name. -->
+                <!-- Search header: input hero on row 1; scope switch + ignored-scope toggle on row 2. One `filter`
+                     ref, three scopes (name = instant client-side tree filter, text/smart = debounced daemon search).
+                     The leading icon doubles as the content-search spinner; the ✕ (and Esc) clear text AND snap scope
+                     back to name. The Aa/ab/.* switches sit INSIDE the field, where every editor puts them, and only
+                     in the text scope — they change what the pattern means, and the other scopes have no pattern. -->
                 <div v-if="layout.sidebarPanel.value === 'files'" class="flex shrink-0 flex-col gap-1 p-1.5">
                     <div class="relative">
                         <Icon
@@ -630,19 +651,39 @@ const endResize = (event: PointerEvent): void => {
                             v-model="filter"
                             type="text"
                             :placeholder="contentMode ? `Search in files…` : `Filter files…`"
-                            class="w-full min-w-0 rounded-md border border-line bg-canvas py-1 pl-7 pr-7 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                            class="w-full min-w-0 rounded-md border border-line bg-canvas py-1 pl-7 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                            :class="textMode ? `pr-[4.75rem]` : `pr-7`"
                             @keydown.esc="clearFilter"
                         />
-                        <button
-                            v-if="filter"
-                            type="button"
-                            class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                            v-tooltip.bottom="'Clear (Esc)'"
-                            aria-label="Clear filter"
-                            @click="clearFilter"
-                        >
-                            <Icon name="times" />
-                        </button>
+                        <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+                            <!-- Aa / ab / .* — the same three switches, in the same order, as the editor this
+                                 panel is modelled on. Glyphs, not icons: they ARE the notation. -->
+                            <template v-if="textMode">
+                                <button
+                                    v-for="toggle in matchToggles"
+                                    :key="toggle.label"
+                                    type="button"
+                                    class="flex h-4 w-4 items-center justify-center rounded font-mono text-[0.6rem] leading-none text-subtle transition-colors hover:bg-overlay hover:text-content"
+                                    :class="{ 'bg-primary-600/20 text-link': toggle.on }"
+                                    :aria-pressed="toggle.on"
+                                    v-tooltip.bottom="toggle.title"
+                                    :aria-label="toggle.title"
+                                    @click="toggle.flip()"
+                                >
+                                    {{ toggle.label }}
+                                </button>
+                            </template>
+                            <button
+                                v-if="filter"
+                                type="button"
+                                class="flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
+                                v-tooltip.bottom="'Clear (Esc)'"
+                                aria-label="Clear filter"
+                                @click="clearFilter"
+                            >
+                                <Icon name="times" />
+                            </button>
+                        </div>
                     </div>
                     <div class="flex items-center gap-1">
                         <Segmented
@@ -650,7 +691,8 @@ const endResize = (event: PointerEvent): void => {
                             size="xs"
                             :options="[
                                 { label: `Name`, value: `name`, title: `Filter by file name` },
-                                { label: `Content`, value: `content`, title: `Search inside file contents` },
+                                { label: `Text`, value: `text`, title: `Search file contents for this exact text` },
+                                { label: `Smart`, value: `smart`, title: `Search by meaning — ranked across the indexed workspace` },
                             ]"
                         />
                         <span class="flex-1"></span>
@@ -658,16 +700,16 @@ const endResize = (event: PointerEvent): void => {
                             v-if="contentMode"
                             type="button"
                             class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-muted transition-colors hover:text-content"
-                            :class="{ 'bg-primary-600/15 text-link': layout.includeIgnored.value }"
-                            :aria-pressed="layout.includeIgnored.value"
+                            :class="{ 'bg-primary-600/15 text-link': search.includeIgnored.value }"
+                            :aria-pressed="search.includeIgnored.value"
                             v-tooltip.bottom="
-                                layout.includeIgnored.value
+                                search.includeIgnored.value
                                     ? 'Including ignored files — node_modules, gitignored paths, the refs/ reference shelf'
                                     : 'Skipping ignored files — node_modules, gitignored paths, the refs/ reference shelf'
                             "
-                            @click="layout.toggleIncludeIgnored()"
+                            @click="search.toggleIncludeIgnored()"
                         >
-                            <Icon class="text-2xs" :name="layout.includeIgnored.value ? `eye` : `eye-slash`" />
+                            <Icon class="text-2xs" :name="search.includeIgnored.value ? `eye` : `eye-slash`" />
                             Ignored
                         </button>
                         <!-- The tree's own take on the same set. Shown (grayed) by default — the explorer's job is
@@ -734,10 +776,13 @@ const endResize = (event: PointerEvent): void => {
                     <WorkspaceSearchResults
                         v-if="contentMode"
                         :groups="searchGroups"
+                        :total="searchTotal"
+                        :files="searchFiles"
                         :truncated="searchTruncated"
                         :searching="searching"
                         :pending="searchPending"
                         :error="searchError"
+                        :note="searchNote"
                         :query="filter"
                         @open-match="openAtLine"
                     />

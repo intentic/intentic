@@ -5,14 +5,14 @@ import { runSearch } from "../lib/run.js";
 type FindFlags = SearchFlags & { readonly literal: boolean; readonly word: boolean; readonly case: boolean };
 
 export const find = buildCommand({
-    docs: { brief: "Lexical content search — regex by default, smart-case" },
+    docs: { brief: "Lexical content search — regex by default, case-insensitive" },
     parameters: {
         flags: {
             ...scopeFlagParameters,
             ...outputFlagParameters,
             literal: { kind: "boolean", default: false, brief: "Fixed-string match instead of regex" },
             word: { kind: "boolean", default: false, brief: "Word-boundary match" },
-            case: { kind: "boolean", default: false, brief: "Case-sensitive (default: smart-case)" },
+            case: { kind: "boolean", default: false, brief: "Case-sensitive (default: insensitive)" },
         },
         aliases: outputAliases,
         positional: { kind: "tuple", parameters: [{ parse: String, brief: "Regex (or literal with --literal)", placeholder: "pattern" }] },

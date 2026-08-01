@@ -18,6 +18,14 @@ import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files.js";
 
+/* What one page of /workspace/search costs. The engine sizes a page by what rendering it as text would spend,
+ * which for the CLI is an agent's context window and here is nothing — the browser reads the JSON and throws the
+ * text away. So the budget is set by how long a list is worth scrolling, not by tokens: the CLI's own 1500 fit
+ * about seven files, which is what made a search of a monorepo answer "showing first matches only" on the first
+ * screen. The file cap is the real bound; the budget only has to be generous enough not to cut in front of it. */
+const GUI_SEARCH_BUDGET = 40_000;
+const GUI_SEARCH_FILES = 300;
+
 // The full /work view + extra-repo cloning. The binary /workspace/raw preview is a plain Hono route in app.ts
 // (a streamed binary body doesn't fit oRPC). External MCP tools moved to the unified capabilities manifest.
 export const createWorkspaceRoutes = (services: Services) => {
@@ -95,27 +103,37 @@ export const createWorkspaceRoutes = (services: Services) => {
                 },
             ),
         ),
-        // Runs the resident iq engine in-process (services.iq) — same engine the agent's Bash `iq` calls use,
-        // minus the per-query process spawn, workspace sweep, and inline revalidation those pay. The request's
-        // abort signal kills the engine's rg child when the browser supersedes a search mid-flight.
+        /* Runs the resident iq engine in-process (services.iq) — same engine the agent's Bash `iq` calls use,
+         * minus the per-query process spawn, workspace sweep, and inline revalidation those pay. The request's
+         * abort signal kills the engine's rg child when the browser supersedes a search mid-flight.
+         *
+         * A GUI caller, not a reading agent, so the page is shaped for a scrollable list instead of a token
+         * capsule: GUI_BUDGET is what bounds how many groups come back (the engine cuts the page by what its
+         * text rendering would cost), a hard group cap keeps a one-letter query from serializing the workspace,
+         * and pack is off — the panel lists hits, and packed bodies would fill it with lines nothing matched. */
         search: i.search.handler(async ({ input, signal }) => {
             const verb = input.mode ?? "q";
             const ignored = input.includeIgnored === true;
+            const options = {
+                ...(input.literal === true ? { literal: true } : {}),
+                ...(input.word === true ? { word: true } : {}),
+                ...(input.caseSensitive === true ? { caseSensitive: true } : {}),
+            };
             const outcome = await services.iq.run(
                 {
                     verb,
                     query: input.query,
                     scope: ignored ? { ignored: true } : {},
-                    // Budget mirrors the iq CLI's default so the panel's result sizes match a bare `iq` call.
                     render: {
-                        budget: 1500,
-                        ...(input.limit !== undefined ? { limit: input.limit } : {}),
+                        budget: GUI_SEARCH_BUDGET,
+                        limit: Math.min(input.limit ?? GUI_SEARCH_FILES, GUI_SEARCH_FILES),
+                        pack: false,
                         ...(input.after !== undefined ? { after: input.after } : {}),
                     },
-                    options: {},
+                    options,
                     // Echo mirrors the CLI form — it seeds the pagination cursor id, so it must be stable for
                     // the same query+mode+scope across requests.
-                    echo: `${verb === "q" ? "" : `${verb} `}"${input.query}"${ignored ? " --ignored" : ""}`,
+                    echo: `${verb === "q" ? "" : `${verb} `}"${input.query}"${ignored ? " --ignored" : ""}${input.literal === true ? " --literal" : ""}${input.word === true ? " --word" : ""}${input.caseSensitive === true ? " --case" : ""}`,
                 },
                 signal,
             );

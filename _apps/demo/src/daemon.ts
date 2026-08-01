@@ -14,7 +14,7 @@ import {
     type TranslatorAccounts,
 } from "@intentic/sandbox-contract";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
-import { agentChanges, fileBody, fileDiff, gitChanges, REPOS, sessions, workspaceTree } from "./fixture/workspace";
+import { agentChanges, fileBody, fileDiff, gitChanges, REPOS, searchWorkspace, sessions, workspaceTree } from "./fixture/workspace";
 import { eventStream } from "./sse";
 import { featuredRun, type Run, visitorRun } from "./turn";
 import { json, refuse } from "./transport";
@@ -216,6 +216,19 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/workspace/children`, () => json({ entries: [], hidden: 0 })],
     [`GET`, `/workspace/file`, ({ url }) => json(workspaceFile(url.searchParams.get(`path`) ?? ``))],
     [`GET`, `/workspace/repos`, () => json({ repos: [...REPOS] })],
+    [
+        `GET`,
+        `/workspace/search`,
+        ({ url }) =>
+            json(
+                searchWorkspace(url.searchParams.get(`query`) ?? ``, {
+                    smart: url.searchParams.get(`mode`) === `q`,
+                    literal: url.searchParams.get(`literal`) === `true`,
+                    word: url.searchParams.get(`word`) === `true`,
+                    caseSensitive: url.searchParams.get(`caseSensitive`) === `true`,
+                }),
+            ),
+    ],
     [`GET`, `/git/repos`, () => json({ repos: [...REPOS] })],
     [`GET`, `/git/changes`, () => json(gitChanges())],
     [`GET`, `/git/{repo}/file-diff`, ({ url, param }) => json(fileDiff(param(`repo`), url.searchParams.get(`path`) ?? ``))],

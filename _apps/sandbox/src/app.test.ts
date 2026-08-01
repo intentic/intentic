@@ -656,7 +656,9 @@ test("panels.list enumerates every repo with its operator panel + runtime status
 
 test("workspace.search runs the resident engine in-process, mapping the wire query to a QueryRequest", async () => {
     const requests: QueryRequest[] = [];
-    const groups = [{ path: "alpha/src/widget.ts", score: 1, hits: [{ line: 3, text: "export const createWidget", tags: [] }] }];
+    const groups = [
+        { path: "alpha/src/widget.ts", score: 1, hits: [{ line: 3, text: "export const createWidget", spans: [{ start: 13, end: 25 }], tags: [] }] },
+    ];
     const client = clientFor(
         createApp(
             services({
@@ -664,7 +666,7 @@ test("workspace.search runs the resident engine in-process, mapping the wire que
                     run: async (request) => {
                         requests.push(request);
                         return {
-                            result: { mode: request.verb, total: 1, shown: 1, groups, freshness: { state: "fresh" }, truncated: false },
+                            result: { mode: request.verb, total: 1, files: 1, shown: 1, groups, freshness: { state: "fresh" }, truncated: false },
                             text: "",
                             exitCode: 0,
                         };
@@ -682,18 +684,58 @@ test("workspace.search runs the resident engine in-process, mapping the wire que
             }),
         ),
     );
-    const result = await client.workspace.search({ query: "createWidget", mode: "find", includeIgnored: "true", limit: 3 });
+    const result = await client.workspace.search({
+        query: "createWidget",
+        mode: "find",
+        includeIgnored: "true",
+        limit: 3,
+        literal: "true",
+        caseSensitive: "true",
+    });
     expect(result.groups).toEqual(groups);
+    // The search box's switches reach the engine as verb options, and the echo names them — it seeds the
+    // pagination cursor, so two searches that differ only by a switch must not share one.
     expect(requests).toEqual([
         {
             verb: "find",
             query: "createWidget",
             scope: { ignored: true },
-            render: { budget: 1500, limit: 3 },
-            options: {},
-            echo: 'find "createWidget" --ignored',
+            render: { budget: 40_000, limit: 3, pack: false },
+            options: { literal: true, caseSensitive: true },
+            echo: 'find "createWidget" --ignored --literal --case',
         },
     ]);
+});
+
+test("workspace.search caps the page at the GUI file limit, whatever the caller asks for", async () => {
+    const requests: QueryRequest[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                iq: {
+                    run: async (request) => {
+                        requests.push(request);
+                        return {
+                            result: { mode: request.verb, total: 0, files: 0, shown: 0, groups: [], freshness: { state: "fresh" }, truncated: false },
+                            text: "",
+                            exitCode: 1,
+                        };
+                    },
+                    health: async () => ({
+                        totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
+                        hotspots: [],
+                        modules: [],
+                        freshness: { state: "fresh" },
+                    }),
+                    markDirty: () => {},
+                    warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh", ageMs: 0 } }),
+                    close: () => {},
+                },
+            }),
+        ),
+    );
+    await client.workspace.search({ query: "the", limit: 100_000 });
+    expect(requests[0]?.render).toEqual({ budget: 40_000, limit: 300, pack: false });
 });
 
 test("workspace.health scopes the resident engine to one repo — 'root' is the workspace repo's empty scope", async () => {

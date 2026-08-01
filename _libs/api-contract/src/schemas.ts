@@ -62,6 +62,7 @@ import {
     WorkspaceSearchHitSchema,
     WorkspaceSearchQuerySchema,
     WorkspaceSearchResultSchema,
+    WorkspaceSearchSpanSchema,
     WorkspaceSearchTagSchema,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -207,6 +208,7 @@ export interface WorkspaceResolveResponse {
 
 // Workspace search results (the daemon's fused-search wire shape). WorkspaceSearchMode is the verb enum in the query.
 export type WorkspaceSearchTag = z.infer<typeof WorkspaceSearchTagSchema>;
+export type WorkspaceSearchSpan = z.infer<typeof WorkspaceSearchSpanSchema>;
 export type WorkspaceSearchHit = z.infer<typeof WorkspaceSearchHitSchema>;
 export type WorkspaceSearchGroup = z.infer<typeof WorkspaceSearchGroupSchema>;
 export type WorkspaceSearchFreshness = z.infer<typeof WorkspaceSearchFreshnessSchema>;

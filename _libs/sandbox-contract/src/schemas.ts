@@ -1359,14 +1359,20 @@ export type WorkspaceClassification = z.infer<typeof WorkspaceClassificationSche
 // The workspace-search wire shape — shared by the daemon's /workspace/search route and the web client.
 // (Implementation detail, not part of the contract: the daemon backs this route with a resident in-process iq
 // engine; the engine is interchangeable behind this shape.) Groups are relevance-ranked (best first, never path
-// order); each hit carries the match-reason tags the fused engines contributed. `start`/`end` are char offsets
-// within `text` so clients highlight without re-finding the needle.
+// order); each hit carries the match-reason tags the fused engines contributed, and the char spans within `text`
+// that matched, so clients highlight without re-finding the needle.
 export const WorkspaceSearchQuerySchema = z.object({
     query: z.string().min(2).max(512),
     // Search verbs only — anchor/git verbs (outline, context, log, who, …) are CLI-only surface. Natural language
     // has no verb of its own: `q` classifies the query and answers it semantically when the words call for it.
     mode: z.enum(["q", "find", "files", "def", "refs", "sym", "ast"]).optional(),
     includeIgnored: z.stringbool().optional(),
+    // How `find` reads the query — the three switches every editor's search box has (VSCode: Aa, ab, .*).
+    // `literal` treats it as fixed text instead of a regex; `caseSensitive` off means case-INSENSITIVE, not
+    // ripgrep's smart case.
+    literal: z.stringbool().optional(),
+    word: z.stringbool().optional(),
+    caseSensitive: z.stringbool().optional(),
     limit: z.coerce.number().int().positive().optional(),
     after: z.string().optional(),
 });
@@ -1375,11 +1381,14 @@ export const WorkspaceSearchTagSchema = z.object({
     score: z.number().optional(),
 });
 export type WorkspaceSearchTag = z.infer<typeof WorkspaceSearchTagSchema>;
+export const WorkspaceSearchSpanSchema = z.object({ start: z.number(), end: z.number() });
+export type WorkspaceSearchSpan = z.infer<typeof WorkspaceSearchSpanSchema>;
 export const WorkspaceSearchHitSchema = z.object({
     line: z.number(),
     text: z.string(),
-    start: z.number().optional(),
-    end: z.number().optional(),
+    // Every matched span in `text`, in order — a text search marks all of them, the way an editor does. Empty
+    // where the LINE is the match and no span of it is (a semantic or definition hit reports none).
+    spans: z.array(WorkspaceSearchSpanSchema),
     tags: z.array(WorkspaceSearchTagSchema),
     // Enclosing symbol ("createWidget (fn)") — parent-document context so the reader often needs no follow-up.
     context: z.string().optional(),
@@ -1401,12 +1410,19 @@ export type WorkspaceSearchFreshness = z.infer<typeof WorkspaceSearchFreshnessSc
 export const WorkspaceSearchResultSchema = z.object({
     mode: z.string(),
     total: z.number(),
+    // Files the query matched in total, which `groups` reports only for the page it carries — the count a
+    // results panel puts beside the hit total ("218 results in 61 files").
+    files: z.number(),
     shown: z.number(),
     groups: z.array(WorkspaceSearchGroupSchema),
     freshness: WorkspaceSearchFreshnessSchema,
     truncated: z.boolean(),
     cursor: z.string().optional(),
     hint: z.string().optional(),
+    // What the engine did with the query that the query did not ask for — a pattern rerun as literal text
+    // because it is not valid regex, grep-style escapes rewritten, a language filter that matched no files. The
+    // text surface has always printed this above the results; a JSON caller could not see it at all.
+    note: z.string().optional(),
     // Code-graph neighbors of the top hits (definition anchors + the strongest caller of each).
     related: z.array(z.string()).optional(),
     // Ranked `path:line` anchors that placed but were NOT shown, best first — the answer often sits at rank 5–13,

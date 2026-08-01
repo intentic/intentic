@@ -1,4 +1,4 @@
-import type { WorkspaceSearchFreshness, WorkspaceSearchResult, WorkspaceSearchTag } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchFreshness, WorkspaceSearchResult, WorkspaceSearchSpan, WorkspaceSearchTag } from "@intentic/sandbox-contract";
 
 // No separate natural-language verb: a bare `q` whose words are not a symbol, path or regex IS the semantic
 // pipeline, and an exact query that finds nothing escalates into it.
@@ -25,6 +25,10 @@ export interface RenderOptions {
     readonly count?: boolean;
     readonly full?: boolean;
     readonly after?: string;
+    // Whether the top groups may be delivered as code bodies rather than anchors (the `pack` stage). On for the
+    // agent-facing text capsule, which pack exists to save a follow-up Read; off for a GUI caller, where the
+    // body's non-matching lines would be listed as if they were hits and the file's own view is one click away.
+    readonly pack?: boolean;
 }
 
 // Verb-specific knobs, flattened — each verb reads only its own.
@@ -75,8 +79,9 @@ export interface EngineHit {
     readonly path: string;
     readonly line: number;
     readonly text: string;
-    readonly start?: number;
-    readonly end?: number;
+    // Char spans of `text` that matched, in order. Absent for every engine that matches a LINE rather than a
+    // span of one (bm25, semantic, symbols, git) — only the lexical engine can say where in the line it hit.
+    readonly spans?: readonly WorkspaceSearchSpan[];
     readonly tags: readonly WorkspaceSearchTag[];
     // Enclosing symbol ("createWidget (fn)") — filled by the symctx enrichment stage.
     context?: string;

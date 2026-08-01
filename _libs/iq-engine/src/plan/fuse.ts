@@ -1,4 +1,4 @@
-import type { WorkspaceSearchTag } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchSpan, WorkspaceSearchTag } from "@intentic/sandbox-contract";
 import type { FileClass, EngineResult, RankedGroup, RankedHit } from "../types.js";
 import { classOf } from "../workspace/scan.js";
 import { pathTokens } from "./tokens.js";
@@ -46,7 +46,7 @@ const dedupeTags = (tags: WorkspaceSearchTag[]): WorkspaceSearchTag[] => {
 export const fuse = (results: readonly EngineResult[], context: FuseContext): RankedGroup[] => {
     const byKey = new Map<
         string,
-        { path: string; line: number; text: string; start?: number; end?: number; tags: WorkspaceSearchTag[]; score: number }
+        { path: string; line: number; text: string; spans?: readonly WorkspaceSearchSpan[]; tags: WorkspaceSearchTag[]; score: number }
     >();
     for (const result of results) {
         result.hits.forEach((hit, rank) => {
@@ -58,8 +58,7 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
                     path: hit.path,
                     line: hit.line,
                     text: hit.text,
-                    ...(hit.start !== undefined ? { start: hit.start } : {}),
-                    ...(hit.end !== undefined ? { end: hit.end } : {}),
+                    ...(hit.spans !== undefined ? { spans: hit.spans } : {}),
                     tags: [...hit.tags],
                     score: contribution,
                 });
@@ -67,11 +66,10 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
             }
             existing.score += contribution;
             existing.tags.push(...hit.tags);
-            // Prefer the richer snippet (one with char offsets) as the display text.
-            if (existing.start === undefined && hit.start !== undefined) {
+            // Prefer the richer snippet (one that knows which spans matched) as the display text.
+            if (existing.spans === undefined && hit.spans !== undefined) {
                 existing.text = hit.text;
-                existing.start = hit.start;
-                existing.end = hit.end ?? hit.start;
+                existing.spans = hit.spans;
             }
         });
     }

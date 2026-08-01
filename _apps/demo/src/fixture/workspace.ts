@@ -1,4 +1,13 @@
-import type { AgentChanges, FileDiff, GitChanges, SessionSummary, WorkspaceTree } from "@intentic/sandbox-contract";
+import type {
+    AgentChanges,
+    FileDiff,
+    GitChanges,
+    SessionSummary,
+    WorkspaceSearchGroup,
+    WorkspaceSearchResult,
+    WorkspaceSearchSpan,
+    WorkspaceTree,
+} from "@intentic/sandbox-contract";
 import { REVIEW_AGENT_ID } from "./fleet";
 
 /* THE WORKSPACE the demo's sandbox holds: `acme-shop`, a two-repo product (a web front end and its API), with
@@ -192,4 +201,84 @@ export const sessions = (now: number): SessionSummary[] => {
         { id: `ses_01j9a11y`, title: `Fix the keyboard trap in the plan switcher`, updatedAt: now - 4 * 24 * hour },
         { id: `ses_01j9docs`, title: `Document the checkout webhook contract`, updatedAt: now - 6 * 24 * hour },
     ];
+};
+
+/* Content search over the files the recording carries — the fixture's answer to GET /workspace/search.
+ *
+ * It is a real text search, because that is what the panel's Text scope IS: one pattern (literal, or a regex
+ * with .*), case-insensitive unless asked, every occurrence on a line reported as a span so the results mark
+ * them. What the recording cannot do is the Smart scope's ranking, which needs an index of the reader's own
+ * code — so Smart answers with the same matcher and says so in the note the panel renders. */
+const filePaths = (): string[] => {
+    const paths: string[] = [];
+    // The recursive tree node erases to Record<string, unknown> in the contract's zod type; the fixture below
+    // is the one that BUILT it, so its own shape is the authority here.
+    const walk = (nodes: WorkspaceTree["tree"]): void => {
+        for (const node of nodes) {
+            if (node.type === `file`) {
+                paths.push(node.path);
+            } else if (node.children !== undefined) {
+                walk(node.children as WorkspaceTree["tree"]);
+            }
+        }
+    };
+    walk(workspaceTree().tree);
+    return paths;
+};
+
+// Fixed text unless the .* switch is on, and an unparseable regex falls back to matching itself — the same
+// recovery the daemon's engine does, and the same note it reports for it.
+const matcher = (query: string, options: SearchOptions): { regex: RegExp; note?: string } => {
+    const escaped = query.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+    const flags = options.caseSensitive ? `g` : `gi`;
+    const wrap = (source: string): string => (options.word ? String.raw`\b(?:${source})\b` : source);
+    if (options.literal) {
+        return { regex: new RegExp(wrap(escaped), flags) };
+    }
+    try {
+        return { regex: new RegExp(wrap(query), flags) };
+    } catch {
+        return { regex: new RegExp(wrap(escaped), flags), note: `Pattern isn't a valid regular expression — searched for it as literal text.` };
+    }
+};
+
+interface SearchOptions {
+    readonly smart: boolean;
+    readonly literal: boolean;
+    readonly word: boolean;
+    readonly caseSensitive: boolean;
+}
+
+export const searchWorkspace = (query: string, options: SearchOptions): WorkspaceSearchResult => {
+    const { regex, note } = matcher(query, options);
+    const groups: WorkspaceSearchGroup[] = [];
+    let total = 0;
+    for (const path of filePaths()) {
+        const hits = fileBody(path)
+            .split(`\n`)
+            .map((text, index) => {
+                regex.lastIndex = 0;
+                const spans: WorkspaceSearchSpan[] = [...text.matchAll(regex)].map((match) => ({
+                    start: match.index,
+                    end: match.index + match[0].length,
+                }));
+                return { line: index + 1, text, spans, tags: [{ kind: `text` as const }] };
+            })
+            .filter((hit) => hit.spans.length > 0);
+        if (hits.length > 0) {
+            groups.push({ path, score: 1 / (groups.length + 1), hits });
+            total += hits.length;
+        }
+    }
+    const smartNote = `This recording answers Smart like Text — ranking by meaning needs your own sandbox's index.`;
+    return {
+        mode: options.smart ? `q` : `find`,
+        total,
+        files: groups.length,
+        shown: total,
+        groups,
+        freshness: { state: `fresh`, ageMs: 0 },
+        truncated: false,
+        ...(options.smart ? { note: smartNote } : note !== undefined ? { note } : {}),
+    };
 };

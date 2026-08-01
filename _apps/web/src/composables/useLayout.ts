@@ -38,11 +38,7 @@ const TERMINAL_OPEN_KEY = `ui-workspace-terminal-open`;
 // Which panel the workspace sidebar shows (files | changes | history). Persists like the terminal's open state.
 const SIDEBAR_PANEL_KEY = `ui-workspace-sidebar-panel`;
 
-// Workspace content-search scope — when on, content search descends into ignored files (node_modules,
-// .gitignore'd paths); off by default. Persists.
-const INCLUDE_IGNORED_KEY = `ui-workspace-include-ignored`;
-
-// The file tree's own take on the same set: off by default (the tree lists everything, graying the ignored
+// The file tree's own take on what the search box's includeIgnored (useSearchOptions) does: off by default (the tree lists everything, graying the ignored
 // entries — that IS the point of "what the LLM sees"), on when the user would rather browse the project alone
 // and not have node_modules/dist/.turbo between them and it. Separate from the search scope above because the
 // two answer different questions and want opposite defaults — a tree that hid them by default would be lying
@@ -128,7 +124,6 @@ const reviewListWidth = ref<number>(readWidth(REVIEW_LIST_WIDTH_KEY, clampReview
 const sidebarCollapsed = ref<boolean>(readBool(SIDEBAR_COLLAPSED_KEY));
 const terminalOpen = ref<boolean>(readBool(TERMINAL_OPEN_KEY));
 const sidebarPanel = ref<SidebarPanel>(readEnum(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`));
-const includeIgnored = ref<boolean>(readBool(INCLUDE_IGNORED_KEY));
 const hideIgnored = ref<boolean>(readBool(HIDE_IGNORED_KEY));
 const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
 const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
@@ -202,11 +197,6 @@ const setSidebarPanel = (panel: SidebarPanel): void => {
     }
 };
 
-const toggleIncludeIgnored = (): void => {
-    includeIgnored.value = !includeIgnored.value;
-    write(INCLUDE_IGNORED_KEY, includeIgnored.value ? `1` : `0`);
-};
-
 const toggleHideIgnored = (): void => {
     hideIgnored.value = !hideIgnored.value;
     write(HIDE_IGNORED_KEY, hideIgnored.value ? `1` : `0`);
@@ -236,7 +226,6 @@ export function useLayout() {
         sidebarCollapsed,
         terminalOpen,
         sidebarPanel,
-        includeIgnored,
         hideIgnored,
         editMode,
         showComments,
@@ -254,7 +243,6 @@ export function useLayout() {
         setTerminalOpen,
         toggleTerminalVisibility,
         setSidebarPanel,
-        toggleIncludeIgnored,
         toggleHideIgnored,
         setEditMode,
         toggleShowComments,

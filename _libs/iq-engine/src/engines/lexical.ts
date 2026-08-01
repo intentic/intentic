@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
+import type { WorkspaceSearchSpan } from "@intentic/sandbox-contract";
 import type { EngineHit } from "../types.js";
 import { DENIED_GLOBS } from "../workspace/floor.js";
 
@@ -32,12 +33,32 @@ interface RgMatchData {
     readonly submatches: readonly { readonly start: number; readonly end: number }[];
 }
 
-const window = (line: string, start: number, end: number): { text: string; start: number; end: number } => {
-    if (line.length <= SNIPPET_MAX) {
-        return { text: line, start, end };
+/* rg reports BYTE offsets into the line; a span has to index the JS string the client renders. On an ASCII line
+ * the two agree, which is why this was invisible until a match sat after an em dash — every offset then points
+ * that many bytes too far right, and the mark lands off the word. */
+const charSpans = (text: string, spans: readonly WorkspaceSearchSpan[]): WorkspaceSearchSpan[] => {
+    const bytes = Buffer.from(text, "utf8");
+    // An all-ASCII line is the common case and needs no conversion — but it still gets rebuilt, so the spans
+    // that leave here are ours and carry nothing else rg's JSON happened to attach to them.
+    if (bytes.length === text.length) {
+        return spans.map((span) => ({ start: span.start, end: span.end }));
     }
-    const from = Math.max(0, start - SNIPPET_LEAD);
-    return { text: line.slice(from, from + SNIPPET_MAX), start: start - from, end: Math.min(end - from, SNIPPET_MAX) };
+    const charAt = (byte: number): number => bytes.subarray(0, byte).toString("utf8").length;
+    return spans.map((span) => ({ start: charAt(span.start), end: charAt(span.end) }));
+};
+
+// The slice of a long line worth shipping — anchored on its FIRST match — with every span that survives the cut
+// rebased onto it. A span the window clipped in half is dropped rather than shown ending mid-word.
+const window = (line: string, spans: readonly WorkspaceSearchSpan[]): { text: string; spans: WorkspaceSearchSpan[] } => {
+    if (line.length <= SNIPPET_MAX) {
+        return { text: line, spans: [...spans] };
+    }
+    const from = Math.max(0, (spans[0]?.start ?? 0) - SNIPPET_LEAD);
+    const to = from + SNIPPET_MAX;
+    return {
+        text: line.slice(from, to),
+        spans: spans.filter((span) => span.start >= from && span.end <= to).map((span) => ({ start: span.start - from, end: span.end - from })),
+    };
 };
 
 // Content search via ripgrep --json, post-filtered against the sweep. Hits come back sorted (path, line) — rg's
@@ -63,7 +84,9 @@ export const rgSearch = async (options: RgOptions): Promise<EngineHit[]> => {
     if (options.word) {
         args.push("-w");
     }
-    args.push(options.caseSensitive ? "-s" : "-S");
+    // Insensitive unless asked, never ripgrep's smart case: `-S` made a capital in the query silently narrow the
+    // search, which is the documented default's opposite and not what a search box's Aa switch means anywhere.
+    args.push(options.caseSensitive ? "-s" : "-i");
     args.push("-e", options.pattern, "./");
     const { stdout } = await exec(options.rgPath ?? "rg", args, {
         cwd: options.root,
@@ -96,12 +119,13 @@ export const rgSearch = async (options: RgOptions): Promise<EngineHit[]> => {
             continue;
         }
         const text = event.data.lines.text?.replace(/\r?\n$/, "");
-        const sub = event.data.submatches[0];
-        if (text === undefined || sub === undefined) {
+        if (text === undefined || event.data.submatches.length === 0) {
             continue;
         }
-        const snippet = window(text, sub.start, sub.end);
-        hits.push({ path, line: event.data.line_number, text: snippet.text, start: snippet.start, end: snippet.end, tags: [{ kind: "text" }] });
+        // Every occurrence on the line, not just the first: a client marks them all, and dropping the rest is
+        // what made a line with three hits look like it had one.
+        const snippet = window(text, charSpans(text, event.data.submatches));
+        hits.push({ path, line: event.data.line_number, text: snippet.text, spans: snippet.spans, tags: [{ kind: "text" }] });
     }
     return hits.toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : a.line - b.line));
 };

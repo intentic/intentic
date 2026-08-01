@@ -50,7 +50,13 @@ interface VerbPlan {
     readonly style: "hits" | "paths" | "plain";
     readonly showTags: boolean;
     readonly hint?: string;
+    // How the query was READ when that differs from how it was written — a pattern rerun as literal text,
+    // grep escapes rewritten, a language filter that matched nothing. Rendered above the results AND handed to
+    // JSON callers, because it is about their query.
     readonly headerNote?: string;
+    // Run provenance: which retrieval stages ran and what state the index was in. Text surface only — a GUI
+    // that showed "reranked" beside every answer would be reporting normal operation as if it were news.
+    readonly provenance?: string;
     readonly related?: string[];
     // Whether the response opens with an `answer:` anchor — see RenderRequest.lead.
     readonly lead?: boolean;
@@ -463,7 +469,7 @@ const naturalPlan = async (
         lead: true,
         pack: true,
         ...(confidence !== undefined ? { confidence } : {}),
-        ...(notes.length > 0 ? { headerNote: notes.join(" · ") } : {}),
+        ...(notes.length > 0 ? { provenance: notes.join(" · ") } : {}),
         ...(related.length > 0 ? { related } : {}),
     };
 };
@@ -676,8 +682,9 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         // traces — one wasted turn per occurrence — and the words are usually a concept rather than an identifier.
         // Answer it semantically instead of spending the agent's next turn on a hint telling it to.
         const escalated = await naturalPlan(context, request, entries, allowed);
-        const note = `no exact ${kind} match — answered semantically`;
-        return { ...escalated, headerNote: escalated.headerNote === undefined ? note : `${note} · ${escalated.headerNote}` };
+        // The escalation is a reading of the QUERY, so it rides headerNote and reaches JSON callers; the
+        // semantic pipeline's own notes stay provenance and print only in the capsule.
+        return { ...escalated, headerNote: `no exact ${kind} match — answered semantically` };
     }
 
     throw new Error(`iq: verb not implemented yet: ${request.verb}`);
@@ -690,6 +697,7 @@ const toResult = (
     offset: number,
     freshness: WorkspaceSearchResult["freshness"],
     hint: string | undefined,
+    note: string | undefined,
     features: ReadonlySet<Feature>,
 ): WorkspaceSearchResult => {
     const shownGroups: WorkspaceSearchGroup[] = plan.groups.slice(offset, offset + rendered.shownGroups).map((group) => ({
@@ -698,8 +706,7 @@ const toResult = (
         hits: group.hits.map((hit) => ({
             line: hit.line,
             text: hit.text,
-            ...(hit.start !== undefined ? { start: hit.start } : {}),
-            ...(hit.end !== undefined ? { end: hit.end } : {}),
+            spans: hit.spans === undefined ? [] : [...hit.spans],
             tags: [...hit.tags],
             ...(hit.context !== undefined ? { context: hit.context } : {}),
         })),
@@ -709,12 +716,14 @@ const toResult = (
     return {
         mode: request.verb,
         total,
+        files: plan.groups.length,
         shown: rendered.shownHits,
         groups: shownGroups,
         freshness,
         truncated: rendered.truncated,
         ...(rendered.cursor !== undefined ? { cursor: rendered.cursor } : {}),
         ...(hint !== undefined ? { hint } : {}),
+        ...(note !== undefined ? { note } : {}),
         ...(plan.related !== undefined && plan.related.length > 0 ? { related: plan.related } : {}),
         ...(rendered.candidates !== undefined ? { candidates: [...rendered.candidates] } : {}),
         ...(disabled.length > 0 ? { features: disabled } : {}),
@@ -770,7 +779,9 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         }
         // Show-don't-point applies only where the agent's next move would be a Read: natural-language answers,
         // including an exact query that escalated into one. Cursor replays skip this — spooled groups are packed.
-        if (context.features.has("pack") && plan.pack === true) {
+        // A caller that renders its own result list (the workspace panel) opts out: a packed body's plain lines
+        // would show up there as hits of a query that never matched them.
+        if (context.features.has("pack") && plan.pack === true && request.render.pack !== false) {
             plan = { ...plan, groups: await packGroups(context.db, context.root, plan.groups, request.render.budget) };
         }
     }
@@ -779,7 +790,10 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
     const featureNote = disabled.length > 0 ? `features ${disabled.map((feature) => `-${feature}`).join(",")}` : undefined;
 
     const hint = plan.hint ?? (plan.groups.length === 0 ? zeroHitHint(request) : undefined);
-    const note = [headerNote ?? plan.headerNote, featureNote].filter((part) => part !== undefined).join(" · ") || undefined;
+    // Two audiences: the capsule prints everything it knows about the run, the JSON result carries only what
+    // the CALLER's query provoked.
+    const note = headerNote ?? plan.headerNote;
+    const capsuleNote = [note, plan.provenance, featureNote].filter((part) => part !== undefined).join(" · ") || undefined;
     const rendered = renderText({
         verb: request.verb,
         echo: request.echo,
@@ -793,7 +807,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         ...(request.render.limit !== undefined ? { limit: request.render.limit } : {}),
         ...(request.render.filesOnly !== undefined ? { filesOnly: request.render.filesOnly } : {}),
         ...(request.render.count !== undefined ? { count: request.render.count } : {}),
-        ...(note !== undefined ? { headerNote: note } : {}),
+        ...(capsuleNote !== undefined ? { headerNote: capsuleNote } : {}),
         ...(hint !== undefined ? { hint } : {}),
         ...(plan.related !== undefined && plan.related.length > 0 ? { related: plan.related } : {}),
         ...(plan.lead === true ? { lead: true } : {}),
@@ -815,7 +829,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
     }
 
     return {
-        result: toResult(plan, rendered, request, offset, context.freshness, hint, context.features),
+        result: toResult(plan, rendered, request, offset, context.freshness, hint, note, context.features),
         text: rendered.text,
         exitCode: rendered.exitCode,
     };
