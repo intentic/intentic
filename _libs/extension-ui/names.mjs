@@ -31,6 +31,7 @@ export const extensionUiNames = [
     "ToggleSwitch",
     "cmp",
     "formatBytes",
+    "seriesColor",
     "timeAgo",
     "useDevice",
     "useTheme",

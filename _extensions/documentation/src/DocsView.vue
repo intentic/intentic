@@ -5,9 +5,10 @@
      staleness counts, publishing — to a strip and a sidebar. Everything shown here is a file that exists; there is
      no documentation service and no server-side state to be out of step with. -->
 <script setup lang="ts">
-import { Button, cmp, Icon, PageHeader, RowGroup, Segmented, Select } from "@intentic/extension-ui";
+import { Button, cmp, Icon, PageHeader, Segmented, Select } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
+import DocsNav from "./DocsNav.vue";
 import DocPage from "./DocPage.vue";
 import GenerateDialog from "./GenerateDialog.vue";
 import { host } from "./host.js";
@@ -80,7 +81,6 @@ const packageQuery = usePackage(page);
 
 const index = computed(() => set.value?.index);
 const entries = computed(() => index.value?.entries ?? []);
-const staleCount = computed(() => entries.value.filter((entry) => entry.stale).length);
 const activeRun = computed(() => rows.value.find((row) => row.running));
 
 // Advancing a run is idempotent and derived, so it is safe to attempt whenever the fleet or the draft moves — see
@@ -195,66 +195,18 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
             <div :class="cmp.emptyState()">
                 <p class="text-sm">{{ label }} has no documentation yet.</p>
                 <p class="mt-1 text-xs text-muted">
-                    One agent will map the repository — its components, its vocabulary, what to read first — and then
-                    a further agent documents each package. You review the result before anything is committed.
+                    One agent will map the repository — its components, its vocabulary, what to read first — and then a further agent documents each
+                    package. You review the result before anything is committed.
                 </p>
                 <button type="button" :class="cmp.buttonPrimary(`mt-3`)" @click="generateOpen = true">Generate documentation</button>
             </div>
         </div>
 
         <!-- Two scroll areas, side by side: a 54-entry contents list and a long document have no reason to share
-             one scrollbar, and sharing it means you cannot keep your place in either. -->
+             one scrollbar, and sharing it means you cannot keep your place in either. Coverage, filtering and the
+             grouping all live inside <DocsNav>; this view only says which page is open. -->
         <div v-else class="flex min-h-0 flex-1 gap-6 px-6 pb-6">
-            <!-- The contents column: the repo page first, then packages grouped by the component the map assigned
-                 them to, which is the whole point of having had a map phase. -->
-            <nav class="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto scrollbar-thin">
-                <RowGroup>
-                    <button
-                        type="button"
-                        class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-canvas"
-                        :class="page === undefined ? `bg-canvas font-medium text-content` : `text-muted`"
-                        @click="openPage(undefined)"
-                    >
-                        <Icon name="align-left" class="shrink-0" />
-                        <span class="truncate">Overview</span>
-                    </button>
-                </RowGroup>
-
-                <RowGroup
-                    v-for="component in set?.repoDoc?.components ?? []"
-                    :key="component.id"
-                    :label="component.name"
-                    :count="component.packages.length"
-                >
-                    <button
-                        v-for="dir in component.packages"
-                        :key="dir"
-                        type="button"
-                        class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-canvas"
-                        :class="page === dir ? `bg-canvas` : ``"
-                        @click="openPage(dir)"
-                    >
-                        <span class="min-w-0 flex-1 truncate font-mono text-2xs" :class="page === dir ? `text-content` : `text-muted`">{{ dir }}</span>
-                        <Icon
-                            v-if="entries.find((entry) => entry.dir === dir)?.stale === true"
-                            name="exclamation-triangle"
-                            class="shrink-0 text-2xs text-warning"
-                        />
-                    </button>
-                </RowGroup>
-
-                <!-- Coverage lives HERE, as a number beside what it describes — never on the rail, where a count
-                     that is lit every day would train the eye to skip the tile. -->
-                <div v-if="index !== undefined" class="flex flex-col gap-1 px-1 text-2xs text-subtle">
-                    <span>{{ entries.length }} documented<span v-if="staleCount > 0">, {{ staleCount }} may be out of date</span></span>
-                    <span v-if="index.undocumented.length > 0">
-                        {{ index.undocumented.length }} package{{ index.undocumented.length === 1 ? `` : `s` }} not documented
-                    </span>
-                    <span v-if="index.orphans.length > 0" class="text-warning">
-                        {{ index.orphans.length }} document{{ index.orphans.length === 1 ? `` : `s` }} for packages that are gone
-                    </span>
-                </div>
-            </nav>
+            <DocsNav :components="set?.repoDoc?.components ?? []" :index="index" :page="page" @open="openPage" />
 
             <!-- KEYED BY PAGE, so each document mounts fresh. Once the document has its own scrollbar, a reused
                  instance keeps the last page's scroll position and you arrive halfway down a page you have never
@@ -292,13 +244,18 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 <h2 class="text-sm font-semibold">Publish to {{ label }}</h2>
                 <p class="text-xs text-muted">
                     {{ publishState.tails.length }} file{{ publishState.tails.length === 1 ? `` : `s` }} will be written under
-                    <span class="font-mono">docs/architecture/</span> and committed<span v-if="publishState.branch !== ``"> on {{ publishState.branch }}</span>.
+                    <span class="font-mono">docs/architecture/</span> and committed<span v-if="publishState.branch !== ``">
+                        on {{ publishState.branch }}</span
+                    >.
                 </p>
-                <p v-if="publishState.foreign.length > 0" class="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-2 text-2xs">
+                <p
+                    v-if="publishState.foreign.length > 0"
+                    class="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-2 text-2xs"
+                >
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
                     <span>
-                        This repository has {{ publishState.foreign.length }} other changed file{{ publishState.foreign.length === 1 ? `` : `s` }}. Any of
-                        them you have already staged will be included in this commit.
+                        This repository has {{ publishState.foreign.length }} other changed file{{ publishState.foreign.length === 1 ? `` : `s` }}.
+                        Any of them you have already staged will be included in this commit.
                     </span>
                 </p>
                 <div class="flex justify-end gap-2">

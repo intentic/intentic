@@ -30,6 +30,7 @@ export const StepSection = m["StepSection"];
 export const ToggleSwitch = m["ToggleSwitch"];
 export const cmp = m["cmp"];
 export const formatBytes = m["formatBytes"];
+export const seriesColor = m["seriesColor"];
 export const timeAgo = m["timeAgo"];
 export const useDevice = m["useDevice"];
 export const useTheme = m["useTheme"];

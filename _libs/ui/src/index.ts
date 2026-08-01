@@ -27,6 +27,9 @@ export { default as PullToRefresh } from "./components/PullToRefresh.vue";
 export { default as Row } from "./components/Row.vue";
 export { default as RowGroup } from "./components/RowGroup.vue";
 export { default as Segmented } from "./components/Segmented.vue";
+// The accent → palette-slot resolver, exported for the same reason the figure types are: a view that holds
+// authored accents (a documentation map's components, say) has to paint them the way a figure would.
+export { seriesColor } from "./components/seriesAccent.js";
 export { default as StatRow } from "./components/StatRow.vue";
 export { default as StatusBadge, type StatusVariant } from "./components/StatusBadge.vue";
 export { default as StepSection } from "./components/StepSection.vue";

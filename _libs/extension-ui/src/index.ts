@@ -31,6 +31,7 @@ export {
     ProgressRing,
     RowGroup,
     Segmented,
+    seriesColor,
     StatRow,
     StatusBadge,
     type StatusVariant,

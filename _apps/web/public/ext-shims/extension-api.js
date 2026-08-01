@@ -15,5 +15,7 @@ export const ViewContributionSchema = m["ViewContributionSchema"];
 export const ViewerContributionSchema = m["ViewerContributionSchema"];
 export const extensionApiVersion = m["extensionApiVersion"];
 export const extensionIdOf = m["extensionIdOf"];
+export const flattenQuery = m["flattenQuery"];
+export const mergeQuery = m["mergeQuery"];
 export const readDaemonStream = m["readDaemonStream"];
 export const sandboxRouteAllowed = m["sandboxRouteAllowed"];
