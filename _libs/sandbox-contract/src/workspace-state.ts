@@ -78,6 +78,11 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
      * query uses would put the drift this table exists to remove straight back into it. Each says which
      * constraint would have to move first, so the next reader doesn't re-derive it. */
     {
+        path: ".intentic/webchat-installs.json",
+        invalidates: [],
+        why: "Which origins have loaded a Doorbell's widget, written on a 30s flush timer while a customer's site serves page views. The install panel that renders it fetches on open and polls itself while it is on screen, which is the whole window in which the answer changes for anyone. Pushing instead would bill every connected browser a refetch per flush, for a panel almost nobody has open.",
+    },
+    {
         path: ".intentic/webchat-sessions.json",
         invalidates: [],
         why: "Doorbell thread bookkeeping (visitor thread → sandbox conversation + provider session), written on EVERY visitor message. Nothing in the browser reads it: what a visitor's chat produces is a conversation, and the fleet board already learns about that from the agent registry's own push. Naming a key here would bill every connected browser a refetch per inbound message — the request storm this table's own note warns about — to refresh nothing it can see.",

@@ -53,7 +53,8 @@ const appFor = (services: Services, wake: WakeFn): Hono => {
     return new Hono()
         .get("/webchat/:id/config", routes.config)
         .get("/webchat/:id/challenge", routes.challenge)
-        .post("/webchat/:id/message", routes.message);
+        .post("/webchat/:id/message", routes.message)
+        .get("/webchat/:id/installs", routes.installs);
 };
 
 const post = (app: Hono, id: string, body: unknown, headers: Record<string, string> = { origin: ORIGIN }) =>
@@ -349,4 +350,35 @@ test("sign-in-only refuses an anonymous message with 401 so the widget knows to 
     // An unverifiable token is refused the same way — an expired-vs-forged breakdown only helps someone probing.
     expect((await post(app, "wc-auth", { conversationId: "v", content: "hi", idToken: "not-a-jwt" })).status).toBe(401);
     expect(turns).toEqual([]);
+});
+
+/* ---- install probes: telling "nobody has written yet" from "the snippet never landed" ---- */
+
+test("a widget load is recorded against the origin it came from, admitted or refused", async () => {
+    const { services } = await setup(webchat("wc-probe"));
+    const app = appFor(services, fakeWake([]));
+    await app.request(`/webchat/wc-probe/config`, { headers: { origin: ORIGIN } });
+    // The commonest setup mistake: the site redirects to www, so the browser asks from an origin nobody listed.
+    await app.request(`/webchat/wc-probe/config`, { headers: { origin: "https://www.site.example" } });
+    await app.request(`/webchat/wc-probe/config`, { headers: { origin: "https://www.site.example" } });
+
+    const installs = await (await app.request(`/webchat/wc-probe/installs`)).json();
+    expect(installs.origins).toHaveLength(2);
+    // Newest first, and the refused one carries the origin the owner has to add.
+    const refused = installs.origins.find((probe: { origin: string }) => probe.origin === "https://www.site.example");
+    expect(refused).toMatchObject({ allowed: false, loads: 2 });
+    expect(installs.origins.find((probe: { origin: string }) => probe.origin === ORIGIN)).toMatchObject({ allowed: true, loads: 1 });
+});
+
+test("a Doorbell nobody has loaded reports no origins at all — the honest 'not installed' answer", async () => {
+    const { services } = await setup(webchat("wc-silent"));
+    const app = appFor(services, fakeWake([]));
+    expect((await (await app.request(`/webchat/wc-silent/installs`)).json()).origins).toEqual([]);
+});
+
+test("a probe for an id that is not a Doorbell records nothing", async () => {
+    const { services } = await setup(webchat("wc-real"));
+    const app = appFor(services, fakeWake([]));
+    await app.request(`/webchat/not-a-doorbell/config`, { headers: { origin: ORIGIN } });
+    expect((await (await app.request(`/webchat/not-a-doorbell/installs`)).json()).origins).toEqual([]);
 });

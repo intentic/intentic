@@ -13,7 +13,7 @@ import {
 import { Button, cmp, CopyButton, Dialog, Icon, ToggleSwitch } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { Cron } from "croner";
-import { computed, nextTick, reactive, ref } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import { cronOf, defaultSchedule, formatAt, parseCron } from "./cronSchedule";
 import { host } from "./host";
 import { type ListenerEventType, LISTENER_SOURCES } from "./listenerSources";
@@ -58,6 +58,10 @@ const { automations, save } = useAutomations();
 const capabilities = computed(() => host().workspace.capabilities());
 
 const visible = defineModel<boolean>(`visible`, { default: false });
+/* A recipe the OPENER already chose — the page's suggestion strip, which offers the handful of automations a
+ * user won't go looking for. It prefills exactly as picking the same template inside the dialog would, so
+ * there is one prefill path and the suggestion cannot drift from the gallery entry it names. */
+const props = defineProps<{ prefill?: AutomationRecipe }>();
 
 const form = reactive({
     kind: `schedule` as `schedule` | `event` | `listener` | `workspace`,
@@ -322,6 +326,14 @@ const pickFirstMatch = (): void => {
         pickRecipe(first);
     }
 };
+
+// Applied on OPEN rather than on mount: the dialog stays mounted between openings and @hide resets the form,
+// so prefilling at mount would be erased by the first close and never come back.
+watch(visible, (open) => {
+    if (open && props.prefill !== undefined) {
+        pickRecipe(props.prefill);
+    }
+});
 
 // Choosing a trigger by hand detaches a prefilled recipe once it no longer matches (the user's edits stay).
 const setKind = (kind: typeof form.kind): void => {

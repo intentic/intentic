@@ -128,6 +128,17 @@ export const docsSections: DocsSection[] = [
         label: "Guides",
         items: [
             {
+                id: "doorbell",
+                title: "Doorbell",
+                blurb: "Put a chat on your website, answered by your agent",
+                meta: {
+                    title: "Doorbell — put your agent on your website — intentic docs",
+                    description:
+                        "Embed a chat widget on your site with one script tag. Visitors talk to your sandbox agent; you watch and take over from the fleet board.",
+                    datePublished: "2026-08-01",
+                },
+            },
+            {
                 id: "autonomous-employees",
                 title: "Autonomous employees",
                 blurb: "Specialize a sandbox until it does a job alone",

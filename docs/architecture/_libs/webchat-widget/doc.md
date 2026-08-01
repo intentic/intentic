@@ -76,9 +76,18 @@ the main thread in yielding batches rather than in a worker: a worker would need
 page's Content-Security-Policy is entitled to forbid, and being unable to chat because of the site's own
 security policy is a worse failure than a busy second.
 
+## The request that answers "did it work?"
+
+Every widget load fetches its config, so that one request is also the install probe: the daemon records which
+origin asked and whether it was admitted (`webchat-installs.ts`). Without it the app could not tell a working
+Doorbell nobody has written to from one whose snippet was never pasted — both are an automation with no runs —
+and the likeliest setup mistake of all, listing `example.com` but not `www.example.com`, had no symptom except
+a chat that never opened. The owner's install panel reads it back and offers to add the origin that was
+turned away.
+
 ## Where to look next
 
-The other half of this wire is `_apps/sandbox/src/webchat/` — four small modules beside the routes, covering
-config resolution, identity, the bot check and the thread store. The shared shapes live in
+The other half of this wire is `_apps/sandbox/src/webchat/` — five small modules beside the routes, covering
+config resolution, identity, the bot check, the thread store and the install probes. The shared shapes live in
 `@intentic/sandbox-contract`, which this package imports as types only, so no schema library reaches a
 visitor's browser.

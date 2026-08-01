@@ -12,6 +12,7 @@ import { createSseStream } from "./sse-stream.js";
 import { antiBotAccepted, issueChallenge } from "./webchat-antibot.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
 import { resolveVisitor, SignInRequired } from "./webchat-identity.js";
+import { fileWebchatInstallsStore, type WebchatInstallsStore } from "./webchat-installs.js";
 import { fileWebchatSessionsStore, WEBCHAT_SESSION_TTL_MS, type WebchatSessionsStore } from "./webchat-sessions.js";
 
 /* The Doorbell's ingest: the daemon's ONLY routes an anonymous browser may reach. Unlike Discord (a gateway
@@ -80,23 +81,30 @@ const CONVERSATION_ID_MAX = 60;
 const mintConversationId = (automationId: string, visitorConversationId: string): string =>
     `wc-${automationId}-${visitorConversationId}`.replaceAll(/[^a-zA-Z0-9_-]/g, "-").slice(0, CONVERSATION_ID_MAX);
 
-// Resolve the automation this request addresses, or the refusal to answer with. A disabled or missing Doorbell
-// says so; a wrong origin gets the same 403 whether or not the automation exists, so the endpoint isn't an
-// oracle for which automation ids are real.
-type Resolved = { automation: AutomationRecord; config: WebchatConfig } | { status: 403 | 404 | 409; error: string };
+/* Resolve the automation this request addresses, or the refusal to answer with.
+ *
+ * A refusal carries the automation whenever one was found, because the install panel's most useful line is
+ * built from exactly that case: a real Doorbell, asked for by an origin that is not on its list. Nothing about
+ * the RESPONSE changes — the caller still answers with `status` and `error` alone. */
+type Resolved = { automation: AutomationRecord; config: WebchatConfig } | { status: 403 | 404 | 409; error: string; automation?: AutomationRecord };
 
 const resolve = async (services: Services, id: string, origin: string | undefined): Promise<Resolved> => {
     const automation = await services.automations.get(id);
     if (automation === undefined || automation.trigger.kind !== "listener" || automation.trigger.provider !== "webchat") {
         return { status: 404, error: "no web-chat automation with that id" };
     }
-    // The public id is the address; the embed-origin allowlist (plus the rate limit below) is the real gate —
-    // CORS only keeps browsers from blocking a legit widget. A non-browser client omits Origin and is refused.
+    /* The public id is the address; the embed-origin allowlist (plus the rate limit below) is the real gate —
+     * CORS only keeps browsers from blocking a legit widget. A non-browser client omits Origin and is refused.
+     *
+     * These statuses do tell an unknown id (404) from a real one asked for by the wrong origin (403). That is
+     * deliberate rather than overlooked: an automation id is PUBLIC by construction — it sits in the embed
+     * snippet on the customer's own page — so there is nothing for a uniform answer to protect, and the two
+     * cases are the two different things a site owner has to fix. */
     if (origin === undefined || !(automation.trigger.allowedOrigins ?? []).includes(origin)) {
-        return { status: 403, error: "origin not allowed" };
+        return { status: 403, error: "origin not allowed", automation };
     }
     if (!automation.enabled) {
-        return { status: 409, error: "automation disabled" };
+        return { status: 409, error: "automation disabled", automation };
     }
     return { automation, config: automation.webchat ?? {} };
 };
@@ -106,19 +114,38 @@ const resolve = async (services: Services, id: string, origin: string | undefine
 const remoteIpOf = (c: Context<AppEnv>): string | undefined =>
     c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
 
-export const createWebchatRoutes = (services: Services, wake: WakeFn = streamAgent, sessions?: WebchatSessionsStore) => {
+export const createWebchatRoutes = (
+    services: Services,
+    wake: WakeFn = streamAgent,
+    sessions?: WebchatSessionsStore,
+    installs: WebchatInstallsStore = fileWebchatInstallsStore(services.workspace.root),
+) => {
     const store = sessions ?? fileWebchatSessionsStore(join(services.workspace.root, ".intentic", "webchat-sessions.json"));
 
     return {
-        // What the widget renders itself from. Origin-gated like the message route so a Doorbell's greeting,
-        // accent and sign-in settings aren't readable from anywhere on the internet.
+        /* What the widget renders itself from. Origin-gated like the message route so a Doorbell's greeting,
+         * accent and sign-in settings aren't readable from anywhere on the internet.
+         *
+         * This is also the INSTALL PROBE: it is the one request every widget makes on every page load, so
+         * recording it — admitted or refused — is what lets the app answer "did the snippet land?" instead of
+         * showing the same empty run history for a working Doorbell and an unpasted one. */
         config: async (c: Context<AppEnv, "/webchat/:id/config">): Promise<Response> => {
-            const resolved = await resolve(services, c.req.param("id"), c.req.header("origin"));
+            const origin = c.req.header("origin");
+            const resolved = await resolve(services, c.req.param("id"), origin);
+            if (origin !== undefined && resolved.automation !== undefined) {
+                installs.record(resolved.automation.id, origin, !("status" in resolved), Date.now());
+            }
             if ("status" in resolved) {
                 return c.json({ error: resolved.error }, resolved.status);
             }
             return c.json(publicConfig(resolved.automation));
         },
+
+        /* What the owner's install panel reads: which origins have actually loaded this Doorbell's widget, and
+         * which were turned away. OWNER-ONLY — deliberately absent from app.ts's public webchat paths, so it
+         * goes through the ordinary bearer middleware like every other route the app calls. */
+        installs: async (c: Context<AppEnv, "/webchat/:id/installs">): Promise<Response> =>
+            c.json({ origins: await installs.list(c.req.param("id")) }),
 
         // A proof-of-work challenge for one visitor thread. The salt is self-verifying and signed against that
         // thread, so nothing is stored here and a solution can't be moved to another conversation.

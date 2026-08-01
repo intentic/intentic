@@ -17,7 +17,7 @@ import { embedSnippet, webhookUrl } from "./useAutomations";
  * ordinary automation and must not grow a second presentation that can drift from it. */
 
 const props = defineProps<{ automation: AutomationSummary; expanded: boolean; busy?: boolean }>();
-const emit = defineEmits<{ toggle: [enabled: boolean]; remove: []; expand: []; run: [] }>();
+const emit = defineEmits<{ toggle: [enabled: boolean]; remove: []; expand: []; run: []; install: [] }>();
 
 const trigger = computed<Trigger>(() => props.automation.trigger);
 const lastRun = computed<AutomationRun | undefined>(() => props.automation.runs[0]);
@@ -89,11 +89,11 @@ const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !
 
 /* The Doorbell summary the expanded row shows: the snippet to paste, and the two settings that decide whether
  * it works at all. Undefined for every other automation, which is what keeps the block out of their rows.
- * `snippet` is undefined only before the sandbox's own origin is known, and then there is nothing to copy. */
+ * Undefined until the sandbox's own origin is known, because without it there is no snippet to install and
+ * the Install action would open a panel with nothing in it. */
 const doorbell = computed(() => {
     const fires = props.automation.trigger;
-    const snippet = embedSnippet(props.automation);
-    if (fires.kind !== `listener` || fires.provider !== `webchat` || snippet === undefined) {
+    if (fires.kind !== `listener` || fires.provider !== `webchat` || embedSnippet(props.automation) === undefined) {
         return undefined;
     }
     const config = props.automation.webchat ?? {};
@@ -101,7 +101,6 @@ const doorbell = computed(() => {
     // as off, because that is what will actually be enforced — the row must not claim a check nobody runs.
     const turnstileReady = config.turnstileSiteKey !== undefined && config.turnstileSecret !== undefined;
     return {
-        snippet,
         origins: fires.allowedOrigins ?? [],
         access: config.access === `google` ? `Google sign-in required` : `open to anyone`,
         botCheck:
@@ -163,6 +162,21 @@ const doorbell = computed(() => {
                 {{ nextLabel }}
             </span>
 
+            <!-- A Doorbell's snippet is the DELIVERABLE — the one thing the owner came here to get — so unlike
+                 Run and Delete it is always visible rather than hover-revealed, and it sits before them because
+                 installing is what you do first and most often. It also carries the install status, which is
+                 the only place in the app that can say whether the paste worked. -->
+            <button
+                v-if="doorbell"
+                type="button"
+                class="shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-2xs font-medium text-muted transition-colors hover:bg-overlay hover:text-content"
+                :aria-label="`Install ${automation.id} on a website`"
+                v-tooltip.top="`Embed code & install status`"
+                @click="emit(`install`)"
+            >
+                <Icon name="globe" class="mr-1 text-2xs" />Install
+            </button>
+
             <!-- Fire it now. The reason this exists at all: a 3 a.m. cron, a webhook you would have to forge, a
                  Discord mention you would have to provoke — none of them testable by waiting. Hover-revealed
                  beside Delete, because it is an occasional act, not part of reading the column of states. It
@@ -216,19 +230,14 @@ const doorbell = computed(() => {
             <!-- A Doorbell's embed snippet, where the owner will actually look for it: on the row, months after
                  the create dialog that first showed it. Beside it, the two things that decide whether the widget
                  works at all — which sites may load it, and who it lets in. -->
-            <template v-if="doorbell">
-                <div class="flex items-center gap-1.5">
-                    <Icon name="globe" class="shrink-0 text-2xs text-subtle" />
-                    <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ doorbell.snippet }}</code>
-                    <CopyButton :text="doorbell.snippet" :aria-label="`Copy the embed snippet for ${automation.id}`" v-tooltip.top="`Copy snippet`" />
-                </div>
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                    <span v-if="doorbell.origins.length > 0">on {{ doorbell.origins.join(`, `) }}</span>
-                    <span v-else class="text-danger">no sites allowed — nobody can chat</span>
-                    <span>{{ doorbell.access }}</span>
-                    <span>{{ doorbell.botCheck }}</span>
-                </div>
-            </template>
+            <!-- State only. The snippet itself lives behind Install above rather than being repeated here: two
+                 copies of the one string the owner acts on is two places for it to be stale or disagree. -->
+            <div v-if="doorbell" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+                <span v-if="doorbell.origins.length > 0">on {{ doorbell.origins.join(`, `) }}</span>
+                <span v-else class="text-danger">no sites allowed — nobody can chat</span>
+                <span>{{ doorbell.access }}</span>
+                <span>{{ doorbell.botCheck }}</span>
+            </div>
 
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
                 <span>wakes {{ automation.agent ?? `claude` }}{{ automation.model ? ` · ${automation.model}` : `` }}</span>

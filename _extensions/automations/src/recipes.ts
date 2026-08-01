@@ -51,6 +51,16 @@ export interface AutomationRecipe {
     // gallery. Chores are the one kind of automation a user is expected to want without knowing it exists, so
     // the shelf lists them OFF and one click creates the row — never a hidden toggle, always a real automation.
     readonly chore?: true;
+    /* Offer this one ON THE PAGE, not only inside the create dialog's template gallery. Chores are all offered
+     * (that is what the chore shelf is), so this is for the rare NON-chore that a user is equally unlikely to
+     * go looking for — a Doorbell is a chat on your own website, and nobody opens an automations page hunting
+     * for that. Deliberately a flag rather than "show every integration recipe": the gallery is where you go
+     * once you know what you want, and a page that offered all of them would be a gallery with extra steps.
+     *
+     * Unlike a chore, picking one of these OPENS THE DIALOG prefilled rather than creating the automation —
+     * they need configuration (a Doorbell with no allowed sites admits nobody) and a row that silently does
+     * nothing is worse than a form. */
+    readonly suggest?: true;
     // What the shelf card says under the title. Chores only — every other recipe is picked from a gallery where
     // the title plus its trigger is enough context.
     readonly description?: string;
@@ -96,6 +106,9 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
         id: "website-concierge",
         trigger: { kind: "listener", provider: "webchat", eventType: "message" },
         note: "instant",
+        // Offered on the page itself: nobody opens this page looking for "put a chat on my website".
+        suggest: true,
+        description: "Put a chat bubble on your own site and let visitors talk to this agent.",
         prompt:
             "A visitor to your website just wrote in the chat widget. The payload is a JSON object: `content` is what they typed, `author` is what " +
             "to call them, and `verified` (when present) is a Google-signed identity — `unverifiedDisplayName` is only a nickname they chose, never " +

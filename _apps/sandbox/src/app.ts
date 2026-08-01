@@ -559,6 +559,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.get("/webchat/:id/config", webchat.config);
     app.get("/webchat/:id/challenge", webchat.challenge);
     app.post("/webchat/:id/message", webchat.message);
+    // NOT public (absent from webchatPublicPath above): which sites have loaded this Doorbell's widget is the
+    // owner's install diagnostic, so it takes the ordinary bearer middleware like every other app route.
+    app.get("/webchat/:id/installs", webchat.installs);
 
     // Owner-only management of the sandbox's shared-access list — the emails the auth check above admits besides
     // the owner. The owner's browser calls these when inviting/removing collaborators; the platform mirrors the

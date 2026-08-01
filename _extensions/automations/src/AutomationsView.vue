@@ -4,7 +4,9 @@ import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageHeader, RowGroup,
 import { computed, reactive, ref } from "vue";
 import AutomationRow from "./AutomationRow.vue";
 import CreateAutomationDialog from "./CreateAutomationDialog.vue";
+import DoorbellInstallDialog from "./DoorbellInstallDialog.vue";
 import { since } from "./cronSchedule";
+import { host } from "./host";
 import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
 import { useAutomations } from "./useAutomations";
 
@@ -38,6 +40,10 @@ const createOpen = ref(false);
 const actionError = ref<string | undefined>(undefined);
 // Rows with their detail unfolded.
 const expanded = reactive(new Set<string>());
+// The Doorbell whose install panel is open, by id rather than by object so it survives the list refetching
+// underneath it (the panel polls, which invalidates nothing, but a save from inside it does).
+const installId = ref<string | undefined>(undefined);
+const installing = computed(() => automations.value.find((automation) => automation.id === installId.value));
 // The chore pill mid-create, so its pill alone shows the wait.
 const enabling = ref<string | undefined>(undefined);
 // The automation awaiting a confirmed delete — a wake's whole run history goes with it, and nothing restores it.
@@ -87,6 +93,30 @@ const integrations = computed(() => shown.value.filter((automation) => automatio
 // A chore recipe with no automation of that id yet — what the suggestion strip offers. Matching on id (not on
 // trigger) keeps a user's own second review chore from hiding the stock one.
 const availableChores = computed(() => CHORE_RECIPES.filter((recipe) => !automations.value.some((automation) => automation.id === recipe.id)));
+
+/* The same offer for the handful of NON-chore recipes marked `suggest` — today just the Doorbell, which nobody
+ * arrives at this page looking for. Provider-gated ones only show once their capability is connected, exactly
+ * as they do in the dialog's gallery. Unlike a chore, picking one opens the dialog prefilled: a Doorbell with
+ * no allowed sites admits nobody, so silently creating the row would be creating a row that does nothing. */
+const SUGGESTED_RECIPES = AUTOMATION_RECIPES.filter((recipe) => recipe.chore !== true && recipe.suggest === true);
+const availableSuggestions = computed(() => {
+    const connected = new Set(
+        host()
+            .workspace.capabilities()
+            .map((capability) => capability.config[`provider`]),
+    );
+    return SUGGESTED_RECIPES.filter(
+        (recipe) =>
+            !automations.value.some((automation) => automation.id === recipe.id) &&
+            (recipe.providers === undefined || recipe.providers.some((provider) => connected.has(provider))),
+    );
+});
+// Which recipe the create dialog opens on, when it was opened from a suggestion rather than from "New".
+const createPrefill = ref<AutomationRecipe | undefined>(undefined);
+const openFromSuggestion = (recipe: AutomationRecipe): void => {
+    createPrefill.value = recipe;
+    createOpen.value = true;
+};
 
 // The enabled toggle is a plain re-post of the automation with the flag flipped (upsert keeps the run history).
 const toggle = async (automation: AutomationSummary, enabled: boolean): Promise<void> => {
@@ -303,6 +333,7 @@ const toggleDetail = (id: string): void => {
                     @expand="toggleDetail(chore.id)"
                     @remove="confirmRemoveId = chore.id"
                     @run="runNow(chore)"
+                    @install="installId = chore.id"
                 />
             </RowGroup>
 
@@ -317,8 +348,34 @@ const toggleDetail = (id: string): void => {
                     @expand="toggleDetail(automation.id)"
                     @remove="confirmRemoveId = automation.id"
                     @run="runNow(automation)"
+                    @install="installId = automation.id"
                 />
             </RowGroup>
+
+            <!-- The same pills for things that are not chores but are equally easy to never find out about.
+                 Separate section because the sentence under it is different: a chore costs nothing until its
+                 check finds something, while these need a few fields before they do anything at all. -->
+            <section v-if="availableSuggestions.length > 0">
+                <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
+                    <span :class="cmp.sectionLabel()">Reach this agent from elsewhere</span>
+                    <span class="text-2xs text-subtle">A few details to fill in, then it is a row like any other.</span>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                    <button
+                        v-for="recipe in availableSuggestions"
+                        :key="recipe.id"
+                        type="button"
+                        class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-line bg-card px-2.5 py-1.5 text-xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                        v-tooltip.top="recipe.description"
+                        @click="openFromSuggestion(recipe)"
+                    >
+                        <Icon name="plus" class="shrink-0 text-2xs text-subtle" />
+                        <Icon v-if="recipe.icon" :name="recipe.icon" class="shrink-0 text-2xs" />
+                        {{ recipe.title }}
+                        <span v-if="recipe.note" class="text-2xs text-subtle">· {{ recipe.note }}</span>
+                    </button>
+                </div>
+            </section>
 
             <!-- The offer, as pills rather than cards: one line each however many there are, and each one click
                  from being a real row above. -->
@@ -350,7 +407,16 @@ const toggleDetail = (id: string): void => {
             </section>
         </div>
 
-        <CreateAutomationDialog v-model:visible="createOpen" />
+        <CreateAutomationDialog v-model:visible="createOpen" :prefill="createPrefill" @update:visible="!$event && (createPrefill = undefined)" />
+        <!-- Keyed on the row so re-opening a different Doorbell remounts the panel rather than showing the
+             previous one's install probes while its own query is still in flight. -->
+        <DoorbellInstallDialog
+            v-if="installing"
+            :key="installing.id"
+            :automation="installing"
+            :visible="true"
+            @update:visible="installId = undefined"
+        />
 
         <!-- Deleting takes the run history with it and the daemon keeps no copy — the one action here with no undo. -->
         <ConfirmDialog

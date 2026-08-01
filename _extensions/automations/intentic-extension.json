@@ -10,6 +10,7 @@
             "POST /automations",
             "DELETE /automations/*",
             "POST /automations/*/run",
+            "GET /webchat/*/installs",
             "GET /automations/pending",
             "POST /automations/pending/*/approve",
             "POST /automations/pending/*/reject"

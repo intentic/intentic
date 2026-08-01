@@ -164,7 +164,11 @@ survive reconnects. Its subsystems:
   ([webchat-sessions.ts](_apps/sandbox/src/webchat/webchat-sessions.ts)), so a five-message support chat is one
   fleet card the owner can watch live and take over — not five worktrees with amnesia. And because an
   automation turn runs `bypassPermissions` by default, a Doorbell's real boundary is `Automation.allowedTools`,
-  carried into the SDK's own allowlist: prompt wording is advice, an empty toolbox is not.
+  carried into the SDK's own allowlist: prompt wording is advice, an empty toolbox is not. The config fetch
+  doubles as the **install probe** ([webchat-installs.ts](_apps/sandbox/src/webchat/webchat-installs.ts)):
+  every widget load records its origin and whether it was admitted, which is the only thing that can tell a
+  working Doorbell nobody has written to from a snippet that was never pasted — and turns the commonest
+  mistake of all (`example.com` listed, `www.example.com` not) into a named origin with an Allow button.
 - **CI pipelines** — the workspace repos' GitHub Actions / GitLab pipelines, as both an automation source and a
   UI surface ([ci/](_apps/sandbox/src/ci/)). A repo participates when its remote's hostname matches a connected
   github/gitlab capability (`projects.ts` — self-hosted GitLab included, via the capability's instance url). A

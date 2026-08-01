@@ -6,7 +6,7 @@ import {
     AutomationsListSchema,
 } from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { computed } from "vue";
+import { computed, type Ref } from "vue";
 import { host } from "./host";
 
 /* The sandbox's automations manifest (.intentic/automations.json), read/written via the daemon's /automations
@@ -39,6 +39,41 @@ export const embedSnippet = (automation: AutomationSummary): string | undefined 
     }
     return `<script src="${base}/webchat/widget.js" data-automation="${automation.id}" defer></script>`;
 };
+
+/* Which sites have actually loaded a Doorbell's widget — the answer to "did the snippet land?", which nothing
+ * else in the app can give: a working Doorbell nobody has written to and one that was never pasted both show an
+ * empty run history. Polled rather than pushed, and only while the install panel is open (`enabled`), because
+ * the one minute after pasting a snippet is the entire window in which this changes for anyone. */
+export interface DoorbellInstall {
+    readonly origin: string;
+    readonly allowed: boolean;
+    readonly lastSeenAt: number;
+    readonly loads: number;
+}
+
+const INSTALL_POLL_MS = 4_000;
+
+export function useDoorbellInstalls(automationId: Ref<string | undefined>, enabled: Ref<boolean>) {
+    const api = host();
+    const query = useQuery({
+        queryKey: computed(() => api.sandbox.key(`webchat-installs`, automationId.value ?? ``)),
+        queryFn: async (): Promise<DoorbellInstall[]> => {
+            const id = automationId.value;
+            if (id === undefined) {
+                return [];
+            }
+            const body = (await api.sandbox.json(`/webchat/${encodeURIComponent(id)}/installs`)) as { origins?: DoorbellInstall[] };
+            return body.origins ?? [];
+        },
+        enabled: computed(() => enabled.value && automationId.value !== undefined && api.sandbox.reachable()),
+        refetchInterval: INSTALL_POLL_MS,
+    });
+    return {
+        installs: computed<DoorbellInstall[]>(() => query.data.value ?? []),
+        isLoading: query.isLoading,
+        error: computed(() => query.error.value?.message),
+    };
+}
 
 export function useAutomations() {
     const api = host();

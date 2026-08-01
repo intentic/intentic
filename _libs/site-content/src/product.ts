@@ -57,6 +57,59 @@ const PUBLISHED = "2026-08-01";
 
 export const productPages: ProductPage[] = [
     {
+        slug: "doorbell",
+        navLabel: "Doorbell",
+        menuBlurb: "Put your agent on your own website",
+        group: "run",
+        heading: "Your agent, answering on your own website.",
+        sub: "One script tag puts a chat bubble on your site. The thing answering is not a help-centre bot — it is the same agent that has your repository, your docs and your tools, so it can answer from what is true today. Every conversation opens on your fleet board, where you can read it and take over mid-sentence.",
+        hero: {
+            src: "/assets/product/doorbell.png",
+            width: 2880,
+            height: 1800,
+            alt: "A robotics company's website with the Doorbell widget open in the corner: the agent greets the visitor, the visitor asks whether the arms work outdoors, and the agent answers with the IP66 rating and a cold-weather caveat, then offers to open a ticket.",
+            frame: "browser",
+            label: "a customer's site",
+        },
+        facts: [
+            { value: "1", label: "script tag to install" },
+            { value: "6 kB", label: "gzipped, no framework" },
+            { value: "read-only", label: "toolbox by default" },
+        ],
+        blocks: [
+            {
+                title: "One line, and the address is already right",
+                body: "The snippet carries exactly one piece of information — which automation to talk to. The sandbox it calls is the origin the script itself came from, so there is no second address to keep in sync and no key sitting in your page's source for anyone to copy.",
+                bullets: [
+                    "Renders in a shadow root: your CSS cannot reshape it, its CSS cannot leak into your page.",
+                    "An allowlist of your own origins decides who may embed it.",
+                    "The install panel tells you which sites have actually loaded it — and which were turned away.",
+                ],
+            },
+            {
+                title: "A conversation, not a series of strangers",
+                body: "A visitor's follow-up continues the same thread, because the widget keeps a thread id and the sandbox resumes that conversation rather than meeting them again. One visitor is one card on your fleet board — open it, read what was said, and answer in your own words when the agent should not be the one deciding.",
+                figure: "shared-surfaces",
+            },
+            {
+                title: "Safe to point at the open internet",
+                body: "A Doorbell is driven by people you have never met, so it runs with a read-only toolbox: it can read files, search the workspace and fetch a page, and it cannot run commands or write anything. That is enforced as a list of allowed tools, not as a request in the prompt — an instruction smuggled into a support question has nothing to reach.",
+                bullets: [
+                    "Each visitor thread runs in its own throwaway git worktree.",
+                    "A bot check per conversation: Cloudflare Turnstile, or a built-in one that needs no accounts.",
+                    "Optional Google sign-in, verified against your own OAuth client — the visitor never holds a credential for your sandbox.",
+                    "Per-conversation rate limits and a daily ceiling you set.",
+                ],
+            },
+        ],
+        meta: {
+            title: "Doorbell — put your agent on your website — intentic",
+            description:
+                "Embed a chat on your site with one script tag. Visitors talk to your sandbox agent; each thread opens on your fleet board for you to watch and take over.",
+            datePublished: PUBLISHED,
+        },
+    },
+    {
         slug: "fleet",
         navLabel: "Fleet board",
         menuBlurb: "Run ten agents at once and see which one needs you",
