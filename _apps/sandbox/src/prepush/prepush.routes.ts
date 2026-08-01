@@ -2,7 +2,9 @@ import { prepushContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { prepushCheck } from "./prepush.js";
+import { type PrepushDeps, prepushCheck } from "./prepush.js";
+
+export type PrepushRoutesDeps = PrepushDeps;
 
 // The pre-push check's owner-facing surface — the push dialog's three verbs. Each addresses the ONE check this
 // process has (prepush/prepush.ts), so none of them takes an id.
@@ -11,7 +13,7 @@ import { prepushCheck } from "./prepush.js";
 // call held open for one would die on the first proxy timeout with the check still going. Awaiting that much is
 // what makes the caller's first `state` poll — fired the instant this returns — see the run rather than the
 // `idle` that preceded it.
-export const createPrepushRoutes = (services: Services) => {
+export const createPrepushRoutes = (services: PrepushRoutesDeps) => {
     const i = implement(prepushContract).$context<OrpcContext>();
     const check = prepushCheck(services);
     return {

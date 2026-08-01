@@ -35,7 +35,8 @@ import type { ThreadSession, ThreadSessionsStore } from "./sessions/thread-sessi
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { AgentTool } from "./agent/agent-tools.js";
 import { listenerProvidersOf } from "./extensions/installed-extensions.js";
-import { noIsolation, testConfig, unstubbed } from "./testing.js";
+import { unstubbed } from "@intentic/testing";
+import { noIsolation, testConfig } from "./testing.js";
 import { workspacePaths } from "./workspace/workspace.js";
 import { MAX_RAW_BYTES, sha256Text, statWorkspaceFileSize, UploadTooLargeError } from "./workspace/workspace-files.js";
 

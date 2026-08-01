@@ -8,11 +8,13 @@ import { buildAuthorizeUrl, exchangeCode, newAccount, renameAccount, toAccount }
 // object is never mutated in place — the store hands back a fresh view per call, but it isn't ours to edit.
 const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): OauthAccount => (usage === undefined ? account : { ...account, usage });
 
+export type ClaudeRoutesDeps = Pick<Services, "accountUsage" | "claudeModels" | "claudeStore">;
+
 // Claude subscription OAuth — the sandbox owns the credential, the platform never sees it. `start` hands the
 // browser the authorize URL + PKCE material; `exchange` stores the tokens as a new account; `accounts` lists
 // them; `rename` renames one; `disconnect` clears the one named by id. The agent route reads the account the
 // turn selected.
-export const createClaudeRoutes = (services: Services) => {
+export const createClaudeRoutes = (services: ClaudeRoutesDeps) => {
     const i = implement(claudeContract).$context<OrpcContext>();
     return {
         start: i.start.handler(() => buildAuthorizeUrl()),

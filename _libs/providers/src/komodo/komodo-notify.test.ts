@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { SshExecutor } from "../core/ssh.js";
-import { unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
 import type { AlerterConfig, KomodoApi } from "./komodo-api.js";
 import { createKomodoNotifyProvider } from "./komodo-notify.js";
 

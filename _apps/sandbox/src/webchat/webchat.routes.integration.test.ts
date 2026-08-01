@@ -10,7 +10,7 @@ import type { WakeFn } from "../automations/scheduler.js";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
-import { unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
 import { createWebchatRoutes } from "./webchat.routes.js";
 
 const ORIGIN = "https://site.example";

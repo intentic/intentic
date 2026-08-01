@@ -3,7 +3,7 @@ import type { DesiredStateGraph } from "@intentic/graph";
 import { expect, test } from "vitest";
 import type { SshExecutor, SshResult } from "../core/ssh.js";
 import { createHostProvider } from "../host/host.js";
-import { unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
 import { createCfRouteProvider } from "./cf-route.js";
 import { createCloudflareProvider } from "./cloudflare.js";
 import type { CloudflareApi, IngressRule } from "./cloudflare-api.js";

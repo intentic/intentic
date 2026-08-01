@@ -48,6 +48,7 @@
     },
     "devDependencies": {
         "@intentic/sdk": "workspace:*",
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
         "@types/ssh2": "catalog:",

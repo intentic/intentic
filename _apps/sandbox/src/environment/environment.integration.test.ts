@@ -6,7 +6,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
-import { unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/workspace-files.js";
 import {
     approvedPath,

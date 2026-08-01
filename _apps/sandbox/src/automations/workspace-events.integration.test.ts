@@ -5,7 +5,7 @@ import type { AgentEvent, Automation, WorkspaceEvent } from "@intentic/sandbox-c
 import { expect, test, vi } from "vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
-import { unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
 import { fileApprovalsStore } from "./approvals-store.js";
 import { fileAutomationsStore } from "./automations-store.js";
 import type { WakeFn } from "./scheduler.js";

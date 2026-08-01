@@ -19,7 +19,7 @@ export const resolveConnections = (connections: ActivityConnection[], idle: bool
 
 // One provider's live picture: what its gateway last pushed, resolved against whether it has anything to
 // connect FOR and whatever it last failed with. Absent when no gateway reported within the TTL.
-const providerStatus = async (services: Services, provider: string): Promise<ActivityStatus | undefined> => {
+const providerStatus = async (services: ActivityRoutesDeps, provider: string): Promise<ActivityStatus | undefined> => {
     const status = listenerStatus(provider, Date.now());
     if (status === undefined) {
         return undefined;
@@ -35,12 +35,14 @@ const providerStatus = async (services: Services, provider: string): Promise<Act
     return { connections: resolveConnections(status.connections, idle, lastError), ...(status.voice !== undefined ? { voice: status.voice } : {}) };
 };
 
+export type ActivityRoutesDeps = Pick<Services, "activity" | "automations" | "capabilities" | "config" | "files" | "workspace">;
+
 // The activity audit feed. `list` reads the daemon-written log; `status` reports the realtime connection +
 // voice health that the provider gateways (extension processes) push to /listeners/<provider>/status — the
 // daemon holds no connection of its own to probe. Every listener provider an enabled extension declares is
 // polled, not a hardcoded one: Discord, Slack and IMAP all report through the same routes, and a fourth
 // gateway shipped as an extension shows up here with no change to this file.
-export const createActivityRoutes = (services: Services) => {
+export const createActivityRoutes = (services: ActivityRoutesDeps) => {
     const i = implement(activityContract).$context<OrpcContext>();
     return {
         list: i.list.handler(async ({ input }) => ({ events: await services.activity.list(input) })),

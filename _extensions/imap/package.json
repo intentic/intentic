@@ -15,6 +15,7 @@
         "mailparser": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/mailparser": "catalog:",
         "@types/node": "catalog:",

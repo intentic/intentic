@@ -3,9 +3,11 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 
+export type HistoryRoutesDeps = Pick<Services, "history">;
+
 // Workspace history over the daemon-owned snapshots: list / per-snapshot diff / file diff / restore. An
 // unknown snapshot id is NOT_FOUND.
-export const createHistoryRoutes = (services: Services) => {
+export const createHistoryRoutes = (services: HistoryRoutesDeps) => {
     const i = implement(historyContract).$context<OrpcContext>();
     return {
         list: i.list.handler(async () => ({ snapshots: await services.history.list() })),

@@ -18,69 +18,23 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
         outputCleaners: "-cap",
         outputHoldout: 0.1,
     };
-    expect(SandboxSettingsSchema.parse(older)).toEqual({
-        ...older,
-        terseHoldout: 0,
-        iqContext: false,
-        iqContextHoldout: 0,
-        filterBackend: "native",
-        systemPromptMode: "intentic",
-        systemPrompt: "",
-        quickModel: "",
-        agentRetentionDays: 3,
-        autoLand: true,
-        resumeAfterOutage: true,
-        autoResumeOnRestart: true,
-        prepushCommand: "",
-        prepushTimeoutMs: 900_000,
-        prepushFixModel: "",
-        prepushFixEffort: "",
-    });
+    // The defaults come from the schema, not from a copy of it written here. Transcribing them made every
+    // setting the product gained land as a failure in this file — a diff that only ever said "the list moved",
+    // never "tolerance broke", and whose fix was always to paste the new default in. What this test is about
+    // is the seam: what the old build sent survives verbatim, and what it never heard of arrives at default.
+    expect(SandboxSettingsSchema.parse(older)).toEqual({ ...SandboxSettingsSchema.parse({}), ...older });
 });
 
-test("an empty object is the full default settings object", () => {
-    expect(SandboxSettingsSchema.parse({})).toEqual({
-        stableSystemPrompt: false,
-        skills: [],
-        hashlineEdits: false,
-        terseOutput: false,
-        // Off: the steer's turn-level control spends the tokens it measures, so measuring is opt-in.
-        terseHoldout: 0,
-        iqSearch: false,
-        // Off, and its holdout with it: pre-injection spends input tokens on every eligible turn, and the
-        // control that would tell you whether they paid for themselves costs the turns it measures.
-        iqContext: false,
-        iqContextHoldout: 0,
-        outputCleaners: "off",
-        outputHoldout: 0,
-        filterBackend: "native",
-        // The default base is Intentic's own prompt; the text field is only read under "custom".
-        systemPromptMode: "intentic",
-        systemPrompt: "",
-        // Empty is not "no quick model" — it is Auto, resolved from the connected accounts on every read
-        // (quick-model.ts). Storing a resolved id as the default would name a provider a fresh sandbox has no
-        // credential for, and would go stale the moment one is connected.
-        quickModel: "",
-        // The one default that isn't "off": the fleet board's Finished lane has no exit of its own, and each
-        // card it holds is a worktree checkout. Opting INTO cleanup would mean shipping a leak by default.
-        agentRetentionDays: 3,
-        // On because it is the historical behaviour — defaulting off would silently hold every existing
-        // sandbox's finished work on branches nobody is watching.
-        autoLand: true,
-        // On, where a spent usage limit re-runs nothing: an outage resume spends nothing the dead turn hadn't
-        // already committed, and the turns it saves are the unattended ones nobody is watching to restart by hand.
-        resumeAfterOutage: true,
-        // On: a daemon restart is usually intentic's own doing (an image update, an approved environment
-        // change), not the user's decision, so the turn it interrupted resumes rather than staying stuck.
-        autoResumeOnRestart: true,
-        // Empty disables the pre-push check until the owner supplies this workspace's verification command.
-        prepushCommand: "",
-        prepushTimeoutMs: 900_000,
-        // Empty ⇒ the suggested fix session opens on whatever the chat composer would have started with, which
-        // is the model the user already chose to work with.
-        prepushFixModel: "",
-        prepushFixEffort: "",
-    });
+/* The invariant a fresh sandbox depends on: NO field is required. A settings object is written for the first
+ * time only when the user changes something, so until then the daemon parses `{}` — one field without a
+ * `.default()` turns that into a throw at boot, and the version tolerance above is built on the same property.
+ *
+ * Asserted by shape rather than by value: what each default IS belongs next to the field in schemas.ts, where
+ * the reason it holds is written down. A second copy here proved nothing the schema didn't already say and
+ * failed on every field the product added. */
+test("no field is required — a workspace that has never written settings parses", () => {
+    const defaults = SandboxSettingsSchema.parse({});
+    expect(Object.keys(defaults).sort()).toEqual(Object.keys(SandboxSettingsSchema.shape).sort());
 });
 
 test("a key of the wrong type is still a parse failure — tolerance is for absence, not for garbage", () => {

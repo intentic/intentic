@@ -75,13 +75,17 @@ const killGroup = (pid: number | undefined, signal: NodeJS.Signals): void => {
     }
 };
 
+// What this reaches for out of the daemon: sandboxSettings. Stated rather than taking Services whole,
+// so a test stands up three seams instead of a hundred and thirty.
+export type PrepushDeps = Pick<Services, "logger" | "sandboxSettings" | "workspace">;
+
 /* THE ONE CHECK THIS PROCESS HAS. A module singleton because the routes (the dialog's clicks) and the shutdown
  * hook all have to reach the SAME live child, and there is only one main working tree for them to be about.
  * Tests build their own with createPrepushCheck instead, which is why that stays exported. */
 let instance: PrepushCheck | undefined;
-export const prepushCheck = (services: Services): PrepushCheck => (instance ??= createPrepushCheck(services));
+export const prepushCheck = (services: PrepushDeps): PrepushCheck => (instance ??= createPrepushCheck(services));
 
-export const createPrepushCheck = (services: Services): PrepushCheck => {
+export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
     const { logger, workspace } = services;
     let current: PrepushRun = IDLE;
     // The live run: its child (for cancel/kill), its buffer (a running state reads output from here), and the
@@ -151,8 +155,7 @@ export const createPrepushCheck = (services: Services): PrepushCheck => {
         const passed = code === 0 && !timedOut && signal === null;
         // A cancel that the watchdog caused is a TIMEOUT, not a cancellation — the user asked for neither, and
         // reporting it as cancelled would hide the one outcome this check most needs to be loud about.
-        const status: PrepushRun["status"] =
-            spawnError !== undefined ? "error" : cancelled && !timedOut ? "cancelled" : passed ? "passed" : "failed";
+        const status: PrepushRun["status"] = spawnError !== undefined ? "error" : cancelled && !timedOut ? "cancelled" : passed ? "passed" : "failed";
         const settled: PrepushRun = {
             status,
             command,

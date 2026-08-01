@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { INTEGRATION_SUITE, UNIT_SUITE } from "@intentic/testing/vitest";
+import { INTEGRATION_SUITE, UNIT_SUITE } from "./src/vitest.js";
 
 export default defineConfig({
     test: {

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
-import { unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
 import type { CloudflareApi, IngressRule } from "./cloudflare-api.js";
 import { createTunnelProvider } from "./tunnel.js";
 

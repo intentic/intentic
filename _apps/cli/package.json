@@ -60,13 +60,14 @@
     "devDependencies": {
         "@intentic/dind-host": "workspace:*",
         "@intentic/sdk": "workspace:*",
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
         "@types/ssh2": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "ssh2": "catalog:",
         "testcontainers": "catalog:",
         "tsx": "catalog:",
-        "@typescript/native-preview": "catalog:",
         "vitest": "catalog:",
         "yaml": "catalog:"
     }

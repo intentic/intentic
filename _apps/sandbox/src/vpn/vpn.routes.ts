@@ -9,7 +9,9 @@ import { connectVpn, disconnectVpn, vpnLink, vpnLinks } from "./vpn-links.js";
 // operation performed many times over one stored connection — by the operator from the Status card and by the
 // agent through the `vpn` CLI, which calls these same routes. Both therefore observe one implementation.
 
-export const createVpnRoutes = (services: Services) => {
+export type VpnRoutesDeps = Pick<Services, "capabilities">;
+
+export const createVpnRoutes = (services: VpnRoutesDeps) => {
     const i = implement(vpnContract).$context<OrpcContext>();
     // One dial per id at a time: two concurrent connects would race the same interface and leave a half-built
     // tunnel behind. Rejecting the second is honest — the first is already streaming its progress.

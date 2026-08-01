@@ -1,7 +1,7 @@
 import type { ActivityEvent, AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
-import { unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
 import { createOutboundSniffer } from "./outbound.js";
 
 // The sniffer only touches activity/logger; `unstubbed` keeps the fake that small. The fake append pushes

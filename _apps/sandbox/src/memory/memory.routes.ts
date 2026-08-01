@@ -4,10 +4,12 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { deleteMemoryFile, listMemoryFiles, memoryRoot, readMemoryFile, writeMemoryFile } from "./memory-files.js";
 
+export type MemoryRoutesDeps = Pick<Services, "workspace">;
+
 // The agent's persistent memory notes (.intentic/claude/projects/<project>/memory) — list/read for the memory
 // panel, write/delete so the owner can curate what the agent remembers. The fs layer scopes every path to the
 // memory dirs; nothing else in the control-plane tree is reachable through here.
-export const createMemoryRoutes = (services: Services) => {
+export const createMemoryRoutes = (services: MemoryRoutesDeps) => {
     const i = implement(memoryContract).$context<OrpcContext>();
     const root = memoryRoot(services.workspace.root);
     return {

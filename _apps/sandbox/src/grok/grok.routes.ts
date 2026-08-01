@@ -38,11 +38,13 @@ const pollDeviceApproval = async (client: OpencodeClient, method: number, signal
     }
 };
 
+export type GrokRoutesDeps = Pick<Services, "openCode">;
+
 // xAI Grok OAuth, relayed through OpenCode (which owns the protocol + token storage). `start` authorizes xAI's
 // device-code method and returns the URL + instructions (the instructions carry the one-time code the user
 // enters at x.ai); OpenCode then polls to completion — there is no paste-back. `accounts` reflects OpenCode's
 // connection view; `disconnect` clears the stored tokens.
-export const createGrokRoutes = (services: Services) => {
+export const createGrokRoutes = (services: GrokRoutesDeps) => {
     const i = implement(grokContract).$context<OrpcContext>();
     // A superseding sign-in aborts the previous device poll so it stops hammering the now-expired code.
     let pollController: AbortController | undefined;

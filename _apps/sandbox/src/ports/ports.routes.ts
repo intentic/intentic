@@ -10,7 +10,9 @@ import type { OrpcContext } from "../context.js";
 // public, so a port is reachable from outside only after the owner (or an agent acting for them) forwards it —
 // and the daemon's own surfaces are never listed or forwardable at all.
 
-export const createPortsRoutes = (services: Services) => {
+export type PortsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "portForwards" | "scanPorts" | "workspace">;
+
+export const createPortsRoutes = (services: PortsRoutesDeps) => {
     const i = implement(portsContract).$context<OrpcContext>();
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);

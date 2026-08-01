@@ -6,8 +6,10 @@ import type { IsolationPlan, TurnIsolation } from "./agents/isolation.js";
 import { overlaysDir } from "./agents/isolation.js";
 import type { Config } from "./env.config.js";
 
-/* Test-support seams shared across this package's suites. Not part of the build (tsconfig `exclude`, like
- * e2e-harness.ts), but IS type-checked — tsconfig.test.json puts it and every *.test.ts in one program.
+/* Test-support seams shared across this package's suites — the ones that stand in for something specific to
+ * THIS daemon. The generic stand-in for any wide interface is `unstubbed` in `@intentic/testing`; import it
+ * from there. Not part of the build (tsconfig `exclude`, like e2e-harness.ts), but IS type-checked —
+ * tsconfig.test.json puts this file and every *.test.ts in one program.
  *
  * It exists because the same fake was being written out longhand in file after file: four copies of a
  * `TurnIsolation` here, six of a throwing API table over in _libs/providers. A copy cannot be updated when the
@@ -55,38 +57,6 @@ export const testConfig: Config = {
     iqPluginDir: "",
     local: { port: 8788 },
 };
-
-/* `then` is the one key a stand-in must never answer, and it is worth spelling out why: a value carrying a
- * callable `then` IS a promise as far as the language is concerned, so `await services` — or merely returning a
- * fake from an async function — hands the resolution machinery a stand-in it then CALLS. Eight turn-resume tests
- * died that way, all reporting `services.then was called`, none of them about `then`. Absent instead. */
-const RESERVED = "then";
-
-/* What an unprovided member answers: a value that is both callable and readable to any depth, and that names
- * the WHOLE path it was reached by when something finally calls it. Depth is the point — `Services` is a tree
- * of seams, so a fake that only names its top level answers a nested `services.komodoStore.seenAt()` with
- * "seenAt is not a function", which says nothing about which fake is short. Symbols answer undefined so that
- * `util.inspect`, `Symbol.toStringTag` and vitest's own equality probes see an ordinary function. */
-const namedThrow = (path: string): (() => never) =>
-    new Proxy(
-        () => {
-            throw new Error(`${path} was called, and this test did not stub it`);
-        },
-        { get: (_target, key) => (typeof key === "symbol" || key === RESERVED ? undefined : namedThrow(`${path}.${key}`)) },
-    );
-
-// Every member throws, named, until the test provides it. Use for a WIDE seam the code under test barely
-// touches (37-method git, 22-field settings, 70-member Services): enumerating no-ops for the other 35 is noise
-// that says nothing, and it goes stale the moment the interface grows. What a test does provide is checked
-// against T as usual; what it doesn't, fails loudly with its own name instead of as a bare 500 from the route.
-// This is what keeps a fake OFF the blast radius of its seam growing: a new required member of T needs no edit
-// here, in any suite, and the first route to actually read it says so by name.
-// NoInfer: T comes from the seam being stood in for (the annotated target), never from the subset a test
-// happens to provide — otherwise the stand-in silently narrows to exactly what was written and checks nothing.
-export const unstubbed = <T extends object>(seam: string, provided: NoInfer<Partial<T>>): T =>
-    new Proxy(provided as T, {
-        get: (target, key) => (key in target ? target[key as keyof T] : key === RESERVED ? undefined : namedThrow(`${seam}.${String(key)}`)),
-    });
 
 /* What a hook the daemon installs actually returns. `HookJSONOutput` is a union, and only its SYNCHRONOUS side
  * carries `hookSpecificOutput` — the field every hook suite here asserts on. Reading it off the union is what

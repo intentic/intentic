@@ -4,9 +4,11 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { listLogFiles, logsRoot, tailLogFile } from "./log-files.js";
 
+export type LogsRoutesDeps = Pick<Services, "config">;
+
 // Daemon-owned debug logs under historyRoot/logs — terminal captures, intentic run logs, daemon.log. Read-only:
 // only the daemon/tmux write these files (the same trust rationale as /activity).
-export const createLogsRoutes = (services: Services) => {
+export const createLogsRoutes = (services: LogsRoutesDeps) => {
     const i = implement(logsContract).$context<OrpcContext>();
     const root = logsRoot(services.config.historyRoot);
     return {

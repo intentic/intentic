@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
-import { unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
 import { createPrepushCheck } from "./prepush.js";
 
 // The check touches sandboxSettings, workspace and logger; `unstubbed` keeps the fake that small. Nothing is

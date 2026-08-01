@@ -1,6 +1,6 @@
 import { beforeEach, expect, type Mock, test, vi } from "vitest";
 import type { Services } from "../composition.js";
-import { unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
 import { cleanSessionTitle, nameAgentTitle } from "./title-namer.js";
 
 const ask = vi.fn<() => Promise<{ text: string }>>();

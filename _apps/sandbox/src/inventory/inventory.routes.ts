@@ -3,12 +3,14 @@ import { readManagedRegion, writeManagedRegion } from "@intentic/scaffold";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { createConfigStore } from "./config-store.js";
+import { type ConfigStoreDeps, createConfigStore } from "./config-store.js";
+
+export type InventoryRoutesDeps = ConfigStoreDeps;
 
 // The i.have.* / i.want.service entries in deploy.config.ts's managed region. add/remove rewrite the region and
 // commit it (mirroring an agent edit) and return the full list. Deploy-target hosts self-register out-of-band via
 // the daemon's plain /enroll route (the connect-host script), not through these routes.
-export const createInventoryRoutes = (services: Services) => {
+export const createInventoryRoutes = (services: InventoryRoutesDeps) => {
     const i = implement(inventoryContract).$context<OrpcContext>();
     const config = createConfigStore(services);
 

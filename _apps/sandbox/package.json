@@ -65,6 +65,7 @@
     },
     "devDependencies": {
         "@huggingface/hub": "catalog:",
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@orpc/client": "catalog:",
         "@orpc/contract": "catalog:",

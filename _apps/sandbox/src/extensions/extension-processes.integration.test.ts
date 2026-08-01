@@ -6,7 +6,8 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
-import { testConfig, unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
+import { testConfig } from "../testing.js";
 import { readWorkspaceFile } from "../workspace/workspace-files.js";
 import { extensionProcessIndex, extensionProcessKey, reconcileListenerProcesses, startAllExtensionProcesses } from "./extension-processes.js";
 

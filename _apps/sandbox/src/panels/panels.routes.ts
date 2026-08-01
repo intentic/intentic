@@ -23,7 +23,9 @@ const mentionsVitest = (file: string): boolean => existsSync(file) && readFileSy
 // one file each. A directory rather than a marker file because the stories ARE the evidence.
 const USER_STORIES_DIR = join("docs", "user-stories");
 
-export const createPanelsRoutes = (services: Services) => {
+export type PanelsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "panelToken" | "processes" | "workspace">;
+
+export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
     const i = implement(panelsContract).$context<OrpcContext>();
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);

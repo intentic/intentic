@@ -1,0 +1,33 @@
+{
+    "name": "@intentic/testing",
+    "version": "0.0.0",
+    "description": "Test-support seams every package's suites share — the deep, self-naming stand-in for a wide interface",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://gitlab.com/radarsu/intentic.git",
+        "directory": "_libs/testing"
+    },
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "default": "./src/index.ts"
+        },
+        "./vitest": {
+            "types": "./src/vitest.ts",
+            "default": "./src/vitest.ts"
+        }
+    },
+    "scripts": {
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "vitest run"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

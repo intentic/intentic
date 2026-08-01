@@ -147,10 +147,22 @@ import {
 } from "./workspace/workspace-files.js";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/workspace-tree.js";
 
-// The daemon's collaborators, wired once at boot and handed to the route factories — the injection seam the
-// route tests build fakes against (the equivalent of the old createDaemon `deps` object). Stateful members
-// (appProcesses, the agent/intentic process runners, the credential/tool stores) live here; the in-memory
-// plan/question bridge stays a module singleton in agent-requests.ts (the agent routes call it directly).
+/* The daemon's collaborators, wired once at boot and handed to the route factories — the injection seam the
+ * route tests build fakes against (the equivalent of the old createDaemon `deps` object). Stateful members
+ * (appProcesses, the agent/intentic process runners, the credential/tool stores) live here; the in-memory
+ * plan/question bridge stays a module singleton in agent-requests.ts (the agent routes call it directly).
+ *
+ * WHAT A MODULE SHOULD TAKE OF IT. This type is the composition root's, not every consumer's. A module that
+ * reads a few seams declares those and nothing else — `export type PortsRoutesDeps = Pick<Services, "config" |
+ * "portForwards" | ...>` — because the surface a module depends on is the surface a test has to stand up, and
+ * the surface a change somewhere else can reach it through. Twenty-two of the daemon's route modules and their
+ * leaf stores are written that way, and their tests build three or four seams instead of a hundred and thirty.
+ *
+ * The exception is real and is the reason the rest still take `Services` whole: a module that ORCHESTRATES the
+ * daemon — the agent turn, the land pass, the capability handlers, the workspace routes — hands `services`
+ * onward to machinery that legitimately reaches most of it. A `Pick` of forty members there would be a
+ * transcription of `Services` that goes stale, which is the exact failure this file's fakes used to have. Take
+ * the whole thing where you pass the whole thing on; name what you use where you use a few. */
 export interface Services {
     readonly config: Config;
     readonly logger: Logger;

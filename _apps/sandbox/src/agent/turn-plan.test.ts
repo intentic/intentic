@@ -1,7 +1,8 @@
 import { type AgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
-import { testConfig, unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
+import { testConfig } from "../testing.js";
 import type { AgentRequest } from "./agent.js";
 import { planTurn, type TurnContext } from "./turn-plan.js";
 

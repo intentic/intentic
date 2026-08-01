@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
-import { unstubbed } from "../testing.js";
+import { unstubbed } from "@intentic/testing";
 import { syncAdvisory, syncWorkspaceRepos } from "./sync-repos.js";
 import { workspacePaths } from "./workspace.js";
 

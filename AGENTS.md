@@ -34,9 +34,11 @@ rules are about what a test stands the code up with, not about how it asserts.
 - One fake per seam, not one per suite – a copy cannot be updated when the interface grows, so it quietly
   starts describing a system that no longer exists. Shared fixtures live in the package's `src/testing.ts`
   (excluded from the build, included in the type check).
-- Stub what the test relies on; let the rest name itself – `unstubbed("git", { … })` (see `src/testing.ts`)
-  returns a seam whose unstubbed members throw with their own name. A route that reaches past the fake says
-  which method it wanted, instead of answering 500.
+- Stub what the test relies on; let the rest name itself – `unstubbed("git", { … })` from `@intentic/testing`
+  returns a seam whose unstubbed members throw with their own name, to any depth. A route that reaches past the
+  fake says which method it wanted, instead of answering 500. One definition for the monorepo: the two copies
+  that existed before had already drifted, and the shallower one turned a nested miss into "x is not a
+  function". Import it from there, never re-export it through a package's own `testing.ts`.
 - Never spread a bare `Partial<T>` into a `T`-annotated literal – it tells the compiler every key might be
   supplied, so a fake missing REQUIRED members still type-checks. Split the wide seams out of the override
   type and complete them yourself (`app.test.ts`, `ServiceOverrides`).
@@ -52,8 +54,12 @@ rules are about what a test stands the code up with, not about how it asserts.
   file's hoisted setup only installs globals; `vi.hoisted`/`vi.mock` still run first. Reach for the dynamic
   form only when a `vi.mock` factory closes over module-scope state, or when the module is a singleton the
   test resets (`vi.resetModules`).
-- A timeout is a hang bound, never a latency measurement – set it far above the slow case and say so in a
-  comment, as `_apps/web` and `_apps/lsp` do. A budget tuned close to observed timings fails on contention
+- A suite that reaches for the machine says so in its NAME – `*.integration.test.ts` (temp trees,
+  subprocesses, real git, docker) runs under the integration budget, everything else under a 5s hang detector;
+  both come from `@intentic/testing/vitest`, and `pnpm typecheck` fails a machine-touching suite that is
+  misnamed. Nothing to tune per file: the ceiling follows the kind of suite.
+- A timeout is a hang bound, never a latency measurement – if a suite needs more than its budget, set it far
+  above the slow case and say so in a comment. A budget tuned close to observed timings fails on contention
   instead of on regressions, and a timed-out test keeps running: its in-flight work lands on the next test's
   mocks, so one slow import reports as two failures with the second blaming innocent code.
 - Assert the SHAPE of a concurrent outcome, not the winner – with two racing requests, "they never overlapped"

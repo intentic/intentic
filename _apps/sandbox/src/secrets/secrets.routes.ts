@@ -46,13 +46,18 @@ export const removeEnv = (content: string, key: string): string => {
 // The KEYS present in a .env's text (for the UI's "✓ set" badges) — never the values.
 export const envKeys = (content: string): string[] => Object.keys(parseEnv(content));
 
+export type SecretsRoutesDeps = Pick<
+    Services,
+    "auth" | "capabilities" | "claudeStore" | "cliProxy" | "config" | "files" | "intentic" | "logger" | "openCode" | "workspace"
+>;
+
 // User-supplied secrets → desired-state/.env (gitignored, on the file denylist, mode 0600). Written
 // straight from the browser to the daemon (never the platform); `apply` reloads .env each run so a freshly set
 // secret is picked up with no restart. set/remove/list/reveal refuse until DevOps has scaffolded the
 // desired-state repo; `inventory` always answers (capability/provider entries exist pre-scaffold).
 // `reveal` is the single value-returning route, owner-only. After every set/remove the daemon fires
 // `intentic deploy secrets push` best-effort so an adopted workspace's Forgejo Actions copy never goes silently stale.
-export const createSecretsRoutes = (services: Services) => {
+export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
     const i = implement(secretsContract).$context<OrpcContext>();
     const desiredState = (): string => services.workspace.repos["desired-state"];
     const envPath = (): string => join(desiredState(), ENV_FILE);

@@ -3,10 +3,12 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 
+export type PushRoutesDeps = Pick<Services, "push" | "pushSender">;
+
 // The browser's half of web push: read the VAPID public key (and whether THIS browser is already registered),
 // register, unregister, and send a test. Subscribing is per-browser, so every route that identifies a device
 // does it by the endpoint the browser's push service minted — the daemon never invents that identity.
-export const createPushRoutes = (services: Services) => {
+export const createPushRoutes = (services: PushRoutesDeps) => {
     const i = implement(pushContract).$context<OrpcContext>();
     return {
         config: i.config.handler(async ({ input }) => {

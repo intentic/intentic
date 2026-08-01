@@ -13,7 +13,11 @@ export interface ConfigStore {
     readonly write: (content: string, message: string) => Promise<void>;
 }
 
-export const createConfigStore = (services: Services): ConfigStore => {
+// What this reaches for out of the daemon: files, git, workspace. Stated rather than taking Services whole,
+// so a test stands up three seams instead of a hundred and thirty.
+export type ConfigStoreDeps = Pick<Services, "files" | "git" | "workspace">;
+
+export const createConfigStore = (services: ConfigStoreDeps): ConfigStore => {
     const configPath = join(services.workspace.repos.intent, CONFIG_FILE);
     return {
         read: async () => (await services.files.read(configPath)) ?? scaffoldDeployConfig([]),

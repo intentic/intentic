@@ -73,8 +73,35 @@ const excludesOf = (configPath) => {
 // Which config `pnpm typecheck` actually compiles — `-p <path>` if the script names one, else tsconfig.json.
 const configFor = (script) => /-p\s+(\S+)/.exec(script)?.[1] ?? "tsconfig.json";
 
+/* What makes a suite an INTEGRATION suite: it reaches for the machine, so how long it takes is a fact about
+ * the runner and not about the code. Those run under a budget of their own (`@intentic/testing/vitest`), and
+ * the budget is selected by the FILE NAME — so a suite that opens temp trees, spawns processes, drives real
+ * git or boots containers under a plain `*.test.ts` name silently gets the 5s hang detector instead.
+ *
+ * That is not a hypothetical: iq-engine's warm pass, the chat-tabs mount and the daemon's fire routes each
+ * went red on a loaded CI runner and each was repaired by hand with its own constant, after main was already
+ * broken. Recognized by shape rather than by a list, like every other invariant here. `vi.mock` lines are cut
+ * first — naming a module in order to REPLACE it is the opposite of reaching for it. */
+const REACHES_THE_MACHINE = /mkdtemp|node:child_process|simple-git|dockerode|testcontainers/;
+const INTEGRATION_NAME = /\.(integration|e2e)\.(test|spec)\.[cm]?[jt]sx?$/;
+const mocked = (source) => source.replace(/vi\.mock\([^)]*\)/g, "");
+
 const problems = [];
 for (const { name, dir, pkg } of packages) {
+    // Only where the budget exists: vitest selects it by file name. A package driven by Playwright (_tools/e2e)
+    // has one budget for the whole run, declared in its own config, and its specs reach for the machine by
+    // definition — holding them to this name would say nothing.
+    const runsVitest = /vitest/.test(pkg.scripts?.test ?? "");
+    for (const file of runsVitest ? walk(dir) : []) {
+        if (INTEGRATION_NAME.test(file) || !REACHES_THE_MACHINE.test(mocked(readFileSync(file, "utf8")))) {
+            continue;
+        }
+        const relative = file.slice(root.length + 1);
+        problems.push(
+            `${relative}: opens temp trees, spawns processes or drives real git, but its name puts it under the ` +
+                `unit budget (5s) — rename it to ${relative.replace(/\.(test|spec)\./, ".integration.$1.")}`,
+        );
+    }
     if (walk(dir).length === 0) {
         continue;
     }
@@ -98,10 +125,10 @@ for (const { name, dir, pkg } of packages) {
 }
 
 if (problems.length > 0) {
-    console.error(`Test files outside every type-check program:\n${problems.map((line) => `  - ${line}`).join("\n")}`);
+    console.error(`Test files outside the program or the budget they belong in:\n${problems.map((line) => `  - ${line}`).join("\n")}`);
     process.exit(1);
 }
-console.log(`typecheck coverage: every package with tests type-checks them`);
+console.log(`typecheck coverage: every package with tests type-checks them, and every machine-touching suite is named as one`);
 
 /* A package needs building exactly when its `exports` resolve into `dist/`: that is the path a DEPENDENT's
  * compiler reads, so a stale or absent dist there is a phantom error in somebody else's package. The ones that
