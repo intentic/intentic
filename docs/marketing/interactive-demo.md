@@ -87,8 +87,12 @@ Per surface, the routes it actually calls and what the fixture answers with:
 | Model picker | `GET /claude/accounts`, `/grok/accounts`, `/translator/accounts`, `/{provider}/models` | a connected Claude Max and a ChatGPT subscription in the translator — without these the composer never leaves "Checking your AI accounts…" |
 | Sessions window | `GET /sessions?query=` (searchable), `GET /sessions/{id}` | 12 conversations from 90 seconds to 6 days old |
 | Workspace | `GET /workspace/tree`, `/workspace/file`, `/git/repos`, `/git/changes`, `/git/{repo}/file-diff` | `acme-shop`: a `web` and an `api` repo, ~30 files, 5 dirty ones across both |
-| Sandbox hub | `GET /info`, `/settings`, `/settings/savings`, `/system/usage`, `/secrets/inventory`, `/ports`, `/environment`, `/members`, `/extensions`, `/panels`, `/vpn`, `/ci/runs`, `/chores` | a measured cleaner-savings report; the rest answer their empty shape, which is the truth about a recording |
+| Sandbox hub | `GET /info`, `/settings`, `/settings/savings`, `/system/usage`, `/secrets/inventory`, `/ports`, `/environment`, `/members`, `/extensions`, `/panels`, `/vpn`, `/chores` | a measured cleaner-savings report; the rest answer their empty shape, which is the truth about a recording |
 | Terminal | `GET /system/terminals` + the `/system/terminal` WebSocket | the featured turn's own tmux session, replaying its vitest run — xterm renders the ANSI for real |
+| Browsers | `GET /system/browsers` + the `/system/browser-view` WebSocket | the checkout agent's Chromium: the pricing page, the Stripe session it created, and the API docs it read. See below |
+| Pipelines | `GET /ci/runs`, `POST /ci/runs/jobs`, `/ci/seen` | 7 runs over two repos on two hosts (`web` on GitHub, `api` on GitLab) — one still going, one broken, and one job broken twice so the "failing repeatedly" analysis has something true to say |
+| Automations | `GET /automations`, `/automations/pending` | one of each trigger the union has — a nightly chore, a Discord listener, a Doorbell held for approval, a land-triggered doc check, a disabled CI webhook — each with the run history that makes a row honest |
+| Memory | `GET /memory`, `/memory/file` (+ PUT/DELETE) | four notes about acme-shop, editable and forgettable: the fixture is the store, so the red pen works |
 
 **The scripted turn is the centrepiece.** `AgentEventSchema` (`_libs/sandbox-contract/src/events.ts:186`) is the
 whole streaming-turn protocol, and `/agent/attach` yields `{kind:"frame", seq, event}`. A recorded sequence on a
@@ -105,17 +109,43 @@ progress instead of restarting the script mid-sentence. `stop`, `steer` and a fr
 same run registry, so the composer starts a short honest reply — "this is a recorded workspace; start a sandbox
 and the same agent works on your repos" — rather than going nowhere.
 
+**The agent's browser is the second recorded stream**, and it costs almost nothing: `/system/browser-view` is a
+socket of frames whose payload is a base64 image, so a few hundred lines of generated SVG *are* a screencast as
+far as the view can tell — three pages, a moving cursor, and the page tabs really switching, because the fixture
+answers the `bind` frame the strip sends. No captured PNGs to go stale, nothing in the bundle but markup.
+
+## Landing, which is the press the board exists for
+
+`POST /agents/{id}/land` is the one mutation that changes four surfaces at once, so the demo does it for real
+rather than refusing: the ready agent's delta moves into the main tree, its review rows flip to *landed*, its
+card crosses into Finished, the Changes panel grows those files **with that agent's chip on them**, and a
+`workspaceChanged` frame tells every open panel to re-read. It is the difference between a fleet board and a
+list of jobs, and it is one click from the hero.
+
+The conflicted agent is the other half, and it refuses exactly as the daemon does — nothing applied, the
+worktree intact, and a report naming both causes: one file the main line moved under (the agent can rebase it)
+and one held by the owner's own uncommitted edits (only they can clear it). That report is what the panel's
+button ladder is built on, so refusing here is not a dead end but the second half of the story.
+
 ## Rewiring the actions
 
 Three classes, decided per mutation:
 
 - **Real, in memory** — rename, archive, drag between lanes, tab switches, open a file, open a diff, filter,
-  the model picker, sending a message (advances the script). The fixture is mutable state; the UI is honest.
-- **Inert with an invitation** — land, push, secrets writes, capability install, sandbox create. The handler
-  answers a refusal the app already renders, and the demo shell shows one "this is a demo — start your own
-  sandbox" CTA. Deliberately *not* hidden: seeing the land button matters.
-- **Absent** — file upload (the XHR path in `sandboxUpload`), the browser view's image stream, extension bundles.
-  Not built; the drop zone is simply not part of the tour.
+  the model picker, **landing**, extension switches, automation edits and approvals, memory edits, marking the
+  pipelines board read, sending a message (advances the script). The fixture is mutable state; the UI is honest.
+- **Inert with an invitation** — push, secrets writes, capability install, sandbox create, firing an automation,
+  rerunning or cancelling someone else's pipeline. The handler answers a refusal the app already renders, and
+  the demo shell shows one "this is a demo — start your own sandbox" CTA. Deliberately *not* hidden: seeing the
+  button matters.
+- **Absent** — file upload (the XHR path in `sandboxUpload`) and git-installed extension bundles. Not built; the
+  drop zone is simply not part of the tour.
+
+**The extension list is read off the app build, not re-typed.** `GET /extensions` enumerates
+`@intentic-app/web`'s own `builtinModules`, because the extension host treats a compiled-in extension the daemon
+never mentioned as image/app version drift and says so on every row — true of a dogfooding sandbox, alarming
+nonsense on a marketing page. Listing them from the registry means a new first-party extension appears here the
+day it is added, with a switch that works, instead of appearing as a warning nobody wrote.
 
 Anything the fixture does not serve answers 404 and logs one line naming the method and path. That console line is
 the tool: it is how each of the routes in the table above got found, and how the next one will be.
@@ -132,6 +162,10 @@ where the fleet board, the docked chat and the terminal are all on screen at onc
 Close button all dismiss it, and the iframe is created once and kept, so re-opening returns to the workspace the
 visitor left rather than restarting the recording.
 
+It sits **above the nav** (`z-200` over the nav's `z-100`), which is what makes it read as a window rather than
+as another section of the page. The nav is `fixed`, so a lower overlay left the marketing header — and its
+bottom border — stapled across the top of the IDE.
+
 Below 1024px or without a fine pointer, the button opens the demo in its own tab instead, where the app's own
 mobile shell can do a better job than any frame of ours. The iframe's `src` is set in the click handler, so until
 someone presses it this page has loaded no part of the app.
@@ -147,6 +181,12 @@ It ships **with the marketing site, at the same origin**, and needs no host of i
 3. `_apps/site` declares `@intentic-dev/demo` as a devDependency purely for ORDER — turbo's `^build` then builds
    the demo before Astro reads `public/`. Nothing is imported across that edge, and a site built without the
    demo present is still a valid site: `/demo/` simply isn't there.
+
+Locally none of that applies: `public/demo/` is a build output, and `astro dev` runs no build, so the site's dev
+server **proxies `/demo/` to the demo's own dev server** (`_apps/site/astro.config.mjs`, dev only). Two servers —
+`pnpm -C _apps/site dev` and `pnpm -C _apps/demo dev` — and the overlay shows the live app with HMR, with no build
+step between a fixture edit and the frame. With the demo's server down the proxy answers a page that says which
+command to run, because a silent 404 in the overlay reads as a broken demo.
 
 Same-origin is not just convenience. A cross-origin iframe gets **partitioned storage**, and the demo seeds
 credentials into `localStorage` before the app boots — on a separate host that seeding is one browser policy away

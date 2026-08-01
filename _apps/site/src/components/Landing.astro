@@ -898,11 +898,15 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
     <!-- The demo, given a viewport. Empty until the hero's play button fills it: the iframe's src is set in
          script, so this page loads no part of the app unless a visitor asks for it. `display` is inline rather
          than a `hidden` class because the container is also a flex centerer — two display utilities on one
-         element decide by stylesheet order, which is not a thing to depend on. -->
+         element decide by stylesheet order, which is not a thing to depend on.
+
+         ABOVE THE NAV (z-200 over its z-100), which is what makes this read as a window rather than as another
+         section of the page: the nav is `fixed`, so at z-50 it and its bottom border sat ON TOP of the app — a
+         marketing header stapled over an IDE, with the site's own line cutting across it. -->
     <div
         id="hero-demo-modal"
         style="display: none"
-        class="fixed inset-0 z-50 items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6"
+        class="fixed inset-0 z-200 items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6"
         role="dialog"
         aria-modal="true"
         aria-label="The intentic workspace, running on a recorded fixture"

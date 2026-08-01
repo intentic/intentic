@@ -90,8 +90,12 @@ class DemoSocket extends EventTarget {
         }
     }
 
-    // The app's client frames (input, resize, ping) — the fixture reads them through its session closure.
-    send(_data: string): void {}
+    /* The app's client frames (input, resize, ping, and the browser view's `bind`/`pause`/`resume`),
+     * re-dispatched as a `client` event so a session can answer them — which is what lets the recorded browser
+     * switch pages when the visitor clicks a tab, instead of playing one stream at whatever the app asked for. */
+    send(data: string): void {
+        this.dispatchEvent(new MessageEvent(`client`, { data }));
+    }
 
     close(): void {
         if (this.readyState === DemoSocket.CLOSED) {

@@ -13,7 +13,8 @@
             "@intentic-app/api-contract": ["../../_libs/api-contract/src/index.ts"],
             "@intentic-app/ui": ["../../_libs/ui/src/index.ts"],
             "@intentic-app/ui/markdown": ["../../_libs/ui/src/markdown/index.ts"],
-            "@intentic-app/web/main": ["../web/src/main.ts"]
+            "@intentic-app/web/main": ["../web/src/main.ts"],
+            "@intentic-app/web/builtins": ["../web/src/extension-host/builtins.ts"]
         }
     },
     "include": ["./src/**/*.ts", "./vite.config.ts"],

@@ -32,6 +32,40 @@ export default defineConfig({
         define: {
             "import.meta.env.PUBLIC_OG_PER_PAGE": JSON.stringify(ogFontFaces !== undefined),
         },
+        /* The interactive demo (@intentic-dev/demo) at DEMO_PATH. In production it is a BUILD output copied into
+         * this package's public/demo/, and the worker serves its history routes (worker.ts). Neither exists under
+         * `astro dev`: the demo isn't built, and public/demo/index.html — if someone did build it — would answer
+         * only its exact path, so the hero's iframe loaded /demo/ and got this site's 404 page.
+         *
+         * So in dev the demo is served by the demo, at its own dev server, through this proxy: the live app with
+         * HMR, its own SPA fallback, and no build step between an edit and the overlay. Run it alongside:
+         *     pnpm -C _apps/demo dev
+         * Port from _apps/demo/vite.config.ts (strictPort, so it is this or nothing). When it isn't running the
+         * proxy says so in the frame rather than failing as a bare gateway error. */
+        server: isDev
+            ? {
+                  proxy: {
+                      "/demo": {
+                          target: "http://localhost:47146",
+                          ws: true,
+                          configure: (proxy) => {
+                              proxy.on("error", (_error, _request, response) => {
+                                  if (!("writeHead" in response)) return;
+                                  response.writeHead(503, { "content-type": "text/html; charset=utf-8" });
+                                  response.end(
+                                      `<!doctype html><meta charset="utf-8"><title>Demo not running</title>` +
+                                          `<body style="font:16px/1.6 system-ui;background:#0b0b0c;color:#e7e7e9;padding:3rem">` +
+                                          `<h1 style="color:#ff7a1a">The demo dev server isn't running</h1>` +
+                                          `<p>Its dev server serves <code>/demo/</code> for this site's dev server. Start it:</p>` +
+                                          `<pre style="background:#151517;padding:1rem;border-radius:.5rem">pnpm -C _apps/demo dev</pre>` +
+                                          `<p>Production is unaffected: there the demo is built into <code>public/demo/</code>.</p>`,
+                                  );
+                              });
+                          },
+                      },
+                  },
+              }
+            : undefined,
     },
     integrations: [
         sitemap({

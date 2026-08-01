@@ -15,8 +15,11 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 export const FEATURED_AGENT_ID = `cnv_checkout_stripe`;
 // The agent parked on a question — the fleet badge's reason to exist, and the card that proves the point.
 export const AWAITING_AGENT_ID = `cnv_flaky_signup`;
-// The agent holding a finished delta on its branch: the one the review panel opens on.
+// The agent holding a finished delta on its branch: the one the review panel opens on, and the one "Land now"
+// is demonstrated with (see workspace.ts).
 export const REVIEW_AGENT_ID = `cnv_soft_deletes`;
+// The agent whose land refuses: half its delta diverged under it, half is held by the owner's own edits.
+export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
 
 const minutes = (count: number): number => count * 60_000;
 
@@ -77,7 +80,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         diff: { files: 2, insertions: 41, deletions: 17 },
     },
     {
-        id: `cnv_auth_middleware`,
+        id: CONFLICT_AGENT_ID,
         sessionId: `ses_01j9auth`,
         title: `Refactor the auth middleware onto the new session store`,
         status: `conflict`,

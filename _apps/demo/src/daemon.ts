@@ -3,6 +3,10 @@ import {
     type AgentsList,
     type AgentSummary,
     AgentReplySchema,
+    type Automation,
+    type BrowsersList,
+    type CiJobsResponse,
+    type CiSeenResponse,
     type Info,
     type Model,
     type OauthAccount,
@@ -13,9 +17,24 @@ import {
     type TerminalsList,
     type TranslatorAccounts,
 } from "@intentic/sandbox-contract";
+import { BROWSER_SESSIONS } from "./browser";
+import { automationApprovals, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
+import { ciJobs, ciRunsResponse } from "./fixture/ci";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
-import { demoCapabilities, demoEnvironment, demoExtensions, demoUsageRollup } from "./fixture/sandbox";
-import { agentChanges, fileBody, fileDiff, gitChanges, REPOS, searchWorkspace, sessions, workspaceTree } from "./fixture/workspace";
+import { deleteMemoryFile, memoryFile, memoryList, saveMemoryFile } from "./fixture/memory";
+import { demoCapabilities, demoEnvironment, demoExtensions, demoUsageRollup, setExtensionEnabled } from "./fixture/sandbox";
+import {
+    agentChanges,
+    fileBody,
+    fileDiff,
+    gitChanges,
+    landAgentDelta,
+    landedPaths,
+    REPOS,
+    searchWorkspace,
+    sessions,
+    workspaceTree,
+} from "./fixture/workspace";
 import { eventStream } from "./sse";
 import { featuredRun, type Run, visitorRun } from "./turn";
 import { json, refuse } from "./transport";
@@ -39,6 +58,9 @@ const STARTED_AT = Date.now();
 // The roster is live state: rename/archive/seen write it, and every write bumps `rev` and re-broadcasts, which
 // is exactly the contract the real registry has with the board (snapshot-not-diff, newest rev wins).
 const roster = { agents: fleetRoster(STARTED_AT), rev: 1 };
+// When the pipelines board was last read. Seeded just before the newest breakage, so the rail badge a visitor
+// arrives to is honest — and opening the view stamps it away, as it does against a real daemon.
+let ciSeenAt = STARTED_AT - 35 * 60_000;
 const listeners = new Set<(event: SystemEvent) => void>();
 const runs = new Map<string, Run>();
 
@@ -152,6 +174,26 @@ const reply = async (request: Request): Promise<Response> => {
     return json({ ok: true });
 };
 
+/* LAND NOW — the press the whole fleet board is pointed at, and the one mutation here that changes more than
+ * one surface. A clean land moves the agent's delta into the main tree (fixture/workspace.ts), so the card
+ * crosses into Finished, the review's rows flip to "landed", the Changes panel grows the files with this
+ * agent's chip on them, and `workspaceChanged` tells every open panel to re-read. A refused one changes
+ * nothing at all, which is exactly the promise `check` makes — the card goes back to conflict carrying the
+ * report the panel then offers to hand to the agent. */
+const land = (id: string): Response => {
+    const result = landAgentDelta(id);
+    if (!result.landed) {
+        patchAgent(id, { status: `conflict`, updatedAt: Date.now(), attention: { plan: false, question: false, permission: false, conflict: true } });
+        return json(result);
+    }
+    patchAgent(id, { status: `landed`, updatedAt: Date.now(), attention: { plan: false, question: false, permission: false, conflict: false } });
+    const paths = landedPaths(id);
+    for (const listener of listeners) {
+        listener({ kind: `workspaceChanged`, paths });
+    }
+    return json(result);
+};
+
 const info: Info = { name: `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
 
 /* The route table. Ordered, first match wins; `{name}` matches one segment, read back through `param`.
@@ -175,6 +217,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/health`, () => json({ error: `The demo has no local daemon to shortcut to.` }, 404)],
     [`POST`, `/system/session`, () => json({ token: `demo-session`, expiresAt: Date.now() + 30 * 24 * 3_600_000, email: `ada@acme.dev` })],
     [`POST`, `/system/presence`, () => json({ ok: true })],
+    // A WebSocket can't carry a bearer header, so the terminal and the browser view spend one of these per
+    // upgrade (wsTicket.ts). Answered rather than left to its 404 fallback: the fallback works, but it puts a
+    // failed request in the console of every demo.
+    [`POST`, `/system/ws-ticket`, () => json({ ticket: `demo-ticket` })],
     [`GET`, `/system/usage`, () => json({ accounts: [] })],
     [
         `GET`,
@@ -184,7 +230,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
                 sessions: [{ name: `agent-checkout-stripe`, label: `checkout-stripe`, kind: `agent`, running: true, activityAt: Date.now() }],
             } satisfies TerminalsList),
     ],
-    [`GET`, `/system/browsers`, () => json({ browsers: [] })],
+    // The agent's Chromium: one still being driven (its screencast is browser.ts) and one that has closed,
+    // which is the state the view renders as a record of where the agent went rather than as a broken stream.
+    [`GET`, `/system/browsers`, () => json({ sessions: BROWSER_SESSIONS(Date.now()) } satisfies BrowsersList)],
+    [`DELETE`, `/system/browsers/{name}`, () => refuse(`This is the demo workspace — the browser you are watching is a recording, so there is nothing to close.`)],
     [`GET`, `/system/subagents`, () => json({ subagents: [] })],
 
     [`GET`, `/agents`, () => json({ agents: roster.agents, rev: roster.rev } satisfies AgentsList)],
@@ -197,7 +246,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/agents/{id}/rename`, renameAgent],
     [`POST`, `/agents/{id}/seen`, ({ param }) => agentResponse(patchAgent(param(`id`), { seenAt: Date.now() }))],
     [`POST`, `/agents/{id}/auto-land`, ({ param }) => agentResponse(patchAgent(param(`id`), {}))],
-    [`POST`, `/agents/{id}/land`, () => refuse(`This is the demo workspace — landing writes to a real branch, which the recording has none of.`)],
+    [`POST`, `/agents/{id}/land`, ({ param }) => land(param(`id`))],
     [`POST`, `/agents/{id}/discard`, () => refuse(`This is the demo workspace — there is no worktree to discard.`)],
     [`POST`, `/agents/archive`, archiveAgents],
     [`POST`, `/agents/unarchive`, () => json({ agents: [], rev: roster.rev })],
@@ -254,14 +303,44 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/settings`, () => json(DEMO_SETTINGS)],
     [`GET`, `/settings/savings`, () => json(DEMO_SAVINGS)],
     [`GET`, `/vpn`, () => json({ networks: [] })],
-    [`GET`, `/ci/runs`, () => json({ runs: [] })],
+
+    /* CI. The board is real data (fixture/ci.ts) and its read state is real state: opening the view stamps
+     * `/ci/seen`, which is what clears the rail's breakage badge. What a recording cannot do is act on someone
+     * else's pipeline, so rerun, cancel and Fix-with-agent refuse in the daemon's own error shape — the view
+     * renders that line above the board, which is the whole point of refusing rather than pretending. */
+    [`GET`, `/ci/runs`, () => json(ciRunsResponse(Date.now(), ciSeenAt))],
+    [`POST`, `/ci/runs/jobs`, ciJobsRoute],
+    [`POST`, `/ci/seen`, () => json({ seenAt: (ciSeenAt = Date.now()) } satisfies CiSeenResponse)],
+    [`POST`, `/ci/runs/rerun`, () => refuse(`This is the demo workspace — rerunning would start a pipeline on a repo that isn't yours.`)],
+    [`POST`, `/ci/runs/cancel`, () => refuse(`This is the demo workspace — there is no live pipeline to cancel.`)],
+    [`POST`, `/ci/fix`, () => refuse(`This is the demo workspace — a fix agent needs your repo and its CI logs. Start a sandbox and this button opens one.`)],
+
     [`GET`, `/chores`, () => json({ chores: [] })],
+
+    /* Automations — the sandbox working while nobody watches. Enabling, editing and deleting a row are real
+     * (the fixture is the store), and so is clearing a held wake; what refuses is FIRING one, because a wake is
+     * an agent turn against a repo the recording doesn't have. */
+    [`GET`, `/automations`, () => json({ automations: automationsList(Date.now()) })],
+    [`GET`, `/automations/pending`, () => json({ approvals: automationApprovals(Date.now()) })],
+    [`POST`, `/automations`, saveAutomationRoute],
+    [`DELETE`, `/automations/{id}`, ({ param }) => okAfter(() => deleteAutomation(Date.now(), param(`id`)))],
+    [`POST`, `/automations/{id}/run`, () => refuse(`This is the demo workspace — firing an automation runs a real turn against real systems.`)],
+    [`POST`, `/automations/pending/{id}/approve`, () => refuse(`This is the demo workspace — approving a held wake would start the turn it is holding.`)],
+    [`POST`, `/automations/pending/{id}/reject`, ({ param }) => okAfter(() => resolveApproval(Date.now(), param(`id`)))],
+
+    /* Memory: what the agent carries between sessions, readable and — the point of the surface — editable. The
+     * red pen writes into the fixture, so an edit and a forget both hold until the tab is reloaded. */
+    [`GET`, `/memory`, () => json({ files: memoryList(Date.now()) })],
+    [`GET`, `/memory/file`, ({ url }) => memoryRead(url)],
+    [`PUT`, `/memory/file`, memoryWrite],
+    [`DELETE`, `/memory/file`, memoryForget],
     [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
     [`GET`, `/usage/rollup`, () => json({ rows: demoUsageRollup(STARTED_AT) })],
     [`GET`, `/secrets/inventory`, () => json({ secrets: [] })],
     [`GET`, `/ports`, () => json({ ports: [] })],
     [`GET`, `/panels`, () => json({ panels: [] })],
     [`GET`, `/extensions`, () => json({ extensions: demoExtensions() })],
+    [`POST`, `/extensions/{id}/enabled`, setEnabled],
     [`GET`, `/drafts`, () => json({ drafts: [] })],
     [`GET`, `/members`, () => json({ members: [] })],
     [`GET`, `/environment`, () => json(demoEnvironment())],
@@ -349,6 +428,46 @@ function archiveAgents({ request }: RouteContext): Promise<Response> {
         roster.agents = roster.agents.filter((agent) => !ids.includes(agent.id));
         broadcastRoster();
         return json({ agents: archived, rev: roster.rev });
+    });
+}
+
+/** A mutation with nothing to report: do it, then answer the daemon's own `{ ok: true }`. */
+const okAfter = (write: () => void): Response => {
+    write();
+    return json({ ok: true });
+};
+
+function ciJobsRoute({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) => {
+        const { repo, runId } = body as { repo?: string; runId?: number };
+        return json({ jobs: ciJobs(repo ?? ``, runId ?? 0, Date.now()) } satisfies CiJobsResponse);
+    });
+}
+
+function saveAutomationRoute({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) => okAfter(() => saveAutomation(Date.now(), body as Automation)));
+}
+
+const memoryRead = (url: URL): Response => {
+    const file = memoryFile(Date.now(), url.searchParams.get(`project`) ?? ``, url.searchParams.get(`name`) ?? ``);
+    return file === undefined ? refuse(`No such memory note.`, 404) : json(file);
+};
+
+function memoryWrite({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) => {
+        const { name, content } = body as { name?: string; content?: string };
+        return okAfter(() => saveMemoryFile(Date.now(), name ?? ``, content ?? ``));
+    });
+}
+
+function memoryForget({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) => okAfter(() => deleteMemoryFile(Date.now(), (body as { name?: string }).name ?? ``)));
+}
+
+function setEnabled({ request, param }: RouteContext): Promise<Response> {
+    return request.json().then((body) => {
+        setExtensionEnabled(param(`id`), (body as { enabled?: boolean }).enabled === true);
+        return json({ extensions: demoExtensions() });
     });
 }
 

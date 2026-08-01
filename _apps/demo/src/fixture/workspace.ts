@@ -1,14 +1,18 @@
 import type {
     AgentChanges,
+    AgentRepoChanges,
     FileDiff,
     GitChanges,
+    LandConflict,
+    LandResult,
+    RepoChanges,
     SessionSummary,
     WorkspaceSearchGroup,
     WorkspaceSearchResult,
     WorkspaceSearchSpan,
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
-import { REVIEW_AGENT_ID } from "./fleet";
+import { CONFLICT_AGENT_ID, FEATURED_AGENT_ID, REVIEW_AGENT_ID } from "./fleet";
 
 /* THE WORKSPACE the demo's sandbox holds: `acme-shop`, a two-repo product (a web front end and its API), with
  * a handful of dirty files so the Changes review has something to show and three agents' names to attribute
@@ -63,62 +67,158 @@ export const workspaceTree = (): WorkspaceTree => ({
     ],
 });
 
-/* The Changes review: what is dirty in the main tree right now, and which agent wrote it.
+/* What is dirty in the main tree BEFORE anything lands: the checkout agent's first pass, already applied, plus
+ * one file the owner is editing by hand.
  *
  * Paths here are REPO-relative, which is the one thing about this shape that is easy to get wrong: the panel
  * composes `repo` and `path` itself, so a root-relative path renders as `api/api/src/db/schema.ts`. Tool-call
- * locations and the workspace tree are the opposite — root-relative — because they address the whole /work drop. */
-export const gitChanges = (): GitChanges => ({
-    repos: [
+ * locations and the workspace tree are the opposite — root-relative — because they address the whole /work drop.
+ *
+ * `origins` is per repo and maps a path to the agents that landed it; `originAgents` (once, on the response)
+ * says who those ids ARE. Both halves or neither: an id in one and not the other is an unattributed chip. */
+const BASE_CHANGES: RepoChanges[] = [
+    {
+        repo: `web`,
+        branch: `main`,
+        conflicted: [],
+        staged: [],
+        unstaged: [
+            { path: `src/lib/checkout.ts`, status: `modified`, additions: 6, deletions: 3 },
+            { path: `src/pricing/CheckoutPanel.tsx`, status: `modified`, additions: 28, deletions: 4 },
+            { path: `tests/checkout.spec.ts`, status: `added`, additions: 44, deletions: 0 },
+        ],
+        origins: {
+            "src/lib/checkout.ts": [FEATURED_AGENT_ID],
+            "src/pricing/CheckoutPanel.tsx": [FEATURED_AGENT_ID],
+            "tests/checkout.spec.ts": [FEATURED_AGENT_ID],
+        },
+    },
+    {
+        repo: `api`,
+        branch: `main`,
+        conflicted: [],
+        staged: [],
+        unstaged: [
+            { path: `src/routes/checkout.ts`, status: `added`, additions: 38, deletions: 0 },
+            // Nobody's but the owner's — which is what makes the auth agent's land refuse on it below.
+            { path: `src/db/schema.ts`, status: `modified`, additions: 12, deletions: 2 },
+        ],
+        origins: { "src/routes/checkout.ts": [FEATURED_AGENT_ID] },
+    },
+];
+
+const ORIGIN_AGENTS: Record<string, { title: string; provider: string }> = {
+    [FEATURED_AGENT_ID]: { title: `Add Stripe checkout to the pricing page`, provider: `claude` },
+    [REVIEW_AGENT_ID]: { title: `Migrate the users table to soft deletes`, provider: `claude` },
+};
+
+/* EVERY AGENT'S CUMULATIVE DELTA, which two surfaces read: the review panel (GET /agents/{id}/diff) and, once
+ * it lands, the main tree's Changes panel. One table for both, because in the product they are one fact seen
+ * from two sides — the whole point of "Land now" is watching a row cross from here to there. */
+const AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
+    [REVIEW_AGENT_ID]: [
         {
-            repo: `web`,
-            branch: `main`,
-            conflicted: [],
-            staged: [],
-            unstaged: [
-                { path: `src/lib/checkout.ts`, status: `modified`, additions: 6, deletions: 3 },
-                { path: `src/pricing/CheckoutPanel.tsx`, status: `modified`, additions: 28, deletions: 4 },
-                { path: `tests/checkout.spec.ts`, status: `added`, additions: 44, deletions: 0 },
+            repo: `api`,
+            branch: `agent/soft-deletes`,
+            changes: [
+                { path: `src/db/schema.ts`, status: `modified`, additions: 34, deletions: 8, landed: false },
+                { path: `src/db/migrations.ts`, status: `modified`, additions: 62, deletions: 0, landed: false },
+                { path: `src/routes/users.ts`, status: `modified`, additions: 96, deletions: 41, landed: false },
             ],
         },
         {
+            repo: `web`,
+            branch: `agent/soft-deletes`,
+            changes: [{ path: `src/lib/api.ts`, status: `modified`, additions: 18, deletions: 6, landed: false }],
+        },
+    ],
+    [CONFLICT_AGENT_ID]: [
+        {
             repo: `api`,
-            branch: `main`,
-            conflicted: [],
-            staged: [],
-            unstaged: [
-                { path: `src/routes/checkout.ts`, status: `added`, additions: 38, deletions: 0 },
-                { path: `src/db/schema.ts`, status: `modified`, additions: 12, deletions: 2 },
+            branch: `agent/auth-middleware`,
+            changes: [
+                { path: `src/middleware/session.ts`, status: `added`, additions: 148, deletions: 0, landed: false },
+                { path: `src/server.ts`, status: `modified`, additions: 22, deletions: 31, landed: false },
+                { path: `src/db/schema.ts`, status: `modified`, additions: 9, deletions: 4, landed: false },
             ],
         },
     ],
-    originAgents: {
-        cnv_release_notes: { title: `Draft the release notes for 2.4`, provider: `claude` },
-    },
-});
+};
 
-/** The review panel's cumulative delta for the agent holding work on its branch. */
-export const agentChanges = (agentId: string): AgentChanges =>
-    agentId === REVIEW_AGENT_ID
-        ? {
-              repos: [
-                  {
-                      repo: `api`,
-                      branch: `agent/soft-deletes`,
-                      changes: [
-                          { path: `src/db/schema.ts`, status: `modified`, additions: 34, deletions: 8, landed: false },
-                          { path: `src/db/migrations.ts`, status: `modified`, additions: 62, deletions: 0, landed: false },
-                          { path: `src/routes/users.ts`, status: `modified`, additions: 96, deletions: 41, landed: false },
-                      ],
-                  },
-                  {
-                      repo: `web`,
-                      branch: `agent/soft-deletes`,
-                      changes: [{ path: `src/lib/api.ts`, status: `modified`, additions: 18, deletions: 6, landed: false }],
-                  },
-              ],
-          }
-        : { repos: [] };
+/* WHY THE AUTH AGENT'S LAND REFUSES, in the shape the daemon reports it — and with both halves of the report,
+ * because they are what the panel's button ladder is built on: `diverged` is the agent's to rebase away (the
+ * main line moved under it), `workspace` is the owner's own uncommitted edit on schema.ts above, which no
+ * rebase can reach. A demo that only ever showed a clean land would be showing the easy half of landing. */
+const CONFLICTS: Record<string, LandConflict[]> = {
+    [CONFLICT_AGENT_ID]: [
+        {
+            repo: `api`,
+            clean: 1,
+            mainBranch: `main`,
+            paths: [
+                { path: `src/server.ts`, reason: `diverged` },
+                { path: `src/db/schema.ts`, reason: `workspace` },
+            ],
+        },
+    ],
+};
+
+// Which agents have landed. The one piece of state the land scenario turns on: it flips the review's rows and
+// moves their files into the main tree, which is exactly what a land does.
+const landedAgents = new Set<string>();
+
+export const gitChanges = (): GitChanges => {
+    // A copy per read: what a land adds belongs to `landedAgents`, not to the base the next read starts from.
+    const repos = structuredClone(BASE_CHANGES);
+    for (const agentId of landedAgents) {
+        for (const delta of AGENT_DELTAS[agentId] ?? []) {
+            const target = repos.find((repo) => repo.repo === delta.repo);
+            if (target === undefined) {
+                continue;
+            }
+            const origins = (target.origins ??= {});
+            for (const change of delta.changes) {
+                // A path the tree already carries keeps its row and gains an author: two agents can land the
+                // same file, and the panel draws a chip per id.
+                if (!target.unstaged.some((row) => row.path === change.path)) {
+                    target.unstaged.push({ path: change.path, status: change.status, additions: change.additions, deletions: change.deletions });
+                }
+                origins[change.path] = [...(origins[change.path] ?? []), agentId];
+            }
+        }
+    }
+    return { repos, originAgents: ORIGIN_AGENTS };
+};
+
+/** The review panel's cumulative delta for one agent, plus why its last land refused. */
+export const agentChanges = (agentId: string): AgentChanges => {
+    const landed = landedAgents.has(agentId);
+    const conflicts = CONFLICTS[agentId];
+    const repos = structuredClone(AGENT_DELTAS[agentId] ?? []);
+    for (const repo of repos) {
+        for (const change of repo.changes) {
+            change.landed = landed;
+        }
+    }
+    return { repos, ...(conflicts === undefined ? {} : { conflicts }) };
+};
+
+/* LAND NOW. The recording's answer to the one press the fleet exists for: the agent's delta stops being a
+ * proposal and becomes the tree's uncommitted work, attributed to it. An agent the fixture records a conflict
+ * for refuses instead, exactly as the daemon does — nothing is applied, the worktree keeps everything, and the
+ * report the panel renders is the same one that came back here. */
+export const landAgentDelta = (agentId: string): LandResult => {
+    const conflicts = CONFLICTS[agentId];
+    if (conflicts !== undefined) {
+        return { landed: false, conflicts };
+    }
+    landedAgents.add(agentId);
+    return { landed: true };
+};
+
+/** Root-relative paths a land just wrote, for the `workspaceChanged` frame that refreshes every open panel. */
+export const landedPaths = (agentId: string): string[] =>
+    (AGENT_DELTAS[agentId] ?? []).flatMap((repo) => repo.changes.map((change) => `${repo.repo}/${change.path}`));
 
 const SOFT_DELETE_BEFORE = `export const users = pgTable("users", {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -151,10 +251,24 @@ const CHECKOUT_LIB_AFTER = `export const checkout = async (priceId: string) => {
 };
 `;
 
+const USERS_ROUTE_BEFORE = `export const deleteUser = async (id: string) => {
+    await db.delete(users).where(eq(users.id, id));
+    return { ok: true };
+};
+`;
+
+const USERS_ROUTE_AFTER = `export const deleteUser = async (id: string) => {
+    // Retire, never remove: the row stays, every read filters it out (see liveUsers).
+    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, id));
+    return { ok: true };
+};
+`;
+
 // Keyed `<repo>/<repo-relative path>` — the two file-diff routes are addressed by that pair, and the join is
 // what keeps `src/db/schema.ts` in two repos from being one entry.
 const DIFFS: Record<string, FileDiff> = {
     "api/src/db/schema.ts": { before: SOFT_DELETE_BEFORE, after: SOFT_DELETE_AFTER },
+    "api/src/routes/users.ts": { before: USERS_ROUTE_BEFORE, after: USERS_ROUTE_AFTER },
     "web/src/lib/checkout.ts": { before: CHECKOUT_LIB_BEFORE, after: CHECKOUT_LIB_AFTER },
 };
 

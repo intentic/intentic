@@ -1,3 +1,4 @@
+import { browserSession } from "./browser";
 import { coverage, daemon } from "./daemon";
 import { DEMO_SANDBOX, DEMO_USER, platform } from "./platform";
 import { terminalSession } from "./terminal";
@@ -22,8 +23,13 @@ const seedCredentials = (): void => {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ token: `demo-session`, expiresAt: Date.now() + 30 * 24 * 3_600_000, email: DEMO_USER.email }));
 };
 
+const SOCKETS: Record<string, typeof terminalSession> = {
+    "/system/terminal": terminalSession,
+    "/system/browser-view": browserSession,
+};
+
 installFetch({ platform, daemon });
-installWebSocket((url) => (url.pathname === `/system/terminal` ? terminalSession : undefined));
+installWebSocket((url) => SOCKETS[url.pathname]);
 seedCredentials();
 
 const served = coverage();

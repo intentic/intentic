@@ -51,6 +51,10 @@ export default defineConfig({
             // mapping this package's tsconfig `paths` already declares. `package.json` names the dependency;
             // this is how it resolves, with no dist between an app edit and the demo showing it.
             "@intentic-app/web/main": here(`../web/src/main.ts`),
+            // The extensions THIS app build compiled in, which the fixture's GET /extensions enumerates. Read
+            // from the app rather than re-listed here on purpose: a demo whose list is one extension short shows
+            // that extension as image/app drift, in the app's own alarmed wording.
+            "@intentic-app/web/builtins": here(`../web/src/extension-host/builtins.ts`),
         },
     },
     base: `/demo/`,
@@ -60,7 +64,10 @@ export default defineConfig({
     publicDir: here(`../web/public`),
     // Plain http on its own port: the demo talks to nothing real, so there is no cross-origin cookie, no Google
     // client and no mixed content to keep the app's dev certificate for. The app's dev server is untouched.
-    server: { host: `localhost`, port: 47146, strictPort: true },
+    // `127.0.0.1` rather than `localhost`, which Node resolves to ::1 on a dual-stack host: the site's dev
+    // server proxies /demo/ here (_apps/site/astro.config.mjs) and Vite rewrites a `localhost` proxy target to
+    // 127.0.0.1, so a v6-only listener is refused. Pinning the family makes both ends name the same socket.
+    server: { host: `127.0.0.1`, port: 47146, strictPort: true },
     build: {
         outDir: here(`../site/public/demo`),
         emptyOutDir: true,

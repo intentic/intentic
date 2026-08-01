@@ -10,6 +10,10 @@ pnpm -C _apps/demo dev      # http://localhost:47146/demo/
 pnpm -C _apps/demo build    # → _apps/site/public/demo/ (Astro copies it into the site's dist)
 ```
 
+Working on the marketing site's hero overlay means running **both** dev servers: `astro dev` proxies `/demo/`
+to this one (`_apps/site/astro.config.mjs`), because `public/demo/` is a build output that nothing produces
+during `astro dev`. Without it the overlay says so in the frame rather than 404ing.
+
 ## Why it is its own package
 
 It lived in `_apps/web/src/demo/` first, which was wrong in three checkable ways: a fixture edit matched CI's
@@ -18,7 +22,8 @@ It lived in `_apps/web/src/demo/` first, which was wrong in three checkable ways
 assumes one. The boundary also does what a boundary is for — app code cannot reach the fixture by accident.
 
 The dependency runs one way and only one way: this package depends on `@intentic-app/web`, imports its entry
-through the `./main` export, and shares its Vite setup through `./vite-shared`. Web knows nothing about this.
+through the `./main` export, its compiled-in extension registry through `./builtins`, and shares its Vite setup
+through `./vite-shared`. Web knows nothing about this.
 
 ## Layout
 
@@ -31,7 +36,8 @@ through the `./main` export, and shares its Vite setup through `./vite-shared`. 
 | `src/turn.ts` | the recorded `AgentEvent` run behind `/agent/attach`, with its frame log |
 | `src/sse.ts` | the event-iterator wire format |
 | `src/terminal.ts` | the recorded pty, as `TerminalServerMessage` frames |
-| `src/fixture/` | the data — `fleet.ts` (the roster) and `workspace.ts` (repos, diffs, sessions) |
+| `src/browser.ts` | the recorded screencast of the agent's Chromium, drawn as SVG frames |
+| `src/fixture/` | the data — `fleet.ts` (the roster), `workspace.ts` (repos, diffs, landing), `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |
 
 Anything the fixture does not serve answers 404 and logs one line naming the method and path. That console line
 is the tool: it is how the served routes were found, and how the next one will be.

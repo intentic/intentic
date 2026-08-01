@@ -1,4 +1,5 @@
 import type { CapabilitySummary } from "@intentic-app/api-contract";
+import { builtinModules } from "@intentic-app/web/builtins";
 import type { Environment, ExtensionSummary, UsageRollupRow } from "@intentic/sandbox-contract";
 
 /* The sandbox's own furniture for the recorded workspace: what acme-shop is wired to, which extensions supply
@@ -28,8 +29,10 @@ export const demoCapabilities = (): CapabilitySummary[] => [
 ];
 
 // The extensions those cli capabilities resolve through: without the contribution there is no card, which is
-// exactly how the product works — a connector is manifest data, not a hardcoded table in the app.
-export const demoExtensions = (): ExtensionSummary[] => [
+// exactly how the product works — a connector is manifest data, not a hardcoded table in the app. These two are
+// daemon-side (a connector catalog and a listener), so no code of theirs runs in the browser and the hub calls
+// them `agent-only`.
+const CONNECTOR_EXTENSIONS: ExtensionSummary[] = [
     {
         id: `intentic.connectors`,
         commit: `9f2c41d`,
@@ -157,6 +160,30 @@ export const demoExtensions = (): ExtensionSummary[] => [
         },
     },
 ];
+
+/* THE LIST THE IMAGE WOULD BAKE. Every first-party extension whose code this app build compiled in, read off
+ * the app's own registry rather than re-typed here — because the extension host treats a compiled-in extension
+ * the daemon didn't mention as version drift, and says so on each row: "this sandbox image doesn't list it —
+ * the image and the app are on different versions". True of a dogfooding sandbox, alarming nonsense on a
+ * marketing page, and re-listing them by hand would only move the drift to the next extension somebody adds.
+ *
+ * `commit` is `demo` for the same reason `info.version` is: the recording is not a build of anything. */
+const compiledExtensions = (): ExtensionSummary[] =>
+    [...builtinModules].map(([id, module]) => ({ id, manifest: module.manifest, commit: `demo`, builtin: true, enabled: true }));
+
+// Built once and then LIVE: the hub's Extensions tab really writes these switches, because the daemon persists
+// a flip and every later read reflects it — a fixture that answered read-only would have a toggle that springs
+// back on the next poll.
+let extensions: ExtensionSummary[] | undefined;
+
+export const demoExtensions = (): ExtensionSummary[] => (extensions ??= [...compiledExtensions(), ...CONNECTOR_EXTENSIONS]);
+
+export const setExtensionEnabled = (id: string, enabled: boolean): void => {
+    const extension = demoExtensions().find((candidate) => candidate.id === id);
+    if (extension !== undefined) {
+        extension.enabled = enabled;
+    }
+};
 
 /* The image overlay: the layer of the environment everyone else keeps closed. What's applied is what the
  * container was built from; the proposal is the agent asking for one more tool — approved by the owner, never
