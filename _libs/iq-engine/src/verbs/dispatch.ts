@@ -8,7 +8,7 @@ import { bm25Search, prfTerms } from "../engines/bm25.js";
 import { fileSearch } from "../engines/files.js";
 import { logSearch, recentFiles, whoAnchor } from "../engines/git.js";
 import { hotspotFiles } from "../engines/hotspots.js";
-import { type RgOptions, rgSearch } from "../engines/lexical.js";
+import { type RgOptions, type RgResult, rgSearch } from "../engines/lexical.js";
 import { repoMap } from "../engines/map.js";
 import { embedPending, semanticSearch } from "../engines/semantic.js";
 import { defOf, refsOf, symSearch } from "../engines/symbols.js";
@@ -18,6 +18,7 @@ import { fuse, type FuseContext } from "../plan/fuse.js";
 import { queryTokens } from "../plan/tokens.js";
 import { estimateTokens } from "../render/budget.js";
 import { cursorId, decodeCursor, readSpool, writeSpool } from "../render/cursor.js";
+import { renderList } from "../render/list.js";
 import { renderText, type Rendered } from "../render/text.js";
 import type { IndexDb } from "../store/db.js";
 import type { EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb } from "../types.js";
@@ -494,22 +495,22 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         // Recover instead of hinting — a hint costs the agent a whole retry turn, a rerun costs milliseconds.
         // A pattern rust regex rejects (`foo({`) reruns literally; grep-style escapes (`a\|b`) that matched
         // nothing rerun with the escapes stripped. The note names what ran so the next call is canonical.
-        let hits: EngineHit[];
+        let found: RgResult;
         let note: string | undefined;
         try {
-            hits = await rgSearch({ ...rgBase, pattern: request.query, ...modifiers, ...(request.options.literal ? { literal: true } : {}) });
+            found = await rgSearch({ ...rgBase, pattern: request.query, ...modifiers, ...(request.options.literal ? { literal: true } : {}) });
         } catch (error) {
             if (request.options.literal || !(error instanceof Error) || !error.message.includes("regex parse error")) {
                 throw error;
             }
-            hits = await rgSearch({ ...rgBase, pattern: request.query, ...modifiers, literal: true });
+            found = await rgSearch({ ...rgBase, pattern: request.query, ...modifiers, literal: true });
             note = "pattern isn't valid rust regex — ran as literal text (--literal)";
         }
-        if (hits.length === 0 && note === undefined && !request.options.literal && GREP_DIALECT.test(request.query)) {
+        if (found.hits.length === 0 && note === undefined && !request.options.literal && GREP_DIALECT.test(request.query)) {
             const rewritten = request.query.replaceAll(/\\([|+?(){}])/g, "$1");
-            const retried = await rgSearch({ ...rgBase, pattern: rewritten, ...modifiers }).catch(() => []);
-            if (retried.length > 0) {
-                hits = retried;
+            const retried = await rgSearch({ ...rgBase, pattern: rewritten, ...modifiers }).catch(() => undefined);
+            if (retried !== undefined && retried.hits.length > 0) {
+                found = retried;
                 note = `grep-style escapes rewritten to rust regex — matched: ${rewritten}`;
             }
         }
@@ -519,7 +520,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             note = GREP_DIALECT_NOTE;
         }
         return {
-            groups: toGroups([{ engine: "lexical", hits }], request.query, entries, context.features),
+            groups: toGroups([{ engine: "lexical", hits: found.hits, capped: found.capped }], request.query, entries, context.features),
             unit: "matches",
             style: "hits",
             showTags: false,
@@ -656,23 +657,23 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         const results: EngineResult[] = [];
         if (kind === "path") {
             results.push({ engine: "files", hits: fileSearch(request.query, paths, /[*?[]/.test(request.query)) });
-            results.push({ engine: "lexical", hits: await rgSearch({ ...rgBase, pattern: request.query, literal: true }) });
+            results.push({ engine: "lexical", ...(await rgSearch({ ...rgBase, pattern: request.query, literal: true })) });
         } else if (kind === "identifier") {
             results.push({ engine: "symbols", hits: defOf(context.db, request.query, allowed) });
             // rg keeps exhaustive precision (existence of every occurrence); BM25 supplies the relevance rank.
-            results.push({ engine: "lexical", hits: await rgSearch({ ...rgBase, pattern: request.query, word: true }) });
+            results.push({ engine: "lexical", ...(await rgSearch({ ...rgBase, pattern: request.query, word: true })) });
             if (on("bm25")) {
                 results.push({ engine: "bm25", hits: bm25Search(context.db, request.query, allowed) });
             }
         } else {
             // Same recovery as `find`: a query that only LOOKS like regex (`foo({`) must not crash auto mode.
-            const hits = await rgSearch({ ...rgBase, pattern: request.query }).catch(async (error: Error) => {
+            const found = await rgSearch({ ...rgBase, pattern: request.query }).catch(async (error: Error) => {
                 if (!error.message.includes("regex parse error")) {
                     throw error;
                 }
                 return rgSearch({ ...rgBase, pattern: request.query, literal: true });
             });
-            results.push({ engine: "lexical", hits });
+            results.push({ engine: "lexical", ...found });
         }
         const groups = toGroups(results, request.query, entries, context.features);
         if (groups.length > 0) {
@@ -700,17 +701,22 @@ const toResult = (
     note: string | undefined,
     features: ReadonlySet<Feature>,
 ): WorkspaceSearchResult => {
-    const shownGroups: WorkspaceSearchGroup[] = plan.groups.slice(offset, offset + rendered.shownGroups).map((group) => ({
-        path: group.path,
-        score: group.score,
-        hits: group.hits.map((hit) => ({
-            line: hit.line,
-            text: hit.text,
-            spans: hit.spans === undefined ? [] : [...hit.spans],
-            tags: [...hit.tags],
-            ...(hit.context !== undefined ? { context: hit.context } : {}),
-        })),
-    }));
+    const shownGroups: WorkspaceSearchGroup[] = plan.groups.slice(offset, offset + rendered.shownGroups).map((group) =>
+        Object.assign(
+            {
+                path: group.path,
+                score: group.score,
+                hits: group.hits.map((hit) => ({
+                    line: hit.line,
+                    text: hit.text,
+                    spans: hit.spans === undefined ? [] : [...hit.spans],
+                    tags: [...hit.tags],
+                    ...(hit.context !== undefined ? { context: hit.context } : {}),
+                })),
+            },
+            group.capped === true ? { capped: true } : {},
+        ),
+    );
     const total = plan.style === "paths" ? plan.groups.length : plan.groups.reduce((sum, group) => sum + group.hits.length, 0);
     const disabled = disabledOf(features);
     return {
@@ -721,6 +727,9 @@ const toResult = (
         groups: shownGroups,
         freshness,
         truncated: rendered.truncated,
+        // `total` is a floor whenever any file's matches ran past the per-file cap — over the WHOLE match set,
+        // not just this page, since that is what the number counts.
+        ...(plan.groups.some((group) => group.capped === true) ? { partial: true } : {}),
         ...(rendered.cursor !== undefined ? { cursor: rendered.cursor } : {}),
         ...(hint !== undefined ? { hint } : {}),
         ...(note !== undefined ? { note } : {}),
@@ -733,6 +742,9 @@ const toResult = (
 export const dispatch = async (context: DispatchContext, request: QueryRequest, defaultEntries: readonly FileEntry[]): Promise<QueryOutcome> => {
     const scopeKey = JSON.stringify(request.scope);
     const id = cursorId(request.echo, scopeKey);
+    // Set by a caller that renders its own rows. It decides the page, and it turns off everything that only ever
+    // fed the text capsule — see RenderOptions.list.
+    const list = request.render.list;
 
     let plan: VerbPlan | undefined;
     let offset = 0;
@@ -743,10 +755,12 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
             throw new Error(`iq: invalid cursor: ${request.render.after}`);
         }
         offset = decoded.offset;
-        const spool = readSpool(context.indexDir, decoded.id);
+        // A list caller never spooled, so there is nothing to replay and nothing has gone wrong — re-running IS
+        // how its cursor works, and saying "stale" would put a warning on a working Load-more.
+        const spool = list === undefined ? readSpool(context.indexDir, decoded.id) : undefined;
         if (spool !== undefined && spool.generation === context.generation) {
             plan = { groups: [...spool.groups], unit: spool.unit, style: spool.style, showTags: spool.showTags, lead: spool.lead };
-        } else {
+        } else if (list === undefined) {
             headerNote = "cursor stale — re-ran";
         }
     }
@@ -773,15 +787,16 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         }
         plan = await runVerb(context, request, entries);
         // Before packing, never after: pack copies the anchor hit into a run of plain lines, and enriching those
-        // would label every line of a body with the symbol that body already is.
-        if (context.features.has("symctx") && ["find", "q", "refs"].includes(request.verb)) {
+        // would label every line of a body with the symbol that body already is. A list caller renders neither —
+        // this was a symbol-table lookup per hit across EVERY matched file, on every keystroke, discarded.
+        if (list === undefined && context.features.has("symctx") && ["find", "q", "refs"].includes(request.verb)) {
             enrichContext(context.db, plan.groups);
         }
         // Show-don't-point applies only where the agent's next move would be a Read: natural-language answers,
         // including an exact query that escalated into one. Cursor replays skip this — spooled groups are packed.
-        // A caller that renders its own result list (the workspace panel) opts out: a packed body's plain lines
-        // would show up there as hits of a query that never matched them.
-        if (context.features.has("pack") && plan.pack === true && request.render.pack !== false) {
+        // A list caller opts out: a packed body's plain lines would show up there as hits of a query that never
+        // matched them.
+        if (list === undefined && context.features.has("pack") && plan.pack === true) {
             plan = { ...plan, groups: await packGroups(context.db, context.root, plan.groups, request.render.budget) };
         }
     }
@@ -794,28 +809,33 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
     // the CALLER's query provoked.
     const note = headerNote ?? plan.headerNote;
     const capsuleNote = [note, plan.provenance, featureNote].filter((part) => part !== undefined).join(" · ") || undefined;
-    const rendered = renderText({
-        verb: request.verb,
-        echo: request.echo,
-        unit: plan.unit,
-        style: plan.style,
-        showTags: plan.showTags,
-        groups: plan.groups,
-        offset,
-        freshness: context.freshness,
-        budget: request.render.budget,
-        ...(request.render.limit !== undefined ? { limit: request.render.limit } : {}),
-        ...(request.render.filesOnly !== undefined ? { filesOnly: request.render.filesOnly } : {}),
-        ...(request.render.count !== undefined ? { count: request.render.count } : {}),
-        ...(capsuleNote !== undefined ? { headerNote: capsuleNote } : {}),
-        ...(hint !== undefined ? { hint } : {}),
-        ...(plan.related !== undefined && plan.related.length > 0 ? { related: plan.related } : {}),
-        ...(plan.lead === true ? { lead: true } : {}),
-        ...(plan.confidence !== undefined ? { confidence: plan.confidence } : {}),
-        cursorId: id,
-    });
+    const rendered =
+        list !== undefined
+            ? renderList(plan.groups, offset, list, id)
+            : renderText({
+                  verb: request.verb,
+                  echo: request.echo,
+                  unit: plan.unit,
+                  style: plan.style,
+                  showTags: plan.showTags,
+                  groups: plan.groups,
+                  offset,
+                  freshness: context.freshness,
+                  budget: request.render.budget,
+                  ...(request.render.limit !== undefined ? { limit: request.render.limit } : {}),
+                  ...(request.render.filesOnly !== undefined ? { filesOnly: request.render.filesOnly } : {}),
+                  ...(request.render.count !== undefined ? { count: request.render.count } : {}),
+                  ...(capsuleNote !== undefined ? { headerNote: capsuleNote } : {}),
+                  ...(hint !== undefined ? { hint } : {}),
+                  ...(plan.related !== undefined && plan.related.length > 0 ? { related: plan.related } : {}),
+                  ...(plan.lead === true ? { lead: true } : {}),
+                  ...(plan.confidence !== undefined ? { confidence: plan.confidence } : {}),
+                  cursorId: id,
+              });
 
-    if (rendered.truncated) {
+    // A list caller's continuation re-runs instead — spooling every group of a keystroke-driven search would put
+    // a megabyte of synchronous JSON on the daemon's event loop per typed character.
+    if (rendered.truncated && list === undefined) {
         writeSpool(context.indexDir, id, {
             generation: context.generation,
             createdAt: Date.now(),

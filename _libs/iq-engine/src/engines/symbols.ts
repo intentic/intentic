@@ -91,7 +91,7 @@ export interface RefsResult {
 // `iq refs X` — live word-boundary ripgrep, each hit classified by lexical context; definition lines dropped.
 export const refsOf = async (db: IndexDb, name: string, kindFilter: RefKind | undefined, rgBase: Omit<RgOptions, "pattern">): Promise<RefsResult> => {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const raw = await rgSearch({ ...rgBase, pattern: escaped, word: true });
+    const { hits: raw } = await rgSearch({ ...rgBase, pattern: escaped, word: true });
     const defLines = new Set(symbolRows(db, "WHERE s.name = ?", name).map((symbol) => `${symbol.path}:${symbol.line}`));
     const counts = new Map<string, number>();
     const classified: EngineHit[] = [];

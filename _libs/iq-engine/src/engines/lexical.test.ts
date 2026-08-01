@@ -21,8 +21,8 @@ beforeAll(async () => {
 });
 afterAll(() => rm(root, { recursive: true, force: true }));
 
-const search = (pattern: string, options: { literal?: boolean; word?: boolean; caseSensitive?: boolean } = {}) =>
-    rgSearch({ root, pattern, allowed, ...options });
+const search = async (pattern: string, options: { literal?: boolean; word?: boolean; caseSensitive?: boolean } = {}) =>
+    (await rgSearch({ root, pattern, allowed, ...options })).hits;
 
 test("every occurrence on a line comes back, not just the first", async () => {
     const hits = await search("own", { literal: true });
@@ -62,4 +62,35 @@ test("word matches whole words only", async () => {
 test("literal takes a regex metacharacter as itself", async () => {
     expect(await search("you own,", { literal: true })).toHaveLength(1);
     expect(await search("you .wn", {})).toHaveLength(2);
+});
+
+test("a file with more matches than the cap reports the cap AND that it is one", async () => {
+    // The count a panel shows has to be a count or a floor, never a floor presented as a count. 60 matching
+    // lines against a cap of 50: 50 come back, and the file is named as having had more.
+    const many = "wide.md";
+    await writeFile(join(root, many), Array.from({ length: 60 }, (_, index) => `needle ${index}`).join("\n"));
+    const found = await rgSearch({ root, pattern: "needle", allowed: new Set([many]), literal: true });
+    expect(found.hits).toHaveLength(50);
+    expect([...found.capped]).toEqual([many]);
+});
+
+test("a file that stops exactly at the cap is not reported as capped", async () => {
+    const exact = "exact.md";
+    await writeFile(join(root, exact), Array.from({ length: 50 }, (_, index) => `needle ${index}`).join("\n"));
+    const found = await rgSearch({ root, pattern: "needle", allowed: new Set([exact]), literal: true });
+    expect(found.hits).toHaveLength(50);
+    expect([...found.capped]).toEqual([]);
+});
+
+test("offsets convert in one pass however many of them a line carries", async () => {
+    // Regression: the conversion decoded the whole byte prefix per span, so a match-dense non-ASCII line was
+    // quadratic — and rg is allowed to hand us a 1 MB one. Every span still has to land on the word.
+    const dense = "dense.md";
+    await writeFile(join(root, dense), `— ${Array.from({ length: 4_000 }, () => "ä needle").join(" ")}`);
+    const started = Date.now();
+    const found = await rgSearch({ root, pattern: "needle", allowed: new Set([dense]), literal: true });
+    const line = found.hits[0]!;
+    expect(line.spans!.length).toBeGreaterThan(0);
+    expect(line.spans!.every((span) => line.text.slice(span.start, span.end) === "needle")).toBe(true);
+    expect(Date.now() - started).toBeLessThan(2_000);
 });

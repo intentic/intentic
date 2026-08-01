@@ -1394,7 +1394,14 @@ export const WorkspaceSearchHitSchema = z.object({
     context: z.string().optional(),
 });
 export type WorkspaceSearchHit = z.infer<typeof WorkspaceSearchHitSchema>;
-export const WorkspaceSearchGroupSchema = z.object({ path: z.string(), score: z.number(), hits: z.array(WorkspaceSearchHitSchema) });
+export const WorkspaceSearchGroupSchema = z.object({
+    path: z.string(),
+    score: z.number(),
+    hits: z.array(WorkspaceSearchHitSchema),
+    // This file had more matching lines than the engine keeps per file, so `hits` is a floor — a panel showing a
+    // per-file count has to say "50+" rather than "50".
+    capped: z.boolean().optional(),
+});
 export type WorkspaceSearchGroup = z.infer<typeof WorkspaceSearchGroupSchema>;
 // `building` = index still filling (progress 0..1, e.g. embeddings pending); `stale` = revalidation was skipped
 // (cursor replay). ageMs = time since the index last matched the disk state.
@@ -1417,6 +1424,9 @@ export const WorkspaceSearchResultSchema = z.object({
     groups: z.array(WorkspaceSearchGroupSchema),
     freshness: WorkspaceSearchFreshnessSchema,
     truncated: z.boolean(),
+    // `total` is a FLOOR: at least one file had more matches than the engine keeps per file. Distinct from
+    // `truncated`, which is about this PAGE — a result can be complete on the page and still count partially.
+    partial: z.boolean().optional(),
     cursor: z.string().optional(),
     hint: z.string().optional(),
     // What the engine did with the query that the query did not ask for — a pattern rerun as literal text

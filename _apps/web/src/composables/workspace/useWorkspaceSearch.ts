@@ -1,5 +1,5 @@
 import type { WorkspaceSearchMode, WorkspaceSearchResult } from "@intentic-app/api-contract";
-import { keepPreviousData, useQuery } from "@tanstack/vue-query";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/vue-query";
 import type { Ref } from "vue";
 import { computed, ref, watch } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -19,10 +19,11 @@ import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
  *   `files` → iq's `files`: fuzzy over PATHS, no file contents. The quick-open fallback for the trees the
  *             client can't rank itself (useFuzzyFiles).
  *
- * Results come relevance-ranked and grouped by file. The input is debounced just enough to coalesce a keystroke
- * burst (the daemon's resident engine answers from a warm index, so queries are cheap); TanStack's abort signal
- * is threaded through so a superseded search cancels daemon-side instead of piling up; keepPreviousData keeps
- * the last results on screen while a refinement is in flight (no flash to the spinner). */
+ * Results come relevance-ranked and grouped by file, one page at a time: the daemon answers with as many whole
+ * files as its row ceiling allows plus a cursor, and `loadMore` appends the next page rather than re-rendering
+ * the list. The input is debounced just enough to coalesce a keystroke burst; TanStack's abort signal is
+ * threaded through so a superseded search cancels daemon-side instead of piling up; keepPreviousData keeps the
+ * last results on screen while a refinement is in flight (no flash to the spinner). */
 export type SearchScope = "text" | "smart" | "files";
 
 const VERB: Record<SearchScope, NonNullable<WorkspaceSearchMode>> = { text: `find`, smart: `q`, files: `files` };
@@ -63,30 +64,45 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         }
         return search.toString();
     });
-    const query = useQuery({
+    const query = useInfiniteQuery({
         // Every switch is in the key: flipping one is a different search, and its previous answer stays cached.
         queryKey: computed(() => sandboxKey(`workspace`, `search`, params.value)),
-        queryFn: ({ signal }) => sandboxJson<WorkspaceSearchResult>(`/workspace/search?${params.value}`, { signal }),
+        queryFn: ({ pageParam, signal }) =>
+            sandboxJson<WorkspaceSearchResult>(`/workspace/search?${params.value}${pageParam === undefined ? `` : `&after=${pageParam}`}`, {
+                signal,
+            }),
+        initialPageParam: undefined as string | undefined,
+        getNextPageParam: (last: WorkspaceSearchResult) => last.cursor,
         enabled,
         placeholderData: keepPreviousData,
     });
+
+    const pages = computed<readonly WorkspaceSearchResult[]>(() => (enabled.value ? (query.data.value?.pages ?? []) : []));
+    // Every page carries the same counts — they describe the whole match set, not the slice that came back.
+    const head = computed(() => pages.value[0]);
 
     return {
         // Ranked best-first by the daemon. A text search then goes back to path order — every hit is an equally
         // exact match of the same pattern, so ranking them says nothing, while path order groups a directory's
         // files together the way an editor's search tree does.
         groups: computed(() => {
-            const groups = enabled.value ? (query.data.value?.groups ?? []) : [];
+            const groups = pages.value.flatMap((page) => page.groups);
             return scope.value === `text` ? groups.toSorted((a, b) => (a.path < b.path ? -1 : 1)) : groups;
         }),
-        total: computed(() => (enabled.value ? (query.data.value?.total ?? 0) : 0)),
-        files: computed(() => (enabled.value ? (query.data.value?.files ?? 0) : 0)),
-        truncated: computed(() => enabled.value && (query.data.value?.truncated ?? false)),
-        searching: computed(() => enabled.value && query.isFetching.value),
+        total: computed(() => head.value?.total ?? 0),
+        files: computed(() => head.value?.files ?? 0),
+        // `total` is a floor: some file had more matches than the engine keeps per file.
+        partial: computed(() => head.value?.partial ?? false),
+        // More pages exist behind the cursor — the panel offers them rather than implying this is everything.
+        truncated: computed(() => query.hasNextPage.value),
+        loadMore: () => void query.fetchNextPage(),
+        loadingMore: computed(() => query.isFetchingNextPage.value),
+        // The header spinner is about the SEARCH; a page append has its own control to report on.
+        searching: computed(() => enabled.value && query.isFetching.value && !query.isFetchingNextPage.value),
         error: computed(() => (enabled.value && query.error.value ? query.error.value.message : undefined)),
         // What the engine did with the pattern that the pattern didn't ask for (an unparseable regex rerun as
         // literal text, grep-style escapes rewritten) — the panel shows it the way the CLI prints it.
-        note: computed(() => (enabled.value ? query.data.value?.note : undefined)),
+        note: computed(() => head.value?.note),
         // True while the typed filter hasn't produced a searchable query yet (too short, or debounce pending).
         pending: computed(() => filter.value.trim().length >= 2 && debounced.value !== filter.value.trim()),
     };

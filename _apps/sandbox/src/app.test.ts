@@ -700,14 +700,14 @@ test("workspace.search runs the resident engine in-process, mapping the wire que
             verb: "find",
             query: "createWidget",
             scope: { ignored: true },
-            render: { budget: 40_000, limit: 3, pack: false },
+            render: { budget: 2_000, list: { hits: 1_000, files: 3 } },
             options: { literal: true, caseSensitive: true },
             echo: 'find "createWidget" --ignored --literal --case',
         },
     ]);
 });
 
-test("workspace.search caps the page at the GUI file limit, whatever the caller asks for", async () => {
+test("workspace.search asks for a LIST page, capped at the GUI file limit whatever the caller asks for", async () => {
     const requests: QueryRequest[] = [];
     const client = clientFor(
         createApp(
@@ -735,7 +735,9 @@ test("workspace.search caps the page at the GUI file limit, whatever the caller 
         ),
     );
     await client.workspace.search({ query: "the", limit: 100_000 });
-    expect(requests[0]?.render).toEqual({ budget: 40_000, limit: 300, pack: false });
+    // `list` is what tells the engine the caller renders its own rows: it sizes the page in rows and skips the
+    // text capsule, the packed bodies, the symbol-context enrichment and the continuation spool.
+    expect(requests[0]?.render).toEqual({ budget: 2_000, list: { hits: 1_000, files: 300 } });
 });
 
 test("workspace.health scopes the resident engine to one repo — 'root' is the workspace repo's empty scope", async () => {

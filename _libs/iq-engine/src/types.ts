@@ -25,10 +25,19 @@ export interface RenderOptions {
     readonly count?: boolean;
     readonly full?: boolean;
     readonly after?: string;
-    // Whether the top groups may be delivered as code bodies rather than anchors (the `pack` stage). On for the
-    // agent-facing text capsule, which pack exists to save a follow-up Read; off for a GUI caller, where the
-    // body's non-matching lines would be listed as if they were hits and the file's own view is one click away.
-    readonly pack?: boolean;
+    /* Set by a caller that renders its OWN result list (the workspace panel) instead of the text capsule, and
+     * sizes the page for it: rows, not tokens. Everything the capsule needs is then skipped, because all of it
+     * was being built and thrown away — the text itself, the `pack` stage (whose non-matching body lines would
+     * be listed as if they were hits), the symbol-context enrichment (a list shows the line, not its enclosing
+     * symbol), and the continuation spool (megabytes of groups written to disk on every keystroke). A `--after`
+     * page re-runs the search instead of replaying that spool; for a list caller the search is the cheap part. */
+    readonly list?: ListPage;
+}
+
+// The page a rendered list wants: whole files, up to these two ceilings, whichever binds first.
+export interface ListPage {
+    readonly hits: number;
+    readonly files: number;
 }
 
 // Verb-specific knobs, flattened — each verb reads only its own.
@@ -90,6 +99,9 @@ export interface EngineHit {
 export interface EngineResult {
     readonly engine: string;
     readonly hits: readonly EngineHit[];
+    // Files this engine stopped reading before it ran out of matches. Only the lexical engine truncates (it caps
+    // what one file may contribute); the group it lands in says so, so a total over these hits is a floor.
+    readonly capped?: ReadonlySet<string>;
 }
 
 export interface RankedHit extends EngineHit {
@@ -100,6 +112,8 @@ export interface RankedGroup {
     readonly path: string;
     readonly score: number;
     readonly hits: readonly RankedHit[];
+    // This file had more matches than the engine kept — its hit count, and any total built from it, is a floor.
+    readonly capped?: boolean;
 }
 
 export interface SymbolRow {

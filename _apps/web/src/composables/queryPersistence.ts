@@ -14,8 +14,13 @@ import { throttleTrailing } from "./throttleTrailing";
  * Session/auth state stays ref-only (useAuth), never in vue-query. */
 
 const IDB_KEY = `intentic-query-cache`;
-// Bump when daemon response shapes change: a mismatched buster drops the old cache on restore.
-const SCHEMA_VERSION = 1;
+/* Bump when daemon response shapes change: a mismatched buster drops the old cache on restore.
+ *
+ * 2 — workspace/search became a PAGED query. Its cache entry is now `{ pages, pageParams }` where it used to be
+ * one result object, and vue-query reads `data.pages.length` before any code of ours runs: a restored v1 entry
+ * threw on the first render of the search panel rather than degrading to a refetch. Any change of a cached
+ * value's SHAPE needs this, not just a change of its fields. */
+const SCHEMA_VERSION = 2;
 
 export const queryClient = new QueryClient();
 

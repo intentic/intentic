@@ -113,6 +113,8 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
             list.push(hit);
         }
     }
+    // Any engine that stopped short on a file marks it for every engine: the group's hits are a floor either way.
+    const capped = new Set(results.flatMap((result) => [...(result.capped ?? [])]));
     const groups: RankedGroup[] = [];
     for (const [path, groupHits] of byPath) {
         // Reduced, not spread: a spread argument list is a stack frame per hit, and one path CAN accumulate an
@@ -123,6 +125,7 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
             path,
             score: best * (1 + 0.05 * Math.log(groupHits.length)),
             hits: groupHits.toSorted((a, b) => a.line - b.line),
+            ...(capped.has(path) ? { capped: true } : {}),
         });
     }
     return groups.toSorted((a, b) => b.score - a.score || (a.path < b.path ? -1 : 1));

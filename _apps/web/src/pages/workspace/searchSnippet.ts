@@ -56,14 +56,18 @@ const clamp = (value: number, low: number, high: number): number => Math.min(Mat
 // clamped, since a hit whose offsets predate a file edit can point past the text we were given. Every span the
 // line reported is kept: a search marks all of a line's occurrences, not just the one that framed it.
 export const snippetWindow = (hit: WorkspaceSearchHit): SnippetWindow => {
+    // This browser can be NEWER than the daemon it is talking to (the app ships ahead of the sandbox image, see
+    // sandboxClient's 404 note), and `spans` postdates the first version of this route. An answer without them
+    // means what a semantic hit's empty one means — the line matched, no offsets — rather than a blank panel.
+    const hitSpans = hit.spans ?? [];
     // Indentation is structure, not content: dropping it is what lets a deeply nested match read at the same
     // density as a top-level one.
     const indent = hit.text.length - hit.text.trimStart().length;
-    const first = clamp(hit.spans[0]?.start ?? indent, indent, hit.text.length);
+    const first = clamp(hitSpans[0]?.start ?? indent, indent, hit.text.length);
     const elided = first - indent > MAX_LEAD;
     const cut = elided ? first - KEEP_BEFORE : indent;
     const text = hit.text.slice(cut, cut + MAX_TEXT);
-    const spans = hit.spans
+    const spans = hitSpans
         .map((span) => ({ start: clamp(span.start - cut, 0, text.length), end: clamp(span.end - cut, 0, text.length) }))
         .filter((span) => span.end > span.start);
     return { text, spans, elided };
@@ -99,9 +103,13 @@ export const snippetPieces = (snippet: SnippetWindow, tokens: readonly CodeToken
 };
 
 /* `lang\ntext` → that line's tokens, `[]` for a language we don't ship (remembered so it is attempted once).
- * Recency-ordered via Map insertion order, so the cap evicts the least recently used. Sized well above one
- * screenful of results: refining a query re-renders rows it already coloured, and a cache that couldn't hold
- * a whole result set would re-tokenize the list on every keystroke. */
+ * Recency-ordered via Map insertion order, so the cap evicts the least recently used.
+ *
+ * The size has to stay well above what ONE RENDER can ask for, and that is what makes the results panel's
+ * windowing load-bearing rather than cosmetic. When the panel asked for every row of a result set at once, a
+ * set larger than this cache could not fit in it, so each batch evicted rows the same batch had just coloured,
+ * the invalidation re-rendered them, and they were requested again — forever, on the main thread. A window is
+ * a few dozen lines; a few hundred entries hold many screenfuls of scrollback, so nothing evicts under it. */
 const CACHE_LIMIT = 600;
 const cache = new Map<string, readonly CodeToken[]>();
 const inFlight = new Set<string>();

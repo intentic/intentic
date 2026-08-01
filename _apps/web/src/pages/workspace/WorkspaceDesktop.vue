@@ -107,9 +107,12 @@ const {
     groups: searchGroups,
     total: searchTotal,
     files: searchFiles,
+    partial: searchPartial,
     truncated: searchTruncated,
     searching,
     pending: searchPending,
+    loadingMore: searchLoadingMore,
+    loadMore: searchLoadMore,
     error: searchError,
     note: searchNote,
 } = useWorkspaceSearch(filter, contentScope, contentMode);
@@ -631,7 +634,10 @@ const endResize = (event: PointerEvent): void => {
                         />
                         <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
                             <!-- Aa / ab / .* — the same three switches, in the same order, as the editor this
-                                 panel is modelled on. Glyphs, not icons: they ARE the notation. -->
+                                 panel is modelled on. Glyphs, not icons: they ARE the notation. `mousedown` is
+                                 suppressed so a press leaves the caret in the field it sits inside: the query is
+                                 half typed and the next keystroke belongs to it. The click still fires, so
+                                 keyboard activation is untouched. -->
                             <template v-if="textMode">
                                 <button
                                     v-for="toggle in matchToggles"
@@ -642,6 +648,7 @@ const endResize = (event: PointerEvent): void => {
                                     :aria-pressed="toggle.on"
                                     v-tooltip.bottom="toggle.title"
                                     :aria-label="toggle.title"
+                                    @mousedown.prevent
                                     @click="toggle.flip()"
                                 >
                                     {{ toggle.label }}
@@ -746,22 +753,27 @@ const endResize = (event: PointerEvent): void => {
                         </button>
                     </div>
                 </div>
-                <div v-if="layout.sidebarPanel.value === 'files'" class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
+                <!-- The match list owns its own scroller (it virtualizes against it); the tree scrolls in the
+                     wrapper the way it always has. -->
+                <div v-if="layout.sidebarPanel.value === 'files' && contentMode" class="min-h-0 flex-1">
                     <WorkspaceSearchResults
-                        v-if="contentMode"
                         :groups="searchGroups"
                         :total="searchTotal"
                         :files="searchFiles"
+                        :partial="searchPartial"
                         :truncated="searchTruncated"
                         :searching="searching"
                         :pending="searchPending"
+                        :loading-more="searchLoadingMore"
                         :error="searchError"
                         :note="searchNote"
                         :query="filter"
                         @open-match="openAtLine"
+                        @load-more="searchLoadMore"
                     />
+                </div>
+                <div v-else-if="layout.sidebarPanel.value === 'files'" class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
                     <WorkspaceTree
-                        v-else
                         :tree="tree"
                         :root-hidden="rootHidden"
                         :filter="filter"

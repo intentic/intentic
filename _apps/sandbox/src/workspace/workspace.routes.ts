@@ -18,13 +18,18 @@ import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files.js";
 
-/* What one page of /workspace/search costs. The engine sizes a page by what rendering it as text would spend,
- * which for the CLI is an agent's context window and here is nothing — the browser reads the JSON and throws the
- * text away. So the budget is set by how long a list is worth scrolling, not by tokens: the CLI's own 1500 fit
- * about seven files, which is what made a search of a monorepo answer "showing first matches only" on the first
- * screen. The file cap is the real bound; the budget only has to be generous enough not to cut in front of it. */
-const GUI_SEARCH_BUDGET = 40_000;
+/* What one page of /workspace/search costs, in the unit the caller actually pays: rows in a scrollable list.
+ * The engine's other page shape sizes itself by what rendering the results as TEXT would spend — an agent's
+ * context window — which here bought nothing (the browser reads the JSON and throws the text away) and made the
+ * number of files that came back depend on how long the matched lines happened to be.
+ *
+ * Sized against the panel's virtualized list, which renders only what is on screen: a thousand rows is a fast
+ * scroll, and past that the reader should be refining the query, not scrolling. Whichever ceiling binds first
+ * wins, and `truncated` + `cursor` let the panel fetch the next page on demand. */
+const GUI_SEARCH_HITS = 1_000;
 const GUI_SEARCH_FILES = 300;
+// The engine still wants a token budget for the paths it names in a zero-hit hint; nothing else reads it here.
+const GUI_SEARCH_BUDGET = 2_000;
 
 // The full /work view + extra-repo cloning. The binary /workspace/raw preview is a plain Hono route in app.ts
 // (a streamed binary body doesn't fit oRPC). External MCP tools moved to the unified capabilities manifest.
@@ -107,10 +112,10 @@ export const createWorkspaceRoutes = (services: Services) => {
          * minus the per-query process spawn, workspace sweep, and inline revalidation those pay. The request's
          * abort signal kills the engine's rg child when the browser supersedes a search mid-flight.
          *
-         * A GUI caller, not a reading agent, so the page is shaped for a scrollable list instead of a token
-         * capsule: GUI_BUDGET is what bounds how many groups come back (the engine cuts the page by what its
-         * text rendering would cost), a hard group cap keeps a one-letter query from serializing the workspace,
-         * and pack is off — the panel lists hits, and packed bodies would fill it with lines nothing matched. */
+         * A GUI caller, not a reading agent, so it asks for a `list` page: rows rather than tokens, and with
+         * that the engine skips everything only the text capsule needed — the capsule itself, the packed bodies
+         * that would fill a match list with lines nothing matched, the per-hit symbol lookup across every
+         * matched file, and the continuation spool. See RenderOptions.list. */
         search: i.search.handler(async ({ input, signal }) => {
             const verb = input.mode ?? "q";
             const ignored = input.includeIgnored === true;
@@ -126,8 +131,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                     scope: ignored ? { ignored: true } : {},
                     render: {
                         budget: GUI_SEARCH_BUDGET,
-                        limit: Math.min(input.limit ?? GUI_SEARCH_FILES, GUI_SEARCH_FILES),
-                        pack: false,
+                        list: { hits: GUI_SEARCH_HITS, files: Math.min(input.limit ?? GUI_SEARCH_FILES, GUI_SEARCH_FILES) },
                         ...(input.after !== undefined ? { after: input.after } : {}),
                     },
                     options,

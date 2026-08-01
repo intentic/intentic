@@ -11,6 +11,7 @@ import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgo
 import { useChanges } from "../../composables/workspace/useChanges";
 import { useMonaco } from "../../composables/workspace/useMonaco";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
+import { useSearchOptions } from "../../composables/workspace/useSearchOptions";
 import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute";
 import { type SearchScope, useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
@@ -123,18 +124,30 @@ const segmentOptions = computed(() => [
 ]);
 
 const filter = ref(``);
-// Same three scopes as the desktop explorer (WorkspaceDesktop.vue documents what each one means); the match
-// switches are desktop-only, since a phone's search field has no room for them and they persist across both.
+/* Same three scopes as the desktop explorer (WorkspaceDesktop.vue documents what each one means), and the same
+ * match switches — they are PERSISTED and shared, so a phone that applied them without showing them was running
+ * a regex search the reader had no way to see, let alone turn off. Their own row rather than inside the field:
+ * there is vertical room here and none beside a 16px input, and a row is a touch target. */
 const searchScope = ref<"name" | SearchScope>(`name`);
 const contentMode = computed(() => searchScope.value !== `name`);
+const textMode = computed(() => searchScope.value === `text`);
 const contentScope = computed<SearchScope>(() => (searchScope.value === `smart` ? `smart` : `text`));
+const search = useSearchOptions();
+const matchToggles = computed(() => [
+    { label: `Aa`, title: `Match case`, on: search.matchCase.value, flip: search.toggleMatchCase },
+    { label: `ab`, title: `Match whole word`, on: search.wholeWord.value, flip: search.toggleWholeWord },
+    { label: `.*`, title: `Use regular expression`, on: search.useRegex.value, flip: search.toggleRegex },
+]);
 const {
     groups: searchGroups,
     total: searchTotal,
     files: searchFiles,
+    partial: searchPartial,
     truncated: searchTruncated,
     searching,
     pending: searchPending,
+    loadingMore: searchLoadingMore,
+    loadMore: searchLoadMore,
     error: searchError,
     note: searchNote,
 } = useWorkspaceSearch(filter, contentScope, contentMode);
@@ -359,6 +372,36 @@ const onPick = (event: Event): void => {
                         ]"
                     />
                 </div>
+                <!-- Aa / ab / .* + Ignored — the same switches the desktop field carries, and the same rule for
+                     which scope sees which: the three change what a PATTERN means, Ignored changes what is
+                     searched at all. -->
+                <div v-if="contentMode" class="flex shrink-0 items-center gap-1.5 px-2 pb-1.5">
+                    <template v-if="textMode">
+                        <button
+                            v-for="toggle in matchToggles"
+                            :key="toggle.label"
+                            type="button"
+                            class="flex h-8 w-9 items-center justify-center rounded-lg font-mono text-xs leading-none text-muted transition-colors active:bg-overlay"
+                            :class="{ 'bg-primary-600/20 text-link': toggle.on }"
+                            :aria-pressed="toggle.on"
+                            :aria-label="toggle.title"
+                            @click="toggle.flip()"
+                        >
+                            {{ toggle.label }}
+                        </button>
+                    </template>
+                    <span class="flex-1"></span>
+                    <button
+                        type="button"
+                        class="flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-2xs font-medium text-muted transition-colors active:bg-overlay"
+                        :class="{ 'bg-primary-600/15 text-link': search.includeIgnored.value }"
+                        :aria-pressed="search.includeIgnored.value"
+                        @click="search.toggleIncludeIgnored()"
+                    >
+                        <Icon :name="search.includeIgnored.value ? `eye` : `eye-slash`" class="text-2xs" />
+                        Ignored
+                    </button>
+                </div>
 
                 <!-- Drill-down header: where we are + one-tap up. The OS back gesture also goes up (history). -->
                 <div v-if="dir !== '' && !contentMode" class="flex h-11 shrink-0 items-center gap-1 border-b border-line px-1">
@@ -373,22 +416,29 @@ const onPick = (event: Event): void => {
                     <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ dir }}</span>
                 </div>
 
-                <PullToRefresh :on-refresh="refetch">
+                <!-- The match list scrolls itself (it virtualizes against its own viewport) and pulling on it
+                     would refetch the directory tree, which is not what it shows. The directory listing keeps
+                     pull-to-refresh. -->
+                <div v-if="contentMode" class="min-h-0 flex-1">
+                    <WorkspaceSearchResults
+                        :groups="searchGroups"
+                        :total="searchTotal"
+                        :files="searchFiles"
+                        :partial="searchPartial"
+                        :truncated="searchTruncated"
+                        :searching="searching"
+                        :pending="searchPending"
+                        :loading-more="searchLoadingMore"
+                        :error="searchError"
+                        :note="searchNote"
+                        :query="filter"
+                        @open-match="openAtLine"
+                        @load-more="searchLoadMore"
+                    />
+                </div>
+                <PullToRefresh v-else :on-refresh="refetch">
                     <div class="pb-24">
-                        <WorkspaceSearchResults
-                            v-if="contentMode"
-                            :groups="searchGroups"
-                            :total="searchTotal"
-                            :files="searchFiles"
-                            :truncated="searchTruncated"
-                            :searching="searching"
-                            :pending="searchPending"
-                            :error="searchError"
-                            :note="searchNote"
-                            :query="filter"
-                            @open-match="openAtLine"
-                        />
-                        <template v-else>
+                        <template>
                             <button
                                 v-for="node in listing"
                                 :key="node.path"
@@ -423,9 +473,12 @@ const onPick = (event: Event): void => {
                     </div>
                 </PullToRefresh>
 
-                <!-- Upload FAB: the picker replacement for desktop's drag-drop; lands in the open directory. -->
+                <!-- Upload FAB: the picker replacement for desktop's drag-drop; lands in the open directory —
+                     so it is gone while a search is showing, which has no open directory to land in and whose
+                     rows it would otherwise sit on top of. -->
                 <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
                 <button
+                    v-if="!contentMode"
                     type="button"
                     :class="cmp.buttonPrimary('absolute bottom-4 right-4 z-10 h-13 w-13 rounded-full px-0 py-0 shadow-lg')"
                     aria-label="Upload files here"
