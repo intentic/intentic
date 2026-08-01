@@ -1,23 +1,18 @@
 ---
 import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
+import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { APP_URL, gitlabIssuesUrl, gitlabUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
 
 const year = 2026;
 
-const featureLinks = [
-    { href: "/#contrast", label: "Why specialized" },
-    { href: "/#anatomy", label: "Anatomy" },
-    { href: "/#workforce", label: "Workforce" },
-    { href: "/#ownership", label: "Ownership" },
-    { href: "/#connect", label: "Get connected" },
-];
+const productLinks = productPages.map((page) => ({ href: productHref(page.slug), label: page.navLabel }));
 
 const docsLinks = [
     ...docsPages.map((page) => ({ href: docsHref(page.id), label: page.title, external: false })),
     { href: "https://gitlab.com/radarsu/intentic/-/releases", label: "Release Notes", external: true },
 ];
 
-const productLinks = [
+const resourceLinks = [
     { href: APP_URL, label: "Open the app", external: true },
     { href: gitlabUrl, label: "GitLab", external: true },
     { href: gitlabIssuesUrl, label: "Issues", external: true },
@@ -38,10 +33,10 @@ const legalLinks = [
         </div>
 
         <div>
-            <h3 class="eyebrow mb-3">Features</h3>
+            <h3 class="eyebrow mb-3">Product</h3>
             <ul class="space-y-2">
                 {
-                    featureLinks.map((link) => (
+                    productLinks.map((link) => (
                         <li>
                             <a href={link.href} class="text-sm text-muted transition-colors hover:text-link">
                                 {link.label}
@@ -73,10 +68,10 @@ const legalLinks = [
         </div>
 
         <div>
-            <h3 class="eyebrow mb-3">Product</h3>
+            <h3 class="eyebrow mb-3">Resources</h3>
             <ul class="space-y-2">
                 {
-                    productLinks.map((link) => (
+                    resourceLinks.map((link) => (
                         <li>
                             <a
                                 href={link.href}

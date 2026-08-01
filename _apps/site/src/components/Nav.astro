@@ -32,62 +32,73 @@ function isActive(entry: NavEntry): boolean {
         <ul class="links flex list-none items-center gap-0.5 max-md:hidden" id="nav-links">
             {
                 navEntries.map((entry) => {
-                    if (entry.type === "dropdown") {
+                    if (entry.type === "menu") {
+                        const preview = entry.sections.flatMap((section) => section.items).filter((item) => item.shot !== undefined);
                         return (
-                            <li class="nav-item has-dropdown">
-                                <button
-                                    type="button"
-                                    class:list={["nav-link", { active: isActive(entry) }]}
-                                >
+                            <li class="nav-item has-menu">
+                                <button type="button" class:list={["nav-link", { active: isActive(entry) }]} aria-expanded="false">
                                     {entry.label}
-                                    <svg
-                                        class="chevron"
-                                        width="10"
-                                        height="6"
-                                        viewBox="0 0 10 6"
-                                        fill="none"
-                                        aria-hidden="true"
-                                    >
-                                        <path
-                                            d="M1 1L5 5L9 1"
-                                            stroke="currentColor"
-                                            stroke-width="1.5"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                        />
+                                    <svg class="chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
+                                        <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
                                     </svg>
                                 </button>
-                                <ul class="dropdown">
-                                    {entry.items.map((item) => (
-                                        <li>
-                                            <a
-                                                href={item.href}
-                                                target={item.external ? "_blank" : undefined}
-                                                rel={item.external ? "noopener" : undefined}
-                                            >
-                                                {item.label}
-                                                {item.external && (
-                                                    <svg
-                                                        class="external-icon"
-                                                        width="12"
-                                                        height="12"
-                                                        viewBox="0 0 12 12"
-                                                        fill="none"
-                                                        aria-hidden="true"
-                                                    >
-                                                        <path
-                                                            d="M3.5 1.5H10.5V8.5M10.5 1.5L1.5 10.5"
-                                                            stroke="currentColor"
-                                                            stroke-width="1.2"
-                                                            stroke-linecap="round"
-                                                            stroke-linejoin="round"
-                                                        />
-                                                    </svg>
-                                                )}
-                                            </a>
-                                        </li>
-                                    ))}
-                                </ul>
+
+                                {/* The panel. Its column count follows the section count, so Docs reads as its
+                                    four shelves and Product as two — and the preview rail exists only where
+                                    there are screenshots to preview. */}
+                                <div class:list={["menu-panel", { "has-preview": preview.length > 0 }]}>
+                                    <div class="menu-sections" style={`--menu-columns:${entry.sections.length}`}>
+                                        {entry.sections.map((section) => (
+                                            <div class="menu-section">
+                                                <div class="menu-section-label">{section.label}</div>
+                                                <ul>
+                                                    {section.items.map((item) => (
+                                                        <li>
+                                                            <a
+                                                                href={item.href}
+                                                                class="menu-item"
+                                                                data-preview={item.shot === undefined ? undefined : item.href}
+                                                                target={item.external ? "_blank" : undefined}
+                                                                rel={item.external ? "noopener" : undefined}
+                                                            >
+                                                                <span class="menu-item-label">{item.label}</span>
+                                                                <span class="menu-item-blurb">{item.description}</span>
+                                                            </a>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {preview.length > 0 && (
+                                        <div class="menu-preview">
+                                            {preview.map((item, i) => (
+                                                <img
+                                                    src={item.shot?.src}
+                                                    alt={item.shot?.alt}
+                                                    width={item.shot?.width}
+                                                    height={item.shot?.height}
+                                                    loading="lazy"
+                                                    decoding="async"
+                                                    class:list={["menu-preview-shot", { current: i === 0 }]}
+                                                    data-preview-for={item.href}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {entry.action && (
+                                        <a
+                                            class="menu-action"
+                                            href={entry.action.href}
+                                            target={entry.action.external ? "_blank" : undefined}
+                                            rel={entry.action.external ? "noopener" : undefined}
+                                        >
+                                            {entry.action.label} <span aria-hidden="true">→</span>
+                                        </a>
+                                    )}
+                                </div>
                             </li>
                         );
                     }
@@ -220,25 +231,32 @@ function isActive(entry: NavEntry): boolean {
         margin-top: 1px;
     }
 
-    .has-dropdown:hover .chevron {
+    .has-menu:hover .chevron,
+    .has-menu:focus-within .chevron {
         transform: rotate(180deg);
     }
 
-    /* ── Dropdown panel ────────────────────────────────── */
-    .dropdown {
+    /* ── Mega-menu panel ───────────────────────────────────
+       One panel shape for both menus: a grid of labelled sections, an optional screenshot rail, and one
+       action at the foot. It is centred under its trigger and clamped to the viewport, so the Product panel
+       (wide, with a preview) and the Docs panel (four narrow shelves) both stay on screen at 1024px. */
+    .menu-panel {
         position: absolute;
         top: 100%;
         left: 50%;
         transform: translateX(-50%) translateY(4px);
-        min-width: 220px;
-        list-style: none;
+        display: grid;
+        grid-template-areas: "sections" "action";
+        gap: 4px;
+        width: max-content;
+        max-width: min(92vw, 62rem);
         background: color-mix(in srgb, var(--color-canvas) 97%, transparent);
         backdrop-filter: blur(24px);
         -webkit-backdrop-filter: blur(24px);
         border: 1px solid var(--color-line);
         border-top: 2px solid var(--color-link);
-        border-radius: 12px;
-        padding: 8px;
+        border-radius: 14px;
+        padding: 14px;
         opacity: 0;
         visibility: hidden;
         transition:
@@ -251,37 +269,129 @@ function isActive(entry: NavEntry): boolean {
             0 0 40px color-mix(in srgb, var(--color-link) 4%, transparent);
     }
 
-    .has-dropdown:hover .dropdown {
+    .menu-panel.has-preview {
+        grid-template-areas:
+            "sections preview"
+            "action   preview";
+        grid-template-columns: minmax(0, 1fr) 20rem;
+        gap: 4px 18px;
+    }
+
+    .has-menu:hover .menu-panel,
+    .has-menu:focus-within .menu-panel {
         opacity: 1;
         visibility: visible;
         transform: translateX(-50%) translateY(0);
     }
 
-    .dropdown a {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 14px;
-        font-size: 0.85rem;
-        font-weight: 500;
-        color: var(--color-muted);
-        border-radius: 8px;
+    .menu-sections {
+        grid-area: sections;
+        display: grid;
+        grid-template-columns: repeat(var(--menu-columns, 2), minmax(11rem, 1fr));
+        gap: 4px 10px;
+    }
+
+    .menu-section > ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .menu-section-label {
+        padding: 6px 12px;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--color-subtle);
+    }
+
+    .menu-item {
+        display: block;
+        padding: 8px 12px;
+        border-radius: 9px;
+        text-decoration: none;
         transition:
             background 0.15s,
-            color 0.15s,
-            padding-left 0.15s;
-        white-space: nowrap;
+            color 0.15s;
+    }
+
+    .menu-item-label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--color-content);
+    }
+
+    .menu-item-blurb {
+        display: block;
+        margin-top: 2px;
+        max-width: 15rem;
+        font-size: 0.75rem;
+        line-height: 1.35;
+        color: var(--color-subtle);
+    }
+
+    .menu-item:hover,
+    .menu-item:focus-visible {
+        background: color-mix(in srgb, var(--color-link) 10%, transparent);
+        outline: none;
+    }
+
+    .menu-item:hover .menu-item-blurb,
+    .menu-item:focus-visible .menu-item-blurb {
+        color: var(--color-muted);
+    }
+
+    .menu-item.active {
+        background: color-mix(in srgb, var(--color-content) 6%, transparent);
+    }
+
+    .menu-item.active .menu-item-label {
+        color: var(--color-link);
+    }
+
+    /* The rail: every product shot stacked, one visible. Cropped to a wide strip — the panel is selling the
+       surface at a glance, and the whole 1240px-tall board would shrink to nothing here. */
+    .menu-preview {
+        grid-area: preview;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--color-line);
+        border-radius: 10px;
+        background: var(--color-card);
+        aspect-ratio: 16 / 10;
+    }
+
+    /* Zoomed to its top-left corner rather than fitted: a whole 1440px surface scaled into a 20rem rail is a
+       grey rectangle, while its first two lanes are recognisably the screen the row leads to. */
+    .menu-preview-shot {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 155%;
+        height: auto;
+        opacity: 0;
+        transition: opacity 0.18s ease;
+    }
+
+    .menu-preview-shot.current {
+        opacity: 1;
+    }
+
+    .menu-action {
+        grid-area: action;
+        margin-top: 6px;
+        border-top: 1px solid var(--color-line);
+        padding: 12px 12px 4px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--color-link);
         text-decoration: none;
     }
 
-    .dropdown a:hover {
-        background: color-mix(in srgb, var(--color-link) 10%, transparent);
-        color: var(--color-content);
-        padding-left: 18px;
-    }
-
-    .dropdown a.active {
-        color: var(--color-content);
+    .menu-action:hover {
+        text-decoration: underline;
     }
 
     /* ── External link icon ────────────────────────────── */
@@ -313,13 +423,26 @@ function isActive(entry: NavEntry): boolean {
             document.body.style.overflow = isOpen ? "hidden" : "";
         });
 
-        // Highlight active dropdown items on desktop
+        // Highlight the menu row for the page you're on.
         const path = window.location.pathname + window.location.hash;
-        document.querySelectorAll(".dropdown a").forEach((a) => {
+        document.querySelectorAll(".menu-item").forEach((a) => {
             const href = a.getAttribute("href");
-            if (href === path || (href && path.startsWith(href))) {
+            if (href === path || (href && href !== "/" && path.startsWith(href))) {
                 a.classList.add("active");
             }
+        });
+
+        // The preview rail follows the hovered row. Pointer only: on a touch screen the panel opens on tap
+        // and the rail just shows the first shot, which is the one the panel is already about.
+        document.querySelectorAll(".menu-panel.has-preview").forEach((panel) => {
+            const shots = panel.querySelectorAll(".menu-preview-shot");
+            const show = (href) => {
+                shots.forEach((shot) => shot.classList.toggle("current", shot.dataset.previewFor === href));
+            };
+            panel.querySelectorAll("[data-preview]").forEach((item) => {
+                item.addEventListener("pointerenter", () => show(item.dataset.preview));
+                item.addEventListener("focus", () => show(item.dataset.preview));
+            });
         });
     });
 </script>

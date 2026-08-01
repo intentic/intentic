@@ -1,0 +1,133 @@
+---
+import { productHref, productPages, type ProductPage } from "@intentic-dev/site-content/product";
+import { APP_URL, DEMO_PATH } from "@intentic-dev/site-content/site";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+import ProductFigure from "../../components/ProductFigure.astro";
+import ProductShotFigure from "../../components/ProductShotFigure.astro";
+
+/* One template, six pages. The pages are content (`_libs/site-content/src/product.ts`) rather than six near
+ * identical .astro files, so a new surface is an entry in an array and its nav row, footer link, page meta
+ * and llms.txt entry all follow from it. */
+
+export function getStaticPaths() {
+    return productPages.map((page) => ({ params: { slug: page.slug }, props: { page } }));
+}
+
+interface Props {
+    page: ProductPage;
+}
+
+const { page } = Astro.props;
+const index = productPages.indexOf(page);
+const next = productPages[(index + 1) % productPages.length];
+
+/* A portrait hero (the docked chat, a phone) is a panel, not a page: stretched to the 6xl column it would be
+ * three screens tall. Sit it in a narrow centred column instead. */
+const portraitHero = page.hero.height > page.hero.width;
+---
+
+<BaseLayout breadcrumbs={[{ name: "Product", path: "/product/" }, { name: page.navLabel, path: productHref(page.slug) }]}>
+    <Nav />
+    <main class="flex-1">
+        <!-- Hero: the claim, then the screen it is about -->
+        <section class="relative overflow-hidden border-b border-line">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="relative mx-auto max-w-6xl px-6 pt-28 pb-16 lg:pt-32 lg:pb-20">
+                <div class="max-w-3xl">
+                    <div class="eyebrow">{page.navLabel}</div>
+                    <h1 class="mt-3 text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{page.heading}</h1>
+                    <p class="mt-4 max-w-2xl text-base leading-relaxed text-muted">{page.sub}</p>
+                    <div class="mt-7 flex flex-wrap gap-3">
+                        <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                        <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
+                    </div>
+                </div>
+
+                <div class:list={["mt-12", { "mx-auto max-w-sm": portraitHero }]}>
+                    <ProductShotFigure shot={page.hero} priority />
+                </div>
+
+                <ul class="mt-8 grid gap-x-8 gap-y-4 border-t border-line pt-6 sm:grid-cols-3">
+                    {
+                        page.facts.map((fact) => (
+                            <li>
+                                <div class="text-lg font-semibold tracking-tight text-link">{fact.value}</div>
+                                <div class="mt-1 text-sm leading-relaxed text-muted">{fact.label}</div>
+                            </li>
+                        ))
+                    }
+                </ul>
+            </div>
+        </section>
+
+        <!-- The blocks: image first, then the fewest words that explain it. Alternating sides on wide screens
+             so a page of six figures doesn't read as one column of captions. -->
+        <section>
+            <div class="mx-auto max-w-6xl space-y-20 px-6 py-20 lg:space-y-24 lg:py-24">
+                {
+                    page.blocks.map((block, i) => (
+                        <div class="fade-in grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
+                            <div class={i % 2 === 0 ? "lg:order-2" : "lg:order-1"}>
+                                <h2 class="text-xl font-semibold tracking-tight text-content">{block.title}</h2>
+                                <p class="mt-3 max-w-md text-base leading-relaxed text-muted">{block.body}</p>
+                                {block.bullets && (
+                                    <ul class="mt-4 space-y-2">
+                                        {block.bullets.map((bullet) => (
+                                            <li class="flex items-start gap-2.5 text-sm leading-relaxed text-subtle">
+                                                <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary-500" />
+                                                {bullet}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                            <div class={i % 2 === 0 ? "lg:order-1" : "lg:order-2"}>
+                                {block.shot && <ProductShotFigure shot={block.shot} />}
+                                {block.figure && <ProductFigure figure={block.figure} />}
+                            </div>
+                        </div>
+                    ))
+                }
+            </div>
+        </section>
+
+        <!-- Next surface + CTA -->
+        <section class="border-t border-line">
+            <div class="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-14 sm:flex-row sm:items-center sm:justify-between">
+                <a href={productHref(next.slug)} class="group">
+                    <div class="eyebrow">Next</div>
+                    <div class="mt-1 text-lg font-semibold tracking-tight text-content group-hover:text-link">{next.navLabel} →</div>
+                    <p class="mt-1 max-w-sm text-sm text-muted">{next.menuBlurb}</p>
+                </a>
+                <div class="flex flex-wrap gap-3">
+                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-secondary" href="/docs/quickstart/">Read the quickstart</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <Footer />
+
+    <script>
+        const targets = document.querySelectorAll(".fade-in");
+        if ("IntersectionObserver" in window) {
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add("visible");
+                            observer.unobserve(entry.target);
+                        }
+                    }
+                },
+                { threshold: 0.12 },
+            );
+            targets.forEach((el) => observer.observe(el));
+        } else {
+            targets.forEach((el) => el.classList.add("visible"));
+        }
+    </script>
+</BaseLayout>

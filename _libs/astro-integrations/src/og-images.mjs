@@ -33,6 +33,7 @@ function eyebrowFor(pathname) {
     const p = pathname.replace(/\/+$/, "") || "/";
     if (p === "/") return "intentic";
     if (p.startsWith("/docs")) return "Documentation";
+    if (p.startsWith("/product")) return "The product";
     if (p === "/faq") return "FAQ";
     return "intentic";
 }

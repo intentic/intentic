@@ -25,8 +25,15 @@ this page.
   `_apps/site/src/pages/index.astro` is the single entry.
 - Meta: title/description come from `_libs/site-content/src/page-meta.ts` /
   `_libs/site-content/src/site.ts` (ORG_DESCRIPTION) — one page, one set of strings.
-- Screenshots: `_apps/site/public/assets/product/` (real product UI —
-  `workspace.png`, `chat.png`, `agents-fleet.png`, `agent-review.png`, `sandbox.png`, `capabilities.png`).
+- Screenshots: `_apps/site/public/assets/product/`, all written by one harness —
+  `node --experimental-strip-types _tools/e2e/shots/capture.mts` after
+  `pnpm --filter @intentic-dev/demo build`. It drives the DEMO build of the real app (the recorded
+  "acme-shop" workspace the live demo runs on), so the site, the demo and the shots tell one story and a
+  re-shoot needs no database, API or tunnel. Whole surfaces are captured; a page that wants a detail crops
+  in CSS.
+- Product pages: `_libs/site-content/src/product.ts` — a `productPages` array rendered by
+  `_apps/site/src/pages/product/[slug].astro`. Adding a surface there gives it a page, a nav row, a footer
+  link, page meta and an llms.txt entry.
 
 ## Conversion model
 
@@ -53,9 +60,9 @@ One page, one continuous scroll. Section ids in parens; copy per section in `lan
    that carries the argument ("Everyone else lets you edit the prompt…") + CTAs + chips, with a visual
    of a specialized agent as a *configured worker*, not a chat window. States the one thing sold.
    (P1, P2)
-2. **The product / tour (`#tour`)** — a tour of real product screenshots: the workspace, chat, the
-   fleet board, and the co-piloting surfaces (plan mode, diff review). The UI is the credibility
-   device — prove the workspace exists before claiming anything about it. (P2, P4)
+2. **The product / tour (`#tour`)** — the fleet board in full, then the six product pages as cards.
+   The UI is the credibility device — prove the workspace exists before claiming anything about it —
+   and the depth lives on `/product/*` rather than being repeated here. (P2, P4)
 3. **The difference (`#contrast`)** — the core argument: the prompt is the one layer everyone lets you
    edit, versus the layers intentic opens (image, capabilities, per-turn context). Lands on the honest
    line: you can't make the model smarter, you can make it better informed and better equipped. (P2)
@@ -87,7 +94,29 @@ One page, one continuous scroll. Section ids in parens; copy per section in `lan
 14. **Final CTA** — restate the thesis + `Get started free` · `See the source`. (close)
 
 The objection bank from messaging.md renders as FAQ with FAQPage JSON-LD (kept in sync with
-messaging.md, deployment kept out of it) — not a numbered marketing band above.
+messaging.md, deployment kept out of it) — not a numbered marketing band above. It is rendered OPEN, in
+topic bands (`faqGroups`), with a jump nav: thirteen collapsed rows hid every answer from both the reader
+and in-page search.
+
+## The product pages (`/product/*`)
+
+The landing page sells the thesis; these six pages show the product, one surface each — **Fleet board,
+Chat & plan mode, Review & land, Workspace & editor, Capabilities, Sandbox & ownership**. They exist
+because the nav used to be five anchors into this page: nothing linkable, nothing rankable, and no room
+for more than a paragraph per surface.
+
+Rules that keep them honest:
+
+- **Screenshot-first.** Each block leads with a real screen and follows with ≤60 words. Where a surface
+  has no honest screenshot (isolation, event triggers, the platform boundary), the block carries a
+  DIAGRAM (`ProductFigure.astro`) — never a mockup of a screen the app does not render.
+- **No invented numbers.** The facts strip under each hero carries only things that are true by
+  construction (three lanes, one branch per agent, two fields stored by the platform, 25 catalog
+  entries). The repo has no benchmark worth quoting yet: the offline cleaner bench measures ~2% over a
+  real corpus, and the agent A/B bench costs real tokens to run. When one exists, it gets a page of its
+  own rather than a number in a hero.
+- The demo fixture (`_apps/web/src/demo/`) is the world every shot is taken in, so enriching it improves
+  the public demo and the marketing shots in the same commit.
 
 ### No dedicated pricing section (deliberate — do not re-add)
 

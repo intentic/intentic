@@ -3,6 +3,8 @@ export interface DocsPage {
     id: string;
     /** Sidebar + breadcrumb label. */
     title: string;
+    /** One line of scent in the nav menu — shorter than meta.description, which is written for search results. */
+    blurb: string;
     /**
      * <title>, meta description and publication date. Descriptions stay under 160 characters — past that
      * a search result truncates mid-sentence and the page loses whatever the tail was carrying.
@@ -25,6 +27,7 @@ export const docsSections: DocsSection[] = [
             {
                 id: "",
                 title: "Overview",
+                blurb: "What intentic is and where to start",
                 meta: {
                     title: "intentic docs — Overview",
                     description:
@@ -35,6 +38,7 @@ export const docsSections: DocsSection[] = [
             {
                 id: "quickstart",
                 title: "Quickstart",
+                blurb: "Sign in, name a sandbox, paste one command",
                 meta: {
                     title: "Quickstart — intentic docs",
                     description:
@@ -45,6 +49,7 @@ export const docsSections: DocsSection[] = [
             {
                 id: "docker",
                 title: "Docker setup",
+                blurb: "The container, the engine inside it, and updates",
                 meta: {
                     title: "Docker setup — intentic docs",
                     description:
@@ -60,6 +65,7 @@ export const docsSections: DocsSection[] = [
             {
                 id: "architecture",
                 title: "Architecture",
+                blurb: "The thin platform, your sandbox, the tunnel between",
                 meta: {
                     title: "Architecture — intentic docs",
                     description:
@@ -75,6 +81,7 @@ export const docsSections: DocsSection[] = [
             {
                 id: "extensions",
                 title: "Extensions",
+                blurb: "A lean core plus a git repo with a manifest",
                 meta: {
                     title: "Extensions — intentic docs",
                     description:
@@ -85,6 +92,7 @@ export const docsSections: DocsSection[] = [
             {
                 id: "extensions/build",
                 title: "Build an extension",
+                blurb: "Author one end to end, from manifest to install",
                 meta: {
                     title: "Build an extension — intentic docs",
                     description:
@@ -95,6 +103,7 @@ export const docsSections: DocsSection[] = [
             {
                 id: "extensions/manifest",
                 title: "Manifest reference",
+                blurb: "Every field of intentic-extension.json",
                 meta: {
                     title: "Extension manifest reference — intentic docs",
                     description:
@@ -105,6 +114,7 @@ export const docsSections: DocsSection[] = [
             {
                 id: "extensions/publish",
                 title: "Publish & marketplace",
+                blurb: "Registries, updates and the trust model",
                 meta: {
                     title: "Publish an extension & the marketplace — intentic docs",
                     description:
@@ -120,6 +130,7 @@ export const docsSections: DocsSection[] = [
             {
                 id: "autonomous-employees",
                 title: "Autonomous employees",
+                blurb: "Specialize a sandbox until it does a job alone",
                 meta: {
                     title: "Turn sandboxes into autonomous employees — intentic docs",
                     description:
@@ -130,6 +141,7 @@ export const docsSections: DocsSection[] = [
             {
                 id: "reference-architecture",
                 title: "Reference architecture",
+                blurb: "A whole company assembled from sandboxes",
                 meta: {
                     title: "Reference architecture — intentic docs",
                     description:

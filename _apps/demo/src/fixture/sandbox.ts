@@ -1,0 +1,222 @@
+import type { CapabilitySummary } from "@intentic-app/api-contract";
+import type { Environment, ExtensionSummary, UsageRollupRow } from "@intentic/sandbox-contract";
+
+/* The sandbox's own furniture for the recorded workspace: what acme-shop is wired to, which extensions supply
+ * that wiring, and the spend ledger behind the Usage tab.
+ *
+ * The connector entries are copies of the real `_extensions/connectors` and `_extensions/discord` manifests —
+ * same providers, same catalog copy — minus the credential guides, which only matter in an add dialog this
+ * fixture can't complete. A card a visitor sees here is a card the product really contributes. */
+
+const day = (now: number, back: number): string => new Date(now - back * 86_400_000).toISOString().slice(0, 10);
+
+// The installed capabilities: one per system the recorded agents operate. Configs are the secret-stripped echo
+// the daemon returns — a token never leaves the sandbox, so it never appears in a list row either.
+export const demoCapabilities = (): CapabilitySummary[] => [
+    { id: `github`, kind: `cli`, status: { state: `active` }, config: { provider: `github`, git: `on` } },
+    {
+        id: `postgres`,
+        kind: `cli`,
+        status: { state: `active` },
+        config: { provider: `postgres`, host: `db.acme.internal`, port: `5432`, user: `acme_app`, database: `acme_shop` },
+    },
+    { id: `sentry`, kind: `cli`, status: { state: `active` }, config: { provider: `sentry`, url: `https://sentry.io`, org: `acme` } },
+    { id: `discord`, kind: `cli`, status: { state: `active` }, config: { provider: `discord`, guild: `acme` } },
+    { id: `stripe`, kind: `integration`, status: { state: `active` }, config: { provider: `stripe` } },
+    { id: `docker`, kind: `docker`, status: { state: `active` }, config: {} },
+    { id: `ops-box`, kind: `ssh`, status: { state: `active` }, config: { auth: `key`, host: `ops.acme.dev`, port: 22, user: `deploy` } },
+];
+
+// The extensions those cli capabilities resolve through: without the contribution there is no card, which is
+// exactly how the product works — a connector is manifest data, not a hardcoded table in the app.
+export const demoExtensions = (): ExtensionSummary[] => [
+    {
+        id: `intentic.connectors`,
+        commit: `9f2c41d`,
+        builtin: true,
+        enabled: true,
+        manifest: {
+            publisher: `intentic`,
+            name: `connectors`,
+            version: `1.0.0`,
+            engines: { intentic: `^0.4.0` },
+            contributes: {
+                connectors: [
+                    {
+                        provider: `github`,
+                        kind: `cli`,
+                        catalog: {
+                            name: `GitHub`,
+                            logo: `github/f5f5f5`,
+                            description: `Issues, PRs and code search as agent tools — plus git clone/pull/push and CI pipelines on your workspace repos.`,
+                            category: `code`,
+                        },
+                        fields: [
+                            { key: `token`, label: `Personal access token`, secret: true },
+                            {
+                                key: `git`,
+                                label: `Git access`,
+                                default: `on`,
+                                options: [
+                                    { value: `on`, label: `On` },
+                                    { value: `off`, label: `Off` },
+                                ],
+                            },
+                        ],
+                        env: { GITHUB_TOKEN: `\${token}` },
+                        skill: `skills/github/SKILL.md`,
+                    },
+                    {
+                        provider: `postgres`,
+                        kind: `cli`,
+                        catalog: {
+                            name: `PostgreSQL`,
+                            logo: `postgresql`,
+                            description: `Let the agent query your database with psql — schema, rows, and migrations it can read before it writes.`,
+                            category: `data`,
+                        },
+                        fields: [
+                            { key: `host`, label: `Host` },
+                            { key: `port`, label: `Port`, default: `5432` },
+                            { key: `user`, label: `User` },
+                            { key: `password`, label: `Password`, secret: true },
+                            { key: `database`, label: `Database` },
+                        ],
+                        env: { POSTGRES_URL: `postgres://\${user}:\${password:uri}@\${host}:\${port}/\${database}` },
+                        skill: `skills/postgres/SKILL.md`,
+                        fragment: `env/postgres.Dockerfile`,
+                    },
+                    {
+                        provider: `sentry`,
+                        kind: `cli`,
+                        catalog: {
+                            name: `Sentry`,
+                            logo: `sentry`,
+                            description: `Read issues, events and stack traces — the agent starts a fix from the error that actually fired.`,
+                            category: `observability`,
+                        },
+                        fields: [
+                            { key: `url`, label: `Sentry URL`, default: `https://sentry.io` },
+                            { key: `org`, label: `Organization` },
+                            { key: `token`, label: `Auth token`, secret: true },
+                        ],
+                        env: { SENTRY_TOKEN: `\${token}`, SENTRY_URL: `\${url}`, SENTRY_ORG: `\${org}` },
+                        skill: `skills/sentry/SKILL.md`,
+                    },
+                    {
+                        provider: `outline`,
+                        kind: `cli`,
+                        catalog: {
+                            name: `Outline`,
+                            logo: `outline/f5f5f5`,
+                            description: `Search and write your team's knowledge base — the agent reads the docs it is expected to follow.`,
+                            category: `business`,
+                        },
+                        fields: [
+                            { key: `url`, label: `Outline URL` },
+                            { key: `apiKey`, label: `API key`, secret: true },
+                        ],
+                        env: { OUTLINE_URL: `\${url}`, OUTLINE_API_KEY: `\${apiKey}` },
+                        skill: `skills/outline/SKILL.md`,
+                    },
+                ],
+            },
+        },
+    },
+    {
+        id: `intentic.discord`,
+        commit: `4ab7e10`,
+        builtin: true,
+        enabled: true,
+        manifest: {
+            publisher: `intentic`,
+            name: `discord`,
+            version: `1.0.0`,
+            engines: { intentic: `^0.4.0` },
+            contributes: {
+                connectors: [
+                    {
+                        provider: `discord`,
+                        kind: `cli`,
+                        catalog: {
+                            name: `Discord`,
+                            logo: `discord`,
+                            description: `The agent reads and sends messages as a real participant — @mention it in a thread and it replies there.`,
+                            category: `communication`,
+                        },
+                        fields: [
+                            { key: `token`, label: `Bot token`, secret: true },
+                            { key: `guild`, label: `Server`, optional: true },
+                        ],
+                        env: { DISCORD_TOKEN: `\${token}` },
+                        skill: `skills/discord/SKILL.md`,
+                    },
+                ],
+                listener: { provider: `discord`, eventTypes: [`message`, `voice_utterance`, `voice_transcript`] },
+            },
+        },
+    },
+];
+
+/* The image overlay: the layer of the environment everyone else keeps closed. What's applied is what the
+ * container was built from; the proposal is the agent asking for one more tool — approved by the owner, never
+ * by the agent, which is the whole point of showing a Dockerfile diff instead of installing behind your back. */
+const APPLIED_OVERLAY = `# intentic:custom — approved 3 days ago
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \\
+ && rm -rf /var/lib/apt/lists/*
+
+# The e2e suite the release agent runs before it lands anything.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+RUN pnpm dlx playwright@1.56 install --with-deps chromium
+`;
+
+export const demoEnvironment = (): Environment => ({
+    container: `intentic-sandbox-acme-shop`,
+    approved: { content: APPLIED_OVERLAY, hash: `sha256:1f4c9ab2` },
+    custom: { content: APPLIED_OVERLAY, hash: `sha256:1f4c9ab2` },
+    appliedHash: `sha256:1f4c9ab2`,
+    proposal: {
+        hash: `sha256:8b07de54`,
+        content: `${APPLIED_OVERLAY}
+# Proposed by the agent while wiring product images on the checkout page.
+RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \\
+ && rm -rf /var/lib/apt/lists/*
+`,
+    },
+});
+
+/* The spend ledger the Usage tab projects: real turns cost real money on YOUR subscription, and the sandbox
+ * records every one of them. Two providers, two accounts, the models the fleet is actually running. */
+export const demoUsageRollup = (now: number): UsageRollupRow[] => {
+    const rows: UsageRollupRow[] = [];
+    const shape = [
+        { provider: `claude`, account: `ada@acme.dev`, model: `claude-sonnet-5`, harness: `claude-code`, turns: 14, cost: 2.9 },
+        { provider: `claude`, account: `ada@acme.dev`, model: `claude-opus-5`, harness: `claude-code`, turns: 4, cost: 3.4 },
+        { provider: `claude`, account: `ada@acme.dev`, model: `claude-haiku-4-5-20251001`, harness: `claude-code`, turns: 9, cost: 0.28 },
+        { provider: `codex`, account: `chatgpt-ada`, model: `gpt-5.2-codex`, harness: `native`, turns: 6, cost: 1.1 },
+    ];
+    // A fortnight of work with a weekend dip — the ledger is per day × provider × account × model, and the
+    // browser re-projects it into every chart on the tab.
+    for (let back = 13; back >= 0; back -= 1) {
+        const weekday = new Date(now - back * 86_400_000).getUTCDay();
+        const load = weekday === 0 || weekday === 6 ? 0.2 : 0.7 + ((back * 37) % 60) / 100;
+        for (const row of shape) {
+            const turns = Math.max(1, Math.round(row.turns * load));
+            rows.push({
+                day: day(now, back),
+                provider: row.provider,
+                account: row.account,
+                model: row.model,
+                harness: row.harness,
+                turns,
+                inputTokens: turns * 21_400,
+                outputTokens: turns * 2_900,
+                cacheReadTokens: turns * 96_000,
+                cacheCreationTokens: turns * 12_000,
+                costUsd: Math.round(row.cost * load * 100) / 100,
+                durationMs: turns * 42_000,
+            });
+        }
+    }
+    return rows;
+};

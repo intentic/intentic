@@ -5,6 +5,7 @@ import sitemap from "@astrojs/sitemap";
 import { indexnow, lastModForUrl, llmsText, ogImages } from "@intentic-dev/astro-integrations";
 import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
 import { landingContent } from "@intentic-dev/site-content/landing";
+import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { ORG_NAME } from "@intentic-dev/site-content/site";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
@@ -55,6 +56,7 @@ export default defineConfig({
                 "intentic runs each coding agent in its own Docker sandbox on hardware you own — the dev-tools its job needs really installed, the systems it operates wired in as capabilities, and its context curated for one job. The platform stores only your identity and the sandbox's URL; your code and credentials never leave your machine. Every page below is also served as Markdown at the same URL with a .md suffix.",
             sections: [
                 { label: "Overview", paths: ["/"] },
+                { label: "Product", paths: ["/product/", ...productPages.map((page) => productHref(page.slug))] },
                 { label: "Docs", paths: docsPages.map((page) => docsHref(page.id)) },
                 { label: "Optional", paths: ["/privacy/", "/terms/"] },
             ],

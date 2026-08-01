@@ -1,6 +1,7 @@
 ---
 import { faqGroups } from "@intentic-dev/site-content/faq";
 import type { LandingContent } from "@intentic-dev/site-content/landing";
+import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { APP_URL, DEMO_PATH, gitlabIssuesUrl, gitlabUrl } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
@@ -171,15 +172,15 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                             <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
                             <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">{content.hero.shot.frameLabel}</span>
                         </div>
-                        <!-- Crop window. The width percentages pick how much of the 2152px-wide shot shows:
-                             275% ≈ the Attention lane alone (phones), 203% ≈ Attention + Active (from sm up).
+                        <!-- Crop window. The width percentages pick how much of the 1072px-wide surface shows:
+                             262% ≈ rail + the Attention lane (phones), 168% ≈ through the Active lane (from sm up).
                              Each aspect ratio is the matching slice of the source, so the image fills the box.
 
                              The play button over it opens the real app in the overlay below — not in this box,
                              which is half a hero column wide: an IDE needs a viewport, and the whole claim of
                              the page is that this is an IDE. The image stays the LCP, undimmed until hover;
                              nothing about the demo loads until it is asked for. -->
-                        <div class="relative aspect-[5/6] overflow-hidden sm:aspect-[53/45]">
+                        <div class="relative aspect-[5/7] overflow-hidden sm:aspect-6/5">
                             <img
                                 src={content.hero.shot.src}
                                 alt={content.hero.shot.alt}
@@ -187,7 +188,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                                 height={content.hero.shot.height}
                                 fetchpriority="high"
                                 decoding="async"
-                                class="w-[275%] max-w-none sm:w-[203%]"
+                                class="w-[262%] max-w-none sm:w-[168%]"
                             />
                             <button
                                 id="hero-demo-play"
@@ -223,7 +224,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                             <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
                             <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
                             <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
-                            <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">release-captain · /agents</span>
+                            <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">acme-shop · /agents</span>
                         </div>
                         <img
                             src={content.tour.hero.src}
@@ -238,59 +239,33 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                     <figcaption class="mx-auto mt-4 max-w-2xl text-center text-xs leading-relaxed text-subtle">{content.tour.hero.caption}</figcaption>
                 </figure>
 
-                <!-- Feature rows: one surface each, image and copy alternating -->
-                <div class="mt-16 space-y-16 lg:mt-20 lg:space-y-24">
-                    <!-- Chat — the mobile surface, in a phone frame (image right) -->
-                    <div class="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
-                        <div>
-                            <h3 class="text-xl font-semibold tracking-tight text-content">{content.tour.chat.title}</h3>
-                            <p class="mt-3 max-w-md text-base leading-relaxed text-muted">{content.tour.chat.body}</p>
-                        </div>
-                        <div class="flex justify-center">
-                            <div class="w-full max-w-[300px] overflow-hidden rounded-[2rem] border border-line-strong bg-card p-2 shadow-2xl shadow-black/50">
-                                <img
-                                    src={content.tour.chat.src}
-                                    alt={content.tour.chat.alt}
-                                    width={content.tour.chat.width}
-                                    height={content.tour.chat.height}
-                                    loading="lazy"
-                                    decoding="async"
-                                    class="w-full rounded-[1.5rem]"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Landscape surfaces, each in a browser window, alternating sides -->
+                <!-- Every surface as a card into its own page. The landing used to carry a screenshot and a
+                     paragraph per surface; each of those is now a page that can afford four screenshots. -->
+                <div class="mt-14 grid gap-6 md:grid-cols-3">
                     {
-                        content.tour.shots.map((shot, i) => (
-                            <div class="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
-                                <div class={i % 2 === 0 ? "lg:order-2" : "lg:order-1"}>
-                                    <h3 class="text-xl font-semibold tracking-tight text-content">{shot.title}</h3>
-                                    <p class="mt-3 max-w-md text-base leading-relaxed text-muted">{shot.body}</p>
+                        productPages.map((page) => (
+                            <a href={productHref(page.slug)} class="card group overflow-hidden transition-colors hover:border-primary-600/40">
+                                <div class="aspect-16/10 overflow-hidden border-b border-line bg-canvas">
+                                    <img
+                                        src={page.hero.src}
+                                        alt={page.hero.alt}
+                                        width={page.hero.width}
+                                        height={page.hero.height}
+                                        loading="lazy"
+                                        decoding="async"
+                                        class="h-full w-full object-cover object-left-top transition-transform duration-300 group-hover:scale-[1.03]"
+                                    />
                                 </div>
-                                <div class={i % 2 === 0 ? "lg:order-1" : "lg:order-2"}>
-                                    <div class="overflow-hidden rounded-xl border border-line bg-card shadow-xl shadow-black/40">
-                                        <div class="flex items-center gap-1.5 border-b border-line bg-overlay/40 px-3 py-2">
-                                            <span class="h-2 w-2 rounded-full bg-line-strong" />
-                                            <span class="h-2 w-2 rounded-full bg-line-strong" />
-                                            <span class="h-2 w-2 rounded-full bg-line-strong" />
-                                        </div>
-                                        <img
-                                            src={shot.src}
-                                            alt={shot.alt}
-                                            width={shot.width}
-                                            height={shot.height}
-                                            loading="lazy"
-                                            decoding="async"
-                                            class="w-full"
-                                        />
-                                    </div>
+                                <div class="p-5">
+                                    <h3 class="text-sm font-medium text-content group-hover:text-link">{page.navLabel}</h3>
+                                    <p class="mt-2 text-sm leading-relaxed text-muted">{page.menuBlurb}</p>
                                 </div>
-                            </div>
+                            </a>
                         ))
                     }
                 </div>
+
+                <a href="/product/" class="mt-8 inline-block text-sm font-medium text-link hover:underline">{content.tour.cta} →</a>
             </div>
         </section>
 
@@ -349,6 +324,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                 <div class="eyebrow">{content.anatomy.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.anatomy.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.anatomy.sub}</p>
+                <a href="/product/sandbox/" class="mt-4 inline-block text-sm font-medium text-link hover:underline">See a real sandbox, layer by layer →</a>
 
                 <div class="mt-12 grid gap-10 sm:grid-cols-2 sm:gap-8 lg:gap-12">
                     {
@@ -374,6 +350,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                 <div class="eyebrow">{content.sandbox.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.sandbox.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.sandbox.sub}</p>
+                <a href="/product/sandbox/" class="mt-4 inline-block text-sm font-medium text-link hover:underline">Open the sandbox page →</a>
 
                 <figure class="mt-12">
                     <!-- machine boundary -->
@@ -424,6 +401,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                 <div class="eyebrow">{content.integrations.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.integrations.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.integrations.sub}</p>
+                <a href="/product/capabilities/" class="mt-4 inline-block text-sm font-medium text-link hover:underline">See how a capability is wired →</a>
 
                 <!-- Radial hub (md+): the sandbox at the centre, its systems on the spokes -->
                 <div class="relative mx-auto mt-14 hidden h-[480px] w-full max-w-3xl overflow-visible md:block">
@@ -503,6 +481,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                 <div class="eyebrow">{content.workforce.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.workforce.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.workforce.sub}</p>
+                <a href="/product/fleet/" class="mt-4 inline-block text-sm font-medium text-link hover:underline">See the fleet board →</a>
 
                 <div class="relative mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
                     <div
@@ -606,6 +585,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                 <div class="eyebrow">{content.ownership.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.ownership.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.ownership.sub}</p>
+                <a href="/product/sandbox/" class="mt-4 inline-block text-sm font-medium text-link hover:underline">How ownership works in the product →</a>
 
                 <div class="mt-12 flex flex-col items-stretch gap-4 md:flex-row md:items-center">
                     <div class="card flex-1 p-5 text-center">

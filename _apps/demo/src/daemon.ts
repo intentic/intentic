@@ -14,6 +14,7 @@ import {
     type TranslatorAccounts,
 } from "@intentic/sandbox-contract";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
+import { demoCapabilities, demoEnvironment, demoExtensions, demoUsageRollup } from "./fixture/sandbox";
 import { agentChanges, fileBody, fileDiff, gitChanges, REPOS, searchWorkspace, sessions, workspaceTree } from "./fixture/workspace";
 import { eventStream } from "./sse";
 import { featuredRun, type Run, visitorRun } from "./turn";
@@ -255,14 +256,15 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/vpn`, () => json({ networks: [] })],
     [`GET`, `/ci/runs`, () => json({ runs: [] })],
     [`GET`, `/chores`, () => json({ chores: [] })],
-    [`GET`, `/capabilities`, () => json({ capabilities: [] })],
+    [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
+    [`GET`, `/usage/rollup`, () => json({ rows: demoUsageRollup(STARTED_AT) })],
     [`GET`, `/secrets/inventory`, () => json({ secrets: [] })],
     [`GET`, `/ports`, () => json({ ports: [] })],
     [`GET`, `/panels`, () => json({ panels: [] })],
-    [`GET`, `/extensions`, () => json({ extensions: [] })],
+    [`GET`, `/extensions`, () => json({ extensions: demoExtensions() })],
     [`GET`, `/drafts`, () => json({ drafts: [] })],
     [`GET`, `/members`, () => json({ members: [] })],
-    [`GET`, `/environment`, () => json({ variables: [] })],
+    [`GET`, `/environment`, () => json(demoEnvironment())],
 ];
 
 const DEMO_COMMANDS = [

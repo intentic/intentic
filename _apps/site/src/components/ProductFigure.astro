@@ -1,0 +1,215 @@
+---
+import type { ProductFigure } from "@intentic-dev/site-content/product";
+
+/* The diagrams a screenshot can't carry: what isolation, sharing, wiring and the platform boundary actually
+ * mean. They are markup rather than images so they read at any width and stay in the site's palette — and
+ * because a page that would otherwise need a mockup gets a drawing that claims nothing about a screen. */
+
+interface Props {
+    figure: ProductFigure;
+}
+
+const { figure } = Astro.props;
+
+const icon = (paths: string) =>
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">${paths}</svg>`;
+
+const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="m3.5 7 8.5 4.5L20.5 7M12 11.5v10"/>');
+const botGlyph = icon('<rect x="5" y="8.5" width="14" height="10.5" rx="2"/><path d="M12 8.5V5M12 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M9.5 13v1.5M14.5 13v1.5"/>');
+const userGlyph = icon('<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>');
+const lockGlyph = icon('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>');
+const branchGlyph = icon('<circle cx="7" cy="5" r="2"/><circle cx="7" cy="19" r="2"/><circle cx="17" cy="12" r="2"/><path d="M7 7v10M7 12h8"/>');
+const boltGlyph = icon('<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/>');
+
+const triggers = [
+    { name: "Push", detail: "GitHub · GitLab" },
+    { name: "Alert", detail: "Sentry" },
+    { name: "Payment", detail: "Stripe" },
+    { name: "Email", detail: "IMAP" },
+    { name: "Message", detail: "Discord" },
+    { name: "Schedule", detail: "cron" },
+];
+
+const surfaces = [
+    { surface: "Search", you: "the workspace search box", agent: "`iq` from Bash" },
+    { surface: "Terminal", you: "a docked terminal tab", agent: "shell commands" },
+    { surface: "Files", you: "the tree and the editor", agent: "Read and Edit" },
+    { surface: "Network", you: "the VPN panel", agent: "/usr/local/bin/vpn" },
+];
+
+const boundary = {
+    local: ["Your code and repos", "Every credential and token", "The agent's transcripts", "The container and its image"],
+    platform: ["Your identity (Google sign-in)", "The sandbox's name and URL", "Billing state", "Grants to invited teammates"],
+};
+---
+
+{
+    figure === "worktrees" && (
+        <div class="card p-6">
+            <div class="eyebrow">One base commit, one branch each</div>
+            <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                {["agent/checkout-stripe", "agent/soft-deletes", "agent/latency-p99"].map((branch) => (
+                    <div class="rounded-xl border border-line bg-overlay/40 p-4">
+                        <span class="flex items-center gap-2 text-link">
+                            <Fragment set:html={branchGlyph} />
+                            <span class="font-mono text-2xs text-muted">{branch}</span>
+                        </span>
+                        <p class="mt-2 text-xs leading-relaxed text-subtle">its own worktree, its own checkout</p>
+                    </div>
+                ))}
+            </div>
+            <div class="my-4 flex items-center gap-2 text-2xs text-subtle">
+                <span aria-hidden="true">↓</span>land, one at a time, after you have read the diff
+                <span class="h-px flex-1 bg-line" />
+            </div>
+            <div class="rounded-xl border border-primary-600/30 bg-primary-600/[0.05] p-4 text-center">
+                <div class="eyebrow text-link">Your working tree</div>
+                <p class="mt-1 text-xs text-muted">untouched until you land — and still yours to amend or revert afterwards</p>
+            </div>
+        </div>
+    )
+}
+
+{
+    figure === "shared-surfaces" && (
+        <div class="card overflow-hidden">
+            <div class="grid grid-cols-[1fr_1fr_1fr] gap-px bg-line text-xs">
+                <div class="bg-card px-4 py-3 text-2xs font-semibold tracking-wider text-subtle uppercase">Surface</div>
+                <div class="flex items-center gap-2 bg-card px-4 py-3 text-2xs font-semibold tracking-wider text-subtle uppercase">
+                    <span class="text-link [&>svg]:h-3.5 [&>svg]:w-3.5">
+                        <Fragment set:html={userGlyph} />
+                    </span>
+                    You
+                </div>
+                <div class="flex items-center gap-2 bg-card px-4 py-3 text-2xs font-semibold tracking-wider text-subtle uppercase">
+                    <span class="text-link [&>svg]:h-3.5 [&>svg]:w-3.5">
+                        <Fragment set:html={botGlyph} />
+                    </span>
+                    The agent
+                </div>
+                {surfaces.map((row) => (
+                    <>
+                        <div class="bg-card px-4 py-3 font-medium text-content">{row.surface}</div>
+                        <div class="bg-card px-4 py-3 text-muted">{row.you}</div>
+                        <div class="bg-card px-4 py-3 font-mono text-2xs text-muted">{row.agent}</div>
+                    </>
+                ))}
+            </div>
+            <p class="border-t border-line px-4 py-3 text-xs text-subtle">
+                One implementation per row. Nothing synchronises the two columns, because there is only one thing behind them.
+            </p>
+        </div>
+    )
+}
+
+{
+    figure === "triggers" && (
+        <div class="card p-6">
+            <div class="grid items-center gap-6 sm:grid-cols-[1fr_auto_1fr]">
+                <div class="grid grid-cols-2 gap-2">
+                    {triggers.map((trigger) => (
+                        <div class="rounded-lg border border-line bg-overlay/40 px-3 py-2">
+                            <div class="text-xs font-medium text-content">{trigger.name}</div>
+                            <div class="text-2xs text-subtle">{trigger.detail}</div>
+                        </div>
+                    ))}
+                </div>
+                <div class="flex items-center justify-center gap-2 text-2xs text-link sm:flex-col">
+                    <Fragment set:html={boltGlyph} />
+                    <span class="whitespace-nowrap">guard, then run</span>
+                </div>
+                <div class="rounded-xl border border-primary-600/30 bg-primary-600/[0.05] p-4">
+                    <span class="flex items-center gap-2 text-link">
+                        <Fragment set:html={cubeGlyph} />
+                        <span class="text-sm font-medium text-content">A fresh agent session</span>
+                    </span>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">
+                        Its own transcript, its own worktree, the same review before anything lands.
+                    </p>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+{
+    figure === "ownership" && (
+        /* Stacked, not a row: this figure lives in half a page column, and four boxes side by side there
+           would wrap every label onto its own line. */
+        <div class="flex flex-col gap-3">
+            <div class="card p-5">
+                <div class="eyebrow">Your browser</div>
+                <p class="mt-1.5 text-sm text-muted">Chat, files, editor, terminal</p>
+            </div>
+            <div class="flex items-center gap-2 px-1 text-xs font-medium text-link">
+                <span aria-hidden="true">↓</span>private tunnel, direct — nothing in between
+                <span class="h-px flex-1 bg-line" />
+            </div>
+            <div class="card border-primary-600/30 bg-primary-600/[0.03] p-5">
+                <div class="eyebrow text-link">Your machine</div>
+                <p class="mt-1.5 text-sm text-muted">Sandboxes, repos, credentials, capabilities</p>
+            </div>
+            <div class="rounded-2xl border border-dashed border-line p-5">
+                <div class="eyebrow">intentic platform</div>
+                <p class="mt-1.5 text-sm text-subtle">Identity + sandbox URL only. Off the command path.</p>
+            </div>
+        </div>
+    )
+}
+
+{
+    figure === "platform-boundary" && (
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="card border-primary-600/30 bg-primary-600/[0.03] p-5">
+                <div class="flex items-center gap-2">
+                    <span class="text-link">
+                        <Fragment set:html={lockGlyph} />
+                    </span>
+                    <h3 class="text-sm font-medium text-content">Stays inside your sandbox</h3>
+                </div>
+                <ul class="mt-4 space-y-2">
+                    {boundary.local.map((item) => (
+                        <li class="text-sm leading-relaxed text-muted">{item}</li>
+                    ))}
+                </ul>
+            </div>
+            <div class="rounded-2xl border border-dashed border-line p-5">
+                <div class="flex items-center gap-2">
+                    <span class="text-subtle">
+                        <Fragment set:html={cubeGlyph} />
+                    </span>
+                    <h3 class="text-sm font-medium text-muted">All the platform holds</h3>
+                </div>
+                <ul class="mt-4 space-y-2">
+                    {boundary.platform.map((item) => (
+                        <li class="text-sm leading-relaxed text-subtle">{item}</li>
+                    ))}
+                </ul>
+                <p class="mt-4 border-t border-line pt-3 text-xs leading-relaxed text-subtle">
+                    What it stores is AES-256-GCM encrypted, with no decrypt path in the product.
+                </p>
+            </div>
+        </div>
+    )
+}
+
+{
+    figure === "integrations" && (
+        <div class="card p-6">
+            <div class="grid items-center gap-6 sm:grid-cols-[auto_1fr]">
+                <div class="mx-auto flex w-40 flex-col items-center rounded-2xl border border-primary-600/40 bg-primary-600/[0.06] p-4 text-center">
+                    <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600/15 text-link">
+                        <Fragment set:html={cubeGlyph} />
+                    </span>
+                    <div class="mt-2 text-sm font-medium text-content">One sandbox</div>
+                    <div class="text-2xs text-subtle">credentials inside it</div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {["GitHub", "GitLab", "PostgreSQL", "MySQL", "Sentry", "SigNoz", "Stripe", "Discord", "Outline", "Redmine", "SSH", "Any MCP server"].map((name) => (
+                        <span class="rounded-lg border border-line bg-overlay/40 px-3 py-2 text-xs text-muted">{name}</span>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )
+}

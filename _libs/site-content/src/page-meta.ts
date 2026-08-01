@@ -1,5 +1,6 @@
 import { docsHref, docsPages } from "./docs";
 import { landingContent } from "./landing";
+import { productHref, productPages } from "./product";
 
 export interface PageMeta {
     title: string;
@@ -25,6 +26,7 @@ export const pageMeta: Record<string, PageMeta> = {
         datePublished: "2026-07-03",
     },
     ...Object.fromEntries(docsPages.map((page) => [docsHref(page.id), page.meta])),
+    ...Object.fromEntries(productPages.map((page) => [productHref(page.slug), page.meta])),
 };
 
 function normalize(path: string): string {
