@@ -1,6 +1,6 @@
 import { type AgentProvider, type ModelBadge, PROVIDERS, compareModelIds, familyOf, providerLabel } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { type ModelOption, acpProviders, modelOptionsFor } from "./conversation";
+import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor } from "./conversation";
 
 /* The unified model-picker list: every provider's models flattened into one searchable entry set. Pure
  * derivation over the live catalogs (conversation.ts) — the picker component owns only its transient UI state
@@ -36,10 +36,13 @@ const entryFor = (provider: AgentProvider, option: ModelOption): PickerEntry => 
 });
 
 // Every pickable model across providers, in PROVIDERS order: each provider's catalog (live, with the static
-// floor pre-load). Installed ACP agents append one row each: the agent owns its own model, so the row IS the
+// floor pre-load). Then the capability-derived providers, which append rows on opposite terms — a model endpoint
+// contributes its whole catalog (its server publishes one, read on the same seam as everyone else's), while an
+// installed ACP agent contributes exactly one row, because the agent owns its own model and so the row IS the
 // provider (empty model id).
 export const pickerEntries = computed<readonly PickerEntry[]>(() => [
     ...PROVIDERS.flatMap(({ value: provider }) => modelOptionsFor(provider).map((option) => entryFor(provider, option))),
+    ...endpointProviders.value.flatMap((endpoint) => modelOptionsFor(endpoint.id).map((option) => entryFor(endpoint.id, option))),
     ...acpProviders.value.map((agent) => entryFor(agent.id, { label: agent.label, value: `` })),
 ]);
 
@@ -201,9 +204,11 @@ export const pickerSections = (
     rail: AgentProvider | undefined,
     isReady: (provider: AgentProvider) => boolean,
 ): readonly { provider: AgentProvider; groups: readonly FamilyGroup[]; total: number }[] => {
-    const providers: AgentProvider[] = [...PROVIDERS.map((option) => option.value), ...acpProviders.value.map((agent) => agent.id)].filter(
-        (provider) => rail === undefined || provider === rail,
-    );
+    const providers: AgentProvider[] = [
+        ...PROVIDERS.map((option) => option.value),
+        ...endpointProviders.value.map((endpoint) => endpoint.id),
+        ...acpProviders.value.map((agent) => agent.id),
+    ].filter((provider) => rail === undefined || provider === rail);
     // The active provider leads whether or not it is connected — it is the one the composer will send on, so
     // burying it under the connected band would hide the selection the user is actually sitting on.
     const rest = providers.filter((provider) => provider !== activeProvider).toSorted((a, b) => Number(isReady(b)) - Number(isReady(a)));

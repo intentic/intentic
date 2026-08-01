@@ -69,8 +69,31 @@ export const PROVIDER_VENDOR: Record<NativeProvider, string> = {
 // AccessKind's declaration order — a union's order is not a runtime fact, and this one is load-bearing.
 export const ACCESS_COST: Record<AccessKind, number> = { free: 0, subscription: 1, key: 2 };
 
+/* THE PROVIDER ID OF AN `endpoint` CAPABILITY — a model API the user pointed us at, native or not, near or far.
+ *
+ * Namespaced rather than bare (which is what ACP agents are) because the two kinds mint providers with OPPOSITE
+ * ability records: an ACP agent brings its own loop and gets the documented ACP floor, while an endpoint is
+ * driven BY the Claude Code loop and gets its full ceiling. capabilitiesOf answers that from the id alone, so
+ * the prefix is what keeps it a pure function of (provider, harness) instead of a lookup against the installed
+ * manifest — which the contract cannot see and the browser would have to pass in everywhere.
+ *
+ * A SLASH, never a colon: `${provider}:${model}` is the picker's own key shape, and quick-model.ts's parsePinned
+ * splits a pinned selection on the FIRST colon. `endpoint:ollama:qwen3` would parse as provider "endpoint" with
+ * model "ollama:qwen3" — a pin that silently resolves to nothing. The capability id (entryId) excludes both
+ * characters, so `endpoint/<id>` stays unambiguous in either direction. */
+export const ENDPOINT_PROVIDER_PREFIX = "endpoint/";
+export const endpointProvider = (id: string): AgentProvider => `${ENDPOINT_PROVIDER_PREFIX}${id}`;
+export const isEndpointProvider = (provider: AgentProvider): boolean => provider.startsWith(ENDPOINT_PROVIDER_PREFIX);
+// The capability id behind an endpoint provider; undefined when the provider is not one.
+export const endpointIdOf = (provider: AgentProvider): string | undefined =>
+    isEndpointProvider(provider) ? provider.slice(ENDPOINT_PROVIDER_PREFIX.length) : undefined;
+
 // An ACP provider carries its own credentials — installed means runnable — so it has no access requirement at
-// all; `undefined` is that state, and every surface reads it as "nothing to connect".
+// all; `undefined` is that state, and every surface reads it as "nothing to connect". An endpoint is the same
+// answer for a different reason: its credential (if it even needs one) was configured with the endpoint itself,
+// so there is likewise nothing left to connect. What a turn on it COSTS is deliberately not claimed here — a
+// self-hosted model on the user's own GPU and a metered gateway key are the same shape to us, and inventing an
+// AccessKind for them would have the picker assert a price the daemon has no way to know.
 export const accessFor = (provider: AgentProvider): ProviderAccess | undefined => PROVIDER_ACCESS[provider as NativeProvider];
 
 // An ACP provider's label is its capability's display name, which the web layers on top — the raw id is the
@@ -215,14 +238,19 @@ const ACP: AgentCapabilities = {
     recovery: false,
 };
 
-// The pair → its record. An id that names no native provider is an installed `agent`-kind capability, served
-// over ACP.
+// The pair → its record. An `endpoint/<id>` provider is a model API the user configured, driven BY the Claude
+// Code loop on either harness — so it gets that loop's full ceiling, which is the entire point of routing a
+// model through it rather than adopting a second runtime. Any other id that names no native provider is an
+// installed `agent`-kind capability, served over ACP.
 export const capabilitiesOf = (provider: AgentProvider, harness: AgentHarness): AgentCapabilities => {
     if (provider === "codex") {
         return harness === "claude-code" ? CLAUDE_CODE : CODEX;
     }
     if (provider === "grok") {
         return harness === "claude-code" ? CLAUDE_CODE : OPENCODE;
+    }
+    if (isEndpointProvider(provider)) {
+        return CLAUDE_CODE;
     }
     return (NATIVE_PROVIDERS as readonly string[]).includes(provider) ? CLAUDE_CODE : ACP;
 };

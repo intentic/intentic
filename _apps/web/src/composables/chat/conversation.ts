@@ -183,13 +183,21 @@ export const clampEffort = (effort: string, provider: AgentProvider, modelId: st
 export const providerCommands = ref<Record<AgentProvider, readonly AgentCommand[]>>(perProvider<readonly AgentCommand[]>(() => []));
 
 // Installed ACP agent providers (agent-kind capabilities): id + display label, loaded on the same reachable
-// seam as accounts/models (useChat.loadAcpProviders) so the picker lists them. Empty until the first load.
+// seam as accounts/models (useChat.loadCapabilityProviders) so the picker lists them. Empty until the first load.
 export const acpProviders = ref<readonly { id: string; label: string }[]>([]);
 
-// The display label for any provider: an ACP agent's capability name when known, else the shared static
-// label (which itself falls back to the raw id).
+// Installed model endpoints (endpoint-kind capabilities), as their `endpoint/<id>` provider ids — loaded on the
+// same seam and from the same /capabilities read. Unlike an ACP agent, each of these HAS a catalog: the models
+// come from the endpoint's own server, so they land in providerModels like every other provider's.
+export const endpointProviders = ref<readonly { id: string; label: string }[]>([]);
+
+// The display label for any provider: a capability-derived provider's own name when known (an ACP agent's
+// configured display name, an endpoint's capability id), else the shared static label — which itself falls back
+// to the raw id.
 export const providerDisplayLabel = (provider: AgentProvider): string =>
-    acpProviders.value.find((agent) => agent.id === provider)?.label ?? providerLabel(provider);
+    acpProviders.value.find((agent) => agent.id === provider)?.label ??
+    endpointProviders.value.find((endpoint) => endpoint.id === provider)?.label ??
+    providerLabel(provider);
 
 // The display label for a selected model id — the option's label, else the raw id, else the provider name. The
 // raw-id rung is what a custom model rides on: it belongs to no catalog by definition, and naming the provider

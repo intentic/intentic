@@ -3,6 +3,8 @@ import {
     type AgentHarness,
     type AgentProvider,
     type EditorContext,
+    endpointIdOf,
+    endpointProvider,
     type KeyedProvider,
     type Model,
     NATIVE_PROVIDERS,
@@ -22,6 +24,7 @@ import {
     acpProviders,
     type CatalogLoadState,
     Conversation,
+    endpointProviders,
     type ModelOption,
     type PendingAttachment,
     perProvider,
@@ -416,8 +419,15 @@ const attachments = computed<PendingAttachment[]>({
 });
 
 // The route prefix each provider's daemon routes live under.
-const providerBase = (p: AgentProvider): string =>
-    p === `codex` ? `/codex` : p === `grok` ? `/grok` : p === `kimi` ? `/kimi` : p === `gemini` ? `/gemini` : `/claude`;
+// An endpoint's catalog route carries its capability id, since there is one route per configured endpoint
+// rather than one per provider — every other provider is a singleton with a fixed base.
+const providerBase = (p: AgentProvider): string => {
+    const endpointId = endpointIdOf(p);
+    if (endpointId !== undefined) {
+        return `/endpoints/${encodeURIComponent(endpointId)}`;
+    }
+    return p === `codex` ? `/codex` : p === `grok` ? `/grok` : p === `kimi` ? `/kimi` : p === `gemini` ? `/gemini` : `/claude`;
+};
 // Providers whose ONLY credential is the translator subscription: they have no native account handshake, so the
 // card shows the routed row alone and there is nothing for `startConnect` to arm. Grok is deliberately absent —
 // it has both a native xAI account and a routed subscription, and which one gates depends on the harness.
@@ -1483,8 +1493,8 @@ export const loadAccountStatus = async (): Promise<void> => {
         refreshConnections(),
         // Model lists are daemon-owned too — load them on the same reachable seam so the pickers are ready.
         loadAllProviderModels(),
-        // Installed ACP agents are providers too — surface them in the picker on the same seam.
-        loadAcpProviders(),
+        // Installed ACP agents and model endpoints are providers too — surface them on the same seam.
+        loadCapabilityProviders(),
         // Each provider's last-published slash commands, so a fresh conversation's `/` popover is populated
         // before its first turn. Claude only: the ACP list arrives per session on the wire anyway, and an ACP
         // provider isn't known until loadAcpProviders resolves.
@@ -1492,16 +1502,31 @@ export const loadAccountStatus = async (): Promise<void> => {
     ]);
 };
 
-// Installed `agent`-kind capabilities (ACP agents), projected to picker entries: id + display label.
-const loadAcpProviders = async (): Promise<void> => {
+/* The two capability kinds that MINT PROVIDERS, read in one pass because they come from one list: `agent`
+ * capabilities are ACP agents (which own their model, so the row IS the provider) and `endpoint` capabilities
+ * are model APIs (which have a catalog of their own, loaded straight after).
+ *
+ * An endpoint's provider id carries the `endpoint/` prefix — that is what tells every surface it runs the full
+ * Claude Code loop rather than the ACP floor (capabilitiesOf), and it is what the turn is sent as. */
+const loadCapabilityProviders = async (): Promise<void> => {
+    let entries: { id: string; kind: string; config: Record<string, unknown> }[];
     try {
         const body = (await sandboxJson(`/capabilities`)) as { capabilities?: { id: string; kind: string; config: Record<string, unknown> }[] };
-        acpProviders.value = (body.capabilities ?? [])
-            .filter((entry) => entry.kind === `agent`)
-            .map((entry) => ({ id: entry.id, label: typeof entry.config[`name`] === `string` ? (entry.config[`name`] as string) : entry.id }));
+        entries = body.capabilities ?? [];
     } catch {
-        // Leave the last list; the picker simply misses new agents until the next reachable load.
+        // Leave the last lists; the picker simply misses new providers until the next reachable load.
+        return;
     }
+    acpProviders.value = entries
+        .filter((entry) => entry.kind === `agent`)
+        .map((entry) => ({ id: entry.id, label: typeof entry.config[`name`] === `string` ? (entry.config[`name`] as string) : entry.id }));
+    // Labelled by the name the user gave the capability — there is no vendor to name here, and the id is the
+    // word they will recognise ("ollama", "gpu-box").
+    endpointProviders.value = entries.filter((entry) => entry.kind === `endpoint`).map((entry) => ({ id: endpointProvider(entry.id), label: entry.id }));
+    // Each endpoint's catalog is daemon-owned like every other provider's, so load them on the same seam. Not
+    // part of loadAllProviderModels: that one runs over a fixed list, and which endpoints exist is what we have
+    // only just learned.
+    await Promise.all(endpointProviders.value.map((endpoint) => loadProviderModels(endpoint.id)));
 };
 
 // Step 2 of the native paste-back connect: exchange the code Anthropic showed against the PKCE handshake.

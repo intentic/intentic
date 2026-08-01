@@ -1,10 +1,14 @@
 import { describe, expect, it, test } from "vitest";
 import {
+    accessFor,
     type AgentCapabilities,
     capabilitiesOf,
     clampMode,
     effortAllowed,
+    endpointIdOf,
+    endpointProvider,
     HARNESSES,
+    isEndpointProvider,
     limitationsOf,
     modesFor,
     PROVIDERS,
@@ -145,5 +149,36 @@ describe("the max-effort rule", () => {
         expect(sendableEffort("max", true)).toBe("max");
         expect(sendableEffort("high", false)).toBe("high");
         expect(sendableEffort(undefined, false)).toBeUndefined();
+    });
+});
+
+/* AN `endpoint/<id>` PROVIDER is a model API the user configured, and the one thing this record has to get right
+ * about it is that it is NOT an ACP agent. Both are minted by installing a capability and both are unknown to
+ * NATIVE_PROVIDERS, so the id is the only thing that tells them apart — and they want opposite records: an ACP
+ * agent brings its own loop and gets the documented floor, while an endpoint is driven BY the Claude Code loop
+ * and gets its full ceiling. Getting this backwards would strip steering, per-tool approvals, MCP and the mount
+ * namespace from every turn on a user's own model. */
+describe("a configured model endpoint", () => {
+    it("runs the Claude Code loop at full ceiling, on either harness", () => {
+        for (const harness of HARNESSES.map((entry) => entry.value)) {
+            expect(capabilitiesOf("endpoint/ollama", harness)).toEqual(capabilitiesOf("claude", harness));
+        }
+        expect(limitationsOf(capabilitiesOf("endpoint/ollama", "native"))).toEqual([]);
+    });
+
+    it("is told apart from an ACP agent by its id alone, so no manifest lookup is needed to read the record", () => {
+        expect(capabilitiesOf("goose", "native").runtime).toBe("acp");
+        expect(capabilitiesOf("endpoint/goose", "native").runtime).toBe("claude-code");
+    });
+
+    it("round-trips its capability id, and carries no access requirement to connect", () => {
+        expect(endpointProvider("gpu-box")).toBe("endpoint/gpu-box");
+        expect(endpointIdOf(endpointProvider("gpu-box"))).toBe("gpu-box");
+        expect(isEndpointProvider("endpoint/gpu-box")).toBe(true);
+        // A bare id that merely starts with the word is not one — the separator is what makes the namespace.
+        expect(isEndpointProvider("endpoints-r-us")).toBe(false);
+        expect(endpointIdOf("claude")).toBeUndefined();
+        // Its credential was configured with the endpoint, so there is nothing left for a connect gate to offer.
+        expect(accessFor("endpoint/gpu-box")).toBeUndefined();
     });
 });

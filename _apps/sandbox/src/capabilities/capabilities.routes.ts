@@ -7,6 +7,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { capabilityJobSession } from "../terminal/terminal-session.js";
 import { composeEnvironment } from "../environment/environment.js";
+import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { capabilityFragments } from "../environment/fragment-sources.js";
 import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensions/extension-processes.js";
 import { enabledExtensions } from "../extensions/installed-extensions.js";
@@ -77,6 +78,11 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 // A connector add/remove flips whether its provider's gateway process is wanted (a cli discord
                 // entry is what makes ext-discord run) — converge listener extensions on the new manifest.
                 void reconcileListenerProcesses(services);
+                // An endpoint is only drivable once the translator knows how to reach it — awaited, not fired and
+                // forgotten, so the "added" the user reads means the next turn on it will actually route.
+                if (input.kind === "endpoint") {
+                    await syncEndpointCompat(services);
+                }
                 // Fold this entry's image fragment(s) into the composed overlay (upsert first, so compose sees it).
                 const composedHash = await composeEnvironment(services);
                 if (
@@ -117,6 +123,10 @@ export const createCapabilitiesRoutes = (services: Services) => {
             }
             await services.capabilities.upsert(updated);
             void reconcileListenerProcesses(services);
+            // A rotated endpoint key is a new upstream credential — the translator holds the old one until told.
+            if (updated.kind === "endpoint") {
+                await syncEndpointCompat(services);
+            }
             return { ok: true } as const;
         }),
         remove: i.remove.handler(async ({ input }) => {
@@ -135,6 +145,10 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 services.acpConnections.drop(capability.id);
             }
             await services.capabilities.remove(input.id);
+            // Removed AFTER the manifest drops it, so the rebuilt list can't put the endpoint straight back.
+            if (capability.kind === "endpoint") {
+                await syncEndpointCompat(services);
+            }
             await composeEnvironment(services);
             void reconcileListenerProcesses(services);
             return { ok: true } as const;

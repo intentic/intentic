@@ -5,7 +5,7 @@ import { useRouter } from "vue-router";
 import { type AgentHarness, type AgentProvider, limitationsOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady } from "../composables/chat/access";
 import { BADGE_META, relativeTime } from "../composables/chat/catalog";
-import { acpProviders, type Conversation, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
+import { acpProviders, type Conversation, endpointProviders, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
 import { customEntryFor, filterEntries, type PickerEntry, pickerBlocks, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
 import { formatUtilization, isStale, usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
 import { accountsOf, loadAllProviderModels, loadProviderModels } from "../composables/chat/useChat";
@@ -194,9 +194,11 @@ const railTo = (target: AgentProvider | undefined): void => {
 const rowAriaLabel = (entry: PickerEntry): string =>
     `${entry.label}${isSelected(entry) ? ` — current model` : ``}${isLocked(entry) ? ` — ${accessBadge(entry.provider)}` : ``}`;
 
-// The provider rail: the native three plus every installed ACP agent.
+// The provider rail: the native ones, then every configured model endpoint and every installed ACP agent — the
+// same order the sections themselves are built in (pickerSections), so the rail and the list agree.
 const railProviders = computed<readonly { label: string; value: AgentProvider }[]>(() => [
     ...PROVIDERS,
+    ...endpointProviders.value.map((endpoint) => ({ label: endpoint.label, value: endpoint.id })),
     ...acpProviders.value.map((agent) => ({ label: agent.label, value: agent.id })),
 ]);
 

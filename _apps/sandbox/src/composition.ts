@@ -95,6 +95,7 @@ import {
 import { collectRepoDiff, type CommitScope, type RepoDiff } from "./git/commit-message.js";
 import { createBranch, deleteBranch, listBranches } from "./git/branches.js";
 import { fetchRemote, pullRemote, pushBranch, remoteState } from "./git/remote.js";
+import { type EndpointCatalog, createEndpointCatalog } from "./endpoints/endpoint-catalog.js";
 import { type GeminiCatalog, createGeminiCatalog } from "./gemini/gemini-catalog.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
@@ -295,6 +296,11 @@ export interface Services {
     // A Gemini turn resolves its model here; /gemini/models serves the picker. There is no geminiStore twin:
     // Gemini is routed-only, so the translator owns the credential.
     readonly geminiModels: GeminiCatalog;
+    // What each `endpoint` capability's own server publishes — the user's model APIs, wherever they run. Keyed by
+    // capability id because these are user-created and unbounded, unlike the four fixed catalogs above, and there
+    // is no seed floor: only the server can say what it serves. Read by the picker route, by the capability card,
+    // and by the translator reconciler that turns each one into a routable provider.
+    readonly endpointModels: EndpointCatalog;
     // The bundled translator (CLIProxyAPI): connects/lists/disconnects the routed providers' SUBSCRIPTION OAuth
     // (codex → ChatGPT, grok → SuperGrok, kimi → Kimi Code, gemini → Google). Codex, Kimi and Gemini have no
     // other credential. /translator drives the connect; streamAgent reads `accounts` to gate a routed turn.
@@ -622,6 +628,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         codexModels: createCodexCatalog(config, join(codexBase, "models.json")),
         kimiModels: createKimiCatalog(cliProxy),
         geminiModels: createGeminiCatalog(config, join(authRoot, "gemini", "models.json")),
+        endpointModels: createEndpointCatalog(join(authRoot, "endpoints")),
         cliProxy,
         codexHome: codexBase,
         codexThreadExists: (threadId) => codexThreadExists(codexBase, threadId),

@@ -1,5 +1,14 @@
-import { type AgentProvider, type KeyedProvider, NATIVE_PROVIDERS, type NativeProvider, PROVIDER_VENDOR } from "@intentic/sandbox-contract";
+import {
+    type AgentProvider,
+    endpointIdOf,
+    type KeyedProvider,
+    NATIVE_PROVIDERS,
+    type NativeProvider,
+    PROVIDER_VENDOR,
+} from "@intentic/sandbox-contract";
 import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
+import { unversionedBase } from "../endpoints/endpoint-config.js";
+import { endpointModelId } from "../endpoints/endpoint-translator.js";
 import type { Services } from "../composition.js";
 import { accountWithHeadroom } from "../usage/account-usage.js";
 import type { TurnLimit } from "../usage/translator-usage.js";
@@ -207,10 +216,72 @@ export const harnessReadyProviders = async (services: Services): Promise<Record<
     return Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, ready[provider]])) as Record<NativeProvider, boolean>;
 };
 
+/* AN `endpoint` CAPABILITY'S TURN — a model API the user configured, which is the same problem as a routed
+ * subscription with one fork in it, and the fork is about the WIRE rather than about where the server runs.
+ *
+ * openai    — re-served through the translator, exactly as the four subscriptions are. The harness is handed the
+ *             loopback bearer and a `<id>/<model>` id (endpointModelId, matching the entry's `prefix`), so the
+ *             user's own key never enters the harness environment at all: it stays in the translator's config on
+ *             /history, which is outside the agent's reach.
+ * anthropic — the endpoint already speaks the harness's own wire, so the translator would be a hop that
+ *             translates Anthropic to Anthropic. The harness goes straight at it with the user's key, and the
+ *             base URL drops its version segment because the harness appends `/v1/messages` itself.
+ *
+ * The model is validated against the endpoint's live catalog exactly as a routed provider's is (routedModel): a
+ * pick the server no longer offers falls to the catalog default rather than being sent and refused. An endpoint
+ * that has published nothing has no default to fall back to, and that is a refusal rather than a turn sent with
+ * an empty model — which the harness would answer by resolving its own Anthropic alias, at an endpoint that has
+ * never heard of it. */
+const resolveEndpointCredentials = async (
+    services: Services,
+    id: string,
+    model: string | undefined,
+): Promise<HarnessCredentialsResult> => {
+    const capability = await services.capabilities.get(id);
+    if (capability === undefined || capability.kind !== "endpoint") {
+        return { ok: false, message: `Unknown model endpoint "${id}" — add it as an Endpoint capability first.` };
+    }
+    const config = capability.config;
+    const catalog = await services.endpointModels.models(id, config);
+    if (catalog.models.length === 0) {
+        return {
+            ok: false,
+            message: `${id} has published no models — check the server is running at ${config.baseUrl} and has a model loaded.`,
+        };
+    }
+    const resolved = routedModel(catalog, model);
+    if (config.protocol === "anthropic") {
+        return {
+            ok: true,
+            credentials: { endpoint: { baseUrl: unversionedBase(config.baseUrl), authToken: config.apiKey ?? "", model: resolved } },
+        };
+    }
+    if (services.config.translator.url === "") {
+        return {
+            ok: false,
+            message: "This sandbox has no model translator, so an OpenAI-compatible endpoint can't run here. Run a sandbox built from the published image.",
+        };
+    }
+    return {
+        ok: true,
+        credentials: {
+            endpoint: {
+                baseUrl: services.config.translator.url,
+                authToken: services.config.translator.token,
+                model: endpointModelId(id, resolved),
+            },
+        },
+    };
+};
+
 export const resolveHarnessCredentials = async (
     services: Services,
     input: { readonly agent: AgentProvider | undefined; readonly account?: string; readonly model?: string },
 ): Promise<HarnessCredentialsResult> => {
+    const endpointId = input.agent === undefined ? undefined : endpointIdOf(input.agent);
+    if (endpointId !== undefined) {
+        return resolveEndpointCredentials(services, endpointId, input.model);
+    }
     if (input.agent === "codex" || input.agent === "grok" || input.agent === "kimi" || input.agent === "gemini") {
         if (services.config.translator.url === "") {
             // Codex/Grok can fall back to their own runtime; Kimi/Gemini have none, so it can only be an image problem.

@@ -1,6 +1,6 @@
 import { ACCESS_COST, accessFor, PROVIDERS } from "./agent-catalog.js";
 import { compareCheapestFirst, familyOf, tierRankOf } from "./model-order.js";
-import type { NativeProvider } from "./schemas.js";
+import type { AgentProvider } from "./schemas.js";
 
 /* THE QUICK MODEL — the cheap, fast model a one-click helper spends instead of the frontier model the chat runs
  * on. Today that is the commit box's autofill; anything else of that shape (a branch name, a PR description)
@@ -17,11 +17,19 @@ import type { NativeProvider } from "./schemas.js";
  * this repo's model handling: model-order.ts derives tier and recency from the id and curates nothing, and the
  * web's defaultModelFor reads the live catalog rather than naming an id that a release will falsify. */
 
-// One provider's standing in the decision: whether a turn on it can be sent at all, and what its catalog holds.
-// ACP agents are deliberately not expressible here — an ACP row's model id is empty because the agent owns its
-// own model, so there is no cheap rung to point it at.
+/* One provider's standing in the decision: whether a turn on it can be sent at all, and what its catalog holds.
+ *
+ * ACP agents are deliberately not expressible here — an ACP row's model id is empty because the agent owns its
+ * own model, so there is no cheap rung to point it at. `endpoint/<id>` providers ARE, and have to be: their
+ * models appear in the same picker the settings row builds its options from, so a pin naming one has to hold
+ * rather than fall silently back to Auto and spend an account the user was deliberately steering away from. */
 export interface QuickModelSource {
-    readonly provider: NativeProvider;
+    // AgentProvider, not NativeProvider: an endpoint's id is user-created and cannot be in a fixed union. Auto's
+    // ranking degrades gracefully for one — costOf falls to the metered rung and an id with no tier word is
+    // UNRANKED, which is genuine last place — so an endpoint effectively only wins Auto when nothing else is
+    // connected, while a PIN on one holds. Both are the right answers: what a turn on someone's own model server
+    // costs is not a fact this repo can know, so it is not one Auto should be asserting.
+    readonly provider: AgentProvider;
     // The same connection predicate every other surface gates on (access.ts web-side, the daemon's own account
     // stores daemon-side). A catalog is never empty by construction, so "has rows" says nothing about "can send".
     readonly ready: boolean;
@@ -29,7 +37,7 @@ export interface QuickModelSource {
 }
 
 export interface QuickModelChoice {
-    readonly provider: NativeProvider;
+    readonly provider: AgentProvider;
     readonly model: string;
 }
 
@@ -45,7 +53,7 @@ export const parsePinned = (pinned: string): QuickModelChoice | undefined => {
     if (separator <= 0 || separator === pinned.length - 1) {
         return undefined;
     }
-    return { provider: pinned.slice(0, separator) as NativeProvider, model: pinned.slice(separator + 1) };
+    return { provider: pinned.slice(0, separator), model: pinned.slice(separator + 1) };
 };
 
 // The cheapest row a provider publishes — its whole catalog read from the cheap end. Undefined for a catalog
@@ -59,12 +67,14 @@ const cheapestOf = (source: QuickModelSource): string | undefined => source.mode
 const tierOf = (model: string): number => tierRankOf(familyOf(model));
 
 // PROVIDERS order, as the final tiebreak. Arbitrary, but the SAME arbitrary answer on every read — the property
-// compareUnrankedModelIds exists to guarantee, and the one a default actually needs.
-const providerOrder = (provider: NativeProvider): number => PROVIDERS.findIndex((entry) => entry.value === provider);
+// compareUnrankedModelIds exists to guarantee, and the one a default actually needs. An endpoint is in no fixed
+// list, so it reads -1 and leads the tiebreak; unreachable in practice, since it can never tie on cost.
+const providerOrder = (provider: AgentProvider): number => PROVIDERS.findIndex((entry) => entry.value === provider);
 
-// How much a call on this provider costs at the margin. Every native provider declares an access kind, so the
-// fallback is unreachable — it exists because AgentProvider is a bare string on the wire.
-const costOf = (provider: NativeProvider): number => {
+// How much a call on this provider costs at the margin. Every native provider declares an access kind; an
+// endpoint declares none, and takes the metered rung — the conservative reading of a model API whose bill this
+// repo cannot see, which keeps Auto from reaching for someone's paid gateway on its own initiative.
+const costOf = (provider: AgentProvider): number => {
     const access = accessFor(provider);
     return access === undefined ? ACCESS_COST.key : ACCESS_COST[access.kind];
 };

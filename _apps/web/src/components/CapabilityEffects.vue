@@ -68,6 +68,17 @@ const describe = (effect: CapabilityEffect): EffectRow => {
                 label: `Lets the agent ${effect.grants.join(`, `)} on your ${effect.platform === `windows` ? `Windows` : `Linux`} computer`,
                 warn: true,
             };
+        case "endpoint":
+            // Named, not warned: pointing turns at a server is the POINT of this capability, and it is as often
+            // the private choice (a model on your own hardware) as the exposing one. The row states the
+            // destination and what leaves for it, and lets the reader judge their own URL.
+            return {
+                icon: `cloud-upload`,
+                label:
+                    effect.url === ``
+                        ? `Sends this sandbox's prompts, files and command output to the model API you configure`
+                        : `Sends this sandbox's prompts, files and command output to ${effect.url}`,
+            };
     }
 };
 

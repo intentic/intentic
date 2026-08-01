@@ -2,7 +2,7 @@ import { compareCheapestFirst, NATIVE_PROVIDERS, type QuickModelChoice, quickMod
 import { computed, type ComputedRef } from "vue";
 import { useSandboxSettings } from "../sandbox/useSandboxSettings";
 import { providerReady } from "./access";
-import { modelOptionsFor, providerDisplayLabel } from "./conversation";
+import { endpointProviders, modelOptionsFor, providerDisplayLabel } from "./conversation";
 
 /* WHICH MODEL THE ONE-CLICK HELPERS RUN, browser-side — the same rule the daemon resolves before it spends the
  * call (contract quick-model.ts), read here for the two things only a UI needs: NAMING the model in the
@@ -13,11 +13,13 @@ import { modelOptionsFor, providerDisplayLabel } from "./conversation";
  * a control they never knew existed. That only works if this answer and the daemon's are the same answer, which
  * is why the rule is in the contract rather than in either of them. */
 
-// Every native provider, as the resolver sees it: whether a turn on it can be sent (the same predicate the
-// picker's rows and the connect gate use) and what its catalog holds. Options come from the live daemon catalog
-// with the static seed floor beneath it, so this is answerable before any catalog has loaded.
+// Every native provider AND every configured model endpoint, as the resolver sees it: whether a turn on it can
+// be sent (the same predicate the picker's rows and the connect gate use) and what its catalog holds. Options
+// come from the live daemon catalog with the static seed floor beneath it, so this is answerable before any
+// catalog has loaded. Endpoints are in the list because their models are in the OPTIONS below — a pin the daemon
+// would honour but this side dropped would name one model in the settings row and run another.
 const quickModelSources = computed(() =>
-    NATIVE_PROVIDERS.map((provider) => ({
+    [...NATIVE_PROVIDERS, ...endpointProviders.value.map((endpoint) => endpoint.id)].map((provider) => ({
         provider,
         ready: providerReady(provider),
         models: modelOptionsFor(provider).map((option) => option.value),

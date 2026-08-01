@@ -1,4 +1,11 @@
-import { NATIVE_PROVIDERS, type NativeProvider, type QuickModelChoice, type QuickModelSource, resolveQuickModel } from "@intentic/sandbox-contract";
+import {
+    endpointProvider,
+    NATIVE_PROVIDERS,
+    type NativeProvider,
+    type QuickModelChoice,
+    type QuickModelSource,
+    resolveQuickModel,
+} from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { harnessReadyProviders, resolveHarnessCredentials } from "./harness-credentials.js";
 import { runOneShot } from "./one-shot.js";
@@ -30,18 +37,39 @@ const catalogOf = async (services: Services, provider: NativeProvider): Promise<
     return catalog?.models.map((model) => model.id) ?? [];
 };
 
-// What the contract's resolver decides over: every native provider, whether it can run, and what it publishes.
-// Catalogs load concurrently — five independent cached reads with no reason to queue.
-const quickModelSources = async (services: Services): Promise<QuickModelSource[]> => {
-    const ready = await harnessReadyProviders(services);
+// Every configured model endpoint, as a source. Ready by being installed — its credential (if any) was
+// configured with it, so there is no separate connection to check — and its catalog is the same probe the picker
+// and the card read. An endpoint that has published nothing contributes an empty list and simply never wins.
+const endpointSources = async (services: Services): Promise<QuickModelSource[]> => {
+    const endpoints = (await services.capabilities.list()).flatMap((capability) => (capability.kind === "endpoint" ? [capability] : []));
     return Promise.all(
-        NATIVE_PROVIDERS.map(async (provider) => ({
-            provider,
-            ready: ready[provider],
-            // A provider that cannot run is never going to be picked, so don't spend a catalog read proving it.
-            models: ready[provider] ? await catalogOf(services, provider) : [],
+        endpoints.map(async (capability) => ({
+            provider: endpointProvider(capability.id),
+            ready: true,
+            models: await services.endpointModels
+                .models(capability.id, capability.config)
+                .then((catalog) => catalog.models.map((model) => model.id))
+                .catch(() => []),
         })),
     );
+};
+
+// What the contract's resolver decides over: every native provider plus every configured endpoint, whether each
+// can run, and what it publishes. Catalogs load concurrently — independent cached reads with no reason to queue.
+const quickModelSources = async (services: Services): Promise<QuickModelSource[]> => {
+    const ready = await harnessReadyProviders(services);
+    const [native, endpoints] = await Promise.all([
+        Promise.all(
+            NATIVE_PROVIDERS.map(async (provider) => ({
+                provider,
+                ready: ready[provider],
+                // A provider that cannot run is never going to be picked, so don't spend a catalog read proving it.
+                models: ready[provider] ? await catalogOf(services, provider) : [],
+            })),
+        ),
+        endpointSources(services),
+    ]);
+    return [...native, ...endpoints];
 };
 
 /* Run one prompt on the sandbox's quick model, reporting which model answered. The single seam every one-click

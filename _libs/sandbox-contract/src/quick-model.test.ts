@@ -86,3 +86,30 @@ test("skips a connected provider whose catalog has not loaded yet", () => {
     expect(resolveQuickModel([unloaded, CLAUDE], ``)).toEqual({ provider: `claude`, model: `claude-haiku-4-5-20251001` });
     expect(resolveQuickModel([unloaded], ``)).toBeUndefined();
 });
+
+/* A MODEL ENDPOINT the user configured is a provider like any other here, and the reason it has to be is the
+ * settings row: its options are built from the same picker catalog, so a pin naming one that this resolver
+ * dropped would print one model's name under the sparkle and spend a different account entirely. */
+const OLLAMA: QuickModelSource = { provider: `endpoint/ollama`, ready: true, models: [`qwen3-coder`, `gemma3-27b`] };
+
+test("honours a pin on a configured endpoint — the whole id, not the half before its slash", () => {
+    expect(resolveQuickModel([CLAUDE, OLLAMA], `endpoint/ollama:qwen3-coder`)).toEqual({ provider: `endpoint/ollama`, model: `qwen3-coder` });
+    // And it round-trips through the key shape the picker mints, which is where the slash-not-colon rule earns
+    // itself: parsePinned splits on the FIRST colon, so an `endpoint:ollama` id would have parsed the provider
+    // as "endpoint" and the model as "ollama:qwen3-coder" — a pin that silently resolves to nothing.
+    expect(quickModelKey({ provider: `endpoint/ollama`, model: `qwen3-coder` })).toBe(`endpoint/ollama:qwen3-coder`);
+});
+
+test("leaves Auto to the providers whose price is known, rather than reaching for someone's own server", () => {
+    // Claude publishes a Haiku-class row; the endpoint's ids carry no tier word at all, so they are UNRANKED and
+    // lose on tier. What a turn on a user's own model API costs is not a fact this repo holds, and Auto should
+    // not be asserting one.
+    expect(resolveQuickModel([CLAUDE, OLLAMA], ``)).toEqual({ provider: `claude`, model: `claude-haiku-4-5-20251001` });
+});
+
+test("still answers from an endpoint when it is the only thing configured", () => {
+    // No tier word in either id, so the shared id-derived ordering decides between them exactly as it does for
+    // Kimi above — the point here is that a sandbox whose only model API is its owner's still gets an answer
+    // rather than the disabled "nothing connected" button.
+    expect(resolveQuickModel([offline(CLAUDE), OLLAMA], ``)).toEqual({ provider: `endpoint/ollama`, model: `qwen3-coder` });
+});

@@ -1,5 +1,5 @@
 import { accessFor, type AccessKind, type AgentHarness, type AgentProvider, type ProviderAccess } from "@intentic/sandbox-contract";
-import { acpProviders, providerAccounts, translatorAccounts } from "./conversation";
+import { acpProviders, endpointProviders, providerAccounts, translatorAccounts } from "./conversation";
 
 /* CAN THIS PROVIDER ACTUALLY RUN, and what does it take to unlock it — one rule, read by every surface that
  * offers a provider (the model picker's rows and rail, the connect gate above the composer, the account panel).
@@ -14,8 +14,8 @@ import { acpProviders, providerAccounts, translatorAccounts } from "./conversati
 export interface ProviderAccessState {
     // Whether a turn on this provider can be sent right now.
     readonly ready: boolean;
-    // Absent for an ACP agent — it carries its own credentials, so it is ready by being installed and there is
-    // nothing to connect.
+    // Absent for an ACP agent and for a model endpoint — both carry their own credentials, so each is ready by
+    // being installed and there is nothing left to connect.
     readonly access: ProviderAccess | undefined;
     // Whether any connected account of this provider has a credential that can no longer be refreshed.
     readonly needsReauth: boolean;
@@ -23,6 +23,7 @@ export interface ProviderAccessState {
 
 const accountsOf = (provider: AgentProvider) => providerAccounts.value[provider] ?? [];
 const isAcp = (provider: AgentProvider): boolean => acpProviders.value.some((agent) => agent.id === provider);
+const isEndpoint = (provider: AgentProvider): boolean => endpointProviders.value.some((endpoint) => endpoint.id === provider);
 
 // Whether a provider can serve a fresh conversation. Mirrors the daemon's own gate (agent.routes): codex and
 // kimi and gemini authenticate ONLY through the translator's subscription, grok through either its native xAI account or
@@ -36,7 +37,9 @@ export const providerReady = (provider: AgentProvider): boolean => {
     if (provider === `grok`) {
         return accountsOf(provider).length > 0 || translatorAccounts.value.grok.length > 0;
     }
-    return accountsOf(provider).length > 0 || isAcp(provider);
+    // A configured endpoint is runnable by existing: whatever it needs to authenticate was configured with
+    // it, so there is no second connection step the way there is for an account-backed provider.
+    return accountsOf(provider).length > 0 || isAcp(provider) || isEndpoint(provider);
 };
 
 export const accessStateFor = (provider: AgentProvider): ProviderAccessState => ({

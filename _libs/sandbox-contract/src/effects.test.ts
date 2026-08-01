@@ -110,6 +110,27 @@ describe("capabilityEffects", () => {
         expect(full).toContainEqual({ kind: "process", names: ["gateway"] });
     });
 
+    /* An endpoint's whole consequence is WHERE the turns go — it rides the translator that is already baked and
+     * already running, so it needs no rebuild and starts nothing. The panel claiming either would be teaching the
+     * user to expect a rebuild prompt that never comes. */
+    it("discloses the model endpoint's destination, and claims no rebuild or process", () => {
+        expect(capabilityEffects({ kind: "endpoint", config: { baseUrl: "http://host.docker.internal:11434/v1" } })).toEqual([
+            { kind: "endpoint", url: "http://host.docker.internal:11434/v1" },
+        ]);
+        // Named the moment the field is filled, so the disclosure can be read BEFORE the add — including the
+        // pre-typing state, where it still has to say what will leave.
+        expect(capabilityEffects({ kind: "endpoint", config: {} })).toEqual([{ kind: "endpoint", url: "" }]);
+        // A key is the ordinary second effect, from the live form or from an installed instance's echo.
+        expect(capabilityEffects({ kind: "endpoint", config: { baseUrl: "https://gw.example.com/v1", apiKey: "sk-x" } })).toContainEqual({
+            kind: "secret",
+            exposure: "disk",
+        });
+        expect(capabilityEffects({ kind: "endpoint", config: { baseUrl: "https://gw.example.com/v1", hasSecret: true } })).toContainEqual({
+            kind: "secret",
+            exposure: "disk",
+        });
+    });
+
     it("marks vpn as a privileged-runtime image change", () => {
         expect(capabilityEffects({ kind: "vpn", config: {} })).toContainEqual({ kind: "runtime", level: "net-admin" });
     });

@@ -11,6 +11,7 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
+import { compatYaml, endpointCompatEntries } from "../endpoints/endpoint-translator.js";
 import type { AccountUsageStore } from "../usage/account-usage.js";
 import { fetchTranslatorUsage, quotaPoolFor, type TranslatorAuthFile, type TurnLimit } from "../usage/translator-usage.js";
 
@@ -49,8 +50,13 @@ export const cliProxyManagementUrl = (config: Config): string => `${config.trans
  *
  * `antigravity-credits` is the one that is off ON PURPOSE. It is the last-resort fallback to PAID AI credits once
  * every free-tier Google auth is spent on Claude models — real money, drawn per turn, with nobody asked. A routed
- * turn must not be able to reach for it; hitting the weekly wall and saying so is the correct outcome. */
-const renderConfig = (opts: { port: number; authDir: string; token: string }): string =>
+ * turn must not be able to reach for it; hitting the weekly wall and saying so is the correct outcome.
+ *
+ * `compat` is the rendered openai-compatibility block — the user's own model endpoints (endpoint-translator.ts).
+ * It is rendered INTO the file rather than left to the Management API push, because this function runs on every
+ * spawn and on every rung of the restart ladder below: entries that lived only in the running proxy's memory
+ * would be erased by the first crash-restart, silently taking the user's endpoints out of service. */
+const renderConfig = (opts: { port: number; authDir: string; token: string; compat: string }): string =>
     [
         `host: "127.0.0.1"`,
         `port: ${opts.port}`,
@@ -64,6 +70,7 @@ const renderConfig = (opts: { port: number; authDir: string; token: string }): s
         `  switch-project: true`,
         `  switch-preview-model: true`,
         `  antigravity-credits: false`,
+        ...(opts.compat === "" ? [] : [opts.compat]),
         ``,
     ].join("\n");
 
@@ -114,7 +121,11 @@ export const startTranslator = (services: Services): void => {
     const start = async (): Promise<void> => {
         await mkdir(authDir, { recursive: true });
         await mkdir(dirname(configPath), { recursive: true });
-        await writeFile(configPath, renderConfig({ port, authDir, token: config.translator.token }), { mode: 0o600 });
+        // The user's own endpoints, resolved before the spawn so the proxy comes up already serving them. Their
+        // catalogs fall back to a persisted list, so a model server that happens to be down right now keeps its
+        // entry instead of being rendered out of the config until something asks again.
+        const compat = compatYaml(await endpointCompatEntries(services).catch(() => []));
+        await writeFile(configPath, renderConfig({ port, authDir, token: config.translator.token, compat }), { mode: 0o600 });
         const startedAt = Date.now();
         // The proxy states WHY it exited (a taken port, a bad config, a panic) in its own log — and that log
         // goes to STDOUT. Its stderr stays empty even for a fatal `bind: address already in use`, so watching

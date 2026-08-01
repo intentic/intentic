@@ -5,6 +5,7 @@ import { browserHandler } from "./handlers/browser.js";
 import { cliHandler } from "./handlers/cli.js";
 import { devopsHandler } from "./handlers/devops.js";
 import { dockerHandler } from "./handlers/docker.js";
+import { endpointHandler } from "./handlers/endpoint.js";
 import { extensionHandler } from "./handlers/extension.js";
 import { hostHandler } from "./handlers/host.js";
 import { integrationHandler } from "./handlers/integration.js";
@@ -31,4 +32,5 @@ export const registry: Record<CapabilityKind, CapabilityHandler> = {
     browser: browserHandler,
     host: hostHandler,
     agent: agentHandler,
+    endpoint: endpointHandler,
 };

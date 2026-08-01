@@ -24,8 +24,10 @@ export const SessionTranscriptMessageSchema = z.object({ role: z.enum(["user", "
 export type SessionTranscriptMessage = z.infer<typeof SessionTranscriptMessageSchema>;
 
 // The agent runtimes the daemon can serve — the vocabulary every surface that picks an agent shares (chat
-// turns, automations). The NATIVE providers have dedicated adapters (and their ids are reserved); any
-// other value is the id of an installed `agent`-kind capability served over ACP (Agent Client Protocol).
+// turns, automations). The NATIVE providers have dedicated adapters (and their ids are reserved); an
+// `endpoint/<id>` value names an installed `endpoint`-kind capability (a model API the user pointed us at,
+// see EndpointConfigSchema); any other value is the id of an installed `agent`-kind capability served over
+// ACP (Agent Client Protocol).
 // Kept as a bare string on the wire (not an enum) so an unknown id is a clean error frame from the agent
 // route — the same bet RepoParamSchema makes — and adding an ACP agent needs no contract change.
 export const NATIVE_PROVIDERS = ["claude", "codex", "grok", "kimi", "gemini"] as const;
@@ -1714,6 +1716,7 @@ export const CapabilityKindSchema = z.enum([
     "browser",
     "host",
     "agent",
+    "endpoint",
 ]);
 export type CapabilityKind = z.infer<typeof CapabilityKindSchema>;
 export const CapabilityStateSchema = z.enum(["active", "pending", "error", "inactive"]);
@@ -1925,6 +1928,36 @@ export const AcpAgentConfigSchema = z.object({
     env: z.string().optional(),
     loginCommand: z.string().min(1).optional(),
 });
+
+/* A MODEL API THE USER POINTED US AT — one shape for every server that serves models over HTTP, whether it runs
+ * beside this container or in another datacentre. There is deliberately NO local/remote axis: an Ollama on the
+ * docker host, a vLLM on the GPU box down the hall, a LiteLLM gateway and OpenRouter differ only in the URL, and
+ * inventing a distinction would mean two code paths, two cards and two sets of bugs for one concept.
+ *
+ * `protocol` is the only real fork, and it is about the WIRE, not about where the server lives:
+ *   openai    — the endpoint speaks OpenAI /v1/chat/completions (Ollama, vLLM, llama.cpp, LM Studio, TGI,
+ *               OpenRouter, most gateways). The Claude Code harness speaks only the Anthropic Messages API, so
+ *               these are re-served through the bundled translator, which is already in the image for exactly
+ *               this job (agent/translator.ts). The user's key stays in the translator's config on /history and
+ *               never reaches the harness — it gets the loopback bearer instead.
+ *   anthropic — the endpoint already speaks the Anthropic Messages API (LiteLLM's /v1/messages, a Bedrock or
+ *               Vertex router, a corporate Anthropic gateway). Nothing to translate: the harness is pointed
+ *               straight at it with the user's own key.
+ *
+ * `headers` is a pasted `Name: value` block, one per line — the extra headers gateways ask for (a tenant id, a
+ * routing hint). The key is the secret field; the header block is not, because it is where non-credential
+ * routing metadata lives and hiding it would make a misrouted endpoint undiagnosable. */
+export const EndpointProtocolSchema = z.enum(["openai", "anthropic"]);
+export type EndpointProtocol = z.infer<typeof EndpointProtocolSchema>;
+export const EndpointConfigSchema = z.object({
+    // The API root, INCLUDING the version segment the server publishes (…:11434/v1). Taken verbatim rather than
+    // normalised: "which suffix does this server want" is the one thing that actually varies between them, and
+    // guessing it is how a working URL becomes an unexplainable 404.
+    baseUrl: z.string().url(),
+    protocol: EndpointProtocolSchema.default("openai"),
+    apiKey: z.string().optional(),
+    headers: z.string().optional(),
+});
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type ServiceConfig = z.infer<typeof ServiceConfigSchema>;
 export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
@@ -1940,6 +1973,7 @@ export type BrowserPlatform = z.infer<typeof BrowserPlatformSchema>;
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
 export type HostConfig = z.infer<typeof HostConfigSchema>;
 export type AcpAgentConfig = z.infer<typeof AcpAgentConfigSchema>;
+export type EndpointConfig = z.infer<typeof EndpointConfigSchema>;
 
 export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("devops"), config: z.object({}) }),
@@ -1963,6 +1997,10 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("browser"), config: BrowserConfigSchema }),
     z.object({ id: entryId, kind: z.literal("host"), config: HostConfigSchema }),
     z.object({ id: entryId, kind: z.literal("agent"), config: AcpAgentConfigSchema }),
+    // A model API (EndpointConfigSchema). The id becomes `endpoint/<id>` in the chat picker — the `agent` kind's
+    // precedent, with the prefix because these two are the only capability kinds that mint providers and they
+    // want opposite ability records (an ACP agent owns its own loop; an endpoint runs the full Claude Code one).
+    z.object({ id: entryId, kind: z.literal("endpoint"), config: EndpointConfigSchema }),
 ]);
 export type Capability = z.infer<typeof CapabilitySchema>;
 

@@ -608,6 +608,42 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             ],
         },
     },
+    /* ONE CARD FOR EVERY MODEL API, wherever it runs. An Ollama on this machine, a vLLM on the GPU box, a
+     * LiteLLM gateway and OpenRouter are the same thing — a URL that serves models — and the only axis that
+     * actually changes anything is which wire the server speaks. Splitting it into "local" and "remote" cards
+     * would be two forms, two sets of copy and two ways to be wrong about one concept; the placeholder carries
+     * the local case instead, because that is the one people don't realise already works. */
+    {
+        id: "endpoint",
+        name: "Model endpoint",
+        kind: "endpoint",
+        category: "extend",
+        icon: "sparkles",
+        description: "Run your own models — Ollama, vLLM, llama.cpp, LM Studio, a gateway — as a provider in the chat.",
+        fields: [
+            { key: "baseUrl", label: "API base URL", placeholder: "http://host.docker.internal:11434/v1" },
+            {
+                key: "protocol",
+                label: "API",
+                default: "openai",
+                options: [
+                    { value: "openai", label: "OpenAI-compatible" },
+                    { value: "anthropic", label: "Anthropic-compatible" },
+                ],
+            },
+            { key: "apiKey", label: "API key", secret: true, optional: true },
+            { key: "headers", label: "Extra headers (Name: value per line)", optional: true, multiline: true },
+        ],
+        hint: "A server on this machine is reachable at host.docker.internal — the sandbox always resolves it. Models are read from the endpoint itself, so pulling a new one just needs a reload. Most servers are OpenAI-compatible; pick Anthropic only if it serves /v1/messages.",
+        guide: {
+            steps: [
+                "Start your model server and note the URL its API is on (Ollama: http://localhost:11434/v1).",
+                "Running on THIS machine? Use host.docker.internal in place of localhost — the sandbox is a container.",
+                "Leave the key empty if the server has no auth; most self-hosted ones don't.",
+                "Its models then appear as their own provider in the chat's model picker.",
+            ],
+        },
+    },
 ];
 
 const isCapabilityCategory = (category: string): category is CapabilityCategory => CAPABILITY_CATEGORIES.some((entry) => entry.id === category);

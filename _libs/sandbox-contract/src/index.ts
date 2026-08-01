@@ -10,6 +10,7 @@ import { ciContract } from "./contracts/ci.contract.js";
 import { claudeContract } from "./contracts/claude.contract.js";
 import { codexContract } from "./contracts/codex.contract.js";
 import { draftsContract } from "./contracts/drafts.contract.js";
+import { endpointsContract } from "./contracts/endpoints.contract.js";
 import { extensionsContract } from "./contracts/extensions.contract.js";
 import { geminiContract } from "./contracts/gemini.contract.js";
 import { gitContract } from "./contracts/git.contract.js";
@@ -44,6 +45,7 @@ export { ciContract } from "./contracts/ci.contract.js";
 export { claudeContract } from "./contracts/claude.contract.js";
 export { codexContract } from "./contracts/codex.contract.js";
 export { draftsContract } from "./contracts/drafts.contract.js";
+export { endpointsContract } from "./contracts/endpoints.contract.js";
 export { extensionsContract } from "./contracts/extensions.contract.js";
 export { geminiContract } from "./contracts/gemini.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
@@ -99,6 +101,7 @@ export const sandboxContract = {
     claude: claudeContract,
     codex: codexContract,
     drafts: draftsContract,
+    endpoints: endpointsContract,
     extensions: extensionsContract,
     sessions: sessionsContract,
     settings: settingsContract,

@@ -38,7 +38,13 @@ export type CapabilityEffect =
     // Gives the agent hands on a computer the user OWNS — the most consequential effect in this union, so it
     // spells out the grant rather than naming a mechanism. `grants` is the scopes ticked on the card, in the
     // machine's own words; the machine's agent enforces exactly these and refuses the rest.
-    | { readonly kind: "machine"; readonly platform: string; readonly grants: readonly string[] };
+    | { readonly kind: "machine"; readonly platform: string; readonly grants: readonly string[] }
+    // Sends this sandbox's turns to a model API the user configured. Its own member rather than a variant of an
+    // existing one because nothing else in this union describes where a conversation GOES, and that is the whole
+    // consequence of adding an endpoint: no file is written, no process runs, no image changes — the prompts,
+    // file contents and command output of every turn on it simply leave for that URL. `url` is named because a
+    // typo'd host is exactly the mistake this disclosure exists to catch before it is made.
+    | { readonly kind: "endpoint"; readonly url: string };
 
 export interface CapabilityEffectInput {
     readonly kind: CapabilityKind;
@@ -149,6 +155,16 @@ export const capabilityEffects = (input: CapabilityEffectInput): readonly Capabi
             // The spawned ACP subprocess is the standing consequence; a pasted env block is a stored credential.
             const effects: CapabilityEffect[] = [{ kind: "process", names: input.id === undefined || input.id.length === 0 ? [] : [input.id] }];
             if (filled(input.config["env"]) || input.config["hasSecret"] === true) {
+                effects.push({ kind: "secret", exposure: "disk" });
+            }
+            return effects;
+        }
+        case "endpoint": {
+            // The destination is the effect; a key is the ordinary second one. Deliberately no `image` or
+            // `process` row: the endpoint rides the translator that is already in the image and already running,
+            // so adding one needs no rebuild and starts nothing — which is worth the panel NOT claiming.
+            const effects: CapabilityEffect[] = [{ kind: "endpoint", url: filled(input.config["baseUrl"]) ? String(input.config["baseUrl"]) : "" }];
+            if (filled(input.config["apiKey"]) || input.config["hasSecret"] === true) {
                 effects.push({ kind: "secret", exposure: "disk" });
             }
             return effects;

@@ -6,6 +6,7 @@ import { type ConfigStore, createConfigStore } from "../inventory/config-store.j
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";
+import type { EndpointCatalog } from "../endpoints/endpoint-catalog.js";
 import type { HostHub } from "../hosts/host-hub.js";
 import type { HostsStore } from "../hosts/hosts-store.js";
 import { connectorSecretField, connectorSecretFields, type ResolvedConnector } from "./cli/connector-registry.js";
@@ -41,6 +42,10 @@ export interface CapabilityCtx {
     // thing this kind's status can usefully say.
     readonly hosts: HostsStore;
     readonly hostHub: HostHub;
+    // What a configured model API actually serves — the endpoint kind's apply AND status are both this probe, and
+    // it is the same catalog the picker and the translator reconciler read, so a card can never claim a model
+    // list the turn path would disagree with.
+    readonly endpointModels: EndpointCatalog;
     // The image-baked extensions dir (services.config.extensionsDir) — lets the cli handler build the connector
     // registry (installedExtensions) from the narrow ctx without holding Services.
     readonly extensionsDir: string;
@@ -89,6 +94,7 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         capabilities: services.capabilities,
         hosts: services.hosts,
         hostHub: services.hostHub,
+        endpointModels: services.endpointModels,
         extensionsDir: services.config.extensionsDir,
         scaffoldNeutralLedger: (session) => scaffoldNeutralLedger(services, session),
         ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
@@ -128,6 +134,11 @@ export const secretField = (capability: Capability, connectors: Map<string, Reso
         case "agent":
             // The whole pasted KEY=VALUE env block — credentials ride in it (the vpn-conf precedent).
             return capability.config.env !== undefined ? "env" : undefined;
+        case "endpoint":
+            // The one rotatable credential. The header block beside it is deliberately NOT the secret: it carries
+            // routing metadata (a tenant id, a project header) that the owner has to be able to READ to diagnose a
+            // misrouted endpoint, and a server with no auth at all is the ordinary case here.
+            return capability.config.apiKey !== undefined ? "apiKey" : undefined;
         case "devops":
         case "monorepo":
         case "service":
@@ -235,6 +246,15 @@ export const echoConfig = (capability: Capability, connectors: Map<string, Resol
                 ...(capability.config.name !== undefined ? { name: capability.config.name } : {}),
                 ...(capability.config.loginCommand !== undefined ? { loginCommand: capability.config.loginCommand } : {}),
                 hasSecret: capability.config.env !== undefined && capability.config.env !== "",
+            };
+        case "endpoint":
+            // The URL and the protocol are what the card renders and what a user checks when a turn fails, so both
+            // travel; the key becomes hasSecret. Headers travel too — see secretField on why they are not secret.
+            return {
+                baseUrl: capability.config.baseUrl,
+                protocol: capability.config.protocol,
+                ...(capability.config.headers !== undefined ? { headers: capability.config.headers } : {}),
+                hasSecret: capability.config.apiKey !== undefined && capability.config.apiKey !== "",
             };
     }
 };
