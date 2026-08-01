@@ -49,9 +49,8 @@ const start = (): void => {
     <Dialog v-model:visible="open" modal :header="`Generate documentation for ${label}`" :style="{ width: `34rem` }">
         <div class="flex flex-col gap-4">
             <p class="text-xs text-muted">
-                One agent writes the repository's map first — the components, the vocabulary, the reading order. The
-                packages you pick below are then documented in parallel, one agent each, and land as a draft you
-                review before anything is committed.
+                One agent writes the repository's map first — the components, the vocabulary, the reading order. The packages you pick below are then
+                documented in parallel, one agent each, and land as a draft you review before anything is committed.
             </p>
 
             <div class="flex flex-wrap items-center gap-2">
@@ -61,8 +60,14 @@ const start = (): void => {
                 <span class="ml-auto text-2xs text-subtle">{{ chosen.length }} of {{ packages.length }}</span>
             </div>
 
-            <div class="max-h-72 divide-y divide-line overflow-y-auto rounded-lg border border-line">
-                <label v-for="dir in packages" :key="dir" class="flex cursor-pointer items-center gap-3 px-3 py-1.5 hover:bg-canvas">
+            <!-- A wash instead of a frame with hairlines between every row: the checkboxes already give the list
+                 its structure, and 55 of them inside a ruled box is a spreadsheet. -->
+            <div class="max-h-72 overflow-y-auto rounded-lg bg-content/[0.035] p-1">
+                <label
+                    v-for="dir in packages"
+                    :key="dir"
+                    class="flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-1.5 transition-colors hover:bg-content/5"
+                >
                     <Checkbox :model-value="chosen.includes(dir)" binary @update:model-value="toggle(dir)" />
                     <span class="min-w-0 flex-1 truncate font-mono text-xs">{{ dir }}</span>
                     <span v-if="stale.includes(dir)" class="shrink-0 text-2xs text-warning">stale</span>

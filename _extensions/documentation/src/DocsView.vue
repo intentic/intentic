@@ -151,8 +151,11 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
             </PageHeader>
 
             <!-- A live run is the one piece of machinery that earns space at the top: it is the answer to "why is
-                 this page not here yet". Progress is read off the documents on disk, not from a counter. -->
-            <div v-if="activeRun !== undefined" class="mb-4 flex items-center gap-3 rounded-lg border border-line bg-card px-3 py-2 text-xs">
+                 this page not here yet". Progress is read off the documents on disk, not from a counter.
+
+                 Both strips here are a WASH, not an outlined box: they sit between a page title and a document,
+                 and an outline at that position reads as a third panel competing with both. -->
+            <div v-if="activeRun !== undefined" class="mb-4 flex items-center gap-3 rounded-lg bg-content/[0.04] px-3 py-2 text-xs">
                 <Icon name="spinner" spin class="shrink-0 text-link" />
                 <span class="text-content">
                     {{ activeRun.mapDone ? `Documenting packages` : `Reading the repository and drawing its map` }}
@@ -176,7 +179,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                  it will do and the count of unrelated changes is on the confirmation, not hidden. -->
             <div
                 v-if="source === `staged` && hasStaged"
-                class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-primary-600/40 bg-primary-600/10 px-3 py-2 text-xs"
+                class="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-primary-600/12 px-3 py-2 text-xs"
             >
                 <Icon name="file-edit" class="shrink-0 text-link" />
                 <span class="text-content">This is a draft. Nothing is in the repository until you publish it.</span>
@@ -205,7 +208,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
         <!-- Two scroll areas, side by side: a 54-entry contents list and a long document have no reason to share
              one scrollbar, and sharing it means you cannot keep your place in either. Coverage, filtering and the
              grouping all live inside <DocsNav>; this view only says which page is open. -->
-        <div v-else class="flex min-h-0 flex-1 gap-6 px-6 pb-6">
+        <div v-else class="flex min-h-0 flex-1 gap-8 px-6 pb-6">
             <DocsNav :components="set?.repoDoc?.components ?? []" :index="index" :page="page" @open="openPage" />
 
             <!-- KEYED BY PAGE, so each document mounts fresh. Once the document has its own scrollbar, a reused
@@ -248,10 +251,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                         on {{ publishState.branch }}</span
                     >.
                 </p>
-                <p
-                    v-if="publishState.foreign.length > 0"
-                    class="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-2 text-2xs"
-                >
+                <p v-if="publishState.foreign.length > 0" class="flex items-start gap-2 rounded-lg bg-warning/10 px-2.5 py-2 text-2xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
                     <span>
                         This repository has {{ publishState.foreign.length }} other changed file{{ publishState.foreign.length === 1 ? `` : `s` }}.

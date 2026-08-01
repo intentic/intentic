@@ -102,13 +102,14 @@
     font-size: 1.5em;
     letter-spacing: -0.01em;
 }
-/* The hairline is what makes a long answer scannable: h2 is where an agent starts a new section, and at these
-   sizes weight alone does not separate one from the h3s below it. */
+/* h2 is where a new section starts, and it has to separate from the h3s below it — but by SPACE rather than by
+   a rule. The hairline this used to carry read as a stroke across every section of a long document, and a page
+   with six sections was six horizontal lines before a word of it was read. A top margin a third larger than the
+   other headings' does the same work: the gap above an h2 is visibly the biggest gap on the page. */
 .md-prose h2 {
+    margin-top: 2.4em;
     font-size: 1.28em;
     letter-spacing: -0.006em;
-    padding-bottom: 0.3em;
-    border-bottom: 1px solid var(--color-line);
 }
 .md-prose h3 {
     font-size: 1.14em;

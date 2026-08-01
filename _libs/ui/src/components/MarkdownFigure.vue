@@ -32,7 +32,9 @@ const dagNodes = computed<DagNode<NodeData>[]>(() =>
           })),
 );
 
-const dagEdges = computed<DagEdge[]>(() => (figure.kind !== `dag` ? [] : figure.edges.map((edge) => ({ from: edge.from, to: edge.to, dashed: edge.dashed }))));
+const dagEdges = computed<DagEdge[]>(() =>
+    figure.kind !== `dag` ? [] : figure.edges.map((edge) => ({ from: edge.from, to: edge.to, dashed: edge.dashed })),
+);
 
 /* A prose column cannot host a pannable canvas of unknown height, so the figure gets a fixed one and DagGraph
  * fits its content into it. Scaled to the node count rather than fixed: a three-box diagram in a 24rem frame is
@@ -46,8 +48,10 @@ const dagHeight = computed(() => (figure.kind !== `dag` ? 0 : Math.min(30, Math.
     <StatRow v-else-if="figure.kind === `stats`" :items="figure.items" />
     <figure v-else class="my-4 flex flex-col gap-2">
         <figcaption v-if="figure.title !== undefined" class="text-xs font-medium text-content">{{ figure.title }}</figcaption>
-        <!-- DagGraph requires its parent to size it (single root, h-full w-full). -->
-        <div class="w-full rounded-md border border-line bg-card" :style="{ height: `${dagHeight}rem` }">
+        <!-- DagGraph requires its parent to size it (single root, h-full w-full). The frame is a tint and not a
+             stroke: the diagram inside is already a field of bordered boxes, and an outline around it turned a
+             figure into a box of boxes. A wash off the text colour lifts the same area in both schemes. -->
+        <div class="w-full rounded-lg bg-content/[0.04]" :style="{ height: `${dagHeight}rem` }">
             <DagGraph :nodes="dagNodes" :edges="dagEdges" :direction="figure.direction" :node-height="56">
                 <template #node="{ node }">
                     <div class="flex h-full items-center gap-2 px-2.5">
