@@ -4,7 +4,7 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { assertPath, assertScope, rootsOf, ScopeError, withinRoots } from "./policy.js";
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", ...overrides });
 
 test("no declared roots means the home directory, which is what the card promises", () => {
     expect(rootsOf(scopes())).toEqual([resolve(homedir())]);

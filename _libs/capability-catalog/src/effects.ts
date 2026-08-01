@@ -145,6 +145,7 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
             "read files",
             ...(input.config["write"] === "on" ? ["write and trash files"] : []),
             ...(input.config["screen"] === "off" ? [] : ["capture the screen"]),
+            ...(input.config["control"] === "on" ? ["use the mouse and keyboard"] : []),
         ];
         return [
             { kind: "machine", platform: String(input.config["platform"] ?? ""), grants },

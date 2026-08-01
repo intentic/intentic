@@ -201,6 +201,15 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
         ],
     },
     {
+        key: "control",
+        label: "Use the mouse and keyboard",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+    },
+    {
         key: "roots",
         label: "Folders it may touch",
         optional: true,

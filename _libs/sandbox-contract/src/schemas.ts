@@ -1910,6 +1910,12 @@ export const HostScopesSchema = z.object({
     write: hostScope.default("off"),
     // Capture the screen. Off ⇒ screenshot refuses, and the agent is told so rather than getting a black frame.
     screen: hostScope.default("on"),
+    /* Move the pointer, click, type and scroll — GUI work, for the things with no command-line way in. Its own
+     * switch rather than part of `screen` because looking and touching are not the same permission: a screenshot
+     * is bounded by what is on the display, while one click can confirm a dialog nobody read. Default off, like
+     * `write`, and for the same reason — a user who has not thought about it should not discover the agent has
+     * been driving their desktop. */
+    control: hostScope.default("off"),
     // One directory per line. Empty ⇒ the machine's home directory, which is what the agent reports at connect.
     roots: z.string().optional(),
 });

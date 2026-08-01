@@ -46,7 +46,7 @@ class FakeSocket {
     }
 }
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", ...overrides });
 
 // The whole wiring: machine hosts the contract, "daemon" holds the client — over one socket, as in production.
 const connectedPair = (initial: HostScopes = scopes()) => {
@@ -85,14 +85,14 @@ test("the daemon can ask a machine what it is", async () => {
 
 test("a pushed grant takes effect on the machine", async () => {
     const { client, scopesNow } = connectedPair();
-    expect(await client.setScopes({ shell: "off", write: "off", screen: "on" })).toEqual({ ok: true });
-    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on" });
+    expect(await client.setScopes({ shell: "off", write: "off", screen: "on", control: "off" })).toEqual({ ok: true });
+    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off" });
 });
 
 test("a grant that does not satisfy the contract is refused before it reaches the machine", async () => {
     const { client, scopesNow } = connectedPair();
     // The whole reason for a typed link: a caller cannot push a scope value the machine has no meaning for.
-    await expect(client.setScopes({ shell: "maybe", write: "off", screen: "on" } as unknown as HostScopes)).rejects.toThrow();
+    await expect(client.setScopes({ shell: "maybe", write: "off", screen: "on", control: "off" } as unknown as HostScopes)).rejects.toThrow();
     expect(scopesNow()).toEqual(scopes());
 });
 
@@ -104,7 +104,7 @@ test("an MCP message rides the one opaque procedure and comes back answered", as
 
 test("the grant the machine enforces is the one it was last pushed, on the very next call", async () => {
     const { client } = connectedPair();
-    await client.setScopes({ shell: "off", write: "off", screen: "off" });
+    await client.setScopes({ shell: "off", write: "off", screen: "off", control: "off" });
     const response = (await client.mcp({
         jsonrpc: "2.0",
         id: 2,

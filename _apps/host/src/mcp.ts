@@ -1,9 +1,10 @@
+import { desktop, pngSize } from "@intentic/desktop";
 import { type HostScopes, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract";
 import { audit } from "./audit.js";
-import { ScopeError } from "./policy.js";
+import { assertScope, ScopeError } from "./policy.js";
 import { describeText } from "./tools/describe.js";
 import { listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/files.js";
-import { captureScreen } from "./tools/screen.js";
+import { act, describeAction, settle, type ComputerInput } from "./tools/computer.js";
 import { describeResult, runCommand } from "./tools/shell.js";
 import { HOST_VERSION } from "./version.js";
 
@@ -80,6 +81,42 @@ const TOOLS: readonly ToolDefinition[] = [
         inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
     },
     {
+        name: "computer",
+        description:
+            "Use this computer's mouse and keyboard: click what is on the screen, type into the focused window, press a key combination, scroll, drag. Coordinates are PIXELS IN THE LAST SCREENSHOT — take one first and read them off it. Every action answers with a fresh screenshot so you can see what happened. Requires the 'Use the mouse and keyboard' permission, which is OFF unless the user turned it on. Prefer a command over the GUI when both would work: a command is exact, and a click is a guess about where something is.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                action: {
+                    type: "string",
+                    enum: [
+                        "mouse_move",
+                        "left_click",
+                        "right_click",
+                        "middle_click",
+                        "double_click",
+                        "left_click_drag",
+                        "type",
+                        "key",
+                        "scroll",
+                        "wait",
+                    ],
+                },
+                coordinate: {
+                    type: "array",
+                    items: { type: "number" },
+                    description: "[x, y] in screenshot pixels — required for every pointer action.",
+                },
+                to: { type: "array", items: { type: "number" }, description: "[x, y] the drag ends at (left_click_drag)." },
+                text: { type: "string", description: 'The text to type, or the key combination to press: "Return", "ctrl+c", "alt+Tab", "super+e".' },
+                direction: { type: "string", enum: ["up", "down", "left", "right"], description: "Scroll direction. Default down." },
+                amount: { type: "number", description: "Wheel notches to scroll. Default 3." },
+                ms: { type: "number", description: 'How long to wait (action "wait"). Default 400, maximum 10000.' },
+            },
+            required: ["action"],
+        },
+    },
+    {
         name: "screenshot",
         description:
             "Capture what is on this computer's screen right now, as an image. Use it to read a dialog, check on a window, or see what the user is describing. Requires the 'See the screen' permission.",
@@ -88,6 +125,33 @@ const TOOLS: readonly ToolDefinition[] = [
 ];
 
 const textResult = (text: string, isError = false): Record<string, unknown> => ({ content: [{ type: "text", text }], isError });
+
+/* The screen, plus the size of it. The dimensions ride along because they are the frame every coordinate the
+ * agent sends back is in — a model that can see the image but not its bounds guesses at the edges, and a click
+ * outside them is refused rather than clamped (tools/computer.ts). */
+const screenshotResult = async (scopes: HostScopes): Promise<Record<string, unknown>> => {
+    assertScope(scopes, "screen");
+    const screen = desktop();
+    const png = await screen.capture();
+    const { width, height } = pngSize(png);
+    return {
+        content: [
+            { type: "text", text: `Screen is ${width}×${height}. Coordinates for the computer tool are pixels in this image.` },
+            { type: "image", data: png.toString("base64"), mimeType: "image/png" },
+        ],
+        isError: false,
+    };
+};
+
+/* What the audit log records about a call. Arguments verbatim, EXCEPT typed text: `computer` with action "type"
+ * carries whatever the user asked to be entered, which is routinely a password or a message, and writing it to a
+ * file on their disk is the one thing an audit trail must not do to earn its place. Its LENGTH still tells the
+ * story a reader needs — "typed 24 characters into the focused window" — without becoming a second copy of the
+ * secret. A key combination is not redacted: "ctrl+c" is the fact, and there is nothing in it to leak. */
+const auditDetail = (name: string, args: Record<string, unknown>): string => {
+    const safe = name === "computer" && args["action"] === "type" ? { ...args, text: `<${String(args["text"] ?? "").length} characters>` } : args;
+    return JSON.stringify(safe).slice(0, 500);
+};
 
 const asString = (value: unknown, name: string): string => {
     if (typeof value !== "string" || value === "") {
@@ -123,7 +187,20 @@ const callTool = async (name: string, args: Record<string, unknown>, scopes: Hos
         case "trash_file":
             return textResult(await trashFile(asString(args["path"], "path"), scopes));
         case "screenshot":
-            return { content: [{ type: "image", data: await captureScreen(scopes), mimeType: "image/png" }], isError: false };
+            return await screenshotResult(scopes);
+        case "computer": {
+            const input = args as unknown as ComputerInput;
+            await act(desktop(), input, scopes);
+            // The confirming frame is the point of a GUI tool: without it the agent is typing blind and has to
+            // ask for a screenshot after every action. It needs the `screen` grant too, so a machine that may be
+            // driven but not watched gets the sentence instead — which is a coherent setting, not an error.
+            if (scopes.screen !== "on") {
+                return textResult(`${describeAction(input)} (No screenshot: "See the screen" is off for this computer.)`);
+            }
+            await settle();
+            const shot = await screenshotResult(scopes);
+            return { content: [{ type: "text", text: describeAction(input) }, ...(shot["content"] as unknown[])], isError: false };
+        }
         default:
             return textResult(`This computer has no tool called "${name}".`, true);
     }
@@ -164,11 +241,15 @@ export const handleMcpMessage = async (message: unknown, scopes: () => HostScope
         const args = isRecord(params["arguments"]) ? params["arguments"] : {};
         try {
             const result = await callTool(name, args, scopes());
-            void audit({ tool: name, ok: result["isError"] !== true, detail: JSON.stringify(args).slice(0, 500) });
+            void audit({ tool: name, ok: result["isError"] !== true, detail: auditDetail(name, args) });
             return reply(result);
         } catch (error) {
             const refused = error instanceof ScopeError;
-            void audit({ tool: name, ok: false, detail: `${refused ? "refused" : "failed"}: ${error instanceof Error ? error.message : String(error)}` });
+            void audit({
+                tool: name,
+                ok: false,
+                detail: `${refused ? "refused" : "failed"}: ${error instanceof Error ? error.message : String(error)}`,
+            });
             return reply(textResult(error instanceof Error ? error.message : String(error), true));
         }
     }

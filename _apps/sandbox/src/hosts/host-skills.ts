@@ -29,7 +29,8 @@ you live and where the repository is; this is their own machine, reached over a 
 | \`mcp__${id}__write_file\` | Create or overwrite a file under the allowed roots. |
 | \`mcp__${id}__list_dir\` | List a directory under the allowed roots. |
 | \`mcp__${id}__trash_file\` | Move a file to the recycle bin / trash — there is no delete tool, on purpose. |
-| \`mcp__${id}__screenshot\` | Capture the screen as an image. |
+| \`mcp__${id}__screenshot\` | Capture the screen as an image, with its pixel size. |
+| \`mcp__${id}__computer\` | Use the mouse and keyboard: click, type, press a chord, scroll, drag. |
 
 ## Rules that are not negotiable
 
@@ -47,6 +48,42 @@ you live and where the repository is; this is their own machine, reached over a 
    written to this machine's audit log.
 6. **If the machine is offline** the tool says so plainly. It means a closed lid or a dropped network — report it,
    do not retry in a loop.
+
+## Driving the screen
+
+\`computer\` is for the things with no command-line way in: a dialog with an OK button, a native app with no API,
+a settings pane. It is the LAST resort, not the first — a command is exact and repeatable, a click is a guess
+about where something is. If the job can be done with \`run_command\`, do that instead.
+
+The loop is always the same:
+
+1. \`screenshot\` — it answers with the image AND its size ("Screen is 2560×1440").
+2. Read the coordinates you want off that image. **Coordinates are pixels in that screenshot**, top-left is (0,0).
+3. Call \`computer\` with an action. Every action answers with a fresh screenshot, so you see the result without
+   asking for one.
+4. Look at what came back before the next action. A menu that did not open means the click missed.
+
+\`\`\`
+computer { action: "left_click", coordinate: [840, 512] }
+computer { action: "type", text: "hello world" }
+computer { action: "key", text: "ctrl+s" }
+computer { action: "scroll", coordinate: [800, 600], direction: "down", amount: 3 }
+computer { action: "left_click_drag", coordinate: [100, 200], to: [400, 200] }
+\`\`\`
+
+Key names are the same everywhere, whatever the OS: \`Return\`, \`Escape\`, \`Tab\`, \`BackSpace\`, \`Delete\`,
+\`Page_Up\`, \`Up\`/\`Down\`/\`Left\`/\`Right\`, \`F1\`–\`F12\`, with \`ctrl\`, \`alt\`, \`shift\` and \`super\` as modifiers
+(\`super\` is the Windows key; \`win\` and \`cmd\` also work). \`type\` is for literal text — never key names.
+
+Things that will bite you:
+
+- **Typing goes to whatever window has focus**, not to where the pointer is. Click the field first, then type.
+- **A coordinate outside the screen is refused, not clamped.** If you get that error you misread the screenshot —
+  take another one rather than adjusting by feel.
+- **Nothing is undoable.** A click can confirm a dialog nobody read. Say what you are about to click and why
+  before you click anything consequential, exactly as you would before deleting a file.
+- **If \`computer\` says the permission is off**, that is the owner's decision. Tell them which switch to turn on
+  ("Use the mouse and keyboard" on this computer's card); do not look for another route in.
 `;
 
 const WINDOWS = `## This machine runs Windows
@@ -90,6 +127,15 @@ $inbox.Items | Select-Object -First 5 Subject, SenderName, ReceivedTime
 \`\`\`
 COM objects hold the app open — finish with \`[System.Runtime.InteropServices.Marshal]::ReleaseComObject($x)\`.
 
+### Driving the Windows GUI
+Input goes through user32 (\`SendInput\`-class calls), so it behaves like a real keyboard and mouse — including
+that it lands on **whatever window has focus**. \`Start-Process\` then a click on the new window is more reliable
+than assuming focus followed. \`super+e\` opens Explorer, \`super+r\` the Run box; both work here even though
+Windows' own SendKeys cannot press that key.
+
+A UAC prompt appears on a SECURE DESKTOP that no injected input can reach — if one opens, the GUI route is over
+and the user has to click it themselves. Say so rather than retrying.
+
 ### Elevation
 You are running as the logged-in user, NOT as administrator, and \`Start-Process -Verb RunAs\` pops a UAC prompt
 on the user's screen that they must click. Say so before you try it; do not fire UAC prompts at somebody
@@ -126,6 +172,16 @@ Get this once from \`describe\` (it reports it) rather than assuming X11.
 Assume there is **no** passwordless sudo. A \`sudo\` command that needs a password will hang until it times out —
 there is no terminal for the user to type into. Run \`sudo -n true\` first: if it fails, ask the user to run the
 privileged command themselves, and hand them the exact line to paste.
+
+### Driving the Linux GUI
+Which tools are needed depends on the session \`describe\` reported:
+- **X11** — everything runs through \`xdotool\`. One package, no permissions: \`sudo apt install xdotool\`.
+- **Wayland** — the compositor refuses synthetic input by design, so pointer actions go through \`ydotool\` (which
+  needs \`/dev/uinput\`: \`sudo apt install ydotool\` then \`sudo usermod -aG input $USER\`, and a re-login), and
+  typing/keys prefer \`wtype\` (\`sudo apt install wtype\`), which needs no privileges.
+
+When one is missing the tool says which and gives the exact install line — pass it on rather than concluding the
+machine cannot be driven.
 
 ### Long-running things
 \`run_command\` waits for the command to exit. For anything that should outlive the call, start it detached

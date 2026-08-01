@@ -6,7 +6,7 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { handleMcpMessage } from "./mcp.js";
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", ...overrides });
 
 const call = async (name: string, args: Record<string, unknown>, grant: HostScopes): Promise<{ text: string; isError: boolean }> => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, () => grant)) as {
@@ -26,7 +26,7 @@ test("initialize advertises tools and identifies the agent", async () => {
 test("tools/list is the machine's whole surface — and there is no delete", async () => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes)) as { result: { tools: { name: string }[] } };
     const names = response.result.tools.map((tool) => tool.name);
-    expect(names).toEqual(["describe", "run_command", "read_file", "write_file", "list_dir", "trash_file", "screenshot"]);
+    expect(names).toEqual(["describe", "run_command", "read_file", "write_file", "list_dir", "trash_file", "computer", "screenshot"]);
     expect(names).not.toContain("delete_file");
 });
 

@@ -1,13 +1,13 @@
 {
-    "name": "@intentic/host",
+    "name": "@intentic/desktop",
     "version": "0.0.0",
-    "description": "Local agent that lets an intentic sandbox work on this computer — one outbound WebSocket, an MCP tool surface, and scopes enforced here",
+    "description": "Drive a desktop from Node: capture the screen, move the pointer, click, type and scroll — Windows and Linux, no native modules",
     "license": "MIT",
     "type": "module",
     "repository": {
         "type": "git",
         "url": "git+https://gitlab.com/radarsu/intentic.git",
-        "directory": "_apps/host"
+        "directory": "_libs/desktop"
     },
     "files": [
         "dist"
@@ -16,8 +16,18 @@
         "access": "public",
         "registry": "https://registry.npmjs.org/"
     },
-    "bin": {
-        "intentic-host": "./dist/cli.js"
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        }
     },
     "scripts": {
         "build": "tsgo",
@@ -27,16 +37,10 @@
         "test:watch": "vitest"
     },
     "dependencies": {
-        "@intentic/desktop": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*",
-        "@orpc/server": "catalog:",
-        "@stricli/core": "catalog:",
         "tslib": "catalog:"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
-        "@orpc/client": "catalog:",
-        "@orpc/contract": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
         "vitest": "catalog:"

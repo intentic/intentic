@@ -54,10 +54,15 @@ export const assertPath = (path: string, scopes: HostScopes, intent: string): st
 
 // Throws unless the named switch is on. One message shape for all three, naming the card's own label so the
 // user is told exactly which control to flip.
-export const assertScope = (scopes: HostScopes, scope: "shell" | "write" | "screen"): void => {
+export const assertScope = (scopes: HostScopes, scope: "shell" | "write" | "screen" | "control"): void => {
     if (scopes[scope] === "on") {
         return;
     }
-    const label = { shell: "Run commands", write: "Create and change files", screen: "See the screen" }[scope];
+    const label = {
+        shell: "Run commands",
+        write: "Create and change files",
+        screen: "See the screen",
+        control: "Use the mouse and keyboard",
+    }[scope];
     throw new ScopeError(`Refused: "${label}" is switched off for this computer. Turn it on in its capability card to allow this.`);
 };
