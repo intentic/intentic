@@ -48,6 +48,42 @@
     }
 }
 
+/* THE SELECTABLE ROW — one hover tint, one selected tint, for every list in the app a keyboard can walk: the
+   model picker, the design system's own PickerPanel, QuickOpen, the git graph and the file explorer.
+
+   All five had written this rule themselves, under five names (`.mp-row`, `.pk-row`, `.qo-row`, `.graphrow`,
+   `.treerow`), and the copies had drifted the way copies do: the two explorers tinted hover at 6% and the two
+   pickers at 5%, while QuickOpen had lost its hover rule altogether and lit up only under the keyboard. The
+   selected tint was the one thing all five still agreed on, which is what made the drift invisible — the state
+   people look at matched, so nobody checked the state they only feel.
+
+   `:not(:disabled)` rather than `:enabled`: a disabled row must not light up, but `:enabled` matches only form
+   elements, so a row rendered as a <div> would silently lose its hover. Focus-visible carries an inset ring
+   because a row a keyboard can reach must be able to show that it has been reached; on the lists that keep
+   focus on the CONTAINER (aria-activedescendant) it simply never fires. */
+@layer components {
+    .ui-row-select {
+        cursor: pointer;
+        transition: background-color 0.1s;
+    }
+
+    .ui-row-select:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--color-content) 5%, transparent);
+    }
+
+    .ui-row-select:focus-visible {
+        outline: none;
+        box-shadow: inset 0 0 0 1px var(--color-primary-500);
+    }
+
+    /* After the hover rule, so the selected tint survives the pointer resting on it — a row that forgets it is
+       selected the moment you point at it is the one row you are most likely to be pointing at. */
+    .ui-row-select-on,
+    .ui-row-select-on:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
+    }
+}
+
 @keyframes ui-skeleton-sweep {
     from {
         background-position: 150% 0;

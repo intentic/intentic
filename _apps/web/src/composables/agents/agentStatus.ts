@@ -280,9 +280,6 @@ export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string
 // Dollars with sensible precision: sub-cent turns still show something, big totals stay short.
 export const formatCost = (usd: number): string => (usd >= 10 ? `$${usd.toFixed(0)}` : usd >= 0.1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(3)}`);
 
-export const formatTokens = (tokens: number): string =>
-    tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1_000 ? `${(tokens / 1_000).toFixed(0)}k` : `${tokens}`;
-
 // Elapsed readout for a running turn's startedAt (ms since epoch).
 export const formatElapsed = (startedAt: number, now: number): string => {
     const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));

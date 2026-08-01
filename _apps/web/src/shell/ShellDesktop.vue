@@ -19,6 +19,7 @@ import { useShellCommands } from "../composables/commands/useShellCommands";
 import { useKeybindings } from "../composables/commands/useKeybindings";
 import { useLayout } from "../composables/useLayout";
 import { useIconRailSize } from "../composables/useIconRailSize";
+import { presenceOthers } from "../composables/usePresence";
 import { usePanels } from "../composables/extensions/usePanels";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
 import { useChanges } from "../composables/workspace/useChanges";
@@ -27,7 +28,7 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useVpn } from "../composables/sandbox/useVpn";
 import AccountPanel from "./AccountPanel.vue";
 import ChatPanel from "../chat/ChatPanel.vue";
-import PresenceStack from "../presence/PresenceStack.vue";
+import PresenceAvatars from "../presence/PresenceAvatars.vue";
 import QuickOpen from "./QuickOpen.vue";
 import SandboxGate from "../sandbox-gates/SandboxGate.vue";
 import SandboxSwitcher from "../sandbox-gates/SandboxSwitcher.vue";
@@ -308,7 +309,7 @@ onUnmounted(() => {
                  shared), add another, or manage access. -->
             <SandboxSwitcher />
             <!-- The other members connected to this sandbox right now — live from the daemon's /events roster. -->
-            <PresenceStack />
+            <PresenceAvatars :members="presenceOthers" direction="column" :size="28" />
             <span class="mb-1 icon-rail-divider h-px bg-line"></span>
 
             <!-- The views (and the "+") all talk to the daemon, so they are inert while it is unreachable — the

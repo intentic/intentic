@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic-app/api-contract";
-import { Code, type IconName, Segmented, useOsPreference } from "@intentic-app/ui";
+import { Code, commandLang, ConfirmDialog, type IconName, OS_OPTIONS, Segmented, useOsPreference } from "@intentic-app/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import Popover from "primevue/popover";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -255,14 +254,13 @@ const confirmRemove = async (): Promise<void> => {
         </div>
     </Popover>
 
-    <Dialog
-        :visible="pending !== undefined"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
-        :style="{ width: '26rem' }"
+    <ConfirmDialog
+        :open="pending !== undefined"
         :header="pending?.role === 'owner' ? 'Remove from account?' : 'Leave sandbox?'"
-        @update:visible="pending = undefined"
+        :confirm-label="pending?.role === 'owner' ? 'Remove' : 'Leave'"
+        confirm-icon="trash"
+        @cancel="pending = undefined"
+        @confirm="confirmRemove"
     >
         <p v-if="pending" class="text-sm text-content">
             {{
@@ -273,23 +271,10 @@ const confirmRemove = async (): Promise<void> => {
         </p>
         <template v-if="pending?.role === 'owner' && cleanupCommand !== undefined">
             <p class="mt-3 text-sm text-muted">To also remove it from the machine hosting it — including its files — run there:</p>
-            <Segmented
-                class="mt-2"
-                v-model="cmdOs"
-                :options="[
-                    { label: `Linux / macOS`, value: `unix` },
-                    { label: `Windows (PowerShell)`, value: `windows` },
-                ]"
-            />
-            <Code class="mt-1.5" :code="cleanupCommand" :lang="cmdOs === `windows` ? `powershell` : `bash`" label="Cleanup command" :wrap="true" />
+            <Segmented class="mt-2" v-model="cmdOs" :options="OS_OPTIONS" />
+            <Code class="mt-1.5" :code="cleanupCommand" :lang="commandLang(cmdOs)" label="Cleanup command" :wrap="true" />
         </template>
-        <template #footer>
-            <Button label="Cancel" severity="secondary" :text="true" @click="pending = undefined" />
-            <Button :label="pending?.role === 'owner' ? 'Remove' : 'Leave'" severity="danger" autofocus @click="confirmRemove">
-                <template #icon><Icon name="trash" /></template>
-            </Button>
-        </template>
-    </Dialog>
+    </ConfirmDialog>
 </template>
 
 <style scoped>

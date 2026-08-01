@@ -16,9 +16,9 @@ import {
     PROVIDER_SERIES,
     providersIn,
     rankByCost,
-    rankedColor,
+    rankedAccent,
     rankedKey,
-    seriesColor,
+    providerColor,
     shiftDay,
     sparkPoints,
     totalsOf,
@@ -118,12 +118,12 @@ describe(`totals`, () => {
 describe(`series identity`, () => {
     it(`assigns a slot by provider identity, in the validated palette order`, () => {
         expect(PROVIDER_SERIES).toEqual([`claude`, `codex`, `kimi`, `grok`, `gemini`]);
-        expect(seriesColor(`claude`)).toBe(`var(--color-series-1)`);
-        expect(seriesColor(`gemini`)).toBe(`var(--color-series-5)`);
+        expect(providerColor(`claude`)).toBe(`var(--color-series-1)`);
+        expect(providerColor(`gemini`)).toBe(`var(--color-series-5)`);
     });
 
     it(`folds an unknown provider into the achromatic tail rather than inventing a sixth hue`, () => {
-        expect(seriesColor(`some-acp-agent`)).toBe(`var(--color-series-other)`);
+        expect(providerColor(`some-acp-agent`)).toBe(`var(--color-series-other)`);
     });
 
     /* Every slot the chart can ASK for must exist in the shipped stylesheet, and `@theme static` is what makes
@@ -136,7 +136,7 @@ describe(`series identity`, () => {
         const block = sheet.slice(sheet.indexOf(`@theme static`));
         expect(block).not.toBe(``);
         for (const provider of [...PROVIDER_SERIES, `some-acp-agent`]) {
-            expect(block).toContain(`${seriesColor(provider).slice(4, -1)}:`);
+            expect(block).toContain(`${providerColor(provider).slice(4, -1)}:`);
         }
     });
 
@@ -238,15 +238,15 @@ describe(`ranked bars`, () => {
         expect(rankedKey(ranked[0]!)).toBe(`unattributed:`);
     });
 
-    it(`colors a bar by its provider, and only when the bar has exactly one`, () => {
+    it(`slots a bar by its provider, and only when the bar has exactly one`, () => {
         const [single] = rankByCost([row({ model: `opus-5` })], (entry) => entry.model, label, `default`);
-        expect(rankedColor(single!)).toBe(`var(--color-series-1)`);
+        expect(rankedAccent(single!)).toBe(`1`);
 
         // A dimension value served by two providers (a routed model, say) has no single identity to wear.
         const rows = [row({ model: `shared` }), row({ model: `shared`, provider: `codex` })];
         const [mixed] = rankByCost(rows, (entry) => entry.model, label, `default`);
         expect(mixed?.providers).toEqual([`claude`, `codex`]);
-        expect(rankedColor(mixed!)).toBe(`var(--color-series-other)`);
+        expect(rankedAccent(mixed!)).toBe(`neutral`);
     });
 
     it(`keeps a dimension value literally named "other" distinct from the fold bucket`, () => {

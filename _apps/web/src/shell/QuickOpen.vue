@@ -9,6 +9,7 @@ import { useQuickOpen } from "../composables/useQuickOpen";
 import { useFuzzyFiles } from "../composables/workspace/useFuzzyFiles";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { iconForEntry, type IconName } from "@intentic-app/ui";
+import { basename, parentDir } from "@intentic-app/ui/path";
 
 /* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type — client-
  * ranked over the explorer's cached tree (useFuzzyFiles), so results land in the same frame as the keystroke;
@@ -53,8 +54,6 @@ const rowCount = computed(() => (commandMode.value ? commandRows.value.length : 
 // Snap the highlight back to the top whenever the result set changes under it.
 watch([rows, commandRows], () => (activeIndex.value = 0));
 
-const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
-const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
 
 const setRowEl = (path: string, el: unknown): void => {
     if (el) {
@@ -164,8 +163,8 @@ const onShow = async (): Promise<void> => {
                     type="button"
                     role="option"
                     :aria-selected="index === activeIndex"
-                    class="qo-row flex w-full items-center gap-2 px-3 py-1.5 text-left"
-                    :class="{ 'qo-row-on': index === activeIndex }"
+                    class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left"
+                    :class="{ 'ui-row-select-on': index === activeIndex }"
                     @click="run(entry)"
                     @mouseenter="activeIndex = index"
                 >
@@ -199,8 +198,8 @@ const onShow = async (): Promise<void> => {
                     type="button"
                     role="option"
                     :aria-selected="index === activeIndex"
-                    class="qo-row flex w-full items-center gap-2 px-3 py-1.5 text-left"
-                    :class="{ 'qo-row-on': index === activeIndex }"
+                    class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left"
+                    :class="{ 'ui-row-select-on': index === activeIndex }"
                     @click="open(path)"
                     @mouseenter="activeIndex = index"
                 >
@@ -220,13 +219,3 @@ const onShow = async (): Promise<void> => {
         </div>
     </Dialog>
 </template>
-
-<style scoped>
-.qo-row {
-    cursor: pointer;
-    transition: background-color 0.1s;
-}
-.qo-row-on {
-    background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
-}
-</style>

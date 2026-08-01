@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ViewBadge } from "@intentic/extension-api";
-import type { IconName } from "@intentic-app/ui";
+import { Avatar, type IconName } from "@intentic-app/ui";
 import { computed, onMounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
@@ -8,7 +8,7 @@ import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath } from "../core-views/registry";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
-import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../composables/usePresence";
+import { presenceActivity, presenceHue, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* The mobile Menu tab: everything the desktop rail and its popovers hold, as one thumb-friendly page —
@@ -151,20 +151,13 @@ const logout = async (): Promise<void> => {
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Here now</h2>
             <div class="flex flex-col gap-1">
                 <div v-for="member in presenceOthers" :key="member.email" class="flex h-11 items-center gap-3 px-2">
-                    <span
-                        class="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full"
-                        :class="{ 'opacity-50 grayscale': member.idle }"
-                        :style="{ backgroundColor: `hsl(${presenceHue(member.email)} 55% 42%)` }"
-                    >
-                        <span class="text-2xs font-semibold text-white">{{ presenceInitials(member) }}</span>
-                        <img
-                            v-if="member.picture"
-                            :src="member.picture"
-                            alt=""
-                            referrerpolicy="no-referrer"
-                            class="absolute inset-0 h-full w-full object-cover"
-                        />
-                    </span>
+                    <Avatar
+                        :size="32"
+                        :name="member.name ?? member.email"
+                        :src="member.picture"
+                        :hue="presenceHue(member.email)"
+                        :idle="member.idle"
+                    />
                     <span class="min-w-0 flex-1">
                         <span class="block truncate text-sm text-content">{{ member.name ?? member.email }}</span>
                         <span class="block truncate text-xs text-muted">{{ presenceActivity(member) }}{{ member.idle ? " · away" : "" }}</span>
@@ -201,12 +194,7 @@ const logout = async (): Promise<void> => {
         <section class="flex flex-col gap-1 pb-4">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Account</h2>
             <div class="flex h-14 items-center gap-3 px-2">
-                <span
-                    class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-content/5 text-muted"
-                >
-                    <img v-if="user?.image" :src="user.image" alt="" referrerpolicy="no-referrer" class="h-full w-full object-cover" />
-                    <Icon name="user" v-else />
-                </span>
+                <Avatar :size="40" :src="user?.image" />
                 <span class="min-w-0 flex-1">
                     <span class="flex items-center gap-2">
                         <span class="truncate text-sm font-medium text-content">{{ user?.email }}</span>

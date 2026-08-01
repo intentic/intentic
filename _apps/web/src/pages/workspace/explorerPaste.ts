@@ -1,8 +1,7 @@
+import { basename, parentDir } from "@intentic-app/ui/path";
 // Pure paste planning for the file explorer — no Vue, so it's unit-checkable (explorerPaste.test.ts).
 // `taken` is the set of names ALREADY in the target directory; the caller reads it off the loaded tree.
 
-const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
-const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
 const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);
 
 // Split a name at its extension the way VSCode does — at the LAST dot, and never at a leading one, so

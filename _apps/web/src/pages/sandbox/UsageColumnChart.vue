@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { formatUsd, niceMax, seriesColor, type SpendBucket } from "./usageChart";
+import { formatUsd, niceMax, providerColor, type SpendBucket } from "./usageChart";
 
 /* Spend over time, as columns. One series when a single provider ran in the window (the card title names it —
  * a one-swatch legend box would only restate the title); stacked with a legend the moment there are two.
@@ -38,7 +38,7 @@ const PLOT_HEIGHT = `10rem`;
         <!-- Two or more series always carry a legend: identity must never rest on colour-matching alone. -->
         <figcaption v-if="stacked" class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span v-for="provider in providers" :key="provider" class="flex items-center gap-1.5 text-2xs text-muted">
-                <span class="size-2 shrink-0 rounded-[2px]" :style="{ background: seriesColor(provider) }" />
+                <span class="size-2 shrink-0 rounded-[2px]" :style="{ background: providerColor(provider) }" />
                 {{ providerLabel(provider) }}
             </span>
         </figcaption>
@@ -75,7 +75,7 @@ const PLOT_HEIGHT = `10rem`;
                                 :key="segment.key"
                                 class="min-h-px w-full"
                                 :class="index === 0 ? `rounded-t-[4px]` : ``"
-                                :style="{ height: `${(segment.value / bucket.totals.costUsd) * 100}%`, background: seriesColor(segment.key) }"
+                                :style="{ height: `${(segment.value / bucket.totals.costUsd) * 100}%`, background: providerColor(segment.key) }"
                             />
                         </div>
                     </div>

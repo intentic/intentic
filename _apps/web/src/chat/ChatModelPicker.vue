@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice, useListNavigation } from "@intentic-app/ui";
+import { SearchBar, useDevice, useListNavigation } from "@intentic-app/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { type AgentHarness, type AgentProvider, limitationsOf, PROVIDERS } from "@intentic/sandbox-contract";
@@ -59,7 +59,7 @@ const harnessChoosable = computed(() => provider.value === `codex` || provider.v
 
 const query = ref(``);
 const rail = ref<AgentProvider | undefined>();
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<{ focus: () => void } | null>(null);
 
 const searching = computed(() => query.value.trim().length > 0);
 
@@ -293,24 +293,20 @@ onMounted(() => {
          desktop popover caps itself to the room above the composer pill (ChatPanel), which on a short window is
          less than the list's preferred height. Search and footer hold their size; the list gives. -->
     <div class="flex min-h-0 flex-col" role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Model picker">
-        <div class="relative shrink-0 border-b border-line">
-            <Icon name="search" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-subtle" aria-hidden="true" />
-            <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
-            <input
-                ref="searchInput"
-                v-model="query"
-                type="text"
-                placeholder="Search models…"
-                class="w-full min-w-0 bg-transparent py-2.5 pl-9 pr-3 text-base text-content placeholder:text-subtle focus:outline-none md:text-xs"
-                role="searchbox"
-                aria-controls="model-picker-list"
-                :aria-activedescendant="flat.length > 0 ? `model-picker-opt-${activeIndex}` : undefined"
-                @keydown.down.prevent="move(1)"
-                @keydown.up.prevent="move(-1)"
-                @keydown.enter.prevent="pickActive"
-                @keydown.esc="onEsc"
-            />
-        </div>
+        <!-- The keys are bound on the BAR, not inside it: they bubble up from the input, and what they mean
+             (Enter picks a model, Esc clears then closes) is this panel's business, not the field's. -->
+        <SearchBar
+            ref="searchInput"
+            v-model="query"
+            class="shrink-0"
+            placeholder="Search models…"
+            aria-controls="model-picker-list"
+            :aria-activedescendant="flat.length > 0 ? `model-picker-opt-${activeIndex}` : undefined"
+            @keydown.down.prevent="move(1)"
+            @keydown.up.prevent="move(-1)"
+            @keydown.enter.prevent="pickActive"
+            @keydown.esc="onEsc"
+        />
 
         <!-- Fixed height on desktop so the panel's overall size never changes as the rail filters between
              sparse and dense providers — a variable height makes the bottom-anchored popover grow upward and the
@@ -421,8 +417,8 @@ onMounted(() => {
                             role="option"
                             :aria-selected="row.index === activeIndex"
                             :aria-label="rowAriaLabel(row.entry)"
-                            class="mp-row flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
-                            :class="{ 'mp-row-on': row.index === activeIndex, 'opacity-60': isLocked(row.entry) }"
+                            class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
+                            :class="{ 'ui-row-select-on': row.index === activeIndex, 'opacity-60': isLocked(row.entry) }"
                             :disabled="isDisabled(row.entry)"
                             @click="pick(row.entry)"
                             @mouseenter="activeIndex = row.index"
@@ -466,7 +462,7 @@ onMounted(() => {
                     <button
                         v-if="section.provider !== undefined && section.collapsible"
                         type="button"
-                        class="mp-row flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-2xs text-subtle max-md:min-h-11"
+                        class="ui-row-select flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-2xs text-subtle max-md:min-h-11"
                         :aria-expanded="section.expanded"
                         :aria-label="
                             section.expanded
@@ -604,17 +600,3 @@ onMounted(() => {
         </div>
     </div>
 </template>
-
-<style scoped>
-.mp-row {
-    cursor: pointer;
-    transition: background-color 0.1s;
-}
-.mp-row:hover {
-    background: color-mix(in srgb, var(--color-content) 5%, transparent);
-}
-.mp-row-on,
-.mp-row-on:hover {
-    background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
-}
-</style>

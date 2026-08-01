@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { GitActionResult, GitChange, GitCommit } from "@intentic-app/api-contract";
-import { cmp, Picker, Segmented, timeAgo } from "@intentic-app/ui";
-import ContextMenu from "primevue/contextmenu";
+import { cmp, ContextMenu, Picker, Segmented, timeAgo } from "@intentic-app/ui";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, watch } from "vue";
@@ -12,7 +11,8 @@ import { useGitLog } from "../../composables/workspace/useGitLog";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { buildFileTree, flattenFileTree } from "./commitFileTree";
 import { computeGraphLayout, type GraphRow } from "./graphLayout";
-import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
+import { type DiffTabPayload } from "./workspaceTabs";
+import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
 
 /* One repo's git-history graph — the committed side of the real-git story whose uncommitted side is the Changes
  * panel (this is NOT the Checkpoints safety timeline). A wide document, so it lives in the main editor area as a
@@ -301,8 +301,8 @@ const runPending = async (): Promise<void> => {
             <div v-for="{ row, commit } in graphRows" :key="commit.sha">
                 <button
                     type="button"
-                    class="graphrow flex w-full items-center gap-2 py-0 pl-3 pr-3 text-left"
-                    :class="{ 'graphrow-on': commit.sha === openSha }"
+                    class="ui-row-select flex w-full items-center gap-2 py-0 pl-3 pr-3 text-left"
+                    :class="{ 'ui-row-select-on': commit.sha === openSha }"
                     :style="{ height: `${ROW_H}px` }"
                     @click="toggle(commit.sha)"
                     @contextmenu.prevent.stop="openMenu($event, commit)"
@@ -410,9 +410,7 @@ const runPending = async (): Promise<void> => {
                                         @click="openFileDiff(commit, row.file)"
                                     >
                                         <span class="w-2.5 shrink-0"></span>
-                                        <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[row.file.status]">{{
-                                            STATUS_LETTER[row.file.status]
-                                        }}</span>
+                                        <ChangeStatusMark :status="row.file.status" />
                                         <span class="min-w-0 flex-1 truncate text-content/90">{{ row.name }}</span>
                                         <DiffStat :additions="row.file.additions" :deletions="row.file.deletions" />
                                     </button>
@@ -425,11 +423,7 @@ const runPending = async (): Promise<void> => {
         </div>
 
         <!-- Right-click commit menu (VSCode "Git Graph" parity), grouped with separators. -->
-        <ContextMenu
-            ref="menu"
-            :model="menuItems"
-            :pt="{ root: '!min-w-56 !text-xs', rootList: '!p-1', itemLink: '!rounded !px-2 !py-1 !text-xs', separator: '!my-1' }"
-        />
+        <ContextMenu ref="menu" :model="menuItems" :min-width="14" />
 
         <!-- One dialog for every action: a name input (branch/tag), a mode picker (reset), or a plain confirm.
              Destructive ops carry the auto-checkpoint reassurance; a clean-apply conflict shows inline. -->
@@ -499,15 +493,3 @@ const runPending = async (): Promise<void> => {
         </Dialog>
     </div>
 </template>
-
-<style scoped>
-.graphrow {
-    transition: background-color 0.1s;
-}
-.graphrow:hover {
-    background: color-mix(in srgb, var(--color-content) 6%, transparent);
-}
-.graphrow-on {
-    background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
-}
-</style>

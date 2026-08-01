@@ -8,6 +8,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { errorMessage, useAsyncAction } from "../useAsyncAction";
 import { resetUploadQueue } from "./useUploadQueue";
 import { readExpandedDirs, writeExpandedDirs } from "./workspaceSnapshot";
+import { basename, parentDir } from "@intentic-app/ui/path";
 
 // Shared, module-level feedback for user file actions (rename, delete, save, move…) so the explorer, the tree
 // rows, and the editor all report through ONE busy spinner + error line. Errors are surfaced, not thrown — a
@@ -95,8 +96,6 @@ const buildMap = (nodes: readonly WorkspaceTreeEntry[]): Map<string, WorkspaceTr
 };
 
 const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
-const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
-const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
 // A folder can't move into itself, its own parent (a no-op), or one of its own descendants.
 const canMoveInto = (source: string, targetDir: string): boolean =>
     !(targetDir === parentDir(source) || targetDir === source || targetDir.startsWith(`${source}/`));

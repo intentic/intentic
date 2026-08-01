@@ -89,16 +89,6 @@ export const presenceHue = (email: string): number => {
     return HUES[Math.abs(hash) % HUES.length]!;
 };
 
-// Two initials for the avatar fallback (name's word boundaries, else the email's first letters).
-export const presenceInitials = (member: PresenceMember): string => {
-    const source = member.name ?? member.email;
-    const words = source.split(/[\s._@-]+/).filter((word) => word !== ``);
-    if (words.length >= 2) {
-        return `${words[0]![0]}${words[1]![0]}`.toUpperCase();
-    }
-    return source.slice(0, 2).toUpperCase();
-};
-
 export const resetPresence = (): void => {
     users.value = [];
 };

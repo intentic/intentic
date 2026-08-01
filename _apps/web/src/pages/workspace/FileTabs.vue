@@ -3,7 +3,9 @@ import { type IconName, useExplorerStyle } from "@intentic-app/ui";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { explorerColorClass, iconForEntry } from "@intentic-app/ui";
-import { STATUS_CLASS, STATUS_LETTER, type WorkspaceTab } from "./workspaceTabs";
+import { type WorkspaceTab } from "./workspaceTabs";
+import { basename } from "@intentic-app/ui/path";
+import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
 
 /* The open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or plan preview.
  * Presentational — selection/close are emitted up to Workspace.vue by tab id, which drives the tab list +
@@ -20,7 +22,6 @@ const emit = defineEmits<{ select: [id: string]; close: [id: string]; contextmen
 const { isDirty } = useEditBuffers();
 const { explorerStyle } = useExplorerStyle();
 
-const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 const fileIcon = (path: string): IconName => iconForEntry(basename(path), `file`);
 
 const tabLabel = (tab: WorkspaceTab): string => {
@@ -159,9 +160,7 @@ watch(
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
                 <Icon name="sitemap" v-else-if="tab.kind === 'graph'" class="text-2xs text-link" />
                 <Icon name="wave-pulse" v-else-if="tab.kind === 'health'" class="text-2xs text-link" />
-                <span v-else class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[tab.status]">{{
-                    STATUS_LETTER[tab.status]
-                }}</span>
+                <ChangeStatusMark v-else :status="tab.status" />
                 <span class="max-w-40 truncate">{{ tabLabel(tab) }}</span>
                 <span class="relative flex h-3 w-3 shrink-0 items-center justify-center" @click="onClose($event, tab.id)">
                     <Icon

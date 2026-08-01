@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { type IconName, Segmented } from "@intentic-app/ui";
+import { cmp, ConfirmDialog, ContextMenu, type IconName, Segmented } from "@intentic-app/ui";
 import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
-import ContextMenu from "primevue/contextmenu";
-import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { inTabSurface } from "../../composables/commands/tabSurface";
@@ -589,7 +587,7 @@ const endResize = (event: PointerEvent): void => {
                              root having no tree row of its own; nested repos open theirs from their tree row. -->
                         <button
                             type="button"
-                            class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                            :class="cmp.iconButton()"
                             @click="openGraph('root')"
                             v-tooltip.bottom="'Git history'"
                             aria-label="Open git history"
@@ -598,7 +596,7 @@ const endResize = (event: PointerEvent): void => {
                         </button>
                         <button
                             type="button"
-                            class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                            :class="cmp.iconButton()"
                             @click="changes.refresh()"
                             v-tooltip.bottom="'Refresh'"
                             aria-label="Refresh changes"
@@ -888,58 +886,23 @@ const endResize = (event: PointerEvent): void => {
              useTerminal (each a tmux session) — detach only removes the host element, so the shells and scrollback
              survive close, navigation, and page reload. -->
 
-        <!-- Right-click tab menu + the confirm shown before a bulk close discards unsaved edits. Dense pt matches
-             the file tree's context menu (WorkspaceTree.vue). -->
-        <ContextMenu
-            ref="tabMenu"
-            :model="tabMenuItems"
-            :pt="{
-                root: '!min-w-52 !text-xs',
-                rootList: '!p-1',
-                itemLink: '!flex !items-center !gap-2 !rounded !px-2 !py-1 !text-xs',
-                separator: '!my-1',
-            }"
-        >
-            <!-- Custom row so each item can show its command's shortcut right-aligned (VSCode parity). A reserved
-                 icon column keeps labels aligned whether or not the item carries an icon. -->
-            <template #item="{ item, props }">
-                <a v-bind="props.action">
-                    <span class="flex w-3.5 shrink-0 justify-center">
-                        <Icon v-if="item.icon" :name="item.icon as IconName" class="text-2xs" />
-                    </span>
-                    <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
-                    <kbd
-                        v-if="item['shortcut']"
-                        class="shrink-0 rounded border border-line bg-overlay px-1 py-px font-mono text-[0.65rem] leading-none text-muted"
-                        >{{ item["shortcut"] }}</kbd
-                    >
-                </a>
-            </template>
-        </ContextMenu>
-        <Dialog
-            :visible="pendingClose !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '26rem' }"
+        <!-- Right-click tab menu + the confirm shown before a bulk close discards unsaved edits. -->
+        <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
+        <ConfirmDialog
+            :open="pendingClose !== undefined"
             :header="pendingCloseDirty.length === 1 ? 'Discard unsaved changes?' : `Discard unsaved changes in ${pendingCloseDirty.length} files?`"
-            @update:visible="pendingClose = undefined"
+            confirm-label="Close anyway"
+            confirm-icon="times"
+            :items="pendingCloseDirty"
+            @cancel="pendingClose = undefined"
+            @confirm="confirmClose"
         >
-            <ul class="flex flex-col gap-1">
-                <li v-for="path in pendingCloseDirty.slice(0, 5)" :key="path" class="flex min-w-0 items-center gap-2 text-sm">
-                    <Icon name="circle-fill" class="shrink-0 text-[0.4rem] text-warning" />
-                    <span class="truncate text-content">{{ path }}</span>
-                </li>
-                <li v-if="pendingCloseDirty.length > 5" class="text-xs text-subtle">…and {{ pendingCloseDirty.length - 5 }} more</li>
-            </ul>
-            <p class="mt-3 text-xs text-muted">Closing these tabs discards their unsaved edits. This can't be undone.</p>
-            <template #footer>
-                <Button label="Cancel" severity="secondary" :text="true" @click="pendingClose = undefined" />
-                <Button label="Close anyway" severity="danger" autofocus @click="confirmClose">
-                    <template #icon><Icon name="times" /></template>
-                </Button>
+            <template #item="{ item }">
+                <Icon name="circle-fill" class="shrink-0 text-[0.4rem] text-warning" />
+                <span class="truncate text-content">{{ item }}</span>
             </template>
-        </Dialog>
+            <p class="mt-3 text-xs text-muted">Closing these tabs discards their unsaved edits. This can't be undone.</p>
+        </ConfirmDialog>
     </div>
 </template>
 

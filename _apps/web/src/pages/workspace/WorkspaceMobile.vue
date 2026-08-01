@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { BottomSheet, cmp, PullToRefresh, Segmented } from "@intentic-app/ui";
+import { BottomSheet, cmp, ConfirmDialog, PullToRefresh, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -29,6 +29,7 @@ import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import UploadProgress from "./UploadProgress.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
+import { parentDir } from "@intentic-app/ui/path";
 
 /* The mobile Workspace: a drill-down file browser — one directory per screen — plus the Changes / History
  * panels, with a full-screen read-only viewer. All navigation state (segment aside) lives in the ROUTE
@@ -75,7 +76,6 @@ const openDir = (path: string): void => {
     // Browsing a folder leaves any open file — clear the path segment along with the query.
     void router.push({ name: `workspace`, params: { path: [] }, query: path === `` ? {} : { dir: path } });
 };
-const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
 const openDiffNav = (payload: DiffTabPayload): void => {
     openDiff(payload);
     void router.push({ name: `workspace`, params: { path: [] }, query: { ...route.query, diff: activeId.value ?? undefined } });
@@ -547,25 +547,18 @@ const onPick = (event: Event): void => {
             </template>
         </Dialog>
 
-        <Dialog
-            :visible="deleteTarget !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: 'min(26rem, calc(100vw - 2rem))' }"
+        <ConfirmDialog
+            :open="deleteTarget !== undefined"
             header="Delete?"
-            @update:visible="deleteTarget = undefined"
+            confirm-label="Delete"
+            confirm-icon="trash"
+            @cancel="deleteTarget = undefined"
+            @confirm="confirmDelete"
         >
             <p class="text-sm text-content">
                 Delete <span class="font-medium">{{ deleteTarget?.path }}</span
                 >{{ deleteTarget?.type === "dir" ? " and everything inside it" : "" }}? This can't be undone.
             </p>
-            <template #footer>
-                <Button label="Cancel" severity="secondary" :text="true" @click="deleteTarget = undefined" />
-                <Button label="Delete" severity="danger" autofocus @click="confirmDelete">
-                    <template #icon><Icon name="trash" /></template>
-                </Button>
-            </template>
-        </Dialog>
+        </ConfirmDialog>
     </div>
 </template>

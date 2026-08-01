@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { InviteRecord } from "@intentic-app/api-contract";
-import { cmp, RowGroup } from "@intentic-app/ui";
+import { Avatar, cmp, RowGroup } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
@@ -8,7 +8,7 @@ import { apiClient, isPaymentRequired } from "../../composables/useApi";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
-import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../../composables/usePresence";
+import { presenceActivity, presenceHue, presenceOthers } from "../../composables/usePresence";
 
 /* The Sandbox hub's "Access" tab. Owner-only invites for the ACTIVE sandbox: inviting is two writes — the
  * daemon's ENFORCED /members list (pushed first from the owner's browser, since the server can't reach the
@@ -278,16 +278,7 @@ const revoke = async (target: string): Promise<void> => {
                     class="flex items-center gap-2.5 px-4 py-3"
                     :class="member.idle ? 'opacity-60' : ''"
                 >
-                    <span
-                        class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full text-2xs font-semibold"
-                        :style="{
-                            backgroundColor: `hsl(${presenceHue(member.email)} 70% 45% / 0.15)`,
-                            color: `hsl(${presenceHue(member.email)} 70% 45%)`,
-                        }"
-                    >
-                        <img v-if="member.picture" :src="member.picture" alt="" referrerpolicy="no-referrer" class="h-full w-full object-cover" />
-                        <span v-else>{{ presenceInitials(member) }}</span>
-                    </span>
+                    <Avatar :size="32" :name="member.name ?? member.email" :src="member.picture" :hue="presenceHue(member.email)" />
                     <div class="min-w-0 flex-1">
                         <div class="truncate text-sm font-medium text-content">{{ member.name ?? member.email }}</div>
                         <div class="truncate text-xs text-muted">{{ presenceActivity(member) }}</div>

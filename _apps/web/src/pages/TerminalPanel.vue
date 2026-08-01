@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { type IconName, useDevice } from "@intentic-app/ui";
+import { cmp, ConfirmDialog, ContextMenu, type IconName, useDevice } from "@intentic-app/ui";
 import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
-import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
@@ -846,7 +845,7 @@ const endResize = (event: PointerEvent): void => {
                 <button
                     v-if="restart !== undefined && activeShell"
                     type="button"
-                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    :class="cmp.iconButton()"
                     @click="restart()"
                     v-tooltip.top="'Restart shell'"
                     aria-label="Restart shell"
@@ -856,7 +855,7 @@ const endResize = (event: PointerEvent): void => {
                 <button
                     v-else
                     type="button"
-                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    :class="cmp.iconButton()"
                     @click="void tabs.refresh()"
                     v-tooltip.top="'Refresh sessions'"
                     aria-label="Refresh sessions"
@@ -869,7 +868,7 @@ const endResize = (event: PointerEvent): void => {
                      the one control is the whole round trip. -->
                 <button
                     type="button"
-                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    :class="cmp.iconButton()"
                     @click="popout.toggle()"
                     v-tooltip.top="popoutHint"
                     :aria-label="popoutHint"
@@ -878,7 +877,7 @@ const endResize = (event: PointerEvent): void => {
                 </button>
                 <button
                     type="button"
-                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    :class="cmp.iconButton()"
                     @click="emit(`close`)"
                     v-tooltip.top="withShortcut('Close terminal', 'terminal.toggle')"
                     aria-label="Close terminal"
@@ -902,64 +901,28 @@ const endResize = (event: PointerEvent): void => {
             </div>
         </div>
 
-        <!-- Right-click pill menu: split/join/unsplit/kill + the per-terminal cosmetic overrides. Rendered into
-             the pop-out window while the panel floats there. The #item slot renders each row's shortcut hint
-             right-aligned (VSCode parity), reusing PrimeVue's own itemLink styling via props.action. -->
-        <ContextMenu
-            ref="menu"
-            :model="menuItems"
-            :append-to="popout.overlayTarget.value"
-            :pt="{
-                root: '!min-w-56 !text-xs',
-                rootList: '!p-1',
-                itemLink: '!flex !items-center !gap-2 !rounded !px-2 !py-1 !text-xs',
-                separator: '!my-1',
-            }"
-        >
-            <template #item="{ item, props }">
-                <a v-bind="props.action">
-                    <!-- Checkmark gutter for the toggle rows (`checked` on the item) — reserved even when
-                         unchecked so the label doesn't shift as the state flips. -->
-                    <span v-if="'checked' in item" class="flex w-3 shrink-0 justify-center">
-                        <Icon v-if="item['checked']" name="check" class="text-2xs text-muted" />
-                    </span>
-                    <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
-                    <kbd
-                        v-if="item['shortcut']"
-                        class="shrink-0 rounded border border-line bg-overlay px-1 py-px font-mono text-[0.65rem] leading-none text-muted"
-                        >{{ item["shortcut"] }}</kbd
-                    >
-                </a>
-            </template>
-        </ContextMenu>
+        <!-- Right-click pill menu: split/join/unsplit/kill + the per-terminal cosmetic overrides. Rendered
+             into the pop-out window while the panel floats there. -->
+        <ContextMenu ref="menu" :model="menuItems" :append-to="popout.overlayTarget.value" :min-width="14" />
 
         <!-- The confirm a bulk kill gets when it would end sessions that are still running — this panel's
              counterpart of the chat's "stop N running agents?" and the workspace's unsaved-edits dialog. -->
-        <Dialog
-            :visible="pendingKill !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :append-to="popout.overlayTarget.value"
-            :style="{ width: '26rem' }"
+        <ConfirmDialog
+            :open="pendingKill !== undefined"
             :header="pendingKillRunning.length === 1 ? 'Kill the running terminal?' : `Kill ${pendingKillRunning.length} running terminals?`"
-            @update:visible="pendingKill = undefined"
+            confirm-label="Kill anyway"
+            confirm-icon="trash"
+            :items="pendingKillRunning"
+            :append-to="popout.overlayTarget.value"
+            @cancel="pendingKill = undefined"
+            @confirm="confirmKill"
         >
-            <ul class="flex flex-col gap-1">
-                <li v-for="tab in pendingKillRunning.slice(0, 5)" :key="tab.name" class="flex min-w-0 items-center gap-2 text-sm">
-                    <Icon :name="segmentIcon(tab.name)" class="shrink-0 text-2xs text-muted" />
-                    <span class="truncate text-content">{{ segmentLabel(tab.name) }}</span>
-                </li>
-                <li v-if="pendingKillRunning.length > 5" class="text-xs text-subtle">…and {{ pendingKillRunning.length - 5 }} more</li>
-            </ul>
-            <p class="mt-3 text-xs text-muted">Killing these ends whatever they are running. Scrollback goes with them.</p>
-            <template #footer>
-                <Button label="Cancel" severity="secondary" :text="true" @click="pendingKill = undefined" />
-                <Button label="Kill anyway" severity="danger" autofocus @click="confirmKill">
-                    <template #icon><Icon name="trash" /></template>
-                </Button>
+            <template #item="{ item }">
+                <Icon :name="segmentIcon(item.name)" class="shrink-0 text-2xs text-muted" />
+                <span class="truncate text-content">{{ segmentLabel(item.name) }}</span>
             </template>
-        </Dialog>
+            <p class="mt-3 text-xs text-muted">Killing these ends whatever they are running. Scrollback goes with them.</p>
+        </ConfirmDialog>
 
         <!-- One dialog for the two pickers, color and icon: both apply on click, with a leading "default"
              swatch that clears the override. (Rename is inline in the strip, not here.) -->

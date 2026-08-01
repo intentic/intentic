@@ -29,6 +29,13 @@ const buttonWarning = (...twClasses: string[]) =>
 const buttonDanger = (...twClasses: string[]) =>
     twMerge(buttonBase, `bg-danger-fill/10 text-danger-fill border-danger-fill/20 hover:bg-danger-fill/18 hover:border-danger-fill/35`, ...twClasses);
 
+/* Bare 24px icon button — the toolbar affordance that shows no chrome until the pointer is on it. Nine of
+ * these had been spelled out by hand across the terminal panel, the workspace toolbar, the history panel and
+ * the two popover triggers; they agreed exactly, which is what made a tenth so easy to get slightly wrong.
+ * Callers size and re-tint through twMerge (`cmp.iconButton('h-7 w-7 hover:text-danger')`). */
+const iconButton = (...twClasses: string[]) =>
+    twMerge(`flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content`, ...twClasses);
+
 /** Standard form input (text, password, number, datetime-local, textarea). */
 const input = (...twClasses: string[]) =>
     twMerge(
@@ -52,4 +59,4 @@ const emptyState = (...twClasses: string[]) =>
 /** Uppercase section heading label (e.g. "CONNECTIONS", "YOUR APPS"). */
 const sectionLabel = (...twClasses: string[]) => twMerge(`text-xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
 
-export const cmp = { buttonPrimary, buttonSuccess, buttonWarning, buttonDanger, input, alertDanger, alertWarning, emptyState, sectionLabel };
+export const cmp = { buttonPrimary, buttonSuccess, buttonWarning, buttonDanger, iconButton, input, alertDanger, alertWarning, emptyState, sectionLabel };

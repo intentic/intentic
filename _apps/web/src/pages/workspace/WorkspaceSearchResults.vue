@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { iconForEntry } from "@intentic-app/ui";
 import { codeLangForPath } from "./fileType";
 import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "./searchSnippet";
+import { basename, parentDir } from "@intentic-app/ui/path";
 
 /* Workspace search results for the explorer sidebar: a count line, then file header rows + indented hit rows
  * (line number + snippet, syntax-coloured, with every matched span <mark>ed from the daemon's char offsets —
@@ -134,8 +135,6 @@ watch(
     },
 );
 
-const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
-const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
 
 /* "Matches", not "results": a row here is a matching LINE with all of its occurrences marked, which is also
  * what the engine counts — so the number is the number of rows the search found, and saying "results" would
@@ -232,7 +231,7 @@ const onKeydown = (event: KeyboardEvent): void => {
                         type="button"
                         role="option"
                         :tabindex="tabbableKey === painted.row.key ? 0 : -1"
-                        class="treerow absolute inset-x-0 flex items-center gap-1.5 px-2 text-left text-[0.8125rem]"
+                        class="ui-row-select absolute inset-x-0 flex items-center gap-1.5 px-2 text-left text-[0.8125rem]"
                         :style="{ top: `${painted.row.index * ROW_H}px`, height: `${ROW_H}px` }"
                         @click="activate(painted.row)"
                         @focus="lead = painted.row.key"
@@ -252,7 +251,7 @@ const onKeydown = (event: KeyboardEvent): void => {
                         type="button"
                         role="option"
                         :tabindex="tabbableKey === painted.row.key ? 0 : -1"
-                        class="treerow absolute inset-x-0 flex items-center gap-2 pr-2 pl-6 text-left"
+                        class="ui-row-select absolute inset-x-0 flex items-center gap-2 pr-2 pl-6 text-left"
                         :style="{ top: `${painted.row.index * ROW_H}px`, height: `${ROW_H}px` }"
                         @click="activate(painted.row)"
                         @focus="lead = painted.row.key"
@@ -274,7 +273,7 @@ const onKeydown = (event: KeyboardEvent): void => {
                 <button
                     v-if="truncated"
                     type="button"
-                    class="treerow absolute inset-x-0 flex items-center justify-center gap-1.5 text-2xs text-link"
+                    class="ui-row-select absolute inset-x-0 flex items-center justify-center gap-1.5 text-2xs text-link"
                     :style="{ top: `${rows.length * ROW_H}px`, height: `${FOOTER_H}px` }"
                     :disabled="loadingMore"
                     @click="emit('loadMore')"
@@ -296,17 +295,6 @@ const onKeydown = (event: KeyboardEvent): void => {
 </template>
 
 <style scoped>
-.treerow {
-    cursor: pointer;
-    transition: background-color 0.1s;
-}
-.treerow:hover {
-    background: color-mix(in srgb, var(--color-content) 6%, transparent);
-}
-.treerow:focus-visible {
-    outline: none;
-    box-shadow: inset 0 0 0 1px var(--color-primary-500);
-}
 /* Shiki hands each token an inline light colour plus a `--shiki-dark` custom property, so dark mode is a pure
  * CSS flip keyed off the app's [data-mode] — no re-tokenizing on theme toggle. !important because the light
  * colour it overrides is an inline style. Identical to how the app's code blocks do it (ui styles/code.css);

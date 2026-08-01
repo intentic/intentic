@@ -3,8 +3,9 @@ import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intent
 import { ref } from "vue";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { useHistory } from "../../composables/workspace/useHistory";
-import { type IconName, timeAgo } from "@intentic-app/ui";
-import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
+import { cmp, type IconName, timeAgo } from "@intentic-app/ui";
+import { type DiffTabPayload } from "./workspaceTabs";
+import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
 
 /* The checkpoint timeline — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the
  * resize handle, and the Files|Changes|Checkpoints mode switch): the daemon's checkpoints of /work, NOT git
@@ -87,7 +88,7 @@ const confirmRestore = (id: string): void => {
             <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin aria-label="Working" />
             <button
                 type="button"
-                class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                :class="cmp.iconButton()"
                 @click="refetch()"
                 v-tooltip.right="'Refresh'"
                 aria-label="Refresh checkpoints"
@@ -127,9 +128,7 @@ const confirmRestore = (id: string): void => {
                         class="cv-file flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-overlay max-md:min-h-11"
                         @click="openDiff(change)"
                     >
-                        <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[change.status]">{{
-                            STATUS_LETTER[change.status]
-                        }}</span>
+                        <ChangeStatusMark :status="change.status" />
                         <!-- <bdi> keeps a leading "_" ("_apps/…") from being reordered to the far right by dir="rtl";
                              the tooltip gives the whole path back, but only while the row is actually cut off. -->
                         <span class="truncate text-2xs text-muted max-md:text-xs" dir="rtl" v-tooltip.right.overflow="changeLabel(change)"

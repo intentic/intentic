@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { Button, Icon, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { Avatar, Button, Icon, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import AuthorAvatar from "./AuthorAvatar.vue";
 import PipelineDagGraph from "./PipelineDagGraph.vue";
 import PipelineGraph from "./PipelineGraph.vue";
 import { pipelineStages } from "./pipelineDag";
@@ -55,7 +54,7 @@ const jobCount = computed(() => stages.value.reduce((total, stage) => total + st
         <div class="flex w-full items-center gap-3 px-4 py-3">
             <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />
 
-            <AuthorAvatar :name="run.authorName" :avatar-url="run.authorAvatarUrl" />
+            <Avatar :size="24" :name="run.authorName" :src="run.authorAvatarUrl" v-tooltip.top="run.authorName" />
 
             <!-- Pipeline info -->
             <div class="min-w-0 flex-1">

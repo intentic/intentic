@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { AnchoredOverlay, cmp, type IconName } from "@intentic-app/ui";
+import { AnchoredOverlay, cmp, ContextMenu, type IconName } from "@intentic-app/ui";
 import type { Disposable } from "@intentic/extension-api";
 import { type AgentOrigin, providerLabel } from "@intentic/sandbox-contract";
-import ContextMenu from "primevue/contextmenu";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
@@ -31,6 +30,7 @@ import { inTabSurface } from "../composables/commands/tabSurface";
 import { commandShortcut, registerCommand, type RegisteredCommand, withShortcut } from "../composables/commands/useCommands";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
+import PastChatList from "./PastChatList.vue";
 
 /* The tab strip + history menu. Reads the conversation list from the useChat singleton and emits select /
  * close / open rather than writing it: the strip is a view of the tabs, and the panel it lives in is what
@@ -692,7 +692,7 @@ const openHistory = (event: Event): void => {
                         <!-- One noun with the fleet: an untitled isolated conversation IS a draft agent card there. -->
                         <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{ tabLabel(c) }}</span>
                         <!-- Members with this same conversation active right now. -->
-                        <PresenceAvatars v-if="c.session.value !== undefined" :viewers="viewersOfSession(c.session.value.id)" label="in this chat" />
+                        <PresenceAvatars v-if="c.session.value !== undefined" :members="viewersOfSession(c.session.value.id)" label="in this chat" />
                         <!-- The × is a HIT TARGET carrying the glyph, not the glyph itself: at text-2xs the svg
                              is an 11px square, and a click that misses it lands on the tab — which, on the tab it
                              is closing (the one the user is looking at), selects an already-selected tab and so
@@ -790,7 +790,7 @@ const openHistory = (event: Event): void => {
                                     </span>
                                     <PresenceAvatars
                                         v-if="c.session.value !== undefined"
-                                        :viewers="viewersOfSession(c.session.value.id)"
+                                        :members="viewersOfSession(c.session.value.id)"
                                         label="in this chat"
                                     />
                                     <!-- Same hit target as the flat strip's (see there): the glyph is 11px, the
@@ -1023,30 +1023,14 @@ const openHistory = (event: Event): void => {
                     </button>
                 </div>
                 <div class="scrollbar-thin flex min-h-0 max-h-80 flex-col gap-0.5 overflow-auto p-1 pt-0">
-                    <template v-if="sessions.length > 0">
-                        <button
-                            v-for="session in sessions"
-                            :key="session.id"
-                            type="button"
-                            class="flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-content/5"
-                            @click="
-                                emit('open', session.id);
-                                historyOpen = false;
-                            "
-                        >
-                            <span class="flex items-center gap-1.5">
-                                <span class="min-w-0 flex-1 truncate text-xs text-content">{{ session.title }}</span>
-                                <!-- Members with this session open right now. -->
-                                <PresenceAvatars :viewers="viewersOfSession(session.id)" label="in this chat" />
-                            </span>
-                            <!-- Why this row matched, when it wasn't the title: the line of the user's own
-                                 prompt the query hit. Same rule and same evidence as the rail's filter, so the
-                                 two boxes in this one window can't come to mean different things. -->
-                            <span v-if="session.snippet !== undefined" class="line-clamp-2 text-2xs italic text-muted">{{ session.snippet }}</span>
-                            <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
-                        </button>
-                    </template>
-                    <p v-else class="px-2 py-3 text-center text-2xs text-subtle">{{ query ? "No matching chats." : "No previous chats." }}</p>
+                    <PastChatList
+                        :sessions="sessions"
+                        :query="query"
+                        @open="
+                            emit(`open`, $event);
+                            historyOpen = false;
+                        "
+                    />
                 </div>
             </div>
         </AnchoredOverlay>
@@ -1055,36 +1039,9 @@ const openHistory = (event: Event): void => {
          overflow-auto clipping, and into the pop-out window while the chat floats there. -->
     <HoverCard ref="hoverCard" :to="overlayTarget" />
 
-    <!-- Right-click menu, for a tab and for the strip's empty space alike. Rendered into the pop-out window while
-         the chat floats there (`append-to`), with the same dense pt and shortcut-hint row the workspace's file-tab
-         menu uses — one tab menu, two strips. -->
-    <ContextMenu
-        ref="tabMenu"
-        :model="tabMenuItems"
-        :append-to="overlayTarget"
-        :pt="{
-            root: '!min-w-52 !text-xs',
-            rootList: '!p-1',
-            itemLink: '!flex !items-center !gap-2 !rounded !px-2 !py-1 !text-xs',
-            separator: '!my-1',
-        }"
-    >
-        <!-- A reserved icon column keeps labels aligned whether or not the item carries an icon; the shortcut sits
-             right-aligned, filled from the command registry (blank until the command is bound). -->
-        <template #item="{ item, props }">
-            <a v-bind="props.action">
-                <span class="flex w-3.5 shrink-0 justify-center">
-                    <Icon v-if="item.icon" :name="item.icon as IconName" class="text-2xs" />
-                </span>
-                <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
-                <kbd
-                    v-if="item['shortcut']"
-                    class="shrink-0 rounded border border-line bg-overlay px-1 py-px font-mono text-[0.65rem] leading-none text-muted"
-                    >{{ item["shortcut"] }}</kbd
-                >
-            </a>
-        </template>
-    </ContextMenu>
+    <!-- Right-click menu, for a tab and for the strip's empty space alike. Rendered into the pop-out window
+         while the chat floats there (`append-to`) — one tab menu, two strips. -->
+    <ContextMenu ref="tabMenu" :model="tabMenuItems" :append-to="overlayTarget" :min-width="13" />
 </template>
 
 <style scoped>

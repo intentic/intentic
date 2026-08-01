@@ -3,10 +3,11 @@ import { BottomSheet } from "@intentic-app/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { useAgents } from "../composables/agents/useAgents";
-import { relativeTime, statusIcon } from "../composables/chat/catalog";
+import { statusIcon } from "../composables/chat/catalog";
 import { useChat } from "../composables/chat/useChat";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
+import PastChatList from "./PastChatList.vue";
 
 /* The mobile counterpart of ChatTabs: a compact header naming the active conversation, with the open-tab
  * strip and the searchable history folded into one bottom sheet. Same emit contract as ChatTabs — the panel
@@ -66,7 +67,7 @@ const openFromHistory = (id: string): void => {
             }}</span>
             <PresenceAvatars
                 v-if="active && active.session.value !== undefined"
-                :viewers="viewersOfSession(active.session.value.id)"
+                :members="viewersOfSession(active.session.value.id)"
                 label="in this chat"
             />
             <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
@@ -91,7 +92,7 @@ const openFromHistory = (id: string): void => {
                     }}</span>
                     <!-- Archived: off the agents board, but the conversation is still open right here. -->
                     <Icon v-if="isArchived(c.conversationId)" name="box" class="shrink-0 text-2xs text-subtle" />
-                    <PresenceAvatars v-if="c.session.value !== undefined" :viewers="viewersOfSession(c.session.value.id)" label="in this chat" />
+                    <PresenceAvatars v-if="c.session.value !== undefined" :members="viewersOfSession(c.session.value.id)" label="in this chat" />
                     <!-- span, not button — a real button can't nest inside the row button. -->
                     <span
                         v-if="conversations.length > 1"
@@ -117,25 +118,7 @@ const openFromHistory = (id: string): void => {
                         class="h-10 w-full min-w-0 rounded-lg border border-line bg-canvas pl-8 pr-3 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
                     />
                 </div>
-                <template v-if="sessions.length > 0">
-                    <button
-                        v-for="session in sessions"
-                        :key="session.id"
-                        type="button"
-                        class="flex min-h-12 flex-col justify-center gap-0.5 rounded-lg px-2 py-1.5 text-left transition-colors active:bg-overlay"
-                        @click="openFromHistory(session.id)"
-                    >
-                        <span class="flex items-center gap-1.5">
-                            <span class="min-w-0 flex-1 truncate text-sm text-content">{{ session.title }}</span>
-                            <PresenceAvatars :viewers="viewersOfSession(session.id)" label="in this chat" />
-                        </span>
-                        <!-- Why this row matched, when it wasn't the title: the line of the user's own prompt
-                             the query hit — the same evidence the desktop history menu and the fleet board show. -->
-                        <span v-if="session.snippet !== undefined" class="line-clamp-2 text-2xs italic text-muted">{{ session.snippet }}</span>
-                        <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
-                    </button>
-                </template>
-                <p v-else class="px-2 py-3 text-center text-2xs text-subtle">{{ query ? "No matching chats." : "No previous chats." }}</p>
+                <PastChatList :sessions="sessions" :query="query" touch @open="openFromHistory" />
             </div>
         </BottomSheet>
     </header>

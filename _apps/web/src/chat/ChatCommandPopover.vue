@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useListNavigation } from "@intentic-app/ui";
+import ComposerPopover from "./ComposerPopover.vue";
 import type { AgentCommand } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 
@@ -35,18 +36,14 @@ defineExpose({ move, pickActive });
 </script>
 
 <template>
-    <div class="absolute bottom-full left-0 right-0 z-20 mb-1 overflow-hidden rounded-xl border border-line-strong bg-card shadow-lg">
-        <p class="flex items-center gap-1.5 border-b border-line px-3 py-1.5 text-2xs uppercase tracking-wide text-subtle">
-            <Icon name="bolt" class="text-2xs" />
-            Agent commands
-        </p>
+    <ComposerPopover icon="bolt" title="Agent commands">
         <button
             v-for="(command, index) in matches"
             :key="command.name"
             :ref="(el) => setRowEl(command.name, el)"
             type="button"
-            class="mp-row flex w-full items-baseline gap-2 px-3 py-1.5 text-left"
-            :class="{ 'bg-overlay': index === activeIndex }"
+            class="ui-row-select flex w-full items-baseline gap-2 px-3 py-1.5 text-left"
+            :class="{ 'ui-row-select-on': index === activeIndex }"
             @mousedown.prevent="emit('pick', command.name)"
         >
             <!-- Meta tier, one step under the body tier its sibling popovers use for a primary: this one is
@@ -57,5 +54,5 @@ defineExpose({ move, pickActive });
             <span v-if="command.hint" class="shrink-0 font-mono text-2xs text-subtle">{{ command.hint }}</span>
             <span class="truncate text-2xs text-subtle">{{ command.description }}</span>
         </button>
-    </div>
+    </ComposerPopover>
 </template>

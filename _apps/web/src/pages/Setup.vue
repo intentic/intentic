@@ -2,7 +2,16 @@
 import type { SandboxSummary, SetupCode, SetupCodeTarget } from "@intentic-app/api-contract";
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
-import { cmp, Code, CopyButton, InfoHint, Picker, type PickerOption, Segmented, StepSection, useOsPreference } from "@intentic-app/ui";
+import {
+    cmp,
+    Code,
+    commandLang,
+    CopyButton,
+    InfoHint,
+    Segmented,
+    StepSection,
+    useOsPreference,
+} from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -12,6 +21,7 @@ import { apiClient, isPaymentRequired } from "../composables/useApi";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
+import CloudflareTokenField from "../components/CloudflareTokenField.vue";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { environment } from "../environments/environment";
@@ -84,10 +94,9 @@ let mintTimer: ReturnType<typeof setTimeout> | undefined;
 // --- own-Cloudflare path state ---
 // Token + zone discovery is shared with the in-app Connect Cloudflare step (useCloudflareZones). Here it only
 // feeds the setup-code target — on this path the token rides the install command, it isn't written to .env.
-const { cfToken, cfTokenValid, zones, selectedZone, zonesLoading, zonesError, setToken } = useCloudflareZones();
+const cf = useCloudflareZones();
+const { cfToken, cfTokenValid, selectedZone, zonesLoading, zonesError } = cf;
 // Zones are domains — monospace rows behind a filterable picker, since an account-wide token can carry dozens.
-const zoneOptions = computed<PickerOption[]>(() => zones.value.map((zone) => ({ value: zone, label: zone, icon: `globe`, mono: true })));
-const showToken = ref(false);
 // The editable subdomain prefix, pre-filled with the derived `sandbox-<hash>` default (so an untouched field
 // reproduces the CLI's default). The full hostname is `<subdomain>.<selectedZone>`.
 const subdomain = ref(``);
@@ -426,7 +435,7 @@ const windowsCommand = (): string => {
 };
 
 const selectedCommand = computed(() => (cmdOs.value === `windows` ? windowsCommand() : linuxCommand()));
-const selectedCommandLang = computed(() => (cmdOs.value === `windows` ? `powershell` : `bash`));
+const selectedCommandLang = computed(() => commandLang(cmdOs.value));
 
 // The third Run tab: manage the sandbox with the user's own docker-compose.yml instead of the install
 // script. Local state layered over the persisted OS preference — picking Compose must not overwrite the
@@ -836,46 +845,10 @@ watch(commandReady, (ready) => {
                             </ul>
                         </InfoHint>
                     </div>
-                    <label class="ui-field">
-                        <span class="ui-field-label">API token</span>
-                        <div class="flex items-center gap-2">
-                            <input
-                                :type="showToken ? 'text' : 'password'"
-                                :value="cfToken"
-                                @input="setToken(($event.target as HTMLInputElement).value)"
-                                autocomplete="off"
-                                autocapitalize="off"
-                                spellcheck="false"
-                                placeholder="Paste your Cloudflare API token"
-                                :class="cmp.input('w-full font-mono')"
-                            />
-                            <Button
-                                severity="secondary"
-                                :text="true"
-                                @click="showToken = !showToken"
-                                :aria-label="showToken ? 'Hide token' : 'Show token'"
-                            >
-                                <template #icon><Icon :name="showToken ? 'eye-slash' : 'eye'" /></template>
-                            </Button>
-                        </div>
-                    </label>
-                    <p v-if="cfToken.length === 0" class="text-xs text-muted">
-                        Used once to look up your Cloudflare zones, then it rides the command into your sandbox — intentic never stores it.
-                    </p>
-                    <p v-else-if="!cfTokenValid" class="text-xs text-warning">
-                        That doesn't look like a Cloudflare API token — double-check for copy/paste slips.
-                    </p>
-                    <p v-else-if="zonesLoading" class="text-xs text-muted">
-                        <Icon name="spinner" spin /> Checking which Cloudflare zones this token can use…
-                    </p>
-                    <div v-else-if="zonesError" :class="cmp.alertDanger('text-2xs')">
-                        {{ zonesError }}
-                    </div>
-                    <label v-else-if="zones.length > 1" class="ui-field">
-                        <span class="ui-field-label">Cloudflare zone</span>
-                        <Picker v-model="selectedZone" :options="zoneOptions" placeholder="Pick the domain to use" class="w-full" aria-label="Cloudflare zone" />
-                        <span class="text-xs text-muted">This token can reach several domains — choose which one your sandbox should use.</span>
-                    </label>
+                    <CloudflareTokenField
+                        :cf="cf"
+                        storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox — intentic never stores it."
+                    />
 
                     <!-- Editable domain: the subdomain prefix under the chosen zone. -->
                     <label v-if="selectedZone" class="ui-field">

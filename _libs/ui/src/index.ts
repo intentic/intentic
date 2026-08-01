@@ -1,11 +1,15 @@
 export { clipboardOf } from "./clipboard.js";
 export { cmp } from "./cmp.js";
 export { default as AnchoredOverlay } from "./components/AnchoredOverlay.vue";
+export { default as Avatar } from "./components/Avatar.vue";
 export { type Cross, placeAnchored, type Side } from "./composables/anchorPlacement.js";
 export { default as BarChart } from "./components/BarChart.vue";
+export { type BarItem } from "./components/barChart.js";
 export { default as BottomSheet } from "./components/BottomSheet.vue";
 export { default as Card } from "./components/Card.vue";
 export { default as Code } from "./components/Code.vue";
+export { default as ConfirmDialog } from "./components/ConfirmDialog.vue";
+export { default as ContextMenu } from "./components/ContextMenu.vue";
 export { default as CopyButton } from "./components/CopyButton.vue";
 export { default as DagGraph } from "./components/DagGraph.vue";
 // Types only. The DAG layout FUNCTIONS ship as `@intentic-app/ui/dag` for the same reason the markdown engine
@@ -26,6 +30,7 @@ export { default as ProgressRing } from "./components/ProgressRing.vue";
 export { default as PullToRefresh } from "./components/PullToRefresh.vue";
 export { default as Row } from "./components/Row.vue";
 export { default as RowGroup } from "./components/RowGroup.vue";
+export { default as SearchBar } from "./components/SearchBar.vue";
 export { default as Segmented } from "./components/Segmented.vue";
 // The accent → palette-slot resolver, exported for the same reason the figure types are: a view that holds
 // authored accents (a documentation map's components, say) has to paint them the way a figure would.
@@ -40,6 +45,16 @@ export { installUi } from "./plugin.js";
 export { vTw } from "./composables/tw.js";
 export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js";
 export { formatBytes, formatTokens, timeAgo } from "./format.js";
+// Path splitting is NOT re-exported here — it ships as `@intentic-app/ui/path`, for the same reason the
+// markdown engine does: `fileType.ts` and `explorerPaste.ts` are unit-tested plain TypeScript, and neither
+// should have to boot this barrel's component graph (and a DOM with it) to split a string on "/".
+//
+// `seriesColor` above is the one export that ships BOTH ways, and deliberately. A Vue caller reaches it here
+// (the documentation sidebar paints an authored accent, and it has already booted this graph to render at
+// all); a plain-TypeScript caller reaches the same function at `@intentic-app/ui/series`, because the
+// usage/savings projections are unit-tested in a node environment and this barrel pulls Picker.vue →
+// useDevice → `window` in behind it. One implementation, two doors, and the subpath is the one that must
+// stay open — a test that has to stub matchMedia to compute a colour is a test about the wrong thing.
 // ICON_SETS is exported for its KEYS, not its values: `Activation.icon` in the public extension API is an open
 // string, so the only way to check a first-party extension actually names a real icon is to compare against the
 // vocabulary at runtime (see builtins.test.ts). Renderers should keep using <Icon name="…">.
@@ -54,7 +69,7 @@ export {
     iconForEntry,
 } from "./icons/fileIcon.js";
 export { useExplorerStyle } from "./composables/useExplorerStyle.js";
-export { type CommandOs, useOsPreference } from "./composables/useOsPreference.js";
+export { commandLang, type CommandOs, OS_OPTIONS, useOsPreference } from "./composables/useOsPreference.js";
 export { type Device, useDevice } from "./composables/useDevice.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
 export { useIconSet } from "./composables/useIconSet.js";

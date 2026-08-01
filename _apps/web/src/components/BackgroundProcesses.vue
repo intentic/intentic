@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { cmp } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, ref } from "vue";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../composables/terminal/useBackgroundProcesses";
@@ -30,7 +31,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
     <button
         v-if="rows.length > 0"
         type="button"
-        class="relative flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+        :class="cmp.iconButton(`relative`)"
         @click="panel?.toggle($event)"
         v-tooltip.top="'Background processes'"
         aria-label="Background processes"
@@ -51,7 +52,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
                 <button
                     v-if="row.session"
                     type="button"
-                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-content/10 hover:text-content"
+                    :class="cmp.iconButton(`hover:bg-content/10`)"
                     @click="openLogs(row)"
                     v-tooltip.top="'View logs (read-only)'"
                     aria-label="View logs"
@@ -61,7 +62,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
                 <button
                     v-if="row.extensionId && !row.running"
                     type="button"
-                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-content/10 hover:text-content"
+                    :class="cmp.iconButton(`hover:bg-content/10`)"
                     :disabled="busy === row.id"
                     @click="void start(row)"
                     v-tooltip.top="'Start'"
@@ -72,7 +73,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
                 <button
                     v-if="row.extensionId && row.running"
                     type="button"
-                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-content/10 hover:text-content"
+                    :class="cmp.iconButton(`hover:bg-content/10`)"
                     :disabled="busy === row.id"
                     @click="void start(row)"
                     v-tooltip.top="'Restart'"
@@ -83,7 +84,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
                 <button
                     v-if="row.running || (row.session && !row.extensionId)"
                     type="button"
-                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-content/10 hover:text-danger"
+                    :class="cmp.iconButton(`hover:bg-content/10 hover:text-danger`)"
                     :disabled="busy === row.id"
                     @click="void stop(row)"
                     v-tooltip.top="'Stop'"

@@ -18,6 +18,14 @@
             "types": "./src/components/dagLayout.ts",
             "default": "./src/components/dagLayout.ts"
         },
+        "./path": {
+            "types": "./src/path.ts",
+            "default": "./src/path.ts"
+        },
+        "./series": {
+            "types": "./src/components/seriesAccent.ts",
+            "default": "./src/components/seriesAccent.ts"
+        },
         "./styles/*": "./src/styles/*"
     },
     "scripts": {

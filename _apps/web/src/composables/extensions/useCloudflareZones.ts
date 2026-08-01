@@ -8,6 +8,11 @@ import { errorMessage } from "../useAsyncAction";
  * (apiClient.sandbox.zones drops it); everything else here is local UI state. Bindings mirror what the
  * consumers render: cfToken/cfTokenValid, the discovered zones + selectedZone, and loading/error flags. */
 
+/* The .env key the token lands under in the sandbox. Exported because three files named it independently —
+ * this module's dev-autofill slot, the connect step that writes it, and the field that collects it — and a
+ * secret whose name is spelled in three places is one that gets written under two of them. */
+export const CF_TOKEN_KEY = `CLOUDFLARE_API_TOKEN`;
+
 // Lenient format check (Cloudflare tokens are 40 chars of [A-Za-z0-9_-]); just catches copy/paste slips.
 const TOKEN_RE = /^[A-Za-z0-9_-]{30,}$/;
 
@@ -60,13 +65,13 @@ export function useCloudflareZones() {
         }
         // Dev autofill persist (inert in prod) — Setup's ride-the-command flow never hits a secrets mutation,
         // so a valid token is remembered here, under the same key CloudflareConnect saves it as.
-        devFillSet(`secret.CLOUDFLARE_API_TOKEN`, cfToken.value.trim());
+        devFillSet(`secret.${CF_TOKEN_KEY}`, cfToken.value.trim());
         zonesLoading.value = true;
         zoneTimer = setTimeout(() => void loadZones(cfToken.value.trim()), 400);
     };
 
     // Dev autofill seed: prefill the last-used token (and fire zone discovery) on both consumers' mounts.
-    const remembered = devFillGet(`secret.CLOUDFLARE_API_TOKEN`);
+    const remembered = devFillGet(`secret.${CF_TOKEN_KEY}`);
     if (remembered !== undefined) {
         setToken(remembered);
     }

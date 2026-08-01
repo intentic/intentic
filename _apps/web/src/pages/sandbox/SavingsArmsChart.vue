@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { TurnExperiment } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { formatCompact, seriesColor } from "./usageChart";
+import { formatCompact, providerColor } from "./usageChart";
 
 /* A turn-level experiment's two arms. Both of this sandbox's turn experiments render through here — the terse
  * steer and the pre-injected workspace context — because they differ in nothing a reader cares about except
@@ -39,7 +39,7 @@ const max = computed(() => Math.max(experiment.on.mean, experiment.off.mean, Num
 // greyscale print as well as the labels do.
 const bars = computed(() => [
     { key: `off`, label: offLabel, arm: experiment.off, color: `var(--color-series-other)` },
-    { key: `on`, label: onLabel, arm: experiment.on, color: seriesColor(`claude`) },
+    { key: `on`, label: onLabel, arm: experiment.on, color: providerColor(`claude`) },
 ]);
 </script>
 

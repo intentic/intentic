@@ -8,10 +8,9 @@ import {
     connectorCard,
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace, type MarketplacePlugin } from "@intentic-app/api-contract";
-import { cmp, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic-app/ui";
+import { cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic-app/ui";
 import { type CapabilityEffect, capabilityEffects, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BrowserLoginDialog from "../components/BrowserLoginDialog.vue";
@@ -952,25 +951,19 @@ const submitLabel = computed(() =>
         </template>
 
         <!-- Removal runs a real teardown in the sandbox (MCP config, SSH host, service provisioning) — confirm first. -->
-        <Dialog
-            :visible="confirmRemoveId !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '24rem' }"
+        <ConfirmDialog
+            :open="confirmRemoveId !== undefined"
             header="Remove capability"
-            @update:visible="confirmRemoveId = undefined"
+            confirm-label="Remove"
+            confirm-icon="trash"
+            :loading="remove.isPending.value"
+            @cancel="confirmRemoveId = undefined"
+            @confirm="confirmRemove"
         >
             <p class="text-sm text-content">
                 Remove <b>{{ confirmRemoveId }}</b> from your sandbox? This tears down its configuration and can't be undone.
             </p>
-            <template #footer>
-                <Button label="Cancel" severity="secondary" :text="true" @click="confirmRemoveId = undefined" />
-                <Button label="Remove" severity="danger" :loading="remove.isPending.value" @click="confirmRemove">
-                    <template #icon><Icon name="trash" /></template>
-                </Button>
-            </template>
-        </Dialog>
+        </ConfirmDialog>
 
         <!-- Guided browser login for browser-kind capabilities (screencast a live Chromium the user signs into). -->
         <BrowserLoginDialog v-model:visible="loginVisible" :platform="loginPlatform" :label="loginLabel" @done="onLoginDone" />

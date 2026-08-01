@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, ProgressRing, useDevice } from "@intentic-app/ui";
+import { cmp, formatTokens, ProgressRing, useDevice } from "@intentic-app/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import ProviderLogo from "../chat/ProviderLogo.vue";
@@ -12,7 +12,6 @@ import {
     contextPct,
     formatCost,
     formatElapsed,
-    formatTokens,
     laneOf,
     reviewAction,
     turnInFlight,

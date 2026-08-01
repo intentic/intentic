@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp } from "@intentic-app/ui";
+import { Avatar, Card, cmp } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
@@ -19,8 +19,9 @@ watch(user, (value) => {
 // A freshly picked avatar, previewed until Save sends it. Undefined = keep the current one.
 const stagedAvatar = ref<string | undefined>(undefined);
 const avatarInput = ref<HTMLInputElement | null>(null);
-const avatarFailed = ref(false);
-const avatarImage = computed(() => stagedAvatar.value ?? (avatarFailed.value ? undefined : (user.value?.image ?? undefined)));
+// A broken picture URL is <Avatar>'s problem, not this form's: it falls back on its own, so there is no
+// load-failure flag to hold here any more.
+const avatarImage = computed(() => stagedAvatar.value ?? user.value?.image);
 const saving = ref(false);
 const saveError = ref<string | undefined>(undefined);
 
@@ -56,7 +57,6 @@ const saveProfile = async (): Promise<void> => {
             ...(stagedAvatar.value !== undefined && { image: stagedAvatar.value }),
         });
         stagedAvatar.value = undefined;
-        avatarFailed.value = false;
     } catch (error) {
         saveError.value = errorMessage(error, `Profile update failed.`);
     } finally {
@@ -76,19 +76,7 @@ const saveProfile = async (): Promise<void> => {
                 </div>
             </div>
             <div class="mt-3 flex items-center gap-3">
-                <span
-                    class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-canvas text-muted"
-                >
-                    <img
-                        v-if="avatarImage"
-                        :src="avatarImage"
-                        alt=""
-                        referrerpolicy="no-referrer"
-                        class="h-full w-full object-cover"
-                        @error="avatarFailed = true"
-                    />
-                    <Icon name="user" v-else class="text-xl" />
-                </span>
+                <Avatar :size="56" :src="avatarImage" />
                 <Button label="Change avatar" severity="secondary" :outlined="true" size="small" @click="avatarInput?.click()">
                     <template #icon><Icon name="image" /></template>
                 </Button>

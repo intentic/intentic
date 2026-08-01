@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic-app/capability-catalog";
 import { type InventoryEntry } from "@intentic-app/api-contract";
-import { Card, cmp, Code, InfoHint, StatusBadge } from "@intentic-app/ui";
+import { Card, cmp, Code, ConfirmDialog, InfoHint, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import SecretField from "../../components/SecretField.vue";
 import { errorMessage } from "../../composables/useAsyncAction";
@@ -617,14 +616,13 @@ onUnmounted(progress.stopWatching);
 
     <!-- Server removal: forgetting the server here vs wiping the machine are separate acts — spell out both,
          with the cleanup one-liner front and center, BEFORE the entry disappears. -->
-    <Dialog
-        :visible="removingServer !== undefined"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
-        :style="{ width: '34rem' }"
+    <ConfirmDialog
+        :open="removingServer !== undefined"
         header="Remove server"
-        @update:visible="removingServer = undefined"
+        confirm-label="Remove server"
+        :width="34"
+        @cancel="removingServer = undefined"
+        @confirm="confirmRemoveServer"
     >
         <div class="flex flex-col gap-3">
             <p class="text-sm text-muted">
@@ -639,9 +637,5 @@ onUnmounted(progress.stopWatching);
                 not by the script.
             </p>
         </div>
-        <template #footer>
-            <Button label="Cancel" severity="secondary" :text="true" @click="removingServer = undefined" />
-            <Button label="Remove server" severity="danger" @click="confirmRemoveServer" />
-        </template>
-    </Dialog>
+    </ConfirmDialog>
 </template>

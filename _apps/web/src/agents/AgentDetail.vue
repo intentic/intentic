@@ -163,7 +163,7 @@ const confirmDiscard = (): void => {
                     type="button"
                     aria-label="Rename agent"
                     v-tooltip.bottom="'Rename'"
-                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    :class="cmp.iconButton()"
                     @click="edit.begin()"
                 >
                     <Icon name="pencil" class="text-xs" />

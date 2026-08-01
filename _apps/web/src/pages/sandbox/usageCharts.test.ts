@@ -3,12 +3,26 @@
 // jsdom because these assertions are about rendered GEOMETRY — the percentages, the stack order, the rounded
 // data-end — which is exactly the class of thing a chart gets wrong silently. A NaN width or an inverted stack
 // throws nothing and fails no type check; it just draws a lie.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, h } from "vue";
-import UsageBarChart from "./UsageBarChart.vue";
+import { BarChart } from "@intentic-app/ui";
 import UsageColumnChart from "./UsageColumnChart.vue";
 import UsageSparkline from "./UsageSparkline.vue";
-import { type RankedEntry, type SpendBucket, type UsageTotals } from "./usageChart";
+import { type RankedEntry, rankedBars, type SpendBucket, type UsageTotals } from "./usageChart";
+
+// The ranked bars render through the design system's <BarChart>, so importing it brings the barrel — and with
+// it `useDevice`, which reads window.matchMedia at module scope. jsdom ships `window` but not that method.
+// vi.hoisted runs above every import in the transformed module, which is exactly what it is for.
+vi.hoisted(() => {
+    globalThis.matchMedia ??= ((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+    })) as unknown as typeof globalThis.matchMedia;
+});
 
 const totals = (over: Partial<UsageTotals> = {}): UsageTotals => ({
     costUsd: 0,
@@ -116,29 +130,32 @@ describe(`UsageColumnChart`, () => {
     });
 });
 
-describe(`UsageBarChart`, () => {
+// The ranked cost bars render through the design system's shared <BarChart>; what is asserted here is the
+// projection into it (rankedBars) plus the geometry the figure owes — the same four claims the app-local copy
+// of this chart used to make on its own.
+describe(`ranked cost bars`, () => {
     const entry = (label: string, value: number, providers: string[]): RankedEntry => ({ key: label, kind: `value`, label, value, providers });
 
     it(`scales bars against the leader, which fills the track`, () => {
-        const element = mount(UsageBarChart, { entries: [entry(`opus-5`, 10, [`claude`]), entry(`sonnet-5`, 2.5, [`claude`])] });
+        const element = mount(BarChart, { items: rankedBars([entry(`opus-5`, 10, [`claude`]), entry(`sonnet-5`, 2.5, [`claude`])]) });
         const bars = [...element.querySelectorAll(`[style*="width"]`)];
         expect(bars.map((node) => percent(node.getAttribute(`style`) ?? ``, `width`))).toEqual([100, 25]);
     });
 
     it(`colors each bar by its own provider, not by its rank`, () => {
-        const element = mount(UsageBarChart, { entries: [entry(`opus-5`, 10, [`claude`]), entry(`gpt`, 2, [`codex`])] });
+        const element = mount(BarChart, { items: rankedBars([entry(`opus-5`, 10, [`claude`]), entry(`gpt`, 2, [`codex`])]) });
         const bars = [...element.querySelectorAll(`[style*="width"]`)];
         expect(bars[0]?.getAttribute(`style`)).toContain(`--color-series-1`);
         expect(bars[1]?.getAttribute(`style`)).toContain(`--color-series-2`);
     });
 
     it(`directly labels every bar with its value — the relief the low-contrast fills owe`, () => {
-        const element = mount(UsageBarChart, { entries: [entry(`opus-5`, 12.5, [`claude`])] });
+        const element = mount(BarChart, { items: rankedBars([entry(`opus-5`, 12.5, [`claude`])]) });
         expect(element.textContent).toContain(`$12.50`);
     });
 
     it(`survives an all-zero set without dividing by zero`, () => {
-        const element = mount(UsageBarChart, { entries: [entry(`free`, 0, [`claude`])] });
+        const element = mount(BarChart, { items: rankedBars([entry(`free`, 0, [`claude`])]) });
         expect(element.innerHTML).not.toContain(`NaN`);
     });
 });

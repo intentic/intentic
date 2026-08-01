@@ -3,7 +3,9 @@ import { Segmented, useDevice } from "@intentic-app/ui";
 import type { DiffLayout } from "../../../composables/useLayout";
 import { useLayout } from "../../../composables/useLayout";
 import DiffStat from "../../../components/DiffStat.vue";
-import { type ChangeStatus, STATUS_CLASS, STATUS_LETTER } from "../workspaceTabs";
+import { type ChangeStatus } from "../workspaceTabs";
+import { basename, parentDir } from "@intentic-app/ui/path";
+import ChangeStatusMark from "../../../components/ChangeStatusMark.vue";
 
 /* The bar above a diff — WHICH file, and HOW it is being read. Every diff surface in the app renders this one:
  * the workspace tab, the agent review, the environment card's proposal. Before it there was no such thing, and
@@ -37,8 +39,6 @@ const { path, status, additions, deletions, from } = defineProps<{
 const { mobile } = useDevice();
 const { showComments, toggleShowComments, diffLayout, setDiffLayout } = useLayout();
 
-const basename = (value: string): string => value.slice(value.lastIndexOf(`/`) + 1);
-const parentDir = (value: string): string => (value.includes(`/`) ? value.slice(0, value.lastIndexOf(`/`)) : ``);
 
 // Two panes don't fit a phone, so the control is desktop-only and DiffView forces unified there — the stored
 // preference is left alone rather than being overwritten by a form factor the user didn't choose.
@@ -51,9 +51,7 @@ const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
 <template>
     <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
         <slot name="lead" />
-        <span v-if="status !== undefined" class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[status]">
-            {{ STATUS_LETTER[status] }}
-        </span>
+        <ChangeStatusMark v-if="status !== undefined" :status="status" />
         <!-- Directory dimmed and leading, basename legible — the same reading order the review's rows use, so
              the file you clicked on the left and the file named up here are recognisably the same thing. Only
              the DIRECTORY truncates: a bar that ellipsises the file name has printed the least useful half of

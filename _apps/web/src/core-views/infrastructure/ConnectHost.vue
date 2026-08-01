@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { HostTunnelSchema, type HostTunnel } from "@intentic-app/api-contract";
-import { cmp, Code, InfoHint, Segmented, useOsPreference } from "@intentic-app/ui";
+import { cmp, Code, commandLang, InfoHint, OS_OPTIONS, Segmented, useOsPreference } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, onUnmounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
@@ -246,16 +246,10 @@ onUnmounted(() => clearInterval(timer));
                 <span>{{ lockedReason }}</span>
             </div>
             <template v-else>
-                <Segmented
-                    v-model="cmdOs"
-                    :options="[
-                        { label: `Linux / macOS`, value: `unix` },
-                        { label: `Windows (PowerShell)`, value: `windows` },
-                    ]"
-                />
+                <Segmented v-model="cmdOs" :options="OS_OPTIONS" />
                 <Code
                     :code="cmdOs === `windows` ? connectHostCommandPs : connectHostCommand"
-                    :lang="cmdOs === `windows` ? `powershell` : `bash`"
+                    :lang="commandLang(cmdOs)"
                     :label="
                         cmdOs === `windows`
                             ? `Run in PowerShell on the machine you want to deploy onto (needs Docker Desktop)`

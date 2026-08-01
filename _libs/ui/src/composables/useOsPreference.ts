@@ -40,3 +40,18 @@ watch(cmdOs, (value) => {
 export function useOsPreference() {
     return { cmdOs };
 }
+
+/* The two options every command block offers, and the Shiki grammar each implies. They ship from here, beside
+ * the preference itself, because three screens were writing both out by hand — the sandbox switcher's cleanup
+ * command, the connect-a-host step and the setup wizard — and a fourth would have had to guess whether the
+ * label is "Windows (PowerShell)" or "Windows", and whether the lang id is `powershell` or `ps1`. The MARKUP
+ * is deliberately not shared: one of the three wraps these in a third "Docker Compose" option with its own
+ * component behind it, so a component here would have to grow a slot for a case only one caller has.
+ *
+ * Mutable, because <Segmented> takes its options array as-is (same reason as RANGE_PRESETS in usageChart). */
+export const OS_OPTIONS: { label: string; value: CommandOs }[] = [
+    { label: `Linux / macOS`, value: `unix` },
+    { label: `Windows (PowerShell)`, value: `windows` },
+];
+
+export const commandLang = (os: CommandOs): string => (os === `windows` ? `powershell` : `bash`);

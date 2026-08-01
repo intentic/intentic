@@ -1,5 +1,7 @@
+import type { FigureAccent } from "@intentic-app/ui/markdown";
+import { seriesColor } from "@intentic-app/ui/series";
 import type { InputSavings, TurnExperiment } from "@intentic/sandbox-contract";
-import { formatCompact, seriesColor } from "./usageChart";
+import { formatCompact } from "./usageChart";
 
 /* Every number and every mark on the Savings surfaces, as pure functions over the daemon's savings report —
  * the same split as usageChart.ts, and for the same reason: the arithmetic under a "89% saved" claim should be
@@ -47,9 +49,10 @@ export const stageLabel = (id: string): string => CLEANER_OPTIONS.find((cleaner)
 // adjacent-pair contrast.
 const SLOTS = 5;
 
-// The keys whose slots the validated palette is defined in terms of — reached through the one function that
-// owns that mapping (seriesColor) rather than interpolating --color-series-N by hand in a second file.
-const PALETTE_KEYS = [`claude`, `codex`, `kimi`, `grok`, `gemini`] as const;
+// The palette's slots, named directly. This used to be a list of PROVIDER names — claude, codex, kimi… — fed
+// through the provider→slot lookup purely to arrive back at slots 1–5, because slot→colour was not reachable
+// on its own. It is now (`seriesColor` is exported), so the detour is gone: nothing here is about providers.
+const SLOTS_BY_RANK = [`1`, `2`, `3`, `4`, `5`] as const satisfies readonly FigureAccent[];
 
 export interface SavingsSegment {
     readonly key: string;
@@ -86,7 +89,7 @@ export const compositionOf = (input: InputSavings): Composition => {
         // Slot by RANK, unlike the provider charts where colour follows the entity for good. There are more
         // possible mechanisms than the five checked slots, so an entity-stable mapping isn't available; the
         // ranked list beside the bar carries identity, and every segment names itself on hover.
-        color: seriesColor(PALETTE_KEYS[index] ?? ``),
+        color: seriesColor(SLOTS_BY_RANK[index] ?? `neutral`),
         kind: `saved`,
     }));
     if (tail.length > 0) {

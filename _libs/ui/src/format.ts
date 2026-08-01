@@ -16,10 +16,14 @@ export const formatBytes = (bytes: number | undefined): string => {
     return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 };
 
-// Token counts, at the width a chip or a summary line can spare: "142k" once thousands are reached, the exact
-// number below that. The same rounding wherever tokens are quoted (context meter, per-account usage, cleaner
-// savings), so two surfaces quoting the same number never disagree about it.
-export const formatTokens = (tokens: number): string => (tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : String(tokens));
+// Token counts, at the width a chip or a summary line can spare: "1.4M" past a million, "142k" once thousands
+// are reached, the exact number below that. The same rounding wherever tokens are quoted (context meter,
+// per-account usage, cleaner savings, the fleet board's per-agent counts), so two surfaces quoting the same
+// number never disagree about it — which is what a second copy in agentStatus.ts had quietly stopped being
+// true: it carried the megabyte tier this one lacked, so a 1.5M-token agent read "1500k" on one screen and
+// "1.5M" on the next.
+export const formatTokens = (tokens: number): string =>
+    tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : String(tokens);
 
 // Coarse "time since" for activity/log/history rows: "just now" under a minute, "Nm ago"/"Nh ago" within a
 // day, else the absolute local timestamp. Distinct on purpose from chat's compact `relativeTime` (no "ago",

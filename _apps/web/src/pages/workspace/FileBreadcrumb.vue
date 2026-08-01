@@ -27,7 +27,7 @@ const sizeLabel = computed(() => formatBytes(meta?.size));
             </template>
         </div>
         <!-- Members looking at the same file as you, live. -->
-        <PresenceAvatars :viewers="viewersOfPath(path)" label="also viewing this file" />
+        <PresenceAvatars :members="viewersOfPath(path)" label="also viewing this file" />
         <slot />
     </div>
 </template>

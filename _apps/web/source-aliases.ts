@@ -33,6 +33,12 @@ export const sourceAliases = (): Record<string, string> => ({
     // unit tests both call, and a test for a pure function must not have to boot the component graph (and a DOM
     // with it) to reach it.
     "@intentic-app/ui/dag": here("../../_libs/ui/src/components/dagLayout.ts"),
+    // Same reason and the same ordering requirement again: splitting a path into name + directory is what every
+    // file row in the app does, including the ones in unit-tested pure modules (fileType.ts, explorerPaste.ts).
+    "@intentic-app/ui/path": here("../../_libs/ui/src/path.ts"),
+    // Same again: the chart palette's slot→colour lookup is called by the usage/savings PROJECTIONS, which are
+    // pure functions with their own unit tests — reaching it through the barrel boots Picker.vue and wants a DOM.
+    "@intentic-app/ui/series": here("../../_libs/ui/src/components/seriesAccent.ts"),
     "@intentic-app/ui": here("../../_libs/ui/src/index.ts"),
     "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
     // Same reason as the markdown subpath above, and the same ordering requirement: the session-name derivation

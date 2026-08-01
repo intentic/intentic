@@ -100,8 +100,11 @@ const openTabs = (count: number): string[] => {
 const tabs = (): HTMLElement[] => [...strip.querySelectorAll<HTMLElement>(`[data-chat-tab]`)];
 // The menu teleports out of the strip, so it is read off the document rather than the strip's own subtree.
 const menuRows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(`.p-contextmenu-item`)];
-// The row's own label, without the shortcut hint the same <a> carries in a <kbd>.
-const labelOf = (item: HTMLElement): string => item.querySelector(`a > span:nth-child(2)`)?.textContent?.trim() ?? ``;
+/* The row's own label, without the shortcut hint the same <a> carries in a <kbd>. Selected by the label span's
+ * own class rather than by position: <ContextMenu> reserves the leading icon/check gutter only for menus whose
+ * model actually uses one, so the label is the first child in the strip menu (no icons anywhere) and the second
+ * in the tab menu (Rename and Close carry one). Which of those a menu is, is not what these tests are about. */
+const labelOf = (item: HTMLElement): string => item.querySelector(`a > span.flex-1`)?.textContent?.trim() ?? ``;
 const labels = (): string[] => menuRows().map(labelOf);
 const row = (label: string): HTMLElement => {
     const found = menuRows().find((item) => labelOf(item) === label);

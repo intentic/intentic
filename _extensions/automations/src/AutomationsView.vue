@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AutomationSummary } from "@intentic/sandbox-contract";
-import { Button, cmp, Dialog, Icon, InfoHint, Page, PageHeader, RowGroup, Segmented } from "@intentic/extension-ui";
+import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageHeader, RowGroup, Segmented } from "@intentic/extension-ui";
 import { computed, reactive, ref } from "vue";
 import AutomationRow from "./AutomationRow.vue";
 import CreateAutomationDialog from "./CreateAutomationDialog.vue";
@@ -353,24 +353,18 @@ const toggleDetail = (id: string): void => {
         <CreateAutomationDialog v-model:visible="createOpen" />
 
         <!-- Deleting takes the run history with it and the daemon keeps no copy — the one action here with no undo. -->
-        <Dialog
-            :visible="confirmRemoveId !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '24rem' }"
+        <ConfirmDialog
+            :open="confirmRemoveId !== undefined"
             header="Delete automation"
-            @update:visible="confirmRemoveId = undefined"
+            confirm-label="Delete"
+            confirm-icon="trash"
+            :loading="remove.isPending.value"
+            @cancel="confirmRemoveId = undefined"
+            @confirm="removeAutomation"
         >
             <p class="text-sm text-content">
                 Delete <b>{{ confirmRemoveId }}</b> and its run history? This can't be undone.
             </p>
-            <template #footer>
-                <Button label="Cancel" severity="secondary" :text="true" @click="confirmRemoveId = undefined" />
-                <Button label="Delete" severity="danger" :loading="remove.isPending.value" @click="removeAutomation">
-                    <template #icon><Icon name="trash" /></template>
-                </Button>
-            </template>
-        </Dialog>
+        </ConfirmDialog>
     </Page>
 </template>

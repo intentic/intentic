@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import GateCard from "./GateCard.vue";
 import { formatElapsed } from "../composables/agents/agentStatus";
 import { bootSteps, bootStartedAt } from "../composables/sandbox/useDaemonBoot";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -18,6 +19,8 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
 
 const { active } = useSandbox();
 
+const title = computed(() => `Starting "${active.value?.name ?? `your sandbox`}"…`);
+
 const done = computed(() => bootSteps.value.filter((step) => step.state === `done` || step.state === `failed`).length);
 const running = computed(() => bootSteps.value.find((step) => step.state === `running`));
 
@@ -31,26 +34,14 @@ onBeforeUnmount(() => clearInterval(ticker));
 </script>
 
 <template>
-    <div class="flex h-full w-full items-center justify-center p-8">
-        <div class="animate-fade-in flex w-full max-w-md flex-col gap-4 rounded-2xl border border-line bg-card p-8">
-            <div class="flex flex-col items-center gap-4 text-center">
-                <span class="flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-canvas text-muted">
-                    <Icon name="box" class="text-xl" />
-                </span>
-                <div class="flex flex-col gap-1.5">
-                    <h2 class="flex items-center justify-center gap-2 text-lg font-semibold text-content">
-                        <Icon name="spinner" class="text-info" spin />
-                        Starting "{{ active?.name ?? "your sandbox" }}"…
-                    </h2>
-                    <p class="text-sm text-muted">
-                        Your sandbox is up and getting its workspace ready. It opens by itself the moment it can serve — nothing to click.
-                    </p>
-                </div>
-            </div>
-
+    <GateCard icon="box" :title="title" spinner>
+        <p class="text-sm text-muted">
+            Your sandbox is up and getting its workspace ready. It opens by itself the moment it can serve — nothing to click.
+        </p>
+        <template #below>
             <!-- The declared chain, in the order it runs. A daemon too old to report one leaves this empty and the
                  card is the message on its own. -->
-            <div v-if="bootSteps.length > 0" class="flex flex-col gap-1.5">
+            <div v-if="bootSteps.length > 0" class="flex flex-col gap-1.5 text-left">
                 <div
                     v-for="step in bootSteps"
                     :key="step.key"
@@ -74,6 +65,6 @@ onBeforeUnmount(() => clearInterval(ticker));
                 <template v-if="bootSteps.length > 0">{{ done }} of {{ bootSteps.length }}{{ running ? ` · ${running.label}` : "" }} · </template>
                 {{ bootStartedAt === undefined ? "starting" : formatElapsed(bootStartedAt, now) }}
             </p>
-        </div>
-    </div>
+        </template>
+    </GateCard>
 </template>

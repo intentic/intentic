@@ -7,11 +7,14 @@
  * Publishing a typed npm artifact for out-of-repo authors is a marketplace-phase task. */
 
 export {
+    Avatar,
     BarChart,
     BottomSheet,
     Card,
     cmp,
     Code,
+    ConfirmDialog,
+    ContextMenu,
     CopyButton,
     DagGraph,
     type DagEdge,
@@ -57,7 +60,6 @@ export type {
 } from "@intentic-app/ui/markdown";
 export { default as Button } from "primevue/button";
 export { default as Checkbox } from "primevue/checkbox";
-export { default as ContextMenu } from "primevue/contextmenu";
 export { default as Dialog } from "primevue/dialog";
 export { default as InputText } from "primevue/inputtext";
 export type { MenuItem } from "primevue/menuitem";

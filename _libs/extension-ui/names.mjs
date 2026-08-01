@@ -2,12 +2,14 @@
 // (_apps/web/scripts/generate-ext-shims.mjs) and hostModules' dev-time coverage assertion. Update alongside
 // src/index.ts; the assertion catches drift on the next dev boot.
 export const extensionUiNames = [
+    "Avatar",
     "BarChart",
     "BottomSheet",
     "Button",
     "Card",
     "Checkbox",
     "Code",
+    "ConfirmDialog",
     "ContextMenu",
     "CopyButton",
     "DagGraph",

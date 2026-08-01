@@ -1,3 +1,6 @@
+import type { FigureAccent } from "@intentic-app/ui/markdown";
+import type { BarItem } from "@intentic-app/ui";
+import { seriesColor } from "@intentic-app/ui/series";
 import type { UsageRollupRow } from "@intentic/sandbox-contract";
 
 /* Every number and every mark on the Usage tab, as pure functions over the daemon's rollup rows. The screen
@@ -114,12 +117,19 @@ export const deltaPercent = (current: number, previous: number | undefined): num
  * slot rather than a sixth generated hue. */
 export const PROVIDER_SERIES = [`claude`, `codex`, `kimi`, `grok`, `gemini`] as const;
 
-// Colour follows the ENTITY, for good: the slot comes from the provider's identity, never from its rank in the
-// current filter, so hiding a provider can't repaint the survivors.
-export const seriesColor = (key: string): string => {
+/* Colour follows the ENTITY, for good: the slot comes from the provider's identity, never from its rank in the
+ * current filter, so hiding a provider can't repaint the survivors.
+ *
+ * Named for the provider it keys on, not for the palette it lands in — as `seriesColor` it collided with the
+ * design system's own `seriesColor` (a figure's authored slot → the same CSS var). Two functions of one name
+ * mapping different domains into one palette is a collision an import line cannot show you. This one owns the
+ * provider→slot half only; the slot→var half stays where it always was. */
+export const providerAccent = (key: string): FigureAccent => {
     const slot = PROVIDER_SERIES.indexOf(key as (typeof PROVIDER_SERIES)[number]);
-    return slot === -1 ? `var(--color-series-other)` : `var(--color-series-${slot + 1})`;
+    return slot === -1 ? `neutral` : (String(slot + 1) as FigureAccent);
 };
+
+export const providerColor = (key: string): string => seriesColor(providerAccent(key));
 
 // The providers actually present in these rows, in slot order (unknown providers last, alphabetical). Drives
 // both the stack order and the legend, so the two can never disagree.
@@ -279,10 +289,23 @@ export const rankByCost = (
     ];
 };
 
-// The bar's fill: its provider's slot when the bar belongs to exactly one provider, the achromatic tail
+// The bar's palette SLOT: its provider's when the bar belongs to exactly one provider, the achromatic tail
 // otherwise. Never a ramp keyed to the bar's own length — that double-encodes what the length already says.
-export const rankedColor = (entry: RankedEntry): string =>
-    entry.providers.length === 1 ? seriesColor(entry.providers[0]!) : `var(--color-series-other)`;
+// A slot rather than a colour, because <BarChart> takes accents and owns the slot→var step for every figure.
+export const rankedAccent = (entry: RankedEntry): FigureAccent =>
+    entry.providers.length === 1 ? providerAccent(entry.providers[0]!) : `neutral`;
+
+// One ranked cost list → the shared bar figure's items. The money formatting, the fold/unattributed rows'
+// quieter type and the collision-proof key all live here, where the domain is, rather than in the chart.
+export const rankedBars = (entries: readonly RankedEntry[]): BarItem[] =>
+    entries.map((entry) => ({
+        label: entry.label,
+        value: entry.value,
+        display: formatUsd(entry.value),
+        accent: rankedAccent(entry),
+        key: rankedKey(entry),
+        muted: entry.kind !== `value`,
+    }));
 
 // ---- axis ------------------------------------------------------------------------------------------------
 

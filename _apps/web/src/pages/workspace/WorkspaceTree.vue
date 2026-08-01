@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { type IconName, useExplorerStyle } from "@intentic-app/ui";
+import { ConfirmDialog, ContextMenu, type IconName, useExplorerStyle } from "@intentic-app/ui";
 import Button from "primevue/button";
-import ContextMenu from "primevue/contextmenu";
-import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, type VNode, watch } from "vue";
 import { useLayout } from "../../composables/useLayout";
@@ -20,6 +18,7 @@ import { movableInto, pastePairs } from "./explorerPaste";
 import { nestSiblings, type NestedEntry } from "./fileNesting";
 import { revealTargets } from "./revealPath";
 import { selectRange, stepLead } from "./treeSelect";
+import { basename, parentDir } from "@intentic-app/ui/path";
 
 interface Row {
     readonly entry: WorkspaceTreeEntry;
@@ -134,8 +133,6 @@ watch(
     },
 );
 
-const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
-const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
 const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);
 const canMoveInto = (source: string, dir: string): boolean => !(dir === source || dir === parentDir(source) || dir.startsWith(`${source}/`));
 
@@ -884,11 +881,11 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     :aria-expanded="row.entry.type === 'dir' || row.nest ? row.isExpanded : undefined"
                     :tabindex="tabbablePath === row.entry.path ? 0 : -1"
                     :draggable="renamingPath !== row.entry.path"
-                    class="treerow flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
+                    class="ui-row-select flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
                     :class="{
-                        'treerow-on': selection.has(row.entry.path),
-                        'treerow-drop': row.entry.path === dragOverPath,
-                        'treerow-changed': isRecentlyChanged(row.entry.path),
+                        'ui-row-select-on': selection.has(row.entry.path),
+                        'ui-row-select-drop': row.entry.path === dragOverPath,
+                        'ui-row-select-changed': isRecentlyChanged(row.entry.path),
                         'opacity-50': clipboard?.mode === 'cut' && clipboard.paths.includes(row.entry.path),
                     }"
                     :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
@@ -972,7 +969,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         @click.stop="onCogClick(row.entry)"
                     />
                     <!-- Other members with this file open right now — live co-presence on the row. -->
-                    <PresenceAvatars v-if="row.entry.type === 'file'" :viewers="viewersOfPath(row.entry.path)" label="viewing this file" />
+                    <PresenceAvatars v-if="row.entry.type === 'file'" :members="viewersOfPath(row.entry.path)" label="viewing this file" />
                     <!-- Transient "just changed" dot (a shape cue, not color-only) alongside the row tint. -->
                     <Icon
                         name="circle-fill"
@@ -1015,80 +1012,46 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
         <p v-if="visibleRows.length === 0 && creating === undefined" class="px-3 py-3 text-center text-2xs text-subtle">
             {{ filter.trim() ? "No matching files." : "Empty workspace." }}
         </p>
-        <!-- Compact the menu to the dense explorer (Tailwind wins via the utilities cssLayer, ordered last). -->
-        <ContextMenu
-            ref="menu"
-            :model="menuItems"
-            :pt="{
-                root: '!min-w-40 !text-xs',
-                rootList: '!p-1',
-                itemLink: '!gap-2 !rounded !px-2 !py-1 !text-xs',
-                itemIcon: '!text-2xs',
-                separator: '!my-1',
-            }"
-        >
-            <template #itemicon="{ item }"><Icon :name="item.icon as IconName" /></template>
-        </ContextMenu>
-        <Dialog
-            :visible="confirmPaths !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '26rem' }"
+        <ContextMenu ref="menu" :model="menuItems" :min-width="10" />
+        <ConfirmDialog
+            :open="confirmPaths !== undefined"
             :header="deleteHeader"
-            @update:visible="cancelDelete"
+            confirm-label="Delete"
+            confirm-icon="trash"
+            :items="confirmPaths ?? []"
+            @cancel="cancelDelete"
+            @confirm="confirmDelete"
             @hide="focusLead"
         >
-            <ul v-if="confirmPaths !== undefined" class="flex flex-col gap-1">
-                <li v-for="path in confirmPaths.slice(0, 5)" :key="path" class="flex min-w-0 items-center gap-2 text-sm">
-                    <!-- Delete-confirm list stays calm/monochrome, but tracks the setup's icon size. -->
-                    <Icon
-                        :name="iconForEntry(basename(path), byPath.get(path)?.type ?? 'file', false)"
-                        class="shrink-0 text-muted"
-                        :class="treatEntry(basename(path), byPath.get(path)?.type ?? 'file', false, false).sizeClass"
-                    />
-                    <span class="truncate text-content">{{ basename(path) }}</span>
-                    <span v-if="parentDir(path) !== ''" class="min-w-0 truncate text-xs text-subtle">{{ parentDir(path) }}</span>
-                </li>
-                <li v-if="confirmPaths.length > 5" class="text-xs text-subtle">…and {{ confirmPaths.length - 5 }} more</li>
-            </ul>
-            <p class="mt-3 text-xs text-muted">This can't be undone.</p>
-            <template #footer>
-                <Button label="Cancel" severity="secondary" :text="true" @click="cancelDelete" />
-                <Button label="Delete" severity="danger" autofocus @click="confirmDelete">
-                    <template #icon><Icon name="trash" /></template>
-                </Button>
+            <!-- Delete-confirm list stays calm/monochrome, but tracks the setup's icon size. -->
+            <template #item="{ item }">
+                <Icon
+                    :name="iconForEntry(basename(item), byPath.get(item)?.type ?? 'file', false)"
+                    class="shrink-0 text-muted"
+                    :class="treatEntry(basename(item), byPath.get(item)?.type ?? 'file', false, false).sizeClass"
+                />
+                <span class="truncate text-content">{{ basename(item) }}</span>
+                <span v-if="parentDir(item) !== ''" class="min-w-0 truncate text-xs text-subtle">{{ parentDir(item) }}</span>
             </template>
-        </Dialog>
+            <p class="mt-3 text-xs text-muted">This can't be undone.</p>
+        </ConfirmDialog>
     </div>
 </template>
 
 <style scoped>
-.treerow {
-    cursor: pointer;
-    transition: background-color 0.1s;
-}
-.treerow:hover {
-    background: color-mix(in srgb, var(--color-content) 6%, transparent);
-}
-.treerow-on {
-    background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
-}
-.treerow:focus-visible {
-    outline: none;
-    box-shadow: inset 0 0 0 1px var(--color-primary-500);
-}
-.treerow-drop {
+/* Only the two states the shared `.ui-row-select` has no opinion about: a drop target, and the flash a row
+   gets when the file under it just changed on disk. Hover, selection and the focus ring come from the utility. */
+.ui-row-select-drop {
     background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);
     box-shadow: inset 0 0 0 1px var(--color-primary-500);
 }
 /* Flash a row that just changed on disk (agent/terminal edit), fading over the ~2s the path stays in
    recentlyChanged. The animation overrides the base/hover/selection background for its duration, then the class
    is removed and the row reverts. */
-.treerow-changed {
-    animation: treerow-changed-flash 2s ease-out;
+.ui-row-select-changed {
+    animation: ui-row-select-changed-flash 2s ease-out;
 }
-@keyframes treerow-changed-flash {
+@keyframes ui-row-select-changed-flash {
     from {
         background: color-mix(in srgb, var(--color-warning) 26%, transparent);
     }

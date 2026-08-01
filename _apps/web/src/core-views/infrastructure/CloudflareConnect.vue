@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { cmp, InfoHint, Picker, type PickerOption } from "@intentic-app/ui";
+import { cmp, InfoHint } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
-import SecretField from "../../components/SecretField.vue";
-import { useCloudflareZones } from "../../composables/extensions/useCloudflareZones";
+import CloudflareTokenField from "../../components/CloudflareTokenField.vue";
+import { CF_TOKEN_KEY, useCloudflareZones } from "../../composables/extensions/useCloudflareZones";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useSecretKeys, useSecrets } from "../../composables/secrets/useSecrets";
 import { errorMessage } from "../../composables/useAsyncAction";
@@ -13,11 +13,10 @@ import { errorMessage } from "../../composables/useAsyncAction";
  * i.have.cloudflare("cf") backend with the chosen zone persisted on it, then emits `connected`. Used inline
  * by the Add service dialog and the Connections page so neither dead-ends the user into a separate flow. */
 
-const CF_TOKEN_KEY = `CLOUDFLARE_API_TOKEN`;
-
 const emit = defineEmits<{ connected: [] }>();
 
-const { cfToken, cfTokenValid, zones, selectedZone, zonesLoading, zonesError, setToken } = useCloudflareZones();
+const cf = useCloudflareZones();
+const { cfToken, cfTokenValid, selectedZone } = cf;
 const { set: setSecret } = useSecrets();
 const { hasKey } = useSecretKeys();
 const { add } = useInventory();
@@ -25,15 +24,10 @@ const { add } = useInventory();
 // The sandbox may already carry a Cloudflare token (own-Cloudflare onboarding seeds it) — then all that's
 // missing is the backend declaration; we can't re-list zones since we only know the key exists, not its value.
 const tokenAlreadySet = computed(() => hasKey(CF_TOKEN_KEY));
-// Bridge SecretField's v-model onto the zones composable's token state (it drives the zone lookup).
-const tokenModel = computed({ get: () => cfToken.value, set: setToken });
 const submitting = ref(false);
 const error = ref<string | undefined>(undefined);
 
 const canConnect = computed(() => tokenAlreadySet.value || (cfTokenValid.value && selectedZone.value !== undefined));
-
-// Zones are domains — monospace rows behind a filterable picker, since an account-wide token can carry dozens.
-const zoneOptions = computed<PickerOption[]>(() => zones.value.map((zone) => ({ value: zone, label: zone, icon: `globe`, mono: true })));
 
 const connect = async (): Promise<void> => {
     if (!canConnect.value || submitting.value) {
@@ -102,46 +96,16 @@ const connect = async (): Promise<void> => {
                     </ul>
                 </InfoHint>
             </div>
-            <label class="ui-field">
-                <span class="ui-field-label">API token</span>
-                <SecretField v-model="tokenModel" :secret-key="CF_TOKEN_KEY" collect no-hint placeholder="Paste your Cloudflare API token" />
-            </label>
-            <p v-if="cfToken.length === 0" class="text-xs text-muted">
-                Used once to look up your Cloudflare zones, then stored in your sandbox — never on the platform.
-            </p>
-            <p v-else-if="!cfTokenValid" class="text-xs text-warning">
-                That doesn't look like a Cloudflare API token — double-check for copy/paste slips.
-            </p>
-            <p v-else-if="zonesLoading" class="text-xs text-muted">
-                <Icon name="spinner" spin /> Checking which Cloudflare zones this token can use…
-            </p>
-            <div v-else-if="zonesError" :class="cmp.alertDanger('text-2xs')">{{ zonesError }}</div>
-            <label v-else-if="zones.length > 1" class="ui-field">
-                <span class="ui-field-label">Cloudflare zone</span>
-                <Picker
-                    v-model="selectedZone"
-                    :options="zoneOptions"
-                    placeholder="Pick the domain to use"
-                    class="w-full"
-                    aria-label="Cloudflare zone"
-                />
-                <span class="text-xs text-muted">This token can reach several domains — choose which one to use.</span>
-            </label>
-            <p v-else-if="selectedZone" class="text-xs text-success">
-                ✓ Using <span class="font-mono">{{ selectedZone }}</span>
-            </p>
-
-            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-2xs">
-                <a
-                    href="https://dash.cloudflare.com/profile/api-tokens"
-                    target="_blank"
-                    rel="noreferrer"
-                    class="inline-flex items-center gap-1 text-link hover:underline"
-                >
-                    Create a token <Icon name="external-link" />
-                </a>
-                <span class="text-subtle">Scopes: Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit</span>
-            </div>
+            <CloudflareTokenField
+                :cf="cf"
+                storage-note="Used once to look up your Cloudflare zones, then stored in your sandbox — never on the platform."
+            >
+                <template #zone-confirmed>
+                    <p v-if="cf.zones.value.length === 1 && selectedZone" class="text-xs text-success">
+                        ✓ Using <span class="font-mono">{{ selectedZone }}</span>
+                    </p>
+                </template>
+            </CloudflareTokenField>
 
             <div class="flex justify-end">
                 <Button type="submit" label="Connect Cloudflare" :disabled="!canConnect || submitting" :loading="submitting">

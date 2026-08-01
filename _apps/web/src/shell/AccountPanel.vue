@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Avatar } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -55,19 +56,7 @@ const logout = async (): Promise<void> => {
         <div class="flex w-72 flex-col p-1">
             <!-- Central account: email + name, with the billing tier badge. -->
             <div class="flex items-center gap-3 px-2 py-2">
-                <span
-                    class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-content/5 text-muted"
-                >
-                    <img
-                        v-if="avatarImage"
-                        :src="avatarImage"
-                        alt=""
-                        referrerpolicy="no-referrer"
-                        class="h-full w-full object-cover"
-                        @error="avatarLoadFailed"
-                    />
-                    <Icon name="user" v-else />
-                </span>
+                <Avatar :size="40" :src="avatarImage" />
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
                         <span class="truncate text-sm font-medium text-content">{{ user?.email }}</span>

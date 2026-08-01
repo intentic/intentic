@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FileDiffResponse } from "@intentic-app/api-contract";
-import { explorerColorClass, iconForEntry, Segmented, useDevice, useExplorerStyle } from "@intentic-app/ui";
+import { cmp, explorerColorClass, iconForEntry, Segmented, useDevice, useExplorerStyle } from "@intentic-app/ui";
 import { isTestPath } from "@intentic/sandbox-contract";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -15,8 +15,9 @@ import BinaryDiffView from "../pages/workspace/viewers/BinaryDiffView.vue";
 import DiffToolbar from "../pages/workspace/viewers/DiffToolbar.vue";
 import DiffView from "../pages/workspace/viewers/DiffView.vue";
 import { rendersAsBytes } from "../pages/workspace/fileType";
-import { STATUS_CLASS, STATUS_LETTER } from "../pages/workspace/workspaceTabs";
 import AgentConflictReport from "./AgentConflictReport.vue";
+import { basename, parentDir } from "@intentic-app/ui/path";
+import ChangeStatusMark from "../components/ChangeStatusMark.vue";
 
 /* One agent's work, as a REVIEW: the file list on the left, that file's diff on the right, in this view — the
  * shape every code review has (GitHub, VSCode's SCM, `git add -p`), because the job is scanning a body of
@@ -336,10 +337,9 @@ const openInWorkspace = (file: AgentReviewFile): void => {
 };
 
 // --- presentation --------------------------------------------------------------------------------------
-const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
-const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
 
-const ICON_BUTTON = `flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40`;
+// The design system's toolbar icon button, plus this panel's own disabled treatment.
+const ICON_BUTTON = cmp.iconButton(`disabled:opacity-40`);
 const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-1.5`;
 
 // What a refused land left behind. The report itself — the causes, and the ladder of actions ordered by who
@@ -518,9 +518,7 @@ const endResize = (event: PointerEvent): void => {
                                     :class="isViewed(file) ? 'opacity-50' : ''"
                                     @click="select(file)"
                                 >
-                                    <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[file.change.status]">
-                                        {{ STATUS_LETTER[file.change.status] }}
-                                    </span>
+                                    <ChangeStatusMark :status="file.change.status" />
                                     <Icon
                                         :name="iconForEntry(basename(file.change.path), 'file', false)"
                                         class="shrink-0 text-2xs"

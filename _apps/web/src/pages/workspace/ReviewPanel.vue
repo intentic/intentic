@@ -26,7 +26,8 @@ import { composeSession, startSession } from "../../composables/agents/sessionSu
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
 import SuggestedSessionBox from "../../agents/SuggestedSessionBox.vue";
 import { fixPrompt, fixSummary } from "./prepushFix";
-import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
+import { type DiffTabPayload } from "./workspaceTabs";
+import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
 
 /* The Changes review — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
  * handle, and the Files|Changes|History mode switch), VSCode's SCM pattern over the real repos: uncommitted
@@ -260,7 +261,8 @@ const sidesSplit = (repo: RepoChanges): boolean => sidesOf(repo).length > 1;
 // This panel lives in a ~270px sidebar, so labelled secondary buttons don't fit — four of them pushed the
 // primary Commit off the edge entirely. Everything secondary is a 24px icon with a tooltip and an aria-label;
 // only the primary action spends horizontal space on a word.
-const ICON_BUTTON = `flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40`;
+// The design system's toolbar icon button, plus this panel's own disabled treatment.
+const ICON_BUTTON = cmp.iconButton(`disabled:opacity-40`);
 
 // Opens the diff of the ROW, not of the file: a staged row shows index-vs-HEAD, an unstaged row
 // worktree-vs-index. The side rides the tab key too, so a partially staged file's two diffs open as two tabs
@@ -1298,9 +1300,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-0.5 text-left max-md:min-h-11"
                                     @click="clickRow({ repo: group.repo, side: section.side, path: change.path }, change, $event)"
                                 >
-                                    <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[change.status]">{{
-                                        STATUS_LETTER[change.status]
-                                    }}</span>
+                                    <ChangeStatusMark :status="change.status" />
                                     <!-- dir="rtl" ellipsizes the head of the path so the filename survives truncation, but it
                                          also lets bidi-neutral edge characters jump sides: a leading "_" in "_apps/…" renders
                                          at the far right. <bdi> isolates the path as one LTR run, keeping the glyphs in order.

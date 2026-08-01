@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { Card, cmp, Segmented } from "@intentic-app/ui";
+import { BarChart, Card, cmp, Segmented } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../composables/agents/useAgents";
@@ -12,7 +12,6 @@ import { compositionOf, verdictOf } from "./savingsChart";
 import SavingsArmsChart from "./SavingsArmsChart.vue";
 import SavingsCard from "./SavingsCard.vue";
 import SavingsStackBar from "./SavingsStackBar.vue";
-import UsageBarChart from "./UsageBarChart.vue";
 import UsageColumnChart from "./UsageColumnChart.vue";
 import UsageSparkline from "./UsageSparkline.vue";
 import {
@@ -29,7 +28,8 @@ import {
     RANGE_PRESETS,
     type RangePreset,
     rankByCost,
-    seriesColor,
+    providerColor,
+    rankedBars,
     sparkPoints,
     todayUtc,
     totalsOf,
@@ -292,12 +292,12 @@ const hasSpend = computed(() => current.value.length > 0);
                 <div class="grid gap-3 lg:grid-cols-2">
                     <Card>
                         <h3 class="mb-3 text-sm font-semibold text-content">Cost by model</h3>
-                        <UsageBarChart v-if="byModel.length > 0" :entries="byModel" />
+                        <BarChart v-if="byModel.length > 0" :items="rankedBars(byModel)" :label-width="8" />
                         <p v-else :class="cmp.emptyState()">Nothing was billed in this range.</p>
                     </Card>
                     <Card>
                         <h3 class="mb-3 text-sm font-semibold text-content">Cost by agent</h3>
-                        <UsageBarChart v-if="byAgent.length > 0" :entries="byAgent" />
+                        <BarChart v-if="byAgent.length > 0" :items="rankedBars(byAgent)" :label-width="8" />
                         <p v-else :class="cmp.emptyState()">Nothing was billed in this range.</p>
                     </Card>
                 </div>
@@ -490,7 +490,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                     <td class="py-1.5 pr-3 whitespace-nowrap">{{ row.day }}</td>
                                     <td class="py-1.5 pr-3">
                                         <span class="flex items-center gap-1.5">
-                                            <span class="size-2 shrink-0 rounded-[2px]" :style="{ background: seriesColor(row.provider) }" />
+                                            <span class="size-2 shrink-0 rounded-[2px]" :style="{ background: providerColor(row.provider) }" />
                                             {{ providerLabel(row.provider) }}
                                         </span>
                                     </td>

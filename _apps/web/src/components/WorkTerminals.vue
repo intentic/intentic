@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { cmp } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import ToggleSwitch from "primevue/toggleswitch";
 import { ref } from "vue";
@@ -43,7 +44,7 @@ const lastOutput = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `runn
     <button
         v-if="rows.length > 0"
         type="button"
-        class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+        :class="cmp.iconButton()"
         @click="panel?.toggle($event)"
         v-tooltip.top="'Running work'"
         aria-label="Running work"

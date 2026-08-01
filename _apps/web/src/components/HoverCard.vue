@@ -40,7 +40,12 @@ interface HoverCardContent {
     readonly body?: string;
 }
 
-const WIDTH = 320; // px — matches max-w below.
+/* The card's width, in px, and the ONLY statement of it: the template binds `maxWidth` from this rather than
+ * repeating it as a `max-w-[320px]` utility. Two spellings of one number is how a card ends up placed for a
+ * width it isn't drawn at — the placement below subtracts WIDTH from the viewport edge to decide whether there
+ * is room beside the anchor, so a class that said 320 while this said something else would put the card off
+ * the edge it just checked. */
+const WIDTH = 320;
 const GAP = 8;
 
 const placement = ref<{ content: HoverCardContent; left: number; top?: number; bottom?: number }>();
@@ -94,8 +99,9 @@ defineExpose({ show, hide });
     <Teleport :to="to">
         <div
             v-if="placement"
-            class="pointer-events-none fixed z-50 min-w-[12rem] max-w-[320px] rounded-lg border border-line-strong bg-card px-3 py-2 shadow-2xl"
+            class="pointer-events-none fixed z-50 min-w-[12rem] rounded-lg border border-line-strong bg-card px-3 py-2 shadow-2xl"
             :style="{
+                maxWidth: `${WIDTH}px`,
                 left: `${placement.left}px`,
                 ...(placement.top !== undefined ? { top: `${placement.top}px` } : {}),
                 ...(placement.bottom !== undefined ? { bottom: `${placement.bottom}px` } : {}),

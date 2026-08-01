@@ -5,6 +5,7 @@
 <script setup lang="ts" generic="T extends string">
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useListNavigation } from "../composables/useListNavigation.js";
+import SearchBar from "./SearchBar.vue";
 import { nextPickerId, normalizePickerGroups, type PickerOption, type PickerOptions } from "./picker.js";
 
 const {
@@ -52,7 +53,7 @@ const flat = computed<readonly PickerOption<T>[]>(() => shown.value.flatMap((gro
 
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (option) => option.value);
 
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<{ focus: () => void } | null>(null);
 const listEl = ref<HTMLElement | null>(null);
 
 const pick = (option: PickerOption<T>): void => {
@@ -109,20 +110,13 @@ onMounted(() => {
 
 <template>
     <div class="flex min-w-0 flex-col" @keydown="onKeydown">
-        <div v-if="searchable" class="relative border-b border-line">
-            <Icon name="search" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-subtle" aria-hidden="true" />
-            <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
-            <input
-                ref="searchInput"
-                v-model="query"
-                type="text"
-                placeholder="Filter…"
-                class="w-full min-w-0 bg-transparent py-2 pl-9 pr-3 text-base text-content placeholder:text-subtle focus:outline-none md:text-xs"
-                role="searchbox"
-                :aria-controls="`${panelId}-list`"
-                :aria-activedescendant="flat.length > 0 ? `${panelId}-opt-${activeIndex}` : undefined"
-            />
-        </div>
+        <SearchBar
+            v-if="searchable"
+            ref="searchInput"
+            v-model="query"
+            :aria-controls="`${panelId}-list`"
+            :aria-activedescendant="flat.length > 0 ? `${panelId}-opt-${activeIndex}` : undefined"
+        />
         <div
             :id="`${panelId}-list`"
             ref="listEl"
@@ -143,8 +137,8 @@ onMounted(() => {
                     type="button"
                     role="option"
                     :aria-selected="row.option.value === selectedValue"
-                    class="pk-row flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-default disabled:opacity-40 max-md:min-h-11"
-                    :class="{ 'pk-row-on': row.index === activeIndex }"
+                    class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-default disabled:opacity-40 max-md:min-h-11"
+                    :class="{ 'ui-row-select-on': row.index === activeIndex }"
                     :disabled="row.option.disabled === true"
                     @click="pick(row.option)"
                     @mouseenter="activeIndex = row.index"
@@ -179,17 +173,3 @@ onMounted(() => {
         <div class="sr-only" aria-live="polite">{{ flat.length }} options</div>
     </div>
 </template>
-
-<style scoped>
-.pk-row {
-    cursor: pointer;
-    transition: background-color 0.1s;
-}
-.pk-row:hover:enabled {
-    background: color-mix(in srgb, var(--color-content) 5%, transparent);
-}
-.pk-row-on,
-.pk-row-on:hover:enabled {
-    background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
-}
-</style>

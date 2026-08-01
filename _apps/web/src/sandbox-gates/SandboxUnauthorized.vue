@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Button from "primevue/button";
+import GateCard from "./GateCard.vue";
 import { computed } from "vue";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
@@ -28,6 +29,8 @@ const wrongGoogleAccount = computed(
 // Drop both credentials — the daemon session the 403 was minted for AND the Google credential behind it — and
 // immediately re-establish: the sign-in gate overlays with Google's account picker (clearCredential disables
 // auto-select), and the liveness retries share the same in-flight establish.
+const title = computed(() => `No access to "${active.value?.name}"`);
+
 const switchAccount = (): void => {
     clearCredential();
     invalidateSession();
@@ -36,27 +39,21 @@ const switchAccount = (): void => {
 </script>
 
 <template>
-    <div class="flex h-full w-full items-center justify-center p-8">
-        <div class="animate-fade-in flex w-full max-w-md flex-col items-center gap-4 rounded-2xl border border-line bg-card p-8 text-center">
-            <span class="flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-canvas text-muted">
-                <Icon name="lock" class="text-xl" />
-            </span>
-            <div class="flex flex-col gap-1.5">
-                <h2 class="text-lg font-semibold text-content">No access to "{{ active?.name }}"</h2>
-                <p v-if="wrongGoogleAccount" class="text-sm text-muted">
-                    You're signed into Google as <span class="font-medium text-content">{{ presentedEmail }}</span
-                    >, but your intentic account is <span class="font-medium text-content">{{ user?.email }}</span
-                    >. Sign in with <span class="font-medium text-content">{{ user?.email }}</span> to open this sandbox.
-                </p>
-                <p v-else class="text-sm text-muted">
-                    This sandbox belongs to another account and hasn't shared access with
-                    <span class="font-medium text-content">{{ presentedEmail }}</span
-                    >. Ask its owner to grant you access — this clears automatically the moment it's granted.
-                </p>
-            </div>
+    <GateCard icon="lock" :title="title">
+        <p v-if="wrongGoogleAccount" class="text-sm text-muted">
+            You're signed into Google as <span class="font-medium text-content">{{ presentedEmail }}</span
+            >, but your intentic account is <span class="font-medium text-content">{{ user?.email }}</span
+            >. Sign in with <span class="font-medium text-content">{{ user?.email }}</span> to open this sandbox.
+        </p>
+        <p v-else class="text-sm text-muted">
+            This sandbox belongs to another account and hasn't shared access with
+            <span class="font-medium text-content">{{ presentedEmail }}</span
+            >. Ask its owner to grant you access — this clears automatically the moment it's granted.
+        </p>
+        <template #actions>
             <Button label="Switch Google account" severity="secondary" @click="switchAccount">
                 <template #icon><Icon name="user" /></template>
             </Button>
-        </div>
-    </div>
+        </template>
+    </GateCard>
 </template>
