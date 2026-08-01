@@ -84,7 +84,10 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
     actionError.value = undefined;
     try {
         const { conversationId } = await fix.mutateAsync(run);
-        host().navigate(`/agents/${conversationId}`);
+        // The BOARD with the new card focused, not the agent's diff view: the turn started a second ago and has
+        // nothing to review yet, so what the user wants is to watch it work beside their other agents. `?focus`
+        // is the fleet's own deep link — it waits for the card to reach the roster, then selects and reveals it.
+        host().navigate(`/agents?focus=${encodeURIComponent(conversationId)}`);
     } catch (failure) {
         actionError.value = failure instanceof Error ? failure.message : String(failure);
     } finally {
@@ -102,9 +105,9 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                         <span class="block text-sm font-medium text-content">Pipelines</span>
                         <span class="mt-1 block text-xs text-muted">
                             Every workspace repo whose remote lands on a connected GitHub/GitLab account is watched: completed pipelines arrive over a
-                            webhook, can wake <b>CI automations</b> (see Automations), and land here. <b>Fix with agent</b> opens an isolated agent
-                            conversation seeded with the failed jobs' logs. Each row's circles are its stages — click one for that stage's jobs, or
-                            expand the row for the full job graph.
+                            webhook, can wake <b>CI automations</b> (see Automations), and land here. <b>Fix with agent</b> starts an isolated agent
+                            seeded with the failed jobs' logs and takes you to its card on the Agents board. Each row's circles are its stages — click
+                            one for that stage's jobs, or expand the row for the full job graph.
                         </span>
                     </InfoHint>
                 </template>
@@ -144,7 +147,12 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                         </div>
                     </div>
                     <div v-if="successRate !== undefined" class="flex items-center gap-2">
-                        <ProgressRing :value="successRate" :size="20" :stroke="2.5" :class="successRate >= 80 ? `text-success` : successRate >= 50 ? `text-warning` : `text-danger`" />
+                        <ProgressRing
+                            :value="successRate"
+                            :size="20"
+                            :stroke="2.5"
+                            :class="successRate >= 80 ? `text-success` : successRate >= 50 ? `text-warning` : `text-danger`"
+                        />
                         <span class="text-xs text-muted">{{ successRate }}% pass rate</span>
                     </div>
                 </div>

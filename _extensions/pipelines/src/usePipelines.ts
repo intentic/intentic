@@ -38,8 +38,8 @@ export function usePipelines() {
         mutationFn: (run: PipelineRun) => api.sandbox.json(`/ci/runs/cancel`, body(run)),
         onSuccess: invalidate,
     });
-    // Opens an isolated agent conversation seeded with the failure context; resolves to its conversation id so
-    // the view can take the user straight to the fleet card.
+    // Starts an isolated agent seeded with the failure context; resolves to its conversation id, which is the
+    // fleet's card id — the view hands it to /agents?focus= and the board lands on the card.
     const fix = useMutation({
         mutationFn: async (run: PipelineRun): Promise<CiFixResponse> => CiFixResponseSchema.parse(await api.sandbox.json(`/ci/fix`, body(run))),
     });

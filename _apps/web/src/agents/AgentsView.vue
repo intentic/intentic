@@ -2,8 +2,8 @@
 import type { Disposable } from "@intentic/extension-api";
 import { cmp, useDevice } from "@intentic-app/ui";
 import Dialog from "primevue/dialog";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
 import { dropActionLabel, dropRejection, type PendingAction } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
@@ -59,6 +59,7 @@ import AgentCard from "./AgentCard.vue";
  * the strip, since an error is the one thing here that must be read. The way back is on the keyboard (Mod+Z)
  * and, permanently, on every card in the archive — so it never depended on the message being still on screen. */
 const router = useRouter();
+const route = useRoute();
 const { mobile } = useDevice();
 const {
     lanes,
@@ -257,6 +258,76 @@ watch(archivedFlash, () => {
 watch(archivedFlash, () => {
     announcement.value = `${undoable.value.length} agent${undoable.value.length === 1 ? `` : `s`} archived`;
 });
+/* --- THE CARD A LINK NAMED: /agents?focus=<agent id> -----------------------------------------------------
+ * Another surface can hand the user an agent it just started — ext-pipelines' "Fix with agent" is the first —
+ * and what that hand-off wants is the BOARD, not the drill-in: a turn that began a second ago has no diff to
+ * review, and the fleet is where the user watches it work beside everything else they have running.
+ *
+ * The id arrives BEFORE the card does: the agent was created by the click that navigated here, so the roster
+ * frame carrying it lands a beat after this board mounts. Hence a held request resolved by a watcher rather
+ * than a read at mount — it fires the moment the fleet knows the agent, and simply never fires for an id the
+ * fleet has no card for. Resolving is one-shot and consumes the parameter, so a reload or a Back does not
+ * re-focus a card the user has since moved off.
+ *
+ * The focus itself is exactly what a click on the card does — the docked chat points at the agent, the card
+ * takes the ring, it is marked read — plus the two things a click gets for free and a link cannot: the board
+ * scrolls the card into view, and it OPENS WHATEVER IS HIDING IT first. A board hides three ways (a lane
+ * window, the archive, a filter), and a link that lands on none of the cards on screen is a link that silently
+ * did nothing. */
+const FOCUS_FLASH_MS = 4_000;
+const flashId = ref<string | undefined>(undefined);
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+// WHICH CARD WEARS THE RING. Normally the docked chat's agent — desktop only, since a phone has no dock for
+// "selected" to be about — and, for a moment after a link named one, that card on either form factor: the eye
+// that just changed screens has to be told where to land.
+const highlightId = computed(() => flashId.value ?? (mobile.value ? undefined : active.value.conversationId));
+const cardEls = new Map<string, HTMLElement>();
+// AgentCard is a component, so the ref hands back its instance rather than an element; `$el` is its root div.
+const setCardEl = (id: string, el: unknown): void => {
+    const root = (el as { $el?: unknown } | null)?.$el;
+    if (root instanceof HTMLElement) {
+        cardEls.set(id, root);
+    } else {
+        cardEls.delete(id);
+    }
+};
+const requestedFocus = ref<string | undefined>(undefined);
+watch(
+    () => route.query[`focus`],
+    (value) => {
+        if (typeof value === `string` && value !== ``) {
+            requestedFocus.value = value;
+        }
+    },
+    { immediate: true },
+);
+watch(
+    () => (requestedFocus.value === undefined ? undefined : agentById(requestedFocus.value)),
+    async (agent) => {
+        if (agent === undefined) {
+            return;
+        }
+        requestedFocus.value = undefined;
+        void router.replace({ query: { ...route.query, focus: undefined } });
+        // Uncover the card, in the three ways this board covers one.
+        if (filtering.value && !matches(agent)) {
+            query.value = ``;
+        }
+        if (agent.archivedAt !== undefined) {
+            archiveOpen.value = true;
+        } else if (lanes.value.finished.findIndex((candidate) => candidate.id === agent.id) >= FINISHED_WINDOW) {
+            showAllFinished.value = true;
+        }
+        open(agent);
+        flashId.value = agent.id;
+        clearTimeout(flashTimer);
+        flashTimer = setTimeout(() => (flashId.value = undefined), FOCUS_FLASH_MS);
+        // After the uncovering above, the card's element may not exist yet.
+        await nextTick();
+        cardEls.get(agent.id)?.scrollIntoView({ block: `nearest` });
+    },
+    { immediate: true },
+);
 // Undo also lives on the keyboard, because an archive that says nothing has to be reversible by the reflex
 // people already have. Registered with the board and disposed with it, so the chord is only claimed while the
 // fleet is on screen; the `when` gate hands it straight back whenever it would be the wrong Mod+Z — nothing
@@ -344,6 +415,7 @@ onUnmounted(() => {
     clearInterval(ticker);
     clearTimeout(receiptTimer);
     clearTimeout(pulseTimer);
+    clearTimeout(flashTimer);
     boardObserver?.disconnect();
     for (const disposable of boardCommands) {
         disposable.dispose();
@@ -378,6 +450,8 @@ const focusAgent = (agent: FleetAgent): void => {
     if (consumeSuppressedOpen()) {
         return;
     }
+    // The user is pointing the board somewhere themselves — whatever a deep link was highlighting is over.
+    flashId.value = undefined;
     open(agent);
     if (mobile.value) {
         void router.push(`/agents/${encodeURIComponent(agent.id)}`);
@@ -599,12 +673,13 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         <AgentCard
                             v-for="agent in cardsFor(lane.key)"
                             :key="agent.id"
+                            :ref="(el) => setCardEl(agent.id, el)"
                             :agent="agent"
                             :now="now"
                             :dense="narrow"
                             :dragging="draggedId === agent.id && dragging"
                             :pending="pendingFor(agent)"
-                            :selected="!mobile && active.conversationId === agent.id"
+                            :selected="agent.id === highlightId"
                             :match="snippetOf(agent)"
                             :query="needle"
                             @open="focusAgent(agent)"
@@ -680,7 +755,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :now="now"
                             :dense="narrow"
                             :pending="pendingFor(agent)"
-                            :selected="!mobile && active.conversationId === agent.id"
+                            :selected="agent.id === highlightId"
                             :match="snippetOf(agent)"
                             :query="needle"
                             @open="focusAgent(agent)"
