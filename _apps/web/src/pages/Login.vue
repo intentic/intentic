@@ -8,14 +8,26 @@ const { signInWithGoogle } = useAuth();
 const year = new Date().getFullYear();
 
 const features: readonly { icon: IconName; title: string; description: string }[] = [
-    { icon: `unlock`, title: `You own everything`, description: `Your code and infrastructure live in your accounts — no vendor lock-in.` },
+    {
+        icon: `box`,
+        title: `Its own sandbox`,
+        description: `A full workspace in a container on hardware you control — one per agent. Not a chat window: a machine the agent actually works on.`,
+    },
+    {
+        icon: `sliders-h`,
+        title: `A curated environment`,
+        description: `The libraries and dev-tools the job needs, baked into the image and really installed. The agent proposes the layer; it ships on your approval.`,
+    },
     {
         icon: `sitemap`,
-        title: `DevOps, orchestrated`,
-        description: `intentic wires and orchestrates tools and pipelines end to end to enable AI superpowers you didn't know existed.`,
+        title: `Access to your systems`,
+        description: `GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers — added in a click. Credentials stay in the sandbox.`,
     },
-    { icon: `bolt`, title: `Ship by intent`, description: `Describe what you want and go from idea to a running system.` },
-    { icon: `users`, title: `For professional developers`, description: `Built for REAL systems development, not vibe-coded demos.` },
+    {
+        icon: `list-check`,
+        title: `Curated context`,
+        description: `Skills, runbooks, repos, and house style scoped to this one job, loaded every turn — not a generic dump.`,
+    },
 ];
 
 const signIn = async (): Promise<void> => {
@@ -45,11 +57,12 @@ const signIn = async (): Promise<void> => {
 
             <div class="animate-fade-in-up relative max-w-md" style="animation-delay: 60ms">
                 <h1 class="text-4xl font-semibold leading-tight tracking-tight xl:text-5xl">
-                    Build software <br />
-                    with intent.
+                    An IDE for your agents. A window for you.
                 </h1>
                 <p class="mt-4 text-base leading-relaxed text-muted">
-                    An AI-native workspace for infra, data, apps, and code — you own every line, we handle the wiring.
+                    Everyone else lets you edit the prompt. intentic lets you see and change the whole environment your agents work in — the
+                    dev-tools really installed, the systems they can reach, the context they load every turn. Run one, or ten in parallel, on
+                    hardware you own.
                 </p>
 
                 <ul class="mt-10 flex flex-col gap-5">
