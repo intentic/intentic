@@ -104,7 +104,12 @@ export const runOneShot = async (params: {
              * failure-sentences.ts already teaches every caller to recognise and refuse as data. */
             if (message.type === `system` && message.subtype === `api_retry`) {
                 if (message.error === `rate_limit`) {
-                    throw new Error(`Claude usage limit reached — this account's allowance is exhausted. Try again once it resets.`);
+                    // The vendor whose allowance this actually spent, not the harness running it — a helper on a
+                    // routed turn is billed to Google or ChatGPT, and "Claude usage limit reached" would send the
+                    // reader to an account in perfect health. The counts the chat's own frame carries are left
+                    // out on purpose: nobody is watching a title pass, and a helper's job here is to fail fast.
+                    const vendor = params.credentials.allowance?.vendor ?? `Claude`;
+                    throw new Error(`${vendor} usage limit reached — the allowance is exhausted. Try again once it resets.`);
                 }
                 if (message.retry_delay_ms > MAX_RETRY_WAIT_MS) {
                     throw new Error(`the model did not answer (retry deferred ${Math.round(message.retry_delay_ms / 1000)}s)`);

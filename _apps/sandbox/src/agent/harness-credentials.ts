@@ -2,6 +2,7 @@ import { type AgentProvider, type KeyedProvider, NATIVE_PROVIDERS, type NativePr
 import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import { accountWithHeadroom } from "../usage/account-usage.js";
+import type { TurnLimit } from "../usage/translator-usage.js";
 
 /* WHAT AUTHENTICATES A CLAUDE CODE HARNESS TURN, per provider — the one question every caller of that harness
  * has to answer before it can spawn anything, and there is now more than one caller: the chat's own turn route
@@ -31,20 +32,26 @@ export interface HarnessEndpoint {
     readonly model: string;
 }
 
-/* WHOSE ALLOWANCE THIS TURN SPENDS, and when a spent one reopens — the two things the harness cannot tell us
- * about its own 429, and the reason they are attached to the CREDENTIAL rather than derived downstream.
+/* WHOSE ALLOWANCE THIS TURN SPENDS, and what is left of it — the two things the harness cannot tell us about
+ * its own 429, and the reason they are attached to the CREDENTIAL rather than derived downstream.
  *
  * A routed turn runs the Claude Code harness against the translator but spends a Google (or ChatGPT, or Kimi)
  * subscription, and the harness knows only that a 429 came back. So it says "Claude", and it sets its retry
- * delay from its OWN backoff curve — 620ms, then 1072ms, then 2281ms — because CLIProxyAPI answers with no
- * Retry-After. Reading that delay as a reset instant is what put "Resets 5:32 PM" under a Google weekly quota
- * that was five days out, on a turn that never touched Anthropic.
+ * delay from its OWN backoff curve — 620ms, then 1072ms, then 2281ms. Reading that delay as a reset instant is
+ * what put "Resets 5:32 PM" under a Google weekly quota that was five days out, on a turn that never touched
+ * Anthropic.
+ *
+ * `limit` is bound to the turn's RESOLVED MODEL, not just its provider, because on Google those are different
+ * allowances: one sign-in meters Gemini separately from the Claude and GPT models, and the pool a refusal names
+ * has to be the pool the turn was spending. It also answers whether any connected account still has room —
+ * CLIProxyAPI balances across the whole auth-file set, so a refusal with headroom left on file is a cooldown
+ * rather than a spent plan, and those two want opposite things from the reader.
  *
  * Absent ⇒ a native Claude turn, whose harness reports both correctly by itself: it names its own vendor, and
  * on a subscription limit it sets the retry delay to the closed window's remaining lifetime. */
 export interface TurnAllowance {
     readonly vendor: string;
-    readonly reopensAt: () => Promise<number | undefined>;
+    readonly limit: () => Promise<TurnLimit>;
 }
 
 export interface HarnessCredentials {
@@ -224,18 +231,18 @@ export const resolveHarnessCredentials = async (
             };
         }
         const catalog = await routedCatalog(services, input.agent);
-        // Narrowed here rather than read off `input` inside the closure: the reopen lookup outlives this call by
+        // Narrowed here rather than read off `input` inside the closure: the limit lookup outlives this call by
         // a whole turn, and `input.agent` is an open provider vocabulary everywhere else in the file.
         const routed = input.agent;
+        // Named once and handed to both: the endpoint sends it upstream and the allowance reads the quota pool
+        // it spends, and a refusal that named a different model's pool than the turn ran on is the bug this
+        // pairing closes.
+        const model = routedModel(catalog, input.model);
         return {
             ok: true,
             credentials: {
-                endpoint: {
-                    baseUrl: services.config.translator.url,
-                    authToken: services.config.translator.token,
-                    model: routedModel(catalog, input.model),
-                },
-                allowance: { vendor: PROVIDER_VENDOR[routed], reopensAt: () => services.cliProxy.reopensAt(routed) },
+                endpoint: { baseUrl: services.config.translator.url, authToken: services.config.translator.token, model },
+                allowance: { vendor: PROVIDER_VENDOR[routed], limit: () => services.cliProxy.turnLimit(routed, model) },
             },
         };
     }

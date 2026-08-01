@@ -12,7 +12,7 @@ import {
 import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
 import type { AccountUsageStore } from "../usage/account-usage.js";
-import { fetchTranslatorUsage, type TranslatorAuthFile } from "../usage/translator-usage.js";
+import { fetchTranslatorUsage, quotaPoolFor, type TranslatorAuthFile, type TurnLimit } from "../usage/translator-usage.js";
 
 /* The bundled translator is CLIProxyAPI: a Go proxy that lets the Claude Code harness — which speaks only the
  * Anthropic Messages API — drive OpenAI (Codex), xAI (Grok), Kimi Code and Google (Gemini) models on the user's
@@ -175,9 +175,10 @@ export interface CliProxyClient {
     // Pull every readable account's quota now and record it. The daemon calls this once at boot so the first
     // person to open the Agent tab already has rings to look at.
     readonly refreshUsage: () => Promise<void>;
-    // When this provider's spent allowance next reopens, for the turn that was just refused by it. Reads the
-    // recorded snapshots only — see the implementation for why the refusal itself cannot answer this.
-    readonly reopensAt: (provider: KeyedProvider) => Promise<number | undefined>;
+    // What the recorded quota says about the pool THIS TURN'S MODEL spends, across every account connected for
+    // the provider — for the turn that was just refused by it. Reads the recorded snapshots only; see the
+    // implementation for why the refusal itself cannot answer this.
+    readonly turnLimit: (provider: KeyedProvider, model: string) => Promise<TurnLimit>;
     readonly connect: (provider: KeyedProvider) => Promise<TranslatorLogin>;
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
@@ -393,28 +394,58 @@ export const createCliProxyClient = (params: {
             });
     };
 
-    /* WHEN THIS PROVIDER CAN SERVE AGAIN after every one of its accounts has refused — read from the snapshots
-     * above rather than from the refusal, because the refusal does not carry it. CLIProxyAPI walks the whole
-     * credential set on a quota 429 and answers with the LAST word on it ("All credentials for model X are
-     * cooling down"); the per-account "Resets in 138h26m8s" is spent inside that walk and never reaches the
-     * caller. The quota reads do carry it, for every account, and cost nothing here — they are already on file.
+    /* WHETHER THIS PROVIDER CAN SERVE THIS MODEL AT ALL, and when it next can — read from the snapshots above
+     * rather than from the refusal, because the refusal cannot say. CLIProxyAPI balances across every auth file
+     * it holds and walks the whole set on a quota 429, so what comes back is the LAST word on the fleet ("All
+     * credentials for model X are cooling down") with no account named and no per-account reset in it. The
+     * quota reads do carry both, for every account, and cost nothing here — they are already on file.
      *
-     * The earliest exhausted window across the provider's accounts, because any ONE account reopening unblocks
-     * the turn. Two deliberate imprecisions, both erring early: a snapshot up to REFRESH_AFTER_MS stale can miss
-     * an account that has since hit its wall, and an account whose pools are exhausted on different clocks is
-     * read at its earliest rather than at the pool that did the refusing. Early costs one retry that fails the
-     * same way; late leaves someone waiting past a window that already reopened. Undefined when nothing on file
-     * is exhausted — the caller then says nothing about a reset, which beats naming an instant we don't have. */
-    const reopensAt = async (provider: KeyedProvider): Promise<number | undefined> => {
+     * SCOPED TO THE POOL THE MODEL SPENDS (quotaPoolFor), which is the correction that makes the rest of this
+     * true. Google meters Gemini and the Claude/GPT models as separate weekly allowances off one sign-in; the
+     * earliest exhausted window across every account and every pool answered a Claude Opus turn with the Gemini
+     * pool's instant, on an account that was not serving it, while another account still had room in the pool
+     * the turn was really spending.
+     *
+     * An account counts as spent when ANY pool this model draws on is spent — it is gated by its tightest, and
+     * for Codex and Kimi (one undivided plan, so every window counts) a spent 5-hour throttle stops a turn that
+     * the weekly pool would have allowed. An account with no reading for the pool counts in neither tally; the
+     * caller reads two zeroes as "nothing on file" and claims nothing about the fleet.
+     *
+     * The reset stays the EARLIEST spent account's, because any one of them reopening unblocks the turn, and it
+     * is deliberately absent while anything still has headroom — see TurnLimit. One deliberate imprecision
+     * remains, erring early: a snapshot up to REFRESH_AFTER_MS stale can miss an account that has since hit its
+     * wall. Early costs one retry that fails the same way; late leaves someone waiting past a window that
+     * already reopened. */
+    const turnLimit = async (provider: KeyedProvider, model: string): Promise<TurnLimit> => {
+        const pool = quotaPoolFor(provider, model);
         const [files, stored] = await Promise.all([listFiles(), usageStore.read()]);
-        const resets = files.flatMap((file) =>
-            file.provider !== CLIPROXY_PROVIDER[provider] || file.name === undefined
-                ? []
-                : (stored[usageKey(provider, file.name)]?.windows ?? []).flatMap((window) =>
-                      window.utilization >= 100 && window.resetsAt !== undefined ? [window.resetsAt] : [],
-                  ),
-        );
-        return resets.length === 0 ? undefined : Math.min(...resets);
+        let spent = 0;
+        let withHeadroom = 0;
+        const resets: number[] = [];
+        for (const file of files) {
+            if (file.provider !== CLIPROXY_PROVIDER[provider] || file.name === undefined) {
+                continue;
+            }
+            const windows = (stored[usageKey(provider, file.name)]?.windows ?? []).filter(
+                (window) => pool === undefined || window.kind === pool.kind,
+            );
+            if (windows.length === 0) {
+                continue;
+            }
+            const exhausted = windows.filter((window) => window.utilization >= 100);
+            if (exhausted.length === 0) {
+                withHeadroom += 1;
+                continue;
+            }
+            spent += 1;
+            resets.push(...exhausted.flatMap((window) => (window.resetsAt === undefined ? [] : [window.resetsAt])));
+        }
+        return {
+            ...(pool === undefined ? {} : { pool: pool.label }),
+            spent,
+            withHeadroom,
+            ...(withHeadroom > 0 || resets.length === 0 ? {} : { reopensAt: Math.min(...resets) }),
+        };
     };
 
     return {
@@ -432,7 +463,7 @@ export const createCliProxyClient = (params: {
             return { codex: of("codex"), grok: of("grok"), kimi: of("kimi"), gemini: of("gemini") };
         },
         refreshUsage,
-        reopensAt,
+        turnLimit,
         connect: (provider) =>
             provider === "grok" || provider === "kimi" ? connectDevice(provider) : provider === "gemini" ? connectGemini() : connectCodex(),
         complete,

@@ -227,57 +227,126 @@ describe("translator subscription usage", () => {
         expect((await client.accounts()).codex[0]).toHaveProperty("usage");
     });
 
-    /* WHEN A SPENT PROVIDER REOPENS — the question a routed 429 leaves unanswered, because CLIProxyAPI walks
-     * its whole credential set and reports only the last word on it ("All credentials … are cooling down"). The
-     * per-account "Resets in 138h26m8s" is spent inside that walk. These snapshots are the only place the
-     * instant survives, so the lookup is pinned on both the ordering and the abstention. */
-    const geminiFiles = (windows: Record<string, { utilization: number; resetsAt?: number }>) =>
+    /* WHETHER A SPENT PROVIDER CAN SERVE THIS MODEL, and when it next can — the question a routed 429 leaves
+     * unanswered, because CLIProxyAPI balances across its whole credential set and reports only the last word on
+     * it ("All credentials … are cooling down"), naming no account and carrying no per-account reset. These
+     * snapshots are the only place either survives, so the lookup is pinned on the ordering, the abstention,
+     * and — the correction these tests exist for — the POOL the turn's model actually spends. */
+    const filesNamed = (provider: string, names: readonly string[]) =>
         (async (input: string | URL): Promise<Response> =>
             String(input).endsWith("/auth-files")
-                ? Response.json({
-                      files: Object.keys(windows).map((name) => ({ name, provider: "antigravity", auth_index: name })),
-                  })
+                ? Response.json({ files: names.map((name) => ({ name, provider, auth_index: name })) })
                 : Response.json({ status_code: 500 })) as typeof fetch;
 
+    const clientOver = (store: ReturnType<typeof memoryStore>["store"], provider: string, names: readonly string[]) =>
+        createCliProxyClient({
+            managementUrl: "http://cliproxy.test",
+            token: "management-secret",
+            configPath: "/tmp/config",
+            usageStore: store,
+            fetchFn: filesNamed(provider, names),
+        });
+
     // Exhausted only, and the earliest of them: any ONE account reopening unblocks the turn, so the soonest is
-    // the answer. An account with headroom left contributes nothing — it did not refuse.
+    // the answer.
     test("reports the earliest reset among a provider's exhausted accounts", async () => {
         const { store } = memoryStore();
         const windows = {
             "spent-late.json": { utilization: 100, resetsAt: 3_000 },
             "spent-early.json": { utilization: 100, resetsAt: 2_000 },
-            "has-room.json": { utilization: 40, resetsAt: 1_000 },
         };
         for (const [name, window] of Object.entries(windows)) {
             await store.record(`gemini:${name}`, { windows: [{ kind: "google:3p-weekly", ...window }], measuredAt: 0 });
         }
-        const client = createCliProxyClient({
-            managementUrl: "http://cliproxy.test",
-            token: "management-secret",
-            configPath: "/tmp/config",
-            usageStore: store,
-            fetchFn: geminiFiles(windows),
-        });
+        const client = clientOver(store, "antigravity", Object.keys(windows));
 
-        await expect(client.reopensAt("gemini")).resolves.toBe(2_000);
+        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
+            pool: "Claude and GPT models",
+            spent: 2,
+            withHeadroom: 0,
+            reopensAt: 2_000,
+        });
         // Another provider's accounts are not this provider's headroom, however spent they are.
-        await expect(client.reopensAt("codex")).resolves.toBeUndefined();
+        await expect(client.turnLimit("codex", "gpt-5")).resolves.toEqual({ spent: 0, withHeadroom: 0 });
     });
 
-    // Nothing measured ⇒ no claim. The caller emits a limit with no reset rather than an invented instant.
-    test("reports no reset when nothing on file is exhausted", async () => {
+    /* THE POOL THE MODEL SPENDS, which is the correction the rest of this rests on.
+     *
+     * One Google sign-in meters Gemini separately from the Claude and GPT models, on separate clocks. Reading
+     * both as one allowance answered a Claude Opus turn with the GEMINI pool's instant — on a pool that turn
+     * never touched — while the pool it WAS spending still had room. Same store, same account, same moment, two
+     * models, two different answers. */
+    test("answers from the pool the turn's model spends, not from the account's fullest one", async () => {
         const { store } = memoryStore();
-        const windows = { "has-room.json": { utilization: 40, resetsAt: 1_000 } };
-        await store.record("gemini:has-room.json", { windows: [{ kind: "google:3p-weekly", utilization: 40, resetsAt: 1_000 }], measuredAt: 0 });
-        const client = createCliProxyClient({
-            managementUrl: "http://cliproxy.test",
-            token: "management-secret",
-            configPath: "/tmp/config",
-            usageStore: store,
-            fetchFn: geminiFiles(windows),
+        await store.record("gemini:spent-for-gemini.json", {
+            windows: [
+                { kind: "google:gemini-weekly", utilization: 100, resetsAt: 2_000 },
+                { kind: "google:3p-weekly", utilization: 73, resetsAt: 9_000 },
+            ],
+            measuredAt: 0,
         });
+        const client = clientOver(store, "antigravity", ["spent-for-gemini.json"]);
 
-        await expect(client.reopensAt("gemini")).resolves.toBeUndefined();
+        await expect(client.turnLimit("gemini", "gemini-3-pro")).resolves.toEqual({
+            pool: "Gemini models",
+            spent: 1,
+            withHeadroom: 0,
+            reopensAt: 2_000,
+        });
+        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
+            pool: "Claude and GPT models",
+            spent: 0,
+            withHeadroom: 1,
+        });
+    });
+
+    /* ONE ACCOUNT WITH ROOM AMONG THIRTY SPENT ONES IS NOT A SPENT PLAN — the translator balances across all of
+     * them, so the one with room can serve the turn. No reset is reported for the same reason: the quota is not
+     * what refused it, and naming a wall days out over a cooldown that clears in seconds is the lie this
+     * replaces. */
+    test("reports headroom rather than a reset while any account can still serve the pool", async () => {
+        const { store } = memoryStore();
+        for (const name of ["spent-1.json", "spent-2.json"]) {
+            await store.record(`gemini:${name}`, { windows: [{ kind: "google:3p-weekly", utilization: 100, resetsAt: 2_000 }], measuredAt: 0 });
+        }
+        await store.record("gemini:has-room.json", { windows: [{ kind: "google:3p-weekly", utilization: 73, resetsAt: 9_000 }], measuredAt: 0 });
+        const client = clientOver(store, "antigravity", ["spent-1.json", "spent-2.json", "has-room.json"]);
+
+        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
+            pool: "Claude and GPT models",
+            spent: 2,
+            withHeadroom: 1,
+        });
+    });
+
+    // Nothing measured ⇒ no claim, and the two zeroes are how the caller is told so. A bucket the provider has
+    // since renamed lands here too, which costs the caller its counts rather than handing it another pool's reset.
+    test("counts an account with no reading for this pool in neither tally", async () => {
+        const { store } = memoryStore();
+        await store.record("gemini:unread.json", { windows: [{ kind: "google:gemini-weekly", utilization: 100, resetsAt: 1_000 }], measuredAt: 0 });
+        const client = clientOver(store, "antigravity", ["unread.json", "never-polled.json"]);
+
+        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
+            pool: "Claude and GPT models",
+            spent: 0,
+            withHeadroom: 0,
+        });
+    });
+
+    // Codex and Kimi sell one undivided plan, so EVERY window gates every model: a spent 5-hour throttle stops a
+    // turn the weekly pool would have allowed, and there is no pool to name in a sentence.
+    test("treats an undivided plan's every window as gating, with no pool to name", async () => {
+        const { store } = memoryStore();
+        await store.record("codex:one.json", {
+            windows: [
+                { kind: "five_hour", utilization: 100, resetsAt: 1_000 },
+                { kind: "seven_day", utilization: 12, resetsAt: 8_000 },
+            ],
+            measuredAt: 0,
+        });
+        const client = clientOver(store, "codex", ["one.json"]);
+
+        await expect(client.turnLimit("codex", "gpt-5")).resolves.toEqual({ spent: 1, withHeadroom: 0, reopensAt: 1_000 });
     });
 
     // Dropping an account drops its snapshot with it: leaving one behind would hand its headroom to whatever

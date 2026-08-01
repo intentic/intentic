@@ -293,7 +293,7 @@ const services = (overrides: ServiceOverrides = {}): Services => {
             disconnect: async () => {},
             models: async () => [],
             refreshUsage: async () => {},
-            reopensAt: async () => undefined,
+            turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
             ...cliProxy,
         }),
         codexHome: "/work/.intentic/codex",

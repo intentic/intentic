@@ -43,6 +43,7 @@ import type { SteeringQueue } from "./agent-steering.js";
 import { bashTmuxHooks, type FilterBackend, tmuxRunEnabled } from "./agent-terminals.js";
 import { EventQueue } from "./event-queue.js";
 import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
+import type { TurnLimit } from "../usage/translator-usage.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
@@ -352,17 +353,72 @@ const apiErrorMessage = (message: SDKAssistantMessage): string => {
     return explained ?? `agent error: ${message.error}`;
 };
 
-// One explanation for both ways a spent subscription allowance reaches us: an assistant refusal after the
-// harness gives up, and the earlier api_retry frame whose long delay says it intends to wait for the reset.
-// Keeping the wording here prevents the live-retry path from drifting back into calling the same condition an
-// outage while the terminal path calls it a limit. `vendor` because the harness is not the vendor on a routed
-// turn — see TurnAllowance; naming Anthropic for a Google quota sends the user to the wrong account.
-const rateLimitFrame = (vendor: string, resetsAt?: number): Extract<AgentEvent, { kind: "error" }> => ({
-    kind: "error",
-    code: "rate_limit",
-    message: `${vendor} usage limit reached — this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.`,
-    ...(resetsAt !== undefined ? { resetsAt } : {}),
-});
+/* THE PROXY'S OWN ANSWER ABOUT WHEN TO COME BACK, when it survives the trip. CLIProxyAPI refuses a fleet-wide
+ * cooldown with a JSON body — {"error":{"code":"model_cooldown","message":"All credentials for model X are
+ * cooling down","reset_seconds":N}} — and the harness prints that body as the API error's text. `reset_seconds`
+ * is the one number separating a credential cooling for a minute from a weekly wall days out, and it is read off
+ * the proxy's own scheduler rather than inferred from a snapshot up to five minutes stale, so it wins over the
+ * recorded quota wherever it appears.
+ *
+ * Both markers are required because the number alone is not the claim — some other provider's error body may
+ * carry a `reset_seconds` meaning something else entirely. Absent on the api_retry path, which carries counters
+ * and a category and no body at all: this is an upgrade over the recorded quota, never a dependency on it. */
+const proxyCooldownReset = (explained: string, now: number = Date.now()): number | undefined => {
+    const seconds = /"reset_seconds"\s*:\s*(\d+)/.exec(explained);
+    return seconds === null || !explained.includes(`"model_cooldown"`) ? undefined : Math.ceil(now / 1000) + Number(seconds[1]);
+};
+
+/* WHAT A SPENT ALLOWANCE READS AS — three situations wearing one 429, and the reason a single sentence could
+ * never be right about all of them.
+ *
+ * `vendor` because the harness is not the vendor on a routed turn (see TurnAllowance): naming Anthropic for a
+ * Google quota sends the user to the wrong account. The POOL because Google meters Gemini separately from the
+ * Claude and GPT models off one sign-in, so "the allowance" names two different things depending on the model
+ * that was running. And the COUNTS because there is no "this account" behind a translator that balances across
+ * every credential it holds — that phrasing is only true of a native Claude turn, which is exactly where it is
+ * kept.
+ *
+ * The middle case is the one that cost the most. Headroom left on file means the quota is NOT what refused this
+ * turn: the translator had every credential cooling for some other reason — a transient upstream error cools one
+ * for a minute — and sending someone away until Monday over a condition that clears in seconds is worse than
+ * saying nothing at all. */
+const limitSentence = (vendor: string, limit: TurnLimit | undefined): string => {
+    if (limit === undefined) {
+        return `${vendor} usage limit reached — this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.`;
+    }
+    const allowance = limit.pool === undefined ? `allowance` : `${limit.pool} allowance`;
+    if (limit.withHeadroom > 0) {
+        const total = limit.withHeadroom + limit.spent;
+        return (
+            `${vendor} refused this turn, but ${limit.withHeadroom} of ${total} connected accounts still ` +
+            `${limit.withHeadroom === 1 ? `has` : `have`} headroom${limit.pool === undefined ? `` : ` for ${limit.pool}`} — every ` +
+            `credential is cooling down rather than spent, so this clears in moments rather than at a reset.`
+        );
+    }
+    // Nothing measured either way: the pool was never polled, or the provider has renamed the bucket it is
+    // reported under. Say a limit was hit and claim nothing about a fleet we cannot see.
+    if (limit.spent === 0) {
+        return `${vendor} usage limit reached — the ${allowance} is exhausted, not a provider outage. Send again once it resets to carry on from here.`;
+    }
+    const accounts = limit.spent === 1 ? `the connected account` : `all ${limit.spent} connected accounts`;
+    return `${vendor} usage limit reached — the ${allowance} is spent on ${accounts}, not a provider outage. Send again once it resets to carry on from here.`;
+};
+
+// One frame for both ways a spent subscription allowance reaches us: an assistant refusal after the harness
+// gives up, and the earlier api_retry frame whose long delay says it intends to wait for the reset. Keeping it
+// here prevents the live-retry path from drifting back into calling the same condition an outage while the
+// terminal path calls it a limit. `named` is what the failure ITSELF said about when to come back — see the two
+// call sites, which have different things to offer and neither of which is always right on its own.
+const rateLimitFrame = async (allowance: TurnAllowance | undefined, named: number | undefined): Promise<Extract<AgentEvent, { kind: "error" }>> => {
+    const limit = await allowance?.limit();
+    const resetsAt = named ?? limit?.reopensAt;
+    return {
+        kind: "error",
+        code: "rate_limit",
+        message: limitSentence(allowance?.vendor ?? "Claude", limit),
+        ...(resetsAt !== undefined ? { resetsAt } : {}),
+    };
+};
 
 /* WHICH CONDITION an API failure actually is — the frame the client branches on.
  *
@@ -376,14 +432,15 @@ const rateLimitFrame = (vendor: string, resetsAt?: number): Extract<AgentEvent, 
  *
  * Everything else stays uncoded and reads as the red line it is: 4xx all land in the SDK's `unknown` bucket, and
  * a malformed request re-sent on a timer is a loop, not a recovery. */
-const errorFrame = (message: SDKAssistantMessage, vendor: string): Extract<AgentEvent, { kind: "error" }> => {
+const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAllowance | undefined): Promise<Extract<AgentEvent, { kind: "error" }>> => {
     // rate_limit is the subscription usage cap, not a workspace fault — tag it so the UI can render it as a
     // "wait and retry" notice instead of a red crash line (see conversation.ts). A limit hit the SDK filed under
     // another category keeps its own sentence (the CLI's "You've hit your session limit · resets …" names the
     // reset; our canned line doesn't) but carries the same code, so every spent-allowance failure reaches the
-    // client as one condition.
+    // client as one condition. This is the ONE path that still holds the API's body, so it is the only one that
+    // can offer the translator's own reset — see proxyCooldownReset.
     if (message.error === "rate_limit") {
-        return rateLimitFrame(vendor);
+        return rateLimitFrame(allowance, proxyCooldownReset(apiErrorMessage(message)));
     }
     if (message.error === "server_error" || message.error === "overloaded") {
         return { kind: "error", code: "provider-outage", message: apiErrorMessage(message) };
@@ -423,15 +480,6 @@ async function* streamSdk(
     // The turn handle children are filed under; absent ⇒ no conversation to file them against (the bench).
     subagents: SubagentTurn | undefined,
 ): AsyncGenerator<AgentEvent> {
-    const vendor = allowance?.vendor ?? "Claude";
-    /* WHEN THE SPENT WINDOW REOPENS, from the only party that knows. On a NATIVE Claude turn the harness sets
-     * its retry delay to the closed window's remaining lifetime, so the delay IS the reset and arithmetic on it
-     * is exact. On a routed turn it is nothing of the sort: CLIProxyAPI answers 429 with no Retry-After, so the
-     * delay is the SDK's own 620ms-and-doubling backoff, and turning that into an instant is what produced
-     * "Resets 5:32 PM" for a Google weekly quota five days out. Ask the provider's quota reporting instead, and
-     * accept `undefined` — the client renders a limit with no reset as a plain notice, which is the truth. */
-    const limitReset = (retryDelayMs: number): Promise<number | undefined> =>
-        allowance === undefined ? Promise.resolve(Math.ceil((Date.now() + retryDelayMs) / 1000)) : allowance.reopensAt();
     let sessionSent = false;
     let terminalSent = false;
     // The agent's live tmux terminal is surfaced twice: once at the first Bash tool_use (so a long command is
@@ -529,7 +577,7 @@ async function* streamSdk(
             // Text/thinking already streamed as deltas above; here we only surface tool calls (and the
             // TodoWrite checklist, which is a tool call we render as its own live list).
             if (message.error !== undefined) {
-                yield errorFrame(message, vendor);
+                yield await errorFrame(message, allowance);
             } else {
                 const content = message.message.content as ReadonlyArray<{ type: string; id?: string; name?: string; input?: unknown }>;
                 for (const block of content) {
@@ -761,7 +809,18 @@ async function* streamSdk(
                  * spinner attached to it for minutes or hours. Returning closes the SDK iterator in sdkTurns'
                  * finally; runAgent then supplies the ordinary terminal done frame. */
                 if (message.error === "rate_limit") {
-                    yield rateLimitFrame(vendor, await limitReset(message.retry_delay_ms));
+                    /* WHEN THE SPENT WINDOW REOPENS, from the only party that knows — and on this path only one
+                     * of the two ever does. A NATIVE Claude turn's harness sets its retry delay to the closed
+                     * window's remaining lifetime, so the delay IS the reset and arithmetic on it is exact. On a
+                     * routed turn it is nothing of the sort: the delay is the SDK's own 620ms-and-doubling
+                     * backoff, and turning that into an instant is what produced "Resets 5:32 PM" for a Google
+                     * weekly quota five days out. So it is offered on the native path and withheld on the routed
+                     * one, where the recorded quota answers instead — and may name no instant at all, which the
+                     * client renders as a plain notice. That is the truth; an invented clock time is not. */
+                    yield await rateLimitFrame(
+                        allowance,
+                        allowance === undefined ? Math.ceil((Date.now() + message.retry_delay_ms) / 1000) : undefined,
+                    );
                     return;
                 }
                 /* Every other retry is still happening INSIDE this turn, so nothing has failed yet and there is

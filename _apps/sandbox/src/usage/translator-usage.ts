@@ -266,6 +266,58 @@ export const kimiUsageFromPayload = (payload: unknown, measuredAt: number = Date
     return windows.length === 0 ? undefined : { windows, measuredAt };
 };
 
+/* ---- which pool a routed model actually spends --------------------------------------------------------------
+ *
+ * Google is the whole reason this exists. Its Antigravity channel serves two model families off ONE sign-in and
+ * meters them SEPARATELY: `retrieveUserQuotaSummary` answers with a "Gemini Models" group (Gemini Flash, Gemini
+ * Pro) and a "Claude and GPT models" group (Claude Opus, Claude Sonnet, GPT-OSS), each carrying its own weekly
+ * fraction and its own reset instant. An account is routinely spent for one and healthy for the other, and a
+ * fleet of Google sign-ins settles into exactly that state.
+ *
+ * Reading an account's pools as one allowance is what put "resets Mon 9:41 PM" — the GEMINI pool's instant, on
+ * an account that was not even serving the turn — under a refused Claude Opus turn, while a connected account
+ * still held 27% of the pool that turn was actually spending.
+ *
+ * Codex and Kimi answer `undefined`, and that is not "unknown": their windows are LENGTHS of one undivided plan
+ * (a 5-hour throttle inside a weekly pool) and every model spends all of them, so every window gates every turn.
+ * A bucket id the provider has since renamed also matches nothing — which costs the caller its counts rather
+ * than handing it the wrong pool, and a caller with no counts claims nothing about the fleet. */
+
+export interface QuotaPool {
+    // The recorded UsageWindow.kind this model's spend lands in.
+    readonly kind: string;
+    // How the provider names the group, as the subject of a sentence — Google's own wording, from the payload
+    // above, because the pool a refusal names has to be the one the user reads on their Antigravity screen.
+    readonly label: string;
+}
+
+const GOOGLE_GEMINI_POOL: QuotaPool = { kind: "google:gemini-weekly", label: "Gemini models" };
+const GOOGLE_THIRD_PARTY_POOL: QuotaPool = { kind: "google:3p-weekly", label: "Claude and GPT models" };
+
+export const quotaPoolFor = (provider: KeyedProvider, model: string): QuotaPool | undefined =>
+    provider !== "gemini" ? undefined : model.startsWith("gemini") ? GOOGLE_GEMINI_POOL : GOOGLE_THIRD_PARTY_POOL;
+
+/* WHAT THE RECORDED QUOTA SAYS ABOUT THAT POOL ACROSS EVERY CONNECTED ACCOUNT — the answer a refused routed
+ * turn needs, and three facts rather than one instant.
+ *
+ * `withHeadroom` is the fact the old single-instant answer could not carry, and the one that changes what the
+ * turn means: CLIProxyAPI balances across every auth file it holds, so a refusal is fleet-wide by construction.
+ * If an account still has room in this pool then the quota is NOT what refused the turn — the translator had
+ * every credential cooling for some other reason (a transient upstream error cools a credential for a minute),
+ * and naming a weekly reset would send the user away for days over a condition that clears in seconds.
+ *
+ * Both counts zero ⇒ nothing on file measures this pool at all (never polled, or a renamed bucket), which is a
+ * third state and reads as one: the caller says a limit was hit and claims nothing about the fleet. */
+export interface TurnLimit {
+    // Absent ⇒ the provider sells one undivided allowance, so there is no pool to name.
+    readonly pool?: string;
+    readonly spent: number;
+    readonly withHeadroom: number;
+    // When the earliest spent account reopens. Only ever set when nothing has headroom — with headroom on file
+    // the pool is not the blocker, and there is no reset that answers "when can I send this again".
+    readonly reopensAt?: number;
+}
+
 const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 const KIMI_USAGE_URL = "https://api.kimi.com/coding/v1/usages";
 const GOOGLE_USAGE_URLS = [

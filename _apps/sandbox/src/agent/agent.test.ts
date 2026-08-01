@@ -546,31 +546,37 @@ test("a usage-limit retry parks the turn at its reset instead of masquerading as
 /* THE ROUTED HALF OF THE SAME FRAME, and the reason `allowance` exists at all.
  *
  * A Google turn runs Claude Opus through Antigravity on the Claude Code harness, so everything the harness says
- * about the 429 is about the wrong vendor: it names Anthropic, and CLIProxyAPI sends no Retry-After, leaving
- * `retry_delay_ms` as the SDK's own 620ms-and-doubling backoff. Reading that as an instant is what put "Resets
- * 5:32 PM" — the moment of the failure — under a Google weekly quota that was five days out. Both halves are
- * asserted here: the delay is IGNORED (the reopen instant wins) and the vendor is the one that refused. */
+ * about the 429 is about the wrong vendor: it names Anthropic, and `retry_delay_ms` is the SDK's own
+ * 620ms-and-doubling backoff rather than anything the provider said. Reading that as an instant is what put
+ * "Resets 5:32 PM" — the moment of the failure — under a Google weekly quota that was five days out. Three
+ * things are asserted here: the delay is IGNORED (the recorded quota wins), the vendor is the one that refused,
+ * and the sentence names the POOL and the fleet rather than an "account" no routed turn has. */
+const retryFrame = { type: "system", subtype: "api_retry", session_id: "s", attempt: 1, max_retries: 300, error_status: 429 } as const;
+
 test("a routed usage-limit retry names the vendor that refused and takes its reset from that vendor's quota, not the harness backoff", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-31T15:32:33.000Z"));
     const reopensAt = Date.parse("2026-08-06T09:57:46.000Z") / 1000;
     try {
         const events = await collect(
-            { ...request, allowance: { vendor: "Google", reopensAt: async () => reopensAt } },
-            fakeQuery({
-                type: "system",
-                subtype: "api_retry",
-                session_id: "s",
-                attempt: 1,
-                max_retries: 300,
-                retry_delay_ms: 620,
-                error_status: 429,
-                error: "rate_limit",
-            }),
+            {
+                ...request,
+                allowance: {
+                    vendor: "Google",
+                    limit: async () => ({ pool: "Claude and GPT models", spent: 31, withHeadroom: 0, reopensAt }),
+                },
+            },
+            fakeQuery({ ...retryFrame, retry_delay_ms: 620, error: "rate_limit" }),
         );
         expect(events).toEqual([
             { kind: "session", sessionId: "s" },
-            { kind: "error", code: "rate_limit", message: expect.stringContaining("Google usage limit reached"), resetsAt: reopensAt },
+            {
+                kind: "error",
+                code: "rate_limit",
+                message:
+                    "Google usage limit reached — the Claude and GPT models allowance is spent on all 31 connected accounts, not a provider outage. Send again once it resets to carry on from here.",
+                resetsAt: reopensAt,
+            },
             { kind: "done" },
         ]);
     } finally {
@@ -578,27 +584,87 @@ test("a routed usage-limit retry names the vendor that refused and takes its res
     }
 });
 
+/* A REFUSAL WITH HEADROOM STILL ON FILE IS NOT A SPENT PLAN, and this is the frame that stopped claiming it was.
+ *
+ * CLIProxyAPI balances across every credential it holds, so one account with room means the pool is not what
+ * refused the turn — every credential was merely cooling, which a transient upstream error does for a minute.
+ * The old frame answered that with a weekly reset days out, sending the user away over a condition that had
+ * already cleared. No reset, and a sentence that says which condition it is. */
+test("a routed refusal with an account still holding headroom reads as a cooldown, not a spent allowance", async () => {
+    const events = await collect(
+        { ...request, allowance: { vendor: "Google", limit: async () => ({ pool: "Claude and GPT models", spent: 30, withHeadroom: 1 }) } },
+        fakeQuery({ ...retryFrame, retry_delay_ms: 620, error: "rate_limit" }),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        {
+            kind: "error",
+            code: "rate_limit",
+            message:
+                "Google refused this turn, but 1 of 31 connected accounts still has headroom for Claude and GPT models — every credential is cooling down rather than spent, so this clears in moments rather than at a reset.",
+        },
+        { kind: "done" },
+    ]);
+});
+
 // Nothing on file beats a number we made up: the client renders a limit with no reset as a plain notice, which
 // is honest, where `now + backoff` reads as "already reset" and invites an immediate retry into a closed window.
 test("a routed usage-limit retry with no quota reading on file carries no reset at all", async () => {
     const events = await collect(
-        { ...request, allowance: { vendor: "Google", reopensAt: async () => undefined } },
-        fakeQuery({
-            type: "system",
-            subtype: "api_retry",
-            session_id: "s",
-            attempt: 1,
-            max_retries: 300,
-            retry_delay_ms: 620,
-            error_status: 429,
-            error: "rate_limit",
-        }),
+        { ...request, allowance: { vendor: "Google", limit: async () => ({ pool: "Claude and GPT models", spent: 0, withHeadroom: 0 }) } },
+        fakeQuery({ ...retryFrame, retry_delay_ms: 620, error: "rate_limit" }),
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
         { kind: "error", code: "rate_limit", message: expect.stringContaining("Google usage limit reached") },
         { kind: "done" },
     ]);
+});
+
+/* THE TRANSLATOR'S OWN ANSWER, on the one path that still holds it. A terminal assistant refusal carries the
+ * API's body, and CLIProxyAPI's is a model_cooldown JSON naming `reset_seconds` off its own scheduler — the one
+ * number that separates a credential cooling for 40 seconds from a weekly wall. It beats the recorded snapshot,
+ * which is a poll up to five minutes stale and cannot tell those two apart at all. */
+test("a routed refusal takes the translator's own reset_seconds over the recorded quota", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-31T15:32:33.000Z"));
+    try {
+        const events = await collect(
+            {
+                ...request,
+                allowance: {
+                    vendor: "Google",
+                    limit: async () => ({ pool: "Claude and GPT models", spent: 31, withHeadroom: 0, reopensAt: 9_999_999 }),
+                },
+            },
+            fakeQuery({
+                type: "assistant",
+                session_id: "s",
+                parent_tool_use_id: null,
+                error: "rate_limit",
+                message: {
+                    content: [
+                        {
+                            type: "text",
+                            text: 'API Error: 429 {"error":{"code":"model_cooldown","message":"All credentials for model claude-opus-4-6-thinking are cooling down","reset_seconds":40}}',
+                        },
+                    ],
+                },
+            }),
+        );
+        expect(events).toEqual([
+            { kind: "session", sessionId: "s" },
+            {
+                kind: "error",
+                code: "rate_limit",
+                message: expect.stringContaining("Google usage limit reached"),
+                resetsAt: Math.ceil(Date.parse("2026-07-31T15:32:33.000Z") / 1000) + 40,
+            },
+            { kind: "done" },
+        ]);
+    } finally {
+        vi.useRealTimers();
+    }
 });
 
 // The CLI files a mid-session limit hit under a non-rate_limit category, with only the sentence saying what
