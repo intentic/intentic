@@ -386,6 +386,24 @@ test("commitIndex commits what is staged and leaves unstaged work untouched", as
     expect(unstaged).toEqual([{ path: "later.txt", status: "added", additions: 1, deletions: 0 }]);
 });
 
+// The pair the commit route runs for a path-scoped commit, in the order and inside the lock it runs them: the
+// Changes panel's origin filter narrows the list, so Commit stages exactly those paths and then records the
+// whole index. What it must NOT do is reach the rest of the worktree — the other agent's work sitting one row
+// away is precisely what the filter was drawn around.
+test("stagePaths then commitIndex records only the named paths, leaving the rest of the worktree uncommitted", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "filtered.txt"), "the filtered agent's work\n");
+    await writeFile(join(dir, "other.txt"), "somebody else's work\n");
+
+    await stagePaths(dir, ["filtered.txt"]);
+    expect(await commitIndex(dir, "feat: the filtered work", author)).toBe(true);
+
+    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).not.toContain("other.txt");
+    const { staged, unstaged } = await changedFiles(dir);
+    expect(staged).toEqual([]);
+    expect(unstaged.map((change) => change.path)).toEqual(["other.txt"]);
+});
+
 test("commitIndex is a no-op false when nothing is staged, even with a dirty worktree", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "loose.txt"), "loose\n");

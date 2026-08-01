@@ -1,3 +1,4 @@
+import type { RepoPaths } from "@intentic-app/api-contract";
 import type { CommitMessageDraft } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -46,10 +47,11 @@ export function useCommitDraft() {
         inFlight = undefined;
     };
 
-    // Draft a message for `repos`, mirroring the panel's own commit target — `all` when the button says "Commit
-    // all" (the worktree), absent for a staged commit (the index). Returns the drafted message, or undefined if
-    // it failed or was cancelled; the caller writes it into the input.
-    const draft = async (repos: readonly string[], all: boolean, current: string): Promise<string | undefined> => {
+    // Draft a message for `groups`, which ARE the panel's own commit target — same repos, same per-repo `paths`
+    // when the origin filter has narrowed what the commit will stage, and `all` when the button says "Commit
+    // all" (the worktree). Passing anything else would describe a commit the button is not about to make.
+    // Returns the drafted message, or undefined if it failed or was cancelled; the caller writes it into the input.
+    const draft = async (groups: readonly RepoPaths[], all: boolean, current: string): Promise<string | undefined> => {
         if (busy.value) {
             cancel();
             return undefined;
@@ -62,7 +64,7 @@ export function useCommitDraft() {
             const result = await sandboxJson<CommitMessageDraft>(`/git/commit-message`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
-                body: JSON.stringify({ repos, ...(all ? { all: true } : {}) }),
+                body: JSON.stringify({ repos: groups, ...(all ? { all: true } : {}) }),
                 signal: controller.signal,
             });
             previous.value = current;

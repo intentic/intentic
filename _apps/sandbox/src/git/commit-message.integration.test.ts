@@ -42,7 +42,7 @@ test("describes the INDEX for an ordinary commit — the unstaged edit beside it
     await sh(dir, "add", "a.txt");
     await writeFile(join(dir, "b.txt"), "not part of this commit\n");
 
-    const diff = await collectRepoDiff("root", dir, false);
+    const diff = await collectRepoDiff("root", dir, {});
 
     expect(diff.summary).toContain("a.txt");
     expect(diff.patch).toContain("staged");
@@ -55,7 +55,7 @@ test("describes the WORKTREE for Commit all, new files included — `git add -A`
     await writeFile(join(dir, "a.txt"), "edited in place\n");
     await writeFile(join(dir, "fresh.txt"), "brand new content\n");
 
-    const diff = await collectRepoDiff("root", dir, true);
+    const diff = await collectRepoDiff("root", dir, { all: true });
 
     expect(diff.patch).toContain("edited in place");
     // `git diff HEAD` cannot see an untracked file at all, so a commit that is ENTIRELY new files would
@@ -69,9 +69,41 @@ test("leaves ignored files out of the Commit all draft, exactly as `git add -A` 
     await writeFile(join(dir, ".env"), "SECRET=leaked\n");
     await writeFile(join(dir, "a.txt"), "edited\n");
 
-    const diff = await collectRepoDiff("root", dir, true);
+    const diff = await collectRepoDiff("root", dir, { all: true });
 
     expect(diff.patch).not.toContain("SECRET=leaked");
+});
+
+test("describes ONLY the paths a filtered commit will stage — the worktree beside them is another agent's work", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "the filtered agent's edit\n");
+    await writeFile(join(dir, "b.txt"), "somebody else's edit\n");
+    await writeFile(join(dir, "mine.txt"), "an untracked file inside the subset\n");
+    await writeFile(join(dir, "theirs.txt"), "an untracked file outside it\n");
+
+    const diff = await collectRepoDiff("root", dir, { paths: ["a.txt", "mine.txt"] });
+
+    expect(diff.patch).toContain("the filtered agent's edit");
+    // The whole point of the shape: this commit stages a subset, so a message describing the rest would be
+    // confidently about changes it is not going to record.
+    expect(diff.patch).not.toContain("somebody else's edit");
+    // Untracked files are listed and read from disk rather than diffed, so they need the SAME narrowing —
+    // separately, and this is the assertion that catches it going missing.
+    expect(diff.summary).toContain("mine.txt");
+    expect(diff.patch).toContain("an untracked file inside the subset");
+    expect(diff.summary).not.toContain("theirs.txt");
+});
+
+test("keeps the diff flags out of the pathspec — `--` ends the option list, so `--stat` after it is a filename", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "edited\n");
+
+    const diff = await collectRepoDiff("root", dir, { paths: ["a.txt"] });
+
+    // A misordered `diff HEAD -- a.txt --stat` exits non-zero, and tryGit swallows that into an empty string —
+    // so the failure mode is a silently blank summary, not an error anyone would see.
+    expect(diff.summary).toContain("a.txt");
+    expect(diff.summary).toContain("M\ta.txt");
 });
 
 test("reads no untracked files for a staged commit — they are not in the index", async () => {
@@ -80,7 +112,7 @@ test("reads no untracked files for a staged commit — they are not in the index
     await sh(dir, "add", "a.txt");
     await writeFile(join(dir, "fresh.txt"), "brand new content\n");
 
-    const diff = await collectRepoDiff("root", dir, false);
+    const diff = await collectRepoDiff("root", dir, {});
 
     expect(diff.patch).not.toContain("brand new content");
 });
@@ -90,7 +122,7 @@ test("carries the repo's own recent subjects, newest first — the house style i
     await writeFile(join(dir, "a.txt"), "x\n");
     await sh(dir, "add", "-A");
 
-    const diff = await collectRepoDiff("root", dir, false);
+    const diff = await collectRepoDiff("root", dir, {});
 
     expect(diff.subjects).toEqual(["fix: add b.txt", "feat: add a.txt"]);
     expect(commitMessagePrompt([diff])).toContain("fix: add b.txt");
@@ -104,7 +136,7 @@ test("survives an unborn repo instead of failing the whole draft", async () => {
     await sh(dir, "init", "-q");
     await writeFile(join(dir, "a.txt"), "one\n");
 
-    const diff = await collectRepoDiff("root", dir, true);
+    const diff = await collectRepoDiff("root", dir, { all: true });
 
     expect(diff.subjects).toEqual([]);
     expect(diff.patch).toContain("a.txt");
@@ -114,7 +146,7 @@ test("names every repo and says the message is shared when a commit spans more t
     const dir = await tempRepo();
     await writeFile(join(dir, "a.txt"), "x\n");
     await sh(dir, "add", "-A");
-    const one = await collectRepoDiff("root", dir, false);
+    const one = await collectRepoDiff("root", dir, {});
     const two = { ...one, repo: "widgets" };
 
     const prompt = commitMessagePrompt([one, two]);
@@ -130,7 +162,7 @@ test("marks a clipped diff as clipped, so a truncated hunk does not read as the 
     await writeFile(join(dir, "big.txt"), `${"line of content\n".repeat(20_000)}`);
     await sh(dir, "add", "-A");
 
-    const prompt = commitMessagePrompt([await collectRepoDiff("root", dir, false)]);
+    const prompt = commitMessagePrompt([await collectRepoDiff("root", dir, {})]);
 
     expect(prompt).toContain("diff truncated");
     // The file list is assembled before the budget is applied, so it survives whole — the model still knows

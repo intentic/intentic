@@ -963,17 +963,21 @@ export const IntenticRunSchema = z.object({ args: z.array(z.string()) });
 
 // ---- git ----
 
-// What a commit records — two shapes, each a real git spelling:
-//   all: true   ⇒ stage every change in the repo, then commit (`commit -a`; VSCode's "stage all and commit")
+// What a commit records — three shapes, each a real git spelling. The last two are for the case where nothing
+// is staged yet and the caller has said what to stage; they are alternatives, and a caller sends at most one:
 //   absent      ⇒ commit whatever is staged (plain `git commit`)
+//   all: true   ⇒ stage every change in the repo, then commit (`commit -a`; VSCode's "stage all and commit")
+//   paths       ⇒ `git add` those repo-relative paths, then commit the index
 //
-// There is deliberately no `paths`. The index IS git's mechanism for choosing what a commit contains, so a
-// second path-selection channel alongside it can only disagree with it: a `commit --only` over a partially
-// staged file records the WORKTREE content while the row the user picked showed the INDEX content. Staging is
-// the selection; this endpoint only ever records it.
+// `paths` is emphatically NOT `commit --only`. The index IS git's mechanism for choosing what a commit
+// contains, so a second path-selection channel alongside it could only disagree with it: a partial commit over
+// a half-staged file records the WORKTREE content while the row the user picked showed the INDEX content. This
+// stages and then records the whole index, which is why it is safe — and why it also survives a merge, where
+// git refuses a partial commit outright (and refuses it only AFTER moving the index).
 export const CommitSchema = RepoParamSchema.extend({
     message: z.string().min(1),
     all: z.boolean().optional(),
+    paths: z.array(z.string().min(1)).max(500).optional(),
 });
 export const DiscardSchema = RepoParamSchema.extend({
     // Repo-relative paths to discard; absent ⇒ discard every uncommitted change in the repo.
@@ -1002,13 +1006,21 @@ export const GitFilesSchema = z.object({ files: z.array(z.string()) });
 export const GitFileSchema = z.object({ path: z.string(), content: z.string() });
 export const CommitResultSchema = z.object({ committed: z.boolean() });
 
+// One repo's slice of a workspace-wide git action: the whole repo, or only the repo-relative paths named. The
+// same pair the per-repo routes take as {repo} + `paths`, in the one shape a caller that spans repos can send.
+export const RepoPathsSchema = z.object({ repo: z.string().min(1), paths: z.array(z.string().min(1)).max(500).optional() });
+export type RepoPaths = z.infer<typeof RepoPathsSchema>;
+
 /* AI-drafted commit message. Workspace-wide, not per repo, because the commit box's target IS a set of repos
  * sharing one message — so the draft has to see every one of their diffs to describe what the commit actually
- * records. `repos` and `all` mirror the panel's own commit target exactly: `all` reads the WORKTREE (what
- * "Commit all" would sweep), absent reads the INDEX (what a bare commit records). Getting that wrong would
- * describe changes the commit isn't going to contain. */
+ * records. The input mirrors CommitSchema field for field, which is the whole point: whatever the commit is
+ * about to do is what gets described, and the two cannot drift.
+ *   repos[].paths ⇒ the subset that commit will stage — read the WORKTREE, narrowed to those paths
+ *   all: true     ⇒ the whole worktree, untracked included (what "Commit all" sweeps)
+ *   neither       ⇒ the INDEX (what a bare commit records)
+ * Getting that wrong would describe changes the commit isn't going to contain. */
 export const CommitMessageDraftSchema = z.object({
-    repos: z.array(z.string().min(1)).min(1).max(50),
+    repos: z.array(RepoPathsSchema).min(1).max(50),
     all: z.boolean().optional(),
 });
 // The draft plus WHICH model wrote it, so the surface can name it rather than claiming an anonymous "AI" —

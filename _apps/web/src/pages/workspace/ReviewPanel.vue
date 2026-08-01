@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { GitChange, GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
+import type { GitChange, GitDiffSide, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
 import { cmp, useDevice } from "@intentic-app/ui";
 import Dialog from "primevue/dialog";
 import { computed, ref, shallowRef, watch } from "vue";
@@ -19,7 +19,7 @@ import { formatElapsed, unfinishedMark } from "../../composables/agents/agentSta
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../../composables/workspace/outgoingWork";
-import { COMMIT_SCOPE, type RepoPaths, type SyncTarget, useChanges } from "../../composables/workspace/useChanges";
+import { COMMIT_SCOPE, type SyncTarget, useChanges } from "../../composables/workspace/useChanges";
 import { usePrepush } from "../../composables/workspace/usePrepush";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { composeSession, startSession } from "../../composables/agents/sessionSuggestion";
@@ -228,6 +228,12 @@ const showOrigins = (event: MouseEvent, ids: readonly string[]): void => {
 // mobile, where this panel is the whole screen.
 const wide = computed(() => mobile.value || layout.sidebarWidth.value >= 320);
 
+// The lit chip in words — the subject of every sentence that names what the filter has narrowed to (the commit
+// button's tooltip, the section verbs, the discard prompt). Undefined is "no filter", not "nobody".
+const filterLabel = computed<string | undefined>(() =>
+    originFilter.value === undefined ? undefined : originFilter.value === YOURS ? `you` : originLabel(originFilter.value),
+);
+
 const matchesFilter = (repo: RepoChanges, change: GitChange): boolean => {
     if (originFilter.value === undefined) {
         return true;
@@ -378,16 +384,45 @@ const byRepo = (rows: readonly Row[]): RepoPaths[] => {
 // --- commit ------------------------------------------------------------------------------------------------
 // The message is NOT component state: this panel is mounted behind a v-if, and going to look at the files you
 // are describing must not throw away what you typed (see composables/workspace/commitMessage.ts).
-// Staged repos are the commit target, full stop. With nothing staged anywhere but changes present, the button
-// becomes "Commit all" — VSCode's "would you like to stage all your changes and commit them directly?", made
-// an explicit label instead of a dialog, and served by the daemon's `all` shape.
+// Staged repos are the commit target, full stop — a commit records the index.
 const stagedRepos = computed(() => scannable.value.filter((repo) => repo.staged.length > 0).map((repo) => repo.repo));
-// Never while an origin filter is on: "Commit all" stages EVERYTHING first, and a user who has narrowed the
-// list to one agent would be recording the other agents' work under a message about this one. The filter
-// narrows the list, not the index — so with nothing staged it stays a plain (disabled) Commit, and the way to
-// commit that agent's work is the Stage all the filter has already narrowed for them.
-const commitAll = computed(() => originFilter.value === undefined && stagedRepos.value.length === 0 && changes.count.value > 0);
-const commitTarget = computed(() => (commitAll.value ? scannable.value.map((repo) => repo.repo) : stagedRepos.value));
+
+/* --- when Commit stages for you ------------------------------------------------------------------------------
+ * Nothing staged anywhere with work on screen is the one state where Commit stages before it records — VSCode's
+ * "would you like to stage all your changes and commit them directly?", made an explicit label instead of a
+ * dialog. WHAT it stages is what the list is SHOWING, which makes the origin filter's two states the button's
+ * two shapes:
+ *   - unfiltered → "Commit all". The whole worktree, through the daemon's `all` shape (`git commit -a`), which
+ *     is also the only reading that reaches the rows the daemon truncated past its per-repo budget.
+ *   - filtered   → "Commit 7 files". Stage exactly that origin's paths, then commit the index. The chip was
+ *     always a whole intent — it narrows the list AND files the session's title into the message — and this is
+ *     the part of it the index never heard. It used to be withheld here, on the grounds that "Commit all"
+ *     would sweep every other agent's work under a message about this one; that is an argument for scoping the
+ *     staging, not for taking the button away, and the scope was sitting in the filter the whole time.
+ * Never once something IS staged: the index is then the user's own answer to what goes in, and Commit records
+ * it. Which is also what keeps this safe — with nothing staged there is no staged work for it to sweep in. */
+const stagesFirst = computed(() => stagedRepos.value.length === 0 && changes.count.value > 0);
+const commitAll = computed(() => stagesFirst.value && originFilter.value === undefined);
+// The filtered set, per repo. Distinct paths, because a file staged AND edited again is two rows and one path
+// to git; and read through `sidesOf`, the single place the filter is applied, so this can only hold rows the
+// user can actually see.
+const filteredGroups = computed<readonly RepoPaths[]>(() =>
+    scannable.value
+        .map((repo) => ({ repo: repo.repo, paths: [...new Set(sidesOf(repo).flatMap((section) => section.changes.map((change) => change.path)))] }))
+        .filter((group) => group.paths.length > 0),
+);
+// What Commit acts on, in the one shape `commitRepos` and the AI draft both take: a bare repo for the two
+// whole-repo shapes, repo + paths for the filtered one.
+const commitGroups = computed<readonly RepoPaths[]>(() => {
+    if (!stagesFirst.value) {
+        return stagedRepos.value.map((repo) => ({ repo }));
+    }
+    return commitAll.value ? scannable.value.map((repo) => ({ repo: repo.repo })) : filteredGroups.value;
+});
+const commitTarget = computed(() => commitGroups.value.map((group) => group.repo));
+// Only the filtered shape carries paths, so this reads 0 for every other one — which is exactly when the button
+// has no count to show.
+const commitFiles = computed(() => commitGroups.value.reduce((total, group) => total + (group.paths?.length ?? 0), 0));
 // An unresolved conflict in ANY repo blocks the button, not just in the repo that has it: a commit here is one
 // commit per repo sharing a message, and git would refuse the conflicted one halfway through — leaving the
 // others committed under a message that describes work that didn't all land. Better to not start.
@@ -395,35 +430,43 @@ const blockedByConflicts = computed(() => scannable.value.some((repo) => repo.co
 const commitReady = computed(
     () => commitTarget.value.length > 0 && commitMessage.value.trim().length > 0 && !blockedByConflicts.value && !changes.actionBusy.value,
 );
-const commitLabel = computed(() => (commitAll.value ? `Commit all` : `Commit`));
+// The count rides the LABEL rather than the readout beside it. This is the one shape whose scope is stated
+// nowhere else on the panel — a bare "Commit" over a list that is hiding rows says nothing about which ones it
+// is about to take.
+const commitLabel = computed(() =>
+    commitAll.value ? `Commit all` : commitFiles.value > 0 ? `Commit ${plural(commitFiles.value, `file`)}` : `Commit`,
+);
 
 /* --- committing an unfinished session's work ------------------------------------------------------------------
  * The sessions this commit would RECORD, and which of them are still going. Scoped exactly like the button:
  * the staged side alone for a plain Commit (a commit records the index), every side for "Commit all", and only
- * the repos in `commitTarget` — the same rule the whole family of files shares.
+ * the repos in `commitTarget` — the same rule the whole family of files shares. A filtered commit needs no
+ * summary at all: it stages that one origin's files and nothing else, so the filter IS the answer, and reading
+ * it off the repos would name every other session with work parked in them.
  *
  * A warning rather than a gate, for the same reason as the mid-write one below: nothing here is at risk of
  * corruption, the commit is a legitimate thing to make (staging the first half of an agent's work on purpose is
  * ordinary), and `reset --soft` walks it back. What it prevents is the silent version — committing under a
  * subject that describes an intent the agent has not finished carrying out, which is exactly what the legend's
  * click-to-name makes easy to do without noticing. */
-const commitOrigins = computed(
-    () =>
-        summarizeOrigins(
-            scannable.value.filter((repo) => commitTarget.value.includes(repo.repo)),
-            commitAll.value ? ALL_SIDES : [`staged`],
-        ).agents,
+const commitOrigins = computed(() =>
+    stagesFirst.value && originFilter.value !== undefined
+        ? legend.value.agents.filter((entry) => entry.id === originFilter.value)
+        : summarizeOrigins(
+              scannable.value.filter((repo) => commitTarget.value.includes(repo.repo)),
+              commitAll.value ? ALL_SIDES : [`staged`],
+          ).agents,
 );
 const unfinished = computed(() => commitOrigins.value.filter((entry) => originMark(entry.id) !== undefined));
 
 /* --- committing while an agent works ------------------------------------------------------------------------
  * THE INDEX IS ALREADY THE ISOLATION, which is why nothing here blocks. A plain Commit records what you
  * staged — a snapshot git took at stage time, which no later worktree write can alter — so a turn running in
- * the background cannot get into it, and refusing to commit during one bought exactly nothing. "Commit all" is
- * the single exception: `commit -a` reads the WORKTREE, so a file an agent is halfway through writing goes in
- * as it stands.
+ * the background cannot get into it, and refusing to commit during one bought exactly nothing. The exception is
+ * a commit that STAGES FIRST, in either shape: it reads the worktree at stage time, so a file an agent is
+ * halfway through writing goes in as it stands.
  *
- * So the panel warns, and only where that is true: a MAIN-TREE turn writing a repo this Commit all would
+ * So the panel warns, and only where that is true: a MAIN-TREE turn writing a repo this commit would
  * sweep. An isolated turn is silent — it works in its own worktree and reaches this tree only through land,
  * which the daemon serializes against every git write this panel makes (git.routes.ts), so there is no race
  * left to warn about. The block this replaces did the opposite of all of that: it read one chat tab's stream,
@@ -448,11 +491,11 @@ const writingRepos = computed<ReadonlySet<string>>(
 );
 // Named in the warning, and the difference between the two lists is the escape hatch: everything else is
 // committable right now, which is the whole point of scoping this per repo instead of per workspace.
-const atRisk = computed(() => (commitAll.value ? commitTarget.value.filter((repo) => writingRepos.value.has(repo)) : []));
-const unaffected = computed(() => commitTarget.value.filter((repo) => !writingRepos.value.has(repo)));
+const atRisk = computed(() => (stagesFirst.value ? commitTarget.value.filter((repo) => writingRepos.value.has(repo)) : []));
+const unaffected = computed(() => commitGroups.value.filter((group) => !writingRepos.value.has(group.repo)));
 
-const runCommit = async (target: readonly string[]): Promise<void> => {
-    await changes.commitRepos(target, commitMessage.value, commitAll.value);
+const runCommit = async (target: readonly RepoPaths[]): Promise<void> => {
+    await changes.commitRepos(target, commitMessage.value, stagesFirst.value);
     // Keep the message on failure — it is the one thing here the user typed by hand.
     if (!changes.failures.value.has(COMMIT_SCOPE)) {
         commitMessage.value = ``;
@@ -465,11 +508,7 @@ const commitBlocker = computed<string | undefined>(() => {
         return `Resolve the conflicts first — git cannot commit while a path is unmerged.`;
     }
     if (commitTarget.value.length === 0) {
-        // The one genuinely puzzling empty target: an origin filter suppresses "Commit all" (it would stage
-        // every agent's work under a message about one), so the button goes quiet with changes on screen.
-        return originFilter.value === undefined
-            ? `Nothing to commit.`
-            : `Nothing staged — "Commit all" is off while the list is filtered. Stage what you want first.`;
+        return `Nothing to commit.`;
     }
     if (commitMessage.value.trim().length === 0) {
         return `Write a commit message first.`;
@@ -487,7 +526,7 @@ const doCommit = async (): Promise<void> => {
         blockerNotice.value = commitBlocker.value;
         return;
     }
-    await runCommit(commitTarget.value);
+    await runCommit(commitGroups.value);
 };
 
 /* --- AI autofill ---------------------------------------------------------------------------------------------
@@ -515,7 +554,11 @@ const autofillHint = computed(() => {
     if (commitTarget.value.length === 0) {
         return `Nothing to describe yet — stage the changes you want to commit.`;
     }
-    const scope = commitAll.value ? `every uncommitted change` : `the staged changes`;
+    const scope = commitAll.value
+        ? `every uncommitted change`
+        : commitFiles.value > 0
+          ? `the ${plural(commitFiles.value, `file`)} from ${filterLabel.value}`
+          : `the staged changes`;
     return `Draft a message from ${scope} using ${quickModel.label.value} — change the model in Sandbox ▸ Agent.`;
 });
 const runAutofill = async (): Promise<void> => {
@@ -529,7 +572,7 @@ const runAutofill = async (): Promise<void> => {
         blockerNotice.value = autofillHint.value;
         return;
     }
-    const message = await commitDraft.draft(commitTarget.value, commitAll.value, commitMessage.value);
+    const message = await commitDraft.draft(commitGroups.value, commitAll.value, commitMessage.value);
     if (message !== undefined) {
         commitMessage.value = message;
     }
@@ -566,6 +609,14 @@ const INDEX_VERB: Record<GitDiffSide, { readonly one: string; readonly all: stri
     unstaged: { one: `Stage`, all: `Stage all`, icon: `plus` },
     staged: { one: `Unstage`, all: `Unstage all`, icon: `undo` },
 };
+
+// The section header's verb as a sentence. Under a filter it says how much it will move and whose, because the
+// button no longer means "this whole side" — it means the rows the filter has left on screen, which is a
+// different promise and the reason the button stops hiding itself (see the header's class below).
+const sideVerbHint = (repo: RepoChanges, side: GitDiffSide): string =>
+    filterLabel.value === undefined
+        ? INDEX_VERB[side].all
+        : `${INDEX_VERB[side].all} — ${plural(changesOn(repo, side).length, `file`)} from ${filterLabel.value}`;
 
 // Row action: moves the acting rows across the index, in the direction their side implies.
 const stageRow = (row: Row): Promise<void> => changes.stageGroups(byRepo(actingRows(row, true)), movesIntoIndex(row.side));
@@ -630,9 +681,9 @@ const askDiscardRepo = (repo: RepoChanges): void => {
     const deletes = repo.unstaged.filter((change) => change.status === `added` && paths.has(change.path)).map((change) => change.path);
     pendingDiscard.value = {
         what:
-            originFilter.value === undefined
+            filterLabel.value === undefined
                 ? `every uncommitted change in ${repo.repo}`
-                : `${plural(paths.size, `file`)} from ${originFilter.value === YOURS ? `you` : originLabel(originFilter.value)} in ${repo.repo}`,
+                : `${plural(paths.size, `file`)} from ${filterLabel.value} in ${repo.repo}`,
         deletes,
         restores: paths.size - deletes.length,
         groups: [originFilter.value === undefined ? { repo: repo.repo } : { repo: repo.repo, paths: [...paths] }],
@@ -977,21 +1028,25 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                             ? 'A path is unmerged — stage each conflicted file to mark it resolved'
                             : commitAll
                               ? 'Stages every change, then commits'
-                              : 'One commit per repo'
+                              : commitFiles > 0
+                                ? `Stages the ${plural(commitFiles, 'file')} from ${filterLabel}, then commits — nothing else goes in`
+                                : 'One commit per repo'
                     "
                 >
                     <Icon name="check" class="mr-1 text-2xs" />{{ commitLabel }}
                 </button>
             </div>
-            <!-- An agent is writing, in a repo this Commit all would sweep from the worktree. A WARNING, not a
+            <!-- An agent is writing, in a repo this commit would stage from the worktree. A WARNING, not a
                  gate: the commit is the user's to make and `reset --soft` walks it back, so the button above
                  stays live. What the strip adds is the thing the old block never offered — the repos nobody is
-                 writing, committable in one click, which is the whole "let me commit something unrelated" case. -->
+                 writing, committable in one click, which is the whole "let me commit something unrelated" case.
+                 It quotes the button rather than naming a shape, so it reads the same for "Commit all" and for
+                 the filtered "Commit 7 files". -->
             <div v-if="atRisk.length > 0" :class="WARNING">
                 <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
                 <div class="min-w-0 flex-1">
                     <p class="break-words text-2xs text-warning">
-                        An agent is editing {{ atRisk.join(`, `) }} right now — "Commit all" records
+                        An agent is editing {{ atRisk.join(`, `) }} right now — "{{ commitLabel }}" records
                         {{ atRisk.length === 1 ? `it` : `them` }} mid-write.
                     </p>
                     <button
@@ -1000,10 +1055,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="mt-1 inline-flex items-center whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
                         :disabled="!commitReady"
                         @click="runCommit(unaffected)"
-                        v-tooltip.right="`Commits ${unaffected.join(`, `)}`"
+                        v-tooltip.right="`Commits ${unaffected.map((group) => group.repo).join(`, `)}`"
                     >
                         <Icon name="check" class="mr-1 text-2xs" />Commit
-                        {{ unaffected.length === 1 ? unaffected[0] : `the other ${unaffected.length} repos` }}
+                        {{ unaffected.length === 1 ? unaffected[0]!.repo : `the other ${unaffected.length} repos` }}
                     </button>
                 </div>
             </div>
@@ -1258,16 +1313,23 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                             <!-- Only when there is more than one section to tell apart; alone it repeats the repo badge. -->
                             <span v-if="sidesSplit(group)" class="shrink-0 text-2xs text-subtle">{{ section.changes.length }}</span>
                             <span class="flex-1"></span>
+                            <!-- Hover-revealed at rest, VISIBLE while a filter is on. Not an inconsistency: the
+                                 filter changes what this button means — "that agent's files in this repo",
+                                 which is the granular half of the intent the chip started — and an action the
+                                 user has just narrowed for is the last one that should be waiting behind a
+                                 hover they have no reason to try. The layout is identical either way, so
+                                 nothing moves when the filter clears. -->
                             <button
                                 type="button"
                                 :class="[
                                     ICON_BUTTON,
-                                    'opacity-0 focus-visible:opacity-100 group-hover/side:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100',
+                                    'disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100',
+                                    originFilter === undefined ? 'opacity-0 focus-visible:opacity-100 group-hover/side:opacity-100' : '',
                                 ]"
                                 :disabled="changes.actionBusy.value"
                                 @click="stageSide(group, section.side)"
-                                v-tooltip.right="INDEX_VERB[section.side].all"
-                                :aria-label="`${INDEX_VERB[section.side].all} in ${group.repo}`"
+                                v-tooltip.right="sideVerbHint(group, section.side)"
+                                :aria-label="`${sideVerbHint(group, section.side)} in ${group.repo}`"
                             >
                                 <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
                             </button>

@@ -90,7 +90,7 @@ import {
     unstagedFileDiff,
     workingFileDiff,
 } from "./git/changes.js";
-import { collectRepoDiff, type RepoDiff } from "./git/commit-message.js";
+import { collectRepoDiff, type CommitScope, type RepoDiff } from "./git/commit-message.js";
 import { createBranch, deleteBranch, listBranches } from "./git/branches.js";
 import { fetchRemote, pullRemote, pushBranch, remoteState } from "./git/remote.js";
 import { type GeminiCatalog, createGeminiCatalog } from "./gemini/gemini-catalog.js";
@@ -350,9 +350,9 @@ export interface Services {
         // (changed files, then a file's before/after AT the commit).
         readonly commitLog: (dir: string, limit: number) => Promise<{ branch?: string; commits: GitCommit[] }>;
         // What one repo contributes to an AI-drafted commit message: its recent subjects (the house style), the
-        // file list, and the diff of whichever side the commit will record — `all` reads the worktree the way
-        // "Commit all" does, absent reads the index the way a bare commit does.
-        readonly collectRepoDiff: (repo: string, dir: string, all: boolean) => Promise<RepoDiff>;
+        // file list, and the diff of whichever side the commit will record — a commit that stages first reads
+        // the worktree (`all`, or just the `paths` it will stage), a bare one reads the index.
+        readonly collectRepoDiff: (repo: string, dir: string, scope: CommitScope) => Promise<RepoDiff>;
         readonly commitChanges: (dir: string, sha: string) => Promise<GitChange[]>;
         readonly commitFileDiff: (dir: string, sha: string, path: string) => Promise<FileDiff>;
         // Graph write actions (VSCode "Git Graph" parity). Non-destructive refs (branch/tag) and the

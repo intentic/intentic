@@ -5,12 +5,14 @@ import { readWorkspaceFile, statWorkspaceFileSize } from "../workspace/workspace
 /* THE MATERIAL A COMMIT MESSAGE IS DRAFTED FROM, and the one rule that matters here: it describes what the
  * Commit button is ABOUT TO RECORD, not what the repo happens to contain. Those differ constantly — a partially
  * staged file, an unstaged edit the user is not ready to commit — and describing the wrong one produces a
- * message that is confidently about changes the commit will not contain. So the two shapes mirror the panel's
- * own target exactly:
+ * message that is confidently about changes the commit will not contain. So the three shapes mirror the panel's
+ * own target exactly, one per shape of CommitSchema:
  *
  *   staged (default)  → the INDEX vs HEAD; what a bare `git commit` records
  *   all               → the WORKTREE, untracked files included; what "Commit all" sweeps, since gitCommitAll
  *                       runs `git add -A` first and `git diff HEAD` alone would miss every new file
+ *   paths             → the same WORKTREE reading, narrowed by pathspec: a commit that stages a subset first
+ *                       (the Changes panel's origin filter) records exactly those paths and nothing else
  *
  * The house style is INFERRED, never prescribed. The last handful of subjects go in the prompt and the model is
  * told to match them, which on a Conventional Commits repo reproduces `feat:` / `fix:` without this file
@@ -46,9 +48,11 @@ const tryGit = async (dir: string, args: readonly string[], git: GitRunner): Pro
         .then((result) => result.stdout)
         .catch(() => ``);
 
-// The diff selectors for each of the two commit shapes, in one place so the stat, the file list and the patch
-// can never disagree about which one they are describing.
-const diffArgs = (all: boolean): readonly string[] => (all ? [`diff`, `HEAD`] : [`diff`, `--cached`]);
+// The diff base for each commit shape, in one place so the stat, the file list and the patch can never disagree
+// about which one they are describing. The pathspec is a SEPARATE tail because `--` ends the option list: every
+// flag (`--stat`, `--name-status`) has to be spelled before it or git reads it as a filename.
+const diffBase = (worktree: boolean): readonly string[] => (worktree ? [`diff`, `HEAD`] : [`diff`, `--cached`]);
+const pathspec = (paths: readonly string[] | undefined): readonly string[] => (paths === undefined ? [] : [`--`, ...paths]);
 
 // Untracked files, as the synthetic "new file" blocks git cannot produce for them. `--exclude-standard` honours
 // .gitignore, so this sees exactly what `git add -A` would stage.
@@ -57,8 +61,10 @@ const diffArgs = (all: boolean): readonly string[] => (all ? [`diff`, `HEAD`] : 
 // (in `git diff --name-status`'s own `A<TAB>path` spelling, so it reads as one list with the tracked changes),
 // while only the first few are read from disk. A `git add -A` can sweep a whole build output — the model does
 // not need to read all of it, but a commit whose message omits half its new files is simply wrong.
-const untrackedFiles = async (dir: string, git: GitRunner): Promise<{ names: string; patch: string }> => {
-    const listed = (await tryGit(dir, [`ls-files`, `--others`, `--exclude-standard`], git)).split(`\n`).filter((path) => path !== ``);
+const untrackedFiles = async (dir: string, paths: readonly string[] | undefined, git: GitRunner): Promise<{ names: string; patch: string }> => {
+    const listed = (await tryGit(dir, [`ls-files`, `--others`, `--exclude-standard`, ...pathspec(paths)], git))
+        .split(`\n`)
+        .filter((path) => path !== ``);
     const blocks: string[] = [];
     for (const path of listed.slice(0, MAX_UNTRACKED_FILES)) {
         const size = await statWorkspaceFileSize(join(dir, path));
@@ -74,16 +80,27 @@ const untrackedFiles = async (dir: string, git: GitRunner): Promise<{ names: str
     return { names: listed.map((path) => `A\t${path}`).join(`\n`), patch: blocks.join(`\n\n`) };
 };
 
-// Everything one repo contributes to the draft. `all` picks the worktree over the index — see the header.
-export const collectRepoDiff = async (repo: string, dir: string, all: boolean, git: GitRunner = defaultGit): Promise<RepoDiff> => {
+// Everything one repo contributes to the draft. The scope is the commit's own — see the header: a commit that
+// stages before it records (`all`, or an explicit `paths` subset) is described from the WORKTREE, and one that
+// records what is already staged is described from the index.
+export interface CommitScope {
+    // `commit -a` — the whole worktree, untracked files included.
+    readonly all?: boolean;
+    // The repo-relative paths the commit will stage first, when it stages only a subset.
+    readonly paths?: readonly string[];
+}
+
+export const collectRepoDiff = async (repo: string, dir: string, scope: CommitScope, git: GitRunner = defaultGit): Promise<RepoDiff> => {
+    const worktree = scope.all === true || scope.paths !== undefined;
+    const spec = pathspec(scope.paths);
     const [subjects, stat, names, patch, untracked] = await Promise.all([
         tryGit(dir, [`log`, `-n`, String(RECENT_SUBJECTS), `--format=%s`], git),
-        tryGit(dir, [...diffArgs(all), `--stat`], git),
-        tryGit(dir, [...diffArgs(all), `--name-status`], git),
-        tryGit(dir, [...diffArgs(all)], git),
-        // Only "Commit all" sweeps untracked files; a staged commit records the index, which by definition
-        // holds none of them.
-        all ? untrackedFiles(dir, git) : Promise.resolve({ names: ``, patch: `` }),
+        tryGit(dir, [...diffBase(worktree), `--stat`, ...spec], git),
+        tryGit(dir, [...diffBase(worktree), `--name-status`, ...spec], git),
+        tryGit(dir, [...diffBase(worktree), ...spec], git),
+        // Only a commit that stages first sweeps untracked files; a staged commit records the index, which by
+        // definition holds none of them.
+        worktree ? untrackedFiles(dir, scope.paths, git) : Promise.resolve({ names: ``, patch: `` }),
     ]);
     return {
         repo,

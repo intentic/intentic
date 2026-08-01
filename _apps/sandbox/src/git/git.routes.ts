@@ -290,7 +290,12 @@ export const createGitRoutes = (services: Services) => {
          * user should see said out loud, rather than a sparkle click that appears to do nothing at all. */
         commitMessage: i.commitMessage.handler(async ({ input, signal }) => {
             const diffs = await Promise.all(
-                input.repos.map(async (repo) => services.git.collectRepoDiff(repo, await repoDir(repo), input.all === true)),
+                input.repos.map(async (target) =>
+                    services.git.collectRepoDiff(target.repo, await repoDir(target.repo), {
+                        ...(input.all === true ? { all: true } : {}),
+                        ...(target.paths === undefined ? {} : { paths: target.paths }),
+                    }),
+                ),
             );
             const { text, choice } = await askQuickModel(services, commitMessagePrompt(diffs), signal ?? new AbortController().signal);
             const message = cleanCommitSubject(text);
@@ -380,6 +385,13 @@ export const createGitRoutes = (services: Services) => {
                 // git's verdict line so the panel prints the reason; a bare throw would reach the browser as an
                 // opaque 500 and the user would read "Commit failed." with nothing to act on.
                 try {
+                    // Nothing was staged, and the caller has said what to stage — so this commit stages first,
+                    // INSIDE the repo lock rather than as a second request the panel makes: a land slipping
+                    // between an add and a commit is exactly the half-a-patch race the lock exists to close.
+                    // A whole-index commit follows, never a partial one (see CommitSchema).
+                    if (input.paths !== undefined) {
+                        await services.git.stagePaths(dir, input.paths);
+                    }
                     const committed =
                         input.all === true
                             ? await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR)

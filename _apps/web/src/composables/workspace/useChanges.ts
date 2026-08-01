@@ -1,4 +1,12 @@
-import type { FileDiffResponse, GitActionResult, GitChangesResponse, GitDiffSide, OriginAgent, RepoChanges } from "@intentic-app/api-contract";
+import type {
+    FileDiffResponse,
+    GitActionResult,
+    GitChangesResponse,
+    GitDiffSide,
+    OriginAgent,
+    RepoChanges,
+    RepoPaths,
+} from "@intentic-app/api-contract";
 import { computed, ref, watch } from "vue";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
@@ -15,9 +23,10 @@ import { resetEditBuffers } from "./useEditBuffers";
  * discovered repo under it, aggregated by the daemon's /git/changes.
  *
  * VSCode's model all the way down, which means STAGING IS THE SELECTION: `commitRepos` records the index and
- * nothing else, and the only way to shape a commit is to stage. There is no path-scoped commit here (or in the
- * daemon) because git already has one mechanism for choosing a commit's contents and a second one could only
- * contradict it. Discard restores the worktree from HEAD; the remote verbs sync it.
+ * nothing else. There is no partial commit here (or in the daemon) because git already has one mechanism for
+ * choosing a commit's contents and a second one could only contradict it — so when the panel wants a subset,
+ * it STAGES that subset and then records the index, which is the same answer said in git's own terms. Discard
+ * restores the worktree from HEAD; the remote verbs sync it.
  *
  * No client-side watermark: the reviewed line IS the commit boundary, so every browser and device agrees.
  * Module-level singletons so the badge (shell), the panel, and the workspace agree. */
@@ -112,12 +121,6 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
 const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiffResponse> =>
     sandboxJson<FileDiffResponse>(`/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`);
 
-// One repo's slice of a batch action: an explicit `paths` subset, or the whole repo when `paths` is absent.
-export interface RepoPaths {
-    readonly repo: string;
-    readonly paths?: readonly string[];
-}
-
 const invalidateChanges = (): Promise<void> => queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) });
 
 const post = <T>(repo: string, action: string, body: Record<string, unknown>): Promise<T> =>
@@ -127,19 +130,24 @@ const post = <T>(repo: string, action: string, body: Record<string, unknown>): P
         body: JSON.stringify(body),
     });
 
-// Commit what is staged. git can't span repos, so each named repo gets its own real commit on its own branch,
-// all sharing the message — one refresh for the whole batch. `stageFirst` is VSCode's "stage all and commit"
-// for the case where nothing is staged yet; it maps onto the daemon's `all` shape (`git commit -a`).
+// Commit. git can't span repos, so each group gets its own real commit on its own branch, all sharing the
+// message — one refresh for the whole batch. `stageFirst` is VSCode's "stage all and commit", for the case where
+// nothing is staged yet, and the group says HOW MUCH: the whole repo through the daemon's `all` shape (`git
+// commit -a`, the only reading that also reaches rows the daemon truncated past its budget), or exactly the
+// `paths` the panel's origin filter narrowed to. Either way the daemon stages inside the repo lock and then
+// records the whole index — never a partial commit, which is what keeps it honest about what the rows showed.
 //
-// There is no per-path variant, deliberately: the index is what decides a commit's contents, so the panel's
-// job is to make staging easy, not to maintain a second answer to the same question.
-const commitRepos = (repos: readonly string[], message: string, stageFirst: boolean): Promise<void> =>
+// Without `stageFirst` the index alone decides, and `paths` is not sent: the panel's target is the staged repos.
+const commitRepos = (groups: readonly RepoPaths[], message: string, stageFirst: boolean): Promise<void> =>
     runBatch(
-        repos.map((repo) => ({
+        groups.map((group) => ({
             scope: COMMIT_SCOPE,
             action: `Commit failed`,
             run: async (): Promise<void> => {
-                await post(repo, `commit`, { message, ...(stageFirst ? { all: true } : {}) });
+                await post(group.repo, `commit`, {
+                    message,
+                    ...(!stageFirst ? {} : group.paths === undefined ? { all: true } : { paths: group.paths }),
+                });
             },
         })),
         invalidateChanges,
