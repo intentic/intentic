@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SandboxSummary, SetupCode, SetupCodeTarget } from "@intentic-app/api-contract";
+import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import { cmp, Code, CopyButton, InfoHint, Picker, type PickerOption, Segmented, StepSection, useOsPreference } from "@intentic-app/ui";
 import Button from "primevue/button";
@@ -380,6 +381,24 @@ const platformEnvPs = (): string =>
 const syncEnv = (): string => (syncEnabled.value ? ` SYNC_DIR='${syncDir.value}'` : ``);
 const syncEnvPs = (): string => (syncEnabled.value ? `$env:SYNC_DIR='${syncDir.value}'; ` : ``);
 
+/* The daemon emits CORS only for the origins WEB_ORIGIN names, and both connect scripts default it to the
+ * hosted app (@intentic/constants PLATFORM_WEB_ORIGIN) because that is the one browser origin that calls a
+ * daemon in the normal case. THIS PAGE IS THAT BROWSER — so a build served from anywhere else (the localhost
+ * dev SPA, a self-hosted deployment) has to say so in the command it hands out, or the sandbox it creates
+ * refuses the very first /health the workspace screen asks for and the user sees only "Failed to fetch".
+ * Derived rather than configured: the origin the setup page is loaded from is, by construction, the origin the
+ * sandbox has to answer. Omitted when it already matches the default, so the hosted one-liner stays as short
+ * as it reads in the docs. */
+const webOrigin = (): string | undefined => (globalThis.location.origin === PLATFORM_WEB_ORIGIN ? undefined : globalThis.location.origin);
+const webOriginEnv = (): string => {
+    const origin = webOrigin();
+    return origin === undefined ? `` : ` WEB_ORIGIN='${origin}'`;
+};
+const webOriginEnvPs = (): string => {
+    const origin = webOrigin();
+    return origin === undefined ? `` : `$env:WEB_ORIGIN='${origin}'; `;
+};
+
 // The commands carry only the short-lived setup code (redeemed by the script at /setup/claim) — plus, on the
 // own-Cloudflare path, the CF token as an env var (never stored by the platform, so it can't ride the code).
 const linuxCommand = (): string => {
@@ -387,7 +406,7 @@ const linuxCommand = (): string => {
     if (code === undefined) {
         return ``;
     }
-    const envs = `${mode.value === `own` ? ` CF_TOKEN='${cfToken.value.trim()}'` : ``}${platformEnv()}${syncEnv()}`;
+    const envs = `${mode.value === `own` ? ` CF_TOKEN='${cfToken.value.trim()}'` : ``}${platformEnv()}${webOriginEnv()}${syncEnv()}`;
     // Production's curl|sh install needs root (Docker install, self-host wiring, /opt writes). Local dev runs
     // connect.sh BY PATH as the developer — who has docker via their group and their Node toolchain (pnpm) on
     // PATH — so `sudo` there only resets PATH to root's secure_path, which kills the in-repo `pnpm build:sandbox`
@@ -403,7 +422,7 @@ const windowsCommand = (): string => {
         return ``;
     }
     const cfEnv = mode.value === `own` ? `$env:CF_TOKEN='${cfToken.value.trim()}'; ` : ``;
-    return psCommand(`ps1`, `${platformEnvPs()}${cfEnv}${syncEnvPs()}$env:SETUP_CODE='${code}'; `);
+    return psCommand(`ps1`, `${platformEnvPs()}${webOriginEnvPs()}${cfEnv}${syncEnvPs()}$env:SETUP_CODE='${code}'; `);
 };
 
 const selectedCommand = computed(() => (cmdOs.value === `windows` ? windowsCommand() : linuxCommand()));
@@ -437,6 +456,7 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
         // gets pull_policy: always, tracking the moving `:stable` release.
         image: `registry.gitlab.com/radarsu/intentic/sandbox:stable`,
         googleClientId: environment.auth.googleClientId,
+        webOrigin: globalThis.location.origin,
         ...(platformUrlOverride.value ? { platformUrl: platformUrlOverride.value } : {}),
     };
 });
@@ -646,8 +666,9 @@ watch(commandReady, (ready) => {
                     <div v-if="attachOutcome?.kind === `unreachable`" :class="cmp.alertDanger('flex flex-col gap-1')">
                         <span>Nothing answered at that address.</span>
                         <span class="text-2xs opacity-80">
-                            Check the sandbox is running and the domain points at it. If you set <code>WEB_ORIGIN</code> on the daemon, it has to be
-                            this app's address — otherwise your browser blocks the call before it's sent.
+                            Check the sandbox is running and the domain points at it. The daemon's <code>WEB_ORIGIN</code> also has to name
+                            <span class="font-mono">{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span> — otherwise your browser blocks the call before
+                            it's sent.
                         </span>
                     </div>
                     <div v-else-if="attachOutcome?.kind === `timeout`" :class="cmp.alertDanger('flex flex-col gap-1')">

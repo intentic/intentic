@@ -1,3 +1,4 @@
+import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { expect, test } from "vitest";
 import type { ComposeArgs } from "./setupCompose";
 import { composeBootstrap, composeFile } from "./setupCompose";
@@ -8,6 +9,7 @@ const base: ComposeArgs = {
     hostname: `sandbox-0f00ba4dd12b.intentic.dev`,
     image: `registry.gitlab.com/radarsu/intentic/sandbox:stable`,
     googleClientId: `client-id.apps.googleusercontent.com`,
+    webOrigin: PLATFORM_WEB_ORIGIN,
 };
 
 test("intentic path: the bootstrap is claim → up, against the production platform, no -k", () => {
@@ -76,6 +78,13 @@ test("daemon-defaulted vars are omitted — the environment block stays minimal"
     ]) {
         expect(yaml, `${noise} should ride the daemon default`).not.toContain(noise);
     }
+});
+
+test("an SPA served anywhere but the hosted app names itself as the daemon's CORS origin", () => {
+    // Without this the daemon allowlists app.intentic.dev alone and the SPA that just created the sandbox is
+    // blocked on its first /health — the failure reads as "sandbox unreachable", never as CORS.
+    expect(composeFile({ ...base, webOrigin: `https://localhost:47145` })).toContain(`WEB_ORIGIN: https://localhost:47145`);
+    expect(composeFile(base)).not.toContain(`WEB_ORIGIN`);
 });
 
 test("the own path feeds the sandbox its Cloudflare token from the .env", () => {

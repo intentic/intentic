@@ -7,6 +7,8 @@
 #   curl -fsSL https://intentic.dev/update  | sh -s -- <SLUG>            # update: the fresh :stable base
 #   sh recreate.sh --dev                                                 # dev: the locally-built dev image
 #
+# Optional env: INTENTIC_SET_ENV — NAME=VALUE lines to change in the recreated container (see below).
+#
 # rebuild — the agent proposed .intentic/environment.Dockerfile, the owner approved it in the browser, and the
 #   platform's Environment card handed over this one-liner. The SHA256 is the trust anchor: the overlay lives
 #   on the workspace volume the agent can write, so only content that still hashes to what the owner reviewed
@@ -99,8 +101,9 @@ pull_image() {
 # ——— The mode pre-step: produce TARGET_IMAGE / BASE_IMAGE / ENV_HASH and the overlay file (may be empty). ———
 overlay="$(mktemp)"
 envdump="$(mktemp)"
+envmerged="$(mktemp)"
 run_command="$(mktemp)"
-trap 'rm -f "$overlay" "$envdump" "$run_command"' EXIT
+trap 'rm -f "$overlay" "$envdump" "$envmerged" "$run_command"' EXIT
 ENV_HASH=""
 
 case "$MODE" in
@@ -222,6 +225,21 @@ fi
 # the rest of the shape lives. The /agent-auth mount is a mount+env pair: replaying AGENT_AUTH_DIR without its
 # volume would point the daemon at an empty container-local dir, stranding the shared credentials.
 docker exec "$CONTAINER" printenv -0 >"$envdump"
+# A container's env is fixed for its life, so REPLAYING it means every value in the allowlist is immutable
+# until the owner re-runs the whole connect wizard — which is a heavy price for changing one string, and an
+# impossible one for a value that did not exist when the container was created (WEB_ORIGIN is the case that
+# taught us: a sandbox built before the daemon had a CORS allowlist can never gain one, so its owner's own
+# self-hosted web app stays locked out). INTENTIC_SET_ENV is the escape hatch — NAME=VALUE per line, and only
+# the run contract's allowlist survives, so nothing else in the caller's shell can leak into the container:
+#
+#   INTENTIC_SET_ENV='WEB_ORIGIN=https://localhost:47145' sh recreate.sh --dev
+#
+# PREPENDED, because the contract resolves each name to its FIRST occurrence — so what the caller asked for
+# beats what the old container carried, and the new value is what the NEXT recreate replays.
+if [ -n "${INTENTIC_SET_ENV:-}" ]; then
+    { printf '%s\n' "$INTENTIC_SET_ENV" | tr '\n' '\0'; cat "$envdump"; } >"$envmerged"
+    cp "$envmerged" "$envdump"
+fi
 MOUNTS="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/agent-auth"}}{{if eq .Type "volume"}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
 [ -n "$MOUNTS" ] && MOUNTS="${MOUNTS}:/agent-auth"
 # The dev wrapper binds the checkout's compiled trees over the image's baked copies (dev-mounts.mjs), so a

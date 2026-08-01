@@ -10,7 +10,7 @@
  * and the workspace data all stay compatible: a sandbox can move between script-managed and compose-managed
  * without losing /work. Keep the two in lockstep. */
 
-import { LOCAL_PORT } from "@intentic/constants";
+import { LOCAL_PORT, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { ORIGIN_HOST, SANDBOX_CAPABILITIES, sandboxNames } from "@intentic/sandbox-run";
 
 export interface ComposeArgs {
@@ -23,6 +23,9 @@ export interface ComposeArgs {
     readonly cfToken?: string;
     readonly image: string;
     readonly googleClientId: string;
+    // The origin the setup page is being served from — the browser the daemon's CORS has to answer. Mirrors
+    // connect.sh's WEB_ORIGIN; rendered only when it differs from the hosted default the daemon already assumes.
+    readonly webOrigin: string;
     // LOCAL DEV ONLY: the localhost platform origin; production leaves it undefined (api.intentic.dev).
     readonly platformUrl?: string;
 }
@@ -128,6 +131,10 @@ export const composeFile = (args: ComposeArgs): string => {
         // exactly that daemon, so an empty value becomes a compose var that refuses to start instead. (The daemon
         // refuses too — see requireAuthWhenReachable — this just fails one layer earlier, with the fix named.)
         `            GOOGLE_CLIENT_ID: ${args.googleClientId === `` ? `\${GOOGLE_CLIENT_ID:?the web app did not supply a Google client id — reload the setup page}` : args.googleClientId}`,
+        // The SPA origin the daemon emits CORS for. Omitted when it is the hosted app, which env.config already
+        // defaults to — but a self-hosted or localhost-dev SPA is a browser the daemon has never heard of, and
+        // without this line every call it makes is blocked before the bearer is ever looked at.
+        ...(args.webOrigin === PLATFORM_WEB_ORIGIN ? [] : [`            WEB_ORIGIN: ${args.webOrigin}`]),
         // Only the own path carries a Cloudflare token; an empty baked-in var would shadow the workspace
         // .env the user may write later (a container's env can't change after creation) — so omit otherwise.
         ...(args.mode === `own` ? [`            CLOUDFLARE_API_TOKEN: \${CLOUDFLARE_API_TOKEN:?run the .env bootstrap first}`] : []),
