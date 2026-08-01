@@ -2597,6 +2597,15 @@ export const DeployLinkParamSchema = z.object({
 });
 export type DeployLinkParam = z.infer<typeof DeployLinkParamSchema>;
 
+/* EVERY FIELD ADDED AFTER THIS ROUTE FIRST SHIPPED IS OPTIONAL OR DEFAULTED, and that is a rule rather than a
+ * style. The browser validates this response with `.parse()`, and the daemon it is talking to is not
+ * necessarily built from the same commit — a sandbox image is rebuilt on the owner's schedule, the web bundle
+ * on ours. `repos` shipped REQUIRED and the first daemon that predated it took the whole view down with
+ * `Invalid input: expected array, received undefined at repos`: not a missing band, a dead page, on the
+ * surface whose entire job is to tell you whether production is up.
+ *
+ * So: a new field is `.default(...)` when the view can render without it, and `.optional()` when its absence
+ * is itself meaningful. Neither is ever `required`. A newer browser must degrade against an older daemon. */
 export const DeployOverviewResponseSchema = z.object({
     komodoUrl: z.string(),
     // FALSE means Komodo did not answer — the view says so loudly and the badge must not read `danger`.
@@ -2605,12 +2614,13 @@ export const DeployOverviewResponseSchema = z.object({
     reachable: z.boolean(),
     // Why it did not answer, in Komodo's own words — the view shows it instead of a bare "unavailable".
     unreachableReason: z.string().optional(),
-    // Absent when Komodo did not answer at all.
+    // Absent when Komodo did not answer — or when the daemon predates the field, which the empty state has to
+    // tell apart from "the key sees nothing", since only one of those is the owner's to fix.
     viewer: DeployViewerSchema.optional(),
     // Every workspace repo with a compose file, with its suggested or linked stack. Independent of whether
     // Komodo returned anything: a repo the owner could link is worth showing even on an empty board, since
     // that is exactly the moment they need to know what this view is for.
-    repos: z.array(DeployRepoLinkSchema),
+    repos: z.array(DeployRepoLinkSchema).default([]),
     resources: z.array(DeployResourceSchema),
     servers: z.array(DeployServerSchema),
     // Newest first. Unresolved and resolved both: the view shows recent history, the badge reads only the

@@ -49,13 +49,26 @@ const stackNames = computed(() => resources.value.filter((resource) => resource.
  * Komodo filters every list by the caller's permissions, so an API key minted on a service user with no grants
  * gets 200 and an empty array — byte-identical to a Komodo with nothing deployed. This view shipped once
  * saying "no stacks or deployments yet" to someone whose Komodo had four stacks, which is the worst kind of
- * wrong: confidently, and about the one thing they came here to check. `viewer` is what tells the two apart. */
+ * wrong: confidently, and about the one thing they came here to check. `viewer` is what tells the two apart.
+ *
+ * THREE cases, not two, because `viewer` can be absent for a second reason: a daemon older than the field.
+ * Claiming an empty Komodo on that evidence would reintroduce the same confident wrong answer through the
+ * back door, so the unknown case says what it knows and points at the thing the owner can actually check. */
 const emptyReason = computed(() => {
     if (resources.value.length > 0 || board.value === undefined || !board.value.reachable) {
         return undefined;
     }
     const viewer = board.value.viewer;
-    if (viewer !== undefined && !viewer.admin) {
+    if (viewer === undefined) {
+        return {
+            title: `Komodo returned nothing`,
+            detail:
+                `Nothing came back for this connection. If you expect stacks or deployments here, the usual cause is that the API key's ` +
+                `user has no permissions on them — Komodo answers every list with nothing rather than refusing. Check the key's user in ` +
+                `Komodo, or use one made on an admin account.`,
+        };
+    }
+    if (!viewer.admin) {
         return {
             title: `This API key can't see anything in Komodo`,
             detail:
