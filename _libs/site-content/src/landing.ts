@@ -30,8 +30,6 @@ export interface ShotImage {
 export interface HeroShot extends ShotImage {
     /** The pill in the frame's title bar — where in the app this shot was taken. */
     frameLabel: string;
-    /** One line under the frame; carries the ownership claim the hero copy leaves out. */
-    caption: string;
 }
 
 /* The invitation to stop looking at the screenshot and use the thing. The hero keeps the still image — it is the
@@ -143,7 +141,6 @@ export const landingContent: LandingContent = {
             height: 940,
             alt: "The intentic fleet board: an agent waiting on approval for a Stripe billing change and another with a question for you, beside three agents actively drafting a changelog and migrating queries — each card showing its model, branch, cost and diff stats.",
             frameLabel: "intentic · /agents",
-            caption: "Five agents, five sandboxes, one board — running on hardware you own.",
         },
         demo: {
             playLabel: "Try the live workspace",
