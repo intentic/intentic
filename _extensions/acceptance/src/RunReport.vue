@@ -2,7 +2,7 @@
 import { Button, Card, cmp, Icon, Markdown, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { host } from "./host";
-import { reposOf, storyDir, type Verdict, verdictTone } from "./runs";
+import { storyDir, type Verdict, verdictTone } from "./runs";
 import type { LiveBrowser, RunRow, StoryOutcome } from "./useRuns";
 
 /* One run, story by story: the verdict, the walkthrough the agent wrote, and the screenshots it took at each
@@ -167,18 +167,19 @@ onBeforeUnmount(() => {
 });
 
 const defects = computed(() => run.manifest.stories.flatMap((story) => outcomes[story.slug]?.result?.defects ?? []));
-// One line per repo the run touched: which app each story was walked through. A run that spanned two repos is
-// unreadable a week later without it.
-const addresses = computed(() => reposOf(run.manifest).map((repo) => ({ repo, url: run.manifest.targets[repo] })));
+// One line per address the run used: which app each group of stories was walked through. Read straight off the
+// manifest rather than re-derived from the stories — what was CHOSEN is the fact a report needs, and a run that
+// aimed two groups of one repo at two ports is unreadable a week later without it.
+const addresses = computed(() => Object.entries(run.manifest.targets).map(([key, url]) => ({ key, url })));
 </script>
 
 <template>
     <div class="flex flex-col gap-4">
         <Card class="p-4">
             <div class="flex flex-col gap-1">
-                <div v-for="address in addresses" :key="address.repo" class="flex items-baseline gap-2 text-xs">
-                    <span class="font-mono text-muted">{{ address.repo }}</span>
-                    <span class="truncate font-mono text-content">{{ address.url ?? `—` }}</span>
+                <div v-for="address in addresses" :key="address.key" class="flex items-baseline gap-2 text-xs">
+                    <span class="font-mono text-muted">{{ address.key }}</span>
+                    <span class="truncate font-mono text-content">{{ address.url || `—` }}</span>
                 </div>
             </div>
             <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">

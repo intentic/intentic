@@ -98,6 +98,22 @@ const byRepo = computed(() =>
 
 const paths = computed<readonly string[]>(() => stories.value.map((story) => story.path));
 
+/* THE ADDRESS EACH GROUP WAS LAST RUN AGAINST — the newest run that named it wins. A group that points somewhere
+ * other than its repo's dev server (a marketing site on its own port) should be typed once, not once per run, and
+ * the manifests already on disk are the record of what was chosen. So this is a read of what is already in hand
+ * rather than a preference to store: nothing new is written, and a run's own history is what remembers. */
+const remembered = computed<Readonly<Record<string, string>>>(() => {
+    const found = new Map<string, string>();
+    for (const run of runs.value) {
+        for (const [key, url] of Object.entries(run.manifest.targets)) {
+            if (url !== `` && !found.has(key)) {
+                found.set(key, url);
+            }
+        }
+    }
+    return Object.fromEntries(found);
+});
+
 /* WHERE EVERY PROMISE STANDS, by story path: the newest run that covered it and had something to say. Older runs
  * are consulted when the newest never included the story — a story tested last week and untouched since is still
  * telling you something, and blanking it because today's run skipped it would lose the only verdict there is.
@@ -242,6 +258,10 @@ const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
                             Stories themselves are markdown in each repo's <span class="font-mono">docs/user-stories/</span> — product documentation,
                             versioned with the code it describes. Editing one here writes that file; there is no separate copy.
                         </p>
+                        <p class="mt-2 text-xs text-muted">
+                            A subdirectory of that is a group, and a run picks one address per group — so a repository serving both a marketing site
+                            and an app can walk each of them, against its own server, in the same run.
+                        </p>
                     </InfoHint>
                 </template>
                 <template #actions>
@@ -311,10 +331,20 @@ const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
                                 @toggle="toggle(story.path)"
                                 @run="openRunDialog([story.path])"
                             />
+                            <!-- One composer per group, so the next story lands beside the ones it belongs with. -->
+                            <StoryComposer :repo="entry.repo" :group="group" :taken="paths" @create="create" />
                         </template>
-                        <!-- Last row, always: writing the next story is the thing this list is for, and it costs
-                             one line of the list to make it cost one keystroke. -->
-                        <StoryComposer :repo="entry.repo" :taken="paths" @create="create" />
+                        <!-- The top level's own composer, when the loop above did not already render it: a repo
+                             with no stories yet has no groups at all, and one whose stories all sit in
+                             subdirectories has no top-level row to type in. Writing the next story is the thing
+                             this list is for, so the last row is always a place to start one. -->
+                        <StoryComposer
+                            v-if="!entry.groups.some(([group]) => group === ``)"
+                            :repo="entry.repo"
+                            group=""
+                            :taken="paths"
+                            @create="create"
+                        />
                     </RowGroup>
                     <p v-if="unread > 0" class="text-2xs text-subtle">
                         {{ unread }} further story files are listed by filename only — titles, criteria and text are read for the first 200.
@@ -379,6 +409,7 @@ const run = async (input: Parameters<typeof start>[0]): Promise<void> =>
             :criteria="criteria"
             :notes="notes"
             :targets="targets"
+            :remembered="remembered"
             :preselect="preselect"
             @submit="run"
         />

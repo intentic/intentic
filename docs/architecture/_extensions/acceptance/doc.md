@@ -15,6 +15,8 @@ Writes down what the product promises, then has agents check it in a real browse
 
 A test suite proves the code does what the code says. It cannot tell you the sign-in flow is confusing. Agents walking the running app can.
 
+A story is one markdown file in a repository's `docs/user-stories/`, and a subdirectory of that is a **group** — the unit this package organises everything by. A group is a heading in the list, the place a new story is authored into, and the thing a run picks an address for: one address per group rather than per repository, so a monorepo whose marketing site and web app are two dev servers on two ports can have both walked in a single run.
+
 ```dag
 { "title": "Its neighbours",
   "direction": "LR",
@@ -55,4 +57,4 @@ Dashed arrows are development-only — needed to build or test, not to run.
 
 ## Where it is used
 
-One tile in the sidebar; one agent session per story, with screenshots and a report.
+One tile in the sidebar; one agent session per story, with screenshots and a report. Nothing is stored for a run beyond files: the manifest under `.intentic/acceptance/` records which address each group was walked against, and that record is also what the run dialog offers back the next time.

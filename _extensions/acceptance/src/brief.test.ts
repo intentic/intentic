@@ -5,6 +5,7 @@ import type { RunStory } from "./runs";
 const story: RunStory = {
     path: `app/docs/user-stories/auth/01-sign-in.md`,
     repo: `app`,
+    group: `auth`,
     slug: `01-sign-in`,
     title: `Sign in`,
     conversationId: `xt-rabc-01-sign-in`,

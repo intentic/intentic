@@ -6,7 +6,13 @@ import type { Story } from "./stories";
 // paths, so a violation is not a validation error the UI can retry past.
 const CONVERSATION_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
-const story = (slug: string, repo = `app`): Story => ({ repo, path: `${repo}/docs/user-stories/${slug}.md`, slug, title: slug, group: `` });
+const story = (slug: string, repo = `app`, group = ``): Story => ({
+    repo,
+    path: `${repo}/docs/user-stories/${group === `` ? `` : `${group}/`}${slug}.md`,
+    slug,
+    title: slug,
+    group,
+});
 
 describe(`conversationIdOf`, () => {
     it(`produces an id the daemon accepts`, () => {
@@ -45,22 +51,38 @@ describe(`runManifestOf`, () => {
     const manifest = runManifestOf({
         runId: `rabc`,
         createdAt: 1_800_000_000_000,
-        targets: { app: `http://localhost:5173`, api: `http://localhost:3000` },
+        targets: { "app/site": `http://localhost:4321`, api: `http://localhost:3000` },
         provider: `claude`,
         model: `claude-sonnet-4-5`,
-        stories: [story(`login`), story(`checkout`, `api`)],
+        stories: [story(`login`, `app`, `site`), story(`checkout`, `api`)],
     });
 
-    it(`records each story's conversation id rather than leaving it to be re-derived later`, () => {
+    // The group rides along because it is half of the key the brief's baseUrl is looked up by (targetKeyOf), so a
+    // manifest that dropped it could not say which server its own story was walked against.
+    it(`records each story's group and conversation id rather than leaving them to be re-derived later`, () => {
         expect(manifest.stories).toEqual([
-            { slug: `login`, repo: `app`, path: `app/docs/user-stories/login.md`, title: `login`, conversationId: `xt-rabc-login` },
-            { slug: `checkout`, repo: `api`, path: `api/docs/user-stories/checkout.md`, title: `checkout`, conversationId: `xt-rabc-checkout` },
+            {
+                slug: `login`,
+                repo: `app`,
+                group: `site`,
+                path: `app/docs/user-stories/site/login.md`,
+                title: `login`,
+                conversationId: `xt-rabc-login`,
+            },
+            {
+                slug: `checkout`,
+                repo: `api`,
+                group: ``,
+                path: `api/docs/user-stories/checkout.md`,
+                title: `checkout`,
+                conversationId: `xt-rabc-checkout`,
+            },
         ]);
     });
 
-    // A run spans repos, so one baseUrl could only ever describe one of them — see RunManifest.targets.
-    it(`keeps one address per repo`, () => {
-        expect(manifest.targets).toEqual({ app: `http://localhost:5173`, api: `http://localhost:3000` });
+    // A run spans repos AND apps within one repo, so a single baseUrl could only ever describe one of them.
+    it(`keeps one address per story group`, () => {
+        expect(manifest.targets).toEqual({ "app/site": `http://localhost:4321`, api: `http://localhost:3000` });
     });
 
     it(`omits an unset model instead of writing an empty string`, () => {

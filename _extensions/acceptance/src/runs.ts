@@ -50,11 +50,12 @@ export const conversationIdOf = (runId: string, slug: string): string =>
     `${PREFIX}-${runId}-${slug}`.slice(0, CONVERSATION_ID_MAX).replace(/[-_]+$/, ``);
 
 // One story's entry in run.json. `conversationId` is stored rather than re-derived so a future change to the id
-// scheme cannot orphan the runs already on disk; `repo` because a run spans repos and a report is unreadable
-// without knowing which app each story was walked through.
+// scheme cannot orphan the runs already on disk; `repo` and `group` because together they name the address the
+// story was walked against (stories.ts targetKeyOf), and a report is unreadable without knowing which app that was.
 export interface RunStory {
     readonly slug: string;
     readonly repo: string;
+    readonly group: string;
     readonly path: string;
     readonly title: string;
     readonly conversationId: string;
@@ -63,9 +64,9 @@ export interface RunStory {
 export interface RunManifest {
     readonly runId: string;
     readonly createdAt: number;
-    /* What the agents were pointed at, PER REPO — kept because a report is unreadable a week later without it.
-     * A map rather than one URL: the area is workspace-wide, so a single run can walk the frontend's stories at
-     * :5173 and the API's at :3000, and one field could only ever describe one of them. */
+    /* What the agents were pointed at, keyed by stories.ts targetKeyOf — kept because a report is unreadable a
+     * week later without it. A map rather than one URL: a run can walk the marketing site's stories at :4321 and
+     * the app's at :5173, and one field could only ever describe one of them. */
     readonly targets: Readonly<Record<string, string>>;
     readonly provider: string;
     readonly model?: string;
@@ -85,7 +86,14 @@ export const runManifestOf = (params: {
     targets: params.targets,
     provider: params.provider,
     ...(params.model === undefined || params.model === `` ? {} : { model: params.model }),
-    stories: params.stories.map(({ slug, repo, path, title }) => ({ slug, repo, path, title, conversationId: conversationIdOf(params.runId, slug) })),
+    stories: params.stories.map(({ slug, repo, group, path, title }) => ({
+        slug,
+        repo,
+        group,
+        path,
+        title,
+        conversationId: conversationIdOf(params.runId, slug),
+    })),
 });
 
 // Every repo a run touched, first-appearance order — the run row's subtitle, and what the report joins

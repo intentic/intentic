@@ -1,6 +1,6 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { criteriaOf, narrativeOf, slugOf, type Story, storiesOf, storyMarkdown, storyPath, titleOf, uniqueOf } from "./stories";
+import { criteriaOf, narrativeOf, slugOf, type Story, storiesOf, storyMarkdown, storyPath, targetKeyOf, titleOf, uniqueOf } from "./stories";
 
 const file = (path: string): WorkspaceTreeEntry => ({ name: path.split(`/`).pop() ?? path, path, type: `file` });
 const dir = (path: string): WorkspaceTreeEntry => ({ name: path.split(`/`).pop() ?? path, path, type: `dir` });
@@ -157,6 +157,26 @@ describe(`storyMarkdown`, () => {
 
 describe(`storyPath`, () => {
     it(`names a new story's file after its slug, under the repo's stories directory`, () => {
-        expect(storyPath(`site`, `sign-in`)).toBe(`site/docs/user-stories/sign-in.md`);
+        expect(storyPath(`site`, ``, `sign-in`)).toBe(`site/docs/user-stories/sign-in.md`);
+    });
+
+    it(`puts a grouped story in its subdirectory, which is where storiesOf reads the group back from`, () => {
+        expect(storyPath(`site`, `01-arrive`, `sign-in`)).toBe(`site/docs/user-stories/01-arrive/sign-in.md`);
+    });
+});
+
+/* One repository can serve several applications — a monorepo's marketing site and its web app are two dev
+ * servers on two ports — and the group is the only thing in a stories tree that already says which is which. */
+describe(`targetKeyOf`, () => {
+    it(`aims a grouped story at its own address`, () => {
+        expect(targetKeyOf({ repo: `intentic`, group: `01-arrive` })).toBe(`intentic/01-arrive`);
+    });
+
+    it(`leaves an ungrouped story on its repo, which is what every run resolved before groups could be aimed`, () => {
+        expect(targetKeyOf({ repo: `intentic`, group: `` })).toBe(`intentic`);
+    });
+
+    it(`keeps two groups of one repo apart, so each can point at a different server`, () => {
+        expect(targetKeyOf({ repo: `intentic`, group: `01-arrive` })).not.toBe(targetKeyOf({ repo: `intentic`, group: `02-setup` }));
     });
 });

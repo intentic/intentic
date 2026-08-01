@@ -25,7 +25,7 @@ import {
     type StoryResult,
     type Verdict,
 } from "./runs";
-import type { Story } from "./stories";
+import { type Story, targetKeyOf } from "./stories";
 
 /* Runs, and the fleet sessions that produce them.
  *
@@ -66,7 +66,8 @@ export interface LiveBrowser {
 export interface StartRunInput {
     readonly stories: readonly Story[];
     readonly contents: Readonly<Record<string, string>>;
-    // The app under test per REPO — a run spanning two repos points at two servers. Keyed by repo name.
+    // The app under test per story GROUP — keyed by stories.ts targetKeyOf, so a repo serving a marketing site
+    // and a web app points each of their groups at its own server.
     readonly targets: Readonly<Record<string, string>>;
     // The authored acceptance criteria per story path, so the brief can demand one verdict per criterion.
     readonly criteria: Readonly<Record<string, readonly string[]>>;
@@ -266,7 +267,7 @@ export function useRuns() {
                     content: input.contents[story.path] ?? ``,
                     criteria: input.criteria[story.path] ?? [],
                     runId,
-                    baseUrl: input.targets[story.repo] ?? ``,
+                    baseUrl: input.targets[targetKeyOf(story)] ?? ``,
                     projectNotes: input.notes[story.repo],
                 });
                 const body = {

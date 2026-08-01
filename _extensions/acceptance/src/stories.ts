@@ -74,6 +74,13 @@ export const titleOf = (path: string, content: string | undefined): string => {
     return name.charAt(0).toUpperCase() + name.slice(1);
 };
 
+/* WHERE A STORY'S APP ANSWERS is a property of its GROUP, not of its repo. One repository can serve several
+ * applications — a monorepo's marketing site and its web app are two dev servers on two ports — and the group is
+ * the only thing in a stories tree that already says which is which. So a run resolves one address per
+ * (repo, group) pair, and an ungrouped story simply targets its repo, which is what every run did before groups
+ * could be aimed. The key is `<repo>/<group>` so it reads as the directory it names. */
+export const targetKeyOf = (story: Pick<Story, "repo" | "group">): string => (story.group === `` ? story.repo : `${story.repo}/${story.group}`);
+
 /* Fold a listing into stories. `entries` is what /workspace/children returned for `docs/user-stories` and each
  * of its subdirectories, flattened by the caller — this stays pure so it is testable without a daemon.
  *
@@ -173,5 +180,5 @@ export const storyMarkdown = (input: { readonly title: string; readonly narrativ
 };
 
 // Where a newly authored story lands. The slug is the filename, so the title someone typed is what they later
-// find in the tree.
-export const storyPath = (repo: string, slug: string): string => `${repo}/${STORIES_DIR}/${slug}.md`;
+// find in the tree; the group is the subdirectory it lands in, `""` for the top level.
+export const storyPath = (repo: string, group: string, slug: string): string => `${repo}/${STORIES_DIR}/${group === `` ? `` : `${group}/`}${slug}.md`;
