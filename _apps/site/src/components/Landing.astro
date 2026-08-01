@@ -133,7 +133,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
             <div class="grid-overlay" aria-hidden="true"></div>
 
-            <div class="relative mx-auto grid max-w-6xl items-center gap-12 px-6 pt-32 pb-20 lg:grid-cols-2 lg:pt-40 lg:pb-28">
+            <div class="relative mx-auto grid max-w-7xl items-center gap-12 px-6 pt-32 pb-20 lg:grid-cols-2 lg:pt-40 lg:pb-28">
                 <div class="animate-fade-in-up">
                     <h1 class="text-4xl leading-tight font-semibold tracking-tight xl:text-5xl">
                         {content.hero.headlineLines.map((line, i) => (i === 0 ? line : <><br />{line}</>))}
@@ -212,7 +212,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 1.5 · The product — real screenshots of the workspace -->
         <section class="border-t border-line" id="tour">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.tour.eyebrow}</div>
                 <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.tour.heading}</h2>
                 <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.tour.sub}</p>
@@ -240,24 +240,30 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                 </figure>
 
                 <!-- Every surface as a card into its own page. The landing used to carry a screenshot and a
-                     paragraph per surface; each of those is now a page that can afford four screenshots. -->
-                <div class="mt-14 grid gap-6 md:grid-cols-3">
+                     paragraph per surface; each of those is now a page that can afford four screenshots.
+                     Two columns, not three: at three the thumbnail was ~350px of a 1072px-wide shot, which is
+                     the app's interface at a third size — a grey rectangle you cannot read anything in. -->
+                <div class="mt-14 grid gap-6 sm:grid-cols-2">
                     {
                         productPages.map((page) => (
                             <a href={productHref(page.slug)} class="card group overflow-hidden transition-colors hover:border-primary-600/40">
-                                <div class="aspect-16/10 overflow-hidden border-b border-line bg-canvas">
+                                {/* Never wider than the shot really is: the card is 602px and most shots are
+                                    1072 CSS px, but the docked-chat one is 368 — stretched to the card it was
+                                    a blurry 1.6×. Capped, it sits sharp and centred instead. */}
+                                <div class="flex aspect-16/10 justify-center overflow-hidden border-b border-line bg-canvas">
                                     <img
                                         src={page.hero.src}
                                         alt={page.hero.alt}
                                         width={page.hero.width}
                                         height={page.hero.height}
+                                        style={`max-width:${page.hero.width / 2}px`}
                                         loading="lazy"
                                         decoding="async"
                                         class="h-full w-full object-cover object-left-top transition-transform duration-300 group-hover:scale-[1.03]"
                                     />
                                 </div>
-                                <div class="p-5">
-                                    <h3 class="text-sm font-medium text-content group-hover:text-link">{page.navLabel}</h3>
+                                <div class="p-6">
+                                    <h3 class="text-base font-medium text-content group-hover:text-link">{page.navLabel}</h3>
                                     <p class="mt-2 text-sm leading-relaxed text-muted">{page.menuBlurb}</p>
                                 </div>
                             </a>
@@ -271,7 +277,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 2 · Why specialized — prompt vs agent -->
         <section class="border-t border-line" id="contrast">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.contrast.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.contrast.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.contrast.sub}</p>
@@ -320,7 +326,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 3 · Anatomy — the four layers of the environment, each one you can open -->
         <section class="border-t border-line" id="anatomy">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.anatomy.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.anatomy.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.anatomy.sub}</p>
@@ -346,7 +352,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 4 · Inside a sandbox — the agent as a machine you own (container figure) -->
         <section class="border-t border-line" id="sandbox">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.sandbox.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.sandbox.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.sandbox.sub}</p>
@@ -397,7 +403,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 5 · Connected — integrations hub-and-spoke -->
         <section class="border-t border-line" id="integrations">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.integrations.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.integrations.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.integrations.sub}</p>
@@ -477,7 +483,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 6 · Workforce — one agent to a graph of them -->
         <section class="border-t border-line" id="workforce">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.workforce.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.workforce.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.workforce.sub}</p>
@@ -506,7 +512,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 7 · In your tools — talk to the agent like a teammate (conversation mock) -->
         <section class="border-t border-line" id="teammate">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.teammate.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.teammate.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.teammate.sub}</p>
@@ -581,7 +587,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 8 · Ownership — diagram + definition rows -->
         <section class="border-t border-line" id="ownership">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.ownership.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.ownership.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.ownership.sub}</p>
@@ -625,7 +631,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 9 · Shared, safely — one sandbox, owner + invited teammates (sharing diagram) -->
         <section class="border-t border-line" id="sharing">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.sharing.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.sharing.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.sharing.sub}</p>
@@ -692,7 +698,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 10 · The whole picture — company teaser linking to the reference architecture -->
         <section class="border-t border-line" id="company">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.company.eyebrow}</div>
                 <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.company.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.company.sub}</p>
@@ -739,7 +745,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 11 · Economics — your subscriptions, your hardware, a flat fee -->
         <section class="border-t border-line" id="economics">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.economics.eyebrow}</div>
                 <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.economics.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.economics.sub}</p>
@@ -786,7 +792,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
         <!-- 12 · Get connected — ghost-numeral steps, no boxes -->
         <section class="border-t border-line" id="connect">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.connect.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.connect.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.connect.sub}</p>
@@ -820,7 +826,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
              whether the answer was even the one they wanted, and hid the answers from in-page search. The
              grouping is what keeps a fully open FAQ scannable — bands are short, and the nav jumps to one. -->
         <section class="border-t border-line" id="faq">
-            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">FAQ</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">Questions, answered plainly.</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">
@@ -877,7 +883,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
         <!-- 14 · Final CTA -->
         <section class="relative overflow-hidden border-t border-line">
             <div class="absolute inset-0 bg-linear-to-br from-primary-600/15 via-canvas to-canvas" aria-hidden="true"></div>
-            <div class="fade-in relative mx-auto max-w-6xl px-6 py-20 text-center lg:py-28">
+            <div class="fade-in relative mx-auto max-w-7xl px-6 py-20 text-center lg:py-28">
                 <div class="eyebrow">Ready</div>
                 <h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{content.finalCta.heading}</h2>
                 <p class="mx-auto mt-3 max-w-md text-base leading-relaxed text-muted">{content.finalCta.sub}</p>

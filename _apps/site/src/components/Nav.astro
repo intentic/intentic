@@ -12,10 +12,17 @@ function isActive(entry: NavEntry): boolean {
     }
     return currentPath.startsWith(entry.prefix);
 }
+
+/* A menu row points at ONE page, so it lights up only on that page. The trigger above matches a prefix because
+ * a whole menu is "current"; a row must not — /docs/ is a prefix of every docs page, which made "Overview" the
+ * current row everywhere under Docs, and "Extensions" current on each of its three children.
+ * The trailing slash is "always" in a build and "ignore" in dev, so it is not part of the comparison. */
+const bare = (path: string): string => path.replace(/\/+$/, "");
+const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath);
 ---
 
 <nav class="fixed top-0 right-0 left-0 z-100 border-b border-line bg-canvas/70 backdrop-blur-lg transition-colors duration-300">
-    <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+    <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <a href="/" class="flex items-center no-underline">
             <img src="/assets/intentic-full.png" alt={ORG_NAME} class="h-6 w-auto" width="126" height="24" />
         </a>
@@ -56,7 +63,7 @@ function isActive(entry: NavEntry): boolean {
                                                         <li>
                                                             <a
                                                                 href={item.href}
-                                                                class="menu-item"
+                                                                class:list={["menu-item", { active: isCurrentPage(item.href) }]}
                                                                 data-preview={item.shot === undefined ? undefined : item.href}
                                                                 target={item.external ? "_blank" : undefined}
                                                                 rel={item.external ? "noopener" : undefined}
@@ -249,7 +256,7 @@ function isActive(entry: NavEntry): boolean {
         grid-template-areas: "sections" "action";
         gap: 4px;
         width: max-content;
-        max-width: min(92vw, 62rem);
+        max-width: min(94vw, 78rem);
         background: color-mix(in srgb, var(--color-canvas) 97%, transparent);
         backdrop-filter: blur(24px);
         -webkit-backdrop-filter: blur(24px);
@@ -273,7 +280,7 @@ function isActive(entry: NavEntry): boolean {
         grid-template-areas:
             "sections preview"
             "action   preview";
-        grid-template-columns: minmax(0, 1fr) 20rem;
+        grid-template-columns: minmax(0, 1fr) 34rem;
         gap: 4px 18px;
     }
 
@@ -352,7 +359,9 @@ function isActive(entry: NavEntry): boolean {
     }
 
     /* The rail: every product shot stacked, one visible. Cropped to a wide strip — the panel is selling the
-       surface at a glance, and the whole 1240px-tall board would shrink to nothing here. */
+       surface at a glance, and the whole 1240px-tall board would shrink to nothing here. It is 34rem because
+       the shots are 1072 CSS px of real interface: a rail much narrower than that renders the app's own text
+       too small to read, which is all a preview has to do. */
     .menu-preview {
         grid-area: preview;
         position: relative;
@@ -363,13 +372,14 @@ function isActive(entry: NavEntry): boolean {
         aspect-ratio: 16 / 10;
     }
 
-    /* Zoomed to its top-left corner rather than fitted: a whole 1440px surface scaled into a 20rem rail is a
-       grey rectangle, while its first two lanes are recognisably the screen the row leads to. */
+    /* Zoomed to its top-left corner rather than fitted: a whole surface scaled to fit the rail is a grey
+       rectangle, while its first lanes are recognisably the screen the row leads to. 170% of a 34rem rail is
+       ~925px of a 1072px-wide shot — near enough to native that the lane headers and card titles read. */
     .menu-preview-shot {
         position: absolute;
         top: 0;
         left: 0;
-        width: 155%;
+        width: 170%;
         height: auto;
         opacity: 0;
         transition: opacity 0.18s ease;
@@ -421,15 +431,6 @@ function isActive(entry: NavEntry): boolean {
             toggle.classList.toggle("active", isOpen);
             toggle.setAttribute("aria-expanded", String(!!isOpen));
             document.body.style.overflow = isOpen ? "hidden" : "";
-        });
-
-        // Highlight the menu row for the page you're on.
-        const path = window.location.pathname + window.location.hash;
-        document.querySelectorAll(".menu-item").forEach((a) => {
-            const href = a.getAttribute("href");
-            if (href === path || (href && href !== "/" && path.startsWith(href))) {
-                a.classList.add("active");
-            }
         });
 
         // The preview rail follows the hovered row. Pointer only: on a touch screen the panel opens on tap

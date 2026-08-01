@@ -34,7 +34,7 @@ const portraitHero = page.hero.height > page.hero.width;
         <!-- Hero: the claim, then the screen it is about -->
         <section class="relative overflow-hidden border-b border-line">
             <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
-            <div class="relative mx-auto max-w-6xl px-6 pt-28 pb-16 lg:pt-32 lg:pb-20">
+            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-16 lg:pt-32 lg:pb-20">
                 <div class="max-w-3xl">
                     <div class="eyebrow">{page.navLabel}</div>
                     <h1 class="mt-3 text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{page.heading}</h1>
@@ -62,40 +62,61 @@ const portraitHero = page.hero.height > page.hero.width;
             </div>
         </section>
 
-        <!-- The blocks: image first, then the fewest words that explain it. Alternating sides on wide screens
-             so a page of six figures doesn't read as one column of captions. -->
+        <!-- The blocks. The layout follows the SHOT, not the index: a landscape screenshot is 1072 CSS px of real
+             interface, so it takes the whole column with its prose above it rather than being halved into a
+             side-by-side that renders the app's own text at half size. A phone shot and a drawn figure are
+             narrow by nature and keep the side-by-side, alternating so the page doesn't read as one column. -->
         <section>
-            <div class="mx-auto max-w-6xl space-y-20 px-6 py-20 lg:space-y-24 lg:py-24">
+            <div class="mx-auto max-w-7xl space-y-20 px-6 py-20 lg:space-y-28 lg:py-24">
                 {
-                    page.blocks.map((block, i) => (
-                        <div class="fade-in grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
-                            <div class={i % 2 === 0 ? "lg:order-2" : "lg:order-1"}>
-                                <h2 class="text-xl font-semibold tracking-tight text-content">{block.title}</h2>
-                                <p class="mt-3 max-w-md text-base leading-relaxed text-muted">{block.body}</p>
-                                {block.bullets && (
-                                    <ul class="mt-4 space-y-2">
-                                        {block.bullets.map((bullet) => (
-                                            <li class="flex items-start gap-2.5 text-sm leading-relaxed text-subtle">
-                                                <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary-500" />
-                                                {bullet}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
+                    page.blocks.map((block, i) => {
+                        // Landscape ⇒ the wide treatment. Held as the shot itself so the branch below is typed.
+                        const wideShot = block.shot !== undefined && block.shot.width > block.shot.height ? block.shot : undefined;
+                        const bullets = block.bullets && (
+                            <ul class:list={["mt-4", wideShot === undefined ? "space-y-2" : "grid gap-2 sm:grid-cols-2"]}>
+                                {block.bullets.map((bullet) => (
+                                    <li class="flex items-start gap-2.5 text-sm leading-relaxed text-subtle">
+                                        <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary-500" />
+                                        {bullet}
+                                    </li>
+                                ))}
+                            </ul>
+                        );
+
+                        if (wideShot !== undefined) {
+                            return (
+                                <div class="fade-in">
+                                    <div class="max-w-3xl">
+                                        <h2 class="text-xl font-semibold tracking-tight text-content">{block.title}</h2>
+                                        <p class="mt-3 text-base leading-relaxed text-muted">{block.body}</p>
+                                        {bullets}
+                                    </div>
+                                    <ProductShotFigure shot={wideShot} class="mt-8" />
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <div class="fade-in grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
+                                <div class={i % 2 === 0 ? "lg:order-2" : "lg:order-1"}>
+                                    <h2 class="text-xl font-semibold tracking-tight text-content">{block.title}</h2>
+                                    <p class="mt-3 max-w-md text-base leading-relaxed text-muted">{block.body}</p>
+                                    {bullets}
+                                </div>
+                                <div class={i % 2 === 0 ? "lg:order-1" : "lg:order-2"}>
+                                    {block.shot && <ProductShotFigure shot={block.shot} />}
+                                    {block.figure && <ProductFigure figure={block.figure} />}
+                                </div>
                             </div>
-                            <div class={i % 2 === 0 ? "lg:order-1" : "lg:order-2"}>
-                                {block.shot && <ProductShotFigure shot={block.shot} />}
-                                {block.figure && <ProductFigure figure={block.figure} />}
-                            </div>
-                        </div>
-                    ))
+                        );
+                    })
                 }
             </div>
         </section>
 
         <!-- Next surface + CTA -->
         <section class="border-t border-line">
-            <div class="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-14 sm:flex-row sm:items-center sm:justify-between">
+            <div class="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-14 sm:flex-row sm:items-center sm:justify-between">
                 <a href={productHref(next.slug)} class="group">
                     <div class="eyebrow">Next</div>
                     <div class="mt-1 text-lg font-semibold tracking-tight text-content group-hover:text-link">{next.navLabel} →</div>

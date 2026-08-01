@@ -44,6 +44,8 @@ interface Shot {
     openFirst?: string;
     /** Text or selector the surface is not itself until it renders. */
     waitFor?: string;
+    /** Controls to open, in order, once the surface has rendered — for a panel whose CONTENT is the story. */
+    click?: string[];
     settleMs?: number;
     /** `area` keeps the workspace left of the docked chat; `chat` keeps the chat. Absent ⇒ the whole viewport. */
     clip?: "area" | "chat";
@@ -75,7 +77,18 @@ const SHOTS: Shot[] = [
     },
     // The workspace
     { name: "workspace-editor", path: "/workspace/api/src/db/schema.ts", waitFor: "text=deletedAt", settleMs: 1800, clip: "area", height: 470 },
-    { name: "workspace-changes", path: "/workspace", waitFor: "text=uncommitted changes", settleMs: 1400, clip: "area", height: 620 },
+    /* Opens the Changes tab rather than shooting the Files tab it lands on: this shot is captioned "changes you
+     * can see before anyone lands anything", and the workspace opens on an empty tree with a "drop your work
+     * here" pane — truthful, and a screenshot of nothing. */
+    {
+        name: "workspace-changes",
+        path: "/workspace",
+        waitFor: "text=uncommitted changes",
+        click: ['[title="Review uncommitted changes"]', "text=src/lib/checkout.ts"],
+        settleMs: 1800,
+        clip: "area",
+        height: 400,
+    },
     // The environment
     { name: "capabilities", path: "/capabilities", waitFor: "text=1 connected", settleMs: 1200, clip: "area" },
     { name: "capability-github", path: "/capabilities/github", waitFor: "text=GitHub", settleMs: 1200, clip: "area", height: 660 },
@@ -165,6 +178,10 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
         await page.goto(demoUrl(shot.path), { waitUntil: "domcontentloaded" });
         if (shot.waitFor !== undefined) {
             await page.waitForSelector(shot.waitFor, { timeout: 20_000 }).catch(() => console.warn(`  [no waitFor ${shot.name}] ${shot.waitFor}`));
+        }
+        for (const target of shot.click ?? []) {
+            await page.click(target, { timeout: 20_000 });
+            await page.waitForTimeout(600);
         }
         await page.waitForTimeout(shot.settleMs ?? 800);
         if (shot.scrollTo !== undefined) {

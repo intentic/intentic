@@ -209,8 +209,8 @@ export const productPages: ProductPage[] = [
                 shot: {
                     src: "/assets/product/workspace-changes.png",
                     width: 2144,
-                    height: 1240,
-                    alt: "The workspace with a Changes tab showing five uncommitted files and a banner offering to review them before continuing.",
+                    height: 800,
+                    alt: "The workspace Changes tab: five uncommitted files grouped by repo with their line counts, and the diff of one of them open beside the list.",
                     frame: "browser",
                     label: "acme-shop · /workspace",
                 },
@@ -263,8 +263,8 @@ export const productPages: ProductPage[] = [
                 shot: {
                     src: "/assets/product/workspace-changes.png",
                     width: 2144,
-                    height: 1240,
-                    alt: "The workspace Files tab with the repo tree, a filter box, and tabs for Files, Changes and Checkpoints.",
+                    height: 800,
+                    alt: "The workspace Changes tab with a banner offering review before continuing, five uncommitted files, and a split diff of checkout.ts.",
                     frame: "browser",
                     label: "acme-shop · /workspace",
                 },
