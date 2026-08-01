@@ -46,6 +46,30 @@ import {
 } from "./turnReducer";
 import { bindingWindow, formatReset, formatWait, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 
+/* WHICH WINDOW'S FRAMES THE TRANSCRIPT RUNS ON — announced by the panel (ChatPanel, on mount and on every
+ * pop-out move), because the window a transcript is DISPLAYED in is not always the window this module lives in.
+ *
+ * A popped-out chat is DOM teleported into a second real window while its JS keeps running in the opener's
+ * realm (composables/usePopout.ts). Rendering steps belong to a window: a browser gives none — no animation
+ * frames, no observer deliveries — to one that is hidden, minimized or fully occluded, and that is the normal
+ * state of the app window while the user works in the chat window in front of it. So a clock armed on the
+ * OPENER simply stops: frames pile up in the inbox, the typewriter holds its text, and the panel out there
+ * looks alive (its keeper is still being answered — see usePopout's liveness contract, which proves the realm
+ * can run code, not that it can paint) while nothing on it moves. Every "the popped-out chat stopped
+ * reacting" report is this. useStickToBottom and terminalSession.observeHost re-home their observers for the
+ * same reason; this is the transcript's half of it.
+ *
+ * Undefined until the panel mounts — and in tests, where this module's own realm is the only answer there is. */
+export const transcriptView = shallowRef<Window | undefined>(undefined);
+
+// How long a tick waits on a frame that may never come. The clock's rate is the frame's — this only bounds the
+// lag when NO window is painting the transcript: both windows minimized, or a pop-out closed while a frame it
+// owed was still pending, which would otherwise leave the clock armed forever and the conversation deaf for
+// the rest of the session. Deliberately on this realm's timer, the one that outlives every pop-out window; a
+// browser throttles it to about a second while the page is hidden, which is the right rate for a transcript
+// nobody is looking at.
+const CLOCK_FALLBACK_MS = 120;
+
 // The permission mode is the contract's PermissionMode — imported, not redeclared. The composer picks the
 // turn's STARTING mode; the agent can then move itself (EnterPlanMode when a request turns out to need
 // thinking through, ExitPlanMode once the user approves), which arrives back as a `mode` frame and drives
@@ -737,12 +761,17 @@ export class Conversation {
      * shallowRef assignment re-renders the whole transcript, so two clocks in one paint would cost two
      * renders to show one. Sharing it holds a streaming turn at ONE render per displayed frame.
      *
-     * Armed-or-not, with no frame handle and no cancellation: a tick that finds nothing to do returns, so
+     * Armed-or-not, with no FRAME handle and no cancellation: a tick that finds nothing to do returns, so
      * draining the work out from under an armed tick (catchUp, settle) needs no cancel and costs one empty
      * callback. Holding a handle instead is what a synchronous test clock breaks — it runs the callback
      * during `requestAnimationFrame` itself, so the id lands in the field AFTER the tick that should have
-     * cleared it and every later cancel aims at a frame that already came. */
+     * cleared it and every later cancel aims at a frame that already came.
+     *
+     * The FALLBACK timer below is held, because it is the one thing that must not fire twice: a stale one is a
+     * second full fold-and-reveal per tick, at the reveal's own expense. It is armed BEFORE the frame is asked
+     * for, so the same synchronous test clock finds it already in the field and clears it. */
     private clockArmed = false;
+    private clockFallback: ReturnType<typeof setTimeout> | undefined;
 
     /* Frames waiting for the next tick, with the turn each arrived under (a stream holds one turn, but the
      * buffer outlives any single `follow` call, so the pairing has to be explicit).
@@ -1726,14 +1755,19 @@ export class Conversation {
         this.schedule();
     }
 
-    // Run a tick on the next paint, unless one is already owed. The clock only runs while there is something
-    // for it to do — buffered frames, or text still being revealed — so an idle conversation holds no timer.
+    // Run a tick on the next paint of the window the transcript is IN (transcriptView — a popped-out panel's is
+    // not this realm's), unless one is already owed. The clock only runs while there is something for it to do
+    // — buffered frames, or text still being revealed — so an idle conversation holds no timer.
     private schedule(): void {
         if (this.clockArmed) {
             return;
         }
         this.clockArmed = true;
-        requestAnimationFrame(() => this.tick());
+        this.clockFallback = setTimeout(() => this.tick(), CLOCK_FALLBACK_MS);
+        // A closed window paints nothing ever again, and the panel hears about one a flush after it goes — so
+        // the frames of the window that is still here are the better bet for the beat in between.
+        const view = transcriptView.value;
+        (view === undefined || view.closed ? globalThis : view).requestAnimationFrame(() => this.tick());
     }
 
     /* Fold every buffered frame into `from`, returning the state they produce and the effects they raised in
@@ -1786,6 +1820,7 @@ export class Conversation {
     // typewriter's next slice, in ONE write to `state.value`.
     private tick(): void {
         this.clockArmed = false;
+        clearTimeout(this.clockFallback);
         // The work may have been taken out from under this tick by a catchUp or a settle — that is the trade
         // for holding no frame handle, and an empty tick is cheaper than the cancellation bookkeeping was.
         if (this.inbox.length === 0 && this.state.value.pending === undefined) {

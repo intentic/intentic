@@ -5,7 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { type AgentCommand, providerLabel } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
 import { modeMeta } from "../composables/chat/catalog";
-import { effectiveAccount, effortsFor, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
+import { effectiveAccount, effortsFor, modelLabelFor, type PendingAttachment, transcriptView } from "../composables/chat/conversation";
 import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import {
     bindingWindow,
@@ -142,6 +142,14 @@ const modePill = ref<HTMLElement>();
 // and — because the composable watches these boxes with an observer owned by the window they are in — when
 // they move to another one, which for this panel is the pop-out and back.
 const { pin, follow } = useStickToBottom(scroller, content, poppedOut);
+
+/* …and the transcript's CLOCK is told the same thing, for the same reason (conversation.ts's transcriptView
+ * carries the argument): frames belong to a window, and the window this panel's rows are in is the pop-out's
+ * whenever it has one. Post-flush, so the Teleport has already moved them and `ownerDocument` answers about
+ * where they landed rather than where they left; the scroller is in the dependencies because a mount is the
+ * other way this becomes true. */
+const transcriptWindow = (): Window & typeof globalThis => scroller.value?.ownerDocument.defaultView ?? window;
+watch([scroller, poppedOut], () => (transcriptView.value = transcriptWindow()), { flush: `post`, immediate: true });
 
 const activeError = computed(() => active.value.error.value);
 // The active conversation's transcript round-trip, still in flight with nothing painted yet — the empty
@@ -849,17 +857,28 @@ const endResize = (event: PointerEvent): void => {
  * critical path (Safari has no idle callback — a beat of setTimeout is the same bargain). */
 const realizing = ref(false);
 let warmQueued = false;
+// Both callbacks are the TRANSCRIPT's window's — asked for afresh at each step, since a pop-out or a dock can
+// land between them. Asking the opener (where this code runs) is asking a window that is typically behind the
+// chat window and getting no rendering steps at all: the pass never ran, and the latch below never lifted.
+const whenIdle = (task: () => void): void => {
+    const view = transcriptWindow();
+    if (view.requestIdleCallback === undefined) {
+        view.setTimeout(task, 200);
+        return;
+    }
+    view.requestIdleCallback(task);
+};
 const warmTranscript = (): void => {
     if (warmQueued) {
         return;
     }
     warmQueued = true;
-    const idle = globalThis.requestIdleCallback ?? ((task: () => void) => setTimeout(task, 200));
-    idle(() => {
+    whenIdle(() => {
         realizing.value = true;
         void nextTick(() => {
-            requestAnimationFrame(() =>
-                requestAnimationFrame(() => {
+            const view = transcriptWindow();
+            view.requestAnimationFrame(() =>
+                view.requestAnimationFrame(() => {
                     realizing.value = false;
                     warmQueued = false;
                 }),
@@ -880,6 +899,18 @@ watch(
             warmTranscript();
         }
     },
+);
+// A pop-out or a dock is a new window at a new width, so every row's remembered size is a measurement of
+// somewhere else — and a pass left in flight is owed frames by the window just left, which will never deliver
+// them. Clearing the latch is what stops that one missed hand-off from disabling warming for the session.
+watch(
+    poppedOut,
+    () => {
+        warmQueued = false;
+        realizing.value = false;
+        warmTranscript();
+    },
+    { flush: `post` },
 );
 watch(streaming, (now, was) => {
     if (was && !now) {

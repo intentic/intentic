@@ -1,7 +1,16 @@
 import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clampEffort, Conversation, effortsFor, providerAccounts, providerModels, turnDefaults, turnRequestBody } from "./conversation";
+import {
+    clampEffort,
+    Conversation,
+    effortsFor,
+    providerAccounts,
+    providerModels,
+    transcriptView,
+    turnDefaults,
+    turnRequestBody,
+} from "./conversation";
 import { resolvePrompt } from "../agents/conflictResolution";
 import { type ChatMessage, foldsIntoTurn, isAcknowledgment, transcriptOf, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
@@ -28,6 +37,8 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    // The window the panel announces it is displayed in — a module singleton like the rest below.
+    transcriptView.value = undefined;
     // turnDefaults is a module singleton; reset the per-provider memory so tests stay order-independent.
     // Grok's default is loaded live (empty until then); a fresh test env has no loaded catalog.
     turnDefaults.models.value = { claude: `opus`, codex: ``, grok: `` };
@@ -1980,6 +1991,64 @@ describe(`Conversation`, () => {
 
         expect(conversation.isolated.value).toBe(true);
         expect(conversation.provider.value).toBe(`codex`);
+    });
+});
+
+/* THE CLOCK'S WINDOW. A popped-out chat is DOM teleported into a second real window while this module keeps
+ * running in the opener's realm (composables/usePopout.ts), and rendering steps belong to a window: the opener,
+ * sitting behind the chat window the user is working in, is given none. A clock armed there stops — the frames
+ * pile up in the inbox and the panel out there shows a live-looking transcript that never moves, which is what
+ * "the popped-out chat stopped reacting" is. So the panel announces which window its rows are in, and the two
+ * tests below pin both halves: the frames are asked of THAT window, and a frame that never comes cannot park
+ * the transcript for good. */
+describe(`the transcript's clock`, () => {
+    // A window that hands out frames on request — what the pop-out is, and what this realm is not while it sits
+    // behind it.
+    const viewWithFrames = (): { view: Window; deliver: () => void } => {
+        const owed: FrameRequestCallback[] = [];
+        return {
+            view: { requestAnimationFrame: (callback: FrameRequestCallback) => owed.push(callback) } as unknown as Window,
+            deliver: () => owed.splice(0, owed.length).forEach((callback) => callback(0)),
+        };
+    };
+
+    it(`asks the window the panel is displayed in for its frames, not the realm it runs in`, async () => {
+        const conversation = new Conversation(`c-popped`);
+        const opener: FrameRequestCallback[] = [];
+        vi.stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback) => opener.push(callback));
+        const { view, deliver } = viewWithFrames();
+        transcriptView.value = view;
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `hi` }], { stayOpen: true }));
+
+        const turn = conversation.send(`go`, settings);
+        // Delivered per poll rather than once: the head opens the stream a beat before the delta rides in, so
+        // the frame the transcript is waiting on is not always the first one owed.
+        await vi.waitFor(() => {
+            deliver();
+            expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `hi` });
+        });
+
+        // The opener was never asked. Being asked is the whole bug: it answers when it is in front and goes
+        // silent when it is behind, which is exactly backwards for a panel that lives in the other window.
+        expect(opener).toHaveLength(0);
+
+        conversation.stop();
+        await turn;
+    });
+
+    it(`applies frames on its own timer when the window it asked never delivers one`, async () => {
+        const conversation = new Conversation(`c-parked`);
+        // Frames requested and never delivered: the chat window minimized, or — the one that used to be
+        // permanent — a pop-out closed while still owing the frame the armed clock was waiting on.
+        transcriptView.value = viewWithFrames().view;
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `hi` }], { stayOpen: true }));
+
+        const turn = conversation.send(`go`, settings);
+
+        await vi.waitFor(() => expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `hi` }), { timeout: 2_000 });
+
+        conversation.stop();
+        await turn;
     });
 });
 

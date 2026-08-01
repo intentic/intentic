@@ -14,6 +14,7 @@ import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
+import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 import ChatTodoList from "./ChatTodoList.vue";
@@ -369,15 +370,24 @@ const restoreToCheckpoint = async (): Promise<void> => {
 const bubble = ref<HTMLElement>();
 const overflowing = ref(false);
 const expanded = ref(false);
+// Which window this row's observers belong to changes with the panel's — see the two watches below.
+const { poppedOut } = useChatPopout();
 
+/* Built by the window the bubble is IN, and rebuilt when the panel moves to another one — an observer is
+ * per-window machinery: it delivers in the rendering steps of the document that CREATED it, whatever document
+ * the element it watches has since been adopted into. Popped out, one made here reports on the OPENER's frames,
+ * and the opener is the window behind the chat window, which a browser stops rendering entirely. Same reasoning
+ * as useStickToBottom's observer and terminalSession.observeHost; `poppedOut` is in the dependencies because
+ * adoption rewrites `ownerDocument` in place, with nothing reactive about it to watch. */
 watch(
-    bubble,
-    (element, _previous, onCleanup) => {
+    [bubble, poppedOut],
+    ([element], _previous, onCleanup) => {
         if (element === undefined) {
             overflowing.value = false;
             return;
         }
-        const observer = new ResizeObserver(() => {
+        const view = element.ownerDocument.defaultView ?? window;
+        const observer = new view.ResizeObserver(() => {
             // Open, the clamp is off and the box always fits — there is nothing to measure, and measuring
             // would clear the flag that keeps the collapse control on screen. The next collapse re-measures.
             if (!expanded.value) {
@@ -387,7 +397,7 @@ watch(
         observer.observe(element);
         onCleanup(() => observer.disconnect());
     },
-    { immediate: true },
+    { immediate: true, flush: `post` },
 );
 
 // A message that folded into the turn above never pins: sticking it would cover the very prompt it defers to
@@ -431,21 +441,23 @@ const groupedTools = computed((): readonly ToolEntry[] => groupConsecutiveTools(
 const row = ref<HTMLElement>();
 const pinned = ref(false);
 
+// Per-window and rebuilt on the move, for the reason the clamp's observer above states.
 watch(
-    row,
-    (element, _previous, onCleanup) => {
+    [row, poppedOut],
+    ([element], _previous, onCleanup) => {
         pinned.value = false;
         if (element === undefined || props.message.role !== `user` || defers.value) {
             return;
         }
-        const observer = new IntersectionObserver(([entry]) => (pinned.value = entry !== undefined && entry.intersectionRatio < 1), {
+        const view = element.ownerDocument.defaultView ?? window;
+        const observer = new view.IntersectionObserver(([entry]) => (pinned.value = entry !== undefined && entry.intersectionRatio < 1), {
             root: element.closest(`.chat-scroller`),
             threshold: [1],
         });
         observer.observe(element);
         onCleanup(() => observer.disconnect());
     },
-    { immediate: true },
+    { immediate: true, flush: `post` },
 );
 
 // A clamped box has no scrollbar and cannot be scrolled by hand, so any scroll it reports came from the
