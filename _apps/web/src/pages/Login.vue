@@ -7,26 +7,28 @@ const { signInWithGoogle } = useAuth();
 
 const year = new Date().getFullYear();
 
+// The site's four "anatomy" pillars, one line each: a sign-in page is read in a glance, so every body is
+// short enough to hold a single line at this panel's measure and never wrap mid-thought.
 const features: readonly { icon: IconName; title: string; description: string }[] = [
     {
         icon: `box`,
         title: `Its own sandbox`,
-        description: `A full workspace in a container on hardware you control — one per agent. Not a chat window: a machine the agent actually works on.`,
+        description: `A container on hardware you control, one per agent.`,
     },
     {
         icon: `sliders-h`,
         title: `A curated environment`,
-        description: `The libraries and dev-tools the job needs, baked into the image and really installed. The agent proposes the layer; it ships on your approval.`,
+        description: `The dev-tools the job needs, really installed.`,
     },
     {
         icon: `sitemap`,
         title: `Access to your systems`,
-        description: `GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers — added in a click. Credentials stay in the sandbox.`,
+        description: `GitHub, databases, Sentry, SSH, MCP — a click each.`,
     },
     {
         icon: `list-check`,
         title: `Curated context`,
-        description: `Skills, runbooks, repos, and house style scoped to this one job, loaded every turn — not a generic dump.`,
+        description: `Skills, runbooks and house style, loaded every turn.`,
     },
 ];
 
@@ -55,24 +57,26 @@ const signIn = async (): Promise<void> => {
                 <img src="/assets/intentic-full.png" alt="intentic platform" class="h-8 w-auto" />
             </div>
 
-            <div class="animate-fade-in-up relative max-w-md" style="animation-delay: 60ms">
-                <h1 class="text-4xl font-semibold leading-tight tracking-tight xl:text-5xl">
-                    An IDE for your agents. A window for you.
+            <div class="animate-fade-in-up relative max-w-xl" style="animation-delay: 60ms">
+                <!-- One sentence per line, as on the site: left to wrap on its own the headline breaks
+                     between "your" and "agents" and reads as one run-on line. 48px only from 2xl up — below
+                     that "An IDE for your agents." is wider than this half-width panel and wraps anyway. -->
+                <h1 class="text-4xl font-semibold leading-tight tracking-tight 2xl:text-5xl">
+                    <span class="block">An IDE for your agents.</span>
+                    <span class="block">A window for you.</span>
                 </h1>
-                <p class="mt-4 text-base leading-relaxed text-muted">
-                    Everyone else lets you edit the prompt. intentic lets you see and change the whole environment your agents work in — the
-                    dev-tools really installed, the systems they can reach, the context they load every turn. Run one, or ten in parallel, on
-                    hardware you own.
+                <p class="mt-5 text-base leading-relaxed text-pretty text-muted">
+                    Everyone else lets you edit the prompt. intentic lets you see and change the whole environment your agents work in.
                 </p>
 
-                <ul class="mt-10 flex flex-col gap-5">
+                <ul class="mt-10 flex max-w-lg flex-col gap-4">
                     <li v-for="feature in features" :key="feature.title" class="flex items-start gap-3">
                         <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-overlay text-link">
                             <Icon :name="feature.icon" class="text-sm" />
                         </span>
                         <div>
                             <p class="text-sm font-medium text-content">{{ feature.title }}</p>
-                            <p class="text-sm text-muted">{{ feature.description }}</p>
+                            <p class="text-sm text-pretty text-muted">{{ feature.description }}</p>
                         </div>
                     </li>
                 </ul>
