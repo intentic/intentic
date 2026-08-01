@@ -4,7 +4,13 @@
      stays identical; each step supplies its own (collapsed or expanded) body via the default slot.
 
      A card that is the WHOLE flow rather than one step of several passes `icon` instead of `step`: a lone
-     "1" badge promises a step 2 that is never coming, which reads as a page that failed to finish loading. -->
+     "1" badge promises a step 2 that is never coming, which reads as a page that failed to finish loading.
+
+     The header is one flex line on a desktop width and two on a phone: badge + title claim the full first
+     line (`w-full` until `md`), so the actions wrap underneath instead of squeezing the title. Sharing the
+     line is what turned "Waiting for your sandbox to report in…" into a three-line column beside a "Check
+     now" button — a title that has to be read vertically reads as a broken layout, and the button it was
+     making room for is the one thing on that card a user might tap. -->
 <script setup lang="ts">
 import { type IconName } from "../icons/iconSets.js";
 
@@ -12,17 +18,19 @@ const { step, icon, title, done = false } = defineProps<{ step?: number; icon?: 
 </script>
 
 <template>
-    <section class="flex flex-col gap-3 rounded-2xl border border-line bg-card p-5">
-        <div class="flex items-center gap-2.5">
-            <span
-                class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-2xs font-semibold"
-                :class="done ? `border-success/40 bg-success/10 text-success` : `border-line bg-canvas text-muted`"
-            >
-                <Icon name="check" v-if="done" :aria-label="`${title} — done`" />
-                <template v-else-if="step !== undefined">{{ step }}</template>
-                <Icon v-else-if="icon" :name="icon" />
-            </span>
-            <h2 class="font-semibold leading-tight">{{ title }}</h2>
+    <section class="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4 md:p-5">
+        <div class="flex flex-wrap items-center gap-2.5">
+            <div class="flex w-full min-w-0 items-center gap-2.5 md:w-auto md:flex-1">
+                <span
+                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-2xs font-semibold"
+                    :class="done ? `border-success/40 bg-success/10 text-success` : `border-line bg-canvas text-muted`"
+                >
+                    <Icon name="check" v-if="done" :aria-label="`${title} — done`" />
+                    <template v-else-if="step !== undefined">{{ step }}</template>
+                    <Icon v-else-if="icon" :name="icon" />
+                </span>
+                <h2 class="min-w-0 font-semibold leading-tight">{{ title }}</h2>
+            </div>
             <div v-if="$slots['actions']" class="ml-auto flex items-center gap-2">
                 <slot name="actions" />
             </div>

@@ -2,16 +2,7 @@
 import type { SandboxSummary, SetupCode, SetupCodeTarget } from "@intentic-app/api-contract";
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
-import {
-    cmp,
-    Code,
-    commandLang,
-    CopyButton,
-    InfoHint,
-    Segmented,
-    StepSection,
-    useOsPreference,
-} from "@intentic-app/ui";
+import { cmp, Code, commandLang, CopyButton, InfoHint, Segmented, StepSection, useDevice, useOsPreference } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -60,6 +51,9 @@ import { type AttachOutcome, daemonUrlProblem, nameFromDaemonUrl, normalizeDaemo
 const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
+// Drives the two places a phone needs different CONTENT rather than different layout (which the md: classes
+// below handle): the run tabs' labels and the size of the controls that carry them.
+const { mobile } = useDevice();
 const { user, upgradeOpen, entitlements, refreshPlan } = useAuth();
 const { getIdToken } = useGoogleIdentity();
 
@@ -450,6 +444,15 @@ const runTab = computed<`unix` | `windows` | `compose`>({
         }
     },
 });
+// Two of the three labels shed a qualifier on a phone, where the three tabs share one line: the shell
+// ("PowerShell") and the vendor ("Docker") are both restated by the panel each tab opens, and a tab that wraps
+// to two lines while its neighbours don't stops reading as one control.
+const runTabOptions = computed(() => [
+    { label: `Linux / macOS`, value: `unix` as const },
+    { label: mobile.value ? `Windows` : `Windows (PowerShell)`, value: `windows` as const },
+    { label: mobile.value ? `Compose` : `Docker Compose`, value: `compose` as const },
+]);
+
 const composeArgs = computed<ComposeArgs | undefined>(() => {
     if (setup.value === null) {
         return undefined;
@@ -568,20 +571,42 @@ watch(commandReady, (ready) => {
 </script>
 
 <template>
-    <div class="min-h-screen w-full overflow-auto bg-canvas text-content">
-        <div class="animate-fade-in mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-8">
-            <header class="flex items-center gap-3">
+    <!-- dvh, not vh: a phone's collapsing browser chrome makes 100vh taller than the screen, which parks the
+         last step under the address bar on first paint. -->
+    <div class="min-h-dvh w-full overflow-auto bg-canvas text-content">
+        <div
+            class="animate-fade-in mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 md:gap-4 md:px-6 md:py-8"
+        >
+            <!-- Wraps rather than shrinks: the three items share one line at desktop widths, and on a phone the
+                 escape hatch takes the first line on its own (`order-first w-full`) so the title keeps the full
+                 width instead of collapsing to "Set up / your / workspace" beside a button pushed off-screen. -->
+            <header class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <!-- Escape hatch for a returning user: they already own a sandbox, so /'s requireSetup guard
+                     lets them back into the workspace. Hidden for a new user (0 sandboxes) who'd just bounce back. -->
+                <Button
+                    v-if="sandbox.sandboxes.value.length > 0"
+                    label="Back to workspace"
+                    severity="secondary"
+                    :text="true"
+                    class="order-first -ml-3 w-full justify-start md:order-last md:ml-auto md:w-auto md:shrink-0"
+                    @click="void router.push(`/`)"
+                >
+                    <template #icon><Icon name="arrow-left" /></template>
+                </Button>
                 <span
-                    class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary-600/30 bg-linear-to-br from-primary-600/20 to-primary-600/5 shadow-md"
+                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary-600/30 bg-linear-to-br from-primary-600/20 to-primary-600/5 shadow-md md:h-12 md:w-12"
                     aria-label="intentic platform"
                 >
-                    <img src="/assets/intentic-logo-sized.png" alt="intentic" class="h-6 w-6 object-contain" />
+                    <img src="/assets/intentic-logo-sized.png" alt="intentic" class="h-5 w-5 object-contain md:h-6 md:w-6" />
                 </span>
-                <div>
-                    <h1 class="text-2xl font-semibold">Set up your workspace</h1>
+                <!-- `contents` on a phone: the h1 becomes the logo's row-mate and the subtitle a full-width row
+                     of its own, so the promise gets the whole width instead of a 200px column. From md up the
+                     wrapper is a normal block again and the two stack beside the logo as before. -->
+                <div class="contents md:block md:min-w-0 md:flex-1">
+                    <h1 class="min-w-0 flex-1 text-xl font-semibold md:text-2xl">Set up your workspace</h1>
                     <!-- The promise has to match the lane: "a few minutes" and "use intentic's domain" describe
                          work the attach lane doesn't do. -->
-                    <p class="text-sm text-muted">
+                    <p class="w-full text-sm text-muted">
                         <template v-if="lane === `attach`"
                             >Point intentic at the sandbox you're already running. One address, and you're in.</template
                         >
@@ -590,18 +615,6 @@ watch(commandReady, (ready) => {
                         >
                     </p>
                 </div>
-                <!-- Escape hatch for a returning user: they already own a sandbox, so /'s requireSetup guard
-                     lets them back into the workspace. Hidden for a new user (0 sandboxes) who'd just bounce back. -->
-                <Button
-                    v-if="sandbox.sandboxes.value.length > 0"
-                    label="Back to workspace"
-                    severity="secondary"
-                    :text="true"
-                    class="ml-auto shrink-0"
-                    @click="void router.push(`/`)"
-                >
-                    <template #icon><Icon name="arrow-left" /></template>
-                </Button>
             </header>
 
             <!-- Step 1: name + create the sandbox (collapses to a summary once created), or — in the attach
@@ -620,14 +633,16 @@ watch(commandReady, (ready) => {
                     </p>
                     <label class="ui-field">
                         <span class="ui-field-label">Domain</span>
-                        <div class="flex items-center gap-2">
+                        <!-- Stacked on a phone: side by side, the field loses half its width to the button and
+                             the address the user is checking scrolls out of view as they type it. -->
+                        <div class="flex flex-col gap-2 md:flex-row md:items-center">
                             <input
                                 v-model="domain"
                                 autocomplete="off"
                                 autocapitalize="off"
                                 spellcheck="false"
                                 placeholder="sandbox.example.com"
-                                :class="cmp.input('w-full font-mono')"
+                                :class="cmp.input('w-full font-mono text-base md:text-sm')"
                                 @keydown.enter="connectDomain"
                             />
                             <!-- `attaching` is in the disabled expression, not left to the loading prop: the
@@ -635,6 +650,7 @@ watch(commandReady, (ready) => {
                                  feel live while a probe is in flight. -->
                             <Button
                                 label="Connect"
+                                class="w-full justify-center md:w-auto"
                                 :loading="attaching"
                                 :disabled="attaching || normalizedDomain === undefined"
                                 @click="connectDomain"
@@ -661,7 +677,7 @@ watch(commandReady, (ready) => {
                             autocomplete="off"
                             spellcheck="false"
                             :placeholder="derivedName === `` ? `e.g. work, staging, my-laptop` : derivedName"
-                            :class="cmp.input('w-full font-mono')"
+                            :class="cmp.input('w-full font-mono text-base md:text-sm')"
                             @keydown.enter="connectDomain"
                         />
                         <span class="text-xs text-muted">
@@ -713,7 +729,7 @@ watch(commandReady, (ready) => {
                                 autocapitalize="off"
                                 spellcheck="false"
                                 placeholder="The CONNECT_TOKEN your sandbox runs with"
-                                :class="cmp.input('w-full font-mono')"
+                                :class="cmp.input('w-full font-mono text-base md:text-sm')"
                                 @keydown.enter="connectDomain"
                             />
                             <span class="text-xs text-muted">
@@ -730,7 +746,7 @@ watch(commandReady, (ready) => {
                     <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
                     <!-- With a row already in hand, going back CONTINUES that sandbox through steps 2-4 rather
                          than setting a new one up — the label has to say which of the two it is. -->
-                    <button type="button" class="self-start text-xs text-muted underline hover:text-content" @click="setLane(`provision`)">
+                    <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="setLane(`provision`)">
                         {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
                     </button>
                 </template>
@@ -740,29 +756,35 @@ watch(commandReady, (ready) => {
                         <p class="text-xs text-muted">
                             You're on the Free plan, which includes one sandbox — and it's already in use. Upgrade to Pro to run more.
                         </p>
-                        <Button label="Upgrade to Pro" class="self-start" @click="upgradeOpen = true">
+                        <Button label="Upgrade to Pro" class="w-full justify-center md:w-auto md:self-start" @click="upgradeOpen = true">
                             <template #icon><Icon name="star" /></template>
                         </Button>
                     </template>
                     <template v-else>
                         <p class="text-xs text-muted">Give this sandbox a name so you can tell it apart in the switcher — you can run several.</p>
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-col gap-2 md:flex-row md:items-center">
                             <input
                                 v-model="name"
                                 autocomplete="off"
                                 spellcheck="false"
                                 placeholder="e.g. work, staging, my-laptop"
-                                :class="cmp.input('w-full font-mono')"
+                                :class="cmp.input('w-full font-mono text-base md:text-sm')"
                                 @keydown.enter="createSandbox"
                             />
-                            <Button label="Create" :loading="creating" :disabled="name.trim().length === 0" @click="createSandbox">
+                            <Button
+                                label="Create"
+                                class="w-full justify-center md:w-auto"
+                                :loading="creating"
+                                :disabled="name.trim().length === 0"
+                                @click="createSandbox"
+                            >
                                 <template #icon><Icon name="plus" /></template>
                             </Button>
                         </div>
                         <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
                         <!-- The one-step lane, kept to a single line: it costs the common path nothing and the
                              user who needs it is looking for exactly these words. -->
-                        <button type="button" class="self-start text-xs text-link hover:underline" @click="setLane(`attach`)">
+                        <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">
                             Already running a sandbox somewhere? Connect it by domain →
                         </button>
                     </template>
@@ -777,12 +799,12 @@ watch(commandReady, (ready) => {
                         <button
                             v-if="atLimit"
                             type="button"
-                            class="self-start text-xs text-muted underline hover:text-content"
+                            :class="cmp.linkButton(`text-muted underline hover:text-content`)"
                             @click="upgradeOpen = true"
                         >
                             Need another sandbox? Upgrade to Pro
                         </button>
-                        <button v-else type="button" class="self-start text-xs text-muted underline hover:text-content" @click="startFresh">
+                        <button v-else type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="startFresh">
                             Not this one? Create a new sandbox instead
                         </button>
                     </template>
@@ -790,70 +812,71 @@ watch(commandReady, (ready) => {
                          sandbox is already running somewhere the platform never heard from (a daemon with no
                          PLATFORM_URL) arrives just as often while staring at step 3's install command. Attaching
                          points THIS row at the domain — it never mints a second sandbox. -->
-                    <button type="button" class="self-start text-xs text-link hover:underline" @click="setLane(`attach`)">
-                        Already reachable at a domain? Connect it →
-                    </button>
+                    <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">Already reachable at a domain? Connect it →</button>
                 </template>
             </StepSection>
 
             <!-- Step 2: how to reach the sandbox (intentic domain collapses to a summary; own-CF form on demand). -->
             <StepSection v-if="created && lane === `provision`" :step="2" :done="setup !== null" title="How should we reach your sandbox?">
+                <!-- The "why a token?" hint rides the step header, the one place this page puts hints (step 3's
+                     "What this does"), instead of a second heading inside the body: "Cloudflare API token"
+                     above a field labelled "API token" said the same thing twice and cost a phone a whole row. -->
+                <template #actions>
+                    <InfoHint v-if="mode === `own`" label="Why the Cloudflare API token is required" text="Why this token">
+                        <p class="mb-1 text-sm font-semibold text-content">Why this token?</p>
+                        <p class="mb-3 text-2xs leading-relaxed text-muted">
+                            intentic reaches your sandbox over a private Cloudflare tunnel — no open inbound ports.
+                        </p>
+                        <ul class="flex flex-col gap-2 text-2xs text-muted">
+                            <li class="flex items-start gap-2">
+                                <Icon name="bolt" class="mt-0.5 text-link" />
+                                <span>Lets the install command <span class="text-content">create the tunnel</span></span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <Icon name="lock" class="mt-0.5 text-success" />
+                                <span
+                                    ><span class="text-content">Never stored by intentic</span> — used once to list zones, then rides the
+                                    command</span
+                                >
+                            </li>
+                        </ul>
+                    </InfoHint>
+                </template>
+
                 <!-- Intentic-provided: fixed, read-only domain. -->
                 <template v-if="mode === `intentic`">
                     <div v-if="setupError" :class="cmp.alertDanger('text-2xs')">
                         {{ setupError }}
                     </div>
                     <template v-else-if="setup">
-                        <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2 font-mono text-sm text-content">
-                            <Icon name="lock" class="text-subtle" />
-                            <span>{{ setup.hostname }}</span>
+                        <div class="flex items-start gap-2 rounded-md border border-line bg-canvas px-3 py-2 font-mono text-sm text-content">
+                            <Icon name="lock" class="mt-0.5 shrink-0 text-subtle" />
+                            <span class="min-w-0 break-words">{{ setup.hostname }}</span>
                         </div>
                         <!-- Names the CLOUDFLARE ZONE, not "my own domain": step 1's attach lane is now the
                              literal own-domain path, and two links reading the same would send people to the
                              wrong one. This path still provisions a tunnel and still needs steps 3-4. -->
-                        <button type="button" class="self-start text-xs text-link hover:underline" @click="mode = `own`">
-                            Use my own Cloudflare zone instead
-                        </button>
+                        <button type="button" :class="cmp.linkButton()" @click="mode = `own`">Use my own Cloudflare zone instead</button>
                     </template>
                     <p v-else class="text-xs text-muted"><Icon name="spinner" spin /> Preparing your intentic domain…</p>
                 </template>
 
                 <!-- Own Cloudflare: token + zone + editable subdomain. -->
                 <template v-else>
-                    <button v-if="intenticAvailable" type="button" class="self-start text-xs text-link hover:underline" @click="mode = `intentic`">
+                    <button v-if="intenticAvailable" type="button" :class="cmp.linkButton()" @click="mode = `intentic`">
                         ← Use intentic's domain
                     </button>
-                    <div class="flex items-center gap-2.5">
-                        <h3 class="text-sm font-semibold text-content">Cloudflare API token</h3>
-                        <InfoHint class="ml-auto" label="Why the Cloudflare API token is required">
-                            <p class="mb-1 text-sm font-semibold text-content">Why this token?</p>
-                            <p class="mb-3 text-2xs leading-relaxed text-muted">
-                                intentic reaches your sandbox over a private Cloudflare tunnel — no open inbound ports.
-                            </p>
-                            <ul class="flex flex-col gap-2 text-2xs text-muted">
-                                <li class="flex items-start gap-2">
-                                    <Icon name="bolt" class="mt-0.5 text-link" />
-                                    <span>Lets the install command <span class="text-content">create the tunnel</span></span>
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <Icon name="lock" class="mt-0.5 text-success" />
-                                    <span
-                                        ><span class="text-content">Never stored by intentic</span> — used once to list zones, then rides the
-                                        command</span
-                                    >
-                                </li>
-                            </ul>
-                        </InfoHint>
-                    </div>
                     <CloudflareTokenField
                         :cf="cf"
                         storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox — intentic never stores it."
                     />
 
-                    <!-- Editable domain: the subdomain prefix under the chosen zone. -->
+                    <!-- Editable domain: the subdomain prefix under the chosen zone. The zone suffix wraps to
+                         its own line rather than stealing width from the one part that is editable — an
+                         account's zone can be long, and on a phone the two together left no field to type in. -->
                     <label v-if="selectedZone" class="ui-field">
                         <span class="ui-field-label">Domain</span>
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <input
                                 :value="subdomain"
                                 @input="subdomain = ($event.target as HTMLInputElement).value"
@@ -861,28 +884,16 @@ watch(commandReady, (ready) => {
                                 autocapitalize="off"
                                 spellcheck="false"
                                 placeholder="sandbox"
-                                :class="cmp.input('w-full font-mono')"
+                                :class="cmp.input('w-full font-mono text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
                             />
-                            <span class="whitespace-nowrap font-mono text-sm text-subtle">.{{ selectedZone }}</span>
+                            <span class="font-mono text-sm break-words text-subtle">.{{ selectedZone }}</span>
                         </div>
                         <span v-if="!subdomainValid" class="text-xs text-warning">Use letters, numbers and hyphens only.</span>
                         <span v-else class="text-xs text-success"
-                            >✓ Your sandbox will be reachable at <span class="font-mono">{{ subdomain.trim() }}.{{ selectedZone }}</span
+                            >✓ Your sandbox will be reachable at <span class="font-mono break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
                             >.</span
                         >
                     </label>
-
-                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
-                        <a
-                            href="https://dash.cloudflare.com/profile/api-tokens"
-                            target="_blank"
-                            rel="noreferrer"
-                            class="inline-flex items-center gap-1 text-link hover:underline"
-                        >
-                            Create a token <Icon name="external-link" />
-                        </a>
-                        <span class="text-subtle">Scopes: Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit</span>
-                    </div>
                 </template>
             </StepSection>
 
@@ -920,9 +931,9 @@ watch(commandReady, (ready) => {
                     </InfoHint>
                 </template>
 
-                <p class="flex items-center gap-2 text-xs text-muted">
-                    <Icon name="box" class="text-info" />
-                    Needs Docker — installed automatically if missing (you'll be asked first).
+                <p class="flex items-start gap-2 text-xs text-muted">
+                    <Icon name="box" class="mt-0.5 shrink-0 text-info" />
+                    <span>Needs Docker — installed automatically if missing (you'll be asked first).</span>
                 </p>
 
                 <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
@@ -930,13 +941,13 @@ watch(commandReady, (ready) => {
                      minted hostname, so it names the same id the sandbox's address does.
                      Hidden on the compose tab: that path has no place to carry SYNC_DIR, so the toggle would do
                      nothing there — the compose panel points at the workspace's Desktop sync card instead. -->
-                <label v-if="runTab !== `compose`" class="flex cursor-pointer items-center gap-3 rounded-lg bg-canvas p-4">
-                    <ToggleSwitch v-model="syncEnabled" class="shrink-0" aria-label="Also sync a local folder with this sandbox" />
-                    <div class="flex flex-col gap-0.5">
+                <label v-if="runTab !== `compose`" class="flex cursor-pointer items-start gap-3 rounded-lg bg-canvas p-3 md:items-center md:p-4">
+                    <ToggleSwitch v-model="syncEnabled" class="mt-0.5 shrink-0 md:mt-0" aria-label="Also sync a local folder with this sandbox" />
+                    <div class="flex min-w-0 flex-col gap-0.5">
                         <span class="text-sm font-semibold text-content">Also sync a local folder with this sandbox</span>
                         <span class="text-xs text-muted">
                             <template v-if="syncEnabled && syncDir !== ``"
-                                >Mirrors to <code>{{ syncDir }}</code> so you can use your own editor.</template
+                                >Mirrors to <code class="break-words">{{ syncDir }}</code> so you can use your own editor.</template
                             >
                             <template v-else>Mirror a local folder here so you can use your own editor.</template>
                         </span>
@@ -944,22 +955,23 @@ watch(commandReady, (ready) => {
                 </label>
                 <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready — a
                      command missing the token/zone/subdomain or the provisioned tunnel would just fail in the sandbox. -->
-                <div v-if="!commandReady" class="flex items-center gap-2 rounded-lg border border-dashed border-line px-3 py-4 text-xs text-muted">
-                    <Icon name="lock" />
+                <div v-if="!commandReady" class="flex items-start gap-2 rounded-lg border border-dashed border-line px-3 py-4 text-xs text-muted">
+                    <Icon name="lock" class="mt-0.5 shrink-0" />
                     <span>{{ lockedReason }}</span>
                 </div>
                 <template v-else>
                     <div class="flex flex-col gap-2">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <Segmented
-                                v-model="runTab"
-                                :options="[
-                                    { label: `Linux / macOS`, value: `unix` },
-                                    { label: `Windows (PowerShell)`, value: `windows` },
-                                    { label: `Docker Compose`, value: `compose` },
-                                ]"
+                        <!-- On a phone the picker and the copy button each take a full row: three pill tabs
+                             sharing a 340px line wrapped every label to two lines, and the copy chip that
+                             trailed them is the one control this step exists for. -->
+                        <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
+                            <Segmented v-model="runTab" :options="runTabOptions" :stretch="mobile" />
+                            <CopyButton
+                                v-if="runTab !== `compose`"
+                                :text="selectedCommand"
+                                :label="mobile ? `Copy command` : `Copy`"
+                                :stretch="mobile"
                             />
-                            <CopyButton v-if="runTab !== `compose`" :text="selectedCommand" label="Copy" />
                         </div>
                         <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
                         <template v-else>
@@ -967,8 +979,8 @@ watch(commandReady, (ready) => {
                             <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
                                  rebuilds it from this checkout on every run (layer-cached), so the pasted command is
                                  self-sufficient and never runs a stale image after sandbox edits. -->
-                            <p v-if="platformUrlOverride" class="flex items-center gap-2 text-xs text-warning">
-                                <Icon name="box" class="shrink-0" />
+                            <p v-if="platformUrlOverride" class="flex items-start gap-2 text-xs text-warning">
+                                <Icon name="box" class="mt-0.5 shrink-0" />
                                 <span
                                     >Local dev: this command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs it — every run
                                     rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few minutes). For

@@ -15,15 +15,27 @@ const buttonBase =
 
 /** Primary call to action — one per view. */
 const buttonPrimary = (...twClasses: string[]) =>
-    twMerge(buttonBase, `bg-primary-fill/10 text-primary-fill border-primary-fill/20 hover:bg-primary-fill/18 hover:border-primary-fill/35`, ...twClasses);
+    twMerge(
+        buttonBase,
+        `bg-primary-fill/10 text-primary-fill border-primary-fill/20 hover:bg-primary-fill/18 hover:border-primary-fill/35`,
+        ...twClasses,
+    );
 
 /** Confirming action that lands work (commit, land, apply). */
 const buttonSuccess = (...twClasses: string[]) =>
-    twMerge(buttonBase, `bg-success-fill/10 text-success-fill border-success-fill/20 hover:bg-success-fill/18 hover:border-success-fill/35`, ...twClasses);
+    twMerge(
+        buttonBase,
+        `bg-success-fill/10 text-success-fill border-success-fill/20 hover:bg-success-fill/18 hover:border-success-fill/35`,
+        ...twClasses,
+    );
 
 /** Destructive-but-reversible action (a checkpoint is saved first). */
 const buttonWarning = (...twClasses: string[]) =>
-    twMerge(buttonBase, `bg-warning-fill/10 text-warning-fill border-warning-fill/20 hover:bg-warning-fill/18 hover:border-warning-fill/35`, ...twClasses);
+    twMerge(
+        buttonBase,
+        `bg-warning-fill/10 text-warning-fill border-warning-fill/20 hover:bg-warning-fill/18 hover:border-warning-fill/35`,
+        ...twClasses,
+    );
 
 /** Destructive action with no undo. */
 const buttonDanger = (...twClasses: string[]) =>
@@ -34,7 +46,20 @@ const buttonDanger = (...twClasses: string[]) =>
  * the two popover triggers; they agreed exactly, which is what made a tenth so easy to get slightly wrong.
  * Callers size and re-tint through twMerge (`cmp.iconButton('h-7 w-7 hover:text-danger')`). */
 const iconButton = (...twClasses: string[]) =>
-    twMerge(`flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content`, ...twClasses);
+    twMerge(
+        `flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content`,
+        ...twClasses,
+    );
+
+/* Inline text button that reads as a link — a lane switch, an escape hatch, "use my own X instead". Sized
+ * so a thumb can hit it (36px) while the negative margin keeps that height from showing up as a gap in the
+ * card it sits in, so the same recipe is right on a phone and on a desktop. Callers restyle the text
+ * (`cmp.linkButton('text-muted underline hover:text-content')` for the quieter, secondary ones). */
+const linkButton = (...twClasses: string[]) =>
+    twMerge(
+        `-my-1.5 flex min-h-9 cursor-pointer items-center self-start text-left text-xs text-link transition-colors hover:underline`,
+        ...twClasses,
+    );
 
 /** Standard form input (text, password, number, datetime-local, textarea). */
 const input = (...twClasses: string[]) =>
@@ -59,4 +84,16 @@ const emptyState = (...twClasses: string[]) =>
 /** Uppercase section heading label (e.g. "CONNECTIONS", "YOUR APPS"). */
 const sectionLabel = (...twClasses: string[]) => twMerge(`text-xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
 
-export const cmp = { buttonPrimary, buttonSuccess, buttonWarning, buttonDanger, iconButton, input, alertDanger, alertWarning, emptyState, sectionLabel };
+export const cmp = {
+    buttonPrimary,
+    buttonSuccess,
+    buttonWarning,
+    buttonDanger,
+    iconButton,
+    linkButton,
+    input,
+    alertDanger,
+    alertWarning,
+    emptyState,
+    sectionLabel,
+};

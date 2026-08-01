@@ -36,9 +36,11 @@ const bootstrap = computed(() => composeBootstrap(props.args));
         <p class="text-xs text-muted">
             Desktop sync isn't part of the compose path — once your workspace opens, enable it from its <b>Desktop sync</b> card.
         </p>
-        <p v-if="args.platformUrl" class="flex items-center gap-2 text-xs text-warning">
-            <Icon name="box" class="shrink-0" />
-            <span
+        <p v-if="args.platformUrl" class="flex items-start gap-2 text-xs text-warning">
+            <Icon name="box" class="mt-0.5 shrink-0" />
+            <!-- min-w-0 + break-words: the image reference is one unbreakable token wider than a phone, and a
+                 flex child defaults to min-content width, so without both it pushes the card's text off-screen. -->
+            <span class="min-w-0 break-words"
                 >Local dev: compose pulls the <b>published</b> <code>{{ args.image }}</code> (not your local checkout — compose can't rebuild), and
                 its <code>PLATFORM_URL</code> points at your machine, so run it here on the same machine as your dev platform. To deploy to a real
                 environment, generate this from that environment's platform instead.</span
