@@ -160,6 +160,32 @@ test("a re-land after a rebase claims only the new delta, not the main-line comm
     expect(await origins.forRepo("root", work)).toEqual({ "other.ts": ["c1"] });
 });
 
+test("a re-land WITHOUT a rebase drops the delta the user committed in between", async () => {
+    const { work, worktrees, conversation } = await setup();
+    // The same first half as the test above — c1 lands app.ts, the user reviews and commits it…
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const first = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed app.ts");
+
+    // …except this branch is never rebased onto that commit, which is the ordinary case rather than the
+    // exception: a rebase runs when a turn STARTS, and an agent that keeps working through several lands
+    // rebases on nobody's schedule. So the merge-base stays behind the commit and app.ts stays in the span,
+    // while `landedHead` advances onto it — the exact pair of shas the per-path expiry cannot resolve.
+    await writeFile(join(conversation.cwd, "other.ts"), "c1 was here\n");
+    const second = await landAgent(worktrees, isolatedAgent(first.repos));
+
+    // Only the new delta is claimed: app.ts was already in the tree, committed, when this land went in, so the
+    // land put nothing of its own there. Measured from the span alone the claim on app.ts never expires…
+    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(second.repos)), logger });
+    expect(await origins.forRepo("root", work)).toEqual({ "other.ts": ["c1"] });
+
+    // …and it costs nothing until someone touches the file, which is what made it so hard to see: a finished
+    // session reappearing in the Changes panel days later, on a row it has no lines in.
+    await writeFile(join(work, "app.ts"), `${edited(1)}later work\n`);
+    expect(await origins.forRepo("root", work)).toEqual({ "other.ts": ["c1"] });
+});
+
 test("a path the user committed BEFORE the land stays credited — only commits after it retire the claim", async () => {
     const { work, worktrees, conversation } = await setup();
     // Main moves while the agent works, on the very file the agent is editing. The worktree was branched

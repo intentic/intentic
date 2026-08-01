@@ -20,6 +20,18 @@ import type { AgentsRegistry } from "./agents-registry.js";
 // the rebase and the delta stays exactly the agent's own work. land.ts got this treatment for its patch span;
 // this file needs it for the same reason, computed the same way.
 //
+// WHAT the claim covers is that span INTERSECTED with `landedHead..landedTip` — the branch against the main
+// line the patch actually went in on, i.e. the paths this land really put in the tree. The span alone is the
+// agent's CUMULATIVE work, and an agent that lands twice has usually had its first delta committed by the time
+// the second one goes in: against the second land's head those paths read as already-there, because that
+// commit is what put them there. The per-path expiry below cannot retire them — it only sees commits AFTER
+// `landedHead`, and that one landed before — so they stay claimed for the life of the entry. Invisible while
+// the file is clean, and then the moment anything makes it dirty again (the user, a terminal, another agent's
+// land) a session that finished days ago has its chip back on the row. The intersection ends that: a path main
+// already matched when the patch went in had nothing of this land applied to it, so this land claims nothing
+// there. The merge-base span stays as the other half of the AND — `landedHead..landedTip` on its own also
+// names every path the MAIN LINE has run ahead on, which a stale branch would then be credited with reverting.
+//
 // The claim EXPIRES PER PATH, when history moves on that path. `landedHead` is where main's HEAD stood when
 // the patch went in; a path whose committed content has not changed since (`landedHead..HEAD` doesn't name it)
 // still carries the agent's uncommitted lines and the credit is exact. Once the user commits that path the
@@ -89,9 +101,15 @@ export const createAgentOrigins = (
         return paths;
     };
 
-    // What the land put in the tree, read as the agent wrote it — rename detection on.
+    // What the agent wrote, read as it wrote it — rename detection on.
     const landedPaths = (dir: string, repo: string, anchor: string, tip: string): Promise<readonly string[]> =>
         pathsBetween(dir, `landed ${repo} ${anchor} ${tip}`, ["-M", anchor, tip]);
+
+    // What the land actually put in the tree: the branch against the main line the patch went in on. Both ends
+    // are shas fixed at land time, so this is read once per landing and never again, however far HEAD runs.
+    // Rename detection on to match landedPaths — the two are intersected, so they must name a rename alike.
+    const appliedPaths = (dir: string, repo: string, landedHead: string, tip: string): Promise<readonly string[]> =>
+        pathsBetween(dir, `applied ${repo} ${landedHead} ${tip}`, ["-M", landedHead, tip]);
 
     /* Where the branch left the main line, so the claim is the agent's own work and not the main-line commits a
      * rebase pulled into its branch (see the header). Falls back to the recorded base when there is no common
@@ -174,13 +192,15 @@ export const createAgentOrigins = (
             const origins: Record<string, string[]> = {};
             for (const landing of landings) {
                 try {
-                    // Landed paths minus the ones history has since absorbed. When HEAD hasn't moved at all
-                    // the second diff is empty and every landed path still counts, which is the common case.
+                    // The agent's own paths, narrowed to the ones this land put in the tree, minus the ones
+                    // history has since absorbed. When HEAD hasn't moved at all the last diff is empty and
+                    // every applied path still counts, which is the common case.
+                    const applied = new Set(await appliedPaths(dir, repo, landing.head, landing.tip));
                     const retired = new Set(await committedSince(dir, repo, landing.head, head));
                     const anchor = await anchorOf(dir, repo, head, landing.tip, landing.base);
                     let claimed = 0;
                     for (const path of await landedPaths(dir, repo, anchor, landing.tip)) {
-                        if (retired.has(path)) {
+                        if (!applied.has(path) || retired.has(path)) {
                             continue;
                         }
                         claimed += 1;
