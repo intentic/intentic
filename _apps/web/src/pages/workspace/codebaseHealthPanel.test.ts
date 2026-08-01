@@ -9,10 +9,19 @@
 import { beforeAll, expect, it, vi } from "vitest";
 import { createApp, h, nextTick, ref } from "vue";
 import type { WorkspaceHealth } from "@intentic-app/api-contract";
+import CodebaseHealth from "./CodebaseHealth.vue";
 
-// The import-time globals a mounted component needs here (see startAgent.test.ts): ui's useDevice reads
-// window.matchMedia at module scope. matches:false keeps the device DESKTOP, where the action is hover-revealed.
-vi.hoisted(() => {
+/* The mocks' state is hoisted alongside the globals rather than declared below the imports, so the component
+ * can be imported statically: a vi.mock factory runs at the mocked module's first import, and with a static
+ * import of the panel that happens while a module-scope `const` is still in its temporal dead zone. Held here
+ * it is initialised first, and the panel's whole subtree loads during collection instead of inside a hook,
+ * where it was ~1s of a hook budget (see vitest.config.ts).
+ *
+ * `matchMedia`: ui's useDevice reads it at module scope, and matches:false keeps the device DESKTOP, where the
+ * refactor action is hover-revealed. `started` is every prompt a press handed to the fleet — the action itself
+ * is covered in agentActions.test.ts, so the seam is mocked and this test says nothing about turns. One repo,
+ * so the header renders its name rather than the Picker (a PrimeVue overlay this test has no use for). */
+const mocked = vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({
         matches: false,
         media: query,
@@ -21,30 +30,20 @@ vi.hoisted(() => {
         removeEventListener: () => {},
         dispatchEvent: () => false,
     })) as unknown as typeof globalThis.matchMedia;
+    return { started: [] as string[], health: { value: undefined as WorkspaceHealth | undefined } };
 });
+const { started, health } = mocked;
 
-// Every prompt a press handed to the fleet. The action itself is covered in agentActions.test.ts; the seam is
-// mocked so this test says nothing about turns and everything about what the panel sends.
-const started: string[] = [];
-vi.mock(`../../composables/agents/agentActions`, () => ({ startAgent: (prompt?: string) => started.push(prompt ?? ``) }));
-
-const health = ref<WorkspaceHealth>();
+vi.mock(`../../composables/agents/agentActions`, () => ({ startAgent: (prompt?: string) => mocked.started.push(prompt ?? ``) }));
 vi.mock(`../../composables/workspace/useCodebaseHealth`, () => ({
-    useCodebaseHealth: () => ({ health, loading: ref(false), error: ref(null), refresh: () => {} }),
+    useCodebaseHealth: () => ({ health: mocked.health, loading: ref(false), error: ref(null), refresh: () => {} }),
 }));
-// One repo, so the header renders its name rather than the Picker (a PrimeVue overlay this test has no use for).
 vi.mock(`../../composables/workspace/useRepos`, () => ({ useRepos: () => ({ options: ref([`root`]) }) }));
-
-let CodebaseHealth: unknown;
-
-beforeAll(async () => {
-    CodebaseHealth = (await import(`./CodebaseHealth.vue`)).default;
-});
 
 const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
-    const app = createApp({ render: () => h(CodebaseHealth as never, { repo: `root` }) });
+    const app = createApp({ render: () => h(CodebaseHealth, { repo: `root` }) });
     app.component(`Icon`, { render: () => null });
     app.directive(`tooltip`, {});
     app.mount(el);

@@ -6,7 +6,12 @@
 // until a hard refresh. The handler answers a failed chunk load with the reload the user would perform by
 // hand, landed on the route they asked for; these tests drive the real router at real failing routes.
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { router } from "./index";
 
+// vi.hoisted runs above the imports, so the router module below evaluates with these already in place — which
+// is why the import can be static. It used to be an `await import` inside beforeAll, and pulling the router's
+// whole module graph there spent ~1s of a 10s hook budget on module loading rather than on the hook's work.
+// On a loaded runner that is the difference between a pass and "Hook timed out in 10000ms".
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({
         matches: false,
@@ -28,10 +33,8 @@ vi.hoisted(() => {
 // replaced global rather than a spy on the real object. The router only reads location at createWebHistory
 // time; the handler's `location.assign` resolves through the global scope at call time.
 const assign = vi.fn();
-let router: typeof import("./index").router;
 
-beforeAll(async () => {
-    ({ router } = await import(`./index`));
+beforeAll(() => {
     Object.defineProperty(globalThis, `location`, {
         configurable: true,
         value: { assign, href: `http://localhost/`, origin: `http://localhost`, pathname: `/` },

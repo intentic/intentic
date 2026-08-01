@@ -34,3 +34,15 @@ rules are about what a test stands the code up with, not about how it asserts.
   nothing. This is what type-checking the tests buys; don't cast it away.
 - State the mode a test means – no-CAP_SYS_ADMIN vs namespace, image vs host checkout. A suite that reads the
   ambient machine asserts different things on CI and on a developer's sandbox.
+- Keep module loading off the assertion clock – an `await import()` inside a test or hook is charged to that
+  test's timeout, and it costs ~10× more on a busy runner than on an idle one. Import statically wherever the
+  file's hoisted setup only installs globals; `vi.hoisted`/`vi.mock` still run first. Reach for the dynamic
+  form only when a `vi.mock` factory closes over module-scope state, or when the module is a singleton the
+  test resets (`vi.resetModules`).
+- A timeout is a hang bound, never a latency measurement – set it far above the slow case and say so in a
+  comment, as `_apps/web` and `_apps/lsp` do. A budget tuned close to observed timings fails on contention
+  instead of on regressions, and a timed-out test keeps running: its in-flight work lands on the next test's
+  mocks, so one slow import reports as two failures with the second blaming innocent code.
+- Assert the SHAPE of a concurrent outcome, not the winner – with two racing requests, "they never overlapped"
+  is the contract and "a went first" is the arrival order of two round trips. Pinning the winner passes idle
+  and inverts under load (`app.test.ts`, git write serialization).

@@ -2722,6 +2722,7 @@ test("git writes serialize per repo, so a commit cannot interleave with an agent
         return next;
     };
     const order: string[] = [];
+    const phase = (entry: string): string | undefined => entry.split(` `)[0];
     const client = clientFor(
         createApp(
             services({
@@ -2740,14 +2741,19 @@ test("git writes serialize per repo, so a commit cannot interleave with an agent
         ),
     );
     await Promise.all([client.git.commit({ repo: "root", message: "a" }), client.git.commit({ repo: "root", message: "b" })]);
-    // One repo, one at a time — whichever won the race ran to completion before the other started.
-    expect(order).toEqual([`enter a`, `exit a`, `enter b`, `exit b`]);
+    /* One repo, one at a time. The shape is the claim — enter/exit/enter/exit, never two enters in a row — and
+     * WHICH of the two won the race to the lock is not something the daemon promises. Pinning a winner here
+     * asserted the arrival order of two concurrent round trips, which holds on an idle machine and inverts on
+     * a loaded one: a correct serialization failing this was a flake in the test, not in the lock. */
+    expect(order.map(phase)).toEqual([`enter`, `exit`, `enter`, `exit`]);
+    expect(new Set(order)).toEqual(new Set([`enter a`, `exit a`, `enter b`, `exit b`]));
 
     order.length = 0;
     await Promise.all([client.git.commit({ repo: "root", message: "r" }), client.git.commit({ repo: "intent", message: "i" })]);
-    // Different repos still overlap. Per-repo is the whole point: a lock that spanned the workspace would be
-    // the daemon reinventing the workspace-wide block this design removed.
-    expect(order).toEqual([`enter r`, `enter i`, `exit r`, `exit i`]);
+    // Different repos still overlap — both are inside before either leaves. Per-repo is the whole point: a lock
+    // that spanned the workspace would be the daemon reinventing the workspace-wide block this design removed.
+    expect(order.map(phase)).toEqual([`enter`, `enter`, `exit`, `exit`]);
+    expect(new Set(order)).toEqual(new Set([`enter r`, `enter i`, `exit r`, `exit i`]));
 });
 
 test("git.discard forwards paths and records the worktree change as a user write", async () => {

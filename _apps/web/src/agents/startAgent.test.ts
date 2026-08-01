@@ -6,9 +6,13 @@
 // its own half of that (the board skipped the caret, the strip skipped the mobile route), which is exactly the
 // drift a store-level unit test cannot see — so this one presses the real buttons and reads the real strip.
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { beforeAll, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
+import ChatTabs from "../chat/ChatTabs.vue";
+import { useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";
+import { router } from "../router";
+import AgentsView from "./AgentsView.vue";
 
 // Same import-time globals the other mounted-component tests stand up (see ChatToolCard.test.ts): ui's
 // useDevice reads window.matchMedia at module scope, environment.ts reads window.env. matches:false keeps the
@@ -35,18 +39,6 @@ vi.hoisted(() => {
         auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
     };
-});
-
-let ChatTabs: unknown;
-let AgentsView: unknown;
-let useChat: typeof import("../composables/chat/useChat").useChat;
-let router: typeof import("../router").router;
-
-beforeAll(async () => {
-    ChatTabs = (await import(`../chat/ChatTabs.vue`)).default;
-    AgentsView = (await import(`./AgentsView.vue`)).default;
-    useChat = (await import(`../composables/chat/useChat`)).useChat;
-    router = (await import(`../router`)).router;
 });
 
 // A bare mount with the app-level registrations the real app makes (the global Icon component and PrimeVue's
