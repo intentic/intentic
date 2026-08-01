@@ -5,8 +5,10 @@ import { startConversationTurn } from "../agent/turn-resume.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { discoverRepos } from "../workspace/repo-discovery.js";
 import { type FetchFn, komodoClient, komodoConnectionFor, type KomodoConnection } from "./komodo-client.js";
 import { deployAlerts, deploymentResource, serverEntry, stackResource } from "./komodo-overview.js";
+import { repoLinks } from "./komodo-repos.js";
 
 /* The Deployments rail view's whole backend, over one connected `komodo` capability.
  *
@@ -98,11 +100,19 @@ export const createKomodoRoutes = (services: Services, wake: WakeFn = streamAgen
             const client = komodoClient(connection, fetchFn);
             const seenAt = await services.komodoStore.seenAt(input.capability);
             const seen = seenAt === undefined ? {} : { seenAt };
+            // The repo half does not depend on Komodo answering. A workspace with a compose file and nothing
+            // linked yet is exactly the state where the owner most needs to see what this view is for, so it
+            // is computed outside the try and survives an unreachable Komodo (with no suggestions, since
+            // there are no stack names to suggest from).
+            const scan = { root: services.workspace.root, read: services.files.read };
+            const links = await services.komodoStore.links(input.capability);
+            const repoDirs = await discoverRepos(services.workspace.root);
             try {
-                // One fan-out. All four are independent reads, so a serial version would make the view four
-                // round-trips slower for nothing; Promise.all means one slow list bounds the response rather
+                // One fan-out. All five are independent reads, so a serial version would make the view five
+                // round-trips slower for nothing; Promise.all means one slow call bounds the response rather
                 // than summing with the others.
-                const [deployments, stacks, servers, alerts] = await Promise.all([
+                const [viewer, deployments, stacks, servers, alerts] = await Promise.all([
+                    client.whoami(),
                     client.listDeployments(),
                     client.listStacks(),
                     client.listServers(),
@@ -111,6 +121,13 @@ export const createKomodoRoutes = (services: Services, wake: WakeFn = streamAgen
                 return {
                     komodoUrl: connection.baseUrl,
                     reachable: true,
+                    viewer,
+                    repos: await repoLinks(
+                        scan,
+                        repoDirs,
+                        stacks.map((item) => item.name),
+                        links,
+                    ),
                     resources: [
                         ...stacks.map((item) => stackResource(connection.baseUrl, item)),
                         ...deployments.map((item) => deploymentResource(connection.baseUrl, item)),
@@ -128,12 +145,17 @@ export const createKomodoRoutes = (services: Services, wake: WakeFn = streamAgen
                     komodoUrl: connection.baseUrl,
                     reachable: false,
                     unreachableReason: reason,
+                    repos: await repoLinks(scan, repoDirs, [], links),
                     resources: [],
                     servers: [],
                     alerts: [],
                     ...seen,
                 };
             }
+        }),
+        link: i.link.handler(async ({ input }) => {
+            await services.komodoStore.link(input.capability, input.repo, input.stack);
+            return { ok: true as const };
         }),
         // The daemon's clock, not the browser's: a device with a fast clock would otherwise stamp itself past
         // breakages that have not happened yet and silence them before they arrive.

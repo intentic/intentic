@@ -29,6 +29,15 @@ const BODY_TAIL = 300;
 // unreachable within the view's own patience, not hold a request open past it.
 const TIMEOUT_MS = 15_000;
 
+/* Node's fetch sends NO user-agent at all, and a Komodo behind Cloudflare answers that with 403 "error code:
+ * 1010" — the browser-integrity check refusing a client with no signature. Every read came back as a hard
+ * failure and the board read as unreachable, for a Komodo that was perfectly healthy.
+ *
+ * Any value fixes it (verified against a live Cloudflare-fronted Komodo: absent → 403, curl/… → 200), so this
+ * names us honestly rather than impersonating a browser. Worth keeping on every outbound call this daemon
+ * makes to a user-hosted service for the same reason. */
+const USER_AGENT = "intentic-sandbox";
+
 // The `komodo` cli capabilities currently connected, newest-manifest-order. The rail renders one tile per
 // entry, so this is also what decides how many Deployments tiles exist.
 export const komodoConnections = async (capabilities: CapabilitiesStore): Promise<KomodoConnection[]> =>
@@ -62,6 +71,7 @@ const call = async <T>(
         method: "POST",
         headers: {
             "content-type": "application/json",
+            "user-agent": USER_AGENT,
             "x-api-key": connection.apiKey,
             "x-api-secret": connection.apiSecret,
         },
@@ -129,7 +139,19 @@ export interface KomodoAlert {
     readonly data?: { readonly type?: string; readonly data?: Record<string, unknown> };
 }
 
+/* Who the API key acts as. Komodo filters every list by the caller's permissions, so a key minted on a
+ * service user with no grants gets a 200 and an EMPTY array — indistinguishable, from the response alone, from
+ * a Komodo with nothing deployed. This is what lets the view tell those two apart instead of reporting the
+ * second when the truth is the first. */
+export interface KomodoViewer {
+    readonly username: string;
+    // Either flag means the key sees everything, so an empty board really is an empty board.
+    readonly admin: boolean;
+}
+
 export interface KomodoClient {
+    // GET /user — the one call on this surface that is not a POST envelope.
+    readonly whoami: () => Promise<KomodoViewer>;
     readonly listDeployments: () => Promise<readonly KomodoListItem<KomodoDeploymentInfo>[]>;
     readonly listStacks: () => Promise<readonly KomodoListItem<KomodoStackInfo>[]>;
     readonly listServers: () => Promise<readonly KomodoListItem<KomodoServerInfo>[]>;
@@ -142,6 +164,18 @@ export interface KomodoClient {
 }
 
 export const komodoClient = (connection: KomodoConnection, fetchFn: FetchFn = fetch): KomodoClient => ({
+    whoami: async () => {
+        const response = await fetchFn(`${connection.baseUrl}/user`, {
+            headers: { "user-agent": USER_AGENT, "x-api-key": connection.apiKey, "x-api-secret": connection.apiSecret },
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text().catch(() => "");
+            throw new Error(`Komodo GET /user failed (${response.status}): ${body.slice(0, BODY_TAIL)}`);
+        }
+        const user = (await response.json()) as { username?: string; admin?: boolean; super_admin?: boolean };
+        return { username: user.username ?? "unknown", admin: user.admin === true || user.super_admin === true };
+    },
     listDeployments: () => call(connection, fetchFn, "read", "ListDeployments"),
     listStacks: () => call(connection, fetchFn, "read", "ListStacks"),
     listServers: () => call(connection, fetchFn, "read", "ListServers"),

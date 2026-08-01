@@ -41,6 +41,11 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic-app/ui/series": here("../../_libs/ui/src/components/seriesAccent.ts"),
     "@intentic-app/ui": here("../../_libs/ui/src/index.ts"),
     "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
+    // The "+" grid's card and category data. It was the ONE first-party lib missing from this map, and the
+    // cost was a silent wrong answer rather than a build error: the app resolved its `dist` instead, so a new
+    // CAPABILITY_CATEGORIES entry did not exist as far as `connectorCard` was concerned and every connector
+    // declaring it fell through to the "extend" catch-all — a card in the wrong section, with nothing failing.
+    "@intentic-app/capability-catalog": here("../../_libs/capability-catalog/src/index.ts"),
     // Same reason as the markdown subpath above, and the same ordering requirement: the session-name derivation
     // is a dependency-free leaf that the daemon, the app and an extension all reach for, so it is exported off
     // the barrel (a unit test that only wants a session name must not resolve the whole wire contract).

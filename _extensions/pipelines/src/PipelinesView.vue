@@ -35,6 +35,28 @@ const recurringByBranch = computed(() => {
 });
 const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurringByBranch.value.get(`${run.repo}\n${run.branch}`) ?? new Map();
 
+/* The "open the thing this view is about" link, matching Deployments' Open Komodo. Pipelines needs a list
+ * rather than one link, because a workspace can span both vendors — and the GitLab entry has to be DERIVED
+ * from a project url rather than assumed, since a self-hosted instance is whatever host the capability points
+ * at. A url the URL parser refuses simply contributes nothing. */
+const hostOrigin = (url: string): string | undefined => {
+    try {
+        return new URL(url).origin;
+    } catch {
+        return undefined;
+    }
+};
+const hosts = computed(() => {
+    const byOrigin = new Map<string, { label: string; url: string }>();
+    for (const repo of repos.value) {
+        const origin = hostOrigin(repo.url);
+        if (origin !== undefined && !byOrigin.has(origin)) {
+            byOrigin.set(origin, { label: repo.host === `github` ? `GitHub` : `GitLab`, url: origin });
+        }
+    }
+    return [...byOrigin.values()];
+});
+
 const byRepo = computed(() => {
     const groups = new Map<string, PipelineRun[]>();
     for (const run of runs.value) {
@@ -110,6 +132,19 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                             one for that stage's jobs, or expand the row for the full job graph.
                         </span>
                     </InfoHint>
+                </template>
+                <template #actions>
+                    <a
+                        v-for="host in hosts"
+                        :key="host.url"
+                        :href="host.url"
+                        target="_blank"
+                        rel="noopener"
+                        class="flex items-center gap-1 text-xs text-subtle hover:text-link"
+                    >
+                        Open {{ host.label }}
+                        <Icon name="arrow-up-right" class="text-2xs" />
+                    </a>
                 </template>
             </PageHeader>
 

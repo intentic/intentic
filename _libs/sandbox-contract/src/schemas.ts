@@ -2550,6 +2550,48 @@ export const DeployAlertSchema = z.object({
 });
 export type DeployAlert = z.infer<typeof DeployAlertSchema>;
 
+/* Who the API key acts as. Komodo filters EVERY list by the caller's permissions, so a key minted on a service
+ * user with no grants returns 200 and an empty array — byte-identical to a Komodo with nothing deployed. That
+ * ambiguity shipped once and cost a user an afternoon: their Komodo had four stacks and the board said "no
+ * stacks or deployments yet". Carrying the viewer lets the empty state name the actual reason. */
+export const DeployViewerSchema = z.object({
+    username: z.string(),
+    // Either of Komodo's admin flags — an admin key sees everything, so its empty board really is empty.
+    admin: z.boolean(),
+});
+export type DeployViewer = z.infer<typeof DeployViewerSchema>;
+
+/* A workspace repo that ships a compose file, and the Komodo stack it belongs to.
+ *
+ * Komodo names a stack whatever its creator typed; a repo names its compose project in the file. The two
+ * usually agree, or nearly — `intentic` in the repo against `intentic-platform` in Komodo — so the daemon
+ * SUGGESTS and the owner decides. The link is explicit and persisted because a guess that silently becomes a
+ * fact is worse than no guess: the owner is the one who knows that `atlas` is this repo's staging stack. */
+export const DeployRepoLinkSchema = z.object({
+    // The workspace repo dir — the same `repo` key the rest of the app joins on.
+    repo: z.string(),
+    // The compose project name: the file's own `name:` when it has one, else the repo dir. This is what
+    // `docker compose up` would call the project, so it is the best guess at the stack's name.
+    projectName: z.string(),
+    // Workspace-relative path of the compose file the name came from, so the UI can say where it looked.
+    composePath: z.string(),
+    // The stack the owner linked, once they have. Absent ⇒ unlinked, and `suggestions` is the offer.
+    linkedStack: z.string().optional(),
+    // Stack names that look like this repo, best first. Empty when nothing resembles it — in which case the
+    // UI offers the full list rather than pretending it has an opinion.
+    suggestions: z.array(z.string()),
+});
+export type DeployRepoLink = z.infer<typeof DeployRepoLinkSchema>;
+
+// Link a repo to a stack, or clear the link with an empty `stack`. Explicit rather than a toggle: the owner
+// may be replacing one stack with another, and a toggle cannot express that in one call.
+export const DeployLinkParamSchema = z.object({
+    capability: z.string(),
+    repo: z.string(),
+    stack: z.string(),
+});
+export type DeployLinkParam = z.infer<typeof DeployLinkParamSchema>;
+
 export const DeployOverviewResponseSchema = z.object({
     komodoUrl: z.string(),
     // FALSE means Komodo did not answer — the view says so loudly and the badge must not read `danger`.
@@ -2558,6 +2600,12 @@ export const DeployOverviewResponseSchema = z.object({
     reachable: z.boolean(),
     // Why it did not answer, in Komodo's own words — the view shows it instead of a bare "unavailable".
     unreachableReason: z.string().optional(),
+    // Absent when Komodo did not answer at all.
+    viewer: DeployViewerSchema.optional(),
+    // Every workspace repo with a compose file, with its suggested or linked stack. Independent of whether
+    // Komodo returned anything: a repo the owner could link is worth showing even on an empty board, since
+    // that is exactly the moment they need to know what this view is for.
+    repos: z.array(DeployRepoLinkSchema),
     resources: z.array(DeployResourceSchema),
     servers: z.array(DeployServerSchema),
     // Newest first. Unresolved and resolved both: the view shows recent history, the badge reads only the

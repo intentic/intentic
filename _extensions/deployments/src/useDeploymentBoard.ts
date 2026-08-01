@@ -50,6 +50,13 @@ export function useDeploymentBoard(capability: Ref<string>) {
         onSuccess: invalidate,
     });
 
+    // Bind a workspace repo to one of this Komodo's stacks (empty `stack` unlinks). Invalidates, because the
+    // overview is what carries the link back — no optimistic copy to drift.
+    const link = useMutation({
+        mutationFn: (input: { repo: string; stack: string }) => api.sandbox.json(`/komodo/${capability.value}/link`, post(input)),
+        onSuccess: invalidate,
+    });
+
     const logs = useMutation({
         mutationFn: async (resource: DeployResource): Promise<DeployLogsResponse> =>
             DeployLogsResponseSchema.parse(
@@ -73,6 +80,7 @@ export function useDeploymentBoard(capability: Ref<string>) {
         // and an "nothing deployed" empty state would flash at someone whose board is about to arrive.
         isPending: query.isPending,
         act,
+        link,
         logs,
         fix,
         refetch: query.refetch,

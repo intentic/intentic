@@ -3,6 +3,7 @@ import {
     DeployActionParamSchema,
     DeployCapabilityParamSchema,
     DeployFixResponseSchema,
+    DeployLinkParamSchema,
     DeployLogsParamSchema,
     DeployLogsResponseSchema,
     DeployOverviewResponseSchema,
@@ -23,6 +24,9 @@ export const komodoContract = {
         .input(DeployCapabilityParamSchema)
         .output(DeployOverviewResponseSchema),
     action: oc.route({ method: "POST", path: "/komodo/{capability}/action" }).input(DeployActionParamSchema).output(OkSchema),
+    // Bind a workspace repo to one of this Komodo's stacks (empty `stack` clears it). The daemon suggests a
+    // match by name; this is the owner accepting it, or choosing a different one.
+    link: oc.route({ method: "POST", path: "/komodo/{capability}/link" }).input(DeployLinkParamSchema).output(OkSchema),
     logs: oc.route({ method: "POST", path: "/komodo/{capability}/logs" }).input(DeployLogsParamSchema).output(DeployLogsResponseSchema),
     fix: oc.route({ method: "POST", path: "/komodo/{capability}/fix" }).input(DeployLogsParamSchema).output(DeployFixResponseSchema),
     // "I have looked at this connection's deployments" — what silences the rail badge for incidents already

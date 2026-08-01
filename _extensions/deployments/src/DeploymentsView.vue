@@ -4,6 +4,7 @@ import { Button, cmp, Icon, InfoHint, Page, PageHeader, RowGroup, timeAgo } from
 import { computed, onMounted, ref, toRef } from "vue";
 import { markDeploymentsSeen } from "./attention";
 import { incidents, topTier } from "./incidents";
+import RepoLinkRow from "./RepoLinkRow.vue";
 import ResourceRow from "./ResourceRow.vue";
 import { gaugeTone, INCIDENT_TONE, SERVER_TONE } from "./stateVisual";
 import { useDeploymentBoard } from "./useDeploymentBoard";
@@ -27,7 +28,7 @@ const props = defineProps<{ capability?: string }>();
 // The rail passes the capability id through the activation's props; a directly-mounted view with none falls
 // back to the conventional default id, which is what a single connection is named.
 const capability = computed(() => props.capability ?? `komodo`);
-const { board, error, isPending, act, logs, fix, refetch } = useDeploymentBoard(toRef(capability));
+const { board, error, isPending, act, link, logs, fix, refetch } = useDeploymentBoard(toRef(capability));
 
 // Opening the view IS reading it: stamp read state so the rail stops flagging incidents now on screen. Only
 // on mount — re-stamping as the board polls would swallow a breakage that lands while the tab sits in the
@@ -40,6 +41,31 @@ const open = computed(() => topTier(incidents(board.value?.alerts ?? [])));
 const worst = computed(() => open.value[0]?.tone);
 const resources = computed(() => board.value?.resources ?? []);
 const servers = computed(() => board.value?.servers ?? []);
+const repos = computed(() => board.value?.repos ?? []);
+const stackNames = computed(() => resources.value.filter((resource) => resource.kind === `stack`).map((resource) => resource.name));
+
+/* WHY AN EMPTY BOARD IS NOT AUTOMATICALLY AN EMPTY KOMODO.
+ *
+ * Komodo filters every list by the caller's permissions, so an API key minted on a service user with no grants
+ * gets 200 and an empty array — byte-identical to a Komodo with nothing deployed. This view shipped once
+ * saying "no stacks or deployments yet" to someone whose Komodo had four stacks, which is the worst kind of
+ * wrong: confidently, and about the one thing they came here to check. `viewer` is what tells the two apart. */
+const emptyReason = computed(() => {
+    if (resources.value.length > 0 || board.value === undefined || !board.value.reachable) {
+        return undefined;
+    }
+    const viewer = board.value.viewer;
+    if (viewer !== undefined && !viewer.admin) {
+        return {
+            title: `This API key can't see anything in Komodo`,
+            detail:
+                `The key acts as "${viewer.username}", which is not an admin and has no permissions on any resource — so Komodo answers ` +
+                `every list with nothing. Grant that user access in Komodo (Settings → Users → ${viewer.username}), or replace the key ` +
+                `with one made on an admin account.`,
+        };
+    }
+    return { title: `Komodo has no stacks or deployments yet`, detail: `Once you add one there, it appears here.` };
+});
 
 const counts = computed(() => {
     const tally = { running: 0, stopped: 0, unhealthy: 0, updates: 0 };
@@ -130,6 +156,19 @@ const askAgent = async (resource: DeployResource): Promise<void> => {
 // The incident strip's fix button addresses the resource the alert names, when that resource is on the board.
 const resourceFor = (name: string | undefined): DeployResource | undefined =>
     name === undefined ? undefined : resources.value.find((resource) => resource.name === name);
+
+const linking = ref<string | undefined>(undefined);
+const setLink = async (repo: string, stack: string): Promise<void> => {
+    linking.value = repo;
+    actionError.value = undefined;
+    try {
+        await link.mutateAsync({ repo, stack });
+    } catch (err) {
+        actionError.value = err instanceof Error ? err.message : String(err);
+    } finally {
+        linking.value = undefined;
+    }
+};
 </script>
 
 <template>
@@ -166,7 +205,17 @@ const resourceFor = (name: string | undefined): DeployResource | undefined =>
 
             <div v-if="isPending" class="text-sm text-muted">Reading your deployments…</div>
 
-            <template v-else-if="board && !board.reachable">
+            <!-- The daemon call itself failed (an old daemon with no /komodo routes, a dropped connection).
+                 It gets its own branch because the alternative is what actually shipped: `board` undefined fell
+                 through to the board below, whose zero resources rendered "Komodo has no stacks or deployments
+                 yet" — a confident wrong answer about the one thing the reader came to check. -->
+            <div v-else-if="board === undefined" :class="cmp.alertDanger(`px-4 py-3 text-sm`)">
+                <div class="font-medium">Couldn't load this Komodo connection</div>
+                <div class="mt-1 text-xs opacity-80">{{ error ?? `The sandbox did not answer.` }}</div>
+                <Button class="mt-3" size="small" severity="secondary" outlined @click="refetch()">Try again</Button>
+            </div>
+
+            <template v-else-if="!board.reachable">
                 <!-- The single most important thing this view can say, and it can only say it by rendering.
                      Deliberately a WARNING and not an error: not being able to see production is not the same
                      as production being broken, and drawing it red would cry wolf on every network blip. -->
@@ -234,8 +283,31 @@ const resourceFor = (name: string | undefined): DeployResource | undefined =>
                     </div>
                 </div>
 
-                <div v-if="resources.length === 0" :class="cmp.emptyState()">
-                    Komodo has no stacks or deployments yet. Once you add one there, it appears here.
+                <!-- ---- Your repos ----
+                     Above the board, because on a first connection this is the only section with anything in
+                     it — and it is what turns "a list of somebody's containers" into "the thing my repo
+                     deploys to". Rendered whether or not Komodo returned resources, for the same reason. -->
+                <RowGroup
+                    v-if="repos.length > 0"
+                    class="mb-5"
+                    label="Your repos"
+                    caption="Which Komodo stack each repo in this workspace deploys to."
+                >
+                    <div class="flex flex-col gap-2">
+                        <RepoLinkRow
+                            v-for="repoLink in repos"
+                            :key="repoLink.repo"
+                            :link="repoLink"
+                            :stacks="stackNames"
+                            :busy="linking === repoLink.repo"
+                            @link="setLink"
+                        />
+                    </div>
+                </RowGroup>
+
+                <div v-if="emptyReason" :class="cmp.emptyState(`text-left`)">
+                    <div class="font-medium text-content">{{ emptyReason.title }}</div>
+                    <div class="mt-1">{{ emptyReason.detail }}</div>
                 </div>
 
                 <!-- ---- 3. Grouped by host ---- -->
