@@ -9,7 +9,9 @@ import { sourceAliases } from "./source-aliases";
 // Resolve a path relative to this config file (which lives at the app root, _apps/web/).
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
-export default defineConfig({
+/* Everything about building THIS SOURCE that is true whichever entry is being served — the app's, or the
+ * interactive demo's (vite.demo.config.ts). Only the entry, the base and the dev server differ between them. */
+export const shared = {
     plugins: [vue(), tailwindcss()],
     resolve: {
         // Source-first workspace aliases, shared with vitest.config.ts — see source-aliases.ts for why.
@@ -32,6 +34,10 @@ export default defineConfig({
             ...shikiLangDeps,
         ],
     },
+};
+
+export default defineConfig({
+    ...shared,
     server: {
         host: "localhost",
         // Must stay 47145 — the API's CORS + Better Auth trust WEB_ORIGIN=https://localhost:47145, and the

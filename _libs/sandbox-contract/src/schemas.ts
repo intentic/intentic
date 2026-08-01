@@ -292,6 +292,7 @@ export type AgentSummary = z.infer<typeof AgentSummarySchema>;
 // mutated agents back. The browser drops any roster older than the newest it has applied, and holds its own
 // pending change until a roster at or past the revision that applied it arrives. See useAgents.ts.
 export const AgentsListSchema = z.object({ agents: z.array(AgentSummarySchema), rev: z.number() });
+export type AgentsList = z.infer<typeof AgentsListSchema>;
 export const AgentIdSchema = z.object({ id: z.string().min(1) });
 // archive's input: the agents to take off the board. Absent `ids` ⇒ every finished agent that is archivable
 // right now (the lane header's "Clear"); unarchive always names its ids (a restore, or a bulk archive's undo).
@@ -595,6 +596,7 @@ export const OauthAccountSchema = z.object({
 });
 export type OauthAccount = z.infer<typeof OauthAccountSchema>;
 export const OauthAccountListSchema = z.object({ accounts: z.array(OauthAccountSchema) });
+export type OauthAccountList = z.infer<typeof OauthAccountListSchema>;
 // Address one account of a provider (disconnect, and the turn's `account`).
 export const AccountIdSchema = z.object({ id: z.string().min(1) });
 // Rename one account of a provider whose credential the sandbox owns (Claude, Kimi). Blank ⇒ the daemon falls
@@ -674,6 +676,7 @@ export const SessionSummarySchema = z.object({
     // own heading is noise, not evidence. See AgentMatchSchema for the same field on the fleet's side.
     snippet: z.string().optional(),
 });
+export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySchema) });
 
 // ---- settings: per-sandbox agent settings (.intentic/settings.json) ----
@@ -2776,6 +2779,7 @@ export const InfoSchema = z.object({
     latest: z.string().optional(),
     updateAvailable: z.boolean().optional(),
 });
+export type Info = z.infer<typeof InfoSchema>;
 
 // A daemon-minted session (system.session): the steady-state browser credential, exchanged for a verified
 // Google ID token so Google UI is a sign-in moment instead of an hourly renewal. `expiresAt` is epoch ms —

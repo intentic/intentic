@@ -1,7 +1,7 @@
 ---
 import { faqItems } from "@intentic-dev/site-content/faq";
 import type { LandingContent } from "@intentic-dev/site-content/landing";
-import { APP_URL, gitlabIssuesUrl, gitlabUrl } from "@intentic-dev/site-content/site";
+import { APP_URL, DEMO_URL, gitlabIssuesUrl, gitlabUrl } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "./Footer.astro";
@@ -172,8 +172,13 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                         </div>
                         <!-- Crop window. The width percentages pick how much of the 2152px-wide shot shows:
                              275% ≈ the Attention lane alone (phones), 203% ≈ Attention + Active (from sm up).
-                             Each aspect ratio is the matching slice of the source, so the image fills the box. -->
-                        <div class="aspect-[5/6] overflow-hidden sm:aspect-[53/45]">
+                             Each aspect ratio is the matching slice of the source, so the image fills the box.
+
+                             The play button over it opens the real app in the overlay below — not in this box,
+                             which is half a hero column wide: an IDE needs a viewport, and the whole claim of
+                             the page is that this is an IDE. The image stays the LCP, undimmed until hover;
+                             nothing about the demo loads until it is asked for. -->
+                        <div class="relative aspect-[5/6] overflow-hidden sm:aspect-[53/45]">
                             <img
                                 src={content.hero.shot.src}
                                 alt={content.hero.shot.alt}
@@ -183,12 +188,26 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                                 decoding="async"
                                 class="w-[275%] max-w-none sm:w-[203%]"
                             />
+                            <button
+                                id="hero-demo-play"
+                                type="button"
+                                data-demo-url={DEMO_URL}
+                                class="group absolute inset-0 flex cursor-pointer items-center justify-center bg-canvas/10 transition hover:bg-canvas/35 focus-visible:bg-canvas/35 focus-visible:outline-none"
+                            >
+                                <span
+                                    class="flex items-center gap-2.5 rounded-full border border-line bg-canvas/85 px-5 py-2.5 text-sm font-medium shadow-xl shadow-black/40 backdrop-blur transition group-hover:border-primary-500 group-hover:text-primary-500"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5"><path d="M8 5v14l11-7z" /></svg>
+                                    <span class="hero-demo-label" data-open-label={content.hero.demo.newTabLabel}>{content.hero.demo.playLabel}</span>
+                                </span>
+                            </button>
                         </div>
                     </div>
                     <figcaption class="mt-3 flex items-center gap-2 text-xs text-subtle">
                         <span class="shrink-0 text-link [&>svg]:h-3.5 [&>svg]:w-3.5"><Fragment set:html={factIcons[0]} /></span>
                         {content.hero.shot.caption}
                     </figcaption>
+                    <p class="mt-2 text-2xs leading-relaxed text-subtle/80">{content.hero.demo.note}</p>
                 </figure>
             </div>
         </section>
@@ -879,9 +898,96 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
             </div>
         </section>
     </main>
+
+    <!-- The demo, given a viewport. Empty until the hero's play button fills it: the iframe's src is set in
+         script, so this page loads no part of the app unless a visitor asks for it. `display` is inline rather
+         than a `hidden` class because the container is also a flex centerer — two display utilities on one
+         element decide by stylesheet order, which is not a thing to depend on. -->
+    <div
+        id="hero-demo-modal"
+        style="display: none"
+        class="fixed inset-0 z-50 items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-label="The intentic workspace, running on a recorded fixture"
+    >
+        <div class="flex h-[90vh] w-[min(94vw,110rem)] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/60">
+            <div class="flex items-center gap-3 border-b border-line bg-overlay/40 px-4 py-2.5">
+                <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
+                <span class="rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">{content.hero.shot.frameLabel}</span>
+                <span class="hidden text-2xs text-subtle sm:inline">{content.hero.demo.note}</span>
+                <a class="ml-auto text-2xs text-link hover:underline" href={APP_URL}>Get started free</a>
+                <button id="hero-demo-close" type="button" class="cursor-pointer rounded-md border border-line px-2.5 py-1 text-2xs text-muted hover:text-content">
+                    Close
+                </button>
+            </div>
+            <div id="hero-demo-frame" class="flex-1 bg-canvas"></div>
+        </div>
+    </div>
+
     <Footer />
 
     <script>
+        /* The hero's play button: open the real app, on its recorded fixture.
+         *
+         * Two behaviours, and the split is deliberate. Given a pointer and room, the demo opens in an overlay
+         * with most of the viewport — an IDE embedded in half a hero column is a maze, and the page's whole
+         * claim is that this is an IDE. On a narrow or touch-first screen it opens in its own tab, where the
+         * app's real mobile shell can do a better job than any frame of ours.
+         *
+         * The iframe is created HERE rather than sitting in the markup, which is the point of the press: until
+         * it, this page has loaded no part of the app. It is created once and kept, so closing and re-opening
+         * returns the visitor to the workspace they were in rather than restarting the recording. */
+        const play = document.querySelector<HTMLButtonElement>("#hero-demo-play");
+        const modal = document.getElementById("hero-demo-modal");
+        const host = document.getElementById("hero-demo-frame");
+        const close = document.getElementById("hero-demo-close");
+        const demoUrl = play?.dataset.demoUrl;
+
+        if (play && modal && host && close && demoUrl) {
+            const roomy = (): boolean => window.matchMedia("(min-width: 1024px) and (pointer: fine)").matches;
+            const label = play.querySelector<HTMLElement>(".hero-demo-label");
+            const openLabel = label?.dataset.openLabel;
+            if (!roomy() && openLabel !== undefined && label) {
+                label.textContent = openLabel;
+            }
+
+            const hide = (): void => {
+                modal.style.display = "none";
+                document.body.style.overflow = "";
+            };
+
+            play.addEventListener("click", () => {
+                if (!roomy()) {
+                    window.open(demoUrl, "_blank", "noopener");
+                    return;
+                }
+                if (host.childElementCount === 0) {
+                    const frame = document.createElement("iframe");
+                    frame.src = demoUrl;
+                    frame.title = "The intentic workspace, running on a recorded fixture";
+                    frame.className = "h-full w-full border-0";
+                    host.append(frame);
+                }
+                modal.style.display = "flex";
+                // The overlay scrolls nothing of its own; a page scrolling behind it is just the hero drifting.
+                document.body.style.overflow = "hidden";
+            });
+
+            close.addEventListener("click", hide);
+            modal.addEventListener("click", (event) => {
+                // The backdrop only — a click that lands inside the frame belongs to the app.
+                if (event.target === modal) {
+                    hide();
+                }
+            });
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && modal.style.display !== "none") {
+                    hide();
+                }
+            });
+        }
+
         // Fade-in observer
         const targets = document.querySelectorAll(".fade-in");
         if ("IntersectionObserver" in window) {

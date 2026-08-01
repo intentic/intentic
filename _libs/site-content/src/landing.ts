@@ -34,6 +34,17 @@ export interface HeroShot extends ShotImage {
     caption: string;
 }
 
+/* The invitation to stop looking at the screenshot and use the thing. The hero keeps the still image — it is the
+ * LCP, and this page ships almost no JavaScript — and the demo is loaded only on the press. */
+export interface HeroDemo {
+    /** On the frame itself. Says what happens, because "Play" on a screenshot could mean a video. */
+    playLabel: string;
+    /** Under the button: what the visitor is about to get, and what it is not. */
+    note: string;
+    /** Where a narrow screen goes instead — an embedded IDE on a phone is not a demo, it is a maze. */
+    newTabLabel: string;
+}
+
 /** One side of the "a prompt vs the whole environment" comparison. */
 export interface LandingContrastColumn {
     label: string;
@@ -79,6 +90,7 @@ export interface LandingContent {
         subhead: string;
         chips: string[];
         shot: HeroShot;
+        demo: HeroDemo;
     };
     // The product tour: real screenshots of the workspace — the fleet board, the chat, diff review, and the
     // integrations catalog — so a visitor sees exactly what they'd be using, not just diagrams.
@@ -132,6 +144,11 @@ export const landingContent: LandingContent = {
             alt: "The intentic fleet board: an agent waiting on approval for a Stripe billing change and another with a question for you, beside three agents actively drafting a changelog and migrating queries — each card showing its model, branch, cost and diff stats.",
             frameLabel: "intentic · /agents",
             caption: "Five agents, five sandboxes, one board — running on hardware you own.",
+        },
+        demo: {
+            playLabel: "Try the live workspace",
+            note: "The real app, on a recorded workspace. Approve a plan, answer an agent, read a diff — nothing to install.",
+            newTabLabel: "Open the live workspace",
         },
     },
     tour: {
