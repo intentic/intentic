@@ -17,6 +17,7 @@ import CodeView from "./CodeView.vue";
 import FileBreadcrumb from "../FileBreadcrumb.vue";
 import FileUnsupported from "./FileUnsupported.vue";
 import { highlightLangFor, resolveFile, TEXT_EDIT_MAX_BYTES, type ViewMode } from "../fileType";
+import ImageView from "./ImageView.vue";
 import type { LineJump } from "../workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import SvgViewer from "./SvgViewer.vue";
@@ -423,12 +424,7 @@ const onEditorSave = (value: string): void =>
                 <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
                 <BigTextView v-else-if="mode === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
                 <SvgViewer v-else-if="mode === 'svg' && text !== null && blobUrl" :src="blobUrl" :source="text ?? ''" />
-                <div
-                    v-else-if="mode === 'image' && blobUrl"
-                    class="image-checker scrollbar-thin flex h-full items-center justify-center overflow-auto p-4"
-                >
-                    <img :src="blobUrl" alt="" class="max-h-full max-w-full object-contain" />
-                </div>
+                <ImageView v-else-if="mode === 'image' && blobUrl" :src="blobUrl" />
                 <object v-else-if="mode === 'pdf' && blobUrl" :data="blobUrl" type="application/pdf" class="h-full w-full">
                     <div class="flex h-full flex-col items-center justify-center gap-3 text-center text-muted">
                         <p class="text-sm">This PDF can't be displayed inline.</p>

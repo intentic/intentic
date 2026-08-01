@@ -175,6 +175,13 @@ const rootDragging = ref(false);
 // True while the drag carries OS files (vs an internal tree-row move) — gates the viewer's "drop to add" overlay.
 const externalDrag = ref(false);
 let dragDepth = 0;
+/* Did this drag START in this document? A browser makes every <img> (and every link) a drag source, and Chromium
+ * types an in-page image drag as `Files` — the same shape a file dragged off the desktop has. So grabbing the
+ * previewed image to move it used to raise "drop files to add to the workspace root", and letting go uploaded a
+ * copy of the file being LOOKED at into the repo root. Nothing already inside the workspace is an upload,
+ * however the drag store types it, so a drag from within is declined here — dragstart marks it, dragend clears
+ * it (drop must NOT, it fires first and the drop handler still needs to know). */
+let fromThisDocument = false;
 
 const resizing = ref(false);
 const sidebar = ref<HTMLElement>();
@@ -455,11 +462,21 @@ const resetRootDrag = (): void => {
     rootDragging.value = false;
     externalDrag.value = false;
 };
+// What a drag is offering this surface: files to upload, tree rows to move, or nothing it can use (an image or a
+// link dragged around inside the app) — in which case no hint is raised and the drop below declines it.
+const dragOffer = (event: DragEvent): { files: boolean; rows: boolean } => {
+    const types = event.dataTransfer?.types;
+    // OS-file drags expose the "Files" type; an internal tree-row move exposes our custom path key instead.
+    return { files: !fromThisDocument && (types?.includes(`Files`) ?? false), rows: types?.includes(`application/x-intentic-path`) ?? false };
+};
 const onRootDragEnter = (event: DragEvent): void => {
+    const offer = dragOffer(event);
+    if (!offer.files && !offer.rows) {
+        return;
+    }
     dragDepth += 1;
     rootDragging.value = true;
-    // OS-file drags expose the "Files" type; an internal tree-row move exposes our custom path key instead.
-    externalDrag.value = event.dataTransfer?.types.includes(`Files`) ?? false;
+    externalDrag.value = offer.files;
 };
 const onRootDragLeave = (): void => {
     dragDepth -= 1;
@@ -468,35 +485,58 @@ const onRootDragLeave = (): void => {
     }
 };
 const onRootDrop = (event: DragEvent): void => {
+    const offer = dragOffer(event);
     resetRootDrag();
     if (event.dataTransfer === null) {
         return;
     }
     const dataTransfer = event.dataTransfer;
     // Tree rows dragged in from within the explorer (one or a multi-selection, newline-joined) → move to root;
-    // otherwise OS files → upload to root.
+    // otherwise OS files → upload to root. A drag that started in this document is neither: the outer @drop.prevent
+    // still swallows it so the browser doesn't navigate away to the image, and nothing is written.
     const internal = dataTransfer.getData(`application/x-intentic-path`);
     if (internal !== ``) {
         void run(() => moveIntoMany(internal.split(`\n`), ``));
+        return;
+    }
+    if (!offer.files) {
         return;
     }
     // enqueueFromDataTransfer runs the capture synchronously (webkitGetAsEntry must fire while the drop's items are
     // alive) and shows the "scanning" panel instantly, before the walk finishes.
     enqueueFromDataTransfer(``, dataTransfer);
 };
+// dragend fires on the SOURCE after the drop is handled, which is why it (and not drop) clears the in-document
+// mark — the drop handler above still has to read it. pointerdown clears it as well: it always precedes a
+// dragstart, so the mark can't outlive its drag even when the source element is removed mid-gesture (a tree row
+// under a file the agent just deleted) and dragend never arrives.
+const onDragStarted = (): void => {
+    fromThisDocument = true;
+};
+const clearDragSource = (): void => {
+    fromThisDocument = false;
+};
+const onDragEnded = (): void => {
+    clearDragSource();
+    resetRootDrag();
+};
 // A folder-targeted drop calls stopPropagation (so it doesn't also upload to root), so the aside never sees that
 // drop to clear its hint. Reset from the window in the CAPTURE phase — it runs before any stopPropagation — so
 // the drop hint can never stick on. (Ctrl+` and the terminal panel itself live in the shell — sandbox-global.)
 onMounted(() => {
+    window.addEventListener(`pointerdown`, clearDragSource, true);
+    window.addEventListener(`dragstart`, onDragStarted, true);
     window.addEventListener(`drop`, resetRootDrag, true);
-    window.addEventListener(`dragend`, resetRootDrag, true);
+    window.addEventListener(`dragend`, onDragEnded, true);
     // Load Monaco (+ Shiki bridge) while the user browses the tree, so the first file open isn't cold.
     void useMonaco().ensureMonaco();
     workspaceCommandDisposables = WORKSPACE_COMMANDS.map((spec) => registerCommand({ owner: `builtin`, ...spec }));
 });
 onBeforeUnmount(() => {
+    window.removeEventListener(`pointerdown`, clearDragSource, true);
+    window.removeEventListener(`dragstart`, onDragStarted, true);
     window.removeEventListener(`drop`, resetRootDrag, true);
-    window.removeEventListener(`dragend`, resetRootDrag, true);
+    window.removeEventListener(`dragend`, onDragEnded, true);
     for (const disposable of workspaceCommandDisposables) {
         disposable.dispose();
     }

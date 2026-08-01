@@ -5,6 +5,7 @@ import { sandboxBlob } from "../../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../../composables/useAsyncAction";
 import { useLayout } from "../../../composables/useLayout";
 import { resolveFile } from "../fileType";
+import ImageView from "./ImageView.vue";
 
 /* WHAT CHANGED, WHEN THE CHANGE ISN'T TEXT. Monaco's diff editor is the right tool for a file made of lines and
  * the wrong one for a screenshot, so every review surface used to stop at "Binary file — no text diff to show."
@@ -149,12 +150,7 @@ const panes = computed(() =>
                     <Icon name="exclamation-triangle" class="text-2xl text-danger" />
                     <p class="text-xs text-danger">{{ pane.side.error }}</p>
                 </div>
-                <div
-                    v-else-if="renderable && pane.side.url"
-                    class="image-checker scrollbar-thin flex h-full items-center justify-center overflow-auto p-4"
-                >
-                    <img :src="pane.side.url" alt="" class="max-h-full max-w-full object-contain" />
-                </div>
+                <ImageView v-else-if="renderable && pane.side.url" :src="pane.side.url" />
                 <!-- Not an image: nothing to compare visually, so say what it is and hand over the bytes. -->
                 <div v-else class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                     <Icon name="box" class="text-3xl text-subtle" />

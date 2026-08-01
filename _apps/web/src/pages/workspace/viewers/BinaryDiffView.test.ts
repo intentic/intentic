@@ -28,6 +28,13 @@ vi.hoisted(() => {
     // showing. Named by byte length instead — that is the assertion each pane is holding ITS OWN side's bytes.
     globalThis.URL.createObjectURL = (blob: Blob) => `blob:fake/${blob.size}`;
     globalThis.URL.revokeObjectURL = () => {};
+    // Each pane's ImageView watches its own size to keep a fitted image fitted; jsdom ships no ResizeObserver,
+    // and it never lays anything out to report anyway. A no-op leaves the render — which is what is asserted.
+    globalThis.ResizeObserver ??= class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    };
 });
 
 // The daemon fetch, stubbed at the seam the viewer uses — the test is about rendering bytes, not about auth.

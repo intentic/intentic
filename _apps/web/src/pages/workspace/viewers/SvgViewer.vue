@@ -2,6 +2,7 @@
 import { Segmented } from "@intentic-app/ui";
 import { ref } from "vue";
 import CodeView from "./CodeView.vue";
+import ImageView from "./ImageView.vue";
 
 /* SVG viewer: renders the image (default) with a Source toggle for the raw markup. The render uses an <img>
  * with a blob: object URL — loading SVG as an image keeps any embedded <script>/onload inert, so this is
@@ -24,9 +25,7 @@ const view = ref<`preview` | `source`>(`preview`);
             />
         </div>
         <div class="min-h-0 flex-1">
-            <div v-if="view === 'preview'" class="image-checker scrollbar-thin flex h-full items-center justify-center overflow-auto p-4">
-                <img :src="src" alt="" class="max-h-full max-w-full object-contain" />
-            </div>
+            <ImageView v-if="view === 'preview'" :src="src" />
             <CodeView v-else :code="source" lang="xml" />
         </div>
     </div>
