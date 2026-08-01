@@ -10,7 +10,8 @@
     "scripts": {
         "build": "turbo run build",
         "test": "turbo run test",
-        "typecheck": "node _tools/scripts/check-test-typecheck.mjs && turbo run typecheck",
+        "typecheck": "turbo run typecheck --continue",
+        "typecheck:declarations": "node _tools/scripts/typecheck.mjs",
         "lint": "oxlint --deny-warnings",
         "lint:fix": "oxlint --fix",
         "knip": "knip",

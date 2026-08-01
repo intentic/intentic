@@ -10,12 +10,25 @@
             "dependsOn": ["^build"],
             "outputs": []
         },
+        // The declarations every `typecheck` below resolves its workspace imports through, plus the guard that
+        // every test file sits in some type-check program (_tools/scripts/typecheck.mjs). A root task, run once
+        // for the whole repo rather than per package.
+        //
+        // This is the `^build` that `test` uses, done without pnpm in the path. `build` goes through pnpm, and
+        // pnpm's `syncInjectedDepsAfterScripts` hardlinks into `node_modules` after it — a different filesystem
+        // in an agent worktree, so a `^build` dependency died EXDEV (exit 238) for every agent in the fleet.
+        // The one check that catches a fake drifting out of shape with its seam was therefore runnable only in
+        // CI, on main, after the merge. `tsgo -b` emits the same declarations and works in both places.
+        // Uncached because it is already incremental against its own tsbuildinfo: a no-op pass measures ~0.1s,
+        // which is cheaper than hashing the inputs would be.
+        "//#typecheck:declarations": {
+            "cache": false
+        },
         // Type-checks each package INCLUDING its test files, which `build` cannot: an emitting package excludes
         // *.test.ts to keep test code out of dist, so without this task the tests are the one part of the repo
-        // no type checker ever reads. Same `^build` dependency as `test` — a package resolves its workspace
-        // imports through the referenced projects' emitted declarations.
+        // no type checker ever reads.
         "typecheck": {
-            "dependsOn": ["^build"],
+            "dependsOn": ["//#typecheck:declarations"],
             "outputs": []
         },
         "check": {

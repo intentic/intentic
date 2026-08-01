@@ -131,19 +131,24 @@ test:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
-  # One turbo invocation, not three: `build` then `test` as separate calls is a hard barrier — every package must
-  # finish building before ANY test starts. A single `build test typecheck` graph lets each package's tests run
-  # the moment its own deps are built while the rest of the monorepo is still compiling.
-  #
   # `typecheck` is the one that reads the TEST files. `build` cannot: an emitting package excludes *.test.ts so
   # test code stays out of dist, which left the tests unchecked by anything but their own execution — hand-built
   # fakes drifted out of shape with the seams they stand in for, and only ever said so as an opaque 500 in some
   # unrelated suite.
+  #
+  # It runs FIRST, and as its own `pnpm typecheck` rather than folded into the graph below, for one reason: that
+  # is the exact command an agent runs on its branch before landing (AGENTS.md). It used to sit in the graph
+  # depending on `^build` — and a pnpm `build` dies EXDEV in an agent worktree, so the check that decided
+  # whether main was green was the one check nobody in the fleet could run. It now emits its own declarations
+  # (turbo.json, `//#typecheck:declarations`), needs nothing from the graph, and fails in seconds instead of
+  # after a full build + test.
+  #
+  # Then one turbo invocation, not two: `build` then `test` as separate calls is a hard barrier — every package
+  # must finish building before ANY test starts. A single `build test` graph lets each package's tests run the
+  # moment its own deps are built while the rest of the monorepo is still compiling.
   script:
-    # Before the turbo task, not inside it: turbo silently skips a package that has no `typecheck` script, so a
-    # new emitting package would go unchecked in exactly the way the task exists to prevent.
-    - node _tools/scripts/check-test-typecheck.mjs
-    - pnpm turbo run build test typecheck
+    - pnpm typecheck
+    - pnpm turbo run build test
 
 # Hermetic infra e2e on merge requests — NON-BLOCKING sidecar (allow_failure). Boots a Docker-in-Docker host
 # via testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no

@@ -11,10 +11,23 @@
 - Guard invariants by discovery, not enumeration – a test that recognizes violations by their SHAPE anywhere
   in the repo; a hardcoded file list repeats the miss it exists to prevent.
 
+## Before you finish a turn
+
+Run **`pnpm typecheck`**. It is the whole of what CI decides main's health on, it runs inside an agent
+worktree, and it takes seconds. Then run the affected packages' own suites (`pnpm -C <pkg> test`) — `pnpm test`
+at the root does not work here, because turbo's `test` depends on `^build` and a pnpm `build` dies EXDEV under
+worktree isolation.
+
+What this catches is almost never an error in the code you changed. It is another package's fixture naming a
+shape the interface just stopped having: change `_libs/iq-engine`, break `_apps/sandbox` and `_tools/iq-bench`,
+and the tests you ran next to your edit say nothing about it. A branch cut from current main and verified only
+in its own package is exactly how main spent 1h48m red across ten landed commits, then went green for four
+minutes before the next one.
+
 ## Tests
 
 Tests are type-checked source, held to the rules above. `pnpm typecheck` compiles every one of them
-(`tsconfig.test.json` in each emitting package); CI runs it beside `build` and `test`. Suites here churn far
+(`tsconfig.test.json` in each emitting package). Suites here churn far
 more over their SETUP than their assertions — half of every test-file edit is fixture rebuilding — so these
 rules are about what a test stands the code up with, not about how it asserts.
 
