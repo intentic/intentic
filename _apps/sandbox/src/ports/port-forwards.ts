@@ -1,13 +1,15 @@
 import http from "node:http";
 import https from "node:https";
-import { PORT_SLOTS } from "@intentic/sandbox-contract";
 import type { LoopbackHost } from "./port-scan.js";
 
-// The forward table behind the port-<slot>-<sandboxId>.<zone> hostnames: a fixed pool of slots (PORT_SLOTS)
-// mapped to whatever ports the owner currently forwards. Slots — not port numbers — appear in hostnames so the
+// The forward table behind the port-<slot>-<sandboxId>.<zone> hostnames: a fixed pool of slots mapped to
+// whatever ports the owner currently forwards. Slots — not port numbers — appear in hostnames so the
 // intentic-provided path mints at most one route per slot per sandbox lifetime while dev servers churn
 // ephemeral ports; own-Cloudflare rides its wildcard either way. In-memory only: forwards are user gestures,
 // and after a daemon restart a click simply re-forwards (usually landing the same, already-minted slot).
+//
+// The slot NAMES are injected rather than imported: they are derived from the connect token
+// (portSlotsFromToken), so this table has no opinion about them beyond their count and their order.
 
 export type PortScheme = "http" | "https";
 
@@ -54,11 +56,14 @@ const detectScheme = async (port: number, host: LoopbackHost): Promise<PortSchem
     return (await answers("https", port, host)) ? "https" : "http";
 };
 
-export const createPortForwards = (probe: (port: number, host: LoopbackHost) => Promise<PortScheme> = detectScheme): PortForwards => {
-    const slots = new Map<string, { port: number; host: LoopbackHost; scheme: PortScheme; lastUsedAt: number }>();
+export const createPortForwards = (
+    slots: readonly string[],
+    probe: (port: number, host: LoopbackHost) => Promise<PortScheme> = detectScheme,
+): PortForwards => {
+    const assigned = new Map<string, { port: number; host: LoopbackHost; scheme: PortScheme; lastUsedAt: number }>();
 
     const slotOf = (port: number): string | undefined => {
-        for (const [slot, entry] of slots) {
+        for (const [slot, entry] of assigned) {
             if (entry.port === port) {
                 return slot;
             }
@@ -73,26 +78,31 @@ export const createPortForwards = (probe: (port: number, host: LoopbackHost) => 
             // between http and https (or moved loopback families).
             const slot =
                 slotOf(port) ??
-                PORT_SLOTS.find((candidate) => !slots.has(candidate)) ??
-                [...slots.entries()].toSorted(([, a], [, b]) => a.lastUsedAt - b.lastUsedAt)[0]![0];
-            slots.set(slot, { port, host, scheme: slots.get(slot)?.port === port ? slots.get(slot)!.scheme : "http", lastUsedAt: Date.now() });
+                slots.find((candidate) => !assigned.has(candidate)) ??
+                [...assigned.entries()].toSorted(([, a], [, b]) => a.lastUsedAt - b.lastUsedAt)[0]![0];
+            assigned.set(slot, {
+                port,
+                host,
+                scheme: assigned.get(slot)?.port === port ? assigned.get(slot)!.scheme : "http",
+                lastUsedAt: Date.now(),
+            });
             const scheme = await probe(port, host);
-            const entry = slots.get(slot);
+            const entry = assigned.get(slot);
             // Only apply if the slot still maps this port — an eviction/re-forward may have won meanwhile.
             if (entry?.port === port) {
-                slots.set(slot, { ...entry, scheme });
+                assigned.set(slot, { ...entry, scheme });
             }
             return slot;
         },
         unforward: (port) => {
             const slot = slotOf(port);
             if (slot !== undefined) {
-                slots.delete(slot);
+                assigned.delete(slot);
             }
         },
         slotOf,
         targetOf: (slot) => {
-            const entry = slots.get(slot);
+            const entry = assigned.get(slot);
             if (entry === undefined) {
                 return undefined;
             }

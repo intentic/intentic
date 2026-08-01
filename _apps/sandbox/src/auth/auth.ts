@@ -27,7 +27,11 @@ export const createGoogleVerifier = (audience: string): IdTokenVerifier => {
     return async (idToken) => {
         // clockTolerance: a fresh container's clock (WSL/Docker after host sleep) can run ahead of the
         // browser's, making a still-valid token look expired here and killing the terminal with 1008.
-        const { payload } = await jwtVerify(idToken, jwks, { issuer: GOOGLE_ISSUERS, audience, clockTolerance: 60 });
+        // `algorithms` pinned for the same reason session.ts pins HS256: the verifier should accept one shape,
+        // not whatever the token's own header proposes. jose already refuses to pair an RSA JWKS key with a
+        // symmetric alg, so this closes nothing open today — it just stops that guarantee from living in a
+        // dependency's behaviour instead of in this call.
+        const { payload } = await jwtVerify(idToken, jwks, { issuer: GOOGLE_ISSUERS, audience, clockTolerance: 60, algorithms: ["RS256"] });
         const email = payload["email"];
         if (typeof email !== "string" || payload["email_verified"] !== true) {
             throw new Error("google id token has no verified email");

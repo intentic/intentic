@@ -113,6 +113,52 @@ describe(`POST /sandbox/announce`, () => {
         expect((await announce(prisma, `tok`, `http://insecure.example.com`)).status).toBe(400);
         expect(findUnique).not.toHaveBeenCalled();
     });
+
+    /* daemonUrl is what the browser sends the user's Google credential to, unprobed — so a connect token that
+     * could rewrite it would be trading a container-env secret for the owner's identity. It can't: the address
+     * is one we already know, from whichever half of setup established it. */
+    it(`refuses a daemonUrl that isn't the intentic tunnel hostname on record`, async () => {
+        const update = vi.fn().mockResolvedValue({});
+        const row = { id: `s1`, tunnelHostname: `sandbox-abc.intentic.dev`, setupPayload: null, daemonUrl: null };
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), update } });
+
+        const res = await announce(prisma, `tok`, `https://evil.example`);
+        expect(res.status).toBe(409);
+        // Neither the URL nor lastSeenAt moves — an unvetted address must not read as a live sandbox.
+        expect(update).not.toHaveBeenCalled();
+
+        expect((await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`)).status).toBe(200);
+    });
+
+    it(`pins an own-Cloudflare sandbox to the zone + subdomain chosen at setup`, async () => {
+        const update = vi.fn().mockResolvedValue({});
+        const row = {
+            id: `s1`,
+            tunnelHostname: null,
+            // Stored the way setupCode writes it: encrypted JSON (plaintext here — the test config sets no key).
+            setupPayload: JSON.stringify({ ZONE: `example.com`, SUBDOMAIN: `box` }),
+            daemonUrl: null,
+        };
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), update } });
+
+        expect((await announce(prisma, `tok`, `https://elsewhere.example.com`)).status).toBe(409);
+        expect((await announce(prisma, `tok`, `https://box.example.com`)).status).toBe(200);
+    });
+
+    /* A row with neither record — attached by hand, or created before the hostname was stored — has nothing to
+     * check against. It learns the address on the first announce and holds it from then on, so the field is
+     * never free-form for longer than one write. */
+    it(`pins on first announce when nothing on the row predicts the address`, async () => {
+        const update = vi.fn().mockResolvedValue({});
+        const bare = { id: `s1`, tunnelHostname: null, setupPayload: null, daemonUrl: null };
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(bare), update } });
+        expect((await announce(prisma, `tok`, `https://self-hosted.example`)).status).toBe(200);
+
+        const pinned = { ...bare, daemonUrl: `https://self-hosted.example` };
+        const after = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(pinned), update } });
+        expect((await announce(after, `tok`, `https://self-hosted.example`)).status).toBe(200);
+        expect((await announce(after, `tok`, `https://evil.example`)).status).toBe(409);
+    });
 });
 
 const hostTunnel = (prisma: PrismaClient, token: string | undefined, hostName: unknown, cfg: Config = config) =>

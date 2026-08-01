@@ -29,6 +29,52 @@ const isHttpsUrl = (value: string): boolean => {
     }
 };
 
+const hostOf = (url: string): string | undefined => {
+    try {
+        return new URL(url).host;
+    } catch {
+        return undefined;
+    }
+};
+
+/* WHERE A SANDBOX IS ALLOWED TO SAY IT LIVES.
+ *
+ * `daemonUrl` is not a passive record: the browser reads it out of the registry and sends the user's Google ID
+ * token — or the daemon session minted from it — to whatever it names, unprobed (the tunnel candidate is the
+ * one endpoint the browser never qualifies, because it IS the registry's own answer). So a `daemonUrl` an
+ * attacker can write is a `daemonUrl` that harvests the owner's Google credential and replays it against the
+ * real daemon. Announce is authenticated only by the connect token, which lives in the container's env, in a
+ * compose file, and in whatever shell history ran the installer — a weaker secret than the identity it would
+ * be trading up for. A platform-side compromise is the same story with no token needed at all, which is what
+ * makes the "the platform holds nothing it could replay" claim (sandbox auth.ts) worth defending here.
+ *
+ * The address is not information the daemon actually contributes. On the intentic path we provisioned the
+ * tunnel and stored its hostname; on the own-Cloudflare path the user picked the zone and subdomain at setup
+ * and we stored those too. Both are known before the daemon ever boots, so an announce that disagrees is
+ * either a misconfiguration or an attack, and neither deserves to be written.
+ *
+ * The remaining case is a sandbox with neither record — an `attach`-only row, or one predating the stored
+ * hostname. There it pins on first announce and holds: still not a free-form field, just one whose value is
+ * learned instead of derived. */
+const expectedDaemonHost = (
+    config: Config,
+    sandbox: { tunnelHostname: string | null; setupPayload: unknown; daemonUrl: string | null },
+): string | undefined => {
+    if (sandbox.tunnelHostname !== null && sandbox.tunnelHostname !== ``) {
+        return sandbox.tunnelHostname;
+    }
+    // The own-Cloudflare path's setup picks, stored encrypted when the setup code was minted (same read as
+    // /setup/claim). A row whose payload is absent or not the string shape simply contributes no expectation.
+    const stored =
+        typeof sandbox.setupPayload === `string` ? (JSON.parse(decryptSecret(config, sandbox.setupPayload)) as Record<string, string>) : {};
+    const zone = stored[`ZONE`];
+    const subdomain = stored[`SUBDOMAIN`];
+    if (zone !== undefined && zone !== `` && subdomain !== undefined && subdomain !== ``) {
+        return `${subdomain}.${zone}`;
+    }
+    return sandbox.daemonUrl === null ? undefined : hostOf(sandbox.daemonUrl);
+};
+
 // A mintable preview-route label. Only the two preview schemes are allowed (an arbitrary label could shadow
 // sandbox-/ssh- hostnames); ≤50 chars keeps the full first label `<label>-<12-hex id>` inside DNS's 63-char
 // label limit.
@@ -169,6 +215,15 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
         if (!sandbox) {
             return c.text(`error: unknown sandbox`, 404);
+        }
+        // The browser trusts this value with the user's Google credential, so it is pinned to the address we
+        // already know this sandbox by (see expectedDaemonHost). A daemon that announces anything else is
+        // refused and the stored URL is left alone — lastSeenAt too, so the sandbox reads as not-phoning-home
+        // rather than quietly alive at an address nobody vetted.
+        const expected = expectedDaemonHost(config, sandbox);
+        if (expected !== undefined && hostOf(daemonUrl) !== expected) {
+            c.get(`logger`).warn({ sandboxId: sandbox.id, announced: hostOf(daemonUrl), expected }, `announce rejected: daemonUrl host mismatch`);
+            return c.text(`error: this sandbox announces at ${expected}`, 409);
         }
         await prisma.sandbox.update({ where: { id: sandbox.id }, data: { daemonUrl, lastSeenAt: new Date() } });
         return c.json({ ok: true });

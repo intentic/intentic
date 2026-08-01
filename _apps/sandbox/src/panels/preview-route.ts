@@ -1,4 +1,5 @@
-import { PORT_SLOTS, portLabel, previewLabel } from "@intentic/sandbox-contract";
+import { portLabel, previewLabel } from "@intentic/sandbox-contract";
+import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
 import type { Services } from "../composition.js";
 import type { Config } from "../env.config.js";
@@ -20,7 +21,8 @@ import { discoverPanels, panelKey } from "./panels.js";
 export const ensureAllPreviewRoutes = async (services: Services): Promise<void> => {
     const discovered = await discoverPanels(services.workspace);
     const keys = discovered.map(({ repo }) => panelKey(repo)).filter((key): key is string => key !== undefined);
-    await services.ensurePreviewRoutes([...keys.map(previewLabel), ...PORT_SLOTS.map(portLabel)]);
+    const slots = portSlotsFromToken(services.config.connectToken);
+    await services.ensurePreviewRoutes([...keys.map(previewLabel), ...slots.map(portLabel)]);
 };
 
 export const createPreviewRouteEnsurer = (config: Config, logger: Logger): ((labels: readonly string[]) => Promise<void>) => {

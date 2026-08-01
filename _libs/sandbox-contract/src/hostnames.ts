@@ -43,17 +43,15 @@ export const CATCH_ALL = { service: "http_status:404" } as const;
 // covers exactly one level), where <panel> is `<repo>` or `<repo>--<app>` and <sandboxId> pins the hostname to
 // this sandbox (the shared intentic zone hosts many sandboxes; without the id two users' panels would collide).
 // Port-forward scheme: `port-<slot>-<sandboxId>.<zone>` — the same shape with a `port-` prefix, where <slot>
-// is one of the sandbox's fixed forward slots (see PORT_SLOTS), not the port number itself: slots keep the
-// intentic-provided path's minted routes bounded and warm while dev servers churn ephemeral ports.
+// is one of the sandbox's forward slots (portSlotsFromToken in ./tunnel-ids), not the port number itself:
+// slots keep the intentic-provided path's minted routes bounded and warm while dev servers churn ephemeral
+// ports. The slot labels are salted with the connect token rather than being the letters a…h, so a forwarded
+// port's hostname is not derivable from the (public) sandbox id alone — see tunnel-ids for why that matters.
 //
 // A *label* is the first-DNS-label prefix before `-<sandboxId>` (`preview-<panel>` / `port-<slot>`) — the unit
 // the platform's /sandbox/preview-route mints, so one endpoint serves both schemes.
 export const previewLabel = (panel: string): string => `preview-${panel}`;
 export const portLabel = (slot: string): string => `port-${slot}`;
-
-// The fixed per-sandbox forward slots. Eight is deliberate: enough for a monorepo's worth of concurrent dev
-// servers, and the hard cap on preview DNS records a sandbox can ever cost the shared intentic zone.
-export const PORT_SLOTS = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 
 // The hostname a label resolves to — what the platform's /sandbox/preview-route mints from the label alone.
 export const labelHostname = (label: string, id: string, zone: string): string => `${label}-${id}.${zone}`;

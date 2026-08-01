@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ActivityEvent, AgentEvent, AgentTurn, Automation } from "@intentic/sandbox-contract";
+import { type ActivityEvent, type AgentEvent, type AgentTurn, type Automation, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
 import { expect, test, vi } from "vitest";
 import { fileApprovalsStore } from "../automations/approvals-store.js";
@@ -205,6 +205,31 @@ test("the daily ceiling is per automation, not per conversation", async () => {
     await (await post(app, "wc-daily", { conversationId: "a", content: "1" })).text();
     await (await post(app, "wc-daily", { conversationId: "b", content: "1" })).text();
     expect((await post(app, "wc-daily", { conversationId: "c", content: "1" })).status).toBe(429);
+});
+
+/* A Doorbell whose owner set no ceiling is the common case — the create dialog leaves the field blank — and
+ * every message it answers is an agent turn billed to that owner. The per-minute window caps the rate but not
+ * the day, so without a fallback a script could run tens of thousands of turns before anyone looked. */
+test("a Doorbell with no configured ceiling still stops at the default", async () => {
+    const { services } = await setup(webchat("wc-unset", { webchat: {} }));
+    const app = appFor(services, fakeWake([]));
+    for (let sent = 0; sent < WEBCHAT_DAILY_MAX_DEFAULT; sent += 1) {
+        // One conversation each, so the per-conversation ceiling can't be what stops it.
+        await (await post(app, "wc-unset", { conversationId: `c${sent}`, content: "1" })).text();
+    }
+    const over = await post(app, "wc-unset", { conversationId: "one-too-many", content: "1" });
+    expect(over.status).toBe(429);
+    expect((await over.json()).error).toContain("today's limit");
+});
+
+// …and an owner who wants more says so. The default is a floor under the unconfigured case, not a cap on intent.
+test("an explicit ceiling above the default is honoured", async () => {
+    const { services } = await setup(webchat("wc-raised", { webchat: { dailyMessageMax: WEBCHAT_DAILY_MAX_DEFAULT + 1 } }));
+    const app = appFor(services, fakeWake([]));
+    for (let sent = 0; sent < WEBCHAT_DAILY_MAX_DEFAULT; sent += 1) {
+        await (await post(app, "wc-raised", { conversationId: `c${sent}`, content: "1" })).text();
+    }
+    expect((await post(app, "wc-raised", { conversationId: "one-more", content: "1" })).status).toBe(200);
 });
 
 /* ---- the bot ceiling ---- */

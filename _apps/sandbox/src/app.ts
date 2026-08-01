@@ -5,6 +5,7 @@ import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { bearerFrom, ForbiddenError, tokenEquals } from "./auth/auth.js";
 import { bridgeScoped } from "./auth/bridge-tokens.js";
 import { streamAgent } from "./agent/agent.routes.js";
@@ -114,6 +115,7 @@ const READY_EXEMPT = new Set([
     "/events",
     "/system/session",
     "/system/presence",
+    "/system/ws-ticket",
     "/system/terminal",
     "/system/browser-login",
     "/system/browser-view",
@@ -150,6 +152,17 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     });
 
     const app = new Hono<AppEnv>();
+
+    /* Response hardening, above everything so it covers the error paths too. The daemon serves JSON and the
+     * occasional raw workspace file, so most of this set is inert here — it is on for the two that are not:
+     * `nosniff`, because /workspace/raw returns whatever bytes are on disk under a by-extension content type,
+     * and `Referrer-Policy`, because the sandbox's own hostname carries its id and should not ride outbound
+     * navigations from anything this origin serves.
+     *
+     * Cross-Origin-Resource-Policy is the one default that has to go: /webchat/widget.js is loaded as a plain
+     * <script> from arbitrary third-party sites, which is precisely the no-cors request CORP blocks — leaving
+     * it on would take every embedded Doorbell down. (COEP is off for the same family of reasons.) */
+    app.use("*", secureHeaders({ crossOriginResourcePolicy: false, crossOriginEmbedderPolicy: false }));
 
     /* Outermost: what the BROWSER waited for. Every other measurement in this daemon times a piece of the
      * work; this one times the answer, which is the only number the user's complaint is actually about — and
@@ -188,15 +201,29 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     if (services.auth !== undefined) {
         const authorize = services.auth.authorize;
-        const allowOrigin = services.auth.allowOrigin ?? "*";
+        const allowOrigins = services.auth.allowOrigins;
         app.use(
             "*",
             cors({
-                // The daemon is owner-driven from one origin — except the web-chat widget, which is embedded on
-                // arbitrary third-party sites. Reflect the caller's origin for /webchat so a legit widget isn't
-                // browser-blocked; the route's own allowedOrigins check is the real gate (CORS isn't a security
-                // boundary — a non-browser client ignores it).
-                origin: (origin, c) => (webchatPublicPath(c.req.path) ? (origin ?? "*") : allowOrigin),
+                /* The daemon is owner-driven from one origin — except the web-chat widget, which is embedded on
+                 * arbitrary third-party sites. Reflect the caller's origin for /webchat so a legit widget isn't
+                 * browser-blocked; the route's own allowedOrigins check is the real gate there.
+                 *
+                 * Everywhere else this is an ALLOWLIST, never a wildcard, and the reason is /health. CORS buys
+                 * nothing on a route that checks a bearer — a stranger has no token to send — but /health
+                 * deliberately checks nothing and answers with the sandbox id, and the loopback listener's port
+                 * is derived from that id (@intentic/sandbox-run localDaemonPort). Under `*` any page in the
+                 * user's browser could walk that port range, read the id, and derive every preview hostname the
+                 * sandbox publishes. An unmatched origin gets no ACAO header, so the browser refuses the read. */
+                origin: (origin, c) => {
+                    if (webchatPublicPath(c.req.path)) {
+                        return origin ?? "*";
+                    }
+                    // Reflect only an exact match: returning the list's first entry for a foreign origin would
+                    // hand the browser a header naming someone else, which it correctly ignores — but it also
+                    // hides the misconfiguration. null ⇒ no header at all, which is the honest answer.
+                    return allowOrigins.includes(origin) ? origin : null;
+                },
                 allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
                 allowHeaders: ["authorization", "content-type", "x-intentic-connect", "x-intentic-base-hash"],
                 maxAge: 600,
@@ -226,7 +253,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             // An operator panel's own backend (running inside this sandbox) calls the daemon with the per-boot
             // panel token instead of a Google bearer — the token never leaves the container (it's injected into
             // panel processes as INTENTIC_PANEL_TOKEN), so it's server-side only and not a browser-exposed path.
-            if (tokenEquals(c.req.header("x-intentic-panel") ?? "", services.panelToken)) {
+            // Guarded on a NON-EMPTY header like the three branches below it: tokenEquals("", "") is true, so a
+            // composition that ever produced an empty panelToken would turn every unauthenticated request into
+            // a panel call. randomBytes makes that unreachable today; the guard makes it unreachable by shape.
+            const panel = c.req.header("x-intentic-panel");
+            if (panel !== undefined && panel !== "" && tokenEquals(panel, services.panelToken)) {
                 return next();
             }
             // The `vpn` CLI on the agent's PATH (and in the owner's own terminals) reaches the daemon over
@@ -433,6 +464,21 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         services.history.notifyUserWrite();
         return c.json({ ok: true });
+    });
+
+    /* Mint the one-shot ticket the three WebSocket upgrades below redeem. This route is ordinary HTTP, so it
+     * rides the bearer middleware like everything else — which is the entire trick: the credential is presented
+     * in a header here, and what travels in the upgrade's query string is a value that is worthless the moment
+     * it is used. Identity comes from the middleware, never the body.
+     *
+     * Loopback mode has no identity to bind a ticket to and no gate on the upgrades either, so it 404s and the
+     * browser connects without one. */
+    app.post("/system/ws-ticket", (c) => {
+        const identity = c.get("identity");
+        if (services.auth === undefined || identity === undefined) {
+            return c.json({ error: "no verified identity to mint a ticket for" }, 404);
+        }
+        return c.json({ ticket: services.wsTickets.mint(identity) });
     });
 
     // Interactive PTY over a WebSocket. Paired with the `ws` server passed to serve() in main.ts (node-server's
@@ -683,6 +729,22 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         return (await services.bridgeTokens.revoke(c.req.param("id"))) ? c.json({ ok: true }) : c.json({ error: "no such token" }, 404);
     });
+    /* Sign out every browser: re-key the session signer, so all sessions minted for this sandbox stop
+     * verifying at once (auth/session.ts). Owner-only, and the owner's OWN browser is included — it 401s on its
+     * next call and silently re-establishes from the Google credential it already holds, which is what makes
+     * this safe to offer as a button rather than a support procedure.
+     *
+     * Here rather than on the members routes because it is not about who may access the sandbox — it is about
+     * what is still holding a credential to it, which is the question a lost laptop actually asks. Loopback
+     * mode has no sessions to rotate and no owner to check, so it answers ok without doing anything. */
+    app.post("/system/sessions/revoke", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        await services.auth?.rotateSessions();
+        return c.json({ ok: true });
+    });
     app.post("/system/authorized-key", async (c) => {
         // Authorized either by a valid pairing token (the agent's path) or the owner's Google token (fallback).
         const pair = c.req.header("x-intentic-pair") ?? undefined;
@@ -715,7 +777,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         // Burn the pairing token only on success, so a transient failure leaves it usable for a retry.
         if (pair !== undefined) {
-            consumePairing(pair);
+            await consumePairing(services.config.historyRoot, pair);
         }
         return c.json({ ok: true, sshHostname, syncToken: result.syncToken, mode });
     });

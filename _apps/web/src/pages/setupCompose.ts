@@ -122,7 +122,12 @@ export const composeFile = (args: ComposeArgs): string => {
         `            OWNER_EMAIL: \${OWNER_EMAIL:-}`,
         `            SANDBOX_PUBLIC_URL: https://${args.hostname}`,
         `            PLATFORM_URL: ${platform}`,
-        `            GOOGLE_CLIENT_ID: ${args.googleClientId}`,
+        // Interpolated, not a compose variable — the id is public and known here. But it is also the switch that
+        // builds the daemon's authorizer: empty, and the sandbox serves every route to anyone who reaches the
+        // tunnel. A build whose env.js substitution didn't land would emit a bare `GOOGLE_CLIENT_ID:` and start
+        // exactly that daemon, so an empty value becomes a compose var that refuses to start instead. (The daemon
+        // refuses too — see requireAuthWhenReachable — this just fails one layer earlier, with the fix named.)
+        `            GOOGLE_CLIENT_ID: ${args.googleClientId === `` ? `\${GOOGLE_CLIENT_ID:?the web app did not supply a Google client id — reload the setup page}` : args.googleClientId}`,
         // Only the own path carries a Cloudflare token; an empty baked-in var would shadow the workspace
         // .env the user may write later (a container's env can't change after creation) — so omit otherwise.
         ...(args.mode === `own` ? [`            CLOUDFLARE_API_TOKEN: \${CLOUDFLARE_API_TOKEN:?run the .env bootstrap first}`] : []),

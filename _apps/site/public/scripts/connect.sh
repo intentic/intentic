@@ -29,7 +29,7 @@
 # Optional env:
 #   SANDBOX_IMAGE   sandbox image to run (default: the latest release registry.gitlab.com/radarsu/intentic/sandbox:stable)
 #   PREVIEW_PORT    the daemon's preview-proxy port, exposed at preview-*.<zone> (default: 5173)
-#   WEB_ORIGIN      scopes the daemon's CORS to the platform web app (default: open — the Google-token audience is the real gate)
+#   WEB_ORIGIN      browser origin(s) the daemon emits CORS for, comma-separated (default: https://app.intentic.dev)
 #   ZONE            the Cloudflare zone to use when the token sees more than one
 #   SELF_HOST       wire THIS machine as a deploy target (service user + SSH key + host SSH tunnel). DEFAULT OFF —
 #                   setup is reachability-only. Set `SELF_HOST=1` (needs root, hence `sudo`) to register this
@@ -115,14 +115,16 @@ SELF_HOST_USER="${SELF_HOST_USER:-}"
 # Browser-direct access: the sandbox is exposed at sandbox-<id>.<zone> via its OWN Cloudflare tunnel and the
 # browser talks to it directly — the daemon verifies the user's Google ID token (audience = GOOGLE_CLIENT_ID, the
 # platform's PUBLIC web client id, hardcoded here since it's a static platform value) and binds the owner on first
-# connect (gated by CONNECT_TOKEN). WEB_ORIGIN, when set, scopes the daemon's CORS to the platform web app; left
-# empty the daemon allows any origin (the Google-token audience is the real gate). ZONE picks the zone when the
-# token sees several.
+# connect (gated by CONNECT_TOKEN). WEB_ORIGIN scopes the daemon's CORS to that same web app: the bearer is what
+# guards the authenticated routes, but /health answers without one and names the sandbox id, so the allowlist is
+# what stops an arbitrary page from reading it. Both values are hardcoded platform constants and must match the
+# app's build (@intentic/constants PLATFORM_WEB_ORIGIN); override either to self-host the SPA elsewhere, comma-
+# separated for several origins. ZONE picks the zone when the token sees several.
 GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com}"
 # The account email the platform seeds via the setup code; the daemon binds ONLY this Google identity as owner
 # (empty on direct/headless runs ⇒ plain trust-on-first-use).
 OWNER_EMAIL="${OWNER_EMAIL:-}"
-WEB_ORIGIN="${WEB_ORIGIN:-}"
+WEB_ORIGIN="${WEB_ORIGIN:-https://app.intentic.dev}"
 ZONE="${ZONE:-}"
 CLOUDFLARED_IMAGE="${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2026.7.2}"
 # The cloudflared binary version installed natively on a self-host to run its SSH-tunnel connector (matches

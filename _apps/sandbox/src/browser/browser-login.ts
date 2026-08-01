@@ -7,6 +7,7 @@ import { dispatchInput, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type Screencas
 import { acquireLoginLock, markConnected, releaseLoginLock, sessionDir } from "./session-store.js";
 import { STEALTH_INIT } from "./stealth.js";
 import type { Services } from "../composition.js";
+import { redeemTicket } from "../auth/ws-tickets.js";
 
 const isBrowserPlatform = (value: string): value is BrowserPlatform => value === "reddit" || value === "x" || value === "youtube";
 
@@ -43,14 +44,12 @@ export const createBrowserLoginRoute = (services: Services) =>
         return {
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
-                if (services.auth !== undefined) {
-                    try {
-                        await services.auth.authorize(url.searchParams.get("token") ?? "", url.searchParams.get("connect") ?? undefined);
-                    } catch (err) {
-                        services.logger.warn({ err }, "browser-login authorize failed");
-                        ws.close(1008, "unauthorized");
-                        return;
-                    }
+                try {
+                    redeemTicket(services, url);
+                } catch (err) {
+                    services.logger.warn({ err }, "browser-login ticket rejected");
+                    ws.close(1008, "unauthorized");
+                    return;
                 }
                 const requested = url.searchParams.get("platform") ?? "";
                 if (!isBrowserPlatform(requested)) {

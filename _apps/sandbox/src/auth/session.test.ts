@@ -30,6 +30,28 @@ test("the secret is created 0600 and reused, so sessions survive a daemon restar
     await expect(createSessions(path).verify(token)).resolves.toEqual({ email: "a@x.com" });
 });
 
+/* The sign-out-everywhere primitive. Sessions are self-contained signed claims — nothing is stored per session,
+ * so there is nothing to delete — which means re-keying the signer IS the revocation, and it has to be total:
+ * every outstanding token, in every browser, including the one that asked. */
+test("rotate invalidates every outstanding session, and the new secret persists across a restart", async () => {
+    const path = await secretPath();
+    const sessions = createSessions(path);
+    const { token: before } = await sessions.mint({ email: "a@x.com" });
+    await expect(sessions.verify(before)).resolves.toEqual({ email: "a@x.com" });
+
+    await sessions.rotate();
+    await expect(sessions.verify(before)).rejects.toThrow();
+
+    // The sandbox stays usable: a session minted after the rotation verifies normally…
+    const { token: after } = await sessions.mint({ email: "a@x.com" });
+    await expect(sessions.verify(after)).resolves.toEqual({ email: "a@x.com" });
+    // …and a restart honours the NEW secret, so a revoked token can't come back with the daemon.
+    const restarted = createSessions(path);
+    await expect(restarted.verify(after)).resolves.toEqual({ email: "a@x.com" });
+    await expect(restarted.verify(before)).rejects.toThrow();
+    expect(((await stat(path)).mode & 0o777).toString(8)).toBe("600");
+});
+
 test("a truncated secret file is re-keyed instead of becoming a weak HMAC key", async () => {
     const path = await secretPath();
     await writeFile(path, "c2hvcnQ", "utf8");

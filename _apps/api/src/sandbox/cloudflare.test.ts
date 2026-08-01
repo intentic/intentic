@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PORT_SLOTS } from "@intentic/sandbox-contract";
+import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import {
     CloudflareTokenError,
     deleteSandboxTunnel,
@@ -91,7 +91,8 @@ describe(`provisionSandboxTunnel`, () => {
         expect(ingress.config.ingress[0]).toEqual({ hostname, service: `http://intentic-sandbox-workspace:8787` });
         expect(ingress.config.ingress[1]).toEqual({ hostname: sshHostname, service: `ssh://intentic-sandbox-workspace:22` });
         // The whole slot pool is routed at provision time — a port preview's first forward never waits on DNS.
-        for (const [index, slot] of PORT_SLOTS.entries()) {
+        const slots = portSlotsFromToken(connectToken);
+        for (const [index, slot] of slots.entries()) {
             expect(ingress.config.ingress[2 + index]).toEqual({
                 hostname: `port-${slot}-${id}.${zone}`,
                 service: `http://intentic-sandbox-workspace:5173`,
@@ -100,10 +101,10 @@ describe(`provisionSandboxTunnel`, () => {
         const dns = calls
             .filter((call) => call.method === `POST` && call.url.endsWith(`/dns_records`))
             .map((call) => call.body as Record<string, unknown>);
-        expect(dns).toHaveLength(2 + PORT_SLOTS.length);
+        expect(dns).toHaveLength(2 + slots.length);
         expect(dns[0]).toMatchObject({ type: `CNAME`, name: hostname, content: `t1.cfargotunnel.com`, proxied: true });
         expect(dns[1]).toMatchObject({ type: `CNAME`, name: sshHostname, content: `t1.cfargotunnel.com`, proxied: true });
-        expect(dns[2]).toMatchObject({ type: `CNAME`, name: `port-a-${id}.${zone}`, content: `t1.cfargotunnel.com`, proxied: true });
+        expect(dns[2]).toMatchObject({ type: `CNAME`, name: `port-${slots[0]}-${id}.${zone}`, content: `t1.cfargotunnel.com`, proxied: true });
     });
 
     it(`reuses an existing tunnel and updates an existing DNS record in place`, async () => {

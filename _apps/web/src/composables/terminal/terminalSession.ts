@@ -5,9 +5,8 @@ import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/san
 import { useDevice } from "@intentic-app/ui";
 import { boundCommand } from "../commands/useCommands";
 import { isApplePlatform } from "../commands/keybindings";
-import { useSandboxSession } from "../sandbox/sandboxSession";
-import { useEndpoint } from "../sandbox/useEndpoint";
 import { useSandbox } from "../sandbox/useSandbox";
+import { socketUrl as wsSocketUrl } from "../sandbox/wsTicket";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
 import { openLoopbackPreview, parseLoopbackLink } from "./portPreview";
@@ -108,27 +107,11 @@ const loadWebglRenderer = (term: Terminal): void => {
 };
 
 // Build the authenticated wss URL for one session, or undefined if the sandbox isn't reachable / not signed in.
-const socketUrl = async (name: string, cols: number, rows: number): Promise<string | undefined> => {
-    const token = await useSandboxSession().getSessionToken();
-    if (token === undefined) {
-        return undefined;
-    }
-    // Read the base and connect token together AFTER the token await, so both come from the same active
-    // sandbox snapshot (a switch/list-refresh during the await would otherwise pair them across sandboxes).
-    // The resolved transport base, so a same-machine sandbox's PTY rides loopback instead of the tunnel —
-    // where keystroke latency is the thing a user feels most directly.
-    const base = useEndpoint().daemonBase.value;
-    if (base === undefined || base === ``) {
-        return undefined;
-    }
-    const connect = useSandbox().active.value?.token;
-    if (connect === undefined) {
-        return undefined;
-    }
-    const ws = base.replace(/^http/, `ws`);
-    const params = new URLSearchParams({ token, connect, session: name, cols: String(cols), rows: String(rows) });
-    return `${ws}/system/terminal?${params.toString()}`;
-};
+// The auth half is a one-shot ticket (wsTicket.ts) so no bearer rides the query string; the URL resolves through
+// the endpoint picker, so a same-machine sandbox's PTY takes loopback rather than the tunnel — keystroke latency
+// is the thing a user feels most directly.
+const socketUrl = (name: string, cols: number, rows: number): Promise<string | undefined> =>
+    wsSocketUrl(`/system/terminal`, { session: name, cols: String(cols), rows: String(rows) });
 
 const scheduleRetry = (s: TerminalSession): void => {
     s.reconnect = window.setTimeout(() => void connectSocket(s), s.retryDelay);

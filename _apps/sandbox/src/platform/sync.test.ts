@@ -13,6 +13,7 @@ import {
     mirrorMachines,
     pairingMode,
     restoreAuthorizedKeys,
+    seedPairing,
     revokeEnrollmentByToken,
     syncHolder,
     verifySyncToken,
@@ -23,11 +24,11 @@ import {
 describe("pairing tokens", () => {
     afterEach(() => vi.useRealTimers());
 
-    it("is valid once, carries its mode, then is consumed", () => {
+    it("is valid once, carries its mode, then is consumed", async () => {
         const { token } = mintPairing("mirror");
         expect(isValidPairing(token)).toBe(true);
         expect(pairingMode(token)).toBe("mirror");
-        consumePairing(token);
+        await consumePairing(mkdtempSync(join(tmpdir(), "sync-")), token);
         expect(isValidPairing(token)).toBe(false);
         expect(pairingMode(token)).toBeUndefined();
     });
@@ -41,6 +42,36 @@ describe("pairing tokens", () => {
         const { token, expiresIn } = mintPairing("sync");
         vi.advanceTimersByTime((expiresIn + 1) * 1000);
         expect(isValidPairing(token)).toBe(false);
+    });
+
+    /* The SETUP-TIME token is the one that needed a burn list. It arrives in the container's environment, which
+     * survives every restart and is replayed into every rebuild — so re-arming it on boot made a leaked env a
+     * permanent key to /system/authorized-key, a route with no bearer check in front of it. Once redeemed it
+     * must stay dead no matter how many times the daemon comes back up. */
+    it("seeds the setup-time token once and never re-arms it after redemption", async () => {
+        const historyRoot = mkdtempSync(join(tmpdir(), "sync-"));
+        const token = "setup-time-token";
+
+        await seedPairing(historyRoot, token);
+        expect(pairingMode(token)).toBe("sync"); // the owner's own token — full file sync, not mirror-only
+
+        await consumePairing(historyRoot, token);
+        expect(isValidPairing(token)).toBe(false);
+
+        // The restart: same env, same token, a fresh in-memory map. The burn is on /history, so it holds.
+        await seedPairing(historyRoot, token);
+        expect(isValidPairing(token)).toBe(false);
+    });
+
+    // Re-running setup is the supported way back in: /setup/claim mints a NEW token per claim, and a digest
+    // nobody has burned still arms. Only replay of a spent token is refused.
+    it("still arms a freshly minted setup token after an earlier one was spent", async () => {
+        const historyRoot = mkdtempSync(join(tmpdir(), "sync-"));
+        await seedPairing(historyRoot, "first-claim");
+        await consumePairing(historyRoot, "first-claim");
+
+        await seedPairing(historyRoot, "second-claim");
+        expect(pairingMode("second-claim")).toBe("sync");
     });
 });
 

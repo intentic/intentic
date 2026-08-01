@@ -73,10 +73,13 @@ $SelfHostUser = ''
 $SelfHostAddress = ''
 # Browser-direct access: the sandbox is exposed at sandbox-<id>.<zone> via its OWN Cloudflare tunnel and the
 # browser talks to it directly — the daemon verifies the user's Google ID token (audience = GOOGLE_CLIENT_ID, the
-# platform's PUBLIC web client id, hardcoded here since it's a static platform value; env can override). WEB_ORIGIN,
-# when set, scopes the daemon's CORS (else open — the Google-token audience is the real gate); ZONE picks the zone.
+# platform's PUBLIC web client id, hardcoded here since it's a static platform value; env can override). WEB_ORIGIN
+# scopes the daemon's CORS to that same web app: the bearer guards the authenticated routes, but /health answers
+# without one and names the sandbox id, so the allowlist is what stops an arbitrary page from reading it. Both are
+# hardcoded platform constants matching the app's build (@intentic/constants PLATFORM_WEB_ORIGIN); override either
+# to self-host the SPA elsewhere, comma-separated for several origins. ZONE picks the zone.
 $GoogleClientId = if ($env:GOOGLE_CLIENT_ID) { $env:GOOGLE_CLIENT_ID } else { '481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com' }
-$WebOrigin = $env:WEB_ORIGIN
+$WebOrigin = if ($env:WEB_ORIGIN) { $env:WEB_ORIGIN } else { 'https://app.intentic.dev' }
 $Zone = $env:ZONE
 $CloudflaredImage = if ($env:CLOUDFLARED_IMAGE) { $env:CLOUDFLARED_IMAGE } else { 'cloudflare/cloudflared:2026.6.1' }
 # The platform can PRE-PROVISION the tunnel (intentic-provided path, for users with no Cloudflare of their own):

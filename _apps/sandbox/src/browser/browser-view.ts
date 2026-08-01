@@ -2,6 +2,7 @@ import { upgradeWebSocket } from "@hono/node-server";
 import { browserSessionContext, browserSessionPage } from "./browser-sessions.js";
 import { dispatchInput, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type Screencast, type ScreencastClientMessage } from "./screencast.js";
 import type { Services } from "../composition.js";
+import { redeemTicket } from "../auth/ws-tickets.js";
 
 /* The /system/browser-view route: WATCH THE AGENT BROWSE, and take the wheel if you want to.
  *
@@ -38,14 +39,12 @@ export const createBrowserViewRoute = (services: Services) =>
         return {
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
-                if (services.auth !== undefined) {
-                    try {
-                        await services.auth.authorize(url.searchParams.get("token") ?? "", url.searchParams.get("connect") ?? undefined);
-                    } catch (err) {
-                        services.logger.warn({ err }, "browser-view authorize failed");
-                        ws.close(1008, "unauthorized");
-                        return;
-                    }
+                try {
+                    redeemTicket(services, url);
+                } catch (err) {
+                    services.logger.warn({ err }, "browser-view ticket rejected");
+                    ws.close(1008, "unauthorized");
+                    return;
                 }
                 session = url.searchParams.get("session") ?? "";
                 // Awaited, not polled: the user clicks Watch the instant the first tool card appears, which can

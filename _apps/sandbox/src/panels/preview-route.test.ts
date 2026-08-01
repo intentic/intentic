@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PORT_SLOTS } from "@intentic/sandbox-contract";
+import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacePaths } from "../workspace/workspace.js";
 
@@ -80,11 +80,15 @@ describe("ensureAllPreviewRoutes", () => {
         const batches: (readonly string[])[] = [];
         await ensureAllPreviewRoutes({
             workspace: workspacePaths(root),
+            // The slot labels are derived from this, so the stub has to carry one for the pool to exist.
+            config: { connectToken: "" },
             ensurePreviewRoutes: async (labels: readonly string[]) => {
                 batches.push(labels);
             },
         } as unknown as Parameters<typeof ensureAllPreviewRoutes>[0]);
         expect(batches).toHaveLength(1);
-        expect(batches[0]!.toSorted()).toEqual(["preview-extra", "preview-intent", ...PORT_SLOTS.map((slot) => `port-${slot}`)].toSorted());
+        expect(batches[0]!.toSorted()).toEqual(
+            ["preview-extra", "preview-intent", ...portSlotsFromToken("").map((slot) => `port-${slot}`)].toSorted(),
+        );
     });
 });

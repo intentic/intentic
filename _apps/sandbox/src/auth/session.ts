@@ -26,6 +26,20 @@ export interface Sessions {
     mint(identity: VerifiedIdentity): Promise<MintedSession>;
     // Returns the identity a valid session was minted for; throws on any signature/claim failure.
     verify(token: string): Promise<VerifiedIdentity>;
+    /* Re-key: every session minted under the old secret stops verifying, everywhere, at once.
+     *
+     * This is the sign-out-everywhere the token shape otherwise can't offer. A session is a self-contained
+     * signed claim — nothing is stored per session, which is what makes verification a local HMAC instead of a
+     * lookup — so there is no record to delete and no revocation list to consult. Rotating what SIGNS them is
+     * the whole answer, and a 30-day sliding credential sitting in a browser's localStorage needs one: a
+     * shared laptop, a synced profile, a device that walked off.
+     *
+     * Deliberately not a per-session revoke. The owner is asking a question about the sandbox ("is anything
+     * still holding a way in?"), not about a device list they never see, and the honest answer to that question
+     * is "nothing is now". Members are signed out too, which is the point of a kill switch — their next call
+     * re-establishes from a fresh Google proof if they are still on the members list, and doesn't if they
+     * aren't. The caller's own browser is included; it re-establishes silently from the Google token it holds. */
+    rotate(): Promise<void>;
 }
 
 export const createSessions = (secretPath: string): Sessions => {
@@ -33,6 +47,12 @@ export const createSessions = (secretPath: string): Sessions => {
     // survive daemon restarts — a rebuild must not re-prompt every browser. Cached as the promise so
     // concurrent first requests share one load/create instead of racing to write two secrets.
     let secret: Promise<Uint8Array> | undefined;
+    const writeFresh = async (): Promise<Uint8Array> => {
+        const fresh = randomBytes(32);
+        await mkdir(dirname(secretPath), { recursive: true });
+        await writeFile(secretPath, fresh.toString("base64url"), { mode: 0o600 });
+        return fresh;
+    };
     const loadSecret = (): Promise<Uint8Array> => {
         secret ??= (async () => {
             const stored = await readFile(secretPath, "utf8").catch(() => undefined);
@@ -43,10 +63,7 @@ export const createSessions = (secretPath: string): Sessions => {
                     return bytes;
                 }
             }
-            const fresh = randomBytes(32);
-            await mkdir(dirname(secretPath), { recursive: true });
-            await writeFile(secretPath, fresh.toString("base64url"), { mode: 0o600 });
-            return fresh;
+            return writeFresh();
         })();
         return secret;
     };
@@ -77,6 +94,12 @@ export const createSessions = (secretPath: string): Sessions => {
                 ...(typeof payload["name"] === "string" ? { name: payload["name"] } : {}),
                 ...(typeof payload["picture"] === "string" ? { picture: payload["picture"] } : {}),
             };
+        },
+        // Replace the cached promise before awaiting the write, so a verify racing the rotation resolves
+        // against the new secret rather than the one being retired.
+        rotate: async () => {
+            secret = writeFresh();
+            await secret;
         },
     };
 };

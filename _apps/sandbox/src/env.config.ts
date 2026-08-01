@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { DAEMON_PORT, LOCAL_PORT, PREVIEW_PORT } from "@intentic/constants";
+import { DAEMON_PORT, LOCAL_PORT, PLATFORM_WEB_ORIGIN, PREVIEW_PORT } from "@intentic/constants";
 import { type ConfigDefinition, cliArgs, env, envFile, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
 import { z } from "zod";
 
@@ -41,7 +41,27 @@ const configSchema = z.object({
     // as a normal single-use pairing so the connect script's sync agent can enroll without the browser minting
     // one. Same trust class as connectToken (both live in the container env); empty ⇒ no seed.
     syncPairToken: z.string().default("").meta({ secret: true }),
-    webOrigin: z.string().default(""),
+    /* The browser origin(s) the daemon emits CORS for — comma-separated, defaulting to the hosted app.
+     *
+     * Defaulted rather than left open because CORS is the only thing guarding the routes that have no bearer to
+     * check: /health is unauthenticated by design (it is the liveness + identity probe) and answers with the
+     * sandbox id, and the loopback listener's port derives from that id — so a wildcard let any page in the
+     * user's browser scan loopback, learn the id, and walk the sandbox's preview hostnames. Authenticated routes
+     * were never at risk; this is about the ones that answer without a credential.
+     *
+     * A self-hosted SPA sets this to its own origin (add several with commas, e.g. a localhost dev origin
+     * alongside the hosted one).
+     *
+     * EMPTY FALLS BACK TO THE DEFAULT, which is why this is a transform and not a plain `.default()`. Sandboxes
+     * built before this existed have a literal `WEB_ORIGIN=` in their container env — connect.sh emitted the var
+     * unconditionally — and REPLAY_ENV carries it through every rebuild. Zod treats "present but empty" as a
+     * value, so a plain default would leave exactly those sandboxes with an empty allowlist: CORS denies the
+     * SPA, and the workspace goes dark on upgrade. There is also no reader for "allow nobody" — a daemon no
+     * browser may call is not a configuration anyone wants — so collapsing empty onto the default loses nothing. */
+    webOrigin: z
+        .string()
+        .default("")
+        .transform((value) => (value.trim() === "" ? PLATFORM_WEB_ORIGIN : value)),
     // Where the platform lives, for the daemon's announce (URL + liveness phone-home). Set by connect.{sh,ps1};
     // a localhost dev platform arrives as host.docker.internal. Empty ⇒ announcing disabled (tests, loopback).
     platform: z

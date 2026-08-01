@@ -4,9 +4,7 @@ import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { viewportCoords } from "../composables/browser/viewportCoords";
-import { useSandboxSession } from "../composables/sandbox/sandboxSession";
-import { useEndpoint } from "../composables/sandbox/useEndpoint";
-import { useSandbox } from "../composables/sandbox/useSandbox";
+import { socketUrl as wsSocketUrl } from "../composables/sandbox/wsTicket";
 
 /* Guided browser login for a `browser`-kind capability. Opens the daemon's /system/browser-login WebSocket: the
  * daemon drives a real (headless) Chromium at the platform's sign-in page and screencasts it here as image frames;
@@ -46,16 +44,13 @@ const connect = async (): Promise<void> => {
     status.value = "connecting";
     errorMsg.value = undefined;
     frame.value = undefined;
-    const token = await useSandboxSession().getSessionToken();
-    const base = useEndpoint().daemonBase.value;
-    const connectToken = useSandbox().active.value?.token;
-    if (token === undefined || base === undefined || base === "" || connectToken === undefined) {
+    const url = await wsSocketUrl(`/system/browser-login`, { platform: props.platform });
+    if (url === undefined) {
         status.value = "error";
         errorMsg.value = "Sandbox isn't reachable, or you're not signed in.";
         return;
     }
-    const params = new URLSearchParams({ token, connect: connectToken, platform: props.platform });
-    const ws = new WebSocket(`${base.replace(/^http/, "ws")}/system/browser-login?${params.toString()}`);
+    const ws = new WebSocket(url);
     socket = ws;
     ws.addEventListener("message", (event) => {
         const message = JSON.parse(String(event.data)) as {

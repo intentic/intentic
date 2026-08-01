@@ -2162,14 +2162,31 @@ export const WebchatConfigSchema = z.object({
     position: z.enum(["top-right", "top-left", "bottom-right", "bottom-left"]).optional(),
     /* Two ceilings on top of the route's fixed per-minute window, because a public endpoint's real exposure is
      * cost, not request rate: `dailyMessageMax` caps the whole automation per UTC day, `conversationMessageMax`
-     * caps one visitor thread for its lifetime. Absent ⇒ uncapped, so an existing automation is unchanged. */
+     * caps one visitor thread for its lifetime.
+     *
+     * `dailyMessageMax` absent ⇒ WEBCHAT_DAILY_MAX_DEFAULT, not uncapped. Every message here is an agent turn
+     * billed to the owner, and the per-minute window bounds the RATE without bounding the DAY — twenty a minute,
+     * sustained, is tens of thousands of turns before anyone notices. A Doorbell nobody configured should not be
+     * able to spend that, so the safe number is the one you get for free and the owner raises it deliberately.
+     * `conversationMessageMax` stays optional-means-uncapped: it is per visitor thread, which the daily ceiling
+     * already bounds in aggregate. */
     dailyMessageMax: z.number().int().positive().optional(),
     conversationMessageMax: z.number().int().positive().optional(),
+    // (WEBCHAT_DAILY_MAX_DEFAULT, below the schema, is the number `dailyMessageMax` falls back to.)
     // How long a visitor thread keeps resuming the same conversation before the next message starts a fresh
     // one. Absent ⇒ WEBCHAT_SESSION_TTL_MS (the daemon's default).
     sessionTtlMinutes: z.number().int().positive().optional(),
 });
 export type WebchatConfig = z.infer<typeof WebchatConfigSchema>;
+
+/* The daily agent-turn ceiling a Doorbell gets when its owner sets none. Lives here rather than beside the
+ * route that enforces it because both ends need the number: the daemon to apply it, and the automation editor
+ * to show the owner what they are already protected by (an invisible limit is one people hit and file as a bug).
+ *
+ * 200 is chosen to be irrelevant to real support traffic and decisive against a script. A Doorbell answering
+ * two hundred questions in one UTC day is a busy one; a scripted flood reaches that in ten seconds and then
+ * stops costing anything. */
+export const WEBCHAT_DAILY_MAX_DEFAULT = 200;
 
 /* ---- the widget wire: three shapes GET /webchat/<id>/config, GET …/challenge and POST …/message speak ----
  *

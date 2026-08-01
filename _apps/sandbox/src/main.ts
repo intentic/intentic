@@ -30,7 +30,7 @@ import { ensureRepoGitDirs } from "./git/repo-git-dirs.js";
 import { commitRootBaseline, ensureRootRepo } from "./git/root-repo.js";
 import { reconcileSkills } from "./settings/skills.js";
 import { composeEnvironment } from "./environment/environment.js";
-import { loadConfig } from "./env.config.js";
+import { type Config, loadConfig } from "./env.config.js";
 import { createLogger } from "./logger.js";
 import { applyTmuxLogHooks, logsRoot, pruneLogFiles, terminalLogsDir } from "./logs/log-files.js";
 import { applyEventsPath, applyRunLive } from "./intentic/apply-events.js";
@@ -81,8 +81,33 @@ const BOOT_STEPS = [
     { key: "agentToken", label: "Writing the agent token" },
 ] as const;
 
+/* THE ONE SWITCH THAT MUST NOT FAIL OPEN.
+ *
+ * `google.clientId` is what builds the authorizer (composition.ts). Empty is a legitimate mode — the tests and
+ * the host-internal server preview run loopback with no auth at all — but it is legitimate only for a daemon
+ * nothing outside can reach. Set it empty on a daemon that HAS a tunnel and every gate in app.ts disappears at
+ * once: no bearer middleware, `ownerDenied` answers "you are the owner", /enroll takes any caller, and
+ * /system/terminal hands out a root PTY. Nothing in the logs distinguishes that from a healthy boot.
+ *
+ * A connect token or a public URL is the daemon saying it is reachable from outside, so the two together are
+ * the contradiction: refuse to serve rather than serve everything. Dying here costs a misconfigured sandbox a
+ * restart loop with the reason in its logs, which is the failure everyone wants over the silent one. */
+const requireAuthWhenReachable = (config: Config): void => {
+    if (config.google.clientId !== "" || (config.connectToken === "" && config.sandbox.publicUrl === "")) {
+        return;
+    }
+    // Before the logger: this must be legible in `docker logs` even when log config is part of what went wrong.
+    process.stderr.write(
+        "FATAL: this sandbox is externally reachable (CONNECT_TOKEN / SANDBOX_PUBLIC_URL is set) but GOOGLE_CLIENT_ID is empty.\n" +
+            "Without it the daemon authenticates nobody and every route — terminals, secrets, the file API — is open to anyone\n" +
+            "who can reach the tunnel. Set GOOGLE_CLIENT_ID to the platform's Google web client id and restart.\n",
+    );
+    process.exit(78); // EX_CONFIG
+};
+
 const main = async (): Promise<void> => {
     const config = loadConfig();
+    requireAuthWhenReachable(config);
     // Every intentic CLI run spawned in here (the /intentic routes, the panel-infra-apply tmux session) tees
     // its output to the daemon-owned logs tree — the same INTENTIC_LOG_DIR contract as an operator shell.
     process.env["INTENTIC_LOG_DIR"] ??= join(logsRoot(config.historyRoot), "intentic-runs");
@@ -142,8 +167,13 @@ const main = async (): Promise<void> => {
     );
 
     // Setup-time desktop sync: arm the platform-minted pairing token so the connect script can enroll its agent.
+    // No-op once that token has been redeemed — the burn is recorded on /history, so the copy living in the
+    // container's env cannot be replayed by a restart (see seedPairing). Detached: the connect script's agent
+    // retries its enroll, so nothing here needs to hold the boot.
     if (config.syncPairToken !== "") {
-        seedPairing(config.syncPairToken);
+        void seedPairing(config.historyRoot, config.syncPairToken).catch((error: unknown) =>
+            logger.warn({ err: error }, "setup pairing not armed — enable desktop sync from the browser instead"),
+        );
     }
 
     // Close the readiness gate the data routes await (app.ts) and name what it is waiting for. A request that

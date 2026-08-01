@@ -5,13 +5,12 @@ import {
     hostSshTunnelName,
     labelHostname,
     LOCAL_ADDRESS,
-    PORT_SLOTS,
     portHostname,
     sandboxHostname as sandboxHost,
     sandboxSubdomain,
     sshHostname,
 } from "@intentic/sandbox-contract";
-import { hostSshIdFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { hostSshIdFromToken, portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 
 // Request-scoped Cloudflare access for the setup screen's zone picker. The user's API token is used ONLY to
@@ -295,7 +294,9 @@ export const provisionSandboxTunnel = async (args: {
             // propagation on a freshly minted record, so the records are minted before the sandbox even boots
             // (the pool provisions them long before a user claims the tunnel). Panels stay lazily minted —
             // their names aren't known here — but the slot pool is finite and fixed by contract.
-            ...PORT_SLOTS.map((slot) => ({
+            // Slot labels are derived from the connect token, not the letters a…h — the daemon derives the
+            // identical eight (portSlotsFromToken), so both sides name the same records without coordinating.
+            ...portSlotsFromToken(args.connectToken).map((slot) => ({
                 hostname: portHostname(slot, id, args.zone),
                 service: PREVIEW_SERVICE,
                 comment: "intentic sandbox preview",

@@ -113,6 +113,31 @@ const resend = async (target: string): Promise<void> => {
     }
 };
 
+/* "Sign out everywhere". A sandbox session is a 30-day signed claim living in each browser's localStorage, so
+ * a device that walked off keeps working until it expires — and there is no per-device list to revoke from,
+ * because nothing is stored per session. Re-keying the daemon's signer is the revocation, and it takes every
+ * browser with it including this one: the next call 401s and re-establishes from the Google credential this tab
+ * already holds, so the owner sees nothing. Members are signed out too and come back only if still on the list. */
+const revokingSessions = ref(false);
+const sessionsRevoked = ref(false);
+
+const revokeSessions = async (): Promise<void> => {
+    if (revokingSessions.value) {
+        return;
+    }
+    revokingSessions.value = true;
+    error.value = undefined;
+    sessionsRevoked.value = false;
+    try {
+        await sandboxJson<{ ok: boolean }>(`/system/sessions/revoke`, { method: `POST` });
+        sessionsRevoked.value = true;
+    } catch (err) {
+        error.value = errorMessage(err, `Couldn't sign other browsers out — is the sandbox online?`);
+    } finally {
+        revokingSessions.value = false;
+    }
+};
+
 const revoke = async (target: string): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
     if (id === undefined || busy.value) {
@@ -215,6 +240,32 @@ const revoke = async (target: string): Promise<void> => {
                 </div>
                 <div class="px-4 py-3 text-xs text-muted">Only the sandbox owner can invite or remove people.</div>
             </template>
+        </RowGroup>
+
+        <!-- The credential kill switch. Owner-only, and separate from the member list above on purpose: this
+             answers "is anything still holding a way in", not "who is allowed in". -->
+        <RowGroup v-if="isOwner" label="Signed-in browsers">
+            <div class="flex flex-col gap-2 px-4 py-3">
+                <p class="text-xs text-muted">
+                    Browsers stay signed in to this sandbox for 30 days. Sign them all out if a device was lost or shared — everyone still on the
+                    access list simply signs in again with Google.
+                </p>
+                <p v-if="sessionsRevoked" class="flex items-center gap-1.5 text-xs font-semibold text-success">
+                    <Icon name="check-circle" /> Every browser has been signed out of this sandbox.
+                </p>
+                <div>
+                    <Button
+                        label="Sign out all browsers"
+                        severity="danger"
+                        :outlined="true"
+                        :loading="revokingSessions"
+                        :disabled="revokingSessions"
+                        @click="revokeSessions"
+                    >
+                        <template #icon><Icon name="sign-out" /></template>
+                    </Button>
+                </div>
+            </div>
         </RowGroup>
 
         <!-- Live presence: who else is connected right now (everyone sees this). -->

@@ -8,7 +8,8 @@ import { promisify } from "node:util";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
 import { capabilitiesOf, HEALTH_LIMIT, portUrl, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
-import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { portSlotsFromToken, sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { createWsTickets } from "./auth/ws-tickets.js";
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
@@ -233,9 +234,12 @@ const services = (overrides: ServiceOverrides = {}): Services => {
         workspace: workspacePaths("/work"),
         processes: fakeProcesses(),
         // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.
-        portForwards: createPortForwards(async () => "http"),
+        portForwards: createPortForwards(portSlotsFromToken("tok"), async () => "http"),
         scanPorts: async () => [],
         terminalRun: createTerminalRunner(),
+        // The real thing: pure in-memory state with no side effects, and a fake would only re-implement the
+        // single-use rule the /system/ws-ticket test is there to check.
+        wsTickets: createWsTickets(),
         panelToken: "panel-secret",
         // The /vpn-scoped secret the in-container CLI presents. A fixed value here so a route test can present
         // it; production mints one per boot.
@@ -404,7 +408,7 @@ const services = (overrides: ServiceOverrides = {}): Services => {
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
         /* Loopback mode unless a test asks for the exposed daemon — `auth: undefined` is the mode, so it is the
          * ABSENCE of the key that means loopback, not an override that happens to be undefined. Spelled out
-         * rather than left to `unstubbed` because `allowOrigin` is a DATA member: a stand-in that answers every
+         * rather than left to `unstubbed` because `allowOrigins` is a DATA member: a stand-in that answers every
          * unread key with a throwing function would make it read as set, and the CORS branch turn on. */
         auth:
             auth === undefined
@@ -413,6 +417,7 @@ const services = (overrides: ServiceOverrides = {}): Services => {
                       authorize: rejectAuth,
                       authorizeOwner: rejectAuth,
                       mintSession: async () => ({ token: "sess-token", expiresAt: 0 }),
+                      allowOrigins: [],
                       ...auth,
                   },
         /* Seams no suite in this file drives. They were absent altogether until the tests joined a type-check
@@ -532,6 +537,36 @@ test("GET /health reports ok, and names the sandbox so a loopback probe can tell
     // agreement is what makes the browser's "did I reach the right daemon" check meaningful.
     const named = await createApp(services({ config: { ...baseConfig, connectToken: "tok" } })).request("/health");
     expect(await named.json()).toMatchObject({ ok: true, sandboxId: sandboxIdFromToken("tok") });
+});
+
+/* /health is the one route that answers a stranger, and it answers with the sandbox id — which is also what the
+ * loopback listener's port derives from. So CORS is not decoration here: without an allowlist, any page the user
+ * happens to have open can walk the loopback port range, read the id off this route, and derive every preview
+ * hostname the sandbox publishes. The wildcard this replaces made that a few seconds of fetches. */
+test("CORS names the configured origins and no others, so an arbitrary page cannot read /health", async () => {
+    const app = createApp(
+        services({
+            config: { ...baseConfig, connectToken: "tok" },
+            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth, allowOrigins: ["https://app.intentic.dev", "https://localhost:47145"] },
+        }),
+    );
+    const originOf = async (origin: string) => (await app.request("/health", { headers: { origin } })).headers.get("access-control-allow-origin");
+
+    // Each configured origin is reflected verbatim — a list, so one sandbox serves the hosted SPA and a dev origin.
+    expect(await originOf("https://app.intentic.dev")).toBe("https://app.intentic.dev");
+    expect(await originOf("https://localhost:47145")).toBe("https://localhost:47145");
+
+    // Anything else gets NO header, not a wildcard and not someone else's origin — the browser refuses the read.
+    expect(await originOf("https://evil.example")).toBeNull();
+    // Including a lookalike that merely contains a configured origin: reflection is exact-match only.
+    expect(await originOf("https://app.intentic.dev.evil.example")).toBeNull();
+
+    // The body is still served — the daemon has nothing to hide from a request it can't attribute (the launch
+    // scripts and the loopback probe are not browsers). CORS decides who may READ it, which is the whole point.
+    expect(await (await app.request("/health", { headers: { origin: "https://evil.example" } })).json()).toMatchObject({
+        ok: true,
+        sandboxId: sandboxIdFromToken("tok"),
+    });
 });
 
 test("GET /health carries the boot progress, so a poller can tell 'starting' from 'serving'", async () => {
@@ -776,7 +811,7 @@ test("panels.start runs the repo's operator dir, rejects unknown repos + repos w
 
 test("ports.list scans on demand, hides the daemon's own listeners, and marks forwards with their URLs", async () => {
     const config = { ...baseConfig, zone: "example.com", connectToken: "tok" };
-    const portForwards = createPortForwards(async () => "http");
+    const portForwards = createPortForwards(portSlotsFromToken("tok"), async () => "http");
     const client = clientFor(
         createApp(
             services({
@@ -807,7 +842,7 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
                 command: "vite",
                 cwd: "/work/app",
                 forwarded: true,
-                previewUrl: portUrl("a", "example.com", sandboxIdFromToken("tok")),
+                previewUrl: portUrl(portSlotsFromToken("tok")[0]!, "example.com", sandboxIdFromToken("tok")),
             },
         ],
     });
@@ -816,7 +851,7 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
 test("ports.forward maps a listener onto a slot, mints its route label, and refuses reserved/dead ports", async () => {
     const config = { ...baseConfig, zone: "example.com", connectToken: "tok" };
     const ensured: string[] = [];
-    const portForwards = createPortForwards(async () => "http");
+    const portForwards = createPortForwards(portSlotsFromToken("tok"), async () => "http");
     const client = clientFor(
         createApp(
             services({
@@ -829,8 +864,10 @@ test("ports.forward maps a listener onto a slot, mints its route label, and refu
             }),
         ),
     );
-    expect(await client.ports.forward({ port: 3000 })).toEqual({ previewUrl: portUrl("a", "example.com", sandboxIdFromToken("tok")) });
-    expect(ensured).toEqual(["port-a"]);
+    expect(await client.ports.forward({ port: 3000 })).toEqual({
+        previewUrl: portUrl(portSlotsFromToken("tok")[0]!, "example.com", sandboxIdFromToken("tok")),
+    });
+    expect(ensured).toEqual([`port-${portSlotsFromToken("tok")[0]}`]);
     // The daemon's own surfaces are never forwardable; a port nothing listens on is NOT_FOUND.
     expect(await errorCode(client.ports.forward({ port: 8787 }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.ports.forward({ port: 4000 }))).toBe("NOT_FOUND");
@@ -988,6 +1025,44 @@ test("system.session exchanges the verified bearer for a daemon-minted session",
 
 test("system.session in loopback mode (no auth, no identity) answers 401 — there is no session to mint", async () => {
     expect((await postJson(createApp(services({})), "/system/session")).status).toBe(401);
+});
+
+/* The WebSocket upgrades can't carry an Authorization header, so the credential is spent here instead and the
+ * URL gets a ticket. This route is the reason no bearer appears in a query string any more, which means it has
+ * to be gated exactly like every other authenticated route — by the middleware, on a header. */
+test("POST /system/ws-ticket mints a one-shot ticket for the verified caller, and 401s an unauthenticated one", async () => {
+    const app = createApp(services({ auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: rejectForbidden } }));
+    const response = await postJson(app, "/system/ws-ticket");
+    expect(response.status).toBe(200);
+    const { ticket } = (await response.json()) as { ticket: string };
+    expect(ticket).toEqual(expect.any(String));
+
+    // Rejected bearer ⇒ no ticket at all: the mint is the gate, so it must not be reachable without one.
+    const closed = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
+    expect((await postJson(closed, "/system/ws-ticket")).status).toBe(401);
+});
+
+test("/system/ws-ticket 404s in loopback mode — no identity to bind, and the upgrades are ungated there", async () => {
+    expect((await postJson(createApp(services({})), "/system/ws-ticket")).status).toBe(404);
+});
+
+/* Sign-out-everywhere. A session is a signed claim with nothing stored per session, so re-keying the signer is
+ * the only revocation there is — and it is the owner's alone: a member who could rotate it would be able to
+ * sign the owner out of their own sandbox. */
+test("POST /system/sessions/revoke re-keys the session signer, and only the owner may ask", async () => {
+    let rotations = 0;
+    const auth = {
+        authorize: async () => ({ email: "member@x.com" }),
+        authorizeOwner: rejectForbidden,
+        rotateSessions: async () => void (rotations += 1),
+    };
+    // A verified non-owner is a 403 (the browser's "no access" shape), and nothing rotates.
+    expect((await postJson(createApp(services({ auth })), "/system/sessions/revoke")).status).toBe(403);
+    expect(rotations).toBe(0);
+
+    const owner = createApp(services({ auth: { ...auth, authorizeOwner: async () => {} } }));
+    expect((await postJson(owner, "/system/sessions/revoke")).status).toBe(200);
+    expect(rotations).toBe(1);
 });
 
 test("the panel token is accepted in place of a Google bearer (server-side panel → daemon calls)", async () => {
@@ -1489,9 +1564,13 @@ test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist
         },
     ]);
     // Bearer auth rejects everything, so reaching the route at all (not a 401) proves the exemption; the origin
-    // allowlist is the real gate. allowOrigin defaults to "*" here, so CORS reflection is what scopes the widget.
+    // allowlist is the real gate. The widget's own origin is deliberately NOT in allowOrigins — /webchat reflects
+    // the caller's origin regardless, which is what lets a legit embed on a third-party site through.
     const app = createApp(
-        services({ automations: store, auth: { authorize: rejectAuth, authorizeOwner: rejectAuth, allowOrigin: "https://app.intentic" } }),
+        services({
+            automations: store,
+            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth, allowOrigins: ["https://app.intentic"] },
+        }),
     );
     const send = (origin: string | undefined, body: unknown = { conversationId: "c1", content: "fix the header" }) =>
         app.request("/webchat/support/message", {

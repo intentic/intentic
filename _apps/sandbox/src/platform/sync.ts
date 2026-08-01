@@ -32,12 +32,56 @@ export const mintPairing = (mode: SyncMode): { token: string; expiresIn: number 
     return { token, expiresIn: Math.floor(PAIR_TTL_MS / 1000) };
 };
 
-// Seed a pre-agreed pairing: the platform-minted setup-time token connect.{sh,ps1} passes via container env
-// (SYNC_PAIR_TOKEN), so the connect script's sync agent can enroll without a browser mint. It's the OWNER's
-// setup-time token, so it seeds the full "sync" mode. Same TTL + single-use consumption as a minted one; the env
-// persists on the container, so each restart re-arms it for PAIR_TTL_MS — same trust class as CONNECT_TOKEN.
-export const seedPairing = (token: string): void => {
+/* Seed a pre-agreed pairing: the platform-minted setup-time token connect.{sh,ps1} passes via container env
+ * (SYNC_PAIR_TOKEN), so the connect script's sync agent can enroll without a browser mint. It's the OWNER's
+ * setup-time token, so it seeds the full "sync" mode.
+ *
+ * SPENT ONCE, SPENT FOR GOOD. A browser-minted pairing dies with the daemon, but this one lives in the
+ * container's environment, which is immortal by comparison: it is in the compose file, in `docker inspect`, in
+ * whatever shell history ran the installer, and it is replayed verbatim into every rebuilt container. Re-arming
+ * it on each boot therefore turned a setup-time token into a permanent key for /system/authorized-key — a route
+ * exempt from the bearer middleware, whose reward is an SSH key in the container. One leak of the env, and
+ * every future restart reopened the same ten-minute window.
+ *
+ * So the redemption is recorded on /history (which outlives the container, like the enrollments themselves) and
+ * a consumed token never arms again. Re-running setup is unaffected: /setup/claim mints a FRESH token per
+ * claim, so the ordinary "run the installer again" path seeds a digest nobody has burned. What no longer works
+ * is replaying an already-redeemed token — which is exactly the capability that was worth removing. */
+export const seedPairing = async (historyRoot: string, token: string): Promise<void> => {
+    if (await isSeedConsumed(historyRoot, token)) {
+        return;
+    }
     pairings.set(token, { expiresAt: Date.now() + PAIR_TTL_MS, mode: "sync" });
+    seeded.add(token);
+};
+
+// The setup-time tokens armed this boot — so consumePairing knows which redemptions are worth persisting. A
+// browser-minted pairing is not in here: it is already unreplayable, because nothing outside memory holds it.
+const seeded = new Set<string>();
+
+const seedConsumedPath = (historyRoot: string): string => join(historyRoot, "sync-pair-consumed.json");
+
+const readConsumed = async (historyRoot: string): Promise<string[]> => {
+    try {
+        const parsed = JSON.parse(await readFile(seedConsumedPath(historyRoot), "utf8")) as { digests?: unknown };
+        return Array.isArray(parsed.digests) ? parsed.digests.filter((digest): digest is string => typeof digest === "string") : [];
+    } catch {
+        return [];
+    }
+};
+
+// Digests, never the tokens: this file records that something was spent, and needs to hold nothing that could
+// spend anything.
+const isSeedConsumed = async (historyRoot: string, token: string): Promise<boolean> => (await readConsumed(historyRoot)).includes(digestOf(token));
+
+const recordSeedConsumed = async (historyRoot: string, token: string): Promise<void> => {
+    const digests = await readConsumed(historyRoot);
+    const digest = digestOf(token);
+    if (digests.includes(digest)) {
+        return;
+    }
+    await mkdir(historyRoot, { recursive: true });
+    await writeFile(seedConsumedPath(historyRoot), JSON.stringify({ digests: [...digests, digest] }), { mode: 0o600 });
 };
 
 // Valid = known + unexpired (prunes on expiry). Peek only — the caller consumes it after a successful enroll,
@@ -57,8 +101,13 @@ export const pairingMode = (token: string): SyncMode | undefined => {
     return pairing.mode;
 };
 
-export const consumePairing = (token: string): void => {
+// Redeem a pairing. A browser-minted one just leaves memory; a SEEDED one (the setup-time SYNC_PAIR_TOKEN) is
+// also written to the /history burn list, so the copy still sitting in the container's env is inert from here on.
+export const consumePairing = async (historyRoot: string, token: string): Promise<void> => {
     pairings.delete(token);
+    if (seeded.delete(token)) {
+        await recordSeedConsumed(historyRoot, token);
+    }
 };
 
 // The enrollment store — source of truth for every desktop machine's key + sync token + mode. It lives on the

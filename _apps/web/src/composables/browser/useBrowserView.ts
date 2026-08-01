@@ -1,8 +1,6 @@
 import { onScopeDispose, ref, type Ref, shallowRef, watch } from "vue";
 import { viewportCoords } from "./viewportCoords";
-import { useSandboxSession } from "../sandbox/sandboxSession";
-import { useEndpoint } from "../sandbox/useEndpoint";
-import { useSandbox } from "../sandbox/useSandbox";
+import { socketUrl as wsSocketUrl } from "../sandbox/wsTicket";
 
 /* ONE live view of the agent's browser: a `browser-*` session streamed over the daemon's /system/browser-view
  * WebSocket as image frames, with the owner's clicks and keystrokes going back the other way.
@@ -57,22 +55,7 @@ export interface BrowserView {
 
 // Build the authenticated wss URL, or undefined if the sandbox isn't reachable / not signed in. Reads the base
 // and connect token together AFTER the token await, so both come from one active-sandbox snapshot.
-const socketUrl = async (name: string): Promise<string | undefined> => {
-    const token = await useSandboxSession().getSessionToken();
-    if (token === undefined) {
-        return undefined;
-    }
-    const base = useEndpoint().daemonBase.value;
-    if (base === undefined || base === ``) {
-        return undefined;
-    }
-    const connect = useSandbox().active.value?.token;
-    if (connect === undefined) {
-        return undefined;
-    }
-    const params = new URLSearchParams({ token, connect, session: name });
-    return `${base.replace(/^http/, `ws`)}/system/browser-view?${params.toString()}`;
-};
+const socketUrl = (name: string): Promise<string | undefined> => wsSocketUrl(`/system/browser-view`, { session: name });
 
 /* Watch one session, following `name` as the view switches between browsers. A change tears the old socket
  * down and opens a new one — there is nothing to preserve across the switch, which is the whole reason this can

@@ -7,6 +7,7 @@ import {
     ModelsSchema,
     modelsFor,
     PROVIDERS,
+    WEBCHAT_DAILY_MAX_DEFAULT,
     type WorkspaceEventKind,
 } from "@intentic/sandbox-contract";
 import { Button, cmp, CopyButton, Dialog, Icon, ToggleSwitch } from "@intentic/extension-ui";
@@ -84,6 +85,9 @@ const form = reactive({
     turnstileSiteKey: ``,
     turnstileSecret: ``,
     greeting: ``,
+    // Blank ⇒ the daemon's WEBCHAT_DAILY_MAX_DEFAULT. Held as a string because it is an <input>: an empty box
+    // has to stay distinguishable from a typed 0, which the schema rejects anyway.
+    dailyMessageMax: ``,
 });
 
 // What a Doorbell may do while a stranger drives it. Deliberately read-only: an automation turn runs
@@ -195,6 +199,12 @@ const liveSources = computed(() => {
 // The Doorbell's own fields replace the shared listener ones (channel/events/mention say nothing about a
 // widget), and its done-state shows an embed snippet instead of a webhook URL.
 const isDoorbell = computed(() => form.kind === `listener` && form.provider === `webchat`);
+// The typed ceiling, or undefined for "leave it to the default". Anything not a positive integer reads as
+// blank — the schema would reject it, and a silently-dropped field beats a save that fails on a stray keystroke.
+const dailyMessageMax = computed<number | undefined>(() => {
+    const typed = Number(form.dailyMessageMax.trim());
+    return form.dailyMessageMax.trim() !== `` && Number.isInteger(typed) && typed > 0 ? typed : undefined;
+});
 const originList = computed(() =>
     form.origins
         .split(/[\n,]/)
@@ -353,6 +363,7 @@ const resetForm = (): void => {
     form.turnstileSiteKey = ``;
     form.turnstileSecret = ``;
     form.greeting = ``;
+    form.dailyMessageMax = ``;
     Object.assign(schedule, defaultSchedule());
     submitError.value = undefined;
     pickedRecipe.value = undefined;
@@ -430,6 +441,9 @@ const submit = async (): Promise<void> => {
                           ...(form.turnstileSiteKey.trim() !== `` ? { turnstileSiteKey: form.turnstileSiteKey.trim() } : {}),
                           ...(form.turnstileSecret.trim() !== `` ? { turnstileSecret: form.turnstileSecret.trim() } : {}),
                           ...(form.greeting.trim() !== `` ? { greeting: form.greeting.trim() } : {}),
+                          // Omitted when blank so the automation keeps tracking the default rather than freezing
+                          // today's number into its record.
+                          ...(dailyMessageMax.value === undefined ? {} : { dailyMessageMax: dailyMessageMax.value }),
                       },
                       allowedTools: [...DOORBELL_TOOLS],
                   }
@@ -722,6 +736,20 @@ const submit = async (): Promise<void> => {
                     <label class="ui-field">
                         <span class="ui-field-label">Greeting (optional)</span>
                         <input v-model="form.greeting" placeholder="Hi! Ask me anything." :class="cmp.input()" />
+                    </label>
+                    <label class="ui-field">
+                        <span class="ui-field-label">Daily message limit</span>
+                        <input
+                            v-model="form.dailyMessageMax"
+                            type="number"
+                            min="1"
+                            :placeholder="String(WEBCHAT_DAILY_MAX_DEFAULT)"
+                            :class="cmp.input()"
+                        />
+                        <p class="text-2xs text-subtle">
+                            Every message runs an agent turn on your account. Left blank, a Doorbell stops answering after
+                            {{ WEBCHAT_DAILY_MAX_DEFAULT }} messages a day and resumes the next day.
+                        </p>
                     </label>
                 </template>
                 <div v-if="!isDoorbell" class="ui-field">

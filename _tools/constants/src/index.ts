@@ -7,6 +7,21 @@
 export const LEGAL_VERSION = "2026-07-03";
 export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
 
+/* The hosted web app's origin — the ONE browser origin a sandbox daemon expects to be called from, and
+ * therefore the default its CORS is scoped to (sandbox env.config `webOrigin`).
+ *
+ * It is a security default, not a convenience one. The daemon's authenticated routes don't need CORS — a
+ * caller without a bearer gets nothing — but /health is deliberately unauthenticated and answers with the
+ * sandbox id, and the loopback listener sits on a 127.0.0.1 port derived from that same id. With a wildcard
+ * ACAO, any page in the user's browser can walk that port range, read the id off /health, and derive the
+ * sandbox's preview hostnames from it. Naming the origin is what closes that, and it costs nothing: the
+ * hosted SPA is the only browser origin that ever legitimately calls a daemon.
+ *
+ * Self-hosters serving the SPA elsewhere set WEB_ORIGIN (comma-separated for several), the same way they
+ * already set GOOGLE_CLIENT_ID. connect.{sh,ps1} keep their own literal copy — a shell script can't import
+ * this — so the two are commented as a matched pair, like the Google client id above them. */
+export const PLATFORM_WEB_ORIGIN = "https://app.intentic.dev";
+
 /* THE FOUR FIXED IN-CONTAINER PORTS: the daemon (oRPC + preview proxy front), the app dev-server preview
  * origin, the loopback listener, and the bundled translator. The daemon binds them, the CLI/platform route
  * Cloudflare ingress to them, and the state-resolver emits them into the workspace node — one source so

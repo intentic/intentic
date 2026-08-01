@@ -9,6 +9,7 @@ import type { Services } from "../composition.js";
 import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { isValidSessionName } from "./terminal-session.js";
+import { redeemTicket } from "../auth/ws-tickets.js";
 
 // One interactive PTY the browser drives over a WebSocket — the sandbox's "open a terminal in here" surface, so
 // the owner can watch processes, re-run a failed dev command and see WHY it failed, and generally poke around.
@@ -69,7 +70,6 @@ export const createTerminalRoute = (services: Services) =>
         let pty: IPty | undefined;
         // Client frames that raced the auth await (see PENDING_MAX) — replayed once the pty exists.
         let pending: TerminalClientMessage[] | undefined = [];
-        let closed = false;
         let drain: NodeJS.Timeout | undefined;
         let liveness: NodeJS.Timeout | undefined;
         let counted = false;
@@ -88,7 +88,6 @@ export const createTerminalRoute = (services: Services) =>
 
         // Idempotent (onClose and onError can both fire, and terminate() re-enters via onClose).
         const cleanup = (): void => {
-            closed = true;
             clearInterval(drain);
             clearInterval(liveness);
             drain = undefined;
@@ -103,19 +102,13 @@ export const createTerminalRoute = (services: Services) =>
         return {
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
-                if (services.auth !== undefined) {
-                    try {
-                        await services.auth.authorize(url.searchParams.get("token") ?? "", url.searchParams.get("connect") ?? undefined);
-                    } catch (err) {
-                        // The close frame only says "unauthorized"; the actual cause (JWKS fetch, clock skew,
-                        // first-bind token mismatch) is only visible here.
-                        services.logger.warn({ err }, "terminal authorize failed");
-                        ws.close(1008, "unauthorized");
-                        return;
-                    }
-                }
-                // The browser vanished during the (possibly slow JWKS) auth await — don't spawn an orphan.
-                if (closed) {
+                try {
+                    redeemTicket(services, url);
+                } catch (err) {
+                    // The close frame only says "unauthorized"; whether the ticket was unknown, already spent or
+                    // expired is only visible here.
+                    services.logger.warn({ err }, "terminal ticket rejected");
+                    ws.close(1008, "unauthorized");
                     return;
                 }
                 // The tmux session this tab attaches. Validated because it reaches a `tmux -s <name>` argv (a name

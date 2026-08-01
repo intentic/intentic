@@ -13,6 +13,7 @@ import type {
     WorkspaceChildren,
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
+import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import {
     type GitCloneOptions,
     type GitStatus,
@@ -32,6 +33,7 @@ import type { Logger } from "pino";
 import { createAcpAgent } from "./acp/acp-agent.js";
 import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.js";
 import { type BridgeTokens, fileBridgeTokens } from "./auth/bridge-tokens.js";
+import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
 import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
@@ -171,6 +173,8 @@ export interface Services {
     readonly terminalRun: TerminalRunner;
     // A per-boot secret injected into every panel process (INTENTIC_PANEL_TOKEN) so a panel's own backend can
     // call the daemon from inside the sandbox without the browser's Google token. Never leaves the container.
+    // One-shot tickets the WebSocket upgrades redeem, so a bearer never rides a query string (auth/ws-tickets.ts).
+    readonly wsTickets: WsTickets;
     readonly panelToken: string;
     // A per-boot secret the in-container `vpn` CLI presents (x-intentic-agent), written to a 0600 file at
     // AGENT_TOKEN_PATH so the agent's shell and the owner's terminals can both read it. UNLIKE panelToken it is
@@ -407,7 +411,7 @@ export interface Services {
     // and write it, and the authorizer consults it. The daemon is the enforcer; the platform only mirrors these.
     readonly members: MembersStore;
     // When set, the daemon is exposed directly and verifies the caller's bearer (a daemon-minted session, or a
-    // Google ID token) on every route but /health; CORS is emitted for `allowOrigin`. Undefined ⇒ loopback mode
+    // Google ID token) on every route but /health; CORS is emitted for `allowOrigins`. Undefined ⇒ loopback mode
     // (tests / host-internal preview). authorizeOwner gates the owner-only member-management routes; mintSession
     // backs system.session — the Google-verified exchange that makes sessions the steady-state credential.
     readonly auth:
@@ -415,7 +419,12 @@ export interface Services {
               readonly authorize: (bearer: string, firstBind: string | undefined) => Promise<VerifiedIdentity>;
               readonly authorizeOwner: (bearer: string) => Promise<void>;
               readonly mintSession: (identity: VerifiedIdentity) => Promise<MintedSession>;
-              readonly allowOrigin?: string;
+              // Re-key the session signer: every browser holding a session for this sandbox is signed out at
+              // once (auth/session.ts rotate). Backs the owner-only "sign out everywhere" route.
+              readonly rotateSessions: () => Promise<void>;
+              // The browser origins CORS is emitted for (config.webOrigin, split on commas). Never a wildcard:
+              // /health answers without a credential, so this is the only gate in front of it.
+              readonly allowOrigins: readonly string[];
           }
         | undefined;
 }
@@ -467,7 +476,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
               authorize: authorizer.authorize,
               authorizeOwner: authorizer.authorizeOwner,
               mintSession: sessions.mint,
-              ...(config.webOrigin !== "" ? { allowOrigin: config.webOrigin } : {}),
+              rotateSessions: sessions.rotate,
+              // Comma-separated so one sandbox can serve the hosted SPA and a local dev origin at once. Never
+              // empty in practice — env.config collapses a blank WEB_ORIGIN onto the hosted default.
+              allowOrigins: config.webOrigin
+                  .split(",")
+                  .map((origin) => origin.trim())
+                  .filter((origin) => origin !== ""),
           }
         : undefined;
 
@@ -532,9 +547,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
         boot: createBootTracker(logger),
         workspace,
         processes: createManagedProcesses(),
-        portForwards: createPortForwards(),
+        // Slot names are salted with the connect token, so a forwarded port's public hostname can't be guessed
+        // from the sandbox id alone (tunnel-ids.ts). The daemon and the platform derive the same eight.
+        portForwards: createPortForwards(portSlotsFromToken(config.connectToken)),
         scanPorts: () => scanListeningPorts(),
         terminalRun,
+        wsTickets: createWsTickets(),
         panelToken: randomBytes(32).toString("hex"),
         agentToken: randomBytes(32).toString("hex"),
         info,

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type WebchatConfig, WebchatMessageSchema } from "@intentic/sandbox-contract";
+import { WEBCHAT_DAILY_MAX_DEFAULT, type WebchatConfig, WebchatMessageSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { z } from "zod";
@@ -45,10 +45,7 @@ const rateLimited = (key: string, now: number): boolean => {
  * record that has to be written anyway. */
 const daily = new Map<string, { day: number; count: number }>();
 const dayOf = (now: number): number => Math.floor(now / 86_400_000);
-const overDailyBudget = (automationId: string, max: number | undefined, now: number): boolean => {
-    if (max === undefined) {
-        return false;
-    }
+const overDailyBudget = (automationId: string, max: number, now: number): boolean => {
     const day = dayOf(now);
     const current = daily.get(automationId);
     const count = current !== undefined && current.day === day ? current.count : 0;
@@ -182,7 +179,7 @@ export const createWebchatRoutes = (services: Services, wake: WakeFn = streamAge
             if (existing !== undefined && config.conversationMessageMax !== undefined && existing.messages >= config.conversationMessageMax) {
                 return c.json({ error: "this conversation has reached its message limit" }, 429);
             }
-            if (overDailyBudget(automation.id, config.dailyMessageMax, now)) {
+            if (overDailyBudget(automation.id, config.dailyMessageMax ?? WEBCHAT_DAILY_MAX_DEFAULT, now)) {
                 return c.json({ error: "this chat has reached today's limit — try again tomorrow" }, 429);
             }
 
