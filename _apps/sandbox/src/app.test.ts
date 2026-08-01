@@ -382,7 +382,7 @@ const services = (overrides: ServiceOverrides = {}): Services => {
         // Inert resident search — no index, no rg. The search route test overrides `run` with a canned outcome.
         iq: {
             run: async () => ({
-                result: { mode: "q", total: 0, shown: 0, groups: [], freshness: { state: "fresh" as const }, truncated: false },
+                result: { mode: "q", total: 0, files: 0, shown: 0, groups: [], freshness: { state: "fresh" as const }, truncated: false },
                 text: "",
                 exitCode: 1 as const,
             }),
@@ -729,7 +729,7 @@ test("workspace.search caps the page at the GUI file limit, whatever the caller 
                     }),
                     markDirty: () => {},
                     warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh", ageMs: 0 } }),
-                    close: () => {},
+                    close: async () => {},
                 },
             }),
         ),

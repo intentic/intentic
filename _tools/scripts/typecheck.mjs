@@ -108,6 +108,27 @@ console.log(`typecheck coverage: every package with tests type-checks them`);
  * export `./src/...` (the Vue libraries) are already the source of truth and have nothing to emit.
  * `tsgo -b` orders the set itself from the project references, and is incremental — a no-op pass is ~1s. */
 const needsDeclarations = packages.filter(({ pkg }) => /\.\/dist\//.test(JSON.stringify(pkg.exports ?? "")));
+
+/* A package whose sources are themselves GENERATED has nothing for `tsgo -b` to read until its generator has
+ * run: `_libs/prisma` is one re-export of `./generated/client.js`, which `prisma generate` writes and git
+ * ignores. turbo used to cover this by way of `^build` (the package's `build` runs the generator first); this
+ * prepass replaced `^build`, and on a fresh checkout it therefore reported the generated module as missing —
+ * one TS2307 in the prepass, then `@intentic-app/prisma` unresolvable in every dependent, ~20 errors deep in
+ * api and e2e that named nothing about the real cause. Recognized by shape (a `generate` script), not by name,
+ * and run through a shell with the package's own `.bin` on PATH rather than through pnpm — pnpm's
+ * `syncInjectedDepsAfterScripts` hardlinks into `node_modules` afterwards and dies EXDEV in an agent worktree,
+ * which is the very thing this script exists to keep out of the path. Generation is unconditional: it is
+ * ~0.8s, and a conditional pass would have to model each generator's inputs to know when it is stale. */
+const generated = needsDeclarations.filter(({ pkg }) => pkg.scripts?.generate !== undefined);
+for (const { name, dir, pkg } of generated) {
+    console.log(`generating: ${name}`);
+    const bin = [join(dir, "node_modules/.bin"), join(root, "node_modules/.bin"), process.env.PATH].join(":");
+    const generate = spawnSync(pkg.scripts.generate, { cwd: dir, shell: true, stdio: "inherit", env: { ...process.env, PATH: bin } });
+    if (generate.status !== 0) {
+        process.exit(generate.status ?? 1);
+    }
+}
+
 console.log(`declarations: building ${needsDeclarations.length} packages that dependents read from dist`);
 const build = spawnSync(join(root, "node_modules/.bin/tsgo"), ["-b", ...needsDeclarations.map(({ name }) => name)], { cwd: root, stdio: "inherit" });
 if (build.status !== 0) {

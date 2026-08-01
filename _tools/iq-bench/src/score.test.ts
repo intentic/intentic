@@ -5,8 +5,9 @@ import { rankedAnchors, scoreCase } from "./score.js";
 const result = (groups: Array<{ path: string; lines: number[] }>, related?: string[], candidates?: string[]): WorkspaceSearchResult => ({
     mode: "q",
     total: groups.length,
+    files: groups.length,
     shown: groups.length,
-    groups: groups.map((group) => ({ path: group.path, score: 1, hits: group.lines.map((line) => ({ line, text: "x", tags: [] })) })),
+    groups: groups.map((group) => ({ path: group.path, score: 1, hits: group.lines.map((line) => ({ line, text: "x", spans: [], tags: [] })) })),
     freshness: { state: "fresh" },
     truncated: false,
     ...(related !== undefined ? { related } : {}),

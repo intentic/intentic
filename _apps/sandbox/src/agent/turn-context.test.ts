@@ -20,6 +20,7 @@ const outcome = (overrides: Partial<QueryOutcome> = {}): QueryOutcome => ({
     result: {
         mode: "q",
         total: 1,
+        files: 1,
         shown: 1,
         groups: [{ path: "src/agent/turn-plan.ts", score: 1, hits: [] }],
         freshness: { state: "fresh" },
