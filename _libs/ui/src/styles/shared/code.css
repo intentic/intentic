@@ -14,6 +14,7 @@
         background-color: var(--color-canvas) !important;
         padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
         font-family: var(--font-mono);
+        font-feature-settings: var(--font-mono--font-feature-settings);
         font-size: 0.75rem;
         line-height: 1rem;
     }

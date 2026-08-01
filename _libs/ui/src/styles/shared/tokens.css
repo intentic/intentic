@@ -15,6 +15,12 @@
     --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
     --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    /* No ligatures in monospace. Mono here always renders characters that must be read literally — a shell
+     * command, a diff, a path, a secret — and JetBrains Mono's `calt` set turns `!=` into `≠` and `->` into an
+     * arrow, showing the user something other than what they typed. It is also a correctness fix: Chromium
+     * shapes an editable field incrementally, and appending a character after a ligature pair leaves the pair's
+     * FIRST glyph blank ("pnpm test &&" + space renders "pnpm test  &"), which no repaint recovers. */
+    --font-mono--font-feature-settings: "liga" 0, "calt" 0;
     --font-default: var(--font-sans);
 
     --text-2xs: 0.6875rem;

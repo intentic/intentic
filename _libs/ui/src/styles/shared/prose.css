@@ -189,6 +189,7 @@
    enough that a trailing comma still reads as punctuation and not as part of the token. */
 .md-prose code {
     font-family: var(--font-mono, ui-monospace, monospace);
+    font-feature-settings: var(--font-mono--font-feature-settings);
     font-size: var(--prose-code);
     background: color-mix(in srgb, var(--color-content) 7%, transparent);
     padding: 0.12em 0.3em;
