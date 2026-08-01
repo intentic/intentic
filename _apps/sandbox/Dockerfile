@@ -300,13 +300,14 @@ COPY _extensions/documentation/bin /opt/extensions/documentation/bin
 COPY _extensions/documentation/plugin /opt/extensions/documentation/plugin
 # The web-builtin UI extensions bake their MANIFEST ONLY — their code is compiled into the web bundle
 # (extension-host/builtins.ts), so there is nothing daemon-side to ship. The manifest is what makes them exist
-# for the daemon: `GET /extensions` then enumerates all fourteen first-party extensions through one enumerator,
+# for the daemon: `GET /extensions` then enumerates all fifteen first-party extensions through one enumerator,
 # so the Extensions tab is a complete list with a working on/off switch instead of a view of one load path.
 # The pairing is checked both ways — a manifest here with no compiled-in module shows as "missing" in the tab
 # (image and web bundle built from different commits), and a module with no manifest shows as "unlisted".
 COPY _extensions/acceptance/intentic-extension.json /opt/extensions/acceptance/
 COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
 COPY _extensions/automations/intentic-extension.json /opt/extensions/automations/
+COPY _extensions/deployments/intentic-extension.json /opt/extensions/deployments/
 COPY _extensions/logs/intentic-extension.json /opt/extensions/logs/
 COPY _extensions/maintenance/intentic-extension.json /opt/extensions/maintenance/
 COPY _extensions/memory/intentic-extension.json /opt/extensions/memory/

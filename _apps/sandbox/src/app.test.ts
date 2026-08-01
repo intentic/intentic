@@ -3562,6 +3562,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.activity",
         "intentic.automations",
         "intentic.connectors",
+        "intentic.deployments",
         "intentic.discord",
         "intentic.documentation",
         "intentic.imap",

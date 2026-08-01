@@ -28,6 +28,7 @@
         "@intentic/ext-acceptance": "workspace:*",
         "@intentic/ext-activity": "workspace:*",
         "@intentic/ext-automations": "workspace:*",
+        "@intentic/ext-deployments": "workspace:*",
         "@intentic/ext-documentation": "workspace:*",
         "@intentic/ext-logs": "workspace:*",
         "@intentic/ext-maintenance": "workspace:*",

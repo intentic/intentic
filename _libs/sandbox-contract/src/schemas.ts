@@ -2458,6 +2458,158 @@ export type CiRunParam = z.infer<typeof CiRunParamSchema>;
 export const CiFixResponseSchema = z.object({ conversationId: z.string() });
 export type CiFixResponse = z.infer<typeof CiFixResponseSchema>;
 
+/* ---- Komodo deployments: the Deployments rail view's wire shape ----
+ *
+ * The daemon does the VENDOR translation (Komodo's tagged unions and enums → the flat shapes below); the
+ * extension does the ATTENTION model on top of them (which alerts are incidents, which have been seen, what
+ * the rail says). Same split as CI, and for the same reason: what a breakage MEANS is a UI decision that has
+ * to be unit-testable without a daemon, while what Komodo's `ContainerStateChange` variant looks like is a
+ * detail no view should ever learn.
+ *
+ * Routes are per-connection (`/komodo/{capability}/…`): a sandbox can hold two Komodo capabilities, and the
+ * credential the daemon resolves per call is the one the path names. The browser never holds either half of
+ * the API key — that is the whole reason these routes exist rather than the view calling Komodo directly. */
+
+// Every Komodo container state (DeploymentState ∪ StackState — eleven words between them) collapsed onto the
+// five a view can tone. `stopped` swallows exited/stopped/paused/created/down/not_deployed on purpose: being
+// down is a LEVEL and says nothing about whether it was meant to be. What says a running thing STOPPED is the
+// alert log, which is why the badge reads alerts and this enum only colours a chip.
+export const DeployStateSchema = z.enum(["running", "deploying", "stopped", "unhealthy", "unknown"]);
+export type DeployState = z.infer<typeof DeployStateSchema>;
+
+// Stacks and deployments are one row type in the view: a stack is a compose project, a deployment a single
+// container, and an operator looking for what is down does not want them in separate lists.
+export const DeployResourceKindSchema = z.enum(["deployment", "stack"]);
+export type DeployResourceKind = z.infer<typeof DeployResourceKindSchema>;
+
+// One service inside a stack — free of extra calls (Komodo's ListStacks already returns them under `info`),
+// so a stack row can expand without a per-row fetch.
+export const DeployServiceSchema = z.object({
+    name: z.string(),
+    image: z.string(),
+    updateAvailable: z.boolean(),
+});
+export type DeployService = z.infer<typeof DeployServiceSchema>;
+
+export const DeployResourceSchema = z.object({
+    kind: DeployResourceKindSchema,
+    // Komodo's resource id — what the action routes address (names collide across resource types, ids don't).
+    id: z.string(),
+    name: z.string(),
+    state: DeployStateSchema,
+    // Komodo's own status prose ("Up 4 days", "Exited (1) 20 minutes ago"). Passed through rather than
+    // regenerated: docker's phrasing is more precise than anything we would compose from a state word.
+    status: z.string().optional(),
+    // The host it runs on — the grouping key of the whole view. Absent on a resource Komodo has not placed yet.
+    server: z.string().optional(),
+    image: z.string().optional(),
+    // A newer image exists at the same tag. An opportunity, never a breakage — see the tone table in
+    // ext-deployments' incidents.ts for why this may not reach the rail as `danger`.
+    updateAvailable: z.boolean(),
+    // Stacks only, and empty when the stack has none deployed yet.
+    services: z.array(DeployServiceSchema),
+    // Deep link into Komodo's own UI for this resource — we do not reimplement Komodo, we get you there.
+    url: z.string(),
+});
+export type DeployResource = z.infer<typeof DeployResourceSchema>;
+
+export const DeployServerStateSchema = z.enum(["ok", "unreachable", "disabled"]);
+export type DeployServerState = z.infer<typeof DeployServerStateSchema>;
+
+// A host, with the three gauges that explain a large share of deployment failures. All three ride ListServers'
+// own `info.stats`, so the strip costs nothing extra; absent when the server is unreachable (no stats to have).
+export const DeployServerSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    state: DeployServerStateSchema,
+    cpuPercent: z.number().optional(),
+    memPercent: z.number().optional(),
+    diskPercent: z.number().optional(),
+    url: z.string(),
+});
+export type DeployServer = z.infer<typeof DeployServerSchema>;
+
+// One entry from Komodo's alert log — an EDGE, already timestamped and resolve-flagged server-side. This is
+// what makes the rail badge possible without keeping any local history: Komodo records the transition, we only
+// decide whether the owner has seen it. `type` stays the raw AlertData variant tag (ContainerStateChange,
+// ServerUnreachable, DeploymentImageUpdateAvailable, BuildFailed…) — a variant we have not met yet is exactly
+// the one worth surfacing, so it passes through instead of being dropped into an "other" bucket.
+export const DeployAlertSchema = z.object({
+    id: z.string(),
+    type: z.string(),
+    level: z.enum(["ok", "warning", "critical"]),
+    // Komodo closes an alert when the condition clears; a resolved container-state alert IS the recovery.
+    resolved: z.boolean(),
+    // Epoch ms the alert OPENED — compared against seenAt, so further trouble inside one open alert can't re-badge.
+    ts: z.number(),
+    // The resource it is about, when the variant names one, and the host it sits on.
+    resource: z.string().optional(),
+    server: z.string().optional(),
+    // The container/stack state transition, on the variants that carry one ("running" → "restarting").
+    from: z.string().optional(),
+    to: z.string().optional(),
+});
+export type DeployAlert = z.infer<typeof DeployAlertSchema>;
+
+export const DeployOverviewResponseSchema = z.object({
+    komodoUrl: z.string(),
+    // FALSE means Komodo did not answer — the view says so loudly and the badge must not read `danger`.
+    // "We cannot see production" is not "production is broken", the same line ciAttention draws when it
+    // leaves the last known state standing rather than blanking the tile.
+    reachable: z.boolean(),
+    // Why it did not answer, in Komodo's own words — the view shows it instead of a bare "unavailable".
+    unreachableReason: z.string().optional(),
+    resources: z.array(DeployResourceSchema),
+    servers: z.array(DeployServerSchema),
+    // Newest first. Unresolved and resolved both: the view shows recent history, the badge reads only the
+    // unresolved half.
+    alerts: z.array(DeployAlertSchema),
+    // When the owner last opened THIS connection's view. Rides the response so the rail decides what is new
+    // without a second call. Absent ⇒ never opened, so everything counts as unseen.
+    seenAt: z.number().optional(),
+});
+export type DeployOverviewResponse = z.infer<typeof DeployOverviewResponseSchema>;
+
+// Which Komodo connection a call addresses — the capability id, which is also the rail tile's key.
+export const DeployCapabilityParamSchema = z.object({ capability: z.string() });
+export type DeployCapabilityParam = z.infer<typeof DeployCapabilityParamSchema>;
+
+// The five state-changing operations the view offers. Deliberately no `write/*`: editing config from a
+// dashboard is how you get drift the desired-state repo then fights, so configuration stays in Komodo or in
+// the intent repo. `pull` pulls the newest image AND deploys — the routine version bump as one click.
+export const DeployActionSchema = z.enum(["deploy", "restart", "start", "stop", "pull"]);
+export type DeployAction = z.infer<typeof DeployActionSchema>;
+
+export const DeployActionParamSchema = z.object({
+    capability: z.string(),
+    kind: DeployResourceKindSchema,
+    // Komodo's resource id. Re-resolved to a live resource per call, so a stale card cannot act on something
+    // that has since been deleted — the CI actions' "re-resolve per call" rule.
+    id: z.string(),
+    action: DeployActionSchema,
+});
+export type DeployActionParam = z.infer<typeof DeployActionParamSchema>;
+
+export const DeployLogsParamSchema = z.object({
+    capability: z.string(),
+    kind: DeployResourceKindSchema,
+    id: z.string(),
+});
+export type DeployLogsParam = z.infer<typeof DeployLogsParamSchema>;
+
+// Komodo returns a `Log` with both channels; the view renders them together, newest at the bottom, the way a
+// terminal would.
+export const DeployLogsResponseSchema = z.object({ stdout: z.string(), stderr: z.string() });
+export type DeployLogsResponse = z.infer<typeof DeployLogsResponseSchema>;
+
+// The fix route opens an isolated conversation seeded with the resource, its state, and its log tail — the
+// thing Komodo's own UI structurally cannot do, since the repo that holds the bug is open in the next tab.
+export const DeployFixResponseSchema = z.object({ conversationId: z.string() });
+export type DeployFixResponse = z.infer<typeof DeployFixResponseSchema>;
+
+export const DeploySeenResponseSchema = z.object({ seenAt: z.number() });
+export type DeploySeenResponse = z.infer<typeof DeploySeenResponseSchema>;
+
 /* ---- the pre-push check: the workspace's own answer to "would this push go red" ----
  *
  * WHERE THIS SITS. A fleet of 5-20 agents lands work into the main tree, the user reviews and commits it by

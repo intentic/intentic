@@ -18,6 +18,7 @@ import { createHistoryRoutes } from "./history/history.routes.js";
 import { createIntenticRoutes } from "./intentic/intentic.routes.js";
 import { createInventoryRoutes } from "./inventory/inventory.routes.js";
 import { createKimiRoutes } from "./kimi/kimi.routes.js";
+import { createKomodoRoutes } from "./komodo/komodo.routes.js";
 import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createMemoryRoutes } from "./memory/memory.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
@@ -53,6 +54,7 @@ export const createRouter = (services: Services) => ({
     git: createGitRoutes(services),
     grok: createGrokRoutes(services),
     kimi: createKimiRoutes(services),
+    komodo: createKomodoRoutes(services),
     history: createHistoryRoutes(services),
     workspace: createWorkspaceRoutes(services),
     inventory: createInventoryRoutes(services),

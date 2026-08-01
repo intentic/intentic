@@ -1,7 +1,8 @@
-# Deployments on the rail — a design
+# Deployments on the rail — the design
 
-A proposal for a `Deployments` rail view, driven by the Komodo connector, in the shape `ext-pipelines`
-established for CI. Not built yet; this is the design to argue with.
+Why the `Deployments` rail view is shaped the way it is: a capability-driven tile over the Komodo connector,
+in the shape `ext-pipelines` established for CI. Built as `@intentic/ext-deployments` plus the daemon's
+`/komodo/{capability}` routes; this records the reasoning, and section 9 records what changed on the way.
 
 ## 1. The gap
 
@@ -181,3 +182,23 @@ that column stops being able to say a crash-looping container is fine.
   registry, and it would relight the tile daily for something nobody needs to see today.
 - **Per-deployment notification settings.** Komodo's Alerter already has whitelist/blacklist/type filters.
   Sending users to configure alerting in two places is worse than sending them to one.
+
+## 9. What the build changed
+
+Three things came out differently from the sketch above, each because the code made the answer clearer:
+
+- **One tile per connection, not one tile.** `detect()` returns an activation per connected `komodo`
+  capability, so two Komodos are two tiles with two independent `seenAt` stamps. Looking at staging must not
+  silence production — which also pushed the seen-state store from one timestamp to a map keyed by capability
+  id (`.intentic/komodo.json`).
+- **`exited` is neutral in the list and a breakage in the alert.** A container sitting exited says nothing
+  (it may have been stopped on purpose); a container that *transitioned into* exited stopped while it was
+  meant to be running. The state table and `BROKEN_STATES` disagree on that word deliberately, and that
+  disagreement is the level/edge distinction made concrete. `komodo-overview.test.ts` and `incidents.test.ts`
+  pin both halves.
+- **The overview degrades rather than throws.** An unreachable Komodo resolves with `reachable: false` and a
+  reason instead of erroring, because the single most important thing this view can say is "I cannot see
+  production", and it can only say it by rendering. Actions still propagate their failures as `BAD_GATEWAY`
+  carrying Komodo's own words — a refused deploy is an answer the operator needs verbatim.
+
+The `km` CLI is still not bundled, so the connector still carries no image effect and still needs no rebuild.

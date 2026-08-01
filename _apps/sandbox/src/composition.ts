@@ -45,6 +45,7 @@ import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/ca
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
 import { createRunsCache, type RunsCache } from "./ci/runs-cache.js";
+import { fileKomodoStore, type KomodoStore } from "./komodo/komodo-store.js";
 import { createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, type MembersStore, type VerifiedIdentity } from "./auth/auth.js";
 import { createSessions, type MintedSession } from "./auth/session.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
@@ -206,6 +207,9 @@ export interface Services {
     readonly ciRuns: RunsCache;
     // Keeps every mapped repo's provider webhook pointing at this sandbox; its warnings ride /ci/runs.
     readonly ciHooks: CiHookReconciler;
+    // When the owner last looked at each connected Komodo's deployments (.intentic/komodo.json) — what
+    // silences the Deployments rail badge for incidents already read.
+    readonly komodoStore: KomodoStore;
     // Wakes from `requireApproval` automations, held for the owner (.intentic/approvals/, one file per wake) —
     // the /automations pending routes approve (run the held wake) or reject them.
     readonly approvals: ApprovalsStore;
@@ -561,6 +565,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ciStore,
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
+        komodoStore: fileKomodoStore(join(workspace.root, ".intentic", "komodo.json")),
         bridgeTokens: fileBridgeTokens(join(workspace.root, ".intentic", "bridge-tokens.json")),
         automations: fileAutomationsStore(join(workspace.root, ".intentic", "automations.json")),
         chores,

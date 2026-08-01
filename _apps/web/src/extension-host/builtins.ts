@@ -4,6 +4,7 @@ import * as acceptance from "@intentic/ext-acceptance";
 import * as activity from "@intentic/ext-activity";
 import * as apps from "@intentic/ext-repo-apps";
 import * as automations from "@intentic/ext-automations";
+import * as deployments from "@intentic/ext-deployments";
 import * as documentation from "@intentic/ext-documentation";
 import * as logs from "@intentic/ext-logs";
 import * as maintenance from "@intentic/ext-maintenance";
@@ -27,6 +28,19 @@ import * as viewers from "@intentic/ext-viewers";
 // daemon lists it under. Typed on the array below so a package that stops exporting one fails here.
 export type BuiltinModule = ExtensionModule & { readonly manifest: ExtensionManifest };
 
-const modules: readonly BuiltinModule[] = [automations, logs, memory, activity, pipelines, apps, acceptance, documentation, maintenance, preview, viewers];
+const modules: readonly BuiltinModule[] = [
+    automations,
+    logs,
+    memory,
+    activity,
+    pipelines,
+    deployments,
+    apps,
+    acceptance,
+    documentation,
+    maintenance,
+    preview,
+    viewers,
+];
 
 export const builtinModules: ReadonlyMap<string, BuiltinModule> = new Map(modules.map((module) => [extensionIdOf(module.manifest), module]));

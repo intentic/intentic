@@ -121,6 +121,11 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
         invalidates: [],
         why: "Webhook secret + conclusion memory; the Pipelines view reads it through /ci/runs, not off disk.",
     },
+    {
+        path: ".intentic/komodo.json",
+        invalidates: [],
+        why: "Per-connection 'when the owner last looked at Deployments'; the view reads it through /komodo/{capability}/overview, not off disk — and it is written BY that view being opened, so invalidating on it would refetch the board in answer to the browser's own click.",
+    },
     { path: ".intentic/bridge-tokens.json", invalidates: [], why: "Hashed ACP bridge tokens, listed on demand by the owner." },
     {
         path: ".intentic/owner.json",
