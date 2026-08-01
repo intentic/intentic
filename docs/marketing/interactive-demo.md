@@ -37,7 +37,7 @@ reported all ten files as unused (web's entry list cannot see a second html), an
 dist beside the one its Dockerfile assumes. The dependency now runs one way only — the demo knows the app, the
 app knows nothing — which is also what stops app code reaching the fixture by accident.
 
-**It cost the app two lines**, both of which are fixes rather than accommodations, because building the same
+**It cost the app three lines**, all of which are fixes rather than accommodations, because building the same
 source under a path prefix is what surfaced them:
 
 - `router/index.ts` now passes `import.meta.env.BASE_URL` to `createWebHistory()`. vue-router's default is a
@@ -46,6 +46,11 @@ source under a path prefix is what surfaced them:
 - `styles.css` now names its own source in an `@source`. Tailwind's auto-detection is rooted at the *build's*
   root, which was the app's directory only because the app was the only thing building it; the demo's first run
   came up as real markup with three-quarters of a design system.
+- `usePopout.ts` resolves the pop-out window's page against `import.meta.env.BASE_URL` instead of the origin
+  root. `/popout.html` under a prefix is the *marketing site's* 404 page, and nothing in it can answer the
+  keeper's handshake — so the window opened and then sat there while the panel stayed docked, which is exactly
+  the failure the liveness contract is written to prevent, arriving through the address rather than the realm.
+  The demo owns its own `popout.html` (same keeper, its own document, since the page is addressed by URL).
 
 Both fixture handlers are plain `Request → Response` functions with contract types on every payload
 (`satisfies AgentsList`, `: SavingsReport`, …), so a shape that drifts from the wire is a build error. They are
@@ -176,8 +181,15 @@ Pressing it opens the demo in a **near-full-viewport overlay**, not in the hero 
 decision the implementation changed: the hero column is ~525px, which puts the app in its mobile shell — a real
 surface, but the wrong one for a page whose claim is "an IDE for your agents". The overlay gives it 94vw × 90vh,
 where the fleet board, the docked chat and the terminal are all on screen at once. Escape, the backdrop and a
-Close button all dismiss it, and the iframe is created once and kept, so re-opening returns to the workspace the
+Close button all dismiss it, and the iframe is created once and kept, so re-opening returns to the screen the
 visitor left rather than restarting the recording.
+
+**It opens on `/demo/agents`.** The app's own default lands a desktop on the workspace, which for someone who
+has just pressed play is the one screen with nothing in it — an empty tree and a drop zone, for files this
+visitor does not have. The fleet board arrives full, and it is the thing being claimed. The redirect is written
+into the URL by `src/main.ts` before the app boots, so there is no first paint of the wrong screen and no
+history entry to press Back into; only the bare base is redirected, since every other address is one the
+visitor chose. The app's own routing is untouched.
 
 It sits **above the nav** (`z-200` over the nav's `z-100`), which is what makes it read as a window rather than
 as another section of the page. The nav is `fixed`, so a lower overlay left the marketing header — and its

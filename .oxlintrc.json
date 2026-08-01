@@ -8,7 +8,10 @@
     },
     "rules": {
         "typescript/no-extraneous-class": ["error", { "allowWithDecorator": true }],
-        "import/no-unassigned-import": ["error", { "allow": ["**/*.css", "**/composables/sandbox/sandboxScope", "**/extension-host/hostModules"] }],
+        "import/no-unassigned-import": [
+            "error",
+            { "allow": ["**/*.css", "**/composables/sandbox/sandboxScope", "**/extension-host/hostModules", "**/popout-keeper"] }
+        ],
         "no-underscore-dangle": ["error", { "allow": ["__API_URL__", "__intentic", "__termFrames", "_core", "_renderService"] }],
         "no-await-in-loop": "off"
     },

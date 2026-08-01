@@ -12,7 +12,7 @@ import { computed, type ComputedRef, nextTick, ref, type Ref, shallowRef, type S
  * every browser opens windows, where document PiP was Chromium-only, so there is no `supported` gate left to
  * ask about.
  *
- * The window opens on a real page of this app — /popout.html, a near-empty document whose whole job is to hold
+ * The window opens on a real page of this app — popout.html, a near-empty document whose whole job is to hold
  * a panel and report in (src/popout/keeper.ts) — rather than the about:blank it used to be. Same origin either
  * way, so this realm owns that document outright: styles are cloned in, the theme root is mirrored, and the
  * panel is Teleported into its body. Closing it (its own ×) docks the panel back. What the address buys is what
@@ -61,10 +61,16 @@ declare global {
     }
 }
 
-// The page every popped-out panel floats in (popout.html, at the app's root). Opened with the panel named in
-// its query, for the readers that see a window's address but not its title bar: the address bar itself, the
-// browser's window list, and the session it restores from.
-const POPOUT_PAGE = `/popout.html`;
+/* The page every popped-out panel floats in (popout.html, beside the app's own document). Opened with the panel
+ * named in its query, for the readers that see a window's address but not its title bar: the address bar itself,
+ * the browser's window list, and the session it restores from.
+ *
+ * Resolved against the app's BASE rather than the origin root, which is the same thing the router does with its
+ * history (router/index.ts): this build is also served under a prefix — the recorded demo lives at `/demo/` on
+ * the marketing site — and there a root-absolute `/popout.html` opens that site's 404 page. Nothing in it
+ * answers the keeper's handshake, so the window sits on a dead end and the panel it was opened for never
+ * leaves its column. Read per call so a test can say that in one line. */
+const popoutPage = (): string => `${import.meta.env.BASE_URL}popout.html`;
 
 // Marks the stylesheets THIS realm clones into a pop-out document, so re-dressing one replaces its clones and
 // leaves the page's own head — its icon, its keeper — untouched.
@@ -531,7 +537,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         }
         // A matching target name reuses the window it already refers to, navigating it: re-popping cannot stack
         // windows, and a window a reload left floating is taken back over rather than joined by a second one.
-        const win = window.open(`${POPOUT_PAGE}?panel=${name}`, name, features(rememberedFrame() ?? centred(size())));
+        const win = window.open(`${popoutPage()}?panel=${name}`, name, features(rememberedFrame() ?? centred(size())));
         if (win === null) {
             return; // blocked by the popup blocker — the panel stays docked
         }

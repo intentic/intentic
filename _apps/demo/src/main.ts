@@ -28,9 +28,25 @@ const SOCKETS: Record<string, typeof terminalSession> = {
     "/system/browser-view": browserSession,
 };
 
+/* WHERE THE RECORDING OPENS. The app's own default lands a desktop on the workspace, which for someone who has
+ * just pressed play on a marketing page is the one screen with nothing in it — an empty tree and a drop zone,
+ * because the visitor has no files here and never will. The fleet board is what this product is FOR, and it
+ * arrives full: seven agents, one in every lane, two of them waiting on a person.
+ *
+ * Written into the URL before the app boots rather than routed after it, so there is no first paint of the
+ * wrong screen and no entry in history to press Back into. Only the bare base is redirected: every other
+ * address — a deep link, a reload, the window the overlay reopens — is a place the visitor chose. */
+const openOnFleet = (): void => {
+    const base = import.meta.env.BASE_URL;
+    if (window.location.pathname === base || window.location.pathname === base.replace(/\/$/, ``)) {
+        window.history.replaceState(window.history.state, ``, `${base}agents${window.location.search}${window.location.hash}`);
+    }
+};
+
 installFetch({ platform, daemon });
 installWebSocket((url) => SOCKETS[url.pathname]);
 seedCredentials();
+openOnFleet();
 
 const served = coverage();
 console.info(`[demo] fixture daemon serving ${served.served} routes of the contract's ${served.contract} — anything else answers 404 and logs here.`);

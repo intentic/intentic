@@ -30,6 +30,7 @@ through `./vite-shared`. Web knows nothing about this.
 | File | What it is |
 | --- | --- |
 | `index.html` | the entry; sets `window.env` inline (sentinel origins) and loads `src/main.ts` |
+| `popout.html` | the window a popped-out panel is teleported into; loads `src/popout.ts`, which is the app's keeper and nothing else |
 | `src/transport.ts` | what the demo claims from `fetch`/`WebSocket`, and the socket shim |
 | `src/platform.ts` | the platform as a fetch handler: the session and the sandbox row the gates need |
 | `src/daemon.ts` | the daemon as a fetch handler: the route table and the `/events` stream |
@@ -48,6 +49,12 @@ therefore which tiles the rail carries at all.
 
 Anything the fixture does not serve answers 404 and logs one line naming the method and path. That console line
 is the tool: it is how the served routes were found, and how the next one will be.
+
+Two things this package owns that the app resolves against its BASE rather than the origin root, because here
+that root belongs to the marketing site: the pop-out window's page (`popout.html`, which the dev server's SPA
+fallback excepts by name and the build emits as a second entry) and the address the recording opens on —
+`src/main.ts` rewrites a bare `/demo/` to `/demo/agents` before the app boots, so a visitor who presses play
+lands on the fleet board rather than on an empty workspace.
 
 Design notes, the route/event coverage table and what is deliberately absent:
 [`docs/marketing/interactive-demo.md`](../../docs/marketing/interactive-demo.md).

@@ -85,6 +85,22 @@ describe(`createPopout`, () => {
         open.mockRestore();
     });
 
+    /* The pop-out page is addressed by URL, so it is addressed under the app's BASE — this same build is served
+     * under a prefix by the marketing site's recorded demo (`/demo/`), where a root-absolute `/popout.html` is
+     * that site's 404 page: a window nothing in it can answer the keeper's handshake from, and therefore a panel
+     * that never leaves its column. */
+    it(`opens the pop-out page under the app's base`, () => {
+        vi.stubEnv(`BASE_URL`, `/demo/`);
+        const popout = createPopout(`based-panel`, `Panel`, size);
+        const open = vi.spyOn(window, `open`).mockReturnValue(fakeWindow(`based-panel`) as unknown as Window);
+
+        popout.popOut();
+
+        expect(open).toHaveBeenCalledWith(`/demo/popout.html?panel=based-panel`, `based-panel`, expect.stringContaining(`popup=1`));
+        open.mockRestore();
+        vi.unstubAllEnvs();
+    });
+
     it(`adopts the window a reload left floating, without docking on the way`, () => {
         sessionStorage.setItem(`ui-popout-reload-panel`, `1`);
         const popout = createPopout(`reload-panel`, `Panel`, size);
