@@ -40,6 +40,7 @@ import { type AgentRequest, runAgent } from "./agent/agent.js";
 import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
+import { fileLoopsStore, type LoopsStore } from "./loops/loops-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
@@ -222,6 +223,9 @@ export interface Services {
     readonly capabilities: CapabilitiesStore;
     // Scheduled agent wake-ups (.intentic/automations.json) — the scheduler polls it; /automations edits it.
     readonly automations: AutomationsStore;
+    // Ralph loops (.intentic/loops.json): the pump drives them, /loops starts and stops them, and the record is
+    // its own restart journal — a loop still marked `running` at boot is one the daemon died under.
+    readonly loops: LoopsStore;
     // Maintenance evidence (.intentic/chores/): the probe cache the background runner fills, and the ledger of
     // what has been done about it. /chores reads both; @intentic/sandbox-contract/chores turns them into verdicts, in the
     // browser, where the panel and the rail badge share one computation.
@@ -610,6 +614,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         komodoStore: fileKomodoStore(join(workspace.root, ".intentic", "komodo.json")),
         bridgeTokens: fileBridgeTokens(join(workspace.root, ".intentic", "bridge-tokens.json")),
         automations: fileAutomationsStore(join(workspace.root, ".intentic", "automations.json")),
+        loops: fileLoopsStore(join(workspace.root, ".intentic", "loops.json")),
         chores,
         probeRunner: createProbeRunner({ workspace, chores, agents, logger }),
         approvals: fileApprovalsStore(join(workspace.root, ".intentic", "approvals")),

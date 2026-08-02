@@ -13,6 +13,7 @@ import {
     formatCost,
     formatElapsed,
     laneOf,
+    loopMeta,
     reviewAction,
     turnInFlight,
 } from "../composables/agents/agentStatus";
@@ -109,6 +110,7 @@ const landable = computed(() => props.agent.archivedAt === undefined && props.ag
 const landing = computed(() => props.pending === `land`);
 const handingOver = computed(() => props.pending === `resolve`);
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
+const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 const model = computed(() => (props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined));
 const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
 // The title with the filter's term marked, and one plain run when no filter is on.
@@ -322,9 +324,7 @@ const grab = (event: PointerEvent): void => {
                     <span class="text-success">+{{ agent.diff.insertions }}</span>
                     <span class="text-danger"> −{{ agent.diff.deletions }}</span>
                 </span>
-                <span v-if="agent.turns !== undefined && agent.turns > 0">
-                    <Icon name="comments" class="mr-0.5 text-2xs" />{{ agent.turns }}
-                </span>
+                <span v-if="agent.turns !== undefined && agent.turns > 0"> <Icon name="comments" class="mr-0.5 text-2xs" />{{ agent.turns }} </span>
                 <!-- THE AGENTS THIS AGENT STARTED. A card is the answer to "what is this agent up to", and one
                      running five children used to look exactly like one running none. A nested button, like the
                      cost above and for the same reason: the click opens the Subagents area rather than the agent.
@@ -335,7 +335,9 @@ const grab = (event: PointerEvent): void => {
                     type="button"
                     class="cursor-pointer transition-colors hover:text-content hover:underline"
                     :class="{ 'text-link': agent.subagents.running > 0 }"
-                    v-tooltip.top="agent.subagents.running > 0 ? `${agent.subagents.running} of ${agent.subagents.total} still working` : 'Agents it started'"
+                    v-tooltip.top="
+                        agent.subagents.running > 0 ? `${agent.subagents.running} of ${agent.subagents.total} still working` : 'Agents it started'
+                    "
                     @click.stop="router.push({ name: `subagents` })"
                 >
                     <Icon name="users" class="mr-0.5 text-2xs" />{{
@@ -347,6 +349,15 @@ const grab = (event: PointerEvent): void => {
                     <span>{{ context }}%</span>
                 </span>
             </div>
+
+            <!-- THE LOOP LINE. Above the activity line and never instead of it: the activity says what the
+                 agent is doing this second, this says what it is doing it TOWARDS, and a looping agent without
+                 the second one is a spinner with no end in sight. Survives the loop's end on purpose — how a
+                 loop stopped is the thing the card is read for afterwards. -->
+            <p v-if="agent.loop !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs" :class="loopLine?.class">
+                <Icon name="repeat" class="shrink-0 text-2xs" :class="loopLine?.spin ? 'animate-spin' : ''" />
+                <span class="truncate">{{ loopLine?.text }}</span>
+            </p>
 
             <!-- The live line and the footer both claim the row's leftovers, so a wide board splits them and a
                  narrow one wraps the footer onto its own line rather than shaving the activity to an ellipsis. -->
@@ -385,7 +396,9 @@ const grab = (event: PointerEvent): void => {
                         handingOver ? "Handing it over…" : "Have the agent resolve it"
                     }}
                 </button>
-                <span class="text-2xs leading-snug text-subtle">It merges in its own worktree — nothing reaches your workspace unless it succeeds.</span>
+                <span class="text-2xs leading-snug text-subtle"
+                    >It merges in its own worktree — nothing reaches your workspace unless it succeeds.</span
+                >
             </div>
 
             <!-- The READY card's press — the deliberate land the user opted into by turning auto-land off (see

@@ -42,6 +42,8 @@ import ChatMentionPopover from "./ChatMentionPopover.vue";
 import ChatMessageView from "./ChatMessageView.vue";
 import ChatModelPicker from "./ChatModelPicker.vue";
 import ChatModeMenu from "./ChatModeMenu.vue";
+import LoopDialog from "../agents/LoopDialog.vue";
+import { stopLoop } from "../composables/agents/useLoops";
 import ChatTabs from "./ChatTabs.vue";
 import ChatTabsMobile from "./ChatTabsMobile.vue";
 import { formatTokens, ProgressRing } from "@intentic-app/ui";
@@ -209,6 +211,27 @@ const activeArchived = computed(() => {
     const agent = agentById(active.value.conversationId);
     return agent?.archivedAt === undefined ? undefined : agent;
 });
+
+/* THE LOOP CONTROL. A loop is started from the conversation it will drive and nowhere else — see LoopDialog on
+ * why. Two things are read off the fleet entry rather than asked in the form: whether this agent works in its
+ * own worktree (a loop cannot change that mid-flight), and whether one is already running (the pill then stops
+ * the loop instead of offering a second one, which the daemon would refuse anyway). */
+const loopDialogOpen = ref(false);
+const activeLoop = computed(() => agentById(active.value.conversationId)?.loop);
+const looping = computed(() => activeLoop.value?.state === `running`);
+const loopIsolated = computed(() => agentById(active.value.conversationId)?.branch !== undefined);
+const endLoop = async (): Promise<void> => {
+    // Stops the LOOP, not the turn: whatever iteration is running finishes and lands. Abandoning it outright is
+    // this plus the Stop button beside it, which is exactly how it reads on screen.
+    await stopLoop(active.value.conversationId).catch(() => undefined);
+};
+// Said in full on the control, because "stop" next to a Stop button that means something else is the one place
+// this feature can genuinely mislead someone.
+const loopHint = computed(() =>
+    looping.value
+        ? `Stop looping — iteration ${activeLoop.value?.iteration} finishes first. Use Stop to cut it short.`
+        : `Run this agent again and again until a goal is met`,
+);
 
 // Compact "142k" style token count for the context tooltip.
 
@@ -1311,6 +1334,26 @@ watch(
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
 
+                                        <!-- LOOP. Sits with the controls that shape the TURN (mode, effort) rather than
+                                             with Send, because that is what it changes: the next message is run over
+                                             and over instead of once. It reads as a toggle because it is one — while a
+                                             loop runs, the same pill ends it, and the count is the only progress
+                                             readout the composer has room for. -->
+                                        <button
+                                            type="button"
+                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                            :class="{ 'composer-active': looping }"
+                                            @click="looping ? endLoop() : (loopDialogOpen = true)"
+                                            v-tooltip.top="loopHint"
+                                            :aria-pressed="looping"
+                                            aria-label="Loop until a goal is met"
+                                        >
+                                            <Icon name="repeat" class="text-2xs" :class="looping ? 'animate-spin text-link' : ''" />
+                                            <span v-if="activeLoop && looping" class="@max-md:hidden"
+                                                >{{ activeLoop.iteration }}/{{ activeLoop.maxIterations }}</span
+                                            >
+                                        </button>
+
                                         <button
                                             v-if="speechSupported"
                                             type="button"
@@ -1422,6 +1465,10 @@ watch(
             <BottomSheet v-model="modeSheetOpen" header="Agent mode">
                 <ChatModeMenu @selected="modeSheetOpen = false" />
             </BottomSheet>
+            <!-- Mounted here rather than app-wide: a loop belongs to the conversation whose composer opened it,
+                 and the dialog takes that conversation's id as a prop precisely so it can never be started
+                 against whichever agent happened to be active when a global dialog was raised. -->
+            <LoopDialog v-model="loopDialogOpen" :conversation-id="active.conversationId" :isolated="loopIsolated" />
         </template>
         <template v-else>
             <!-- No height cap here any more: AnchoredOverlay measures the room its side of the pill actually has

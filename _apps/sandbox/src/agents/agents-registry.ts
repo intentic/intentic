@@ -1,6 +1,7 @@
 import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
 import { isFailureSentence } from "../agent/failure-sentences.js";
 import { subagentCountsOf } from "../agent/subagents.js";
+import { forgetLoops, loopProjectionOf, onLoopChange } from "../loops/loop-state.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
 import { type AgentsStore, type AgentTitleSource, isIsolated, type PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
@@ -226,6 +227,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         const inputTokens = entry.inputTokens + (state?.pendingInputTokens ?? 0);
         const outputTokens = entry.outputTokens + (state?.pendingOutputTokens ?? 0);
         const subagents = subagentCountsOf(entry.id);
+        const loop = loopProjectionOf(entry.id);
         return {
             id: entry.id,
             status,
@@ -269,6 +271,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.diffFiles !== undefined
                 ? { diff: { files: entry.diffFiles, insertions: entry.diffInsertions ?? 0, deletions: entry.diffDeletions ?? 0 } }
                 : {}),
+            // The loop driving this conversation, read off the pump's own live state for the same reason the
+            // subagent counts are read off theirs — one projection, no second copy to go stale.
+            ...(loop !== undefined ? { loop } : {}),
         };
     };
 
@@ -283,6 +288,12 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             listener(agents, revision);
         }
     };
+
+    /* A loop's state moves BETWEEN turns, which is the one card-visible change no frame announces: the last
+     * iteration's finish() has already published, and only then does the pump decide the goal is met. Without
+     * this the card would hold `running · iteration 12/12` until something unrelated moved the fleet — at
+     * precisely the moment someone is watching it. Never unsubscribed: the registry outlives the process. */
+    onLoopChange(broadcast);
 
     // Only the live, branch-backed roster is probed — see LandStandings.refresh on why an archived agent keeps
     // its last answer, and why a workspace conversation has no standing to probe at all.
@@ -721,6 +732,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 runtime.delete(id);
             }
             standings.forget(ids);
+            forgetLoops(ids);
             await persist();
             broadcast();
         },

@@ -11,6 +11,7 @@ import { createApp } from "./app.js";
 import { sweepAgedAgents } from "./agents/archive.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/turn-resume.js";
+import { resumeLoops } from "./loops/loop-runner.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { restoreConnectorGitAccess } from "./capabilities/cli/git-access.js";
@@ -538,6 +539,12 @@ const main = async (): Promise<void> => {
     void resumeInterruptedTurns(services, streamAgent).catch((error: unknown) =>
         logger.error({ err: error }, "interrupted turns could not be resumed — they stand on the record as interrupted"),
     );
+
+    // The same restart story for LOOPS, and they need it more than any single turn does: a loop is a sequence,
+    // so the death that costs one turn costs every iteration that would have followed it. The loops manifest is
+    // its own journal — a record still marked `running` is one nothing settled — so this needs no second store,
+    // only a read. Detached and bounded by a resume count; see loop-runner.ts.
+    void resumeLoops(services, streamAgent).catch((error: unknown) => logger.error({ err: error }, "loops could not be resumed"));
 
     // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking
     // update without ever fetching on the request path.

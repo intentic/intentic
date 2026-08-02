@@ -166,6 +166,157 @@ export const AttachTurnSchema = z.object({
 });
 export type AttachTurn = z.infer<typeof AttachTurnSchema>;
 
+// ---- loops: run a conversation again, and again, until a goal is met ----
+/* THE RALPH LOOP. An automation answers "run this at 3am"; a loop answers "run this until it is actually done".
+ * The two are the opposite question and neither substitutes for the other: a schedule repeats on CADENCE and
+ * never converges, a loop repeats on CONVERGENCE and stops the moment its goal is met.
+ *
+ * A loop is an ATTRIBUTE OF A CONVERSATION, not a new kind of object. It drives ordinary turns on an ordinary
+ * fleet agent, which is what makes the worktree, the cost ledger, the transcript, the /agents card and the Stop
+ * button work on it without a line of new code — the same bet the acceptance extension makes when it derives
+ * conversation ids instead of owning session machinery.
+ */
+
+// How the next iteration meets its context, and the single most consequential field here.
+//
+// `fresh` is the canonical Ralph and the default: each iteration is a NEW provider session against the SAME
+// worktree, so the filesystem — not the transcript — is the memory. Immune to context rot, so iteration 20 reads
+// the tree as clearly as iteration 1, and it costs a re-read each time. The loop keeps a progress file for it
+// (see LOOP_DIR) precisely because nothing else carries forward.
+//
+// `continue` resumes the provider session, so an iteration is a follow-up prompt. Cheaper (the prefix caches)
+// and it keeps the reasoning, which is what a short refine-this loop wants. It degrades on long runs, and it
+// degrades in the direction that matters: a session that has spent eleven turns arguing for its own approach is
+// the worst available judge of whether that approach is finished.
+export const LoopContextSchema = z.enum(["fresh", "continue"]);
+export type LoopContext = z.infer<typeof LoopContextSchema>;
+
+/* WHAT ENDS THE LOOP, ordered here by how much of it you can believe.
+ *
+ * `command` is a shell one-liner run in the conversation's tree; exit 0 ⇒ done. Deterministic, free, and the
+ * only one of the three whose answer does not come from a model. It is the automation `guard` with the sign
+ * flipped, and it runs through the same runner. `pnpm test` passing is a better completion signal than any
+ * amount of self-report.
+ *
+ * `claim` asks the iteration itself, through a written verdict file (loop-verdict.ts). Self-assessment, so it is
+ * advisory by construction — it is here because plenty of goals have no command that can check them ("the README
+ * explains the auth flow"), not because it is trustworthy.
+ *
+ * `judge` puts a SEPARATE, tool-less call on the question: it reads the iteration's own report and rules against
+ * a rubric, having done none of the work and having nothing invested in it being finished. The rule the three
+ * encode: the check must be a different call from the work, or it is not a check.
+ */
+export const LoopStopSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("command"), command: z.string().min(1) }),
+    z.object({ kind: z.literal("claim") }),
+    // The rubric is what the judge is asked; absent `model` runs it on the quick rung the other helpers use.
+    z.object({ kind: z.literal("judge"), rubric: z.string().min(1), model: z.string().optional() }),
+]);
+export type LoopStop = z.infer<typeof LoopStopSchema>;
+
+// Enough iterations for a real convergence, few enough that a misconfigured loop is a bounded mistake. A loop
+// that has not converged in 50 turns is not one iteration short of it.
+const LOOP_ITERATIONS_MAX = 50;
+
+export const LoopSchema = z.object({
+    // The conversation the loop drives — its fleet card, its worktree, its transcript.
+    conversationId: ConversationIdSchema,
+    // What "done" means, in the user's words. Rides into every iteration's prompt (and into the judge's
+    // question) so the model is told the goal it is being measured against rather than left to infer it.
+    goal: z.string().min(1),
+    // What each iteration is asked to DO. Separate from `goal` because they are different sentences: "make the
+    // suite green" is the goal, "run the tests, pick the top failure, fix it" is the instruction.
+    prompt: z.string().min(1),
+    context: LoopContextSchema,
+    stop: LoopStopSchema,
+    maxIterations: z.number().int().min(1).max(LOOP_ITERATIONS_MAX),
+    // The spend ceiling in USD across the whole loop, summed from the turns' own usage frames. Optional because
+    // a 3-iteration loop does not need one; strongly wanted on anything unattended, since this is the first
+    // feature in the sandbox that can spend without a person pressing anything between turns.
+    maxSpendUsd: z.number().positive().optional(),
+    /* Stop after this many CONSECUTIVE iterations that changed nothing in the tree.
+     *
+     * The guard that matters most in practice, and the one whose absence is expensive. The failure mode of a
+     * loop is not runaway success, it is an agent that re-reads the same three files, restates the same plan,
+     * declares more work remains, and does that eleven times. Nothing about that is an error — every turn
+     * succeeds — so only "the tree did not move" catches it. */
+    stallLimit: z.number().int().min(1),
+    // Whether the iterations run in the conversation's own worktree or on the shared tree. Recorded on the loop
+    // rather than read off the conversation because a loop can OPEN one, and because it decides where the stop
+    // command runs: a check against /work would be testing code an isolated loop has not landed yet.
+    isolated: z.boolean(),
+    // Which provider / harness / model the iterations run on; absent ⇒ the conversation's own last choice, then
+    // the provider default. The same three passthroughs an automation carries, for the same reason: a headless
+    // driver has no composer to read them from.
+    agent: AgentProviderSchema.optional(),
+    harness: AgentHarnessSchema.optional(),
+    model: z.string().optional(),
+});
+export type Loop = z.infer<typeof LoopSchema>;
+
+/* Where a loop keeps what it must not lose between iterations: <workspace>/.intentic/loops/<conversationId>/.
+ *
+ * Under `.intentic` for the reason the acceptance runs are — it is outside every repo and bound back SHARED
+ * into an isolated turn's worktree, so the agent writes and the browser reads the same tree, with nothing to
+ * land and no git noise. `progress.md` is the loop's memory in `fresh` mode and its audit trail in `continue`
+ * mode; `iteration-<n>.json` is the verdict a `claim` stop reads. */
+export const LOOP_DIR = ".intentic/loops";
+
+// Why an iteration ended, which is not the same question as how the LOOP ended. `continue` is the ordinary
+// "not done yet"; `error` is a turn that surfaced an error frame, which does NOT end the loop by itself — a
+// failing turn is often exactly what the next iteration is supposed to fix.
+export const LoopIterationSchema = z.object({
+    n: z.number().int().min(1),
+    at: z.number(),
+    outcome: z.enum(["continue", "done", "error"]),
+    // The stop check's own words — the guard's output tail, the claim's reason, the judge's verdict. What the
+    // run history is actually read for: "why did it keep going" and "why did it stop".
+    detail: z.string().optional(),
+    costUsd: z.number().optional(),
+    // Whether the tree moved this iteration. Feeds the stall detector, and is worth showing per row: three
+    // unchanged iterations in a history is the shape of a loop that is not working.
+    changed: z.boolean(),
+    // The provider session this iteration ran on — the door from a history row to a readable transcript.
+    sessionId: z.string().optional(),
+});
+export type LoopIteration = z.infer<typeof LoopIterationSchema>;
+
+/* How a loop ended, and every one of these is a distinct thing to tell the user.
+ *
+ * `done` — the stop condition was met. The only success.
+ * `exhausted` — maxIterations ran out with the goal unmet.
+ * `stalled` — stallLimit consecutive iterations changed nothing. Reported apart from `exhausted` because the
+ *   remedy is different: exhausted says "give it more room", stalled says "it is not making progress and more
+ *   room will not help".
+ * `overspent` — maxSpendUsd was reached.
+ * `stopped` — the user pressed Stop.
+ * `error` — the loop itself failed (not a turn inside it; see LoopIteration.outcome).
+ */
+export const LoopStateSchema = z.enum(["running", "done", "exhausted", "stalled", "overspent", "stopped", "error"]);
+export type LoopState = z.infer<typeof LoopStateSchema>;
+
+export const LoopRecordSchema = LoopSchema.extend({
+    state: LoopStateSchema,
+    startedAt: z.number(),
+    endedAt: z.number().optional(),
+    /* How many times a daemon BOOT has picked this loop back up. The record is its own journal: a loop still
+     * marked `running` at boot is exactly one the daemon died under, which is the same trick turn-journal.ts
+     * plays with its files and needs no second store to play it.
+     *
+     * Counted, not just flagged, for the reason the turn journal counts its attempts — a loop whose iteration
+     * reliably kills the daemon (an OOM in a test it keeps running) would otherwise be resurrected on every
+     * boot forever, and the container is recreated on every sandbox update. */
+    resumed: z.number().int().min(0),
+    // Why the loop ended, for the states whose reason isn't in their name (`error`, and a `done` whose stop
+    // check said something worth keeping).
+    detail: z.string().optional(),
+    iterations: z.array(LoopIterationSchema),
+});
+export type LoopRecord = z.infer<typeof LoopRecordSchema>;
+
+export const LoopsListSchema = z.object({ loops: z.array(LoopRecordSchema) });
+export const LoopIdParamSchema = z.object({ conversationId: ConversationIdSchema });
+
 // ---- agents: the conversation fleet ----
 // A "fleet agent" is any conversation with a registry entry, keyed by its conversationId. Isolated ones own a
 // git worktree (branch agent/<id> in every workspace repo); workspace conversations have no branch. The fleet
@@ -282,6 +433,18 @@ export const AgentSummarySchema = z.object({
     // The agent's cumulative output (base → branch tip across every repo), refreshed on each land —
     // the card's "12 files · +412 −96" readout. Independent of what has landed.
     diff: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
+    /* The loop driving this conversation, when one is (or was) — "iteration 3/12, until the suite is green".
+     *
+     * PROJECTED onto the card rather than fetched beside it, and that is the whole reason a loop needed no
+     * surface of its own: a looping agent is an agent, so the board's status, spend, unread badge and Stop
+     * button already describe it, and one extra line is the difference between a card that says `running` for
+     * forty minutes and one that says what it is running towards. A second query joined client-side would have
+     * paid for the same line with a poll that can disagree with the roster.
+     *
+     * Absent ⇒ an ordinary conversation, which is nearly all of them. */
+    loop: z
+        .object({ state: LoopStateSchema, iteration: z.number().int().min(0), maxIterations: z.number().int().min(1), goal: z.string() })
+        .optional(),
     // When the agent was ARCHIVED (ms epoch) — off the board, but nothing lost: its checkout was retired
     // (worktree removed) while the agent/<id> branch, the transcript, and every counter stayed. Absent ⇒ live
     // on the board. Archived agents are excluded from the roster the fleet renders; `agents.archived` lists

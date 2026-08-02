@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic-app/ui";
-import type { AgentAttention, AgentOrigin, AgentStatus } from "@intentic/sandbox-contract";
+import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, LoopState } from "@intentic/sandbox-contract";
 
 /* WHERE AN AGENT STANDS, and how each surface draws it. Every projection of a fleet agent's state lives here —
  * the lane machine, the "why does this need me" label, the drill-in verb, the glyphs — and NOTHING else in the
@@ -313,4 +313,34 @@ export const activityIcon = (tool: string | undefined): IconName => {
         return `search`;
     }
     return `sparkles`;
+};
+
+/* HOW A LOOP READS ON A CARD — one line, and the one line has to answer "how far along" and "towards what".
+ *
+ * A looping agent is otherwise indistinguishable from any other running one: same spinner, same activity line,
+ * same growing cost, for forty minutes. What separates them is that a loop has a DESTINATION and a POSITION, so
+ * those are what the line carries, and the goal is the half that is worth the horizontal space — "iteration
+ * 3/12" without it is a progress bar for an unnamed job.
+ *
+ * The ENDED states are not folded into one "finished". `done` and `stalled` are opposite outcomes that a status
+ * dot alone would render identically, and `stalled` is the one that needs a person: it means the agent stopped
+ * changing anything while still reporting work to do, which is a prompt problem and not a capacity problem.
+ * Colour follows that reading — link while it runs, success for the only success, warning for the three ways it
+ * gave up, danger only for a loop that actually broke.
+ */
+export const loopMeta = (loop: NonNullable<AgentSummary["loop"]>): { readonly text: string; readonly class: string; readonly spin: boolean } => {
+    if (loop.state === `running`) {
+        return { text: `Iteration ${loop.iteration}/${loop.maxIterations} · until ${loop.goal}`, class: `text-link`, spin: true };
+    }
+    const ended: Record<Exclude<LoopState, "running">, { readonly text: string; readonly class: string }> = {
+        done: { text: `Goal met after ${loop.iteration}`, class: `text-success` },
+        // Each of these says what to DO about it, because the state name alone does not: an exhausted loop
+        // wants more room, a stalled one wants a better prompt, and an overspent one wants a decision.
+        exhausted: { text: `Ran out of iterations after ${loop.iteration}`, class: `text-warning` },
+        stalled: { text: `Stalled after ${loop.iteration} — nothing changed`, class: `text-warning` },
+        overspent: { text: `Hit the spend ceiling after ${loop.iteration}`, class: `text-warning` },
+        stopped: { text: `Loop stopped after ${loop.iteration}`, class: `text-muted` },
+        error: { text: `Loop failed after ${loop.iteration}`, class: `text-danger` },
+    };
+    return { ...ended[loop.state], spin: false };
 };
