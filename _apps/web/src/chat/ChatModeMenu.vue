@@ -19,8 +19,8 @@ const modes = computed(() => modeOptions(capabilities.value));
             v-for="m in modes"
             :key="m.value"
             type="button"
-            class="qopt flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors max-md:py-3"
-            :class="{ 'qopt-on': mode === m.value }"
+            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+            :class="{ 'ui-row-select-on': mode === m.value }"
             @click="
                 mode = m.value;
                 emit(`selected`);

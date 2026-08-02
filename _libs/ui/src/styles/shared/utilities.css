@@ -62,6 +62,17 @@
    selected tint was the one thing all five still agreed on, which is what made the drift invisible — the state
    people look at matched, so nobody checked the state they only feel.
 
+   A SIXTH copy outlived that sweep: chat's `.qopt`, whose hover rule was character-for-character this one and
+   whose selected tint was 14% against this 15% — one percent, invisible alone and unmissable once a picker put
+   both on screen at once (the model list here, the account rows in its own footer). It is gone; its four call
+   sites are these classes now.
+
+   WHEN NOT TO USE THIS. A tint marks the chosen row of a LIST — items sharing edges inside a container that
+   already draws its own frame, where boxing one row makes a box inside a box. A free-standing card on a canvas
+   (AgentCard on the board) is the other case entirely: it carries a border at rest, so selection has to change
+   that border and add a ring, and a fill would collide with the category and lane hues the card is already
+   using to say other things. Two shapes, two treatments, one primary — not one treatment.
+
    `:not(:disabled)` rather than `:enabled`: a disabled row must not light up, but `:enabled` matches only form
    elements, so a row rendered as a <div> would silently lose its hover. Focus-visible carries an inset ring
    because a row a keyboard can reach must be able to show that it has been reached; on the lists that keep

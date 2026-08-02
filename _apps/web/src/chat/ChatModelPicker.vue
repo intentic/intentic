@@ -193,7 +193,13 @@ const accountRows = computed(() =>
             <!-- Session controls that have no place in the shared list: which connected account serves the next
                  turn, the harness axis (codex/grok), Claude's extended-thinking knob, fast speed, and what this
                  runtime cannot do. Controls and the state of them — no standing prose. -->
-            <div v-if="footerVisible" class="flex shrink-0 flex-col gap-2 border-t border-line p-2">
+            <!-- Padded on the model list's own 12px rhythm (ModelPicker's rows and section headers are all
+                 `px-3`), because the two read as one column: at the footer's old 8px every label in it sat
+                 four pixels inboard of the headings directly above, close enough to the panel edge to look
+                 like a crop rather than a margin. The row groups below take that padding back with `-mx-3`
+                 so their tint spans the panel exactly as a model row's does — bleed is the LIST's idiom, and
+                 the text still lands on the 12px line. -->
+            <div v-if="footerVisible" class="flex shrink-0 flex-col gap-2 border-t border-line px-3 py-2">
                 <!-- WHOSE SETTINGS THESE ARE. The list above is a BROWSE surface — the rail filters it across
                      every provider without touching the conversation — while everything below configures the
                      conversation you are in. The two disagree whenever the rail is pointed elsewhere, and
@@ -219,19 +225,19 @@ const accountRows = computed(() =>
                          NO FRAME PER ROW. Boxing each account drew three hard rectangles into a panel that already
                          has a border, a header rule and a model list above it, and the frames carried no meaning —
                          every row had one, chosen or not. What actually needs marking is the one row in effect, and
-                         the tint does that alone (the same borderless list ChatModeMenu uses for the same job).
-                         Hover is what says the rest are choosable.
+                         the tint does that alone. Hover is what says the rest are choosable.
 
-                         The group is pulled out by its own padding so the names sit on the footer's left edge with
-                         every section label, and only the tint bleeds past them. A box can carry an indent; a bare
-                         name at the same indent just looks misaligned against the label above it. -->
-                    <div class="-mx-1 flex flex-col gap-0.5" role="group" aria-label="Account">
+                         These ARE the model list's rows, one panel down, so they are drawn by the same utility at
+                         the same metrics: `.ui-row-select` full-bleed at `px-3 py-1.5`, square rather than rounded.
+                         An inset pill under a run of full-width rows reads as a different KIND of list — which is
+                         the one thing these are not. -->
+                    <div class="-mx-3 flex flex-col" role="group" aria-label="Account">
                         <button
                             v-for="a in accountRows"
                             :key="a.id"
                             type="button"
-                            class="qopt flex min-h-8 min-w-0 items-center gap-2 rounded-lg p-1 text-xs transition-colors max-md:min-h-11"
-                            :class="{ 'qopt-on': activeAccountId === a.id }"
+                            class="ui-row-select flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs max-md:min-h-11"
+                            :class="{ 'ui-row-select-on': activeAccountId === a.id }"
                             :disabled="streaming"
                             @click="conversation.selectAccount(a.id)"
                         >
@@ -262,8 +268,8 @@ const accountRows = computed(() =>
                     <!-- Unframed like the account rows above, and for a second reason on top of the weight: these
                          are not controls. A box that looks exactly like the one you can click, but doesn't, is
                          worse than no box. -->
-                    <div class="flex flex-col gap-0.5" role="group" aria-label="Subscription">
-                        <div v-for="a in routedRows" :key="a.name" class="flex min-h-8 min-w-0 items-center gap-2 py-1 text-xs">
+                    <div class="-mx-3 flex flex-col" role="group" aria-label="Subscription">
+                        <div v-for="a in routedRows" :key="a.name" class="flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs">
                             <span class="min-w-0 truncate text-content">{{ a.label }}</span>
                             <UsageRing v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
                         </div>

@@ -940,8 +940,8 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                     type="button"
                                     :role="question.multiSelect ? 'checkbox' : 'radio'"
                                     :aria-checked="isSelected(index, option.label)"
-                                    class="qopt flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
-                                    :class="{ 'qopt-on': isSelected(index, option.label) }"
+                                    class="ui-row-select flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left"
+                                    :class="{ 'ui-row-select-on': isSelected(index, option.label) }"
                                     @click="toggleOption(question, index, option.label)"
                                 >
                                     <Icon
@@ -979,8 +979,8 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                     type="button"
                                     :role="question.multiSelect ? 'checkbox' : 'radio'"
                                     :aria-checked="isSelected(index, OTHER_LABEL)"
-                                    class="qopt flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
-                                    :class="{ 'qopt-on': isSelected(index, OTHER_LABEL) }"
+                                    class="ui-row-select flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left"
+                                    :class="{ 'ui-row-select-on': isSelected(index, OTHER_LABEL) }"
                                     @click="toggleOption(question, index, OTHER_LABEL)"
                                 >
                                     <Icon
@@ -1024,7 +1024,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                 :key="option.label"
                                 role="listitem"
                                 class="flex items-start gap-2 rounded-lg border border-transparent px-2.5 py-2"
-                                :class="{ 'qopt-picked': option.picked }"
+                                :class="{ 'chat-option-picked': option.picked }"
                             >
                                 <span class="mt-0.5 flex w-3 shrink-0 justify-center">
                                     <Icon v-if="option.picked" name="check" class="text-2xs text-primary-500" />
