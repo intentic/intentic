@@ -25,6 +25,19 @@ overrides:
   # @posthog/core 1.40.1's tarball shipped dist .d.ts that import "../src/*.ts" (raw source), dragging posthog's
   # src into vue-tsc under our strict flags (58 errors); 1.40.2 fixes the declaration emit (types-only bump).
   "@posthog/core": 1.40.2
+  # astro 6.4's `sharp` is still an optional `^0.34.0`, so the catalog bump below reaches the site's own copy but
+  # not astro's — and 0.34.x carries four libvips CVEs (GHSA-f88m-g3jw-g9cj). Overriding globally is also what
+  # keeps the single-copy property the catalog entry asks for: astro, the site and @huggingface/transformers
+  # (which already wanted 0.35.x) all land on one sharp.
+  sharp: 0.35.3
+  # astro-opengraph-images > tw-to-css pins postcss to an exact 8.4.31, which has two sourceMappingURL
+  # arbitrary-file-read advisories (GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849). Same major, and it dedupes onto
+  # the 8.5.x copy the rest of the tree already resolves.
+  "tw-to-css>postcss": 8.5.25
+  # onnxruntime-node's `adm-zip: ^0.5.16` is used only by its postinstall unpacker, which `allowBuilds` disables
+  # here — so GHSA-xcpc-8h2w-3j85 is unreachable in this workspace. Pinned to the patched 0.6.0 anyway so the
+  # tree does not carry a known-bad copy for whoever enables that build later.
+  "onnxruntime-node>adm-zip": 0.6.0
 
 minimumReleaseAgeExclude:
   - knip@6.29.0
@@ -150,7 +163,7 @@ catalog:
   "@ast-grep/lang-go": 0.0.6
   "@ast-grep/lang-rust": 0.0.7
   "@ast-grep/lang-java": 0.0.7
-  astro: 6.3.1
+  astro: 6.4.8
   astro-indexnow: 2.3.10
   astro-opengraph-images: 1.17.4
   bcryptjs: 3.0.3
@@ -187,9 +200,10 @@ catalog:
   prisma: 7.9.1
   semantic-release: 25.0.8
   # astro:assets' default image service loads `sharp` from the PROJECT, not from astro's own tree — so the
-  # site has to declare it even though astro carries the same optional dependency. Pinned to what astro 6.3
-  # already resolves, so the two share one copy.
-  sharp: 0.34.5
+  # site has to declare it even though astro carries the same optional dependency. The two still share one
+  # copy, but it now takes the `sharp` override above to hold that: astro 6.4 asks for ^0.34.0 and 0.34.x is
+  # the vulnerable line.
+  sharp: 0.35.3
   shiki: 4.4.1
   ssh2: 1.17.0
   stripe: 22.4.0
