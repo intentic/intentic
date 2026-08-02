@@ -1392,10 +1392,20 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                  the toggle behind it changes how the list READS, and staging stays the side's
                                  verb above (and the row's own beside it), so nothing here can act on a scope
                                  git has no word for. `box` is a package's own manifest; `folder` marks the
-                                 bucket of paths no module claims, named after the repo they sit loose in. -->
-                            <div v-if="viewOf(group.repo, section.side).named" class="flex items-center gap-1 pl-2 pt-1">
-                                <Icon :name="bucket.packaged ? 'box' : 'folder'" class="shrink-0 text-2xs text-subtle" />
-                                <span class="min-w-0 truncate text-2xs font-medium text-content" v-tooltip.right.overflow="bucket.name">{{
+                                 bucket of paths no module claims, named after the repo they sit loose in.
+
+                                 QUIETER THAN WHAT IT GROUPS. This heading is the third rank in the list — under
+                                 the repo, under the side — so it is separated by AIR, not by brightness: at
+                                 `text-content` it outshone every filename below it and the eye landed on the
+                                 package instead of on the change, which is the one thing this panel is read
+                                 for. `text-muted` + the leading glyph is the same recessive heading the review
+                                 panel on /agents/{id} uses, so a module is said the same way in both lists.
+                                 The glyph is drawn under 1em on purpose: at 1em these icon sets overshoot an
+                                 11px line's cap height by ~1.5px top AND bottom, and a mark taller than the
+                                 word beside it reads as sitting off-centre however exactly it is centred. -->
+                            <div v-if="viewOf(group.repo, section.side).named" class="flex items-center gap-1.5 pl-2 pt-2">
+                                <Icon :name="bucket.packaged ? 'box' : 'folder'" class="shrink-0 text-[0.6rem] text-subtle" />
+                                <span class="min-w-0 truncate text-2xs font-medium text-muted" v-tooltip.right.overflow="bucket.name">{{
                                     bucket.name
                                 }}</span>
                                 <span class="shrink-0 text-2xs text-subtle">{{ bucket.rows.length }}</span>

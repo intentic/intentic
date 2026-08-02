@@ -610,7 +610,11 @@ const endResize = (event: PointerEvent): void => {
                                     v-if="viewOf(group.repo).named"
                                     class="group/head flex items-center gap-1.5 border-b border-line/40 bg-canvas/60 py-0.5 pl-2 pr-1"
                                 >
-                                    <Icon :name="bucket.packaged ? 'box' : 'folder'" class="shrink-0 text-2xs text-subtle" />
+                                    <!-- Under 1em: at 1em these icon sets overshoot an 11px line's cap height by
+                                     ~1.5px top and bottom, and a mark taller than the word beside it reads as
+                                     sitting off-centre however exactly it is centred. Same size in the
+                                     workspace's own Changes list — one way to say a module. -->
+                                    <Icon :name="bucket.packaged ? 'box' : 'folder'" class="shrink-0 text-[0.6rem] text-subtle" />
                                     <span class="min-w-0 truncate text-2xs font-medium text-muted" v-tooltip.right.overflow="bucket.name">{{
                                         bucket.name
                                     }}</span>
