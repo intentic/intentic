@@ -2550,6 +2550,9 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_libs/testing
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig

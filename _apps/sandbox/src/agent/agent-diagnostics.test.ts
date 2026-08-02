@@ -1,4 +1,4 @@
-import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
+import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import { expect, test } from "vitest";
 import { syncHookOutput } from "../testing.js";
 import { type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";
@@ -92,7 +92,7 @@ test("the missing-dependency reason is told ONCE per turn, not stapled to every 
     expect(second).toEqual({});
 });
 
-const contextOf = (result: unknown): string =>
+const contextOf = (result: HookJSONOutput): string =>
     (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext ?? "";
 
 /* A PARTIALLY installed tree is the case the old boolean gate could not see: node_modules exists, so it opened,
