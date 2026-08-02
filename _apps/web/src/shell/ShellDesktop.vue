@@ -12,7 +12,7 @@ import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/
 import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 import { commandShortcut } from "../composables/commands/useCommands";
-import { type ActiveExtension, activationBadge, detectActivations, extensionPath } from "../core-views/registry";
+import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
@@ -34,6 +34,10 @@ import SandboxGate from "../sandbox-gates/SandboxGate.vue";
 import SandboxSwitcher from "../sandbox-gates/SandboxSwitcher.vue";
 
 interface AreaTile {
+    // The rail element's id — a core shell tile's own name, or the contributing extension's id. It is what
+    // RAIL_GROUPS ranks and groups by, so core tiles and extension tiles sort against ONE table (see registry.ts)
+    // instead of core tiles being pinned above and extensions ordered among themselves.
+    readonly id: string;
     // The route the tile links to (e.g. /workspace, /panel/app).
     readonly to: string;
     readonly label: string;
@@ -142,6 +146,7 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
 // no extension serves lives only in the Workspace file tree.
 const fixedTiles = computed<readonly AreaTile[]>(() => [
     {
+        id: `agents`,
         to: `/agents`,
         label: `Agents`,
         icon: `comments`,
@@ -156,16 +161,18 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
             : {}),
     },
     {
+        id: `workspace`,
         to: `/workspace`,
         label: `Workspace`,
         icon: `folder`,
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
 ]);
-// Slotted in between Agents and Workspace only when the agent has proposed a draft (or left an unreadable draft file) — an
-// empty queue keeps the rail uncluttered, mirroring the extension tiles that appear on content. Drafts stays a
-// core shell surface (the mobile bottom-bar "Review" tab depends on it too), so its tile is not an extension.
-const draftsTile: AreaTile = { to: `/drafts`, label: `Drafts`, icon: `send` };
+// Present only when the agent has proposed a draft (or left an unreadable draft file) — an empty queue keeps the
+// rail uncluttered, mirroring the extension tiles that appear on content. Drafts stays a core shell surface (the
+// mobile bottom-bar "Review" tab depends on it too), so its tile is not an extension. Where it lands among the
+// others is RAIL_GROUPS' call like every other tile's, not a splice here.
+const draftsTile: AreaTile = { id: `drafts`, to: `/drafts`, label: `Drafts`, icon: `send` };
 /* Browsers appears the moment a turn opens one and stays while the daemon still lists it — a rail tile that
  * tracks live work rather than a permanent surface. It renders in the rail's live-runtime cluster (next to the
  * ports indicator and the terminal), not among the navigation tiles: a browser session is runtime state like a
@@ -179,6 +186,7 @@ const browserTile = computed<AreaTile | undefined>(() => {
     }
     const live = browsers.value.filter((session) => session.running).length;
     return {
+        id: `browsers`,
         to: `/browsers`,
         label: `Browsers`,
         icon: `desktop`,
@@ -194,6 +202,7 @@ const subagentTile = computed<AreaTile | undefined>(() => {
     }
     const live = runningSubagents.value.length;
     return {
+        id: `subagents`,
         to: `/subagents`,
         label: `Subagents`,
         icon: `users`,
@@ -209,27 +218,35 @@ const extensionTile = (active: ActiveExtension): AreaTile => {
     const { extension, activation } = active;
     const badge = activationBadge(active);
     return {
+        id: extension.id,
         to: extensionPath(extension, activation),
         label: activation.title,
         ...(activation.icon === undefined ? {} : { icon: activation.icon as IconName }),
         ...(badge === undefined ? {} : { badge }),
     };
 };
-// The navigation tiles: the always-present areas, Drafts when there is something to review, then one tile per
-// EXTENSION ACTIVATION (extensions detect workspace content from /panels and contribute their own areas). Live
-// runtime surfaces (browsers, subagents, forwarded ports, the terminal) are NOT here — they render in the cluster
-// below the divider, next to the "+" and account controls.
-const tiles = computed<readonly AreaTile[]>(() => {
-    const base = drafts.value.length > 0 || invalidDrafts.value.length > 0 ? fixedTiles.value.toSpliced(1, 0, draftsTile) : fixedTiles.value;
-    return [
-        ...base,
+/* The navigation tiles, in ONE run ranked by RAIL_GROUPS: the always-present areas, Drafts when there is
+ * something to review, and one tile per EXTENSION ACTIVATION (extensions detect workspace content from /panels
+ * and contribute their own areas). Core tiles are no longer pinned above the extensions — that pinning is what
+ * made Workflows, which belongs beside Agents, unable to sit anywhere but below every core view.
+ *
+ * The sort is stable and detectActivations has already ranked the extensions by the same table, so activations a
+ * table cannot order (one Deployments tile per Komodo connection) keep the order it gave them.
+ *
+ * Live runtime surfaces (browsers, subagents, forwarded ports, the terminal) are NOT here — they render in the
+ * cluster below the divider, next to the "+" and account controls. */
+const tiles = computed<readonly AreaTile[]>(() =>
+    [
+        ...(drafts.value.length > 0 || invalidDrafts.value.length > 0 ? [...fixedTiles.value, draftsTile] : fixedTiles.value),
         ...detectActivations(panels.value, capabilities.value)
             // Only rail-surface extensions get a tile; per-repo directory panels (Apps, UI, preview) open from
             // the Workspace tree instead, so the rail stays a short, capability-first list.
             .filter(({ extension }) => extension.surface === `rail`)
             .map(extensionTile),
-    ];
-});
+    ].toSorted((left, right) => railRank(left.id) - railRank(right.id)),
+);
+// The tiles cut into their bands, so the template can draw a hairline between runs.
+const tileBands = computed(() => railBands(tiles.value, (tile) => tile.id));
 
 // Up to two initials from a repository name's word boundaries (my-shop-api → MS, api → AP) — the rail tile's
 // glyph, so repositories stay distinguishable instead of all sharing one icon.
@@ -312,35 +329,45 @@ onUnmounted(() => {
             <PresenceAvatars :members="presenceOthers" direction="column" :size="28" />
             <span class="mb-1 icon-rail-divider h-px bg-line"></span>
 
-            <!-- The views (and the "+") all talk to the daemon, so they are inert while it is unreachable — the
+            <!-- The navigation tiles, in bands (Work / Judge / Know — see RAIL_GROUPS) separated by the same
+                 hairline the rail already uses for its other seams. A 44px column has no room for a heading, so
+                 the gap between runs IS the heading; the mobile menu, which has the width, spells them out.
+                 THIS is the one part of the rail that scrolls — see .icon-rail-nav.
+
+                 The views (and the "+") all talk to the daemon, so they are inert while it is unreachable — the
                  gate in <main> is the only thing to see anyway. The switcher and account stay live. -->
-            <RouterLink
-                v-for="tile in tiles"
-                :key="tile.to"
-                :to="tile.to"
-                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
-                :tabindex="reachable ? undefined : -1"
-                :aria-disabled="!reachable"
-                :aria-label="tileLabel(tile)"
-                v-tooltip.right="tileLabel(tile)"
-            >
-                <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initials(tile.label) }}</span>
-                <Icon v-else :name="tile.icon!" class="text-lg" />
-                <!-- One badge for every tile, core or extension — see AreaTile.badge. A `mark` replaces the
-                     number outright rather than sitting beside it: the chip is four pixels of glance, and a
-                     glyph AND a digit in it would be two claims competing for the same read. No tooltip of its
-                     own either: it would nest inside the tile's and open a second box on top of it — its
-                     sentence rides the tile instead (see tileLabel). -->
-                <span
-                    v-if="tile.badge"
-                    class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
-                    :class="badgeClass(tile.badge)"
-                >
-                    <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
-                    <template v-else>{{ badgeText(tile.badge) }}</template>
-                </span>
-            </RouterLink>
+            <div class="icon-rail-nav flex flex-col items-center overflow-y-auto overscroll-contain">
+                <template v-for="(band, at) in tileBands" :key="band.group.id">
+                    <span v-if="at > 0" class="my-1 icon-rail-divider h-px bg-line"></span>
+                    <RouterLink
+                        v-for="tile in band.items"
+                        :key="tile.to"
+                        :to="tile.to"
+                        class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
+                        :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
+                        :tabindex="reachable ? undefined : -1"
+                        :aria-disabled="!reachable"
+                        :aria-label="tileLabel(tile)"
+                        v-tooltip.right="tileLabel(tile)"
+                    >
+                        <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initials(tile.label) }}</span>
+                        <Icon v-else :name="tile.icon!" class="text-lg" />
+                        <!-- One badge for every tile, core or extension — see AreaTile.badge. A `mark` replaces the
+                             number outright rather than sitting beside it: the chip is four pixels of glance, and a
+                             glyph AND a digit in it would be two claims competing for the same read. No tooltip of its
+                             own either: it would nest inside the tile's and open a second box on top of it — its
+                             sentence rides the tile instead (see tileLabel). -->
+                        <span
+                            v-if="tile.badge"
+                            class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
+                            :class="badgeClass(tile.badge)"
+                        >
+                            <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
+                            <template v-else>{{ badgeText(tile.badge) }}</template>
+                        </span>
+                    </RouterLink>
+                </template>
+            </div>
 
             <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
@@ -496,6 +523,38 @@ onUnmounted(() => {
 .icon-rail {
     gap: var(--icon-rail-gap);
     padding-block: var(--icon-rail-padding);
+}
+
+/* NOTHING IN THE RAIL MAY BE SQUASHED. A column flex item defaults to flex-shrink: 1, and .icon-rail-tile sets
+ * `height`, not `min-height` — so a rail that outgrew the viewport did not overflow or scroll, it silently
+ * compressed its tiles toward their content height. Measured before this rule, with 14 nav + 7 system tiles:
+ * the 44px nav tiles rendered at 24px on an 800–945px viewport and 28px at 1080px, with no scrollbar and
+ * nothing clipped — they simply stopped being squares and lost nearly half their hit target. The nav tiles took
+ * all of it while the seven outside kept their size, because shrinkage is distributed by flex-basis and the nav
+ * run is by far the largest item in the column: the more extensions registered a tile, the more the tiles paid
+ * and the less anything else did. With the rule, 21/21 tiles hold 44px at every viewport and the nav scrolls
+ * (9 nav tiles fit at 945px, 11 at 1080px). */
+.icon-rail > *,
+.icon-rail-tile,
+.icon-rail-divider {
+    flex-shrink: 0;
+}
+
+/* The one part that gives. The nav tiles are the run that grows without bound (one per extension activation), so
+ * they are the run that scrolls — leaving the switcher above and the terminal / "+" / account below anchored
+ * where the hand already expects them, however many extensions register a tile. It shrinks only under pressure
+ * (min-height: 0, no flex-grow), so on a rail that fits, the layout is unchanged. */
+.icon-rail-nav {
+    flex-shrink: 1;
+    min-height: 0;
+    gap: var(--icon-rail-gap);
+    /* A scrollbar in a 44px column would eat a quarter of it and sit under the tiles; the seam above and below
+     * is what says there is more, and the tiles scroll under the finger regardless. */
+    scrollbar-width: none;
+}
+
+.icon-rail-nav::-webkit-scrollbar {
+    display: none;
 }
 
 .icon-rail-tile {

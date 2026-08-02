@@ -20,7 +20,12 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                     (capability) =>
                         capability.kind === `cli` && (capability.config[`provider`] === `github` || capability.config[`provider`] === `gitlab`),
                 )
-                    ? [{ key: `pipelines`, title: `Pipelines`, icon: `sitemap` }]
+                    ? /* `bolt`, not `sitemap`. A CI pipeline IS a job graph, so `sitemap` was the apt glyph — but
+                       * Workflows is a fan-out of agents and has the better claim on a tree, and two tiles sharing
+                       * a silhouette in a 44px column is worse than either being slightly less apt (the argument
+                       * ext-maintenance already made against `list-check`). A bolt says "this fires on its own and
+                       * either lands or doesn't", which is the whole of what the tile reports. */
+                      [{ key: `pipelines`, title: `Pipelines`, icon: `bolt` }]
                     : [],
             // Unacknowledged breakages only — see ciStreaks.ts for why this counts streaks and not failures.
             badge: () => ciBadge(),

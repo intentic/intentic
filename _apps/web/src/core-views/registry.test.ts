@@ -1,11 +1,11 @@
-import type { Disposable, IntenticApi, ViewRegistration } from "@intentic/extension-api";
+import type { CapabilityFacts, Disposable, IntenticApi, ViewRegistration } from "@intentic/extension-api";
 import * as acceptance from "@intentic/ext-acceptance";
 import * as documentation from "@intentic/ext-documentation";
 import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic-app/api-contract";
 import { describe, expect, it } from "vitest";
-import { detectActivations, registerView } from "./registry";
+import { RAIL_GROUPS, detectActivations, registerView } from "./registry";
 
 // apps + preview are packaged extensions the app activates via loadBuiltins; the registry seeds only the still-
 // static core views (infrastructure/live-status/directory-ui). Register the two packaged detects here so the
@@ -196,7 +196,7 @@ describe(`re-activation`, () => {
 
 /* The rail's order is a product decision, and it used to be an accident: whatever order the core views and the
  * `builtins.ts` array happened to register in. That put Acceptance between Automations and Documentation, which
- * is not a sequence a user can infer from anything. RAIL_ORDER now declares it — checked here rather than in a
+ * is not a sequence a user can infer from anything. RAIL_GROUPS now declares it — checked here rather than in a
  * surface because BOTH the desktop rail and the mobile menu render this list and must agree. */
 describe(`rail order`, () => {
     const railIds = (): string[] =>
@@ -204,12 +204,34 @@ describe(`rail order`, () => {
             .filter(({ extension }) => extension.surface === `rail`)
             .map(({ extension }) => extension.id);
 
-    it(`reads from what to understand, through what to verify, down to what runs underneath`, () => {
+    it(`puts what summons you above what you go and consult`, () => {
         const ids = railIds();
         const rank = (id: string): number => ids.indexOf(id);
-        expect(rank(`documentation`)).toBeGreaterThanOrEqual(0);
-        // Documentation before Acceptance before the rest — the specific ordering the user could not infer before.
-        expect(rank(`documentation`)).toBeLessThan(rank(`acceptance`));
+        expect(rank(`acceptance`)).toBeGreaterThanOrEqual(0);
+        // Acceptance badges to fetch you; Documentation is read on your own initiative. The old table had this
+        // the other way round, on the theory that you read about a system before verifying it — true of a first
+        // afternoon, false of every day after.
+        expect(rank(`acceptance`)).toBeLessThan(rank(`documentation`));
+    });
+
+    /* The regression that motivated the rewrite: `workflows` and `deployments` were added after the first table
+     * shipped and never listed in it, so the fall-through put the two NEWEST surfaces below every core view. A
+     * table that silently demotes what it does not mention is worse than no table, so every rail view a build
+     * compiles in has to appear in it. */
+    it(`ranks every compiled-in rail view, so none falls through to the end unnoticed`, () => {
+        const listed = new Set(RAIL_GROUPS.flatMap((group) => group.ids));
+        const capabilities: CapabilityFacts[] = [
+            { id: `bot`, kind: `cli`, config: { provider: `discord` } },
+            { id: `repos`, kind: `cli`, config: { provider: `github` } },
+            { id: `production`, kind: `cli`, config: { provider: `komodo` } },
+        ];
+        const rail = detectActivations(
+            [panel({ repo: `demo`, hasPanel: true, userStories: true, deployConfig: true, desiredState: true })],
+            capabilities,
+        )
+            .filter(({ extension }) => extension.surface === `rail`)
+            .map(({ extension }) => extension.id);
+        expect(rail.filter((id) => !listed.has(id))).toEqual([]);
     });
 
     it(`keeps an unlisted view at the end instead of letting it jump the queue`, () => {
@@ -232,7 +254,7 @@ describe(`rail order`, () => {
         const directory = detectActivations(panels, [])
             .filter(({ extension }) => extension.surface === `directory`)
             .map(({ extension }) => extension.id);
-        expect(directory).toEqual([...directory].sort((left, right) => directory.indexOf(left) - directory.indexOf(right)));
+        expect(directory).toEqual(directory.toSorted((left, right) => directory.indexOf(left) - directory.indexOf(right)));
         expect(directory.length).toBeGreaterThan(0);
     });
 });

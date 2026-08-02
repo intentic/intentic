@@ -45,32 +45,69 @@ export interface ActiveExtension {
 export const extensionPath = (extension: ViewRegistration, activation: Activation): string =>
     activation.key === extension.id ? `/ext/${extension.id}` : `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
 
-/* THE RAIL'S READING ORDER, owned by the app rather than by whoever registered first.
+/* THE RAIL'S READING ORDER AND ITS GROUPS, owned by the app rather than by whoever registered first.
  *
  * Without this the rail was in registration order — core views, then the `builtins.ts` array — which is an
  * implementation detail, so Acceptance landed between Automations and Documentation for no reason a user could
  * infer. The rail is the app's own furniture and the order is a product decision, so it is declared here.
  *
- * The sequence is a narrowing from "the work" to "the machinery underneath":
- *   understand   Documentation — what this system is, read before touching it
- *   verify       Acceptance, Pipelines — what we promised, and whether it builds
- *   maintain     Maintenance — what the code is owed, and has been owed for a while
- *   delegate     Automations — what runs without being asked
- *   inspect      Memory, Activity — what the agent remembers, and what it did
- *   operate      Infrastructure, Live status — the platform under all of it
+ * ORDERED BY WHAT SUMMONS YOU, THEN BY HOW OFTEN YOU GO. The first table read as a narrowing from "the work" to
+ * "the machinery underneath" — understand, verify, maintain, delegate, inspect, operate. That is a taxonomy of
+ * nouns, and a rail is not read as a taxonomy: it is aimed at, from muscle memory, all day. Sorting by concept
+ * put Documentation — a surface read once a month — in the best position left after the two pinned tiles, and
+ * buried the ones that light up to fetch you. Position now tracks how a hand uses the column.
  *
- * Agents and Workspace are not here: they are fixed shell tiles pinned above every extension (ShellDesktop's
- * fixedTiles), because they are where work starts.
+ *   Work   Agents, Drafts, Workflows, Workspace — where a turn is started, reviewed and landed. Workflows sits
+ *          with Agents because it is the same verb at another scale: one agent watched, or many run.
+ *   Judge  Acceptance, Pipelines, Deployments, Maintenance — "is it good, did it ship, what is owed". These are
+ *          the tiles you click BECAUSE one lit up, so they are together and high.
+ *   Know   Automations, Memory, Documentation, Activity, Infrastructure, Live status — what you go and consult
+ *          on your own initiative. Documentation badges too, but its badge is an invitation (docs nobody has
+ *          read yet), not an alarm, so it stays here.
  *
- * An id absent from this list keeps its registration position, so a third-party extension appends rather than
- * silently jumping the queue — and adding a first-party rail view without touching this list puts it last, which
- * is the honest default rather than an arbitrary middle. */
-const RAIL_ORDER: readonly string[] = [`documentation`, `acceptance`, `pipelines`, `maintenance`, `automations`, `memory`, `activity`, `infrastructure`, `live-status`];
+ * The bands are DECLARED, not derived. `badge: true` in the manifest happens to land on exactly the Judge set,
+ * which is good evidence the band is real — but deriving from it would reshuffle the whole rail the day
+ * Automations grows a badge, and a column whose order moves is a column that has to be re-read.
+ *
+ * IT NAMES CORE SHELL TILES TOO (`agents`, `drafts`, `workspace`), not just extensions. Order used to live half
+ * here and half in ShellDesktop's fixedTiles, which is how Workflows — an extension that belongs beside Agents —
+ * had no way to be expressed as anything but "after every core view". One column, one table.
+ *
+ * An id absent from these groups keeps its registration position within the last group, so a third-party
+ * extension appends rather than silently jumping the queue. Note what that default cost the two first-party
+ * views added after the first table shipped: `workflows` and `deployments` were never listed, so they sorted
+ * BELOW Infrastructure and Live status — the newest surfaces in the worst seats, which is the very drift this
+ * table exists to prevent. Add a rail view here in the same commit that registers it. */
+export interface RailGroup {
+    readonly id: string;
+    // Used as the mobile menu's section heading; the desktop rail is 44px wide and separates with a hairline.
+    readonly label: string;
+    readonly ids: readonly string[];
+}
 
-const railRank = (id: string): number => {
+export const RAIL_GROUPS: readonly RailGroup[] = [
+    { id: `work`, label: `Work`, ids: [`agents`, `drafts`, `workflows`, `workspace`] },
+    { id: `judge`, label: `Judge`, ids: [`acceptance`, `pipelines`, `deployments`, `maintenance`] },
+    { id: `know`, label: `Know`, ids: [`automations`, `memory`, `documentation`, `activity`, `infrastructure`, `live-status`] },
+];
+
+const RAIL_ORDER: readonly string[] = RAIL_GROUPS.flatMap((group) => group.ids);
+
+export const railRank = (id: string): number => {
     const at = RAIL_ORDER.indexOf(id);
     return at === -1 ? RAIL_ORDER.length : at;
 };
+
+// Which band a rail element renders in. An unlisted id lands in the last group, matching where railRank puts it —
+// the two must agree, or a tile would sort into one run and be drawn under another's divider.
+const railGroupOf = (id: string): RailGroup => RAIL_GROUPS.find((group) => group.ids.includes(id)) ?? RAIL_GROUPS[RAIL_GROUPS.length - 1]!;
+
+/* Cut a rail-ordered run into its bands, dropping the ones nothing landed in — so a surface never draws a
+ * separator (or a heading) over nothing on a workspace where a whole band has not activated. Shared by the
+ * desktop rail and the mobile menu for the same reason detectActivations sorts here rather than in each of them:
+ * a band that existed in one surface and not the other is the same fact told two ways. */
+export const railBands = <T>(items: readonly T[], idOf: (item: T) => string): { readonly group: RailGroup; readonly items: readonly T[] }[] =>
+    RAIL_GROUPS.map((group) => ({ group, items: items.filter((item) => railGroupOf(idOf(item)) === group) })).filter((band) => band.items.length > 0);
 
 // detect() failures are contained, not propagated: one broken extension contributes nothing this round instead
 // of blanking every sidebar element with it.

@@ -38,6 +38,9 @@ vi.hoisted(() => {
 });
 
 const { builtinModules } = await import("./builtins");
+// The core views register outside builtinModules but land in the SAME rail column, so the glyph check below has
+// to see both. Imported the same deferred way, for the same reason: after the stubs above are installed.
+const { coreViews } = await import("../core-views/coreViews");
 
 /* A fake host that accepts every registration an extension can make and records what it was handed. It has to
  * accept ALL of them, not just the one a given test reads: activate() runs top to bottom, so a registry the stub
@@ -67,6 +70,16 @@ const activateAndCapture = (module: { activate: (api: IntenticApi, ctx: Extensio
 
 const noRepos: readonly RepoFacts[] = [];
 const discordCap: CapabilityFacts = { id: `bot`, kind: `cli`, config: { provider: `discord` } };
+/* One connected capability per provider any rail view gates on — discord (Activity), github (Pipelines), komodo
+ * (Deployments). A single discord capability was NOT enough and the gap was silent: a detect() gated on a
+ * provider the fixture never supplies returns nothing, so its icons are never collected and every check below
+ * passes it by. That is precisely how the `sitemap` collision reached the rail — Pipelines' glyph had never once
+ * been looked at by a test. Add a capability here whenever a rail view starts gating on a new provider. */
+const richCapabilities: readonly CapabilityFacts[] = [
+    discordCap,
+    { id: `repos`, kind: `cli`, config: { provider: `github` } },
+    { id: `production`, kind: `cli`, config: { provider: `komodo` } },
+];
 // Every fact true, so a detect() that gates on evidence still yields its activations and its icons can be checked.
 const richRepo: RepoFacts = {
     repo: `demo`,
@@ -120,10 +133,43 @@ describe(`every builtin`, () => {
             module.activate(api, { extensionId: id, subscriptions: [] });
             const known = new Set(Object.keys(ICON_SETS.phosphor));
             // Facts generous enough that a detect() gated on evidence still produces its activations.
-            const icons = registered.flatMap((view) => view.detect([richRepo], [discordCap]).flatMap((a) => (a.icon === undefined ? [] : [a.icon])));
+            const icons = registered.flatMap((view) =>
+                view.detect([richRepo], richCapabilities).flatMap((a) => (a.icon === undefined ? [] : [a.icon])),
+            );
             expect(icons.filter((icon) => !known.has(icon))).toEqual([]);
         });
     }
+});
+
+/* NO TWO RAIL TILES MAY SHARE A GLYPH. The rail is a column of ~44px squares with no labels — the icon IS the
+ * name, so two tiles wearing the same one are two tiles the user cannot tell apart without hovering both. This
+ * shipped as a THREE-way collision: `sitemap` on Workflows, Pipelines and Live status at once, which is how it
+ * escaped the per-extension review that caught `cog` and `list-check` individually. No single package's test
+ * could see it — a collision is a fact about the SET, so it is checked over the set.
+ *
+ * Rail only, deliberately. A `directory` panel is opened from the Workspace tree beside its repo's name and a
+ * `sandbox` view is a labelled tab, so both carry their identity in words; only the rail asks a glyph to carry
+ * it alone. Core views (Infrastructure, Live status) register outside builtinModules, so they are folded in
+ * here — the user sees one column, not two registration paths. */
+describe(`rail glyphs`, () => {
+    it(`gives every rail tile an icon no other rail tile uses`, () => {
+        const registrations = [...builtinModules.values()].flatMap((module) => {
+            const { api, views } = capture();
+            module.activate(api, { extensionId: `test`, subscriptions: [] });
+            return views;
+        });
+        const owners = new Map<string, string[]>();
+        for (const view of [...registrations, ...coreViews].filter((registered) => registered.surface === `rail`)) {
+            for (const { icon } of view.detect([richRepo], richCapabilities)) {
+                if (icon === undefined) {
+                    continue;
+                }
+                owners.set(icon, [...(owners.get(icon) ?? []), view.id]);
+            }
+        }
+        // Reported as the whole map of offenders rather than a count, so a failure names which tiles clash.
+        expect(Object.fromEntries([...owners].filter(([, ids]) => ids.length > 1))).toEqual({});
+    });
 });
 
 describe(`ext-logs`, () => {

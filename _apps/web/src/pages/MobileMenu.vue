@@ -5,7 +5,7 @@ import { computed, onMounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { type ActiveExtension, activationBadge, detectActivations, extensionPath } from "../core-views/registry";
+import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands } from "../core-views/registry";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { identityHue } from "../composables/identityHue";
@@ -17,6 +17,9 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
  * comes from the same singletons the desktop chrome reads; only the presentation is form-factor-specific. */
 
 interface AreaRow {
+    // The contributing extension's id — what railBands groups by, so this page's sections and the desktop rail's
+    // hairline-separated runs are the same partition of the same list.
+    readonly id: string;
     readonly to: string;
     readonly label: string;
     readonly icon?: IconName;
@@ -37,6 +40,7 @@ const extensionRow = (active: ActiveExtension): AreaRow => {
     const { extension, activation } = active;
     const badge = activationBadge(active);
     return {
+        id: extension.id,
         to: extensionPath(extension, activation),
         label: activation.title,
         ...(activation.icon === undefined ? {} : { icon: activation.icon as IconName }),
@@ -62,18 +66,26 @@ onMounted(() => {
     }
 });
 
-// The rail's extension tiles, same detection as ShellDesktop — Workspace/Drafts/Chat live on the tab bar, so
-// the menu lists only the remaining areas.
-const areas = computed<readonly AreaRow[]>(() => [
-    // Automations is now a rail extension — it flows through detectActivations below like every other rail tile.
-    ...detectActivations(panels.value, capabilities.value)
-        .filter(({ extension }) => extension.surface === `rail`)
-        .map(extensionRow),
-    { to: `/capabilities`, label: `Add a capability`, icon: `plus` },
-    { to: `/terminal`, label: `Terminal`, icon: `code` },
-    { to: `/sandbox`, label: `Sandbox`, icon: `box` },
-    { to: `/settings`, label: `Settings`, icon: `cog` },
-]);
+/* The rail's extension tiles, same detection AND same bands as ShellDesktop — Workspace/Drafts/Chat live on the
+ * tab bar, so the menu lists only the remaining areas. The desktop rail separates its bands with a hairline
+ * because 44px leaves no room for a word; this page has the width, so it spells the band names out. Same
+ * partition either way, which is the point of railBands living in the registry. */
+const areaBands = computed(() =>
+    railBands(
+        detectActivations(panels.value, capabilities.value)
+            .filter(({ extension }) => extension.surface === `rail`)
+            .map(extensionRow),
+        (area) => area.id,
+    ),
+);
+// The box rather than the work — the same things the desktop rail keeps below its last divider, next to the
+// terminal and the "+". Not banded: none of them is an area a rail tile ever stood for.
+const sandboxRows: readonly AreaRow[] = [
+    { id: `capabilities`, to: `/capabilities`, label: `Add a capability`, icon: `plus` },
+    { id: `terminal`, to: `/terminal`, label: `Terminal`, icon: `code` },
+    { id: `sandbox`, to: `/sandbox`, label: `Sandbox`, icon: `box` },
+    { id: `settings`, to: `/settings`, label: `Settings`, icon: `cog` },
+];
 
 const addSandbox = (): void => {
     const limit = entitlements.value?.sandboxLimit;
@@ -167,11 +179,12 @@ const logout = async (): Promise<void> => {
             </div>
         </section>
 
-        <!-- The areas the desktop rail links to (minus the ones on the tab bar). -->
-        <section class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Areas</h2>
+        <!-- The areas the desktop rail links to (minus the ones on the tab bar), in the rail's own bands — the
+             headings the 44px column can only imply with a hairline. -->
+        <section v-for="band in areaBands" :key="band.group.id" class="flex flex-col gap-1">
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ band.group.label }}</h2>
             <RouterLink
-                v-for="area in areas"
+                v-for="area in band.items"
                 :key="area.to"
                 :to="area.to"
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-content transition-colors active:bg-overlay"
@@ -187,6 +200,21 @@ const logout = async (): Promise<void> => {
                     :class="BADGE_TONE[area.badge.tone ?? `info`]"
                     >{{ area.badge.tooltip ?? area.badge.count }}</span
                 >
+                <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
+            </RouterLink>
+        </section>
+
+        <!-- The box rather than the work, matching what the desktop rail keeps below its last divider. -->
+        <section class="flex flex-col gap-1">
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Sandbox</h2>
+            <RouterLink
+                v-for="row in sandboxRows"
+                :key="row.to"
+                :to="row.to"
+                class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-content transition-colors active:bg-overlay"
+            >
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon :name="row.icon!" class="text-base text-muted" /></span>
+                <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
             </RouterLink>
         </section>

@@ -31,9 +31,13 @@ export const coreViews: readonly ViewRegistration[] = [
         surface: `rail`,
         // A fresh desired-state repo carries NO content marker (desired-state.json appears after the first
         // resolve), so the role dir is the day-one evidence; the artifact takes over once it exists.
+        //
+        // `cloud`, not `sitemap`: this tile and Infrastructure's `server` are a matched pair — what you declared
+        // versus what is actually up out there — and a reader who sees them together should be able to tell which
+        // is which without hovering. `sitemap` said neither, and said it in the same shape as two other tiles.
         detect: (repos) => {
             const target = repos.find((repo) => repo.role === `desired-state` || repo.desiredState);
-            return target === undefined ? [] : [{ key: target.repo, title: `Live status`, icon: `sitemap`, repo: target.repo }];
+            return target === undefined ? [] : [{ key: target.repo, title: `Live status`, icon: `cloud`, repo: target.repo }];
         },
         view: async () => (await import(`./live-status/LiveStatusView.vue`)).default,
     },

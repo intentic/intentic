@@ -30,11 +30,13 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             id: `maintenance`,
             label: `Maintenance`,
             surface: `rail`,
-            /* `cog` — machinery being kept running, which is what this is. Not `list-check`: that is Acceptance's,
+            /* `wrench` — machinery being kept running, which is what this is. Not `list-check`: that is Acceptance's,
              * and two tiles sharing a glyph in a column read at a glance is worse than either being slightly less
              * apt. Not a warning triangle either — the two chores that are genuinely urgent say so with the
-             * badge's tone, and an icon that shouts permanently says nothing. */
-            detect: (repos) => (repos.length === 0 ? [] : [{ key: `maintenance`, title: `Maintenance`, icon: `cog` }]),
+             * badge's tone, and an icon that shouts permanently says nothing. And no longer `cog`: a gear means
+             * Settings everywhere else in this app (the account popover's row, the mobile menu's), so the one
+             * glyph a reader already has a fixed meaning for is the one it must not borrow. */
+            detect: (repos) => (repos.length === 0 ? [] : [{ key: `maintenance`, title: `Maintenance`, icon: `wrench` }]),
             badge: maintenanceBadge,
             view: async () => (await import(`./MaintenanceView.vue`)).default,
         }),
