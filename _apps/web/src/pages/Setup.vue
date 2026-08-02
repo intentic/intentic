@@ -4,6 +4,7 @@ import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import { cmp, Code, commandLang, CopyButton, InfoHint, Segmented, StepSection, useDevice, useOsPreference } from "@intentic-app/ui";
 import Button from "primevue/button";
+import Checkbox from "primevue/checkbox";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { track } from "../composables/analytics";
@@ -203,19 +204,15 @@ const hasDocker = ref(false);
 const review = ref(false);
 // The filename the review path downloads to — named after what it is, in the folder the user is standing in.
 const SCRIPT_FILE = { unix: `intentic-connect.sh`, windows: `intentic-connect.ps1` } as const;
-// The command's options read as checkboxes, not buttons: each answers a question the caption beside it asks,
-// and a pressed state is the answer. min-h-7 keeps them thumb-sized without breaking the text row they sit in.
-// The shared min-width is what makes the rows read as a group rather than as ragged sentences: their captions
-// start in the same column at any width where every chip fits on its caption's line.
-//
-// MONOCHROME, deliberately. Ticked used to be green, which put a success colour on a card that already spends
-// amber on the stuck-wait, orange on the local-dev note and a status dot on the footer — five hues to say one
-// checkbox is ticked. Green also claims something these do not mean: nothing has succeeded, an option is on.
-// The glyph (check-square vs square) carries the boolean; the chrome only needs to look pressed.
-const chipClass = (on: boolean): string =>
-    `inline-flex min-h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-2xs transition-colors md:min-w-[11.5rem] ${
-        on ? `border-line-strong bg-overlay text-content` : `border-line text-muted hover:border-line-strong hover:text-content`
-    }`;
+/* The command's options are checkboxes, and now they look like checkboxes: the design system's own control
+ * (animated in primeng.css, so this row ticks the same way every other box in the app does) with its name
+ * beside it. They were chips — a bordered pill that filled in when pressed — which is a toggle BUTTON, and it
+ * dressed three quiet options as the loudest thing on a card whose subject is a command. The tick is the
+ * state; it needs no box around the box.
+ *
+ * The shared min-width is what survives from the chips, and it is the reason the group reads as a group: every
+ * caption starts in the same column at any width where the names fit on their caption's line. */
+const optionLabel = `shrink-0 text-content md:min-w-[11.5rem]`;
 
 // The chosen target once its inputs are complete — what the setup code is minted for; undefined keeps it locked.
 const target = computed<SetupCodeTarget | undefined>(() => {
@@ -1257,15 +1254,15 @@ watch(commandReady, (ready) => {
                                  nine lines of env vars between the button that copies it and the step that
                                  comes next. The dev command is the long one, but even the hosted one-liner
                                  wraps to four lines at 390px.
-                                 The label is the block's title bar, and one word is all it needs: a dark
-                                 monospace box in a page of cards reads as a documentation snippet, and
-                                 "Terminal" is what stops it. Which machine is the line above's job. -->
+                                 No label. It read "Terminal", to stop a dark monospace box being taken for a
+                                 documentation snippet — but the line above the block already says to paste this
+                                 into a terminal, so it was a heading restating the sentence directly above it,
+                                 and a row of chrome between the Copy button and the thing it copies. -->
                                     <Code
                                         :code="selectedCommand"
                                         :lang="selectedCommandLang"
                                         :wrap="true"
                                         :copyable="false"
-                                        label="Terminal"
                                         :clamp-lines="mobile ? 4 : undefined"
                                     />
                                     <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
@@ -1297,17 +1294,17 @@ watch(commandReady, (ready) => {
                                  changes what this command does — so it now reads as one, and the folder it mirrors
                                  to is the caption rather than a sentence of its own.
                                  Script tabs only — compose carries no SYNC_DIR and declares its own shape. -->
+                            <!-- The <label> stops at the option's NAME rather than wrapping the whole row: a
+                                 label toggles on any click inside it, and these captions carry a folder path,
+                                 a `sudo` mention and a link out to the script — text people select and read.
+                                 Clicking a row's name still hits a 200px target; selecting its caption no
+                                 longer rewrites the command. -->
                             <div v-if="runTab !== `compose`" class="flex flex-col gap-1.5 text-2xs text-muted">
                                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <button
-                                        type="button"
-                                        :aria-pressed="syncEnabled"
-                                        :class="chipClass(syncEnabled)"
-                                        @click="syncEnabled = !syncEnabled"
-                                    >
-                                        <Icon :name="syncEnabled ? `check-square` : `square`" />
-                                        Also sync a local folder
-                                    </button>
+                                    <label class="flex cursor-pointer items-center gap-2">
+                                        <Checkbox v-model="syncEnabled" :binary="true" size="small" />
+                                        <span :class="optionLabel">Also sync a local folder</span>
+                                    </label>
                                     <!-- On, the folder IS the news; off, the reason is. Saying both at once was one
                                          clause of each, and the clause that mattered was never the one being read. -->
                                     <span class="min-w-0">
@@ -1321,20 +1318,20 @@ watch(commandReady, (ready) => {
                              there is no switch here and the Docker prerequisite is left to the panel, which
                              names the reboot a first Windows install may want. -->
                                 <div v-if="environment.production && runTab === `unix`" class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <button type="button" :aria-pressed="hasDocker" :class="chipClass(hasDocker)" @click="hasDocker = !hasDocker">
-                                        <Icon :name="hasDocker ? `check-square` : `square`" />
-                                        I already have Docker
-                                    </button>
+                                    <label class="flex cursor-pointer items-center gap-2">
+                                        <Checkbox v-model="hasDocker" :binary="true" size="small" />
+                                        <span :class="optionLabel">I already have Docker</span>
+                                    </label>
                                     <span class="min-w-0">
                                         <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
                                         <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
                                     </span>
                                 </div>
                                 <div v-if="environment.production" class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <button type="button" :aria-pressed="review" :class="chipClass(review)" @click="review = !review">
-                                        <Icon :name="review ? `check-square` : `square`" />
-                                        Download and read it first
-                                    </button>
+                                    <label class="flex cursor-pointer items-center gap-2">
+                                        <Checkbox v-model="review" :binary="true" size="small" />
+                                        <span :class="optionLabel">Download and read it first</span>
+                                    </label>
                                     <span class="min-w-0">
                                         <a
                                             :href="sourceUrl"

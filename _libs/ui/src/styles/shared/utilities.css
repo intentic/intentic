@@ -93,11 +93,27 @@
     }
 }
 
+/* The tick a checkbox draws when it is ticked (primeng.css wires it to .p-checkbox-icon). Scale AND opacity,
+   not scale alone: a tick that grows from nothing at full opacity flickers at the first frame, where one that
+   fades as it grows simply arrives. */
+@keyframes ui-check-in {
+    from {
+        opacity: 0;
+        transform: scale(0.4);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
 /* A placeholder is by definition content the reader cannot act on yet, so its motion is pure decoration —
    the first thing to drop for anyone who asked the OS for less of it. The fill stays: it is what says
-   "something is coming here". */
+   "something is coming here". The checkbox's tick is the same bargain: the state it reports is carried by
+   the mark and the fill, so dropping the flourish costs nothing anyone needs. */
 @media (prefers-reduced-motion: reduce) {
-    .skeleton {
+    .skeleton,
+    .p-checkbox-checked .p-checkbox-icon {
         animation: none;
     }
 }
