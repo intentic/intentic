@@ -13,6 +13,7 @@ import { transcriptView } from "../composables/chat/transcriptClock";
 import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
 import { errorMessage } from "../composables/useAsyncAction";
+import { useLoadingReveal } from "../composables/loadingReveal";
 import { useChat } from "../composables/chat/useChat";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -37,6 +38,7 @@ import LoopDialog from "../agents/LoopDialog.vue";
 import { stopLoop } from "../composables/agents/useLoops";
 import ChatTabs from "./ChatTabs.vue";
 import ChatTabsMobile from "./ChatTabsMobile.vue";
+import ChatTranscriptSkeleton from "./ChatTranscriptSkeleton.vue";
 import { formatTokens, ProgressRing } from "@intentic/ui";
 import ProviderLogo from "./ProviderLogo.vue";
 import UsageRing from "../components/UsageRing.vue";
@@ -150,9 +152,15 @@ const transcriptWindow = (): Window & typeof globalThis => scroller.value?.owner
 watch([scroller, poppedOut], () => (transcriptView.value = transcriptWindow()), { flush: `post`, immediate: true });
 
 const activeError = computed(() => active.value.error.value);
-// The active conversation's transcript round-trip, still in flight with nothing painted yet — the empty
-// state defers to a loading one on it.
-const activeLoading = computed(() => active.value.loading.value);
+/* The active conversation's transcript round-trip, still in flight with nothing painted yet — the empty state
+ * defers to a loading one on it. Gated by useLoadingReveal, not read raw: a warm daemon answers this in well
+ * under the time it takes to read a placeholder, and an outline that appears for one beat and vanishes is a
+ * glitch, not feedback. Keyed on the conversation so switching tabs mid-load drops the outline at once instead
+ * of holding it over a different chat. */
+const activeLoading = useLoadingReveal(
+    computed(() => active.value.loading.value),
+    computed(() => active.value.conversationId),
+);
 
 // The active conversation's account when its stored credential can no longer be refreshed — surfaced as a
 // pre-send banner so the user reconnects before hitting an opaque failure mid-turn (Codex today).
@@ -1059,9 +1067,7 @@ watch(
                         <!-- The transcript is on its way (a history open, a restored tab whose local mirror was
                              empty). Without this state the round-trip wears the "Start a conversation" text
                              below, which over a chat that merely hasn't arrived yet reads as data loss. -->
-                        <p v-else-if="activeLoading" class="m-auto flex items-center gap-2 text-xs text-muted">
-                            <Icon name="spinner" spin />Loading conversation…
-                        </p>
+                        <ChatTranscriptSkeleton v-else-if="activeLoading" />
                         <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">Start a conversation with {{ providerName }}.</p>
                         <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
                     </div>

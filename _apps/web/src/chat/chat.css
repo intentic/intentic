@@ -149,6 +149,13 @@
     background: color-mix(in srgb, var(--color-overlay) 35%, transparent);
     border: 1px solid var(--color-line);
 }
+/* The loading outline (ChatTranscriptSkeleton) fades out at its top edge. It stands in for the END of a
+   conversation — the rest of which is above the viewport — so a hard first row would claim the transcript
+   starts there, and the arriving content, which is scrolled to its own bottom, would contradict it. The fade
+   is the same statement the clamped prompt's gradient makes: there is more of this than you can see. */
+.chat-skeleton {
+    mask-image: linear-gradient(to bottom, transparent, black 4rem);
+}
 /* ── Chat type scale ─────────────────────────────────────────────────────────────────────────────
    The chat column runs on the APP's type scale — it does not keep one of its own. Three tiers, and
    nothing else in here:
