@@ -19,7 +19,7 @@ import {
     turnInFlight,
     unreadBadge,
 } from "../composables/agents/agentStatus";
-import { identityFill } from "../composables/identityHue";
+import { categoryHue, categoryLabel } from "../composables/categoryHue";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { markSegments } from "../composables/agents/useAgentFilter";
 import { canArchive, type FleetAgent } from "../composables/agents/useAgents";
@@ -57,6 +57,9 @@ const emit = defineEmits<{ open: []; review: []; resolve: []; land: []; archive:
 
 const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
+// The identity tile's category hue (categoryHue over the title), undefined for a title that reads as nothing
+// — one computed, because the tile binds it three ways (class, style, tooltip).
+const tileHue = computed(() => categoryHue(props.agent.title));
 const router = useRouter();
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
@@ -184,13 +187,18 @@ const grab = (event: PointerEvent): void => {
         @keydown.space.self.prevent="openCard"
     >
         <div class="flex items-center gap-2">
-            <!-- The IDENTITY TILE — the provider glyph on this agent's own identity hue (identityHue, the same
-                 8-hue hash a member's avatar wears). The colour is the cross-reference between this card and
-                 the same session's card on the chat rail: one glyph slot answers whose runtime AND which chat,
-                 where a board of one provider used to be a column of identical grey marks. -->
+            <!-- The IDENTITY TILE — the provider glyph on a tint of this agent's CATEGORY hue (categoryHue:
+                 the title's action word read as a kind of work — audits blue, redesigns purple, new work
+                 green, fixes red). One glyph slot answers whose runtime AND what kind of session; the tint is
+                 also the cross-reference to the same session's card on the chat rail. It hashed the id into a
+                 hue once, worn solid — colour that could only be re-found, never read, and a board of it was
+                 louder than anything the cards actually said. The tooltip is the legend; an unreadable title
+                 wears neutral chrome. -->
             <span
-                class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white"
-                :style="{ background: identityFill(agent.id) }"
+                v-tooltip.top="tileHue === undefined ? undefined : categoryLabel(agent.title)"
+                class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
+                :class="tileHue === undefined ? 'border border-line bg-content/5 text-muted' : 'category-tile'"
+                :style="tileHue === undefined ? undefined : { '--tile-hue': tileHue }"
             >
                 <ProviderLogo :provider="agent.provider" class="text-xs" />
             </span>

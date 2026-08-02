@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { compareEntries, type RegistryEntry, RegistryFactsSchema, RegistryFileSchema, resolveRegistry } from "./registry.js";
 
 const SHA = "9f2c1ab0d4e5f60718293a4b5c6d7e8f90a1b2c3";
-const REGISTRY = "https://github.com/intentic-dev/registry";
+const REGISTRY = "https://github.com/intentic/registry";
 
 const file = RegistryFileSchema.parse({
     name: `intentic`,

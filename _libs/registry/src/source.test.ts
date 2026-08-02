@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { githubRepoOf, isShaPinned, resolveSource } from "./source.js";
 
 const SHA = "9f2c1ab0d4e5f60718293a4b5c6d7e8f90a1b2c3";
-const REGISTRY = "https://github.com/intentic-dev/registry";
+const REGISTRY = "https://github.com/intentic/registry";
 
 describe(`resolveSource`, () => {
     it(`reads a bare string as a path inside the registry repo, with pluginRoot prepended`, () => {

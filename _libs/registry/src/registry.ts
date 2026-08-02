@@ -22,7 +22,7 @@ export const REGISTRY_FACTS_FILE = ".claude-plugin/registry.generated.json";
 
 // The default the Extensions tab browses and the gallery is built from. A default, not a gate: the browse
 // field stays editable, so a company points it at an internal registry and never touches this one.
-export const OFFICIAL_REGISTRY_URL = "https://github.com/intentic-dev/registry";
+export const OFFICIAL_REGISTRY_URL = "https://github.com/intentic/registry";
 
 // The GitHub topic an author adds to be found. This is discovery only — appearing in the scan gets you a pull
 // request against the registry, never a listing.

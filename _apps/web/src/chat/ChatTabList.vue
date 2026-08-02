@@ -14,7 +14,7 @@ import {
     turnInFlight,
     unreadBadge,
 } from "../composables/agents/agentStatus";
-import { identityFill } from "../composables/identityHue";
+import { categoryHue, categoryLabel } from "../composables/categoryHue";
 import { markSegments, useAgentFilter } from "../composables/agents/useAgentFilter";
 import { type FleetAgent, useAgents } from "../composables/agents/useAgents";
 import FilterField from "../components/FilterField.vue";
@@ -44,11 +44,12 @@ import { providerLabel } from "@intentic/sandbox-contract";
  * two different products. What "in miniature" costs is only the facts that need width the rail lacks (the
  * branch, the token counters); it does not license a second visual grammar. The card's rows, top to bottom:
  *
- *   · the LEADING mark is the chat's IDENTITY TILE — the provider glyph on the chat's own identity hue
- *     (identityHue, the same 8-hue hash a member's avatar wears). One glyph slot answers two questions:
- *     whose runtime (the glyph), and WHICH chat (the colour) — a column of a dozen same-provider sessions
- *     used to be a dozen identical asterisks, and "the amber one" is how a person actually re-finds a card.
- *     Always present, so every title starts at one x.
+ *   · the LEADING mark is the chat's IDENTITY TILE — the provider glyph on a tint of the chat's CATEGORY
+ *     hue (categoryHue: the title's action word read as a kind of work — audits blue, redesigns purple, new
+ *     work green, fixes red). One glyph slot answers two questions: whose runtime (the glyph), and what KIND
+ *     of session (the colour). It hashed the chat id into a hue once, worn solid — identity, but identity
+ *     nothing could be read from, and a lane of it was the loudest thing on screen. A chat whose title reads
+ *     as nothing wears neutral chrome. Always present, so every title starts at one x.
  *   · the TRAILING glyph is the status, in a fixed slot at the end of the title row, with the × taking the
  *     slot beside it on hover (AgentCard's hover-action pattern).
  *   · the title is the card's one piece of CONTENT and takes the content tier (text-xs, semibold) over a
@@ -65,9 +66,9 @@ import { providerLabel } from "@intentic/sandbox-contract";
  * whole of why the rail read flatter than the board. Both hosts hand this list a canvas ground now, so one
  * rule holds in both.
  *
- * Colour is spent the way the board spends it: identity in the tile, status in the glyph, the reason in a
- * chip, the live readout in link, diffs in success/danger — and everything else neutral, so an accent on
- * screen always means something.
+ * Colour is spent the way the board spends it: the work's category in the tile, status in the glyph, the
+ * reason in a chip, the live readout in link, diffs in success/danger — and everything else neutral, so an
+ * accent on screen always means something.
  *
  * The list reads the stores and emits verbs rather than writing them: the panel that hosts it is what hands
  * each verb to useChat, exactly as the strip always did. */
@@ -180,8 +181,18 @@ const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: str
 // model deep (an Opus session next to a Codex one is a real difference in what the card will cost and how it
 // behaves). No provider fallback here: the tile's glyph already says who runs it, and repeating that in text
 // would put the same word on every card of a one-provider fleet.
-const modelOf = (agent: FleetAgent): string | undefined =>
-    agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : undefined;
+const modelOf = (agent: FleetAgent): string | undefined => (agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : undefined);
+
+/* The identity tile's skin, ready to `v-bind` (the statusOf pattern — one derivation per render, not one per
+ * bound attribute). Category-tinted when the title reads as a kind of work (categoryHue), neutral chrome —
+ * Avatar's own — when it doesn't: a hue that means nothing is the flashiness this replaced. */
+const tileOf = (title: string | undefined): { class: string; style?: Record<string, number> } => {
+    const hue = categoryHue(title);
+    if (hue === undefined) {
+        return { class: `border border-line bg-content/5 text-muted` };
+    }
+    return { class: `category-tile`, style: { "--tile-hue": hue } };
+};
 
 /* HAS THE CARD'S SECOND LINE ANYTHING TO SAY? A fresh draft has no numbers, no age, no marks and no model, so
  * the row would render as an empty strip under its title — which is exactly what the old card did, leaving a
@@ -205,16 +216,17 @@ const hasMeta = (entry: OpenChat): boolean => {
     );
 };
 
-// The card's hover preview note: the model (with the provider as its floor) and the UNTRUNCATED live activity —
-// the card's own meta line clamps both, so the hover is where a long command or model name is read whole.
+// The card's hover preview note: what kind of work the tile's colour says this is (the legend for the tint —
+// a colour code nothing ever spells out is one the user has to break), the model (with the provider as its
+// floor) and the UNTRUNCATED live activity — the card's own meta line clamps both, so the hover is where a
+// long command or model name is read whole.
 const noteOf = (agent: FleetAgent | undefined): string | undefined => {
     if (agent === undefined) {
         return undefined;
     }
     const model = agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : providerLabel(agent.provider);
-    return [model, activityLine(agent)].filter((part) => part !== undefined && part !== ``).join(` · `);
+    return [categoryLabel(agent.title), model, activityLine(agent)].filter((part) => part !== undefined && part !== ``).join(` · `);
 };
-
 
 /* What the query found that ISN'T open in this window — the whole point of the filter reaching past its own
  * list. Live fleet agents first (the likeliest thing to want), then the archive, each as a row that opens the
@@ -428,12 +440,12 @@ const closeTab = (event: Event, id: string): void => {
                             @mouseleave="hidePreview"
                         >
                             <span class="flex w-full min-w-0 items-start gap-2">
-                                <!-- The IDENTITY TILE leads: the provider glyph on the chat's own hue (see the
-                                     header comment). Sized to the title's first line so a two-line title hangs
-                                     off it, not around it. -->
+                                <!-- The IDENTITY TILE leads: the provider glyph on a tint of the chat's
+                                     category hue (see the header comment). Sized to the title's first line so
+                                     a two-line title hangs off it, not around it. -->
                                 <span
-                                    class="-mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md text-white"
-                                    :style="{ background: identityFill(c.conversationId) }"
+                                    class="-mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md"
+                                    v-bind="tileOf(tabLabel(c))"
                                 >
                                     <ProviderLogo :provider="agent?.provider ?? c.provider.value" class="text-2xs" />
                                 </span>
@@ -594,13 +606,10 @@ const closeTab = (event: Event, id: string): void => {
                         @click="emit('open', agent.id)"
                     >
                         <span class="flex w-full min-w-0 items-start gap-2">
-                            <!-- The same identity tile as the lanes above: a hit here is a destination, and the
-                                 colour is what it will be re-found by once open. Only the TEXT ink drops a
-                                 step, since nothing here is a session you are currently in. -->
-                            <span
-                                class="-mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md text-white"
-                                :style="{ background: identityFill(agent.id) }"
-                            >
+                            <!-- The same identity tile as the lanes above: a hit here is a destination, and
+                                 the category tint says what kind of work it will turn out to be. Only the
+                                 TEXT ink drops a step, since nothing here is a session you are currently in. -->
+                            <span class="-mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md" v-bind="tileOf(agent.title)">
                                 <ProviderLogo :provider="agent.provider" class="text-2xs" />
                             </span>
                             <span class="line-clamp-2 min-w-0 flex-1 text-xs font-medium leading-4 text-muted">

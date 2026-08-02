@@ -1,0 +1,8 @@
+{
+    "name": "example",
+    "description": "Teaches the agent that this sandbox has an `intentic-example` CLI for leaving short notes the owner reads in the Example rail view. Ships the `example-notes` skill; the CLI itself arrives on PATH from the same extension.",
+    "version": "1.0.0",
+    "author": { "name": "intentic" },
+    "homepage": "https://github.com/intentic/extension-example",
+    "repository": "https://github.com/intentic/extension-example"
+}

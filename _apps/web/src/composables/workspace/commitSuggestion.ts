@@ -181,8 +181,9 @@ const VERBS = new Map<string, TitleVerb>([
 ]);
 
 // A title whose lead word is in neither table describes work with no verb this can read — a noun phrase, a
-// question, a pasted line. `feat` is the type for "new work" and the whole title stays: the guess that can be
-// wrong is the prefix, and the prefix is the cheap half to correct.
+// question, a pasted line. Reading it reports NO type rather than guessing one, because the two consumers
+// disagree about what a guess is worth: the commit box defaults to `feat` (the prefix is the cheap half to
+// correct), while the category tint declines to colour — a wrong hue would teach the palette to lie.
 const DEFAULT_TYPE = `feat`;
 
 /* The action tag on a model-written title: ` · fix`, ` · remove`, ` · logging`. Anchored to the end and limited
@@ -234,8 +235,11 @@ const uncapitalized = (text: string): string => {
     return `${first[0]!.toLowerCase()}${text.slice(1)}`;
 };
 
-// A title read as one commit type plus one subject fragment. Undefined for a title with nothing in it.
-const readTitle = (title: string): { readonly type: string; readonly subject: string } | undefined => {
+/* A title read as one commit type plus one subject fragment. Undefined for a title with nothing in it; a
+ * present reading with `type: undefined` for one whose kind could not be read (no prefix, no tag, no known
+ * verb). EXPORTED for the second reader of the same convention: the session cards colour their identity tile
+ * by this type (categoryHue), so the commit box and the tile can never read one title as two kinds of work. */
+export const readTitle = (title: string): { readonly type: string | undefined; readonly subject: string } | undefined => {
     // A trailing full stop belongs to a sentence, not a subject; a question mark carries the tone the title
     // meant and stays.
     const clean = title.replaceAll(/\s+/g, ` `).trim().replace(/\.+$/, ``).trim();
@@ -263,14 +267,14 @@ const readTitle = (title: string): { readonly type: string; readonly subject: st
         const tag = tagged[1]!;
         const tagVerb = VERBS.get(tag.toLowerCase());
         if (tagVerb === undefined) {
-            return { type: DEFAULT_TYPE, subject: subjectCased(`${head} ${tag}`) };
+            return { type: undefined, subject: subjectCased(`${head} ${tag}`) };
         }
         return { type: tagVerb.type, subject: tagVerb.drop ? subjectCased(head) : `${tag} ${uncapitalized(head)}` };
     }
     const [lead = ``] = clean.split(` `, 1);
     const verb = VERBS.get(lead.toLowerCase());
     if (verb === undefined) {
-        return { type: DEFAULT_TYPE, subject: subjectCased(clean) };
+        return { type: undefined, subject: subjectCased(clean) };
     }
     if (!verb.drop) {
         return { type: verb.type, subject: subjectCased(clean) };
@@ -299,5 +303,5 @@ export const conventionalSubject = (titles: readonly string[]): string | undefin
     if (subjects.length === 0) {
         return undefined;
     }
-    return `${parts[0]!.type}: ${subjects.join(`, `)}`;
+    return `${parts[0]!.type ?? DEFAULT_TYPE}: ${subjects.join(`, `)}`;
 };

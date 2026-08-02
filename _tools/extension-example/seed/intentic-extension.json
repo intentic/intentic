@@ -1,0 +1,18 @@
+{
+    "publisher": "intentic",
+    "name": "example",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.4.0" },
+    "entry": "dist/extension.js",
+    "permissions": { "sandbox": ["GET /workspace/file"] },
+    "contributes": {
+        "views": [{ "id": "example", "label": "Example", "surface": "rail", "badge": true }],
+        "files": [{ "path": ".intentic/example-notes.json", "invalidates": ["example-notes"] }],
+        "commands": [{ "command": "example.reload", "title": "Example: reload notes" }],
+        "settings": [
+            { "key": "limit", "type": "number", "title": "Notes shown", "description": "How many of the newest notes the view lists.", "default": 5 }
+        ],
+        "bin": "bin",
+        "agent": { "path": "plugin" }
+    }
+}

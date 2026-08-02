@@ -1,0 +1,66 @@
+#!/usr/bin/env node
+/* `intentic-example` — the agent's half of this extension, on its PATH every turn.
+ *
+ * `contributes.bin` names this directory and the daemon prepends it to the AGENT's PATH; the files themselves
+ * are the approved code, because they ride the sha-pinned checkout the owner installed. Nothing is compiled and
+ * nothing is installed at install time — which is exactly why this file is plain ESM with no imports beyond
+ * node's own: it is executed directly by a shell, with no build step and no loader.
+ *
+ *   intentic-example add "some text"   append a note
+ *   intentic-example list              print the notes as JSON
+ *
+ * Writing the file is the whole trick behind the live view: the path is declared in `contributes.files`, so the
+ * daemon's watcher matches it and pushes an invalidation to every browser watching the `example-notes` query.
+ * The agent writes; the view updates; neither knows about the other. */
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+
+const NOTES_TAIL = join(`.intentic`, `example-notes.json`);
+
+// The workspace root is wherever `.intentic/` lives at or above the cwd — the agent may be anywhere under /work.
+const workspaceRoot = () => {
+    let dir = resolve(process.cwd());
+    for (;;) {
+        if (existsSync(join(dir, `.intentic`))) {
+            return dir;
+        }
+        const parent = dirname(dir);
+        if (parent === dir) {
+            return resolve(process.cwd());
+        }
+        dir = parent;
+    }
+};
+
+const notesPath = join(workspaceRoot(), NOTES_TAIL);
+
+const read = async () => {
+    try {
+        const parsed = JSON.parse(await readFile(notesPath, `utf8`));
+        return Array.isArray(parsed.notes) ? parsed.notes : [];
+    } catch {
+        // No file yet, or a half-written one. Either way the answer is "no notes", not a crash.
+        return [];
+    }
+};
+
+const [verb, ...rest] = process.argv.slice(2);
+
+if (verb === `add`) {
+    const text = rest.join(` `).trim();
+    if (text === ``) {
+        console.error(`usage: intentic-example add "some text"`);
+        process.exit(1);
+    }
+    const notes = await read();
+    notes.push({ at: new Date().toISOString(), text });
+    await mkdir(dirname(notesPath), { recursive: true });
+    await writeFile(notesPath, `${JSON.stringify({ notes }, undefined, 4)}\n`);
+    console.log(`noted (${notes.length} total) — ${notesPath}`);
+} else if (verb === `list`) {
+    console.log(JSON.stringify({ notes: await read() }, undefined, 4));
+} else {
+    console.error(`usage: intentic-example <add|list> [text]`);
+    process.exit(1);
+}

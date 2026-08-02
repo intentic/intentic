@@ -98,6 +98,23 @@
         height: auto;
         min-height: 2.25rem;
     }
+
+    /* A session card's identity tile, tinted by what KIND of work the session is (categoryHue): the wash and
+     * the glyph both take the category's hue, at the volume of the app's chips (bg-warning/15 + text-warning)
+     * rather than as a solid fill — a lane of solid saturated squares was the loudest thing on screen, and the
+     * tile is a cross-reference, not an alert. AgentCard (the fleet board) and ChatTabList (the rail, the
+     * docked sheet) both wear it, which is why it lives here and not in either one's scoped styles: the two
+     * cards are one card in two frames, and this is the line that keeps their colour formulas from drifting.
+     * The ink flips with the scheme the way role tokens do — deep ink on the light wash, bright ink on the
+     * dark one — parameterised on the one custom property (`--tile-hue`) the card sets inline. */
+    .category-tile {
+        background: hsl(var(--tile-hue) 60% 45% / 0.16);
+        color: hsl(var(--tile-hue) 55% 34%);
+    }
+    [data-mode="dark"] .category-tile {
+        background: hsl(var(--tile-hue) 55% 55% / 0.22);
+        color: hsl(var(--tile-hue) 70% 72%);
+    }
 }
 
 /* GSI injects its One Tap / verifying prompt iframe at body level. Match its light color-scheme
