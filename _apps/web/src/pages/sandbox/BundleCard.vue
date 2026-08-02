@@ -1,52 +1,44 @@
 <script setup lang="ts">
-import { ImportReportSchema, type ImportReport } from "@intentic-app/api-contract";
+import { ImportReportSchema, type BundleExport, type ImportReport } from "@intentic-app/api-contract";
 import { Card, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
-import { sandboxJson, sandboxRequest } from "../../composables/sandbox/sandboxClient";
+import { sandboxJson } from "../../composables/sandbox/sandboxClient";
+import { bundleDownloadUrl, useBundleExports } from "../../composables/sandbox/useBundleExports";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useAsyncAction } from "../../composables/useAsyncAction";
 
-/* MOVING A SANDBOX — export this one's environment as a file, or restore one into this sandbox.
+/* MOVING A SANDBOX — export this one's environment to a file, or restore one into this sandbox.
  *
- * The two volumes that hold an environment (`/work` and the daemon's `/history`) travel; the CONTAINER cannot.
- * That asymmetry is the whole reason this card ends in a report rather than a success tick: the image the
- * overlay describes is built by the machine running the container, so a restored sandbox is complete only once
- * its owner runs the rebuild the Environment card above then shows.
+ * Everything on the left of this card is DERIVED from the daemon's export directory (useBundleExports), which
+ * is what makes an export findable later. The first cut streamed the bundle down the click's own response and
+ * held its state in a local `busy` ref: switching view or refreshing abandoned the pack AND lost every trace of
+ * it, leaving a reset button and no answer to "where did my export go". Now the click starts a job, the row
+ * appears at once, and the row is still there — packing, ready or failed — however the browser is treated in
+ * the minutes that follow.
  *
- * The secrets switch is a real decision, not a preference, so it is presented as one — off by default (the
- * bundle is safe to send someone), and the warning under it says what turning it on puts in the file.
+ * The container still cannot travel, which is why a restore ends in a report rather than a success tick: the
+ * image the overlay describes is built by the machine running the container.
  */
 
 const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
+const { exports, packing, start, remove, error: listError } = useBundleExports();
 
 const withSecrets = ref(false);
 const report = ref<ImportReport | undefined>(undefined);
-const { busy: exporting, error: exportError, run: runExport } = useAsyncAction();
+const { busy: starting, error: startError, run: runStart } = useAsyncAction();
 const { busy: importing, error: importError, run: runImport } = useAsyncAction();
 
-/* The download goes through fetch rather than a plain link because every daemon call carries a bearer, and an
- * <a href> cannot. The response is materialized as a Blob — the browser holds it before it hits disk, which is
- * the one place this card trades simplicity for ceiling. It is bounded in practice by what the bundle leaves
- * out (node_modules, build output, the iq index, agent checkouts) rather than by the workspace's size.
- * ponytail: stream straight to disk via showSaveFilePicker where the browser has it, and keep this as the fallback.
- */
-const exportBundle = (): Promise<void> =>
-    runExport(async () => {
-        const response = await sandboxRequest(`/bundle${withSecrets.value ? `?secrets=1` : ``}`);
-        if (!response.ok) {
-            throw new Error(response.status === 403 ? `Only the sandbox owner can export the environment.` : `The export failed.`);
-        }
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement(`a`);
-        anchor.href = url;
-        // The daemon's Content-Disposition names it; this is the fallback for browsers that ignore it on a blob URL.
-        anchor.download = /filename="([^"]+)"/.exec(response.headers.get(`content-disposition`) ?? ``)?.[1] ?? `intentic-bundle.tar.gz`;
-        anchor.click();
-        URL.revokeObjectURL(url);
-    }, `Could not export the environment.`);
+const startExport = (): Promise<void> => runStart(() => start(withSecrets.value), `Could not start the export.`);
+
+/* Navigating to the URL is the point: the browser's own download manager takes the file, with a real
+ * Content-Length behind it, so a multi-GB bundle never passes through this tab's memory — and closing the tab
+ * afterwards does not cancel it. */
+const download = (entry: BundleExport): Promise<void> =>
+    runStart(async () => {
+        window.location.href = await bundleDownloadUrl(entry.name);
+    }, `Could not start the download.`);
 
 const chooseBundle = ref<HTMLInputElement>();
 const importBundle = (event: Event): Promise<void> =>
@@ -57,8 +49,15 @@ const importBundle = (event: Event): Promise<void> =>
         }
         report.value = undefined;
         // One continuous body, like the folder-drop archive route — the daemon streams it to disk entry by entry.
-        report.value = ImportReportSchema.parse(await sandboxJson(`/bundle`, { method: `POST`, body: file, duplex: `half` } as RequestInit));
+        report.value = ImportReportSchema.parse(await sandboxJson(`/bundles/restore`, { method: `POST`, body: file, duplex: `half` } as RequestInit));
     }, `Could not restore the bundle.`);
+
+const sizeLabel = (bytes: number): string => {
+    const units = [`B`, `KB`, `MB`, `GB`];
+    const index = Math.min(units.length - 1, bytes === 0 ? 0 : Math.floor(Math.log(bytes) / Math.log(1024)));
+    return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+};
+const whenLabel = (ms: number): string => new Date(ms).toLocaleString(undefined, { dateStyle: `medium`, timeStyle: `short` });
 </script>
 
 <template>
@@ -82,27 +81,67 @@ const importBundle = (event: Event): Promise<void> =>
                         bundle is safe to hand to someone else — the restore then lists what to re-enter.
                     </p>
                     <p v-if="withSecrets" class="mt-1 text-2xs text-warning">
-                        The downloaded file will contain credentials in the clear. Store it like a password.
+                        The exported file will contain credentials in the clear. Store it like a password.
                     </p>
                 </div>
-                <ToggleSwitch v-model="withSecrets" class="mt-0.5 shrink-0" />
+                <ToggleSwitch v-model="withSecrets" :disabled="packing !== undefined" class="mt-0.5 shrink-0" />
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-                <Button label="Export environment" size="small" :loading="exporting" @click="exportBundle">
-                    <template #icon><Icon name="download" /></template>
+                <!-- Disabled while one is packing rather than queueing a second: two concurrent packs would
+                     halve each other's speed to produce near-identical files, and the daemon 409s anyway. -->
+                <Button
+                    :label="packing ? 'Export running…' : 'Export environment'"
+                    size="small"
+                    :loading="starting"
+                    :disabled="packing !== undefined"
+                    @click="startExport"
+                >
+                    <template #icon><Icon name="box" /></template>
                 </Button>
                 <Button label="Restore from a bundle" size="small" severity="secondary" :loading="importing" @click="chooseBundle?.click()">
                     <template #icon><Icon name="upload" /></template>
                 </Button>
                 <input ref="chooseBundle" type="file" accept=".gz,.tgz,application/gzip" class="hidden" @change="importBundle" />
             </div>
-            <p class="text-2xs text-subtle">
-                Restore onto a FRESH sandbox. It overwrites files this workspace already has, and any agent working here would be writing underneath
-                it.
-            </p>
         </template>
         <p v-else class="text-2xs text-subtle">Only the sandbox owner can export or restore an environment.</p>
+
+        <!-- THE ANSWER TO "where do I get it later": the exports that exist, whatever this tab has been doing. -->
+        <div v-if="exports.length > 0" class="flex flex-col divide-y divide-line rounded-lg border border-line">
+            <div v-for="entry in exports" :key="entry.name" class="flex items-center gap-3 p-3">
+                <div class="min-w-0 flex-1">
+                    <p class="truncate font-mono text-2xs text-content">{{ entry.name }}</p>
+                    <p class="text-2xs text-subtle">
+                        <template v-if="entry.status === 'packing'">Packing… {{ sizeLabel(entry.bytes) }} so far</template>
+                        <template v-else-if="entry.status === 'failed'">{{ entry.error ?? `The export failed.` }}</template>
+                        <template v-else>{{ sizeLabel(entry.bytes) }} · {{ whenLabel(entry.createdAt) }}</template>
+                    </p>
+                </div>
+                <StatusBadge v-if="entry.secrets && entry.status === 'ready'" variant="warning" label="Secrets" />
+                <StatusBadge v-if="entry.status === 'packing'" variant="info" label="Packing" dot />
+                <StatusBadge v-else-if="entry.status === 'failed'" variant="danger" label="Failed" dot />
+                <Button v-if="entry.status === 'ready'" label="Download" size="small" severity="secondary" :text="true" @click="download(entry)">
+                    <template #icon><Icon name="download" /></template>
+                </Button>
+                <Button
+                    v-if="isOwner && entry.status !== 'packing'"
+                    size="small"
+                    severity="danger"
+                    :text="true"
+                    aria-label="Delete export"
+                    v-tooltip.top="'Delete this export'"
+                    @click="remove(entry.name)"
+                >
+                    <template #icon><Icon name="trash" /></template>
+                </Button>
+            </div>
+        </div>
+
+        <p v-if="isOwner" class="text-2xs text-subtle">
+            Exports stay on the sandbox until you delete them, so you can come back for one later. Restore onto a FRESH sandbox — it overwrites files
+            this workspace already has.
+        </p>
 
         <!-- The fidelity report: what landed, and what the target cannot do for itself. -->
         <template v-if="report">
@@ -126,7 +165,8 @@ const importBundle = (event: Event): Promise<void> =>
             </p>
         </template>
 
-        <p v-if="exportError" class="text-2xs text-danger">{{ exportError }}</p>
+        <p v-if="startError" class="text-2xs text-danger">{{ startError }}</p>
         <p v-if="importError" class="text-2xs text-danger">{{ importError }}</p>
+        <p v-if="listError" class="text-2xs text-danger">{{ listError }}</p>
     </Card>
 </template>

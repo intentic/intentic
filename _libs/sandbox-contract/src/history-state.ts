@@ -66,6 +66,11 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "logs/", portability: "derived" },
     { path: "trash/", portability: "derived" },
     { path: ".isolation-probe", portability: "derived" },
+    /* The finished bundles themselves. `derived` is doing real work here rather than describing leftovers: an
+     * export that carried the export directory would pack every previous bundle into the new one, and the next
+     * export would pack THAT — each one a multiple of the last. Living on this volume is the other half of the
+     * same guard; under `/work` the file would also be watched, indexed by iq, and snapshotted into history. */
+    { path: "exports/", portability: "derived" },
 
     /* ---- credentials ---- */
 

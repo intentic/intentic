@@ -31,6 +31,7 @@ import { ensureRepoGitDirs } from "./git/repo-git-dirs.js";
 import { commitRootBaseline, ensureRootRepo } from "./git/root-repo.js";
 import { reconcileSkills } from "./settings/skills.js";
 import { composeEnvironment } from "./environment/environment.js";
+import { sweepStaleExports } from "./portability/exports.js";
 import { type Config, loadConfig } from "./env.config.js";
 import { createLogger } from "./logger.js";
 import { applyTmuxLogHooks, logsRoot, pruneLogFiles, terminalLogsDir } from "./logs/log-files.js";
@@ -330,6 +331,15 @@ const main = async (): Promise<void> => {
     await boot.step("referenceShelf", () =>
         mkdir(join(config.workspaceRoot, REFERENCE_DIR), { recursive: true }).catch((error: unknown) =>
             logger.warn({ err: error }, "reference shelf not ensured — refs/ drops have no target"),
+        ),
+    );
+
+    // An environment export half-written when the daemon stopped. Only a LIVE process can be writing a `.part`,
+    // so one that survived a restart is an export that will never finish — marked failed here so the card shows
+    // a reason instead of a progress bar that never moves again (portability/exports.ts).
+    await boot.step("staleExports", () =>
+        sweepStaleExports(config.historyRoot).catch((error: unknown) =>
+            logger.warn({ err: error }, "stale exports not swept — an interrupted export may still read as packing"),
         ),
     );
 

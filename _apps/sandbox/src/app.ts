@@ -33,7 +33,7 @@ import {
     verifySyncToken,
 } from "./platform/sync.js";
 import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
-import { packBundle } from "./portability/bundle.js";
+import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./portability/exports.js";
 import { BundleFormatError, restoreBundle } from "./portability/restore.js";
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
@@ -749,33 +749,93 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     /* The environment BUNDLE: this sandbox's two volumes packed for a move, and the restore that unpacks one.
      *
-     * Raw Hono rather than oRPC for the same reason the upload routes are — both directions are a stream of
-     * arbitrary size, and neither end may hold it. Owner-only in both directions and not merely by convention:
-     * an export reads every repo and (at the owner's choice) every credential the sandbox holds, and an import
+     * Raw Hono rather than oRPC for the same reason the upload routes are — a restore and a download are streams
+     * of arbitrary size, and neither end may hold one. Owner-only throughout and not merely by convention: an
+     * export reads every repo and (at the owner's choice) every credential the sandbox holds, and a restore
      * overwrites the workspace a fleet may be working in.
      *
-     * `?secrets=1` is the owner's export choice, carried as a query param because it changes the BYTES, not the
-     * framing — a bundle records the choice it was made with and the import report explains what the choice
-     * cost. Default off: the safe bundle is the one you can hand to somebody else.
+     * The EXPORT is an artifact, not a response. `POST /bundles` starts the pack and answers with its name at
+     * once; the bytes land in the daemon's export directory and `GET /bundles` reads that directory back. This
+     * is what makes an export survive the tab that asked for it — see portability/exports.ts for why the first
+     * cut, which streamed the pack down the click's own response, could not.
      */
-    app.get("/bundle", async (c) => {
+    app.get("/bundles", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        const secrets = c.req.query("secrets") === "1";
-        const stamp = new Date().toISOString().slice(0, 10);
-        const name = services.config.sandbox.name === "" ? "sandbox" : services.config.sandbox.name;
-        return c.body(packBundle(services, { secrets, now: Date.now() }), 200, {
-            "content-type": "application/gzip",
-            "content-disposition": `attachment; filename="intentic-${name}-${stamp}.tar.gz"`,
-            // The bundle is assembled as it streams, so its length is unknown until it ends — say so rather
-            // than let a proxy buffer the whole workspace to compute one.
-            "transfer-encoding": "chunked",
+        return c.json({ exports: await listExports(services.config.historyRoot) });
+    });
+
+    // Start one. `?secrets=1` is the owner's choice and it changes the BYTES, not the framing — the bundle
+    // records what it was made with, and the restore report explains what the choice cost. Default off: the
+    // safe bundle is the one you can hand to somebody else.
+    app.post("/bundles", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        try {
+            return c.json({ name: await startExport(services, { secrets: c.req.query("secrets") === "1", now: Date.now() }) });
+        } catch (error) {
+            if (error instanceof ExportBusyError) {
+                return c.json({ error: error.message }, 409);
+            }
+            throw error;
+        }
+    });
+
+    app.delete("/bundles", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const removed = await removeExport(services.config.historyRoot, c.req.query("name") ?? "");
+        return removed ? c.json({ ok: true }) : c.json({ error: "no such export" }, 404);
+    });
+
+    /* Mint a ticket for ONE bundle, then serve it at the route below.
+     *
+     * A download has the same problem a <video> has (see /workspace/media): the browser must fetch it ITSELF for
+     * the bytes to stream to disk rather than through the tab's memory, and a navigation cannot carry an
+     * Authorization header. The containment is the same too — the ticket names one bundle and buys nothing else.
+     * Namespaced `bundle:` so a ticket minted here can never be replayed against a workspace path, nor a media
+     * ticket against a bundle.
+     */
+    app.post("/bundles/ticket", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const name = c.req.query("name") ?? "";
+        if (!(await isReadyExport(services.config.historyRoot, name))) {
+            return c.json({ error: "no such export" }, 404);
+        }
+        return c.json(services.mediaTickets.mint(`bundle:${name}`));
+    });
+
+    app.get("/bundles/download", async (c) => {
+        const name = c.req.query("name") ?? "";
+        if (services.auth !== undefined && !services.mediaTickets.valid(c.req.query("ticket") ?? "", `bundle:${name}`)) {
+            return c.json({ error: "unauthorized" }, 401);
+        }
+        // Resolved through the export LIST, so only a finished bundle this daemon produced can be named here —
+        // a query string can never walk it onto another file.
+        const opened = await openExport(services.config.historyRoot, name);
+        if (opened === undefined) {
+            return c.json({ error: "no such export" }, 404);
+        }
+        return c.body(opened.body, 200, {
+            "Content-Type": "application/gzip",
+            // A real length, unlike the streamed-as-you-pack first cut: the browser can show a progress bar and
+            // resume, because the file already exists in full before anyone asks for it.
+            "Content-Length": String(opened.size),
+            "Content-Disposition": `attachment; filename="${name}"`,
+            "Cache-Control": "no-store",
         });
     });
 
-    app.post("/bundle", async (c) => {
+    app.post("/bundles/restore", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;

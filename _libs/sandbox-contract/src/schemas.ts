@@ -3417,6 +3417,29 @@ export const ImportReportSchema = z.object({
 });
 export type ImportReport = z.infer<typeof ImportReportSchema>;
 
+/* One export sitting in the daemon's export directory — the ARTIFACT a bundle is, rather than the request that
+ * produced it. Packing takes minutes over a real workspace, so tying it to a response made it a property of one
+ * browser tab: a refresh abandoned the work and left nothing to come back to. It is a file now, and every field
+ * below is read off that file rather than remembered anywhere.
+ *
+ * `status` is derived from the extension (.part / .tar.gz / .failed) and `bytes` is the file's own size, which
+ * is what makes a live pack's progress free to report. */
+export const BundleExportSchema = z.object({
+    // The finished bundle's filename, which is the id in every route — and, once downloaded, the name the owner
+    // sees on disk. Carries its own timestamp and a `-with-secrets` marker so it stays self-describing there.
+    name: z.string(),
+    status: z.enum(["packing", "ready", "failed"]),
+    // Bytes written so far while packing; the finished size once ready.
+    bytes: z.number(),
+    // mtime: when packing ended for a finished bundle, when it last made progress for a live one.
+    createdAt: z.number(),
+    secrets: z.boolean(),
+    // Why it stopped, for a failed one. Read from the .failed marker's own contents.
+    error: z.string().optional(),
+});
+export type BundleExport = z.infer<typeof BundleExportSchema>;
+export const BundleExportsSchema = z.object({ exports: z.array(BundleExportSchema) });
+
 // ---- secrets: user-supplied env-var secrets the daemon writes to desired-state/.env ----
 // The web posts a Cloudflare token / GitHub PAT / another-host SSH key straight to the sandbox daemon (never
 // through the platform); `apply` reloads .env each run so a new secret is picked up with NO restart. `list`

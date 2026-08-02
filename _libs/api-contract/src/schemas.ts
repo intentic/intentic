@@ -19,6 +19,7 @@ import {
     DraftsListSchema,
     DraftSummarySchema,
     EnvironmentSchema,
+    BundleExportSchema,
     HostTunnelSchema,
     ImportReportSchema,
     InventoryEntrySchema,
@@ -106,6 +107,8 @@ export {
     DraftsListSchema,
     DraftSummarySchema,
     EnvironmentSchema,
+    BundleExportSchema,
+    BundleExportsSchema,
     HostTunnelSchema,
     ImportReportSchema,
     InventoryEntrySchema,
@@ -145,6 +148,7 @@ export type CapabilitySummary = z.infer<typeof CapabilitySummarySchema>;
 export type CapabilityRecommendation = z.infer<typeof CapabilityRecommendationSchema>;
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export type ImportReport = z.infer<typeof ImportReportSchema>;
+export type BundleExport = z.infer<typeof BundleExportSchema>;
 export type Marketplace = z.infer<typeof MarketplaceSchema>;
 export type Automation = z.infer<typeof AutomationSchema>;
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
