@@ -41,7 +41,7 @@ import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { verificationHooks } from "./agent-verification.js";
-import { bashTmuxHooks, type FilterBackend, tmuxRunEnabled } from "./agent-terminals.js";
+import { bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
 import { EventQueue } from "./event-queue.js";
 import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
 import type { TurnLimit } from "../usage/translator-usage.js";
@@ -158,9 +158,6 @@ export interface AgentRequest {
     // Measurement control: a fraction [0,1] of commands whose output bypasses cleaning (INTENTIC_OUTPUT_HOLDOUT),
     // recorded raw so the savings report has a real cleaned-vs-raw baseline. 0/undefined ⇒ no holdout.
     readonly outputHoldout?: number;
-    // Which cleaner backend compresses the output: "native" (agent-output-filter, default) or "rtk" (the rtk
-    // binary — the PreToolUse hook prefixes `rtk ` and the native filter is turned off). An A/B backend switch.
-    readonly filterBackend?: "native" | "rtk";
     // Extra turn-scoped instructions appended to the claude_code preset system prompt (e.g. the CLI
     // delegation note when Codex/Grok accounts are connected — see agent/delegation.ts).
     readonly systemAppend?: string;
@@ -936,20 +933,12 @@ const errorMessage = (error: unknown, stderr: string): string => {
     return detail ? `${base}: ${detail}` : base;
 };
 
-/* WHAT COMPRESSES THIS TURN'S SHELL OUTPUT — the master toggle first, the backend choice second. "off" means
- * "no compression at all", so it beats the backend: the native filter stays off AND the hook skips the `rtk `
- * prefix. Reading it the other way round is what made the toggle inert under rtk — rtk kept compressing whatever
- * the switch said, so the UI had to grey the switch out, which reads as a broken control rather than an
- * unreachable one. Per-cleaner spec and holdout remain native-only: rtk brings its own handlers. */
-export const outputFilter = (request: AgentRequest): FilterBackend =>
-    request.outputCleaners === "off" ? "none" : (request.filterBackend ?? "native");
-
-// Map the output-cleaner settings to the env the Bash output filter reads. Only the native backend runs the
-// filter at all: a spec selects cleaners, a non-zero holdout bypasses that fraction of commands as a measured
-// control, and empty leaves it at its all-on default. Under rtk (which compresses in the hook) or "none" the
-// filter is turned off outright.
+/* Map the output-cleaner settings to the env the Bash output filter reads: a spec selects cleaners, a non-zero
+ * holdout bypasses that fraction of commands as a measured control, and empty leaves it at the filter's all-on
+ * default. The literal "off" — the master toggle — turns the filter off outright, which is the only thing that
+ * can: every other value here selects WHICH cleaners run, not WHETHER any do. */
 const cleanerEnv = (request: AgentRequest): Record<string, string> => {
-    if (outputFilter(request) !== "native") {
+    if (request.outputCleaners === "off") {
         return { INTENTIC_RUN_FILTER: "0" };
     }
     return {
@@ -1084,13 +1073,12 @@ const baseOptions = (
         ...(request.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
     },
     // Hooks fire even under bypassPermissions, and for subagents too. tmux: every Bash command runs inside an
-    // `agent-*` tmux session (bin/tmux-run) so the terminal panel can watch the agent work live (the rtk
-    // backend rewrites the command to `rtk <cmd>` inside the same wrapper). Installs: an image-scoped install
+    // `agent-*` tmux session (bin/tmux-run) so the terminal panel can watch the agent work live. Installs: an image-scoped install
     // is pointed at the owner-approved overlay, and so is a command that came back `not found`, which is the
     // same problem noticed one step earlier. Diagnostics: every native Edit/Write is type-checked by the
     // resident lsp service and compile errors ride back as additionalContext.
     hooks: mergeHooks(
-        tmuxEnabled ? bashTmuxHooks(outputFilter(request), Object.keys(request.cliEnv ?? {}), request.isolation) : {},
+        tmuxEnabled ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation) : {},
         installSteeringHooks(),
         // Verification: the per-turn ledger of what was edited against what was proven, and the one follow-up
         // it asks for when a turn tries to end on unproven code. Opt-in — off, nothing is wired.

@@ -62,18 +62,23 @@ The active set is the **`outputCleaners`** per-sandbox setting (`.intentic/setti
 spec:
 
 - `""` — all cleaners on (default)
-- `"off"` — no compression at all (raw baseline). Beats `filterBackend`: the filter is off (`INTENTIC_RUN_FILTER=0`)
-  and the hook skips the `rtk ` prefix too, so this one switch means the same thing on either backend
+- `"off"` — no compression at all (raw baseline): the filter never runs (`INTENTIC_RUN_FILTER=0`). The only
+  value that answers *whether* anything is cleaned; every other one selects *which* cleaners run
 - `"git,pnpm"` — allow-list (only those)
 - `"-cap"` / `"-dedup,-redact"` — default-minus (all except)
 
-The daemon resolves the two settings into one active backend (`agent.ts` `outputFilter`: `native` | `rtk` | `none`)
-and threads the spec to the filter as `INTENTIC_OUTPUT_CLEANERS` on the SDK env (`cleanerEnv`). The UI
+The daemon threads the spec to the filter as `INTENTIC_OUTPUT_CLEANERS` on the SDK env (`cleanerEnv`). The UI
 exposes a master on/off in the Sandbox → Agent settings; finer specs are set via the `/settings` route for
 benchmarking. Unknown tokens are ignored (fail-open).
 
 **Provenance:** `agent-output-filter` appends one line per command to `historyRoot/logs/filter-stats.jsonl` with
 `rawBytes`/`emittedBytes` + the active `cleaners` + which `matched` + `stageBytes`. This is the live A/B ledger.
+
+`command` on that row — and the command the cleaners are matched against — is the line **as the agent wrote it**,
+handed to the filter by `tmux-run -c`. By the time tmux-run runs it, the executed string carries the daemon's
+wrapping (`nsenter --mount=/proc/<pid>/ns/mnt --wd=… -- nice -n 10 ionice -c 2 -n 7 bash -c '…'`), which is ~100
+characters of boilerplate before the agent's first word and a per-turn pid that makes every row unique. Recording
+that instead is what made the un-cleaned-commands report unreadable and ungroupable.
 
 **Per-mechanism attribution:** `stageBytes` maps stage id → bytes that stage removed, weighed against what
 reached it (`cleanLines` returns `{ lines, stages }`). Sequential by construction, so the stages sum exactly to
@@ -178,8 +183,8 @@ and the control arm holds the same unsearchable questions in the same proportion
 
 `SavingsReport` is three families, deliberately never one ranking:
 
-- `input` — the cleaners, from the ledger of whichever backend is compressing (`filterBackend`). Exact, windowed
-  by UTC day. `windowed: false` under rtk, whose `gain` reports no timestamps, so the UI labels it all-time.
+- `input` — the cleaners, from `filter-stats.jsonl`. Exact, windowed by UTC day. `gaps` — the un-cleaned
+  commands worth a handler — is **grouped by command line**, `commands` runs summing to `tokens`.
 - `output` — the terse A/B above (`metric: "outputTokens"`). Absent entirely when the experiment isn't running.
 - `context` — the pre-injection A/B (`metric: "costUsd"`). Same `TurnExperiment` shape, same Welch machinery,
   same absence rule.
@@ -190,32 +195,23 @@ each mechanism's figure repeated next to its own switch on the Agent tab. Note t
 lives under `logsRoot` and is therefore pruned by `pruneLogFiles` (5 MB → newest 1 MB, 30-day idle): it is a
 window of recent commands, not a lifetime record like `usage.jsonl`.
 
-## Swapping the filter backend (external cleaners)
+## Why there is one filter and not a choice of backend
 
-`bin/tmux-run` reads `INTENTIC_FILTER_CMD` (default `agent-output-filter`) — any stdin→stdout filter can be dropped
-in for head-to-head benchmarking. Because rtk / headroom **run** the command rather than filter its output, wiring
-one as a backend means either (a) a thin adapter script on PATH that shells to it as a stdin filter and set
-`INTENTIC_FILTER_CMD` to it, or (b) rewriting the command to `<tool> <cmd>` at the PreToolUse hook with
-`INTENTIC_RUN_FILTER=0`. `jfrog/boost` is proprietary — reference only, not bundlable.
+`bin/tmux-run` reads `INTENTIC_FILTER_CMD` (default `agent-output-filter`) — any stdin→stdout filter can be
+dropped in for head-to-head benchmarking. That is the whole extension point. An external cleaner that **runs**
+the command instead of filtering its output (rtk, headroom, `jfrog/boost`) needs a different shape: rewriting the
+line to `<tool> <cmd>` at the PreToolUse hook with `INTENTIC_RUN_FILTER=0`.
 
-**rtk is the one shipped alternate** — path (b), selected by the **`filterBackend`** setting (`"native"` |
-`"rtk"`). The binary is baked into the sandbox image (`_apps/sandbox/Dockerfile`, `RTK_VERSION`), not shipped as
-an installable extension fragment: `filterBackend` is a plain setting with no capability behind it, so nothing
-would prompt for the install + rebuild an extension-gated binary needs — flipping it would just make every Bash
-command fail with `rtk: command not found`. A backend switch must be usable the moment it is switched.
+**rtk shipped as exactly that for a while, behind a `filterBackend` setting, and was removed after being
+measured.** The finding is positional, not qualitative: rtk has to be `argv[0]`, the native filter reads stdout.
+Over 10,687 Bash commands from 200 session transcripts, `cd` is the first word of 8,546 of them — 80% of
+commands, 82% of the output bytes — and `rtk cd …` cannot exec at all, so those lines had to run bare. 18.1% of
+commands were prefixable; only 10.1% (6.5% of bytes) also had an rtk verb as `argv[0]` and would truly be
+filtered. (rtk's own `rtk discover` reports a far larger opportunity because it strips the `cd … &&` prefix when
+deriving a base command and prices each filter at a fixed percentage rather than measuring it — on a real `grep`
+from this repo, its top-ranked opportunity saved nothing.)
 
-The hook only prefixes commands rtk can exec: rtk filters known subcommands (git, pnpm, tsc, …) and execs
-unknown binaries unfiltered, but a shell-only first word — a builtin (`cd`), keyword (`for`), `VAR=` assignment
-or compound syntax — cannot be exec'd, so prefixing it would kill the whole line with exit 127. Those commands
-run bare and emit raw output under this backend, which is also rtk's own behaviour for anything it can't handle.
-
-**How much that costs, measured.** Over 10,687 Bash commands from 200 session transcripts, `cd` is the first word
-of 8,546 of them — 80% of commands, 82% of the output bytes — so under rtk those are uncompressed. 18.1% of
-commands are prefixable at all; only 10.1% (6.5% of bytes) also have an rtk verb as `argv[0]` and would actually
-be filtered. rtk's own `rtk discover` reports a much larger opportunity because it strips the `cd …  &&` prefix
-when deriving a base command and prices each filter at a fixed percentage rather than measuring it — on a real
-`grep` from this repo, its top-ranked opportunity saved nothing at all.
-
-Where rtk *does* fire it compresses better than a generic cap, which is why `ls` and `files` above are modelled
-on `rtk ls` / `rtk find`. The difference that matters is positional, not qualitative: rtk must be `argv[0]`, the
-native filter reads stdout. That is the argument for porting rtk's behaviours rather than switching backend.
+Where rtk *did* fire it compressed better than a generic cap, which is why the `ls` and `files` shape cleaners
+above are modelled on `rtk ls` / `rtk find`. Porting the behaviours was the part worth keeping; the backend
+switch was a second code path, a settings field, and a screen full of per-cleaner toggles that did nothing
+whenever it was on.

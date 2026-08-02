@@ -26,9 +26,8 @@ export const createSettingsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         savings: i.savings.handler(async ({ input }) => {
-            const { filterBackend } = await services.sandboxSettings.get();
             const [inputSavings, experiments] = await Promise.all([
-                readInputSavings(services.config.historyRoot, filterBackend, input),
+                readInputSavings(services.config.historyRoot, input),
                 readTurnExperiments(services.usage, input),
             ]);
             return { input: inputSavings, ...experiments };

@@ -1,27 +1,16 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic-app/ui";
 
-/* The (i) beside the Agent tab's "Assistant" group. These settings share nothing but a heading, so the dialog
- * opens with a what-changes/default table (the only thing that IS common) and then treats each one separately,
- * led by a visual: a real before/after reply for terse, a kept-vs-lost split for the system prompt, an
- * off-vs-on table for iq and another for retrieving ahead of a turn, a lifecycle strip for archiving. Most are
- * easier to show than to describe, which is why the prose is thin.
+/* The (i) beside the Agent tab's "Instructions" group — what the assistant is told before you type anything.
+ * Two settings, and they are not peers in weight: terse is a preference, the system prompt is a decision.
  *
- * The system prompt gets the longest section for a reason that isn't its complexity: its three options are
- * NOT three peers. Two are maintained prompts you pick between in a click; the third replaces them, and the
+ * The system prompt gets the longer section for a reason that isn't its complexity: its three options are NOT
+ * three peers either. Two are maintained prompts you pick between in a click; the third replaces them, and the
  * cost of that is invisible at the moment of the edit — the chat's cards and panels are driven from the prompt,
  * so a replacement turns them off without an error anywhere. Hence the modes table first, then the kept/lost
  * columns, and only then anything about writing one.
  *
- * Defaults quoted here come from SandboxSettingsSchema — off / intentic / off / off / 3 days. */
-
-const AT_A_GLANCE = [
-    [`Terse responses`, `How much the assistant writes back`, `Off`],
-    [`System prompt`, `Who the assistant is, before you say anything`, `Intentic's`],
-    [`iq code search`, `How it hunts through your code`, `Off`],
-    [`Retrieve before the turn`, `Whether it starts a message already knowing where to look`, `Off`],
-    [`Archive finished agents`, `How long finished work stays on the board`, `3 days`],
-];
+ * Defaults quoted here come from SandboxSettingsSchema — off / intentic. */
 
 const TERSE_ASKS = [`Lead with the answer`, `No restating the question`, `No re-quoting files`, `No echoing tool output`];
 
@@ -48,27 +37,11 @@ const PROMPT_KEPT = [
     [`CLAUDE.md and your skills`, `Still loaded from the workspace exactly as before`],
     [`Cross-provider delegation`, `Moves into the first message instead of the prompt`],
 ];
-
-const IQ_COMPARISON = [
-    [`A typical hunt`, `Several calls, then whole files read to find one function`, `One call`],
-    [`What comes back`, `Every line that matched the text`, `Ranked answers, trimmed to a token budget`],
-    [`Each result`, `A file to open and scan`, `A path:line anchor it can open directly`],
-    [`When your words aren't the code's words`, `Misses`, `Still finds it`],
-];
-
-// The setting after it, and the pair is easy to confuse: iq teaches the assistant to search, this one searches
-// before it decides to. Framed as when the searching happens, because that IS the whole difference.
-const PREFETCH_COMPARISON = [
-    [`How a message starts`, `A search or three, then the work`, `The answer is already in front of it`],
-    [`Who pays for the search`, `The assistant, a round trip at a time`, `The sandbox, once, before the turn`],
-    [`When your message names a file`, `Opens it`, `Nothing is retrieved — you already said where`],
-];
 </script>
 
 <template>
-    <InfoDialog title="Assistant settings">
-        <p class="text-sm text-muted">Unrelated settings that happen to share a heading. Each applies to this sandbox only.</p>
-        <InfoTable class="mt-2" :headers="[`Setting`, `What it changes`, `Default`]" :rows="AT_A_GLANCE" />
+    <InfoDialog title="Instructions">
+        <p class="text-sm text-muted">What the assistant is told before you say anything, and how much it writes back. This sandbox only.</p>
 
         <!-- ① Terse responses — the same answer written twice is the entire explanation. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Terse responses</h3>
@@ -98,9 +71,9 @@ const PREFETCH_COMPARISON = [
             Same tools, same work, same thoroughness — less narration. It's appended at a fixed spot at the very end of the standing instructions, so
             it doesn't disturb the reuse that keeps a long conversation's later turns cheap.
         </p>
-        <!-- Why the two turn-level settings carry a measurement control and the rest don't: their effect cannot
-             be observed on the turn it applies to, so it needs a control group. Said plainly, because "Measure
-             it" next to a switch otherwise reads as telemetry rather than the experiment it is. -->
+        <!-- Why this setting carries a measurement control and most don't: its effect cannot be observed on the
+             turn it applies to, so it needs a control group. Said plainly, because "Measure it" next to a switch
+             otherwise reads as telemetry rather than the experiment it is. -->
         <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
             <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
             <p class="text-2xs text-muted">
@@ -160,81 +133,6 @@ const PREFETCH_COMPARISON = [
         <p class="mt-1.5 text-2xs text-subtle">
             Editing it costs one turn's worth of the reuse that keeps long conversations cheap, then settles back. Write it and leave it — it isn't a
             place to steer a single task from.
-        </p>
-
-        <!-- ③ iq — an off/on comparison, because the value is entirely relative to grep. -->
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">iq code search</h3>
-        <p class="mt-1.5 text-2xs text-muted">
-            iq is a search tool built into the sandbox. Where grep answers "which lines contain this text", iq answers "where does this happen" — it
-            works out what you're asking, runs several kinds of search at once, then ranks and trims the result.
-        </p>
-        <InfoTable class="mt-2" :headers="[``, `Off — grep / find / glob`, `On — iq`]" :rows="IQ_COMPARISON" />
-        <p class="mt-1.5 text-2xs text-subtle">
-            Switching it on loads a small plugin that teaches the assistant iq's commands and nudges it to reach for them. The Search box in your
-            workspace uses iq either way — this only changes what the assistant does.
-        </p>
-
-        <!-- ④ Retrieve before the turn — the sibling of ③, and the one thing worth being precise about is that
-             the assistant is not being told what to think: it is handed a search result and can ignore it. -->
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Retrieve before the turn</h3>
-        <p class="mt-1.5 text-2xs text-muted">
-            Every message you send is a question about your code before it is anything else. With this on, the sandbox searches for it the moment you
-            press send and hands the assistant the ranked answer along with your words — so the reply starts from
-            <span class="font-mono">path:line</span> anchors instead of spending its first few moves finding them.
-        </p>
-        <InfoTable class="mt-2" :headers="[``, `Off — it searches when it decides to`, `On — searched already`]" :rows="PREFETCH_COMPARISON" />
-        <p class="mt-1.5 text-2xs text-subtle">
-            It's a head start, not an instruction: the assistant is told the search may have missed, and its own search tools are untouched. Messages
-            with nothing to look up — "yes, do that", "thanks" — are left alone, and so are ones that already name a file. Independent of
-            <span class="font-medium text-content">iq code search</span> above, and they work well together: that one teaches it to search, this one
-            answers before it asks.
-        </p>
-        <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
-            <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
-            <p class="text-2xs text-muted">
-                <span class="font-medium text-content">Measure it</span> runs a slice of messages without the head start, as a control — the same
-                arrangement the terse steer uses, and for the same reason. The figure here is
-                <span class="font-medium text-content">cost per turn</span>, not tokens: the context it hands over costs input tokens on purpose, to
-                buy back the searches that would have followed. It lands under
-                <span class="font-medium text-content">Usage → Search before the turn</span>.
-            </p>
-        </div>
-
-        <!-- ⑤ Archiving — a lifecycle, so a lifecycle strip, then the kept/released split it turns on. -->
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Archive finished agents</h3>
-        <p class="mt-1.5 text-2xs text-muted">
-            Every agent works in its own checkout of your repository, so two can never trip over each other's edits. That checkout is real disk, and
-            it stays put after the agent stops — as does its card on the board.
-        </p>
-        <div class="mt-2 flex items-stretch gap-1.5">
-            <div class="flex flex-1 flex-col items-center rounded-lg border border-line bg-canvas px-2 py-2.5 text-center">
-                <Icon name="check-circle" class="text-muted" />
-                <span class="mt-1 text-2xs font-medium text-content">Agent finishes</span>
-            </div>
-            <Icon name="arrow-right" class="shrink-0 self-center text-2xs text-subtle" />
-            <div class="flex flex-1 flex-col items-center rounded-lg border border-line bg-canvas px-2 py-2.5 text-center">
-                <Icon name="clock" class="text-muted" />
-                <span class="mt-1 text-2xs font-medium text-content">Quiet for your chosen time</span>
-            </div>
-            <Icon name="arrow-right" class="shrink-0 self-center text-2xs text-subtle" />
-            <div class="flex flex-1 flex-col items-center rounded-lg border border-line bg-canvas px-2 py-2.5 text-center">
-                <Icon name="box" class="text-muted" />
-                <span class="mt-1 text-2xs font-medium text-content">Archived</span>
-            </div>
-        </div>
-        <div class="mt-2 grid grid-cols-2 gap-2">
-            <div class="rounded-lg border border-line bg-canvas p-2.5">
-                <p class="flex items-center gap-1.5 text-xs font-semibold text-content"><Icon name="eraser" class="text-subtle" /> Released</p>
-                <p class="mt-1 text-2xs text-muted">Its checkout of your repo, and its spot on the board.</p>
-            </div>
-            <div class="rounded-lg border border-line bg-canvas p-2.5">
-                <p class="flex items-center gap-1.5 text-xs font-semibold text-content"><Icon name="history" class="text-subtle" /> Kept</p>
-                <p class="mt-1 text-2xs text-muted">Its branch, its diff, and the whole conversation — restorable any time.</p>
-            </div>
-        </div>
-        <p class="mt-1.5 text-2xs text-subtle">
-            Talking to an agent resets its clock, so one you're still using never ages out from under you. The sweep runs when the sandbox starts and
-            once an hour after. "Never" keeps every card — and one checkout per agent — indefinitely.
         </p>
     </InfoDialog>
 </template>

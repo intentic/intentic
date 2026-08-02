@@ -438,8 +438,6 @@ const DEMO_SETTINGS = { autoLand: false, systemPromptMode: `intentic`, stableSys
 // states it the way the product does: per-stage, with the ledger's own freshness.
 const DEMO_SAVINGS: SavingsReport = {
     input: {
-        source: `native`,
-        windowed: true,
         updatedAt: STARTED_AT - 4 * 60_000,
         commands: 218,
         rawTokens: 1_284_600,
@@ -452,8 +450,8 @@ const DEMO_SAVINGS: SavingsReport = {
         ],
         holdout: { cleaned: 196, heldOut: 22, measuredSavedPct: 66.4 },
         gaps: [
-            { command: `pnpm -C web build`, tokens: 41_200 },
-            { command: `docker compose logs api`, tokens: 28_900 },
+            { command: `pnpm -C web build`, commands: 14, tokens: 41_200 },
+            { command: `docker compose logs api`, commands: 6, tokens: 28_900 },
         ],
     },
 };

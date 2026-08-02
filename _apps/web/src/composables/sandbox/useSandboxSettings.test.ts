@@ -107,3 +107,35 @@ test("a rejected save rolls back, so a switch never claims a setting the sandbox
     await vi.waitFor(() => expect(settings.value?.iqSearch).toBe(true));
     await vi.waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 });
+
+/* `patch` is what every control on the Agent tab writes through, and the whole reason it exists is that the
+ * route takes the WHOLE object: a toggle that sent only its own field would blank every other setting. The
+ * groups on that page are separately-mounted components over one cached object, so this also pins that a patch
+ * from one of them carries what the others are currently showing. */
+test("patch sends the whole settings object with just the named fields changed", async () => {
+    daemon(() => NEVER);
+    const { patch, settings } = mounted(() => useSandboxSettings());
+    await vi.waitFor(() => expect(settings.value).toEqual(DEFAULTS));
+
+    patch({ iqSearch: true, terseOutput: true });
+
+    // The mutation reaches the client a tick later, and reads share the same mock — so wait for the POST and
+    // assert on that one rather than on whichever call happened to be last.
+    const posted = async (): Promise<SandboxSettings> => {
+        const call = jsonMock.mock.calls.findLast(([, init]) => init?.method === `POST`);
+        return JSON.parse(call?.[1]?.body as string) as SandboxSettings;
+    };
+    await vi.waitFor(async () => expect(await posted()).toEqual({ ...DEFAULTS, iqSearch: true, terseOutput: true }));
+});
+
+// Settings not yet loaded: there is no object to spread, and inventing one would write this app's defaults over
+// whatever the daemon actually has. Every control is disabled in that state, so the write is simply dropped.
+test("patch writes nothing before the settings have loaded", async () => {
+    jsonMock.mockImplementation(() => NEVER as Promise<never>);
+    const { patch, settings } = mounted(() => useSandboxSettings());
+    expect(settings.value).toBeUndefined();
+
+    patch({ iqSearch: true });
+
+    expect(jsonMock.mock.calls.some(([, init]) => init?.method === `POST`)).toBe(false);
+});

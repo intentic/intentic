@@ -147,11 +147,9 @@ const composition = computed(() => (savings.value === undefined ? undefined : co
 const hasSavings = computed(
     () => (savings.value?.input.commands ?? 0) > 0 || savings.value?.output !== undefined || savings.value?.context !== undefined,
 );
-// Under rtk the numbers cannot be windowed (its ledger reports no timestamps), so the section says which
-// calendar it is really on instead of sitting silently under a 7-day filter that does not reach it.
-const savingsPeriod = computed(() =>
-    savings.value?.input.windowed === false ? `all time — rtk's ledger reports no dates` : preset.value === `all` ? `all time` : `this range`,
-);
+// Which calendar these numbers are on, said next to them rather than left to the range picker above — a total
+// under a 7-day filter and the same total over all time are the same digits with different meanings.
+const savingsPeriod = computed(() => (preset.value === `all` ? `all time` : `this range`));
 
 // Both experiments' headlines come from one function, so "Measuring" and "Off" land in the same slot, at the
 // same size, as a delta would — see verdictOf. It takes the undefined case itself, which is what lets these be
@@ -367,10 +365,9 @@ const hasSpend = computed(() => current.value.length > 0);
 
                             <!-- Provenance, never trailing the numbers: this card once sat on a ledger nothing
                                  was writing any more, and a frozen figure reads exactly like a live one unless
-                                 its source and its age are stated. -->
+                                 its age is stated. -->
                             <template #footnote>
-                                {{ formatCompact(savings?.input.commands ?? 0) }} commands · {{ savingsPeriod }} · via
-                                {{ savings?.input.source === `rtk` ? `rtk gain` : `the output filter` }}
+                                {{ formatCompact(savings?.input.commands ?? 0) }} commands · {{ savingsPeriod }}
                                 <template v-if="savings?.input.updatedAt !== undefined"
                                     >· last command {{ relativeTime(savings.input.updatedAt) }}</template
                                 >

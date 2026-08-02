@@ -273,7 +273,9 @@ const discover = (file) => {
     }
     process.stdout.write("high-volume commands with NO matching cleaner (add a handler for these):\n");
     for (const gap of report.gaps) {
-        process.stdout.write(`  ~${gap.tokens} tok  ${gap.command}\n`);
+        // ×N first: a command that costs this much ACROSS N runs is a handler worth writing, and one that did
+        // it once is an outlier. Same grouping the settings page's list reads from.
+        process.stdout.write(`  ~${gap.tokens} tok ×${gap.commands}  ${gap.command}\n`);
     }
 };
 

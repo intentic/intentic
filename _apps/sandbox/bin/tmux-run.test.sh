@@ -17,8 +17,8 @@ R=selftest-race
 #       the REAL savings ledger and are then reported to the owner as agent traffic. A test must not be able to
 #       write the product's telemetry.
 #   INTENTIC_RUN_FILTER — off for the cases below, which assert on RAW capture; the filter block at the bottom
-#       turns it on for itself. Left inherited it is whatever the host sandbox's cleaner backend implies (the
-#       rtk backend exports 0), so the filter cases would quietly assert nothing.
+#       turns it on for itself. Left inherited it is whatever the host sandbox's "Clean command output" switch
+#       implies (off exports 0), so the filter cases would quietly assert nothing.
 LOGS="$(mktemp -d)"
 F=""
 export INTENTIC_TERMINAL_LOGS_DIR="$LOGS/terminals"
@@ -108,9 +108,32 @@ printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$(cd "$(dirname "$0")" && pwd
 chmod +x "$F/agent-output-filter"
 out="$(INTENTIC_RUN_FILTER=1 PATH="$F:$PATH" bash "$W" "$S" 'echo hi; exit 3' run)"; rc=$?
 [ "$out" = hi ] && [ "$rc" = 3 ] || { echo "FAIL: filtered failure got out='$out' rc=$rc (want hi/3)"; exit 1; }
-out="$(INTENTIC_RUN_FILTER=1 PATH="$F:$PATH" bash "$W" "$S" 'printf "npm warn deprecated x\nadded 1 package\n"' run)"; rc=$?
-[ "$rc" = 0 ] || { echo "FAIL: filtered success exited $rc"; exit 1; }
-case "$out" in *"npm warn"*) echo "FAIL: npm warn survived the filter: '$out'"; exit 1;; esac
-case "$out" in *"added 1 package"*"filtered to"*) ;; *) echo "FAIL: filtered success missing summary/footer: '$out'"; exit 1;; esac
 
-echo "PASS: tmux-run returns full output + real exit code, -e env, output cap, soft timeout + filter behave"
+# A LOT of progress noise, deliberately. The trim has to dwarf the retrieval footer, because the filter's
+# "never worse than raw" guard hands back the raw capture whenever the final text would be longer than what
+# came in — and the footer carries this run's pane-log path, whose length is a temp directory nobody controls.
+# A handful of lines put the two within a few bytes of each other and the assertion passed or failed by which
+# mktemp name it drew. `:` keeps the command a no-op while still NAMING pnpm, which is what the cleaner matches.
+noise='for i in $(seq 1 40); do printf "Progress: resolved %d, reused %d, downloaded 0, added 0\n" "$i" "$i"; done; printf "done in 4s\n"'
+
+out="$(INTENTIC_RUN_FILTER=1 PATH="$F:$PATH" bash "$W" "$S" ": pnpm install; $noise" run)"; rc=$?
+[ "$rc" = 0 ] || { echo "FAIL: filtered success exited $rc"; exit 1; }
+case "$out" in *"Progress: resolved"*) echo "FAIL: pnpm progress survived the filter: '$out'"; exit 1;; esac
+case "$out" in *"done in 4s"*"filtered to"*) ;; *) echo "FAIL: filtered success missing summary/footer: '$out'"; exit 1;; esac
+
+# -c names the command the FILTER is told this is: by the time tmux-run runs it, the executed line carries the
+# daemon's wrapping (namespace hop, nice/ionice, bash -c), while everything the filter is asked about — which
+# cleaners match, which un-cleaned commands deserve a handler — is a property of what the AGENT wrote.
+#
+# Asserted through a stub filter rather than the real one, because the question here is purely "which string
+# reaches argv[1]". Routing it through the cleaners instead would make the assertion depend on their matching,
+# the session cache and the size guard above, none of which this flag has anything to do with.
+printf '#!/usr/bin/env bash\nprintf "ARGV1=%%s\\n" "$1"\n' > "$F/echo-argv1"
+chmod +x "$F/echo-argv1"
+out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv1" bash "$W" -c 'pnpm install' "$S" 'echo ignored' run)"
+[ "$out" = "ARGV1=pnpm install" ] || { echo "FAIL: -c did not reach the filter, got '$out'"; exit 1; }
+# Without it the two are the same string — the daemon's own terminal runner has no wrapping to see past.
+out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv1" bash "$W" "$S" 'echo ignored' run)"
+[ "$out" = "ARGV1=echo ignored" ] || { echo "FAIL: filter got '$out' with no -c (want the executed command)"; exit 1; }
+
+echo "PASS: tmux-run returns full output + real exit code, -e env, -c filter command, output cap, soft timeout + filter behave"

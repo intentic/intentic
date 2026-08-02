@@ -936,15 +936,12 @@ export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"
 //   outputHoldout     — measurement control: a fraction [0,1] of Bash commands whose output bypasses cleaning
 //                        (recorded raw as `heldOut`), so the savings report compares a real cleaned-vs-raw
 //                        population instead of an estimate. 0 = no holdout (default).
-//   filterBackend     — which cleaner runs the compression: "native" (agent-output-filter, default) or "rtk"
-//                        (the image-baked rtk binary, rewritten at the PreToolUse hook) — an
-//                        A/B backend switch, so native and rtk can be benchmarked head-to-head.
 //   verifyOnStop      — a turn that edited code and ran no passing check gets ONE follow-up asking for proof,
 //                        naming the scripts this workspace defines; off ⇒ the turn ends when the model says so.
 //   automationFailureLimit — consecutive `error` runs after which an automation is disabled rather than left
 //                        firing forever; 0 (default) ⇒ never.
-// The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "off" (cleaning off),
-// outputHoldout 0, filterBackend "native" — a fresh sandbox starts with cleaning and iq off until the owner enables them.
+// The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "off" (cleaning off)
+// and outputHoldout 0 — a fresh sandbox starts with cleaning and iq off until the owner enables them.
 //
 // Every field carries that default IN THE SCHEMA, so a settings object written before a field existed still
 // parses — the absent key reads as its default. That is not a compatibility layer, it is the seam this shape
@@ -1006,7 +1003,6 @@ export const SandboxSettingsSchema = z.object({
     iqContextHoldout: z.number().min(0).max(1).default(0),
     outputCleaners: z.string().default("off"),
     outputHoldout: z.number().min(0).max(1).default(0),
-    filterBackend: z.enum(["native", "rtk"]).default("native"),
     /* The model behind the one-click helpers that are not a conversation — today the commit box's autofill.
      * `${provider}:${modelId}`, or EMPTY for Auto, which is the default and the interesting case: Auto is
      * resolved from whatever accounts are connected at the moment it is read (resolveQuickModel), so it can
@@ -1131,33 +1127,27 @@ export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;
 // `footer` stage, which adds the retrieval pointer back — a cost on the same ledger as what it bought.
 export const SavingsStageSchema = z.object({ id: z.string(), commands: z.number(), savedTokens: z.number() });
 
-// Whichever cleaner is ACTUALLY compressing output owns these numbers, so they are read from that backend's
-// own ledger: "native" aggregates historyRoot/logs/filter-stats.jsonl (one row per agent Bash command, written
-// by agent-output-filter), "rtk" reads rtk's own gain ledger. Reading one ledger regardless of backend is how
-// this card went stale: under rtk the native filter is switched off, nothing appends, and the last numbers
-// written — a test run's, as it happened — sat on the card looking live.
+// What the cleaners saved on the way in, aggregated from historyRoot/logs/filter-stats.jsonl — one row per
+// agent Bash command, written by agent-output-filter. Every number here is windowed on the ledger's own
+// calendar (the UTC day each command ran), so the reader's date range and the figures above it agree.
 export const InputSavingsSchema = z.object({
-    // Which backend's ledger these numbers came from — shown on the card, because a number without its source
-    // cannot be told apart from a stale one. Defaulted for the same daemon-older-than-browser seam as settings.
-    source: z.enum(["native", "rtk"]).default("native"),
-    // False ⇒ these totals cover the ledger's whole life, not the range the reader selected: `rtk gain` reports
-    // no timestamps, so its numbers cannot be windowed and the screen has to say so rather than let a 7-day
-    // filter sit above an all-time figure.
-    windowed: z.boolean(),
-    // When that ledger last recorded a command (epoch ms), so the card can show its age instead of implying
-    // freshness it doesn't have. Absent when the ledger has never been written or its age can't be read.
+    // When the ledger last recorded a command (epoch ms), so the card can show its age instead of implying
+    // freshness it doesn't have. Absent when the ledger has never been written.
     updatedAt: z.number().optional(),
     commands: z.number(),
     rawTokens: z.number(),
     emittedTokens: z.number(),
     savedPct: z.number(),
-    // Per-stage attribution, biggest first. Native-only: rtk reports totals, not which of its handlers fired.
+    // Per-stage attribution, biggest first.
     perCleaner: z.array(SavingsStageSchema),
     // The measured control — commands the holdout left raw — against the cleaned population. A real saved-%
     // for the pipeline as a whole rather than an estimate, and the only whole-pipeline counterfactual there is.
     holdout: z.object({ cleaned: z.number(), heldOut: z.number(), measuredSavedPct: z.number().optional() }),
-    // High-volume commands that matched no cleaner: where the next handler is worth writing. Native-only.
-    gaps: z.array(z.object({ command: z.string(), tokens: z.number() })),
+    /* High-volume commands that matched no cleaner: where the next handler is worth writing. GROUPED by the
+     * command text — `commands` is how many times it ran and `tokens` their total — because the question this
+     * list is read for is "what is worth a handler", and a handler is worth writing for a command that costs
+     * 5k twenty times over, not for the single 60k outlier that happened to sort first. */
+    gaps: z.array(z.object({ command: z.string(), commands: z.number(), tokens: z.number() })),
 });
 export type InputSavings = z.infer<typeof InputSavingsSchema>;
 

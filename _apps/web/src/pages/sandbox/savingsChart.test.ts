@@ -7,8 +7,6 @@ import { compositionOf, savedByCleaner, stageLabel, verdictOf } from "./savingsC
 // not a budget, it's a picture.
 
 const report = (overrides: Partial<InputSavings> = {}): InputSavings => ({
-    source: `native`,
-    windowed: true,
     commands: 10,
     rawTokens: 10_000,
     // 10_000 raw − 7_900 removed + 100 of footers added back. The fixture holds the identity the daemon's

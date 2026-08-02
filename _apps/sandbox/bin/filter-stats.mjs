@@ -1,7 +1,7 @@
 // Aggregation over agent-output-filter's telemetry rows (historyRoot/logs/filter-stats.jsonl, one row per agent
-// Bash command). The single source of truth for the rtk-`gain`-style savings report — shared by the offline
-// bench's `discover` and (mirrored in TS) the daemon's /settings/savings route. Pure + dependency-free so it
-// rides the image next to the other bin cleaners and is unit-testable.
+// Bash command). The single source of truth for the savings report — shared by the offline bench's `discover`
+// and (mirrored in TS) the daemon's /settings/savings route. Pure + dependency-free so it rides the image next
+// to the other bin cleaners and is unit-testable.
 //
 // Row shape (written by agent-output-filter): { rawBytes, emittedBytes, matched: string[], heldOut: boolean,
 // command, stageBytes: { [id]: bytesRemoved } }. ~4 chars/token, the same heuristic iq-engine's estimateTokens uses.
@@ -41,12 +41,24 @@ export const summarizeStats = (rows) => {
     const avgEmittedCleaned = avg(cleaned, "emittedBytes");
     const measuredSavedPct = held.length > 0 && avgRawHeld > 0 ? Math.round((1 - avgEmittedCleaned / avgRawHeld) * 100) : undefined;
 
-    // High-volume commands that matched no cleaner — the next handler to write (rtk's `discover` idea).
-    const gaps = cleaned
-        .filter((row) => (row.matched === undefined || row.matched.length === 0) && (row.rawBytes ?? 0) > 2000)
-        .toSorted((a, b) => (b.rawBytes ?? 0) - (a.rawBytes ?? 0))
-        .slice(0, 15)
-        .map((row) => ({ command: String(row.command ?? "").slice(0, 80), tokens: tokens(row.rawBytes ?? 0) }));
+    /* High-volume commands that matched no cleaner — the next handler to write. GROUPED by the command line,
+     * because a handler is worth writing for what costs 5k twenty times, not for the one 60k outlier that
+     * sorted first. The floor is per-run: a command that emits fifty bytes a thousand times is not a cleaner's
+     * job. Grouping only means anything because the row records the agent's own line (tmux-run's `-c`) — while
+     * it held the daemon's wrapper, a per-turn pid in `nsenter --mount=/proc/<pid>/…` made every row unique. */
+    const byCommand = new Map();
+    for (const row of cleaned) {
+        if ((row.matched !== undefined && row.matched.length > 0) || (row.rawBytes ?? 0) <= 2000) {
+            continue;
+        }
+        const command = String(row.command ?? "");
+        const current = byCommand.get(command) ?? { commands: 0, bytes: 0 };
+        byCommand.set(command, { commands: current.commands + 1, bytes: current.bytes + (row.rawBytes ?? 0) });
+    }
+    const gaps = [...byCommand.entries()]
+        .map(([command, entry]) => ({ command, commands: entry.commands, tokens: tokens(entry.bytes) }))
+        .toSorted((a, b) => b.tokens - a.tokens)
+        .slice(0, 15);
 
     return {
         commands: rows.length,

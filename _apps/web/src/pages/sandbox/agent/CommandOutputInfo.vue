@@ -40,13 +40,6 @@ const GLOBAL_CLEANERS = [
     [`collapse repeats`, `Output identical to an earlier run this session isn't shown twice`],
 ];
 
-const BACKENDS = [
-    [`Who compresses`, `The built-in cleaner`, `The rtk binary`],
-    [`Cleaning on/off`, `Applies`, `Applies`],
-    [`Per-cleaner switches`, `Apply`, `Ignored — rtk brings its own`],
-    [`Holdout`, `Applies`, `Ignored`],
-    [`Needs`, `Nothing — it ships with the sandbox`, `Nothing — it ships with the sandbox`],
-];
 </script>
 
 <template>
@@ -158,11 +151,6 @@ const BACKENDS = [
         <p class="mt-1.5 text-2xs text-subtle">
             The full breakdown — every mechanism, and what was left for the assistant — is on the Usage tab, where you can pick a date range.
         </p>
-
-        <!-- ⑥ A/B backends — two options a reader wants to scan row by row. -->
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Native or rtk</h3>
-        <InfoTable class="mt-2" :headers="[``, `Native`, `rtk`]" :rows="BACKENDS" />
-        <p class="mt-1.5 text-2xs text-subtle">Both compress the same output; the switch exists so you can benchmark them head to head.</p>
 
         <div class="mt-5 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
             <Icon name="shield" class="mt-0.5 shrink-0 text-2xs text-subtle" />

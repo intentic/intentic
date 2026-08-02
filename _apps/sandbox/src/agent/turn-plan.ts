@@ -294,7 +294,6 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
         iqContextHoldout,
         outputCleaners,
         outputHoldout,
-        filterBackend,
         terseOutput,
         terseHoldout,
         systemPromptMode,
@@ -430,10 +429,9 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
             // from the model's context (native Read stays for viewing images/PDFs).
             ...(hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),
             // Forward the Bash output-cleaner spec (default "off" ⇒ forwarded ⇒ filter disabled; "" ⇒ omit ⇒
-            // filter's all-on default), the holdout control fraction, and the cleaner backend (default "native" ⇒ omit).
+            // filter's all-on default) and the holdout control fraction.
             ...(outputCleaners !== "" ? { outputCleaners } : {}),
             ...(outputHoldout > 0 ? { outputHoldout } : {}),
-            ...(filterBackend !== "native" ? { filterBackend } : {}),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
             // The verify-on-stop ledger, forwarded only when on so an unset workspace wires no hooks at all.
             ...(verifyOnStop ? { verifyOnStop } : {}),

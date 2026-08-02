@@ -49,33 +49,7 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
  * not a shell keyword. */
 const POLITE_PREFIX = "nice -n 10 ionice -c 2 -n 7 ";
 
-// rtk EXECS its first argument: a known subcommand (git, pnpm, tsc, …) gets its filter, an unknown binary is
-// exec'd unfiltered — but a shell-only first word (builtin, keyword, VAR= assignment, compound syntax) cannot
-// be exec'd at all, so `rtk cd …` dies with exit 127 and, in a `cd x && git status` chain, kills the whole
-// line. The gate below therefore skips the prefix for any command bash must interpret itself; those run raw
-// (the native filter is off for this backend), which is rtk's own behaviour for anything it can't handle.
-const RTK_SHELL_ONLY = new Set([
-    "cd", "pushd", "popd", "dirs", "export", "source", ".", "set", "unset", "alias", "unalias", "eval", "exec",
-    "exit", "return", "shift", "trap", "wait", "read", "readonly", "local", "declare", "typeset", "let",
-    "ulimit", "umask", "builtin", "command", "if", "then", "else", "elif", "fi", "for", "while", "until", "do",
-    "done", "case", "esac", "function", "select", "time", "coproc",
-]);
-const rtkPrefixable = (command: string): boolean => {
-    const first = command.trimStart().split(/\s/, 1)[0] ?? "";
-    // A leading assignment, redirect, subshell, group, negation or [[ is bash syntax, not an executable.
-    return first !== "" && !first.includes("=") && !/^[<>({}![]/.test(first) && !RTK_SHELL_ONLY.has(first);
-};
-
-// What compresses the agent's shell output: the native filter (agent-output-filter, via tmux-run), rtk, or
-// nothing at all when the owner turned cleaning off. agent.ts `outputFilter` resolves the settings into one.
-export type FilterBackend = "native" | "rtk" | "none";
-
-// Under "rtk", a prefixable command is rewritten to `rtk <cmd>` before it's wrapped, so rtk runs it and
-// compresses the output; the native output filter is turned off for it (cleanerEnv sets INTENTIC_RUN_FILTER=0),
-// so rtk owns the compression and tmux-run just tees rtk's already-compact output. "native"/undefined keeps
-// today's path, and "none" — cleaning switched off — leaves the command exactly as the agent wrote it.
 export const bashTmuxHooks = (
-    filterBackend?: FilterBackend,
     envKeys: readonly string[] = [],
     /* An isolated turn's Bash must land in the same tree as its Edit/Write, or the two tools disagree about
      * what /work is — the agent edits its worktree and `sed -i` on the same path rewrites the shared tree.
@@ -109,26 +83,31 @@ export const bashTmuxHooks = (
                             return {};
                         }
                         // The path rewrite goes FIRST, on the agent's own words: everything added below is the
-                        // daemon's (the rtk prefix, tmux-run, the pane name) and names no workspace path of
+                        // daemon's (tmux-run, the namespace hop, the pane name) and names no workspace path of
                         // its own, so rewriting after would scan text that can only produce false matches.
                         const command =
                             isolation !== undefined && isolation.anchor === undefined ? redirectCommand(tool.command, isolation.plan) : tool.command;
-                        const wrapped = filterBackend === "rtk" && rtkPrefixable(command) ? `rtk ${command}` : command;
-                        // The namespace hop goes OUTSIDE the rtk prefix and inside the tmux wrapper: rtk is
-                        // the agent's own command line and belongs in the namespace with it, while tmux-run
-                        // itself must stay out here where the server and the pane logs are. The polite prefix
-                        // goes with the command (inside the hop), so the whole build/test tree it forks
-                        // inherits the demotion.
+                        // The namespace hop goes inside the tmux wrapper: tmux-run itself must stay out here
+                        // where the server and the pane logs are. The polite prefix goes with the command
+                        // (inside the hop), so the whole build/test tree it forks inherits the demotion.
                         const inner =
                             isolation?.anchor !== undefined
-                                ? `${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}bash -c ${shellQuote(wrapped)}`
-                                : `${POLITE_PREFIX}bash -c ${shellQuote(wrapped)}`;
+                                ? `${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}bash -c ${shellQuote(command)}`
+                                : `${POLITE_PREFIX}bash -c ${shellQuote(command)}`;
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",
                                 updatedInput: {
                                     ...(tool as Record<string, unknown>),
-                                    command: `${TMUX_RUN_BIN} ${envFlags}${session} ${shellQuote(inner)} ${windowSlug(tool.description)}`,
+                                    /* `-c` carries the command AS THE AGENT WROTE IT, alongside the wrapped one
+                                     * tmux-run actually executes, because everything the cleaners are asked
+                                     * about is a property of the agent's line and none of it survives wrapping:
+                                     * the ledger's "which un-cleaned commands are worth a handler" list showed
+                                     * `nsenter --mount=/proc/<pid>/ns/mnt … nice -n 10 ionice …` for every row —
+                                     * ~100 characters of daemon boilerplate before the first real word, and a
+                                     * per-turn pid making every row unique. Cleaner MATCHING reads it too, so
+                                     * `nice`/`ionice`/`bash` can no longer stand in for the agent's own verb. */
+                                    command: `${TMUX_RUN_BIN} ${envFlags}-c ${shellQuote(command)} ${session} ${shellQuote(inner)} ${windowSlug(tool.description)}`,
                                 },
                             },
                         };

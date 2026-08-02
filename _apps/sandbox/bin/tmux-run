@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tmux-run [-e NAME]... <session> <command-string> [window-name]
+# tmux-run [-e NAME]... [-c AGENT-COMMAND] <session> <command-string> [window-name]
 #
 # Runs <command-string> inside a new window of tmux session <session> so the web terminal panel can watch
 # it live (and type into it — the command's stdin is the pane tty), while this wrapper streams the combined
@@ -14,17 +14,25 @@
 # already have the values in this wrapper's environment, which is also what the no-tmux fallback path sees.
 # Invalid or unset names are skipped (fail open).
 #
+# -c is the command AS THE AGENT WROTE IT, for the output filter alone — <command-string> by then carries the
+# daemon's wrapping (a namespace hop, the nice/ionice demotion, `bash -c`), and everything the filter is asked
+# about is a property of the agent's line: which cleaners match it, and which un-cleaned commands are worth a
+# new handler. Without it that report read `nsenter --mount=/proc/<pid>/ns/mnt … nice -n 10 ionice …` on every
+# row. Absent (the daemon's own terminal runner) the two are the same string, so it defaults to <command-string>.
+#
 # Capture is a plain file fed by `tee` inside the pane, NOT pipe-pane: a pane supports only one pipe-pane
 # and the global per-pane log hooks (src/logs/log-files.ts) already own it — creating the window triggers
 # those hooks, so commands land in the terminal history logs for free.
 set -u
 
 envflags=()
-while getopts e: opt; do
+agentcmd=""
+while getopts e:c: opt; do
     case "$opt" in
         # Regex first: [[ ]] short-circuits, so an invalid name never reaches the (fatal under bash) indirect
         # expansion. Indirection, not printenv: command substitution would strip trailing newlines.
         e) [[ "$OPTARG" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n "${!OPTARG+x}" ]] && envflags+=(-e "$OPTARG=${!OPTARG}") ;;
+        c) agentcmd="$OPTARG" ;;
         *) exit 2 ;;
     esac
 done
@@ -33,6 +41,8 @@ shift $((OPTIND - 1))
 session="$1"
 cmd="$2"
 name="${3:-run}"
+# What the filter is told this command IS. Only the filter sees it — the pane runs, logs and reports $cmd.
+: "${agentcmd:=$cmd}"
 
 # Fail open: any tmux failure below must degrade to running the command plainly, never break the caller.
 fallback() { exec bash -c "$cmd"; }
@@ -95,12 +105,11 @@ logfile=""
 # missing binary, opt-out, or a filter error all degrade to the raw capture — tail-capped when the caller
 # bounds what ships over stdout (the full output stays in the pane + pane log).
 emit() {
-    # The filter backend is swappable for A/B benchmarking: INTENTIC_FILTER_CMD names any stdin→stdout filter
-    # (raw output in, compacted out) and defaults to the native agent-output-filter. An external cleaner that
-    # RUNS the command instead (rtk/headroom) is wired at the PreToolUse hook via a thin adapter, not here.
+    # The filter is swappable for A/B benchmarking: INTENTIC_FILTER_CMD names any stdin→stdout filter (raw
+    # output in, compacted out) and defaults to agent-output-filter.
     filter="${INTENTIC_FILTER_CMD:-agent-output-filter}"
     if [ "${INTENTIC_RUN_FILTER:-1}" != "0" ] && command -v "$filter" >/dev/null 2>&1; then
-        "$filter" "$cmd" "$1" "$SECONDS" "$logfile" < "$d/out" 2>/dev/null && return
+        "$filter" "$agentcmd" "$1" "$SECONDS" "$logfile" < "$d/out" 2>/dev/null && return
     fi
     if [ -n "${INTENTIC_RUN_OUTPUT_BYTES:-}" ]; then
         tail -c "$INTENTIC_RUN_OUTPUT_BYTES" "$d/out" 2>/dev/null

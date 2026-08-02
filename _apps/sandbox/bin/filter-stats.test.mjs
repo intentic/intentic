@@ -34,9 +34,14 @@ test("summarizeStats: held-out rows form the measured control and never count as
     expect(report.gaps).toEqual([]);
 });
 
-test("summarizeStats: high-volume cleaned commands with no cleaner surface as gaps", () => {
-    const rows = [{ command: "weird-tool run", rawBytes: 9000, emittedBytes: 9000, matched: [], heldOut: false }];
-    expect(summarizeStats(rows).gaps).toEqual([{ command: "weird-tool run", tokens: 2250 }]);
+test("summarizeStats: high-volume cleaned commands with no cleaner surface as gaps, grouped by command", () => {
+    const rows = [
+        { command: "weird-tool run", rawBytes: 9000, emittedBytes: 9000, matched: [], heldOut: false },
+        { command: "weird-tool run", rawBytes: 3000, emittedBytes: 3000, matched: [], heldOut: false },
+    ];
+    // One row per command, `commands` runs summing to `tokens` — the list is read for which handler to write
+    // next, and that is a question about a command over its runs, not about a single expensive run.
+    expect(summarizeStats(rows).gaps).toEqual([{ command: "weird-tool run", commands: 2, tokens: 3000 }]);
 });
 
 test("parseStatsFile: skips blank and corrupt lines", () => {
