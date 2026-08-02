@@ -16,6 +16,7 @@ export const FOUNDER_URL = "https://gitlab.com/radarsu";
 export const gitlabUrl = "https://gitlab.com/radarsu/intentic";
 export const gitlabProfileUrl = "https://gitlab.com/radarsu";
 export const gitlabIssuesUrl = "https://gitlab.com/radarsu/intentic/-/issues";
+export const gitlabReleasesUrl = "https://gitlab.com/radarsu/intentic/-/releases";
 
 /* The founder's public profiles. They are here rather than in about.ts because two consumers need them
  * and neither owns them: the visible link chips on /about/ and the landing band, and `sameAs` in the

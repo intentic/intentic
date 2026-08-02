@@ -5,6 +5,7 @@ import { APP_URL, gitlabUrl, ORG_NAME } from "@intentic-dev/site-content/site";
 import { Image } from "astro:assets";
 import logo from "../assets/intentic-full.png";
 import { shotAsset, SHOT_WIDTHS } from "../lib/shots";
+import ExternalIcon from "./ExternalIcon.astro";
 import MobileNav from "./MobileNav.astro";
 
 const currentPath = Astro.url.pathname;
@@ -27,13 +28,15 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 <nav class="fixed top-0 right-0 left-0 z-100 border-b border-line bg-canvas/70 backdrop-blur-lg transition-colors duration-300">
     <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         {/* The wordmark is what a phone paints largest before the hero image arrives, so it IS the LCP on
-            every page here — hence eager and fetchpriority=high, ahead of the stylesheet's other requests. */}
-        <a href="/" class="flex items-center no-underline">
+            every page here — hence eager and fetchpriority=high, ahead of the stylesheet's other requests.
+            `shrink-0` because the links row does not wrap: without it a bar one link too full pays for the
+            overflow out of the BRAND, silently — the wordmark rendered at 50px of its 126 before this. */}
+        <a href="/" class="flex shrink-0 items-center no-underline">
             <Image src={logo} alt={ORG_NAME} width={126} height={24} densities={[2]} loading="eager" fetchpriority="high" class="h-6 w-auto" />
         </a>
 
         <button
-            class="hamburger flex-col gap-1.25 p-1 md:hidden"
+            class="hamburger flex-col gap-1.25 p-1"
             id="mobile-nav-open"
             aria-label="Toggle navigation"
             aria-expanded="false"
@@ -41,7 +44,14 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
             <span></span><span></span><span></span>
         </button>
 
-        <ul class="links flex list-none items-center gap-0.5 max-md:hidden" id="nav-links">
+        {/* The bar swaps to the hamburger at 64rem, not the 48rem it used to: six links, the repo mark and the
+            CTA need ~900px of the 1280 this row ever gets, and at 48rem they had 768 to share with the
+            wordmark. A tablet gets the overlay — the same navigation, laid out for a width that can hold it.
+            Which of the two shows is decided ONLY by the media query in this file's <style> and the matching
+            one in MobileNav: an Astro scoped rule is unlayered and so outranks any Tailwind `max-lg:hidden`
+            here however specific that looks, and a second spelling of the breakpoint is a second answer at
+            the pixel where they disagree. */}
+        <ul class="links flex list-none items-center gap-0.5" id="nav-links">
             {
                 navEntries.map((entry) => {
                     if (entry.type === "menu") {
@@ -88,7 +98,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                     {preview.length > 0 && (
                                         <div class="menu-preview">
                                             {preview.map(({ href, shot }, i) => (
-                                                /* A fixed 34rem box — the menu only exists from md up, so
+                                                /* A fixed 34rem box — the menu only exists from lg up, so
                                                    this is one width, not a viewport formula. The rail asks
                                                    for 170% below, but Tailwind's `img { max-width: 100% }`
                                                    holds it to the box, and `sizes` follows what paints. */
@@ -113,7 +123,8 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                             target={entry.action.external ? "_blank" : undefined}
                                             rel={entry.action.external ? "noopener" : undefined}
                                         >
-                                            {entry.action.label} <span aria-hidden="true">→</span>
+                                            {entry.action.label}{" "}
+                                            {entry.action.external ? <ExternalIcon /> : <span aria-hidden="true">→</span>}
                                         </a>
                                     )}
                                 </div>
@@ -131,24 +142,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                     rel={entry.external ? "noopener" : undefined}
                                 >
                                     {entry.label}
-                                    {entry.external && (
-                                        <svg
-                                            class="external-icon"
-                                            width="12"
-                                            height="12"
-                                            viewBox="0 0 12 12"
-                                            fill="none"
-                                            aria-hidden="true"
-                                        >
-                                            <path
-                                                d="M3.5 1.5H10.5V8.5M10.5 1.5L1.5 10.5"
-                                                stroke="currentColor"
-                                                stroke-width="1.2"
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                            />
-                                        </svg>
-                                    )}
+                                    {entry.external && <ExternalIcon />}
                                 </a>
                             </li>
                         );
@@ -172,8 +166,8 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                 </a>
             </li>
 
-            <li class="max-md:mt-1">
-                <a class="btn btn-primary ml-2 max-md:ml-0 max-md:w-full" href={APP_URL}>Get started free</a>
+            <li>
+                <a class="btn btn-primary ml-2" href={APP_URL}>Get started free</a>
             </li>
         </ul>
     </div>
@@ -417,14 +411,8 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         text-decoration: underline;
     }
 
-    /* ── External link icon ────────────────────────────── */
-    .external-icon {
-        opacity: 0.4;
-        flex-shrink: 0;
-    }
-
     /* ── Responsive ────────────────────────────────────── */
-    @media (max-width: 48rem) {
+    @media (width < 64rem) {
         .hamburger {
             display: flex;
         }

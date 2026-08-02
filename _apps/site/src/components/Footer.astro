@@ -2,32 +2,48 @@
 import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
-import { APP_URL, gitlabIssuesUrl, gitlabUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
+import { APP_URL, gitlabIssuesUrl, gitlabReleasesUrl, gitlabUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
 import { Image } from "astro:assets";
 import logo from "../assets/intentic-full.png";
+import ExternalIcon from "./ExternalIcon.astro";
 
 const year = 2026;
 
-const productLinks = productPages.map((page) => ({ href: productHref(page.slug), label: page.navLabel }));
-
-// The hub first: it is the page that reframes the question, and the six below it are the long tail a search
-// engine wants as its own links.
-const compareLinks = [
-    { href: compareHref(""), label: "Where intentic sits" },
-    ...comparePages.map((page) => ({ href: compareHref(page.slug), label: page.navLabel })),
-];
-
-const docsLinks = [
-    ...docsPages.map((page) => ({ href: docsHref(page.id), label: page.title, external: false })),
-    { href: "https://gitlab.com/radarsu/intentic/-/releases", label: "Release Notes", external: true },
-];
-
-const resourceLinks = [
-    { href: APP_URL, label: "Open the app", external: true },
-    { href: "/about/", label: "About the creator", external: false },
-    { href: gitlabUrl, label: "GitLab", external: true },
-    { href: gitlabIssuesUrl, label: "Issues", external: true },
-    { href: "/#faq", label: "FAQ", external: false },
+/* The four columns, as data. They render through one loop because they are one thing — a labelled list of
+ * links, some of which leave the site — and four hand-written copies of that markup is how the footer ended
+ * up with the external mark on none of them. `external` is the whole switch: it opens the tab AND draws the
+ * arrow, so the two can no longer disagree. */
+const columns: { label: string; links: { href: string; label: string; external?: boolean }[] }[] = [
+    {
+        label: "Product",
+        links: productPages.map((page) => ({ href: productHref(page.slug), label: page.navLabel })),
+    },
+    {
+        label: "Docs",
+        links: [
+            ...docsPages.map((page) => ({ href: docsHref(page.id), label: page.title })),
+            { href: gitlabReleasesUrl, label: "Release notes", external: true },
+        ],
+    },
+    {
+        // The hub first: it is the page that reframes the question, and the six below it are the long tail a
+        // search engine wants as its own links.
+        label: "Compare",
+        links: [
+            { href: compareHref(""), label: "Where intentic sits" },
+            ...comparePages.map((page) => ({ href: compareHref(page.slug), label: page.navLabel })),
+        ],
+    },
+    {
+        label: "Resources",
+        links: [
+            { href: APP_URL, label: "Open the app", external: true },
+            { href: "/about/", label: "About the creator" },
+            { href: gitlabUrl, label: "GitLab", external: true },
+            { href: gitlabIssuesUrl, label: "Issues", external: true },
+            { href: "/#faq", label: "FAQ" },
+        ],
+    },
 ];
 
 const legalLinks = [
@@ -43,75 +59,28 @@ const legalLinks = [
             <p class="mt-3 max-w-xs text-sm leading-relaxed text-muted">{ORG_TAGLINE}</p>
         </div>
 
-        <div>
-            <h3 class="eyebrow mb-3">Product</h3>
-            <ul class="space-y-2">
-                {
-                    productLinks.map((link) => (
-                        <li>
-                            <a href={link.href} class="text-sm text-muted transition-colors hover:text-link">
-                                {link.label}
-                            </a>
-                        </li>
-                    ))
-                }
-            </ul>
-        </div>
-
-        <div>
-            <h3 class="eyebrow mb-3">Docs</h3>
-            <ul class="space-y-2">
-                {
-                    docsLinks.map((link) => (
-                        <li>
-                            <a
-                                href={link.href}
-                                target={link.external ? "_blank" : undefined}
-                                rel={link.external ? "noopener" : undefined}
-                                class="text-sm text-muted transition-colors hover:text-link"
-                            >
-                                {link.label}
-                            </a>
-                        </li>
-                    ))
-                }
-            </ul>
-        </div>
-
-        <div>
-            <h3 class="eyebrow mb-3">Compare</h3>
-            <ul class="space-y-2">
-                {
-                    compareLinks.map((link) => (
-                        <li>
-                            <a href={link.href} class="text-sm text-muted transition-colors hover:text-link">
-                                {link.label}
-                            </a>
-                        </li>
-                    ))
-                }
-            </ul>
-        </div>
-
-        <div>
-            <h3 class="eyebrow mb-3">Resources</h3>
-            <ul class="space-y-2">
-                {
-                    resourceLinks.map((link) => (
-                        <li>
-                            <a
-                                href={link.href}
-                                target={link.external ? "_blank" : undefined}
-                                rel={link.external ? "noopener" : undefined}
-                                class="text-sm text-muted transition-colors hover:text-link"
-                            >
-                                {link.label}
-                            </a>
-                        </li>
-                    ))
-                }
-            </ul>
-        </div>
+        {
+            columns.map((column) => (
+                <div>
+                    <h3 class="eyebrow mb-3">{column.label}</h3>
+                    <ul class="space-y-2">
+                        {column.links.map((link) => (
+                            <li>
+                                <a
+                                    href={link.href}
+                                    target={link.external ? "_blank" : undefined}
+                                    rel={link.external ? "noopener" : undefined}
+                                    class="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-link"
+                                >
+                                    {link.label}
+                                    {link.external && <ExternalIcon />}
+                                </a>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ))
+        }
     </div>
 
     {/* The legal bar sets its links in 12px type, which leaves a hit box a fingertip cannot land on — the one
@@ -130,8 +99,14 @@ const legalLinks = [
         </span>
         <span class="inline-flex items-center gap-1">
             Open source on
-            <a href={gitlabUrl} target="_blank" rel="noopener" class="inline-flex min-h-6 items-center transition-colors hover:text-link">
+            <a
+                href={gitlabUrl}
+                target="_blank"
+                rel="noopener"
+                class="inline-flex min-h-6 items-center gap-1 transition-colors hover:text-link"
+            >
                 GitLab
+                <ExternalIcon />
             </a>
         </span>
     </div>

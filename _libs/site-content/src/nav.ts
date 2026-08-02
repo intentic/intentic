@@ -3,7 +3,7 @@ import { docsHref, docsSections } from "./docs";
 import type { ShotImage } from "./landing";
 import type { ProductPage } from "./product";
 import { productHref, productPages } from "./product";
-import { DEMO_PATH } from "./site";
+import { DEMO_PATH, gitlabReleasesUrl } from "./site";
 
 /* The site's navigation, as data.
  *
@@ -85,6 +85,10 @@ export const navEntries: NavEntry[] = [
             label: section.label,
             items: section.items.map((page) => ({ label: page.title, href: docsHref(page.id), description: page.blurb })),
         })),
+        // Release notes as the panel's action rather than a seventh link in the bar. It is the same question
+        // the docs answer — what does this thing do — asked about the last two weeks of it, and it was the
+        // one row of the bar a visitor reads once a release.
+        action: { label: "Release notes", href: gitlabReleasesUrl, external: true },
     },
     // A bare link, like Compare: the gallery's contents come from the registry repo at build time, so there is
     // no authored list here to build a menu out of.
@@ -108,11 +112,13 @@ export const navEntries: NavEntry[] = [
         href: "/download/",
         prefix: "/download",
     },
+    // Last of the text links, where a bar conventionally keeps it — and in the bar at all because "who is
+    // behind this?" is a question about TRUST, and the reader with it is deciding whether to run a container
+    // on their own machine and hand it real credentials. That reader will not go looking in the footer.
     {
         type: "link",
-        label: "Release notes",
-        href: "https://gitlab.com/radarsu/intentic/-/releases",
-        prefix: "/release-notes",
-        external: true,
+        label: "About",
+        href: "/about/",
+        prefix: "/about",
     },
 ];
