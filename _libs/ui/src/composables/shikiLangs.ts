@@ -7,7 +7,7 @@
 // Lazily-importable grammars, keyed by Shiki language id — only the ones actually rendered ship in the
 // bundle. The workspace file viewer maps a file's extension to one of these ids (see file-type.ts); add a
 // row here and an extension mapping there to cover a new language. Callers stay untouched.
-export const LANGS: Record<string, () => Promise<unknown>> = {
+export const LANGS = {
     bash: () => import(`@shikijs/langs/bash`),
     powershell: () => import(`@shikijs/langs/powershell`),
     typescript: () => import(`@shikijs/langs/typescript`),
@@ -47,7 +47,20 @@ export const LANGS: Record<string, () => Promise<unknown>> = {
     diff: () => import(`@shikijs/langs/diff`),
     markdown: () => import(`@shikijs/langs/markdown`),
     log: () => import(`@shikijs/langs/log`),
-};
+} satisfies Record<string, () => Promise<unknown>>;
+
+/* The ids above, as a type. Every surface that NAMES a grammar itself — a <Code lang>, the file viewer's
+ * extension table, a markdown fence alias — is typed with this, so a name we ship no grammar for stops
+ * compiling. It used to cost nothing at build time and render the block as plain grey text at runtime, which
+ * is indistinguishable from "this language has no colours": `lang="dockerfile"` sat in the sandbox's
+ * Environment card that way, next to a diff of the same file that WAS coloured (the id is `docker`). */
+export type ShikiLang = keyof typeof LANGS;
+
+/* The loader for an id that came from OUTSIDE — a markdown fence's info string is whatever its writer typed,
+ * so an arbitrary string has to be a legal question with `undefined` for an answer. A Map, so asking it one
+ * needs no cast. Surfaces that pick their own id use ShikiLang instead and are checked. */
+const loaders: ReadonlyMap<string, () => Promise<unknown>> = new Map(Object.entries(LANGS));
+export const langLoader = (lang: string): (() => Promise<unknown>) | undefined => loaders.get(lang);
 
 // The @shikijs/langs packages Vite must pre-bundle (see the web app's vite.config optimizeDeps.include):
 // every grammar except the local gitignore one. Derived from LANGS so it can't drift. Without pre-bundling,

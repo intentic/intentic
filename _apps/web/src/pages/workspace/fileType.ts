@@ -1,3 +1,5 @@
+import type { ShikiLang } from "@intentic-app/ui/langs";
+
 /* THE CORE'S ANSWER TO "WHAT IS THIS FILE?" — and deliberately a small one.
  *
  * This module knows about TEXT: is a path source, prose, or opaque bytes, and which Shiki grammar colours it.
@@ -20,8 +22,8 @@ export interface FileResolution {
     readonly mode: TextMode;
     // Shiki language id, carried by both TEXT modes (`code`, `markdown`) — prose renders through the same editor
     // under its Source toggle, so both need a grammar. undefined opens as plaintext (unknown extension, or a file
-    // too big to tokenize) and is the only value `binary`/`empty` ever carry. Must be a key of useHighlighter LANGS.
-    readonly lang?: string;
+    // too big to tokenize) and is the only value `binary`/`empty` ever carry.
+    readonly lang?: ShikiLang;
 }
 
 /* Size gates (bytes). Tuned for a browser relay, not VSCode's multi-GB limits.
@@ -40,8 +42,9 @@ export const TEXT_EDIT_MAX_BYTES = 2_000_000;
 // Above this fetch the text but SKIP Shiki (plain <pre>): the JS-regex engine janks on huge/minified input.
 const HIGHLIGHT_MAX_BYTES = 512_000;
 
-// File extension → Shiki language id. Keys must exist in useHighlighter LANGS.
-const EXT_LANG: Record<string, string> = {
+// File extension → Shiki language id. ShikiLang is the grammar table itself (shikiLangs.ts), so an id we ship
+// no grammar for does not compile — it used to render as uncoloured plain text, which looks like a plain file.
+const EXT_LANG: Record<string, ShikiLang> = {
     ts: "typescript",
     mts: "typescript",
     cts: "typescript",
@@ -191,7 +194,7 @@ const BINARY_EXTS = new Set([
 ]);
 
 // Exact (lowercased) filenames → Shiki lang id, for well-known config files that carry no usable extension.
-const NAME_LANG: Record<string, string> = {
+const NAME_LANG: Record<string, ShikiLang> = {
     ".npmrc": "ini",
     ".yarnrc": "ini",
     ".editorconfig": "ini",
@@ -220,7 +223,7 @@ const nameExt = (path: string): { name: string; ext: string } => {
 
 // The Shiki lang id for a file, accounting for extensionless special files (Dockerfile, .env variants,
 // config dotfiles).
-const langFor = (name: string, ext: string): string | undefined => {
+const langFor = (name: string, ext: string): ShikiLang | undefined => {
     if (name === "dockerfile" || ext === "dockerfile") {
         return "docker";
     }
@@ -239,7 +242,7 @@ const langFor = (name: string, ext: string): string | undefined => {
 // (langFor: extension table, well-known filenames, and the dockerfile/.env/ignore specials). Exposed so the
 // chat's Read tool cards color file contents from the same source of truth as the /workspace editor. Content-
 // based shebang detection stays out here: it needs the file bytes (see langFromShebang), which a card lacks.
-export const codeLangForPath = (path: string): string | undefined => {
+export const codeLangForPath = (path: string): ShikiLang | undefined => {
     const { name, ext } = nameExt(path);
     return langFor(name, ext);
 };
@@ -249,7 +252,7 @@ export const codeLangForPath = (path: string): string | undefined => {
 // doesn't already resolve a language. Only interpreters whose grammar the app ships appear here; the rest
 // stay plain text. Deno/Bun run TS as often as JS, and the TypeScript grammar is a JS superset, so both map
 // to typescript (it colors plain JS correctly too).
-const SHEBANG_LANG: Record<string, string> = {
+const SHEBANG_LANG: Record<string, ShikiLang> = {
     sh: "bash",
     bash: "bash",
     zsh: "bash",
@@ -274,7 +277,7 @@ const basename = (token: string): string => token.slice(token.lastIndexOf("/") +
 // language — so a known extension always wins, matching VSCode's precedence. Handles `#!/bin/bash`,
 // `#!/usr/bin/env bash`, `#!/usr/bin/env -S bash -eu`, and version suffixes (`python3.11` → python). Cheap for
 // the overwhelmingly common no-shebang case: it bails on the first two bytes before scanning anything.
-export const langFromShebang = (content: string): string | undefined => {
+export const langFromShebang = (content: string): ShikiLang | undefined => {
     if (!content.startsWith("#!")) {
         return undefined;
     }
@@ -303,7 +306,7 @@ export const langFromShebang = (content: string): string | undefined => {
  * and whose bytes are in hand: the extension/filename table, then the shebang the way VSCode does it, and
  * nothing at all above the highlight cap. The one place the tokenizer decision is made once the guesswork is
  * over — resolveFile's `lang` is only a pre-warm hint, made before the read from a size that may be missing. */
-export const highlightLangFor = (path: string, size: number, content: string): string | undefined => {
+export const highlightLangFor = (path: string, size: number, content: string): ShikiLang | undefined => {
     if (size > HIGHLIGHT_MAX_BYTES) {
         return undefined;
     }

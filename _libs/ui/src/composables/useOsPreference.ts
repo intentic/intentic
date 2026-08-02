@@ -1,4 +1,5 @@
 import { ref, watch, type Ref } from "vue";
+import type { ShikiLang } from "./shikiLangs.js";
 
 export type CommandOs = "unix" | "windows";
 
@@ -54,4 +55,4 @@ export const OS_OPTIONS: { label: string; value: CommandOs }[] = [
     { label: `Windows (PowerShell)`, value: `windows` },
 ];
 
-export const commandLang = (os: CommandOs): string => (os === `windows` ? `powershell` : `bash`);
+export const commandLang = (os: CommandOs): ShikiLang => (os === `windows` ? `powershell` : `bash`);

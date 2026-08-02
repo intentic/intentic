@@ -94,7 +94,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         <!-- Approved, not yet built into the running container. The one-liner pins the approved content's
              hash, and the content is shown right here — what you paste is exactly what gets built. -->
         <template v-if="pending">
-            <Code :code="pending.content" lang="dockerfile" label="Approved overlay (pending rebuild)" />
+            <Code :code="pending.content" lang="docker" label="Approved overlay (pending rebuild)" />
             <template v-if="serverManaged">
                 <p class="text-2xs text-subtle">
                     Applies on the next <span class="font-mono">intentic deploy apply</span> against this sandbox's host.
@@ -111,7 +111,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         </template>
 
         <!-- The active overlay the running container was built from. -->
-        <Code v-if="applied && !proposal && !pending" :code="applied.content" lang="dockerfile" label="Active overlay" />
+        <Code v-if="applied && !proposal && !pending" :code="applied.content" lang="docker" label="Active overlay" />
 
         <p v-if="actionError" class="text-2xs text-danger">{{ actionError }}</p>
     </Card>

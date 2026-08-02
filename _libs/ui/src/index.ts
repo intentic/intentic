@@ -55,6 +55,10 @@ export { formatBytes, formatTokens, timeAgo } from "./format.js";
 // markdown engine does: `fileType.ts` and `explorerPaste.ts` are unit-tested plain TypeScript, and neither
 // should have to boot this barrel's component graph (and a DOM with it) to split a string on "/".
 //
+// The Shiki grammar table is NOT re-exported here either, and ships as `@intentic-app/ui/langs`. Same reason,
+// same caller: `fileType.ts` maps every extension the app knows onto a `ShikiLang`, and that is the module the
+// mapping has to be checked against.
+//
 // `seriesColor` above is the one export that ships BOTH ways, and deliberately. A Vue caller reaches it here
 // (the documentation sidebar paints an authored accent, and it has already booted this graph to render at
 // all); a plain-TypeScript caller reaches the same function at `@intentic-app/ui/series`, because the

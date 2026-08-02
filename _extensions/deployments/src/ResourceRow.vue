@@ -181,7 +181,7 @@ const logText = computed(() => {
             <div v-if="logsPending && logText === ``" class="text-2xs text-subtle">Reading logs…</div>
             <!-- The shared code block: a copy button (a log tail's whole point is that it goes somewhere else)
                  and a clamp, so a 200-line tail does not push the next row off the screen. -->
-            <Code v-else-if="logText !== ``" :code="logText" label="Container log" :clamp-lines="14" />
+            <Code v-else-if="logText !== ``" :code="logText" lang="log" label="Container log" :clamp-lines="14" />
             <div v-else class="text-2xs text-subtle">No log output.</div>
         </div>
     </div>

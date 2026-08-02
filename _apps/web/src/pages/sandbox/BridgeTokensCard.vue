@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Card } from "@intentic-app/ui";
+import { Card, Code, CopyButton } from "@intentic-app/ui";
 import Button from "primevue/button";
-import { ref } from "vue";
 import { useBridgeTokens } from "../../composables/sandbox/useBridgeTokens";
 
 /* The Editor bridge (ACP) card: drive this sandbox's agents from Zed / JetBrains / any ACP editor. Mint a
@@ -9,17 +8,6 @@ import { useBridgeTokens } from "../../composables/sandbox/useBridgeTokens";
  * folder as the project. Sits beside Desktop sync — the two halves of "work from your own machine". */
 
 const { tokens, minted, minting, error, label, mint, revoke, zedSnippet } = useBridgeTokens();
-
-const copied = ref<string | undefined>(undefined);
-const copy = async (key: string, text: string): Promise<void> => {
-    await navigator.clipboard.writeText(text);
-    copied.value = key;
-    setTimeout(() => {
-        if (copied.value === key) {
-            copied.value = undefined;
-        }
-    }, 1500);
-};
 </script>
 
 <template>
@@ -52,19 +40,11 @@ const copy = async (key: string, text: string): Promise<void> => {
             <p class="text-2xs text-subtle">Shown once — copy it now. The sandbox stores only a hash.</p>
             <div class="flex items-center gap-2">
                 <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
-                <Button :label="copied === 'token' ? 'Copied' : 'Copy'" size="small" :text="true" @click="copy('token', minted.token)" />
+                <CopyButton :text="minted.token" label="Copy" />
             </div>
-            <p class="text-2xs text-subtle">Zed → settings.json (JetBrains takes the same command + env):</p>
-            <pre class="scrollbar-thin max-h-48 overflow-auto rounded bg-overlay px-2 py-1.5 text-2xs leading-relaxed text-muted">{{
-                zedSnippet
-            }}</pre>
-            <Button
-                :label="copied === 'snippet' ? 'Copied' : 'Copy snippet'"
-                size="small"
-                :text="true"
-                class="self-start"
-                @click="copy('snippet', zedSnippet)"
-            />
+            <!-- The shared code block: it is JSON going into a settings file, so it is coloured as JSON and
+                 carries its own copy button — the snippet's whole purpose is to be pasted elsewhere. -->
+            <Code :code="zedSnippet" lang="json" label="Zed → settings.json (JetBrains takes the same command + env)" />
         </div>
 
         <ul v-if="tokens.length > 0" class="flex flex-col gap-1">

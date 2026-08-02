@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { clipboardOf } from "../clipboard.js";
+import type { ShikiLang } from "../composables/shikiLangs.js";
 import { FIGURE_LANGS } from "./figures.js";
 
 /* Fenced code blocks inside rendered markdown: Shiki colouring plus a copy button.
@@ -31,7 +32,7 @@ export const escapeHtml = (text: string): string => text.replace(/&/g, `&amp;`).
  * to one v-html string cannot hold a component, and a malformed body degrades to a code block by design. Its
  * body is JSON either way, so it is coloured as JSON rather than left a grey blob. Derived from FIGURE_LANGS so
  * a new figure kind cannot pick up one behaviour and miss the other. */
-const ALIASES: Record<string, string> = {
+const ALIASES: Record<string, ShikiLang> = {
     ...Object.fromEntries(FIGURE_LANGS.map((lang) => [lang, `json`])),
     "c++": `cpp`,
     cjs: `javascript`,

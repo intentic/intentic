@@ -22,6 +22,10 @@
             "types": "./src/path.ts",
             "default": "./src/path.ts"
         },
+        "./langs": {
+            "types": "./src/composables/shikiLangs.ts",
+            "default": "./src/composables/shikiLangs.ts"
+        },
         "./series": {
             "types": "./src/components/seriesAccent.ts",
             "default": "./src/components/seriesAccent.ts"

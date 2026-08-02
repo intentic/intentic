@@ -6,19 +6,21 @@
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { cmp } from "../cmp.js";
 import { useHighlighter } from "../composables/useHighlighter.js";
+import type { ShikiLang } from "../composables/shikiLangs.js";
 import CopyButton from "./CopyButton.vue";
 
 const {
     code,
-    lang = ``,
+    lang,
     label = ``,
     copyable = true,
     wrap = false,
     clampLines,
 } = defineProps<{
     code: string;
-    // Shiki language id (e.g. `bash`, `powershell`); empty renders as plain text.
-    lang?: string;
+    // Shiki language id (e.g. `bash`, `powershell`); omit to render as plain text. Typed against the grammars
+    // we actually ship, so a name that would silently render grey (`dockerfile` for `docker`) fails to compile.
+    lang?: ShikiLang;
     label?: string;
     copyable?: boolean;
     // Long single-line commands read better wrapped; multi-line files scroll horizontally.
@@ -73,7 +75,7 @@ watch(
     () => [code, lang] as const,
     ([nextCode, nextLang]) => {
         const id = ++seq;
-        if (!nextLang) {
+        if (nextLang === undefined) {
             html.value = undefined;
             return;
         }

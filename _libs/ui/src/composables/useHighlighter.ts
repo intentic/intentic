@@ -1,6 +1,6 @@
 import { createHighlighterCore, type HighlighterCore, type ThemedToken } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import { LANGS } from "./shikiLangs.js";
+import { langLoader } from "./shikiLangs.js";
 
 /* Shared Shiki highlighter. One lazily-built core instance for the whole app, using the JavaScript RegExp
  * engine (no WASM, so no asset-pipeline config) and fine-grained, dynamically-imported grammars/themes —
@@ -49,7 +49,7 @@ const ensureLang = (lang: string): Promise<HighlighterCore | undefined> => {
     if (pending) {
         return pending;
     }
-    const load = LANGS[lang];
+    const load = langLoader(lang);
     if (!load) {
         return Promise.resolve(undefined);
     }

@@ -36,6 +36,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // Same reason and the same ordering requirement again: splitting a path into name + directory is what every
     // file row in the app does, including the ones in unit-tested pure modules (fileType.ts, explorerPaste.ts).
     "@intentic-app/ui/path": here("../../_libs/ui/src/path.ts"),
+    // And again, for the same module: fileType.ts maps every extension the app knows onto a `ShikiLang`, so the
+    // grammar table is what that mapping is type-checked against. A plain map of dynamic-import thunks — nothing
+    // from shiki/core is loaded by naming it.
+    "@intentic-app/ui/langs": here("../../_libs/ui/src/composables/shikiLangs.ts"),
     // Same again: the chart palette's slot→colour lookup is called by the usage/savings PROJECTIONS, which are
     // pure functions with their own unit tests — reaching it through the barrel boots Picker.vue and wants a DOM.
     "@intentic-app/ui/series": here("../../_libs/ui/src/components/seriesAccent.ts"),
