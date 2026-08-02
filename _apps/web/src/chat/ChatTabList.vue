@@ -178,50 +178,94 @@ const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: str
     return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
 };
 
-/* The model, as the label the pickers use — worth a word on the meta line the moment a fleet stops being one
- * model deep (an Opus session next to a Codex one is a real difference in what the card will cost and how it
- * behaves). The card says WHO RUNS IT exactly once — AgentCard's rule: while the tile wears the provider mark
- * (no category yet) this line needs no floor, and once the category glyph takes the tile, a card with no
- * recorded model says the provider here instead. */
-const modelOf = (agent: FleetAgent): string | undefined => {
-    if (agent.model !== undefined) {
-        return modelLabelFor(agent.provider, agent.model);
+/* --- What the card knows ------------------------------------------------------------------------------
+ * THE FLEET ENTRY IS THE BEST SOURCE, NOT THE ONLY ONE. Every number on this card used to be read straight
+ * off the FleetAgent behind one `v-if="agent !== undefined"`, which made the card all-or-nothing: a chat the
+ * roster could not resolve collapsed to a bare title over a grey dot — no model, no cost, no count, nothing —
+ * and a rail of them read as a list of dead links.
+ *
+ * And "cannot resolve" is a NORMAL state, not a broken one. The roster carries live agents only: the daemon's
+ * retention sweep files finished ones away (archive.ts), the archive half is pull-only, and a conversation
+ * opened from History may have outlived its registry entry altogether. Meanwhile the browser is holding a
+ * Conversation for every one of these tabs, and that object knows what it is running on, what it has spent
+ * here and how much has been said — so the card asks the agent first and the conversation second, and only
+ * the facts NEITHER of them holds (the diff, the daemon's cross-device age, unread) are agent-only.
+ *
+ * The conversation's figures are this TAB's own tally, so they are rendered only when they are non-zero: a
+ * chat restored from history has streamed nothing here, and printing `$0.00` under it would be the card
+ * inventing a fact rather than lacking one. */
+
+// The model, as the label the pickers use — worth a word the moment a fleet stops being one model deep (an
+// Opus session next to a Codex one is a real difference in what the card will cost and how it behaves). The
+// card says WHO RUNS IT exactly once — AgentCard's rule: while the tile wears the provider mark (no category
+// yet) this line needs no floor, and once the category glyph takes the tile, a card with no recorded model
+// says the provider here instead. `activeModel` is what the last turn actually ran on; `model` is what the
+// composer would send next, which is the honest answer for a chat that has not run one here.
+const modelOf = (entry: OpenChat): string | undefined => {
+    const { agent, conversation } = entry;
+    const provider = agent?.provider ?? conversation.provider.value;
+    const model = agent?.model ?? conversation.activeModel.value ?? conversation.model.value;
+    if (model !== null && model !== ``) {
+        return modelLabelFor(provider, model);
     }
-    return sessionCategory(agent.title) === undefined ? undefined : providerLabel(agent.provider);
+    return sessionCategory(tabLabel(conversation)) === undefined ? undefined : providerLabel(provider);
+};
+
+const costOf = (entry: OpenChat): number | undefined =>
+    entry.agent?.costUsd ?? (entry.conversation.costUsd.value > 0 ? entry.conversation.costUsd.value : undefined);
+
+// Completed turns. The registry counts them across every device; a conversation this browser holds can count
+// the prompts in its own transcript, which is the same number whenever this tab saw the whole conversation.
+const turnsOf = (entry: OpenChat): number | undefined => {
+    const turns = entry.agent?.turns ?? entry.conversation.messages.value.filter((message) => message.role === `user`).length;
+    return turns > 0 ? turns : undefined;
+};
+
+/* THE LIVE LINE'S CONTENT, from whichever half is watching the turn. The registry's activity frames say what
+ * the tool is doing and are the richer reading; a conversation streaming a turn the roster hasn't caught up
+ * with (or has retired) still knows that it is streaming and when it started, which is the whole point of the
+ * line — a working card must be findable in a column of stopped ones even when the join is cold. */
+const liveOf = (entry: OpenChat): { icon: IconName; text: string; since: number | undefined } | undefined => {
+    const { agent, conversation } = entry;
+    if (agent !== undefined && turnInFlight(agent)) {
+        return {
+            icon: (agent.subagents?.running ?? 0) > 0 ? `users` : activityIcon(agent.activity?.tool),
+            text: activityLine(agent) ?? `Working…`,
+            since: agent.startedAt,
+        };
+    }
+    if (conversation.streaming.value) {
+        return { icon: activityIcon(undefined), text: `Working…`, since: conversation.turnStartedAt.value };
+    }
+    return undefined;
 };
 
 /* HAS THE CARD'S SECOND LINE ANYTHING TO SAY? A fresh draft has no numbers, no age, no marks and no model, so
  * the row would render as an empty strip under its title — which is exactly what the old card did, leaving a
- * lone provider glyph floating on a line of its own. Asked per card rather than assumed from
- * `agent !== undefined`. */
-const hasMeta = (entry: OpenChat): boolean => {
-    const agent = entry.agent;
-    if (agent === undefined) {
-        return false;
-    }
-    return (
-        attentionReason(agent) !== undefined ||
-        unreadBadge(agent) !== undefined ||
-        originOf(entry.conversation) !== undefined ||
-        isArchived(entry.conversation) ||
-        modelOf(agent) !== undefined ||
-        agent.costUsd !== undefined ||
-        (agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)) ||
-        (agent.turns !== undefined && agent.turns > 0) ||
-        agent.updatedAt > 0
-    );
-};
+ * lone provider glyph floating on a line of its own. Asked per card rather than assumed from the join. */
+const hasMeta = (entry: OpenChat): boolean =>
+    (entry.agent !== undefined &&
+        (attentionReason(entry.agent) !== undefined ||
+            unreadBadge(entry.agent) !== undefined ||
+            (entry.agent.diff !== undefined && (entry.agent.diff.insertions > 0 || entry.agent.diff.deletions > 0)) ||
+            entry.agent.updatedAt > 0)) ||
+    originOf(entry.conversation) !== undefined ||
+    isArchived(entry.conversation) ||
+    modelOf(entry) !== undefined ||
+    costOf(entry) !== undefined ||
+    turnsOf(entry) !== undefined;
 
 // The card's hover preview note: what kind of work the tile's colour says this is (the legend for the tint —
 // a colour code nothing ever spells out is one the user has to break), the model (with the provider as its
 // floor) and the UNTRUNCATED live activity — the card's own meta line clamps both, so the hover is where a
 // long command or model name is read whole.
-const noteOf = (agent: FleetAgent | undefined): string | undefined => {
-    if (agent === undefined) {
-        return undefined;
-    }
-    const model = agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : providerLabel(agent.provider);
-    return [sessionCategory(agent.title)?.type, model, activityLine(agent)].filter((part) => part !== undefined && part !== ``).join(` · `);
+const noteOf = (entry: OpenChat): string | undefined => {
+    const parts = [
+        sessionCategory(tabLabel(entry.conversation))?.type,
+        modelOf(entry) ?? providerLabel(entry.agent?.provider ?? entry.conversation.provider.value),
+        entry.agent === undefined ? undefined : activityLine(entry.agent),
+    ].filter((part) => part !== undefined && part !== ``);
+    return parts.length === 0 ? undefined : parts.join(` · `);
 };
 
 /* What the query found that ISN'T open in this window — the whole point of the filter reaching past its own
@@ -241,13 +285,38 @@ const notOpen = computed<FleetAgent[]>(() => {
 });
 const notOpenCount = computed(() => notOpen.value.length + sessionMatches.value.length);
 
-/* THE ARCHIVE IS LOADED AT MOUNT, not at first keystroke. The open chats a long session accumulates are mostly
- * agents the daemon's retention sweep has already ARCHIVED — off the live roster, findable by agentById only
- * once loadArchived has run. Without this, every such card rendered as a bare title over an idle dot: no cost,
- * no diff, no age, no status — the wall of nothing the pop-out rail was reported showing. The board pays the
- * same fetch at its own mount for the same reason; the filter's "Not open" group needs it too, so one ask at
- * mount serves both. */
-onMounted(() => void loadArchived());
+/* THE ARCHIVE IS ASKED FOR WHENEVER A CHAT NEEDS IT, not once at mount. The open chats a long session
+ * accumulates are mostly agents the daemon's retention sweep has already ARCHIVED — off the live roster,
+ * findable by agentById only once loadArchived has run. A mount-time load only covers what was already filed
+ * away when the window opened: this list stays up for hours while the sweep keeps running underneath it, and
+ * every agent it retires after that turned its card into a bare title over a grey dot.
+ *
+ * So the trigger is the SYMPTOM: a conversation the fleet has registered (`registered` latches, so this is
+ * never a draft) that neither half of the join can resolve. Probed once per id — the set below is the memory
+ * that keeps a genuinely gone agent, which no fetch will ever produce, from asking again on every frame. */
+const probed = new Set<string>();
+watch(
+    () => conversations.value.filter((conversation) => conversation.registered.value && agentById(conversation.conversationId) === undefined),
+    (unresolved) => {
+        const fresh = unresolved.filter((conversation) => !probed.has(conversation.conversationId));
+        if (fresh.length === 0) {
+            return;
+        }
+        for (const conversation of fresh) {
+            probed.add(conversation.conversationId);
+        }
+        void loadArchived();
+    },
+    { immediate: true },
+);
+// And once more whenever a search STARTS, because the query reaches past the open chats into the archive
+// (archivedMatches) — a hit sitting one click away that the filter reports as "no matches" is the failure a
+// search is least forgiven for, and no card being unresolved is exactly when the probe above stays quiet.
+watch(filtering, (on) => {
+    if (on) {
+        void loadArchived();
+    }
+});
 
 // One second ticks every running card's elapsed readout together (the board's `now` pattern) — armed while
 // this list is on screen, which for the docked sheet means only while it is open.
@@ -304,10 +373,10 @@ defineExpose({ beginRename });
 // title and, under it, the first message that title was derived from. The card itself is the shared HoverCard
 // — the Changes panel's agent chips raise the same one for the same session.
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
-const showPreview = (event: MouseEvent, conversation: Conversation, agent?: FleetAgent): void => {
-    const firstUser = conversation.messages.value.find((message) => message.role === `user`);
+const showPreview = (event: MouseEvent, entry: OpenChat): void => {
+    const firstUser = entry.conversation.messages.value.find((message) => message.role === `user`);
     // A fresh "New chat"/"New agent" card has neither, and the preview declines to open on empty content.
-    hoverCard.value?.show(event, { title: conversation.title.value ?? undefined, note: noteOf(agent), body: firstUser?.text });
+    hoverCard.value?.show(event, { title: entry.conversation.title.value ?? undefined, note: noteOf(entry), body: firstUser?.text });
 };
 const hidePreview = (): void => {
     hoverCard.value?.hide();
@@ -433,7 +502,7 @@ const closeTab = (event: Event, id: string): void => {
                             @click="emit('select', c.conversationId)"
                             @dblclick.prevent.stop="beginRename(c.conversationId)"
                             @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
-                            @mouseenter="showPreview($event, c, agent)"
+                            @mouseenter="showPreview($event, { conversation: c, agent })"
                             @mouseleave="hidePreview"
                         >
                             <span class="flex w-full min-w-0 items-start gap-2">
@@ -486,92 +555,103 @@ const closeTab = (event: Event, id: string): void => {
                                     <Icon v-bind="statusOf({ conversation: c, agent })" />
                                 </span>
                             </span>
-                            <template v-if="agent !== undefined">
-                                <!-- The crucial facts, one wrapping line at the board's own picks: why it needs
-                                     you (or that it's unread), where it came from, the model, cost, diff, how
-                                     long a conversation it has been — and the age, right-aligned. Quiet by
-                                     default: these are reference numbers, not events, so the only colour on
-                                     the line is the one that means something. -->
+                            <!-- The crucial facts, one wrapping line at the board's own picks: why it needs
+                                 you (or that it's unread), where it came from, the model, cost, diff, how
+                                 long a conversation it has been — and the age, right-aligned. Drawn from the
+                                 fleet entry where there is one and from the conversation where there isn't
+                                 (see "What the card knows"), so an off-roster chat keeps a populated card.
+                                 Quiet by default: these are reference numbers, not events, so the only colour
+                                 on the line is the one that means something. -->
+                            <span
+                                v-if="hasMeta({ conversation: c, agent })"
+                                class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
+                            >
                                 <span
-                                    v-if="hasMeta({ conversation: c, agent })"
-                                    class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
+                                    v-if="agent !== undefined && attentionReason(agent) !== undefined"
+                                    class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
+                                    >{{ attentionReason(agent) }}</span
                                 >
-                                    <span
-                                        v-if="attentionReason(agent) !== undefined"
-                                        class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
-                                        >{{ attentionReason(agent) }}</span
-                                    >
-                                    <!-- The board's unread chip, in the attention chip's slot: both answer "why
-                                         should I look at this one", and a card never needs both ("needs you"
-                                         outranks "you haven't looked"). -->
-                                    <span
-                                        v-else-if="unreadBadge(agent) !== undefined"
-                                        v-tooltip.top="
-                                            unreadBadge(agent)!.seenAt === undefined
-                                                ? undefined
-                                                : `Worked since you last opened it — ${relativeTime(unreadBadge(agent)!.seenAt!)}`
-                                        "
-                                        class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px font-semibold text-link"
-                                        >{{ unreadBadge(agent)!.label }}</span
-                                    >
-                                    <!-- Came in from outside (a Discord mention, a visitor, a webhook), and
-                                         off the board, still open — both are marks about the card's PROVENANCE
-                                         rather than its name, so they ride the meta line the way the board
-                                         puts its OriginMark in the card body. -->
-                                    <OriginMark :origin="originOf(c)" compact />
-                                    <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
-                                        <Icon name="box" class="text-2xs text-subtle" />
-                                    </span>
-                                    <span v-if="modelOf(agent) !== undefined" class="max-w-24 truncate">{{ modelOf(agent) }}</span>
-                                    <span v-if="agent.costUsd !== undefined" class="shrink-0">{{ formatCost(agent.costUsd) }}</span>
-                                    <span
-                                        v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)"
-                                        class="shrink-0 font-mono"
-                                    >
-                                        <span class="text-success">+{{ agent.diff.insertions }}</span>
-                                        <span class="text-danger"> −{{ agent.diff.deletions }}</span>
-                                    </span>
-                                    <span v-if="agent.turns !== undefined && agent.turns > 0" class="shrink-0" aria-label="Turns">
-                                        <Icon name="comments" class="mr-0.5 text-2xs" />{{ agent.turns }}
-                                    </span>
-                                    <!-- The age keeps to the settled cards: a running card's clock is the live
-                                         line's ticking elapsed below, and two clocks on one card disagree by
-                                         construction. -->
-                                    <span v-if="!turnInFlight(agent) && agent.updatedAt > 0" class="ml-auto shrink-0">{{
-                                        relativeTime(agent.updatedAt)
-                                    }}</span>
+                                <!-- The board's unread chip, in the attention chip's slot: both answer "why
+                                     should I look at this one", and a card never needs both ("needs you"
+                                     outranks "you haven't looked"). -->
+                                <span
+                                    v-else-if="agent !== undefined && unreadBadge(agent) !== undefined"
+                                    v-tooltip.top="
+                                        unreadBadge(agent)!.seenAt === undefined
+                                            ? undefined
+                                            : `Worked since you last opened it — ${relativeTime(unreadBadge(agent)!.seenAt!)}`
+                                    "
+                                    class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px font-semibold text-link"
+                                    >{{ unreadBadge(agent)!.label }}</span
+                                >
+                                <!-- Came in from outside (a Discord mention, a visitor, a webhook), and
+                                     off the board, still open — both are marks about the card's PROVENANCE
+                                     rather than its name, so they ride the meta line the way the board
+                                     puts its OriginMark in the card body. -->
+                                <OriginMark :origin="originOf(c)" compact />
+                                <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
+                                    <Icon name="box" class="text-2xs text-subtle" />
                                 </span>
-                                <!-- THE LIVE LINE, the board's own: what the turn is doing this second and how
-                                     long it has been at it, in link — the one accent that makes a working card
-                                     findable in a column of stopped ones. Held through a stop's UNWIND
-                                     (turnInFlight, not `running`): the turn is still live there, the elapsed
-                                     keeps its meaning, and the line freezes on what it was doing when the user
-                                     stopped it — blinking it off a beat before the card settles is the same
-                                     flicker the stopping state exists to remove. -->
-                                <span v-if="turnInFlight(agent)" class="flex w-full min-w-0 items-center gap-1.5 text-2xs font-medium text-link">
-                                    <Icon
-                                        :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)"
-                                        class="shrink-0 text-2xs"
-                                    />
-                                    <span class="min-w-0 flex-1 truncate">{{ activityLine(agent) ?? `Working…` }}</span>
-                                    <span v-if="agent.startedAt !== undefined" class="shrink-0">{{ formatElapsed(agent.startedAt, now) }}</span>
+                                <span v-if="modelOf({ conversation: c, agent }) !== undefined" class="max-w-24 truncate">{{
+                                    modelOf({ conversation: c, agent })
+                                }}</span>
+                                <span v-if="costOf({ conversation: c, agent }) !== undefined" class="shrink-0">{{
+                                    formatCost(costOf({ conversation: c, agent })!)
+                                }}</span>
+                                <!-- The diff is the registry's alone: it is measured against the branch's base
+                                     daemon-side, and nothing this browser holds can stand in for it. -->
+                                <span
+                                    v-if="agent?.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)"
+                                    class="shrink-0 font-mono"
+                                >
+                                    <span class="text-success">+{{ agent.diff.insertions }}</span>
+                                    <span class="text-danger"> −{{ agent.diff.deletions }}</span>
                                 </span>
-                                <!-- WHY this chat survived the filter, when the reason isn't its title (that one
-                                     is marked in place above). The board's cards carry the same line for the
-                                     same reason: a result the user can't see the cause of is one they stop
-                                     believing. -->
-                                <span v-if="snippetOf(agent) !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
-                                    <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
-                                    <span class="line-clamp-2 min-w-0 flex-1 italic leading-4">
-                                        <span
-                                            v-for="(run, at) in markSegments(snippetOf(agent) ?? '', needle)"
-                                            :key="at"
-                                            :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
-                                            >{{ run.text }}</span
-                                        >
-                                    </span>
+                                <span v-if="turnsOf({ conversation: c, agent }) !== undefined" class="shrink-0" aria-label="Turns">
+                                    <Icon name="comments" class="mr-0.5 text-2xs" />{{ turnsOf({ conversation: c, agent }) }}
                                 </span>
-                            </template>
+                                <!-- The age keeps to the settled cards: a running card's clock is the live
+                                     line's ticking elapsed below, and two clocks on one card disagree by
+                                     construction. -->
+                                <span v-if="agent !== undefined && !turnInFlight(agent) && agent.updatedAt > 0" class="ml-auto shrink-0">{{
+                                    relativeTime(agent.updatedAt)
+                                }}</span>
+                            </span>
+                            <!-- THE LIVE LINE, the board's own: what the turn is doing this second and how
+                                 long it has been at it, in link — the one accent that makes a working card
+                                 findable in a column of stopped ones. Held through a stop's UNWIND
+                                 (turnInFlight, not `running`): the turn is still live there, the elapsed
+                                 keeps its meaning, and the line freezes on what it was doing when the user
+                                 stopped it — blinking it off a beat before the card settles is the same
+                                 flicker the stopping state exists to remove. -->
+                            <span
+                                v-if="liveOf({ conversation: c, agent }) !== undefined"
+                                class="flex w-full min-w-0 items-center gap-1.5 text-2xs font-medium text-link"
+                            >
+                                <Icon :name="liveOf({ conversation: c, agent })!.icon" class="shrink-0 text-2xs" />
+                                <span class="min-w-0 flex-1 truncate">{{ liveOf({ conversation: c, agent })!.text }}</span>
+                                <span v-if="liveOf({ conversation: c, agent })!.since !== undefined" class="shrink-0">{{
+                                    formatElapsed(liveOf({ conversation: c, agent })!.since!, now)
+                                }}</span>
+                            </span>
+                            <!-- WHY this chat survived the filter, when the reason isn't its title (that one
+                                 is marked in place above). The board's cards carry the same line for the
+                                 same reason: a result the user can't see the cause of is one they stop
+                                 believing. -->
+                            <span
+                                v-if="agent !== undefined && snippetOf(agent) !== undefined"
+                                class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted"
+                            >
+                                <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
+                                <span class="line-clamp-2 min-w-0 flex-1 italic leading-4">
+                                    <span
+                                        v-for="(run, at) in markSegments(snippetOf(agent) ?? '', needle)"
+                                        :key="at"
+                                        :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
+                                        >{{ run.text }}</span
+                                    >
+                                </span>
+                            </span>
                         </button>
                     </template>
                 </div>
