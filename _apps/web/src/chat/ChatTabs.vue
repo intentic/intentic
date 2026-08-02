@@ -208,8 +208,8 @@ const endRailResize = (event: PointerEvent): void => {
     }
 };
 
-/* The history panel and WHICH button it is hanging off — the docked header's glyph or the rail's "Past chats…"
- * row, whichever was pressed. The anchor is also what decides the window it opens in (AnchoredOverlay derives
+/* The history panel and WHICH button it is hanging off — the docked header's glyph or the rail's "Past chats"
+ * button, whichever was pressed. The anchor is also what decides the window it opens in (AnchoredOverlay derives
  * document, viewport and dismissal from it), and those two buttons live in different ones: the rail's is in the
  * pop-out window, the header's in the app. */
 const historyOpen = ref(false);
@@ -536,29 +536,35 @@ const openHistory = (event: Event): void => {
         </div>
 
         <!-- FOOT OF THE RAIL: the two ways out of the list — one more session, or an older one — as ONE
-             toolbar row in the window's bottom-left corner. The corner has never been in question: the
-             composer the hand is about to type into sits directly to the right, and a corner is an
-             infinite-height target (Fitts) that a row at the top can never be. Both controls stay LABELLED
-             there, which is what the two 28px glyphs this replaced never were.
-             The WEIGHT was what went wrong. Stacked full-width rows under a divider made a footer slab, and
-             at the rail's width the primary was exactly a card — wearing a tinted border in the same colour
-             as the ring on the active card above it, so the loudest pair of rectangles in a window whose job
-             is to be read were both chrome. Sized to their labels instead, the two sit in one row and the
-             rank is carried by the fill alone: the primary keeps the fleet board's fill, glyph and wording
-             (one "New agent" across the product), the archive is the quiet ghost beside it. Only a rail
-             dragged near its 176px floor wraps them back onto two lines.
-             The divider went with the border down the rail's right edge — with no edge to end against, a
-             hairline over a half-empty column is a line to nowhere. The filter at the top of the list is
-             held off by a gap alone, and now so is this.
-             Note the division of labour with that filter: typing SEARCHES past the open chats already (the
-             "Not open" group), so History is for BROWSING — recent chats, newest first. -->
-        <div v-else class="flex shrink-0 flex-wrap items-center gap-2 pt-3">
+             centred row under it. Both controls are LABELLED, which is what the two 28px glyphs this
+             replaced never were, and both are sized to their labels: stacked full-width rows made a footer
+             slab, and at the rail's width the primary was exactly a card, wearing a tinted border in the
+             same colour as the ring on the active card above it. Two competing rectangles, both chrome, in
+             a window whose job is to be read. Rank is carried by the fill alone now — the primary keeps the
+             fleet board's fill, glyph and wording (one "New agent" across the product), the archive is the
+             quiet ghost beside it.
+             CENTRED rather than pushed into the bottom-left corner. The corner is the better Fitts target
+             and that is what this row was first built as, but a pair of small controls held against the
+             left of a rail that can be dragged to 480px reads as two things left over at the end of a list
+             — the width they are not using is the loudest thing about them. A band across the foot is what
+             the eye expects under a column, and the filled button is a big enough target either way.
+             The label says "Past chats", not "Past chats…": the ellipsis is the convention for "this opens
+             a chooser", but beside a button that has none it reads as a truncated label rather than as a
+             promise, which is exactly how it was read.
+             No divider — that went with the border down the rail's right edge, since with no edge to end
+             against a hairline over a half-empty column is a line to nowhere. Gaps hold this row off
+             instead, and the one BELOW it is the point: the rail's own padding alone left a control sitting
+             on the window's bottom edge. Both are ~1rem, so the row sits in a band of its own rather than
+             at the end of the window.
+             Note the division of labour with the filter at the top of the list: typing SEARCHES past the
+             open chats already (the "Not open" group), so History is for BROWSING — newest first. -->
+        <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
             <button type="button" :class="cmp.buttonPrimary('h-7 text-2xs')" @click="startAgent()">
                 <Icon name="plus" class="text-2xs" />New agent
             </button>
             <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
                 <Icon name="history" class="text-2xs" />
-                <span>Past chats…</span>
+                <span>Past chats</span>
             </button>
         </div>
 
