@@ -3,7 +3,7 @@ import { automationsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
 import { streamAgent } from "../agent/agent.routes.js";
-import { CI_EVENT_TYPES, CI_PROVIDER } from "../ci/webhook.routes.js";
+import { CI_EVENT_TYPES, CI_PROVIDER } from "../ci/events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";

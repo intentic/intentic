@@ -164,12 +164,15 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
         title: "Fix failing CI",
         icon: "bolt",
         id: "fix-failing-ci",
-        trigger: { kind: "listener", provider: "ci", eventType: "pipeline_failed" },
+        trigger: { kind: "listener", provider: "ci", eventType: "pipeline_broken" },
         prompt:
-            "A CI pipeline just failed — each payload line is one JSON event with the workspace repo, branch, sha, run url and the failed job names. " +
-            "Fetch the failing jobs' logs with your GitHub/GitLab capability, reproduce the failure locally in that repo, fix the cause, verify the " +
-            "failing checks pass, and push the fix to the branch that failed.",
-        note: "instant · via the CI webhook",
+            "A CI pipeline that was green just went red — each payload line is one JSON event with the workspace repo, branch, sha, run url and the " +
+            "failed job names. Fetch the failing jobs' logs with your GitHub/GitLab capability, reproduce the failure locally in that repo, fix the " +
+            "cause, verify the failing checks pass, and push the fix to the branch that failed.",
+        // `pipeline_broken` rather than `pipeline_failed` on purpose: a template is a default, and the default
+        // anyone wants is the run that BROKE the branch, not another agent for every push to a branch that has
+        // been red since this morning. The form offers the wider one a click away.
+        note: "the moment a branch goes red",
     },
     {
         providers: ["sentry"],

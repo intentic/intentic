@@ -20,7 +20,7 @@ import { createCiWebhookRoute } from "./webhook.routes.js";
 
 // The receiver touches ciStore/ciRuns/workspace/capabilities plus the listener dispatch path
 // (automations/activity/logger); `unstubbed` keeps the fake that small — the listeners.test.ts convention.
-const harness = async (automationId: string) => {
+const harness = async (automationId: string, narrow: { eventType?: string; branch?: string; channelId?: string } = {}) => {
     const root = mkdtempSync(join(tmpdir(), "ci-webhook-"));
     const dir = join(root, "web");
     await mkdir(dir, { recursive: true });
@@ -29,7 +29,12 @@ const harness = async (automationId: string) => {
     const capabilities = fileCapabilitiesStore(join(root, ".intentic", "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T" } });
     const automations = fileAutomationsStore(join(root, ".intentic", "automations.json"));
-    await automations.upsert({ id: automationId, trigger: { kind: "listener", provider: "ci" }, prompt: "handle ci", enabled: true });
+    await automations.upsert({
+        id: automationId,
+        trigger: { kind: "listener", provider: "ci", ...narrow },
+        prompt: "handle ci",
+        enabled: true,
+    });
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
@@ -116,6 +121,33 @@ test("a success after a failure dispatches pipeline_succeeded AND pipeline_fixed
     await vi.waitFor(() => expect(prompts).toHaveLength(1), { timeout: 3000 });
     expect(prompts[0]).toContain("pipeline_succeeded");
     expect(prompts[0]).toContain("pipeline_fixed");
+});
+
+// The mirror of the test above, and the reason `pipeline_broken` exists: a branch that was already red keeps
+// firing `pipeline_failed` on every push, and only the run that turned it red is news.
+test("a failure after a recorded success dispatches pipeline_failed AND pipeline_broken; a second failure does not", async () => {
+    const { app, services, prompts } = await harness("wh-broken");
+    await services.ciStore.recordConclusion("web", "main", "success", 1);
+    const secret = await services.ciStore.secret();
+    expect((await deliver(app, secret, workflowRun("failure"))).status).toBe(200);
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), { timeout: 3000 });
+    expect(prompts[0]).toContain("pipeline_failed");
+    expect(prompts[0]).toContain("pipeline_broken");
+
+    expect((await deliver(app, secret, workflowRun("failure"))).status).toBe(200);
+    await vi.waitFor(() => expect(prompts).toHaveLength(2), { timeout: 3000 });
+    expect(prompts[1]).toContain("pipeline_failed");
+    expect(prompts[1]).not.toContain("pipeline_broken");
+});
+
+// A workspace where every agent pushes its own branch is exactly where an unnarrowed CI trigger is useless.
+test("a branch-narrowed trigger ignores a run on another branch", async () => {
+    const { app, services, prompts } = await harness("wh-branch", { branch: "release" });
+    expect((await deliver(app, await services.ciStore.secret(), workflowRun("failure"))).status).toBe(200);
+    // The conclusion is still recorded — the memory is about the repo's branches, not about who was listening.
+    expect(await services.ciStore.lastConclusion("web", "main")).toBe("failed");
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(prompts).toEqual([]);
 });
 
 test("phases, foreign events and unmapped projects are acknowledged and dropped", async () => {

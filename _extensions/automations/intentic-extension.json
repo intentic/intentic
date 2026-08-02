@@ -8,6 +8,7 @@
         "sandbox": [
             "GET /automations",
             "GET /*/models",
+            "GET /ci/runs",
             "POST /automations",
             "DELETE /automations/*",
             "POST /automations/*/run",

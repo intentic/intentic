@@ -4,7 +4,8 @@ import type { IconName } from "@intentic/extension-ui";
 // for the shared filter fields, and a starter prompt. Grows alongside each gateway extension's
 // contributes.listener declaration — plus the daemon's own core sources (`ci`, fed by its pipeline webhook
 // receiver rather than a gateway process).
-export type ListenerEventType = `message` | `voice_transcript` | `flags` | `expunge` | `pipeline_failed` | `pipeline_succeeded` | `pipeline_fixed`;
+export type ListenerEventType =
+    `message` | `voice_transcript` | `flags` | `expunge` | `pipeline_failed` | `pipeline_broken` | `pipeline_succeeded` | `pipeline_fixed`;
 
 export interface ListenerSource {
     readonly label: string;
@@ -22,6 +23,10 @@ export interface ListenerSource {
     // The `mentioned` filter's meaning in this source's vocabulary (shown only for `message` events).
     readonly mentionLabel: string;
     readonly channel: { label: string; placeholder: string };
+    /* A SECOND narrowing axis, for the one source whose events have two. CI's channel is the repo, and a repo
+     * is not what anyone means by "tell me when CI breaks" — a fleet of agents pushes a branch each, so a
+     * repo-only filter is a wake per agent per red run. Absent on every other source, which has one axis. */
+    readonly branchField?: { label: string; placeholder: string; hint: string };
     readonly starterPrompt: string;
 }
 
@@ -66,14 +71,22 @@ export const LISTENER_SOURCES: Record<`webchat` | `discord` | `imap` | `ci`, Lis
         label: `CI/CD`,
         icon: `bolt`,
         providers: [`github`, `gitlab`],
+        // Ordered as the two edges beside the two states they are edges of: "failed" is every red run, "broke"
+        // is only the run that turned it red. Most people mean the second and pick the first.
         events: [
             { value: `pipeline_failed`, label: `Pipeline failed` },
+            { value: `pipeline_broken`, label: `Pipeline broke` },
             { value: `pipeline_succeeded`, label: `Pipeline passed` },
             { value: `pipeline_fixed`, label: `Pipeline fixed` },
         ],
         // CI has no message events, so this never renders — worded anyway so a future event kind fails obvious.
         mentionLabel: `Only pipelines this sandbox pushed`,
         channel: { label: `Repository (optional)`, placeholder: `all workspace repos` },
-        starterPrompt: `CI pipeline results just arrived — each line of the event payload is one JSON event: type \`pipeline_failed\`, \`pipeline_succeeded\` or \`pipeline_fixed\`, with extra carrying repo (the workspace repo dir), branch, sha, url and failedJobs. For a failure: fetch the failing jobs' logs with your GitHub/GitLab capability (the url points at the run), reproduce the failure locally in that repo, fix the cause, and push the fix. For a pass or a fix, no action is usually needed — summarize briefly.`,
+        branchField: {
+            label: `Branch (optional)`,
+            placeholder: `every branch`,
+            hint: `Exact match. Leave blank and every agent's branch wakes this too — name your default branch to hear only about the one that ships.`,
+        },
+        starterPrompt: `CI pipeline results just arrived — each line of the event payload is one JSON event: \`type\` is \`pipeline_failed\`, \`pipeline_broken\` (it was green before), \`pipeline_succeeded\` or \`pipeline_fixed\`; \`channelId\` is the workspace repo dir and \`branch\` is the ref, with \`extra\` carrying sha, url and failedJobs. For a failure: fetch the failing jobs' logs with your GitHub/GitLab capability (the url points at the run), reproduce the failure locally in that repo, fix the cause, and push the fix. For a pass or a fix, no action is usually needed — summarize briefly.`,
     },
 };

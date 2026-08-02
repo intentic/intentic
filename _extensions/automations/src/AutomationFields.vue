@@ -6,6 +6,7 @@ import { computed, ref } from "vue";
 import { formatAt } from "./cronSchedule";
 import { host } from "./host";
 import { LISTENER_SOURCES } from "./listenerSources";
+import { useCiDelivery } from "./useCiDelivery";
 import type { AutomationFormState, TriggerKind } from "./useAutomationForm";
 
 /* EVERY FIELD OF AN AUTOMATION, once — rendered by the create dialog and by the row that edits an existing one.
@@ -26,8 +27,38 @@ const props = defineProps<{
     nameLocked?: boolean;
 }>();
 
-const { form, schedule, isDoorbell, liveSources, cronPreview, harnessChoosable, touched, markTouched, nameError, promptError, originsError } =
-    props.state;
+const {
+    form,
+    schedule,
+    isDoorbell,
+    branchField,
+    liveSources,
+    cronPreview,
+    harnessChoosable,
+    touched,
+    markTouched,
+    nameError,
+    promptError,
+    originsError,
+} = props.state;
+
+// A CI trigger's delivery path — whether this will fire instantly, be polled, or never fire at all. Only
+// fetched while a CI trigger is on screen. See useCiDelivery.
+const isCi = computed(() => form.kind === `listener` && form.provider === `ci`);
+const { delivery } = useCiDelivery(
+    isCi,
+    computed(() => form.channelId),
+);
+const DELIVERY_TONE = {
+    ok: `text-muted`,
+    polling: `text-warning`,
+    none: `text-danger`,
+} as const;
+const DELIVERY_ICON = {
+    ok: `check-circle`,
+    polling: `clock`,
+    none: `exclamation-triangle`,
+} as const;
 
 // Exposed so a submitting parent can send the user to the first field that needs fixing.
 const nameInput = ref<HTMLInputElement>();
@@ -377,6 +408,13 @@ const setKind = (kind: TriggerKind): void => {
                     :class="cmp.input()"
                 />
             </label>
+            <!-- The second narrowing axis, for the one source that has one: CI's branch. Without it, "wake me
+                 when CI fails" means every agent's branch as well as the one that ships. -->
+            <label v-if="branchField" class="ui-field">
+                <span class="ui-field-label">{{ branchField.label }}</span>
+                <input v-model="form.branch" :placeholder="branchField.placeholder" class="font-mono" :class="cmp.input()" />
+                <p class="text-2xs text-subtle">{{ branchField.hint }}</p>
+            </label>
         </template>
         <div v-if="form.kind === 'schedule'" class="ui-field">
             <span class="ui-field-label">Repeats</span>
@@ -432,6 +470,19 @@ const setKind = (kind: TriggerKind): void => {
             Wakes when a visitor writes in the chat widget on your site. Each visitor's messages continue one conversation you can watch live and take
             over. The agent answers with a read-only toolbox — it can look things up, not change them.
         </p>
+        <!-- CI is the one source with no gateway holding a connection open: its events arrive by provider
+             webhook, or by polling when that webhook could not be registered. Which of the two — or neither —
+             is the difference between a row that works and a row that silently never fires, so it is stated
+             here rather than left to be discovered from an empty run history. -->
+        <template v-else-if="isCi">
+            <p v-if="delivery" class="flex items-start gap-1.5 text-xs" :class="DELIVERY_TONE[delivery.state]">
+                <Icon :name="DELIVERY_ICON[delivery.state]" class="mt-0.5 shrink-0 text-2xs" />
+                <span>
+                    {{ delivery.summary }}
+                    <span v-if="delivery.detail" class="mt-1 block text-2xs text-subtle">{{ delivery.detail }}</span>
+                </span>
+            </p>
+        </template>
         <p v-else-if="form.kind === 'listener'" class="text-xs text-muted">
             Fires instantly over {{ LISTENER_SOURCES[form.provider].label }}'s live connection when the selected events happen — "Any" wakes on every
             kind.

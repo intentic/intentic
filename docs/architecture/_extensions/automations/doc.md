@@ -1,6 +1,6 @@
 # @intentic/ext-automations
 
-Wakes an agent on a schedule, a webhook, or an incoming message.
+Wakes an agent on a schedule, a webhook, an incoming message, a CI pipeline result, or your fleet's own work.
 
 ```stats
 { "items": [
@@ -13,7 +13,7 @@ Wakes an agent on a schedule, a webhook, or an incoming message.
 
 ## The problem it solves
 
-Useful work is not always started by a person sitting at the screen. Some of it should happen at 6am, or when a pull request arrives.
+Useful work is not always started by a person sitting at the screen. Some of it should happen at 6am, when a pull request arrives, or the moment a branch goes red.
 
 ```dag
 { "title": "Its neighbours",

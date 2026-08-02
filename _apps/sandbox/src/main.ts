@@ -21,6 +21,7 @@ import { startTranslator } from "./agent/translator.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
 import { writeAgentToken } from "./auth/agent-token.js";
 import { startClaudeRefresh } from "./claude/claude-credentials.js";
+import { createCiPoller } from "./ci/poller.js";
 import { reconnectVpns } from "./vpn/vpn-links.js";
 import { writeCodexConfig } from "./codex/codex-config.js";
 import { createServices } from "./composition.js";
@@ -531,6 +532,12 @@ const main = async (): Promise<void> => {
     // interval), so completed pipelines wake `ci` automations and freshen the Pipelines view.
     services.ciHooks.start();
 
+    // And the fallback under it: poll the repos whose hook could NOT be registered (no public URL, a token
+    // without hook scope) so their `ci` automations still fire. Its first pass is a silent seed, so starting it
+    // before the reconciler's first warnings have landed costs nothing. See ci/poller.ts.
+    const ciPoller = createCiPoller(services, streamAgent);
+    ciPoller.start();
+
     // Maintenance probes: refresh expired measurements (pnpm outdated/audit, knip, jscpd) so the rail can tell
     // the owner something they did not already know. Serialized across the sandbox, skipped entirely while any
     // turn is live, and behind a warm-up — a probe racing the boot's `pnpm install` measures a tree that does not
@@ -616,6 +623,7 @@ const main = async (): Promise<void> => {
         prepushCheck(services).stop();
         workloadPriority.stop();
         services.ciHooks.stop();
+        ciPoller.stop();
         turnResume.stop();
         versionCheck.stop();
         announcer.stop();

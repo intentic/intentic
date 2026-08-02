@@ -44,6 +44,8 @@ export function useAutomationForm() {
         channelId: ``,
         eventType: undefined as ListenerEventType | undefined,
         mentioned: false,
+        // The CI trigger's second axis (LISTENER_SOURCES.ci.branchField); ignored by every other source.
+        branch: ``,
         workspaceEvent: `turn.settled` as WorkspaceEventKind,
         repo: ``,
         // Doorbell — `origins` is edited as one line per site because that is how people hold a short allowlist
@@ -67,6 +69,11 @@ export function useAutomationForm() {
     /* ---- derived ---- */
 
     const isDoorbell = computed(() => form.kind === `listener` && form.provider === `webchat`);
+
+    // The picked source's second narrowing axis, when it has one (only CI does). Drives both the extra input
+    // and whether `build` writes the field at all — switching source must not leave a branch on a Discord
+    // trigger, where the daemon would match it against a message that has no branch and never fire.
+    const branchField = computed(() => (form.kind === `listener` ? LISTENER_SOURCES[form.provider].branchField : undefined));
 
     const liveSources = computed(() => {
         const connected = new Set(capabilities.value.map((capability) => capability.config[`provider`]));
@@ -170,6 +177,7 @@ export function useAutomationForm() {
             channelId: ``,
             eventType: undefined,
             mentioned: false,
+            branch: ``,
             workspaceEvent: `turn.settled`,
             repo: ``,
             origins: ``,
@@ -233,6 +241,7 @@ export function useAutomationForm() {
             form.eventType = trigger.eventType as ListenerEventType | undefined;
             form.mentioned = trigger.mentioned === true;
             form.channelId = trigger.channelId ?? ``;
+            form.branch = trigger.branch ?? ``;
             // One per line, which is how the textarea presents them and how they were typed in the first place.
             form.origins = (trigger.allowedOrigins ?? []).join(`\n`);
         }
@@ -267,6 +276,7 @@ export function useAutomationForm() {
                           ...(form.eventType !== undefined ? { eventType: form.eventType } : {}),
                           ...(form.eventType === `message` && form.mentioned ? { mentioned: true } : {}),
                           ...(form.channelId.trim() !== `` ? { channelId: form.channelId.trim() } : {}),
+                          ...(branchField.value !== undefined && form.branch.trim() !== `` ? { branch: form.branch.trim() } : {}),
                           // The Doorbell's admission list lives on the trigger, beside the provider it gates.
                           ...(isDoorbell.value ? { allowedOrigins: originList.value } : {}),
                       },
@@ -305,6 +315,7 @@ export function useAutomationForm() {
         schedule,
         // derived
         isDoorbell,
+        branchField,
         liveSources,
         originList,
         effectiveCron,

@@ -42,7 +42,16 @@ const triggerLabel = computed<string>(() => {
     // A provider with no source entry is a gateway extension this build doesn't know — it reads as its own id
     // rather than as a blank.
     const source = LISTENER_SOURCES[fires.provider as keyof typeof LISTENER_SOURCES]?.label ?? fires.provider;
-    return `${source} live${fires.eventType !== undefined ? ` · ${fires.eventType}` : ``}${fires.mentioned === true ? ` · mentions` : ``}`;
+    return [
+        // "live" means a gateway is holding a connection open. CI has none — its events arrive by webhook or
+        // by poll — so saying it there would be describing a thing that isn't running.
+        fires.provider === `ci` ? source : `${source} live`,
+        ...(fires.eventType !== undefined ? [fires.eventType] : []),
+        // The branch matters enough to earn room in the row: two CI automations differing only by branch are
+        // otherwise the same line twice.
+        ...(fires.branch !== undefined ? [fires.branch] : []),
+        ...(fires.mentioned === true ? [`mentions`] : []),
+    ].join(` · `);
 });
 
 /* The dot: one mark carrying "is it on" and "did the last run go wrong". `idle` covers never-run AND

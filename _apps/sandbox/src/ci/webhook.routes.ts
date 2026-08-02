@@ -2,11 +2,11 @@ import { createHmac } from "node:crypto";
 import type { PipelineRun } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { streamAgent } from "../agent/agent.routes.js";
-import { dispatchListenerMessage, type ListenerMessage } from "../automations/listeners.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { tokenEquals } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../context.js";
+import { dispatchCiRun } from "./events.js";
 import { ciClientFor, type FetchFn, type GithubRun, githubRun, type GitlabPipelineHook, gitlabHookRun, gitlabStatus } from "./providers.js";
 import { ciProjects } from "./projects.js";
 
@@ -17,46 +17,9 @@ import { ciProjects } from "./projects.js";
  * mapping (projects.ts) names the repo — a delivery for a project the workspace no longer maps to is
  * acknowledged and dropped, not an error, because the provider retries errors and there is nothing to retry.
  *
- * A terminal run freshens the runs cache and — for the two results that ARE results — dispatches `ci`
- * listener messages: `pipeline_failed` or `pipeline_succeeded`, plus `pipeline_fixed` riding along when a
- * success ends a recorded failure streak on that repo+branch (the batcher folds the pair into one wake for an
- * automation listening to everything). Canceled/skipped runs freshen the cache only: they are outcomes, not
- * results. */
-
-// `ci` — the core listener provider automations name (the webchat precedent: no gateway extension declares
-// it). One provider for both vendors: a trigger narrows by repo and result, not by who hosts the pipeline.
-export const CI_PROVIDER = "ci";
-export const CI_EVENT_TYPES = new Set(["pipeline_failed", "pipeline_succeeded", "pipeline_fixed"]);
-
-const sha7 = (sha: string): string => sha.slice(0, 7);
-
-const contentOf = (run: PipelineRun, type: string): string => {
-    const what = type === "pipeline_fixed" ? "CI fixed (back to green)" : run.status === "failed" ? "CI failed" : "CI passed";
-    const jobs = run.failedJobs !== undefined && run.failedJobs.length > 0 ? ` — failed jobs: ${run.failedJobs.join(", ")}` : "";
-    return `${what}: ${run.repo} ${run.branch} @ ${sha7(run.sha)}${jobs} — ${run.url}`;
-};
-
-const messageOf = (run: PipelineRun, type: string, author: { id: string; name: string }): ListenerMessage => ({
-    provider: CI_PROVIDER,
-    type,
-    id: `${run.host}:${run.project}:${run.runId}:${type}`,
-    channelId: run.repo,
-    author,
-    content: contentOf(run, type),
-    timestamp: new Date().toISOString(),
-    extra: {
-        host: run.host,
-        repo: run.repo,
-        project: run.project,
-        runId: run.runId,
-        branch: run.branch,
-        sha: run.sha,
-        status: run.status,
-        url: run.url,
-        ...(run.failedJobs !== undefined ? { failedJobs: run.failedJobs } : {}),
-        ...(run.durationSeconds !== undefined ? { durationSeconds: run.durationSeconds } : {}),
-    },
-});
+ * What a finished run MEANS — which of the four `ci` event types it is — is ci/events.ts, shared with the
+ * poller that stands in for this route on a sandbox whose hooks could not be registered. This file is only the
+ * vendor half: verify the sender, recognize the delivery, normalize it into a PipelineRun. */
 
 interface GithubDelivery {
     readonly action?: string;
@@ -139,15 +102,6 @@ export const createCiWebhookRoute =
             run = failedJobs.length > 0 ? { ...run, failedJobs } : run;
         }
         services.ciRuns.upsert(run);
-
-        if (run.status === "failed" || run.status === "success") {
-            const previous = await services.ciStore.lastConclusion(run.repo, run.branch);
-            await services.ciStore.recordConclusion(run.repo, run.branch, run.status === "failed" ? "failed" : "success", Date.now());
-            const types =
-                run.status === "failed" ? ["pipeline_failed"] : ["pipeline_succeeded", ...(previous === "failed" ? ["pipeline_fixed"] : [])];
-            for (const type of types) {
-                await dispatchListenerMessage(services, messageOf(run, type, author), wake);
-            }
-        }
+        await dispatchCiRun(services, run, author, wake);
         return c.json({ ok: true });
     };

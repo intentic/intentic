@@ -41,6 +41,10 @@ export const ListenerMessageSchema = z.object({
     content: z.string(),
     // Discord message: it @mentions one of our bots or replies to a bot's message. Voice events never set it.
     mentioned: z.boolean().optional(),
+    // CI pipeline event: the ref it ran on. Top-level rather than inside `extra` for the same reason
+    // `mentioned` is — the dispatcher below MATCHES on it, and a narrowing axis the trigger can name has to be
+    // a field of the message rather than a key in a provider's opaque bag.
+    branch: z.string().optional(),
     // Prior channel messages (chronological) fetched when a bot is tagged, so the agent can reason about why.
     // Kept a top-level field (not in `extra`) so it reaches the model's payload but stays out of the activity
     // feed, which logs only content/extra.
@@ -185,6 +189,9 @@ export const dispatchListenerMessage = async (
             continue;
         }
         if (trigger.mentioned === true && message.mentioned !== true) {
+            continue;
+        }
+        if (trigger.branch !== undefined && trigger.branch !== message.branch) {
             continue;
         }
         let batcher = batchers.get(automation.id);

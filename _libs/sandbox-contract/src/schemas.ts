@@ -2503,6 +2503,10 @@ export type ExtensionProcessStatus = z.infer<typeof ExtensionProcessStatusSchema
 // /webchat/<id>/message and the agent's reply streams back over SSE. Its address is the public automation id, so
 // allowedOrigins (the widget's embed sites) + a per-conversation rate limit are its abuse boundary — no secret
 // token can live in a browser.
+// `ci` is the other gateway-less source: the daemon's own pipeline receiver (ci/events.ts) dispatches it from a
+// provider webhook, or from the REST poller on a sandbox whose hooks could not be registered. Its channelId is
+// the workspace repo, and `branch` is its SECOND narrowing axis — a fleet pushes a branch per agent, so a
+// pipeline trigger that can only say "this repo" says "every agent's every failure".
 // `workspace` fires from the sandbox's OWN codebase instead of the outside world — see WorkspaceEventKindSchema.
 
 // What the daemon emits as the fleet works, and what a `workspace` trigger names. These are the events a code
@@ -2550,6 +2554,8 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
         channelId: z.string().min(1).optional(),
         eventType: z.string().min(1).optional(),
         mentioned: z.boolean().optional(),
+        // ci only: the git ref the pipeline ran on. Absent ⇒ every branch of the matched repos.
+        branch: z.string().min(1).optional(),
         // webchat only: the website origins allowed to POST to the widget endpoint. Absent/empty ⇒ none admitted.
         allowedOrigins: z.array(z.string()).optional(),
     }),
@@ -3074,6 +3080,15 @@ export const CiRepoSchema = z.object({
     hookWarning: z.string().optional(),
 });
 export type CiRepo = z.infer<typeof CiRepoSchema>;
+
+/* How often the daemon polls a repo whose webhook could NOT be registered (ci/poller.ts) — the fallback that
+ * keeps a `ci` automation firing on a sandbox with no public URL or a token without hook scope.
+ *
+ * Here rather than beside the poller because both ends need the number: the daemon to run on it, and the
+ * automation editor to tell the owner what a `hookWarning` actually costs them. "Webhooks are off" is a fact
+ * about infrastructure; "this fires within two minutes instead of instantly" is the answer to the question
+ * they were really asking. */
+export const CI_POLL_INTERVAL_MS = 2 * 60_000;
 
 export const CiRunsResponseSchema = z.object({
     repos: z.array(CiRepoSchema),
