@@ -15,6 +15,11 @@
 #   curl -fsSL https://intentic.dev/connect | sudo env CF_TOKEN=… sh -s -- <SETUP_CODE>  (own Cloudflare)
 #   Headless/scripted: skip the code and pass everything as env vars (CONNECT_TOKEN=… CF_TOKEN=… ./connect.sh).
 #
+# The `sudo` is for INSTALLING DOCKER and nothing else — every other step is a docker/curl call the invoking
+# user can make themselves (SELF_HOST=1 is the one opt-in that needs root for its own reasons, below). Drop it
+# on a machine that already has Docker; the setup page offers exactly that as "I already have Docker", and a
+# sudo-less run that then finds no Docker stops with the two ways forward rather than escalating on its own.
+#
 # Required:
 #   SETUP_CODE     the short-lived code the platform mints ($1 or env) — redeemed at ${PLATFORM_URL}/setup/claim
 #                  below for CONNECT_TOKEN + the tunnel/zone values, so no raw token rides in the command line.
@@ -397,20 +402,55 @@ run_desktop_sync() {
     printf '%s\n' "$sync_script" | $sync_user env SANDBOX_URL="$SANDBOX_PUBLIC_URL" PAIR_TOKEN="$SYNC_PAIR_TOKEN" SYNC_DIR="$SYNC_DIR" sh
 }
 
+# The one-liner the setup page hands out carries `sudo` ONLY so that a missing Docker can be installed — every
+# other step here is a docker/curl call the invoking user can make on their own. The page therefore offers to
+# drop the `sudo` ("I already have Docker"), and this is where that promise is checked: Docker is missing and
+# we are not root, so there is nothing to do but name the two ways forward. Printing the exact command back is
+# the point — the user is looking at a terminal, not at the setup page, and "re-run with sudo" without the
+# command means retyping a one-liner from memory.
+#
+# The own-Cloudflare command carries CF_TOKEN, which is NOT echoed back: a secret that reached this shell in a
+# paste does not get reprinted by us. That path is sent to the page instead, which still holds the token and
+# can re-render the whole command with the switch off.
+require_root_to_install_docker() {
+    echo "error: Docker is not installed, and installing it needs root — this command is running without sudo." >&2
+    echo >&2
+    echo "  Install Docker yourself, then re-run this exact command:" >&2
+    echo "      https://docs.docker.com/get-docker/" >&2
+    echo >&2
+    echo "  …or let intentic install it, by re-running with sudo:" >&2
+    if [ -n "$CF_TOKEN" ]; then
+        echo "      copy the command from the setup page again with \"I already have Docker\" switched off" >&2
+    elif [ -n "$SETUP_CODE" ]; then
+        echo "      curl -fsSL https://intentic.dev/connect | sudo sh -s -- $SETUP_CODE" >&2
+    else
+        echo "      curl -fsSL https://intentic.dev/connect | sudo sh" >&2
+    fi
+    exit 1
+}
+
 # Consent gate for installing Docker: a root-level system change beyond the sandbox itself, so never silent.
 # INSTALL_DOCKER=1 pre-consents (headless runs); otherwise ask on /dev/tty (the human is at a terminal even
 # under `curl … | sh` — stdin is the script), and fail with the remedy when there is no terminal to ask.
+#
+# WHETHER /dev/tty CAN BE OPENED is the question, and `[ -r /dev/tty ]` does not answer it: the node is
+# world-readable on every machine, but opening it fails with ENXIO whenever the process has no CONTROLLING
+# terminal — a systemd unit, a CI step, anything under `setsid`. That test passed in exactly those cases, the
+# read below then failed, and its `|| answer=""` fallback landed on the empty default this case statement
+# reads as YES. So the one prompt that must never be silent silently approved a root-level install on every
+# headless run. Probed in a SUBSHELL because a redirection error on a special built-in may exit the shell
+# outright rather than report a status, and a failed read is now a refusal rather than consent.
 confirm_install_docker() {
     if [ "${INSTALL_DOCKER:-}" = "1" ]; then
         return 0
     fi
-    if [ ! -r /dev/tty ]; then
+    if ! (exec </dev/tty) 2>/dev/null; then
         echo "error: docker is not installed and there is no terminal to ask — re-run with INSTALL_DOCKER=1" >&2
         echo "       to install it automatically, or install it yourself: https://docs.docker.com/get-docker/" >&2
         exit 1
     fi
     printf '%s [Y/n] ' "$1" >&2
-    read -r answer </dev/tty || answer=""
+    read -r answer </dev/tty || answer="n"
     case "$answer" in
         n* | N*)
             echo "error: docker is required — install it (https://docs.docker.com/get-docker/) and re-run." >&2
@@ -420,20 +460,17 @@ confirm_install_docker() {
 }
 
 # Docker Engine via Docker's official convenience script. Enabling dockerd on boot is also what brings the
-# sandbox + tunnel containers (--restart unless-stopped) back after a reboot.
+# sandbox + tunnel containers (--restart unless-stopped) back after a reboot. Reached only as root (the caller
+# guards), so nothing here escalates: a `sudo` inside a `curl … | sh` would prompt for a password from a
+# terminal the user has no reason to expect one on, halfway through an install they thought was unprivileged.
 install_docker_linux() {
     confirm_install_docker "intentic: Docker is not installed. Install it now via get.docker.com?"
-    if [ "$(id -u)" = 0 ]; then
-        docker_sudo=""
-    else
-        docker_sudo="sudo"
-    fi
     echo "intentic: installing Docker Engine (get.docker.com)…"
-    curl -fsSL https://get.docker.com | $docker_sudo sh
+    curl -fsSL https://get.docker.com | sh
     if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-        $docker_sudo systemctl enable --now docker >/dev/null 2>&1 || true
+        systemctl enable --now docker >/dev/null 2>&1 || true
     elif command -v service >/dev/null 2>&1; then
-        $docker_sudo service docker start >/dev/null 2>&1 || true
+        service docker start >/dev/null 2>&1 || true
     fi
 }
 
@@ -466,6 +503,9 @@ install_docker_macos() {
 echo "intentic: checking Docker…"
 docker_installed=""
 if ! command -v docker >/dev/null 2>&1; then
+    # Installing Docker is the ONE thing here that needs root, so it is also the one thing that can fail on a
+    # deliberately sudo-less run — say so with the remedy instead of escalating behind the user's back.
+    [ "$(id -u)" = 0 ] || require_root_to_install_docker
     case "$(uname -s)" in
         Linux) install_docker_linux ;;
         Darwin) install_docker_macos ;;
@@ -480,6 +520,17 @@ fi
 # with a server-format does a fast daemon round-trip and fails cleanly if the daemon is unreachable.
 if ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
     if [ -z "$docker_installed" ]; then
+        # A running daemon this user may not TALK to is the other way a sudo-less run fails, and it is
+        # indistinguishable from a stopped one at the CLI — except that the socket is there to be seen. Docker
+        # installs it root-owned with a `docker` group, so naming the group is the actual fix; sudo is the
+        # one-off. Telling this user to "start Docker" sends them to restart a daemon that is already up.
+        if [ -S /var/run/docker.sock ] && [ "$(id -u)" != 0 ]; then
+            echo "error: the docker daemon is running, but this user can't talk to it." >&2
+            echo "       add yourself to the docker group (then log out and back in):" >&2
+            echo "           sudo usermod -aG docker $(id -un) && newgrp docker" >&2
+            echo "       or re-run this command with sudo." >&2
+            exit 1
+        fi
         echo "error: the docker daemon is not running or not reachable. Start Docker, then re-run." >&2
         exit 1
     fi

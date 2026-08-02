@@ -20,6 +20,13 @@ const bootstrap = computed(() => composeBootstrap(props.args));
 
 <template>
     <div class="flex flex-col gap-3">
+        <!-- What this tab is actually FOR, said before the YAML rather than left to be inferred from it: it is
+             the path for someone who would rather read a file than run a script, and that is not something the
+             label "Docker Compose" conveys to the person looking for exactly it. -->
+        <p class="flex items-start gap-2 text-2xs text-muted">
+            <Icon name="eye" class="mt-0.5 shrink-0 text-subtle" />
+            <span class="min-w-0">No script runs on your machine — you read the file below in full, then start it yourself.</span>
+        </p>
         <Code :code="yaml" lang="yaml" label="1. Add these services to your docker-compose.yml" :wrap="false" :clamp-lines="mobile ? 8 : undefined" />
         <Code
             :code="bootstrap"

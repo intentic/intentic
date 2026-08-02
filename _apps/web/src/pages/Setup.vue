@@ -16,7 +16,7 @@ import CloudflareTokenField from "../components/CloudflareTokenField.vue";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { environment } from "../environments/environment";
-import { bashCommand, psCommand } from "../environments/scriptCommand";
+import { bashCommand, bashDownloadCommand, psCommand, psDownloadCommand, scriptUrl, type SplitCommand } from "../environments/scriptCommand";
 import SetupCompose from "./SetupCompose.vue";
 import type { ComposeArgs } from "./setupCompose";
 import { type AttachOutcome, daemonUrlProblem, nameFromDaemonUrl, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
@@ -33,11 +33,19 @@ import { type AttachOutcome, daemonUrlProblem, nameFromDaemonUrl, normalizeDaemo
  * same code (SYNC_DIR + a platform-minted single-use SYNC_PAIR_TOKEN in the payload), so the one pasted command
  * additionally enrolls the sync agent after the sandbox boots — no second paste. Once running, the DAEMON announces
  * its URL + liveness to the platform; this page just polls sandbox.list for a fresh lastSeenAt and then opens the
- * workspace — the browser never resolves the sandbox hostname here, so no DNS race can wedge setup.
+ * workspace — the browser never resolves the sandbox hostname here, so no DNS race can wedge setup. That wait is
+ * step 3's own footer rather than a fourth step: it asks the user for nothing, so a card of its own was chrome
+ * around one sentence, and the sentence belongs under the command whose result it is reporting.
+ *
+ * Step 3 is also where the flow is most often abandoned — not because a pasted command does more than an .msi
+ * would, but because it shows up without any of an installer's affordances. So the card states what will be
+ * created, what it writes outside Docker and how to remove all of it, and offers the two switches that reshape
+ * the command instead of leaving the reader to abandon it: `hasDocker` (drop the `sudo`, which is only ever there
+ * to install Docker) and `review` (download and read the script, then run the file).
  *
  * That is the PROVISION lane. There is a second, one-step ATTACH lane for a user whose sandbox is already running
  * behind a domain of their own: they paste the address, the browser probes it (setupAttach.ts), and sandbox.attach
- * records it — no tunnel to provision, no command to run, no announce to wait for, so steps 2-4 never render.
+ * records it — no tunnel to provision, no command to run, no announce to wait for, so steps 2-3 never render.
  * `lane` decides which spine step 1 is the head of.
  *
  * The two lanes SHARE their state rather than mirroring it. Everything a lane owns is genuinely lane-specific
@@ -140,6 +148,31 @@ const step1Title = computed(() => {
 
 // Step 3 shows one command at a time; the preferred OS is a persisted singleton shared across screens.
 const { cmdOs } = useOsPreference();
+
+/* The two controls over the SHAPE of the pasted command. Both exist because a copy-paste install is the point
+ * people balk at — not because it does more than an .exe would, but because it arrives with none of an
+ * installer's affordances: no publisher, no preview, no file list, no uninstaller. These give the command back
+ * the two that are ours to give.
+ *
+ * `hasDocker` drops the `sudo`. It is in there for exactly one job — installing Docker when the machine has
+ * none (connect.sh's require_root_to_install_docker states the same deal from the other side) — and for a
+ * developer who already runs Docker it is the single most alarming token in the line. Not persisted: it is a
+ * claim about the machine the user is about to paste into, which is not necessarily the one they are reading on.
+ *
+ * `review` splits the one-liner into download-and-read, then run. Deploy-only: local dev already runs the
+ * checkout's own script by path, so there is nothing to fetch and the developer can read it in their editor. */
+const hasDocker = ref(false);
+const review = ref(false);
+// The filename the review path downloads to — named after what it is, in the folder the user is standing in.
+const SCRIPT_FILE = { unix: `intentic-connect.sh`, windows: `intentic-connect.ps1` } as const;
+// Both switches read as checkboxes, not buttons: each answers a question the sentence beside it asks, and a
+// pressed state is the answer. min-h-7 keeps them thumb-sized without breaking the text row they sit in.
+// The shared min-width is what makes the two rows read as a pair rather than as two ragged sentences: their
+// captions start in the same column at any width where both chips fit on their caption's line.
+const chipClass = (on: boolean): string =>
+    `inline-flex min-h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-2xs transition-colors md:min-w-[11.5rem] ${
+        on ? `border-success/40 bg-success/10 text-success` : `border-line text-muted hover:border-line-strong hover:text-content`
+    }`;
 
 // The command is out and we're watching the registry for the daemon's announce — drives step 4's "waiting…".
 const waiting = computed(() => setup.value !== null);
@@ -404,32 +437,49 @@ const webOriginEnvPs = (): string => {
 
 // The commands carry only the short-lived setup code (redeemed by the script at /setup/claim) — plus, on the
 // own-Cloudflare path, the CF token as an env var (never stored by the platform, so it can't ride the code).
-const linuxCommand = (): string => {
-    const code = setup.value?.code;
-    if (code === undefined) {
-        return ``;
-    }
+// Everything between the pipe and `sh`: the runner, then the env assignments the script reads.
+const linuxPrefix = (): string => {
     const envs = `${mode.value === `own` ? ` CF_TOKEN='${cfToken.value.trim()}'` : ``}${platformEnv()}${webOriginEnv()}${syncEnv()}`;
-    // Production's curl|sh install needs root (Docker install, self-host wiring, /opt writes). Local dev runs
+    // Production's curl|sh install needs root ONLY to install Docker when the machine has none — which is why
+    // `hasDocker` can drop it (connect.sh then stops with the remedy rather than escalating). Local dev runs
     // connect.sh BY PATH as the developer — who has docker via their group and their Node toolchain (pnpm) on
     // PATH — so `sudo` there only resets PATH to root's secure_path, which kills the in-repo `pnpm build:sandbox`
     // the dev image is built from: the build fails "pnpm: command not found" and connect.sh silently falls back
     // to the PREVIOUS image, so the sandbox never runs the working tree. No sudo in dev ⇒ the paste rebuilds.
-    const runner = environment.production ? `sudo ` : ``;
-    return bashCommand(`sh`, `${runner}${envs === `` ? `` : `env${envs} `}`, code);
+    const runner = environment.production && !hasDocker.value ? `sudo ` : ``;
+    return `${runner}${envs === `` ? `` : `env${envs} `}`;
 };
 
-const windowsCommand = (): string => {
+const windowsEnv = (code: string): string => {
+    const cfEnv = mode.value === `own` ? `$env:CF_TOKEN='${cfToken.value.trim()}'; ` : ``;
+    return `${platformEnvPs()}${webOriginEnvPs()}${cfEnv}${syncEnvPs()}$env:SETUP_CODE='${code}'; `;
+};
+
+const selectedCommand = computed(() => {
     const code = setup.value?.code;
     if (code === undefined) {
         return ``;
     }
-    const cfEnv = mode.value === `own` ? `$env:CF_TOKEN='${cfToken.value.trim()}'; ` : ``;
-    return psCommand(`ps1`, `${platformEnvPs()}${webOriginEnvPs()}${cfEnv}${syncEnvPs()}$env:SETUP_CODE='${code}'; `);
-};
-
-const selectedCommand = computed(() => (cmdOs.value === `windows` ? windowsCommand() : linuxCommand()));
+    return cmdOs.value === `windows` ? psCommand(`ps1`, windowsEnv(code)) : bashCommand(`sh`, linuxPrefix(), code);
+});
+// The same install as download-then-run, for the reader who wants the script on disk before it executes.
+// Undefined outside `review` (and outside production, where there is nothing to download) so the template
+// switches on one value instead of restating the condition.
+const splitCommand = computed<SplitCommand | undefined>(() => {
+    const code = setup.value?.code;
+    if (code === undefined || !review.value || !environment.production) {
+        return undefined;
+    }
+    return cmdOs.value === `windows`
+        ? psDownloadCommand(`ps1`, windowsEnv(code), SCRIPT_FILE.windows)
+        : bashDownloadCommand(`sh`, linuxPrefix(), code, SCRIPT_FILE.unix);
+});
 const selectedCommandLang = computed(() => commandLang(cmdOs.value));
+// The uninstaller, offered beside the installer: it removes every container, volume and network the command
+// creates. Knowing the undo exists before you commit is most of what an .exe's Add/Remove entry is worth.
+const cleanupCommand = computed(() => (cmdOs.value === `windows` ? psCommand(`cleanupPs1`, ``) : bashCommand(`cleanup`, ``, ``)));
+// The script this step hands out, readable in a browser tab without running anything.
+const sourceUrl = computed(() => scriptUrl(cmdOs.value === `windows` ? `ps1` : `sh`));
 
 // The third Run tab: manage the sandbox with the user's own docker-compose.yml instead of the install
 // script. Local state layered over the persisted OS preference — picking Compose must not overwrite the
@@ -447,10 +497,18 @@ const runTab = computed<`unix` | `windows` | `compose`>({
 // Two of the three labels shed a qualifier on a phone, where the three tabs share one line: the shell
 // ("PowerShell") and the vendor ("Docker") are both restated by the panel each tab opens, and a tab that wraps
 // to two lines while its neighbours don't stops reading as one control.
+// The third tab is on a different axis from the first two — it is not another OS, it is the path for someone
+// who would rather read a file than run a script — and its label can't say so without outgrowing the row. The
+// title says it on a desktop and the panel's own first line says it everywhere, which is where the reader who
+// needs it actually arrives.
 const runTabOptions = computed(() => [
     { label: `Linux / macOS`, value: `unix` as const },
     { label: mobile.value ? `Windows` : `Windows (PowerShell)`, value: `windows` as const },
-    { label: mobile.value ? `Compose` : `Docker Compose`, value: `compose` as const },
+    {
+        label: mobile.value ? `Compose` : `Docker Compose`,
+        value: `compose` as const,
+        title: `No script runs — read the whole file, then start it yourself`,
+    },
 ]);
 
 const composeArgs = computed<ComposeArgs | undefined>(() => {
@@ -854,16 +912,19 @@ watch(commandReady, (ready) => {
                     <div v-if="setupError" :class="cmp.alertDanger('text-2xs')">
                         {{ setupError }}
                     </div>
-                    <template v-else-if="setup">
-                        <div class="flex items-start gap-2 rounded-md border border-line bg-canvas px-3 py-2 font-mono text-sm text-content">
-                            <Icon name="lock" class="mt-0.5 shrink-0 text-subtle" />
+                    <!-- One row, not a bordered box inside the card: the hostname is a fact this step reports,
+                         and framing it bought a second border and 24px to say nothing. The escape hatch shares
+                         the line at desktop widths and wraps under it on a phone, where the hostname fills it.
+                         The link names the CLOUDFLARE ZONE, not "my own domain": step 1's attach lane is the
+                         literal own-domain path, and two links reading the same would send people to the wrong
+                         one. This path still provisions a tunnel and still needs the run step. -->
+                    <div v-else-if="setup" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span class="flex min-w-0 items-start gap-2 font-mono text-sm text-content">
+                            <Icon name="lock" class="mt-0.5 shrink-0 text-success" />
                             <span class="min-w-0 break-words">{{ setup.hostname }}</span>
-                        </div>
-                        <!-- Names the CLOUDFLARE ZONE, not "my own domain": step 1's attach lane is now the
-                             literal own-domain path, and two links reading the same would send people to the
-                             wrong one. This path still provisions a tunnel and still needs steps 3-4. -->
-                        <button type="button" :class="cmp.linkButton()" @click="mode = `own`">Use my own Cloudflare zone instead</button>
-                    </template>
+                        </span>
+                        <button type="button" :class="cmp.linkButton(`text-2xs`)" @click="mode = `own`">Use my own Cloudflare zone instead</button>
+                    </div>
                     <p v-else class="text-xs text-muted"><Icon name="spinner" spin /> Preparing your intentic domain…</p>
                 </template>
 
@@ -903,66 +964,40 @@ watch(commandReady, (ready) => {
                 </template>
             </StepSection>
 
-            <!-- Step 3: run the sandbox. -->
+            <!-- Step 3: run the sandbox — and the whole reason this page loses people. A copy-paste command is
+                 no more dangerous than an .msi, but it arrives without any of an installer's affordances: no
+                 publisher, no preview of what will happen, no list of what it changes, no uninstaller. What the
+                 old "What this does" hint held is therefore ON the card now (a nervous reader does not hover an
+                 ⓘ), next to the two controls that let them reshape the command instead of abandoning it.
+                 Step 4 folded in here too: waiting for the daemon asked nothing of the user, so a card of its
+                 own was chrome around one sentence — and that sentence belongs under the command that causes it. -->
             <StepSection v-if="created && lane === `provision`" :step="3" title="Run your sandbox">
                 <template #actions>
-                    <InfoHint label="What running your sandbox does" text="What this does">
-                        <p class="mb-1 text-sm font-semibold text-content">What this does</p>
-                        <p class="mb-3 text-2xs leading-relaxed text-muted">One command on the machine that will host your sandbox. It:</p>
-                        <ul class="flex flex-col gap-2 text-2xs text-muted">
-                            <li class="flex items-start gap-2">
-                                <Icon name="box" class="mt-0.5 text-link" />
-                                <span>Starts your sandbox in <span class="text-content">Docker</span></span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="cloud" class="mt-0.5 text-link" />
-                                <span>Opens a <span class="text-content">private Cloudflare tunnel</span> so your browser can reach it</span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="lock" class="mt-0.5 text-success" />
-                                <span>No open ports, <span class="text-content">nothing deployed</span> — just a reachable workspace</span>
-                            </li>
-                        </ul>
-                        <div class="mt-3 border-t border-line pt-2 text-2xs text-subtle">
-                            <p>
-                                Missing Docker is installed for you — you'll be asked first. Docker Engine on Linux, Docker Desktop on macOS/Windows;
-                                a first Windows install may need a reboot.
-                            </p>
-                            <a
-                                href="https://docs.docker.com/get-docker/"
-                                target="_blank"
-                                rel="noreferrer"
-                                class="mt-1 inline-flex items-center gap-1 text-link hover:underline"
-                            >
-                                Or install Docker yourself <Icon name="external-link" />
-                            </a>
-                        </div>
-                    </InfoHint>
+                    <Button label="Check now" size="small" severity="secondary" :text="true" :loading="checking" @click="check">
+                        <template #icon><Icon name="refresh" /></template>
+                    </Button>
                 </template>
-
-                <!-- One line, because the hint beside the title carries the rest (which engine, the consent
-                     prompt, the reboot): the prerequisite belongs on the card, its footnotes do not. -->
-                <p class="flex items-start gap-2 text-xs text-muted">
-                    <Icon name="box" class="mt-0.5 shrink-0 text-info" />
-                    <span>Needs Docker — installed for you if missing.</span>
-                </p>
 
                 <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
                      the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name + the
-                     minted hostname, so it names the same id the sandbox's address does.
+                     minted hostname, so it names the same id the sandbox's address does. It sits ABOVE the command
+                     because it changes it: every control that rewrites what you are about to copy comes first.
+                     One flowing line rather than a filled sub-card — a card inside a card inside a page of cards
+                     was three frames deep to carry one switch.
                      Hidden on the compose tab: that path has no place to carry SYNC_DIR, so the toggle would do
                      nothing there — the compose panel points at the workspace's Desktop sync card instead. -->
-                <label v-if="runTab !== `compose`" class="flex cursor-pointer items-start gap-3 rounded-lg bg-canvas p-3 md:items-center md:p-4">
-                    <ToggleSwitch v-model="syncEnabled" class="mt-0.5 shrink-0 md:mt-0" aria-label="Also sync a local folder" />
-                    <div class="flex min-w-0 flex-col gap-0.5">
-                        <span class="text-sm font-semibold text-content">Also sync a local folder</span>
-                        <span class="text-xs text-muted">
-                            <template v-if="syncEnabled && syncDir !== ``"
-                                >Mirrors to <code class="break-words">{{ syncDir }}</code> — edit in your own editor.</template
-                            >
-                            <template v-else>Mirror this sandbox to a folder you can open in your own editor.</template>
-                        </span>
-                    </div>
+                <!-- items-start, not items-center: the sentence wraps to three lines on a phone, and a switch
+                     centred against three lines floats in the middle of a paragraph it is supposed to head. -->
+                <label v-if="runTab !== `compose`" class="flex cursor-pointer items-start gap-2.5">
+                    <ToggleSwitch v-model="syncEnabled" class="shrink-0" aria-label="Also sync a local folder" />
+                    <span class="min-w-0 pt-1 text-xs text-muted">
+                        <span class="font-medium text-content">Also sync a local folder</span>
+                        <template v-if="syncEnabled && syncDir !== ``">
+                            — mirrors to <code class="break-words">{{ syncDir }}</code
+                            >, editable in your own editor.</template
+                        >
+                        <template v-else> — mirror this sandbox to a folder you can open in your own editor.</template>
+                    </span>
                 </label>
                 <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready — a
                      command missing the token/zone/subdomain or the provisioned tunnel would just fail in the sandbox. -->
@@ -974,17 +1009,23 @@ watch(commandReady, (ready) => {
                     <div class="flex flex-col gap-2">
                         <!-- On a phone the picker and the copy button each take a full row: three pill tabs
                              sharing a 340px line wrapped every label to two lines, and the copy chip that
-                             trailed them is the one control this step exists for. -->
+                             trailed them is the one control this step exists for. The single Copy belongs to
+                             the single command — the review path's two blocks each carry their own, because
+                             the point of splitting them is that they are run one at a time. -->
                         <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
                             <Segmented v-model="runTab" :options="runTabOptions" :stretch="mobile" />
                             <CopyButton
-                                v-if="runTab !== `compose`"
+                                v-if="runTab !== `compose` && splitCommand === undefined"
                                 :text="selectedCommand"
                                 :label="mobile ? `Copy command` : `Copy`"
                                 :stretch="mobile"
                             />
                         </div>
                         <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
+                        <template v-else-if="splitCommand">
+                            <Code :code="splitCommand.fetch" :lang="selectedCommandLang" :wrap="true" label="1. Download it, and read it" />
+                            <Code :code="splitCommand.run" :lang="selectedCommandLang" :wrap="true" label="2. Run the file you just read" />
+                        </template>
                         <template v-else>
                             <!-- Clamped on a phone: the command is a thing to COPY, and wrapped in full it is
                                  nine lines of env vars between the button that copies it and the step that
@@ -1015,26 +1056,100 @@ watch(commandReady, (ready) => {
                             </details>
                         </template>
                     </div>
-                </template>
-            </StepSection>
 
-            <!-- Step 4: live gate — waits for the daemon to report in to the platform (no browser→sandbox calls). -->
-            <StepSection
-                v-if="created && lane === `provision`"
-                :step="4"
-                :title="waiting ? `Waiting for your sandbox to report in…` : `Connect your sandbox`"
-            >
-                <template #actions>
-                    <Icon name="spinner" v-if="waiting" class="text-info" spin />
-                    <Button label="Check now" size="small" severity="secondary" :text="true" :loading="checking" @click="check">
-                        <template #icon><Icon name="refresh" /></template>
-                    </Button>
+                    <!-- Everything ABOUT the command, as one block on the card's rhythm rather than four rows
+                         each taking a full step-sized gap: the two switches over its shape, then what it will
+                         do, leave behind and how to undo. Script tabs only — compose declares itself. -->
+                    <div v-if="runTab !== `compose`" class="flex flex-col gap-2">
+                        <!-- The two switches over the SHAPE of the command, each beside the sentence that justifies
+                         it — a checkbox whose reason is a hover away is a checkbox nobody ticks. They sit
+                         directly under the command so the rewrite is visible one row up, next to the Copy that
+                         picks it up. -->
+                        <div v-if="environment.production" class="flex flex-col gap-1.5">
+                            <!-- Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
+                                 the Docker prerequisite is a FACT rather than a control's caption, and it moves
+                                 into the list below — a lone caption here would start its column with nothing
+                                 in front of it while the row under it is indented past a chip. -->
+                            <div v-if="runTab === `unix`" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
+                                <button type="button" :aria-pressed="hasDocker" :class="chipClass(hasDocker)" @click="hasDocker = !hasDocker">
+                                    <Icon :name="hasDocker ? `check-square` : `square`" />
+                                    I already have Docker
+                                </button>
+                                <span class="min-w-0">
+                                    <template v-if="hasDocker"
+                                        >No <code>sudo</code> — runs as you. Docker has to be installed and running already.</template
+                                    >
+                                    <template v-else><code>sudo</code> is in there for one job: installing Docker if it's missing.</template>
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
+                                <button type="button" :aria-pressed="review" :class="chipClass(review)" @click="review = !review">
+                                    <Icon :name="review ? `check-square` : `square`" />
+                                    Download and read it first
+                                </button>
+                                <span class="min-w-0">
+                                    Nothing runs until you've read it.
+                                    <a
+                                        :href="sourceUrl"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        class="inline-flex items-center gap-1 text-link hover:underline"
+                                    >
+                                        Read it in your browser <Icon name="external-link" />
+                                    </a>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- What the command will do, what it leaves behind, and how to take it all back. Plain rows,
+                         no frame: this is already the third level of nesting, and a border around it would read
+                         as a warning about its own contents. -->
+                        <ul class="flex flex-col gap-1.5 text-2xs leading-relaxed text-muted">
+                            <li v-if="runTab === `windows`" class="flex items-start gap-2">
+                                <Icon name="desktop" class="mt-0.5 shrink-0 text-subtle" />
+                                <span class="min-w-0"
+                                    >Installs Docker Desktop if it's missing — it asks first, and a first install may need a reboot.</span
+                                >
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <Icon name="box" class="mt-0.5 shrink-0 text-subtle" />
+                                <span class="min-w-0">Creates 2 containers, 3 volumes and 1 network, every one named <code>intentic-*</code>.</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <Icon name="cloud" class="mt-0.5 shrink-0 text-subtle" />
+                                <span class="min-w-0">Opens a private Cloudflare tunnel so your browser can reach it — no inbound ports.</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <Icon name="file" class="mt-0.5 shrink-0 text-subtle" />
+                                <span class="min-w-0">
+                                    Outside Docker it writes <code>~/.intentic/logs</code
+                                    ><template v-if="syncEnabled">
+                                        — plus the sync agent in <code>~/.intentic/sync</code>, which runs as you, no root</template
+                                    >.
+                                </span>
+                            </li>
+                            <!-- The uninstaller, shown before the install rather than after it: an action you can see
+                             the undo for is a far smaller decision than one you can't. -->
+                            <li class="flex items-start gap-2">
+                                <Icon name="undo" class="mt-0.5 shrink-0 text-subtle" />
+                                <span class="min-w-0">
+                                    <!-- break-words, not break-all: a phone splits this mid-URL otherwise
+                                     ("https://intentic.de / v/cleanup"), when breaking at its spaces fits. -->
+                                    Removes all of it, whenever: <code class="break-words text-content">{{ cleanupCommand }}</code>
+                                    <CopyButton :text="cleanupCommand" />
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
                 </template>
-                <p class="text-xs text-muted">
-                    <template v-if="waiting"
-                        >Your sandbox announces itself the moment it starts — your workspace opens automatically when it does.</template
+
+                <!-- Step 4's whole job, as the footer of the step it reports on. -->
+                <p v-if="waiting" class="flex items-start gap-2 border-t border-line pt-3 text-xs text-muted">
+                    <Icon name="spinner" spin class="mt-0.5 shrink-0 text-info" />
+                    <span
+                        >Waiting for your sandbox to report in — it announces itself the moment it starts, and your workspace opens
+                        automatically.</span
                     >
-                    <template v-else>After you run the command above, your sandbox reports in and your workspace opens automatically.</template>
                 </p>
                 <p v-if="status" class="text-2xs text-warning">{{ status }}</p>
             </StepSection>

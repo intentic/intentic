@@ -251,13 +251,18 @@ if ! command -v docker >/dev/null 2>&1; then
     # Deploy targets are standard Linux servers, so install Docker Engine via Docker's official convenience
     # script — with consent (a root-level system change), pre-given via INSTALL_DOCKER=1 for headless runs.
     if [ "${INSTALL_DOCKER:-}" != "1" ]; then
-        if [ ! -r /dev/tty ]; then
+        # `-r /dev/tty` passes even where OPENING it fails (no controlling terminal: systemd, cron, setsid), and
+        # the failed read below then fell back to an empty answer — which the case reads as yes, so this consent
+        # prompt silently approved a root-level install on every headless run. The open is the real probe, in a
+        # subshell (a redirection error on a special built-in may exit the shell rather than report a status),
+        # and a failed read is a refusal. Same fix as connect.sh's confirm_install_docker and cleanup-host.sh.
+        if ! (exec </dev/tty) 2>/dev/null; then
             echo "error: docker is not installed and there is no terminal to ask — re-run with INSTALL_DOCKER=1" >&2
             echo "       to install it automatically, or install it yourself: https://docs.docker.com/engine/install/" >&2
             exit 1
         fi
         printf 'intentic: Docker is not installed. Install it now via get.docker.com? [Y/n] ' >&2
-        read -r answer </dev/tty || answer=""
+        read -r answer </dev/tty || answer="n"
         case "$answer" in
             n* | N*)
                 echo "error: docker is required — install it (https://docs.docker.com/engine/install/) and re-run." >&2
