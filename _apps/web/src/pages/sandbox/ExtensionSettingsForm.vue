@@ -59,8 +59,11 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
                 :aria-label="setting.title"
                 @change="(event) => setValue(setting, (event.target as HTMLInputElement).value)"
             />
+            <!-- Compact, like the row switch this form opens under: two sizes of the same control in one
+                 panel reads as two kinds of control. -->
             <ToggleSwitch
                 v-else-if="setting.type === `boolean`"
+                class="ui-switch-sm"
                 :model-value="valueOf(setting) === true"
                 :aria-label="setting.title"
                 @update:model-value="(value: boolean) => setValue(setting, value)"

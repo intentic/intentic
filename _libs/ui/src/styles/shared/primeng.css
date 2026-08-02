@@ -79,6 +79,19 @@
         background: color-mix(in srgb, var(--color-primary-fill) 22%, transparent);
     }
 
+    /* Compact switch — the size a LIST of toggles needs. Aura's 40×24 control is right when a toggle is one
+     * of three on a settings card; stacked fifteen deep (the Extensions tab) that same control becomes a
+     * column of brand-coloured blocks carrying more weight than the names it belongs to, and the eye reads
+     * the column before it reads the list. Same control at ~55% of the area, so the switches state the row's
+     * on/off without being the first thing on the page. PrimeVue sizes from these variables, so a modifier
+     * class is the whole implementation. */
+    .ui-switch-sm {
+        --p-toggleswitch-width: 2rem;
+        --p-toggleswitch-height: 1.125rem;
+        --p-toggleswitch-handle-size: 0.875rem;
+        --p-toggleswitch-gap: 0.125rem;
+    }
+
     /* Label + control stack used by forms. */
     .ui-field {
         display: flex;

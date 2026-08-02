@@ -134,24 +134,29 @@ const reload = async (): Promise<void> => {
              the filter, and a header that kept claiming 14 over 13 rows is a header nobody trusts again. The
              running total stays visible on the segmented control's "All" badge. -->
         <RowGroup label="Extensions" :count="healthy.length">
+            <!-- Two matched tracks and a bare action, rather than three controls of three different heights:
+                 the filter and the state switcher are the same kind of thing (they narrow the list below) and
+                 read as one instrument; reloading the host is not, so it stays chromeless beside them. -->
             <template #actions>
                 <template v-if="filterable">
                     <!-- SearchBar rather than a `cmp.input`, even here: it is the one field in this tab a phone
                          will focus, and its 16px-below-md rule is what stops iOS zooming the whole hub. The
                          border it deliberately lacks (it is normally a panel's first row) is this wrapper's. -->
-                    <div class="w-40 overflow-hidden rounded-md border border-line bg-canvas sm:w-56">
+                    <div class="h-8 w-40 overflow-hidden rounded-md border border-line bg-canvas sm:w-56">
                         <SearchBar v-model="query" placeholder="Name or contribution…" class="border-b-0" />
                     </div>
-                    <Segmented
-                        v-model="mode"
-                        :options="[
-                            { label: `All`, value: `all`, badge: entries.length },
-                            { label: `On`, value: `on`, badge: enabledCount },
-                            { label: `Off`, value: `off`, badge: entries.length - enabledCount },
-                        ]"
-                    />
+                    <div class="flex h-8 items-center rounded-md border border-line bg-canvas px-1">
+                        <Segmented
+                            v-model="mode"
+                            :options="[
+                                { label: `All`, value: `all`, badge: entries.length },
+                                { label: `On`, value: `on`, badge: enabledCount },
+                                { label: `Off`, value: `off`, badge: entries.length - enabledCount },
+                            ]"
+                        />
+                    </div>
                 </template>
-                <button type="button" :class="cmp.iconButton()" :disabled="reloading" v-tooltip.top="`Reload extensions`" @click="reload">
+                <button type="button" :class="cmp.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" @click="reload">
                     <Icon name="refresh" :spin="reloading" />
                 </button>
             </template>
