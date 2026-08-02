@@ -1,6 +1,6 @@
 import { staleQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { contributedFileBindings } from "../../extension-host/fileBindings";
-import { setAgents } from "../agents/useAgents";
+import { desyncAgents, setAgents } from "../agents/useAgents";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { throttleTrailing } from "../throttleTrailing";
@@ -31,6 +31,20 @@ const refreshChanges = throttleTrailing(() => void queryClient.invalidateQueries
 export const applySystemEvent = (event: SystemEvent, sandboxId: string): void => {
     switch (event.kind) {
         case `hello`: {
+            /* A NEW CONNECTION IS A NEW REVISION LINE, and this frame is the only thing that sees every one of
+             * them. The fleet roster is versioned by a counter the daemon keeps in its own memory, so a daemon
+             * that restarted — a rebuild, an update, a crash — numbers from 0 again while this tab still holds
+             * the high-water mark from the process before it, and `setAgents` then drops that daemon's every
+             * snapshot as "older than what we have". The board freezes at the instant before the restart:
+             * statuses stop moving, finished agents never leave their lane, agents started since never appear,
+             * and /agents/:id for one of them has nothing to show. Only a reload clears it, which is exactly
+             * how it kept being reported.
+             *
+             * The stream's failure path already reset it — but that is one of the four ways a stream can end,
+             * and a REBUILD takes another: the loopback listener dies with the container, the client demotes to
+             * the tunnel and reconnects, and that branch stands down without a word to the roster. Resetting
+             * here instead of in each branch is what stops the next branch from forgetting. */
+            desyncAgents();
             // The advertised route surface first: it gates features for the rest of this connection.
             setDaemonRoutes(event.routes);
             // Then where the daemon's boot is: `reachable` reads it, so learning this before anything else

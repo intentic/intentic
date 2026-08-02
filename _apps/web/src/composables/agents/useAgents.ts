@@ -40,6 +40,16 @@ const registry = shallowRef<AgentSummary[]>([]);
 // handed, including revision 0 from a daemon that just restarted.
 let appliedRev = -1;
 
+/* WHICH CONNECTION THE REVISION LINE BELONGS TO. The counter above is only comparable within one daemon
+ * PROCESS — it lives in that process's memory and starts again at 0 when it restarts — so every reset of it
+ * (desync, which the hello frame of every connection performs) opens a new line, and reads issued against the
+ * old one must not land on the new. A GET /agents that left before a rebuild and answers after it carries the
+ * old daemon's high-water number, and applying it would re-poison the guard the reset had just cleared: the
+ * new daemon's every snapshot would be dropped as "older than what we have", which is the freeze this whole
+ * mechanism exists to avoid. Reads capture the epoch they were issued in and drop their own answer if it
+ * moved; frames need no such check, because a frame IS its connection. */
+let epoch = 0;
+
 // Ids this browser has locally added to or removed from the board, each held until `untilRev` is applied.
 // `present` is the summary to show for a restore; a removal carries none.
 interface PendingMove {
@@ -151,6 +161,7 @@ const desync = (keepRoster: boolean): void => {
     }
     pending.clear();
     appliedRev = -1;
+    epoch += 1;
     undoable.value = [];
     receipt.value = undefined;
     notice.value = undefined;
@@ -382,8 +393,14 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
 
 // Explicit registry pull — the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
 const refresh = async (): Promise<void> => {
+    const issuedAt = epoch;
     try {
         const body = await sandboxJson<{ agents: AgentSummary[]; rev: number }>(`/agents`);
+        // Answered on a revision line nobody is on any more — the daemon this read left for has since been
+        // replaced (see `epoch`). Its number would land as a high-water mark the successor cannot beat.
+        if (issuedAt !== epoch) {
+            return;
+        }
         // Through setAgents, not a raw assignment: this read races the stream, and a slow one that started
         // before the newest frame must not be allowed to undo it.
         setAgents(body.agents, body.rev);
