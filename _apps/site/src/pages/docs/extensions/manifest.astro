@@ -48,6 +48,7 @@ const processes = `"processes": [
             <tr><td><code>name</code></td><td>yes</td><td>Lowercase slug, unique within the publisher.</td></tr>
             <tr><td><code>version</code></td><td>yes</td><td>Your semver, for display. The <em>code</em> identity is always the installed commit sha.</td></tr>
             <tr><td><code>engines.intentic</code></td><td>yes</td><td>Semver range over the host's extension-API version, checked before activation. Current API: <strong>0.4.0</strong>.</td></tr>
+            <tr><td><code>category</code></td><td>no</td><td>The section your extension sits under in the sandbox's Extensions tab — <code>work</code>, <code>workspace</code>, <code>connections</code>, <code>knowledge</code> or <code>sandbox</code>. Anything else (or nothing) lists it under <em>Other</em>; it installs and runs either way.</td></tr>
             <tr><td><code>entry</code></td><td>no</td><td>Repo-relative path to a prebuilt single-file ESM bundle. Omit for an extension with no UI.</td></tr>
             <tr><td><code>permissions.sandbox</code></td><td>no</td><td>The daemon routes you may call. Omit if you call none.</td></tr>
             <tr><td><code>contributes</code></td><td>no</td><td>Everything below.</td></tr>

@@ -228,6 +228,13 @@ export const ExtensionManifestSchema = z.object({
     name: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
     // The extension's own semver — display/identity only; the installed code identity is the pinned commit sha.
     version: z.string().min(1),
+    /* The section this extension sits under in the Sandbox hub's Extensions tab — a grouping by what it is FOR,
+     * declared because it cannot be derived. Nine of the first-party extensions contribute a rail tile, so a
+     * grouping read off `contributes` puts more than half the list in one section and says nothing about any of
+     * them. Deliberately a loose string, exactly like a connector's `catalog.category`: the vocabulary belongs
+     * to the surface that renders it (extensionCategories.ts in the web app), and an extension declaring a
+     * section this app has never heard of lands in "Other" rather than failing to install. */
+    category: z.string().min(1).optional(),
     // Semver range over the host's extension API version (extensionApiVersion) — checked before activation.
     engines: z.object({ intentic: z.string().min(1) }),
     // Repo-relative path of the prebuilt single-file ESM bundle (built with `vue` and `@intentic/extension-api`

@@ -2,6 +2,7 @@
     "publisher": "intentic",
     "name": "maintenance",
     "version": "1.0.0",
+    "category": "work",
     "engines": { "intentic": "^0.4.0" },
     "permissions": {
         "sandbox": [

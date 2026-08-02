@@ -3,7 +3,8 @@ import { extensionIdOf } from "@intentic/extension-api";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { cmp, RowGroup, SearchBar, Segmented, StatusBadge } from "@intentic-app/ui";
 import { computed, ref } from "vue";
-import { type ExtensionEntry, useExtensionList } from "../../composables/extensions/useExtensionList";
+import { type ExtensionSection, sectionsOf } from "../../composables/extensions/extensionCategories";
+import { useExtensionList } from "../../composables/extensions/useExtensionList";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { reloadExtensions } from "../../extension-host/useExtensionHost";
 import ExtensionRow from "./ExtensionRow.vue";
@@ -13,19 +14,24 @@ import ExtensionRow from "./ExtensionRow.vue";
  * switch. Install/remove happens on the Capabilities page like every other capability; this tab is the
  * management surface.
  *
- * IT IS A LIST OF SIXTEEN THINGS, AND GROWING, so it is built to be scanned rather than read. Three decisions
+ * IT IS A LIST OF SEVENTEEN THINGS, AND GROWING, so it is built to be scanned rather than read. Four decisions
  * follow from that, and they are the design:
  *
  *  1. The nominal case is silent. An extension that is on and working carries no badge — the switch says it is
  *     on and the absence of anything else says it is fine. What is left in colour is only what deserves the
- *     eye: a load failure, an engines mismatch, an image/app version drift. Those also LEAVE the list, into a
- *     pinned group at the top, so "is anything wrong?" is answered without reading a single row.
+ *     eye: a load failure, an engines mismatch, an image/app version drift. Those also LEAVE their section,
+ *     into a pinned group at the top, so "is anything wrong?" is answered without reading a single row.
  *  2. One line per extension. Version, commit, contribution counts, the consequences of switching it off and
  *     the settings form are all real, and all below the fold — a row expands into its full record. Before, the
- *     tab paid for that detail on every row at all times, which is what made sixteen extensions unreadable.
+ *     tab paid for that detail on every row at all times, which is what made seventeen extensions unreadable.
  *  3. Find beats scroll past a dozen. The filter box matches the id AND everything the extension contributes,
  *     so "github" finds the connectors extension and ".docx" finds viewers; the segmented control answers
- *     "which ones did I switch off?", which is otherwise invisible in an alphabetical list. */
+ *     "which ones did I switch off?", which is otherwise invisible in an alphabetical list.
+ *  4. Sections by PURPOSE, declared in the manifest (see extensionCategories.ts). One alphabetical run of
+ *     seventeen names asks the reader to know what each one is before they can find the one they want; five
+ *     headings turn the same list into five short ones, and the heading is what a reader arrives with —
+ *     "the CI thing", "whatever talks to Discord". The filter and the switcher moved OUT of a group header
+ *     and above the sections for it: they narrow the whole tab, and each section is now only a part of it. */
 
 const { entries, unlisted, setEnabled, isLoading, error } = useExtensionList();
 
@@ -44,7 +50,7 @@ const reloading = ref(false);
 const filterable = computed(() => entries.value.length >= FILTERABLE_FROM);
 const enabledCount = computed(() => entries.value.filter((entry) => entry.extension.enabled).length);
 
-const matches = computed<ExtensionEntry[]>(() => {
+const matches = computed(() => {
     const needle = query.value.trim().toLowerCase();
     return entries.value.filter(
         (entry) => (mode.value === `all` || (mode.value === `on`) === entry.extension.enabled) && (needle === `` || entry.search.includes(needle)),
@@ -53,10 +59,28 @@ const matches = computed<ExtensionEntry[]>(() => {
 const attention = computed(() => matches.value.filter((entry) => entry.state.attention));
 const healthy = computed(() => matches.value.filter((entry) => !entry.state.attention));
 
-/* What the main group says when it holds no rows of its own — three different facts, and the wrong one is a
- * lie the reader can see. An attention row IS a match, so a filter that hits only a broken extension empties
- * this group while a row sits visibly above it; "nothing matches" there would be flatly contradicted by the
- * screen. */
+/* One list of sections, rendered by one loop. The exception group is a section like the others because it
+ * behaves like one — a heading over rows — and pinning it first is the whole of its specialness. It overrides
+ * the purpose taxonomy rather than sitting inside it: a broken extension is not something to find under the
+ * heading you'd have looked for it under on a good day. */
+const sections = computed<ExtensionSection[]>(() => [
+    ...(attention.value.length === 0
+        ? []
+        : [
+              {
+                  id: `attention`,
+                  label: `Needs attention`,
+                  caption: `loaded with a problem, or built against a different version`,
+                  entries: attention.value,
+              },
+          ]),
+    ...sectionsOf(healthy.value),
+]);
+
+/* What the tab says when the sections hold no rows of their own — three different facts, and the wrong one is a
+ * lie the reader can see. An attention row IS a match, so a filter that hits only a broken extension leaves the
+ * purpose sections empty while a row sits visibly above them; "nothing matches" there would be flatly
+ * contradicted by the screen. */
 const emptyNote = computed<string | undefined>(() => {
     if (isLoading.value || healthy.value.length > 0) {
         return undefined;
@@ -107,20 +131,48 @@ const reload = async (): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-5">
         <p v-if="error" :class="cmp.alertDanger()">{{ error }}</p>
         <p v-if="toggleError" :class="cmp.alertDanger()">{{ toggleError }}</p>
 
-        <!-- Only ever populated when something actually went wrong — see the note on decision 1 above. It sits
-             ABOVE the filter bar deliberately: a broken extension is not something to have to search for. -->
-        <RowGroup
-            v-if="attention.length > 0"
-            label="Needs attention"
-            :count="attention.length"
-            caption="loaded with a problem, or built against a different version"
-        >
+        <!-- The tab's instrument, not any one section's: two matched tracks and a bare action. The filter and
+             the state switcher are the same kind of thing (they narrow every section below) and read as one
+             instrument; reloading the host is not, so it stays chromeless beside them. No heading on the left —
+             the hub's own tab already says "Extensions", and the running total is on the "All" pill. -->
+        <div class="flex flex-wrap items-center justify-end gap-2">
+            <template v-if="filterable">
+                <!-- SearchBar rather than a `cmp.input`, even here: it is the one field in this tab a phone
+                     will focus, and its 16px-below-md rule is what stops iOS zooming the whole hub. The border
+                     it deliberately lacks (it is normally a panel's first row) is this wrapper's.
+
+                     It takes the row's slack (`flex-1`) so the toolbar spans the same width as the sections
+                     under it — one left edge and one right edge down the whole tab, instead of a control
+                     cluster huddled in a corner. `justify-end` still earns its place: below the filterable
+                     threshold there is no field to grow, and the lone reload button belongs on the right. -->
+                <div class="h-8 min-w-40 flex-1 overflow-hidden rounded-md border border-line bg-canvas">
+                    <SearchBar v-model="query" placeholder="Name or contribution…" class="border-b-0" />
+                </div>
+                <div class="flex h-8 items-center rounded-md border border-line bg-canvas px-1">
+                    <Segmented
+                        v-model="mode"
+                        :options="[
+                            { label: `All`, value: `all`, badge: entries.length },
+                            { label: `On`, value: `on`, badge: enabledCount },
+                            { label: `Off`, value: `off`, badge: entries.length - enabledCount },
+                        ]"
+                    />
+                </div>
+            </template>
+            <button type="button" :class="cmp.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" @click="reload">
+                <Icon name="refresh" :spin="reloading" />
+            </button>
+        </div>
+
+        <!-- Each count is what its section HOLDS, not the total: rows leave for the pinned group above and for
+             the filter, and a header that kept claiming 17 over 13 rows is a header nobody trusts again. -->
+        <RowGroup v-for="section in sections" :key="section.id" :label="section.label" :count="section.entries.length" :caption="section.caption">
             <ExtensionRow
-                v-for="entry in attention"
+                v-for="entry in section.entries"
                 :key="entry.extension.id"
                 :entry="entry"
                 :expanded="opened === entry.extension.id"
@@ -130,53 +182,13 @@ const reload = async (): Promise<void> => {
             />
         </RowGroup>
 
-        <!-- The count is what this group HOLDS, not the total: rows leave for the attention group above and for
-             the filter, and a header that kept claiming 14 over 13 rows is a header nobody trusts again. The
-             running total stays visible on the segmented control's "All" badge. -->
-        <RowGroup label="Extensions" :count="healthy.length">
-            <!-- Two matched tracks and a bare action, rather than three controls of three different heights:
-                 the filter and the state switcher are the same kind of thing (they narrow the list below) and
-                 read as one instrument; reloading the host is not, so it stays chromeless beside them. -->
-            <template #actions>
-                <template v-if="filterable">
-                    <!-- SearchBar rather than a `cmp.input`, even here: it is the one field in this tab a phone
-                         will focus, and its 16px-below-md rule is what stops iOS zooming the whole hub. The
-                         border it deliberately lacks (it is normally a panel's first row) is this wrapper's. -->
-                    <div class="h-8 w-40 overflow-hidden rounded-md border border-line bg-canvas sm:w-56">
-                        <SearchBar v-model="query" placeholder="Name or contribution…" class="border-b-0" />
-                    </div>
-                    <div class="flex h-8 items-center rounded-md border border-line bg-canvas px-1">
-                        <Segmented
-                            v-model="mode"
-                            :options="[
-                                { label: `All`, value: `all`, badge: entries.length },
-                                { label: `On`, value: `on`, badge: enabledCount },
-                                { label: `Off`, value: `off`, badge: entries.length - enabledCount },
-                            ]"
-                        />
-                    </div>
-                </template>
-                <button type="button" :class="cmp.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" @click="reload">
-                    <Icon name="refresh" :spin="reloading" />
-                </button>
-            </template>
-            <div v-if="isLoading" class="px-4 py-6 text-center text-xs text-muted">Reading this sandbox's extensions…</div>
-            <div v-else-if="emptyNote !== undefined" class="flex flex-col items-center gap-2 px-4 py-6 text-center text-xs text-muted">
-                <span>{{ emptyNote }}</span>
-                <button v-if="matches.length === 0 && entries.length > 0" type="button" :class="cmp.buttonPrimary()" @click="clearFilters">
-                    Clear filter
-                </button>
-            </div>
-            <ExtensionRow
-                v-for="entry in healthy"
-                :key="entry.extension.id"
-                :entry="entry"
-                :expanded="opened === entry.extension.id"
-                :pending="pending === entry.extension.id"
-                @toggle="(enabled) => toggle(entry.extension, enabled)"
-                @update:expanded="(open) => (opened = open ? entry.extension.id : undefined)"
-            />
-        </RowGroup>
+        <div v-if="isLoading" :class="cmp.emptyState(`py-6`)">Reading this sandbox's extensions…</div>
+        <div v-else-if="emptyNote !== undefined" :class="cmp.emptyState(`flex flex-col items-center gap-2 py-6`)">
+            <span>{{ emptyNote }}</span>
+            <button v-if="matches.length === 0 && entries.length > 0" type="button" :class="cmp.buttonPrimary()" @click="clearFilters">
+                Clear filter
+            </button>
+        </div>
 
         <!-- Running in this app build, absent from the daemon's list: no row to sit in, no switch to offer. -->
         <RowGroup v-if="unlisted.length > 0" label="Running but not listed" caption="compiled into this app build, unknown to the sandbox image">
