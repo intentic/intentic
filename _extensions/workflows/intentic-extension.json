@@ -1,0 +1,24 @@
+{
+    "publisher": "intentic",
+    "name": "workflows",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.4.0" },
+    "permissions": {
+        "sandbox": [
+            "GET /workflows",
+            "POST /workflows",
+            "DELETE /workflows/*",
+            "POST /workflows/*/run",
+            "GET /workflows/runs",
+            "POST /workflows/runs/*/stop",
+            "GET /*/models"
+        ]
+    },
+    "contributes": {
+        "views": [{ "id": "workflows", "label": "Workflows", "surface": "rail" }],
+        "files": [
+            { "path": ".intentic/workflows.json", "invalidates": ["workflows"] },
+            { "path": ".intentic/workflow-runs.json", "invalidates": ["workflows", "workflow-runs"] }
+        ]
+    }
+}

@@ -1,6 +1,7 @@
 import { ExtensionManifestSchema } from "@intentic/extension-api";
 import { RegistryEntrySchema } from "@intentic/registry";
 import { z } from "zod";
+import { OutputFieldsSchema } from "./output-fields.js";
 
 // All request/response wire schemas for the sandbox daemon. Inputs that carry a `{param}` in their route path
 // (repo / id / name) merge the path param into the same flat object — oRPC fills the path placeholder from the
@@ -191,28 +192,67 @@ export type AttachTurn = z.infer<typeof AttachTurnSchema>;
 export const LoopContextSchema = z.enum(["fresh", "continue"]);
 export type LoopContext = z.infer<typeof LoopContextSchema>;
 
-/* WHAT ENDS THE LOOP, ordered here by how much of it you can believe.
+/* WHAT THE LOOP PRODUCES — asked separately from what ends it, because they are separate questions and
+ * conflating them is what makes a chain of sessions impossible to build.
  *
- * `command` is a shell one-liner run in the conversation's tree; exit 0 ⇒ done. Deterministic, free, and the
- * only one of the three whose answer does not come from a model. It is the automation `guard` with the sign
- * flipped, and it runs through the same runner. `pnpm test` passing is a better completion signal than any
- * amount of self-report.
+ * `none` — the loop produces nothing but its work. The classic "make the suite green": what it leaves behind
+ *   is a green suite, and asking it to also file a report is asking it to spend a turn on paperwork.
+ * `claim` — the iteration writes `{done, reason, evidence?}`. Prose, but STRUCTURED prose: `done` is a boolean
+ *   the daemon reads rather than a sentence it has to interpret. Self-assessment, so advisory by construction —
+ *   it exists because plenty of goals have no command that can check them ("the README explains the auth
+ *   flow"), not because a model's word for it is worth much.
+ * `json` — the iteration writes `{done, reason, data}` where `data` matches a declared field list. This is the
+ *   one that makes a step's output usable as the next step's input: a paragraph mentioning three files cannot
+ *   be fed to anything, `{files: [...]}` can.
  *
- * `claim` asks the iteration itself, through a written verdict file (loop-verdict.ts). Self-assessment, so it is
- * advisory by construction — it is here because plenty of goals have no command that can check them ("the README
- * explains the auth flow"), not because it is trustworthy.
- *
- * `judge` puts a SEPARATE, tool-less call on the question: it reads the iteration's own report and rules against
- * a rubric, having done none of the work and having nothing invested in it being finished. The rule the three
- * encode: the check must be a different call from the work, or it is not a check.
+ * All three land in ONE file per iteration, with one shape, differing only in strictness. See LoopDocumentSchema.
  */
-export const LoopStopSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("command"), command: z.string().min(1) }),
+export const LoopOutputSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("none") }),
     z.object({ kind: z.literal("claim") }),
+    z.object({ kind: z.literal("json"), fields: OutputFieldsSchema }),
+]);
+export type LoopOutput = z.infer<typeof LoopOutputSchema>;
+
+/* WHAT ELSE HAS TO BE TRUE — checks that are not the worker's own word, ANDed with the output above.
+ *
+ * `command` is a shell one-liner run in the conversation's tree; exit 0 ⇒ satisfied. Deterministic, free, and
+ * the only signal here whose answer does not come from a model. It is the automation `guard` with the sign
+ * flipped, and it runs through the same runner. `pnpm test` passing beats any amount of self-report.
+ *
+ * `judge` puts a SEPARATE, tool-less call on the question: it reads the iteration's own report and rules
+ * against a rubric, having done none of the work and nothing invested in it being finished.
+ *
+ * The rule both encode, and the reason they are kept apart from the output: the check must be a DIFFERENT CALL
+ * from the work, or it is not a check. An output is what the worker says; a check is what someone else says.
+ */
+export const LoopCheckSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("command"), command: z.string().min(1) }),
     // The rubric is what the judge is asked; absent `model` runs it on the quick rung the other helpers use.
     z.object({ kind: z.literal("judge"), rubric: z.string().min(1), model: z.string().optional() }),
 ]);
-export type LoopStop = z.infer<typeof LoopStopSchema>;
+export type LoopCheck = z.infer<typeof LoopCheckSchema>;
+
+/* THE VERDICT FILE an iteration writes — one shape for all three output kinds, because the loop reads it the
+ * same way whatever was declared and only the validation of `data` differs.
+ *
+ * It is a FILE rather than a sentence in the reply for the reason every structured output in this codebase is
+ * a file: a reply has to be parsed out of prose the model is simultaneously using to talk to a person, and the
+ * two demands pull against each other until neither is served. A file has one job.
+ */
+export const LoopDocumentSchema = z.object({
+    // Whether the goal is met NOW. The loop's own reading of this is the whole point of the file.
+    done: z.boolean(),
+    // One line: why it is or is not met. The single most-read string in the feature — it is what the next
+    // iteration reads first and what the history row shows.
+    reason: z.string(),
+    // What the iteration checked to know that. Optional because a model with nothing to point at should say so
+    // by omitting it rather than by inventing a sentence.
+    evidence: z.string().optional(),
+    // The declared fields, present only for a `json` output and validated against them there.
+    data: z.record(z.string(), z.unknown()).optional(),
+});
+export type LoopDocument = z.infer<typeof LoopDocumentSchema>;
 
 // Enough iterations for a real convergence, few enough that a misconfigured loop is a bounded mistake. A loop
 // that has not converged in 50 turns is not one iteration short of it.
@@ -228,7 +268,11 @@ export const LoopSchema = z.object({
     // suite green" is the goal, "run the tests, pick the top failure, fix it" is the instruction.
     prompt: z.string().min(1),
     context: LoopContextSchema,
-    stop: LoopStopSchema,
+    output: LoopOutputSchema,
+    /* Everything besides the worker's own word that has to hold before the loop may end. Ordinarily one or
+     * none; a list because "the suite is green AND the report is written" is a real completion bar and
+     * expressing it as two loops would run the work twice. */
+    checks: z.array(LoopCheckSchema),
     maxIterations: z.number().int().min(1).max(LOOP_ITERATIONS_MAX),
     // The spend ceiling in USD across the whole loop, summed from the turns' own usage frames. Optional because
     // a 3-iteration loop does not need one; strongly wanted on anything unattended, since this is the first
@@ -253,6 +297,12 @@ export const LoopSchema = z.object({
     model: z.string().optional(),
 });
 export type Loop = z.infer<typeof LoopSchema>;
+
+// Can this loop ever end on its own terms? A loop with nothing to produce and nothing to check runs to its
+// iteration ceiling and reports `exhausted`, having been unable to succeed from the moment it was configured.
+// A predicate rather than a schema refinement because both callers want it as one: the route refuses, and the
+// dialog greys out its button while you are still deciding.
+export const loopCanConverge = (loop: Pick<Loop, "output" | "checks">): boolean => loop.output.kind !== "none" || loop.checks.length > 0;
 
 /* Where a loop keeps what it must not lose between iterations: <workspace>/.intentic/loops/<conversationId>/.
  *
@@ -2708,6 +2758,250 @@ export type AutomationSummary = z.infer<typeof AutomationSummarySchema>;
 export const AutomationsListSchema = z.object({ automations: z.array(AutomationSummarySchema) });
 export const AutomationIdParamSchema = z.object({ id: z.string() });
 
+// ---- workflows: a designed graph of sessions ----
+/* THE THIRD DRIVER. An automation answers "run this at 3am", a loop answers "run this until it is done", and a
+ * workflow answers "run these, in this order, each handing its result to the next".
+ *
+ * IT IS A GRAPH OF LOOPS, and that is the whole implementation. A step is not a new kind of execution — it is
+ * a Loop with a declared output and a place in a dependency graph, driven on a conversation of its own. So
+ * every step gets the fleet card, the worktree, the transcript, the cost ledger, the Stop button, the stall
+ * detector and the spend ceiling without a line of new code, and this file's job is only to say what the steps
+ * are and what depends on what.
+ *
+ * WHY IT IS NOT "AN AUTOMATION WITH SEVERAL PROMPTS". Because the value is in the SEAM between steps: the
+ * output of one is validated before the next is allowed to start, the reviewing step is a different session
+ * from the implementing one, and a step that cannot converge stops the branch below it rather than feeding
+ * garbage forward. None of that exists in a prompt that says "then do X".
+ */
+
+// A step id: short and slug-shaped because it is spliced into the derived conversation id (`wf-<run>-<step>`),
+// which is itself a branch name and a directory name. The regex is the injection guard, the length cap is what
+// keeps the derived id inside ConversationIdSchema's 64.
+const StepIdSchema = z
+    .string()
+    .min(1)
+    .max(24)
+    .regex(/^[a-z0-9][a-z0-9-]*$/);
+
+/* HOW A STEP MEETS ITS PREDECESSOR — the fork the whole feature turns on, and the one the user has to choose
+ * because neither answer is right twice in a row.
+ *
+ * `fresh` opens a NEW conversation: its own fleet card, its own session, its own worktree when the run is
+ * isolated. What it knows about the step before it is exactly what that step declared as output. This is the
+ * only honest way to run a review, an audit or a second opinion — a session that spent nine turns arguing for
+ * an approach is the worst available judge of whether that approach worked, and the fix is not a better prompt,
+ * it is a different session.
+ *
+ * `continue` sends the next prompt into the SAME conversation. The model keeps everything it learned, the
+ * prefix stays cached, and — when the run is isolated — the work stays in one worktree on one branch, which is
+ * the only way a chain like implement → test → document can build on itself at all. Requires exactly one
+ * predecessor: two upstream sessions cannot both be continued into one.
+ */
+export const WorkflowHandoffSchema = z.enum(["fresh", "continue"]);
+export type WorkflowHandoff = z.infer<typeof WorkflowHandoffSchema>;
+
+// Enough steps for a real pipeline, few enough that a workflow stays legible as one picture. A design past
+// this is two workflows, and reading it as one graph was never going to work.
+const WORKFLOW_STEPS_MAX = 24;
+
+export const WorkflowStepSchema = z.object({
+    id: StepIdSchema,
+    // What the node says on the graph. Short — the prompt is where the detail goes.
+    title: z.string().min(1).max(60),
+    // What "done" means for this step, in the user's words. Restated in every iteration's prompt and put to the
+    // judge; it is the sentence the step is measured against.
+    goal: z.string().min(1),
+    // What the step is told to DO. A different sentence from the goal: "the suite is green" is the goal,
+    // "run the tests, take the top failure, fix it" is the instruction.
+    prompt: z.string().min(1),
+    // The steps that must finish before this one starts. Empty ⇒ a root, started when the run starts. The
+    // graph must be acyclic and every id must exist; both are checked when the workflow is saved.
+    needs: z.array(StepIdSchema),
+    handoff: WorkflowHandoffSchema,
+    output: LoopOutputSchema,
+    checks: z.array(LoopCheckSchema),
+    // How the step's own ITERATIONS meet each other — the Ralph question, one level down from `handoff`. A
+    // long-running step wants `fresh` (no context rot); a short refine-this step wants `continue`.
+    context: LoopContextSchema,
+    maxIterations: z.number().int().min(1).max(LOOP_ITERATIONS_MAX),
+    maxSpendUsd: z.number().positive().optional(),
+    stallLimit: z.number().int().min(1),
+    agent: AgentProviderSchema.optional(),
+    harness: AgentHarnessSchema.optional(),
+    model: z.string().optional(),
+});
+export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
+
+export const WorkflowSchema = z.object({
+    id: entryId,
+    name: z.string().min(1).max(80),
+    description: z.string().max(400).optional(),
+    steps: z.array(WorkflowStepSchema).min(1).max(WORKFLOW_STEPS_MAX),
+    /* Whether the run's sessions work in their own git worktrees or on the shared /work tree, decided once for
+     * the whole run because it changes what a `fresh` step can see.
+     *
+     * ISOLATED: every `fresh` step branches off main and sees NONE of its predecessors' uncommitted work — only
+     * their declared outputs. Right for fan-out that reads (review three repos, audit a change, research), and
+     * for chains that stay on one conversation via `continue`. Wrong, and quietly so, for a `fresh` step that
+     * expects to find the previous step's edits on disk.
+     *
+     * SHARED: every step works on /work, so each one sees what the last one did whatever its handoff. Right for
+     * a sequential build-on-itself pipeline; the cost is that parallel steps share a tree and can collide, so a
+     * fan-out here should be reading rather than writing.
+     */
+    isolated: z.boolean(),
+    // How many steps may run at once. Bounded because a fan-out of twelve is twelve provider sessions, twelve
+    // worktrees and twelve times the burn rate — and because the machine this runs on is one machine.
+    maxParallel: z.number().int().min(1).max(8),
+    // The spend ceiling for the WHOLE run, summed across every step. Checked before each step starts, so it
+    // bounds what a run can cost rather than what one step can.
+    maxSpendUsd: z.number().positive().optional(),
+});
+export type Workflow = z.infer<typeof WorkflowSchema>;
+
+/* Why the graph is not runnable, as a list of sentences. Empty ⇒ it is. Shared by the save route (which
+ * refuses) and the designer (which shows them under the canvas as you type), because a rule enforced only
+ * daemon-side is a rule the user meets as a failed save with no idea which node is wrong.
+ */
+export const workflowFaults = (workflow: Pick<Workflow, "steps">): string[] => {
+    const faults: string[] = [];
+    const ids = new Set<string>();
+    for (const step of workflow.steps) {
+        if (ids.has(step.id)) {
+            faults.push(`Two steps share the id "${step.id}".`);
+        }
+        ids.add(step.id);
+    }
+    for (const step of workflow.steps) {
+        for (const need of step.needs) {
+            if (!ids.has(need)) {
+                faults.push(`"${step.title}" waits for "${need}", which is not a step in this workflow.`);
+            }
+        }
+        if (step.needs.includes(step.id)) {
+            faults.push(`"${step.title}" waits for itself.`);
+        }
+        // A step that continues a session needs exactly one session to continue. Zero (a root) has nothing to
+        // carry on from; two would have to pick, and picking silently is how a workflow quietly drops half its
+        // context.
+        if (step.handoff === "continue" && step.needs.length !== 1) {
+            faults.push(
+                step.needs.length === 0
+                    ? `"${step.title}" continues a session but starts the run — there is nothing to continue.`
+                    : `"${step.title}" continues a session but waits for ${step.needs.length} steps; it can only continue one.`,
+            );
+        }
+        // A step with nothing to produce and nothing to check cannot end except by running out of iterations.
+        if (step.output.kind === "none" && step.checks.length === 0) {
+            faults.push(`"${step.title}" has no output and no check, so nothing can tell it it is finished.`);
+        }
+    }
+    /* Two steps continuing the SAME session is the one graph that is legal on paper and broken in practice:
+     * both would run on one conversation, in parallel, against one worktree and one turn mutex — so they would
+     * serialize on a lock neither knows about and the second would inherit a session the first had moved on.
+     * A predecessor can be continued once; anything else that needs its result takes it as a handover. */
+    const continued = new Map<string, string[]>();
+    for (const step of workflow.steps) {
+        if (step.handoff === "continue" && step.needs.length === 1) {
+            const parent = step.needs[0] ?? "";
+            continued.set(parent, [...(continued.get(parent) ?? []), step.title]);
+        }
+    }
+    for (const [parent, titles] of continued) {
+        if (titles.length > 1) {
+            faults.push(`${titles.map((title) => `"${title}"`).join(" and ")} all continue "${parent}"'s session; only one step can.`);
+        }
+    }
+    // Cycles, by walking every path from every root. A workflow with a cycle has steps that can never start,
+    // and the scheduler would simply wait forever on them rather than saying so.
+    const byId = new Map(workflow.steps.map((step) => [step.id, step]));
+    const state = new Map<string, "open" | "closed">();
+    const walk = (id: string, trail: readonly string[]): void => {
+        if (state.get(id) === "closed") {
+            return;
+        }
+        if (state.get(id) === "open") {
+            faults.push(`These steps wait for each other in a circle: ${[...trail.slice(trail.indexOf(id)), id].join(" → ")}.`);
+            return;
+        }
+        state.set(id, "open");
+        for (const need of byId.get(id)?.needs ?? []) {
+            if (byId.has(need)) {
+                walk(need, [...trail, id]);
+            }
+        }
+        state.set(id, "closed");
+    };
+    for (const step of workflow.steps) {
+        walk(step.id, []);
+    }
+    return faults;
+};
+
+/* How one step ended. `skipped` is the one that carries information the others cannot: it means the step never
+ * ran because something it waited for did not finish, which is why a failed workflow shows one red node and a
+ * trail of grey ones rather than a wall of failures that all say the same thing.
+ */
+export const WorkflowStepStateSchema = z.enum(["pending", "running", "done", "failed", "skipped", "stopped"]);
+export type WorkflowStepState = z.infer<typeof WorkflowStepStateSchema>;
+
+export const WorkflowStepRunSchema = z.object({
+    stepId: StepIdSchema,
+    state: WorkflowStepStateSchema,
+    // The conversation this step ran on — derived, and the door from a node on the graph to a real transcript.
+    // Shared with the predecessor when the handoff is `continue`, which is what makes those steps one card.
+    conversationId: z.string(),
+    startedAt: z.number().optional(),
+    endedAt: z.number().optional(),
+    iterations: z.number().int().min(0),
+    costUsd: z.number().optional(),
+    // How the step's LOOP ended — `exhausted` and `stalled` both land as a `failed` step, and the difference
+    // between them is the difference between "give it more room" and "more room will not help".
+    loopState: LoopStateSchema.optional(),
+    detail: z.string().optional(),
+    // What the step produced. Present once the step has written a valid document, which for a `json` output
+    // means it matched the declared fields. This is what the steps downstream are given.
+    document: LoopDocumentSchema.optional(),
+    /* The step's closing words, truncated. Two jobs, and it would be stored for either: it is the only output a
+     * `none` step has, and it is what a resumed run hands forward for a step that finished before the daemon
+     * died — without it, resuming would either re-run finished work or feed the next step a blank. */
+    report: z.string().optional(),
+});
+export type WorkflowStepRun = z.infer<typeof WorkflowStepRunSchema>;
+
+// `done` means every step that ran finished; a run with skipped steps is `failed`, because a graph that did not
+// reach its leaves did not do what it was asked whatever the survivors managed.
+export const WorkflowRunStateSchema = z.enum(["running", "done", "failed", "stopped", "overspent", "error"]);
+export type WorkflowRunState = z.infer<typeof WorkflowRunStateSchema>;
+
+export const WorkflowRunSchema = z.object({
+    runId: z.string().min(1),
+    /* The workflow AS IT WAS WHEN THE RUN STARTED, snapshotted rather than referenced. Three things need this
+     * and none of them tolerate a live lookup: the run view draws the graph the run actually ran (not the one
+     * that has been edited twice since), the boot resume needs the step definitions of a workflow that may have
+     * been deleted, and a history row for a deleted workflow is otherwise an id and nothing else. */
+    workflow: WorkflowSchema,
+    state: WorkflowRunStateSchema,
+    startedAt: z.number(),
+    endedAt: z.number().optional(),
+    // How many daemon boots have picked this run back up — the same counter, and the same reason, as a loop's.
+    resumed: z.number().int().min(0),
+    detail: z.string().optional(),
+    // One entry per step, in the workflow's own order. Written at start with every step `pending`, so the graph
+    // is complete from the first frame and a node's absence never has to mean two things.
+    steps: z.array(WorkflowStepRunSchema),
+});
+export type WorkflowRun = z.infer<typeof WorkflowRunSchema>;
+
+// The list row: the stored workflow plus the runs it has had, newest first.
+export const WorkflowSummarySchema = WorkflowSchema.extend({ runs: z.array(WorkflowRunSchema) });
+export type WorkflowSummary = z.infer<typeof WorkflowSummarySchema>;
+
+export const WorkflowsListSchema = z.object({ workflows: z.array(WorkflowSummarySchema) });
+export const WorkflowRunsListSchema = z.object({ runs: z.array(WorkflowRunSchema) });
+export const WorkflowIdParamSchema = z.object({ id: z.string() });
+export const WorkflowRunIdParamSchema = z.object({ runId: z.string() });
+
 // ---- ci: pipeline runs on the workspace repos' github/gitlab remotes ----
 // The daemon maps each workspace repo to the CI project behind its remote (a connected github/gitlab
 // capability supplies the token), registers a webhook so completed pipelines dispatch `ci` listener
@@ -3532,6 +3826,21 @@ export const ActivityEventSchema = z.object({
     endpoint: z.string().optional(),
     // The agent turn that made/handled it — the join key between an inbound wake and its outbound calls.
     sessionId: z.string().optional(),
+    /* ONE TURN'S EVENTS, TIED TOGETHER. A turn writes four lifecycle events plus one per outbound provider call,
+     * and read as five rows they say one thing five times — so the feed groups on this instead. It cannot be
+     * sessionId: the runtime does not mint one until the stream's first frame, which is AFTER turn.started, so
+     * the very event carrying the prompt is the one that could never be joined. Minted by the turn itself. */
+    turnId: z.string().optional(),
+    // The stable conversation the turn belongs to. Outlives sessionId, which a provider/account/harness switch
+    // retires mid-conversation — so this, not sessionId, is what "the same agent" means across a feed.
+    conversationId: z.string().optional(),
+    // The conversation's display title as it stood when the event was written. Denormalised on purpose: the
+    // registry entry it came from is prunable and renameable, and an audit row must still read as words years
+    // later. Absent on the first event of a fresh conversation — the auto-namer has not run yet.
+    title: z.string().optional(),
+    // What woke the conversation from outside, when something did (see AgentOriginSchema) — the feed's "who
+    // called me" attribution, and how a turn is filed under Discord rather than under the runtime that served it.
+    origin: AgentOriginSchema.optional(),
     automationIds: z.array(z.string()).optional(),
     outcome: z.enum(["ok", "error"]).optional(),
     error: z.string().optional(),

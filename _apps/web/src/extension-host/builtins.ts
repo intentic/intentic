@@ -12,6 +12,7 @@ import * as memory from "@intentic/ext-memory";
 import * as pipelines from "@intentic/ext-pipelines";
 import * as preview from "@intentic/ext-preview";
 import * as viewers from "@intentic/ext-viewers";
+import * as workflows from "@intentic/ext-workflows";
 
 /* The first-party extensions whose CODE is compiled into this bundle, keyed by the id the daemon lists them
  * under. Each is a real in-repo extension package (its own intentic-extension.json + activate) activated
@@ -41,6 +42,7 @@ const modules: readonly BuiltinModule[] = [
     maintenance,
     preview,
     viewers,
+    workflows,
 ];
 
 export const builtinModules: ReadonlyMap<string, BuiltinModule> = new Map(modules.map((module) => [extensionIdOf(module.manifest), module]));

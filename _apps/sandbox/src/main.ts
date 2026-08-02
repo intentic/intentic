@@ -12,6 +12,7 @@ import { sweepAgedAgents } from "./agents/archive.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/turn-resume.js";
 import { resumeLoops } from "./loops/loop-runner.js";
+import { resumeWorkflowRuns } from "./workflows/workflow-runner.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { restoreConnectorGitAccess } from "./capabilities/cli/git-access.js";
@@ -555,6 +556,10 @@ const main = async (): Promise<void> => {
     // its own journal — a record still marked `running` is one nothing settled — so this needs no second store,
     // only a read. Detached and bounded by a resume count; see loop-runner.ts.
     void resumeLoops(services, streamAgent).catch((error: unknown) => logger.error({ err: error }, "loops could not be resumed"));
+
+    // And for WORKFLOW RUNS, which need it most of all: a run is the longest-lived thing in the sandbox, and a
+    // resume replays the steps that already finished off the record rather than paying for them twice.
+    void resumeWorkflowRuns(services, streamAgent).catch((error: unknown) => logger.error({ err: error }, "workflow runs could not be resumed"));
 
     // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking
     // update without ever fetching on the request path.

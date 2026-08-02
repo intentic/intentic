@@ -43,7 +43,8 @@ const baseLoop = (conversationId: string): Loop => ({
     goal: "the suite is green",
     prompt: "fix the top failure",
     context: "fresh",
-    stop: { kind: "claim" },
+    output: { kind: "claim" },
+    checks: [],
     maxIterations: 3,
     stallLimit: 99,
     isolated: false,
@@ -102,7 +103,7 @@ test("a written verdict of done stops the loop on that iteration", async () => {
     expect(settled?.iterations.at(-1)).toMatchObject({ outcome: "done", detail: "pass 2" });
 });
 
-test("a missing verdict file reads as not-done rather than as done — the safe direction", async () => {
+test("a missing output file reads as not-done rather than as done — the safe direction", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     const record = await services.loops.start({ ...baseLoop("c4"), maxIterations: 1 }, 1);
@@ -110,7 +111,7 @@ test("a missing verdict file reads as not-done rather than as done — the safe 
 
     const settled = await services.loops.get("c4");
     expect(settled?.state).toBe("exhausted");
-    expect(settled?.iterations[0]?.detail).toContain("No verdict file");
+    expect(settled?.iterations[0]?.detail).toContain("No output file");
 });
 
 test("consecutive iterations that change nothing trip the stall limit before the iteration ceiling", async () => {

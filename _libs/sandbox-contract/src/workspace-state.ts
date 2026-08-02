@@ -107,6 +107,18 @@ const STATE_FILES = [
         portability: "carry",
     },
     {
+        path: ".intentic/workflows.json",
+        invalidates: [],
+        why: "Declared by the intentic.workflows extension's contributes.files — `workflows` is its query key, not core's.",
+        portability: "carry",
+    },
+    {
+        path: ".intentic/workflow-runs.json",
+        invalidates: [],
+        why: "Declared by the intentic.workflows extension's contributes.files — `workflows` and `workflow-runs` are its query keys, not core's.",
+        portability: "carry",
+    },
+    {
         path: ".intentic/loops.json",
         invalidates: [],
         why: "Ralph loops and their iteration history. Nothing observes it: where a RUNNING loop stands rides on the fleet roster (AgentSummary.loop), which the /events stream already pushes about once a second, and a second source invalidating on this file could only ever disagree with the card beside it. The iteration list of an ENDED loop is an on-demand read — nothing renders it until someone opens it (web's useLoops, which holds no query for exactly this reason).",

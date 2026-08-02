@@ -68,5 +68,6 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.repo-apps",
         "intentic.slack",
         "intentic.viewers",
+        "intentic.workflows",
     ]);
 });

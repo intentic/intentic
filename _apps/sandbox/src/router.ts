@@ -22,6 +22,7 @@ import { createKimiRoutes } from "./kimi/kimi.routes.js";
 import { createKomodoRoutes } from "./komodo/komodo.routes.js";
 import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createLoopsRoutes } from "./loops/loops.routes.js";
+import { createWorkflowsRoutes } from "./workflows/workflows.routes.js";
 import { createMemoryRoutes } from "./memory/memory.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
 import { createPortsRoutes } from "./ports/ports.routes.js";
@@ -63,6 +64,7 @@ export const createRouter = (services: Services) => ({
     inventory: createInventoryRoutes(services),
     logs: createLogsRoutes(services),
     loops: createLoopsRoutes(services),
+    workflows: createWorkflowsRoutes(services),
     memory: createMemoryRoutes(services),
     panels: createPanelsRoutes(services),
     ports: createPortsRoutes(services),

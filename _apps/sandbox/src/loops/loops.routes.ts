@@ -1,4 +1,4 @@
-import { loopsContract } from "@intentic/sandbox-contract";
+import { loopCanConverge, loopsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
@@ -17,6 +17,13 @@ export const createLoopsRoutes = (services: Services) => {
             // same turn mutex, and the loser would spend a whole turn finding that out.
             if (loopRunning(input.conversationId)) {
                 throw new ORPCError("CONFLICT", { message: "This agent is already looping — stop that loop before starting another." });
+            }
+            // A loop with nothing to produce and nothing to check cannot succeed; it can only run out of
+            // iterations. Refused here rather than left to fail slowly, because failing slowly costs money.
+            if (!loopCanConverge(input)) {
+                throw new ORPCError("BAD_REQUEST", {
+                    message: "This loop has no output and no check, so nothing could ever tell it it is finished.",
+                });
             }
             const record = await services.loops.start(input, Date.now());
             // Detached, like every other route that starts a turn: the first iteration alone can take minutes,

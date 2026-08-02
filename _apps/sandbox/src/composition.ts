@@ -41,6 +41,7 @@ import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createC
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
 import { fileLoopsStore, type LoopsStore } from "./loops/loops-store.js";
+import { fileWorkflowRunsStore, fileWorkflowsStore, type WorkflowRunsStore, type WorkflowsStore } from "./workflows/workflows-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
@@ -227,6 +228,13 @@ export interface Services {
     // Ralph loops (.intentic/loops.json): the pump drives them, /loops starts and stops them, and the record is
     // its own restart journal — a loop still marked `running` at boot is one the daemon died under.
     readonly loops: LoopsStore;
+    // Workflow designs (.intentic/workflows.json): a manifest the user authors and edits, changing at human
+    // speed. /workflows edits it; nothing fires it on its own.
+    readonly workflows: WorkflowsStore;
+    // Workflow runs (.intentic/workflow-runs.json): the ledger the scheduler writes several times per step.
+    // Kept out of the manifest so a run's writes cannot rewrite the user's designs, and so a run of a deleted
+    // workflow stays readable — it snapshotted its definition. Its own restart journal, like the loops one.
+    readonly workflowRuns: WorkflowRunsStore;
     // Maintenance evidence (.intentic/chores/): the probe cache the background runner fills, and the ledger of
     // what has been done about it. /chores reads both; @intentic/sandbox-contract/chores turns them into verdicts, in the
     // browser, where the panel and the rail badge share one computation.
@@ -616,6 +624,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         bridgeTokens: fileBridgeTokens(statePath(workspace.root, ".intentic/bridge-tokens.json")),
         automations: fileAutomationsStore(statePath(workspace.root, ".intentic/automations.json")),
         loops: fileLoopsStore(statePath(workspace.root, ".intentic/loops.json")),
+        workflows: fileWorkflowsStore(statePath(workspace.root, ".intentic/workflows.json")),
+        workflowRuns: fileWorkflowRunsStore(statePath(workspace.root, ".intentic/workflow-runs.json")),
         chores,
         probeRunner: createProbeRunner({ workspace, chores, agents, logger }),
         approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/approvals/")),

@@ -90,12 +90,17 @@ const start = async (): Promise<void> => {
     busy.value = true;
     failure.value = undefined;
     try {
-        const stop: Loop["stop"] =
+        /* The contract asks two questions where this form asks one, and collapsing them here is deliberate.
+         * An ad-hoc loop started from a composer has exactly one bar to clear, so offering "what do you produce"
+         * and "what else must be true" as separate controls would be two fields to answer a question the user
+         * has already answered. Combining them is a workflow step's job, and that has a designer. */
+        const output: Loop["output"] = stopKind.value === `claim` ? { kind: `claim` } : { kind: `none` };
+        const checks: Loop["checks"] =
             stopKind.value === `command`
-                ? { kind: `command`, command: command.value.trim() }
+                ? [{ kind: `command`, command: command.value.trim() }]
                 : stopKind.value === `judge`
-                  ? { kind: `judge`, rubric: rubric.value.trim() }
-                  : { kind: `claim` };
+                  ? [{ kind: `judge`, rubric: rubric.value.trim() }]
+                  : [];
         await startLoop({
             conversationId,
             goal: goal.value.trim(),
@@ -103,7 +108,8 @@ const start = async (): Promise<void> => {
             // optional rather than required.
             prompt: instruction.value.trim() === `` ? `Work towards the goal above. Do the next most useful thing.` : instruction.value.trim(),
             context: context.value,
-            stop,
+            output,
+            checks,
             maxIterations: maxIterations.value,
             maxSpendUsd: maxSpendUsd.value,
             stallLimit: stallLimit.value,

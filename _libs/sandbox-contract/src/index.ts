@@ -34,6 +34,7 @@ import { systemContract } from "./contracts/system.contract.js";
 import { translatorContract } from "./contracts/translator.contract.js";
 import { usageContract } from "./contracts/usage.contract.js";
 import { vpnContract } from "./contracts/vpn.contract.js";
+import { workflowsContract } from "./contracts/workflows.contract.js";
 import { workspaceContract } from "./contracts/workspace.contract.js";
 
 export { activityContract } from "./contracts/activity.contract.js";
@@ -73,6 +74,7 @@ export { systemContract } from "./contracts/system.contract.js";
 export { translatorContract } from "./contracts/translator.contract.js";
 export { usageContract } from "./contracts/usage.contract.js";
 export { vpnContract } from "./contracts/vpn.contract.js";
+export { workflowsContract } from "./contracts/workflows.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";
 export * from "./events.js";
 export * from "./sse.js";
@@ -86,6 +88,7 @@ export * from "./hostnames.js";
 export * from "./model-order.js";
 export * from "./path-refs.js";
 export * from "./quick-model.js";
+export * from "./output-fields.js";
 export * from "./schemas.js";
 export * from "./terminal-protocol.js";
 export * from "./title.js";
@@ -129,6 +132,7 @@ export const sandboxContract = {
     translator: translatorContract,
     usage: usageContract,
     vpn: vpnContract,
+    workflows: workflowsContract,
 };
 
 // Every route in THIS build of the contract, and the names the daemon advertises on its hello frame. Bound here

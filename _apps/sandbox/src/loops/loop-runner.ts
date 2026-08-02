@@ -1,11 +1,9 @@
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import type { AgentEvent, AgentTurn, Loop, LoopIteration, LoopRecord, LoopState } from "@intentic/sandbox-contract";
-import { LOOP_DIR } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn, Loop, LoopDocument, LoopIteration, LoopRecord, LoopState } from "@intentic/sandbox-contract";
 import { sumUsage, type UsageFrame } from "../agent/turn-usage.js";
 import type { Services } from "../composition.js";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
-import { briefForIteration } from "./loop-brief.js";
+import { briefForIteration, loopDirIn } from "./loop-brief.js";
 import { treeDigest } from "./loop-progress.js";
 import { evaluateStop } from "./loop-stop.js";
 import { setLoopProjection } from "./loop-state.js";
@@ -110,24 +108,43 @@ const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { 
 const publish = (loop: Loop, state: LoopState, iteration: number): void =>
     setLoopProjection(loop.conversationId, { state, iteration, maxIterations: loop.maxIterations, goal: loop.goal });
 
-/* Drive one loop to completion. Resolves when the loop ends, however it ends; it never rejects, because every
- * caller is fire-and-forget (a route that has already acked, a boot pass) and a loop that fails has a state to
- * say so with.
+/* HOW A LOOP ENDED, handed back to whoever started it.
  *
- * `startAt` is the iteration number to begin from — 1 for a fresh start, and one past the history for a loop
- * the daemon died under and is now picking back up.
+ * A route that acked and walked away ignores this; a workflow step is entirely made of it. Returned rather
+ * than re-read from the store because this is the one moment everything is already in hand — re-reading the
+ * manifest to learn what the call you just awaited did is both slower and a chance to disagree with it.
  */
-export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn): Promise<void> => {
+export interface LoopSettlement {
+    readonly state: LoopState;
+    readonly detail?: string;
+    readonly iterations: number;
+    // The last iteration's closing assistant text. The output of a `none` loop, and the evidence anything
+    // downstream has when no document was asked for.
+    readonly report: string;
+    // What the whole loop cost, summed from its iterations' own usage frames. Returned rather than left to be
+    // re-read off the manifest: the caller that has to know (a workflow charging a run-level ceiling) would
+    // otherwise re-open a file to learn the total of a call it just awaited.
+    readonly costUsd: number;
+    // The last VALID document the loop read, whatever it said. Present even on a loop that ended `exhausted`,
+    // because "here is the last thing it managed to conclude" is worth more than a blank.
+    readonly document?: LoopDocument;
+}
+
+/* Drive one loop to completion. Resolves when the loop ends, however it ends; it never rejects, because a loop
+ * that fails has a state to say so with and both callers (a route that has already acked, a workflow step)
+ * would only have to turn a rejection back into one.
+ */
+export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn): Promise<LoopSettlement> => {
     const { conversationId } = record;
     if (running.has(conversationId)) {
-        return;
+        return { state: "error", detail: "This agent is already looping.", iterations: record.iterations.length, report: "", costUsd: 0 };
     }
     const abort = new AbortController();
     running.set(conversationId, { abort });
     const tree = treeOf(services, record);
     // The loop's own directory, made before the first iteration is told to write into it — a `fresh` iteration
     // asked to read a progress file whose directory does not exist wastes its opening move on mkdir.
-    await mkdir(join(services.workspace.root, LOOP_DIR, conversationId), { recursive: true }).catch(() => undefined);
+    await mkdir(loopDirIn(services.workspace.root, conversationId), { recursive: true }).catch(() => undefined);
 
     let iteration = record.iterations.length;
     let spentUsd = record.iterations.reduce((total, entry) => total + (entry.costUsd ?? 0), 0);
@@ -135,6 +152,11 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
     // The session to resume, carried between iterations in `continue` mode. Undefined in `fresh` mode forever —
     // that absence IS the mode: no session id means the provider opens a new one against the same worktree.
     let sessionId = record.context === "continue" ? services.agents.sessionIdOf(conversationId) : undefined;
+    // What the loop hands back. Kept across iterations rather than taken from the last one, because the last
+    // iteration of a loop that ran out of road is often the one that produced the least — an `exhausted` loop
+    // should still return the best document it ever wrote.
+    let report = "";
+    let document: LoopDocument | undefined;
     let ended: { readonly state: LoopState; readonly detail?: string } | undefined;
     try {
         while (ended === undefined) {
@@ -163,6 +185,7 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 ...(record.model !== undefined ? { model: record.model } : {}),
             };
             const outcome = await runIteration(services, record, turn, fn);
+            report = outcome.report;
             if (record.context === "continue") {
                 sessionId = outcome.sessionId ?? sessionId;
             }
@@ -181,6 +204,7 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 report: outcome.report,
                 signal: abort.signal,
             });
+            document = verdict.document ?? document;
             const entry: LoopIteration = {
                 n: iteration,
                 at: Date.now(),
@@ -207,13 +231,23 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
         ended = { state: "error", detail: error instanceof Error ? error.message : "loop failed" };
         services.logger.error({ err: error, conversationId }, "loop failed");
     } finally {
+        // In `finally` and alone in it, because this is the one thing that must happen on every path: a leaked
+        // entry here means the conversation can never be looped again for as long as the daemon lives.
         running.delete(conversationId);
-        const settled = ended ?? { state: "error" as const, detail: "loop ended without a verdict" };
-        await services.loops
-            .settle(conversationId, settled.state, Date.now(), settled.detail)
-            .catch((error: unknown) => services.logger.warn({ err: error, conversationId }, "loop: settle failed"));
-        publish(record, settled.state, iteration);
     }
+    const settled = ended ?? { state: "error" as const, detail: "loop ended without a verdict" };
+    await services.loops
+        .settle(conversationId, settled.state, Date.now(), settled.detail)
+        .catch((error: unknown) => services.logger.warn({ err: error, conversationId }, "loop: settle failed"));
+    publish(record, settled.state, iteration);
+    return {
+        state: settled.state,
+        ...(settled.detail !== undefined ? { detail: settled.detail } : {}),
+        iterations: iteration,
+        report,
+        costUsd: spentUsd,
+        ...(document !== undefined ? { document } : {}),
+    };
 };
 
 /* THE BOOT PASS — every loop the daemon died under, picked back up.

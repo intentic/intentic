@@ -338,6 +338,7 @@ COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
 COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/
 COPY _extensions/viewers/intentic-extension.json /opt/extensions/viewers/
+COPY _extensions/workflows/intentic-extension.json /opt/extensions/workflows/
 # pane-log-clean on PATH — the tmux pipe-pane hooks (above / logs/log-files.ts) replay each pane's byte
 # stream through it (a headless VT emulator using @xterm/headless from the daemon's node_modules) to keep
 # the terminal logs readable. Symlinked like intentic/iq: node resolves @xterm/headless from the target's
