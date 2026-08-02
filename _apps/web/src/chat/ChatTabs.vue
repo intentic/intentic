@@ -564,11 +564,11 @@ const openHistory = (event: Event): void => {
 
         <!-- THE SHEET. Pinned to the column's width under the header, capped so the transcript is never
              completely covered by the list of things it is one of.
-             ON CANVAS, not on the panel's card colour: the list's cards are opaque and one step lighter than
-             the ground they lie on (see ChatTabList's .rail-card), which only holds if both of its hosts hand
-             it the same ground. The rail out in the pop-out window is a canvas body; this paints one. The
-             strong edge and the shadow are what make it a sheet floating over the transcript — the fill was
-             never carrying that. -->
+             ON CANVAS, not on the panel's card colour: the list draws its lanes as slabs mixed FROM canvas
+             (`.lane`), so a host that paints anything else leaves them floating a shade off their own
+             surroundings. The rail out in the pop-out window is a canvas body; this paints one. The strong
+             edge and the shadow are what make it a sheet floating over the transcript — the fill was never
+             carrying that. -->
         <div
             v-if="listOpen && !vertical"
             class="absolute inset-x-1.5 top-full z-30 mt-1 flex max-h-[60vh] flex-col overflow-hidden rounded-xl border border-line-strong bg-canvas p-1.5 shadow-lg"

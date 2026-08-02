@@ -610,7 +610,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     v-for="lane in LANES"
                     :key="lane.key"
                     :data-drop="lane.key === 'finished' && archiveOpen ? undefined : lane.key"
-                    class="flex min-w-0 flex-col rounded-xl bg-canvas/60 transition-colors"
+                    class="lane flex min-w-0 flex-col rounded-xl transition-colors"
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
                     <!-- The Finished lane doubles as the archive's window, so its header is the one that
@@ -619,7 +619,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                          one page is a page and a half of cards, and a card is only readable as "finished" if
                          the lane it belongs to is still on screen. It pins inside its own section, so it
                          leaves with it rather than sitting over the next lane's cards. -->
-                    <header class="flex items-center gap-2 px-3 py-2" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
+                    <!-- Pinned, it paints the LANE's own fill (.lane-header) rather than canvas: a header a
+                         shade off the slab it caps is a seam across the column. -->
+                    <header class="flex items-center gap-2 px-3 py-2" :class="narrow ? 'lane-header sticky top-0 z-10 rounded-t-xl' : ''">
                         <template v-if="lane.key === 'finished' && archiveOpen">
                             <button
                                 type="button"

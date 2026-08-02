@@ -115,6 +115,29 @@
         background: hsl(var(--tile-hue) 55% 55% / 0.22);
         color: hsl(var(--tile-hue) 70% 72%);
     }
+
+    /* A LANE — the kanban column the fleet board is read as, and the same slab in the chat rail's one-card
+     * width. It is a SURFACE the lane's cards lie on, not a heading over loose cards, and that is what the
+     * rail was missing: with the cards drawn straight on canvas, a pinned header was a black rectangle with a
+     * hard edge butting into the first card, and the eye had nothing telling it where a lane began or ended
+     * except that rectangle. A slab answers both — the header is the slab's cap rather than a band, the gaps
+     * between cards are the slab showing through, and the group is bounded by a rounded edge instead of by a
+     * colour change.
+     *
+     * ONE FILL, mixed from the ink into the ground rather than named as a token, so it holds in both schemes
+     * without a second rule: 4% of content over canvas lifts a dark ground and settles a light one, and it
+     * lands between canvas and `--color-card` in both — which is the whole contract, since a card has to stay
+     * a step LIGHTER than the lane it sits on to read as an object (see .rail-card).
+     *
+     * The header inherits `--lane-fill` rather than re-deriving it: it has to be OPAQUE to occlude the cards
+     * that scroll under it while pinned, and a header a shade off its own lane is a seam across the slab. */
+    .lane {
+        --lane-fill: color-mix(in srgb, var(--color-content) 3%, var(--color-canvas));
+        background: var(--lane-fill);
+    }
+    .lane-header {
+        background: var(--lane-fill);
+    }
 }
 
 /* GSI injects its One Tap / verifying prompt iframe at body level. Match its light color-scheme

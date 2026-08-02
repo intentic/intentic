@@ -60,11 +60,12 @@ import { providerLabel } from "@intentic/sandbox-contract";
  *   · a RUNNING card adds the board's live line — tool glyph, what it is doing, and the ticking elapsed — in
  *     link, so the sessions that are working are findable in a column of stopped ones.
  *
- * Cards sit on the LIST's own ground rather than their host's: an opaque card surface over canvas, the board's
- * lane exactly. The old skin was a translucent wash of the canvas colour, which in the pop-out (a canvas body)
- * mixed to precisely the background it was drawn on — cards with a 1px border and no surface, which is the
- * whole of why the rail read flatter than the board. Both hosts hand this list a canvas ground now, so one
- * rule holds in both.
+ * EACH LANE IS A SLAB (`.lane`), the board's kanban column at one card's width: a rounded surface the lane's
+ * cards lie on, capped by its own header and separated from the next lane by a gap rather than by a colour
+ * change. Cards are opaque and a step lighter than it. Both halves of that are load-bearing and both were
+ * once wrong here — cards were a translucent wash of the canvas colour, which in the pop-out (a canvas body)
+ * mixed to exactly the ground they were drawn on, and the header was a bg-canvas band, which on that same
+ * ground was a black rectangle with a hard edge butting into the first card.
  *
  * Colour is spent the way the board spends it: the work's category in the tile, status in the glyph, the
  * reason in a chip, the live readout in link, diffs in success/danger — and everything else neutral, so an
@@ -389,21 +390,22 @@ const closeTab = (event: Event, id: string): void => {
         <div ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
             <!-- A lane with nothing in it is hidden; a lane the FILTER emptied keeps its header and says
                  so, so the list doesn't reshuffle under the cursor mid-keystroke. -->
-            <section v-for="lane in LANES" v-show="lanes[lane.key].length > 0" :key="lane.key" class="flex min-w-0 flex-col">
+            <section v-for="lane in LANES" v-show="lanes[lane.key].length > 0" :key="lane.key" class="lane flex min-w-0 flex-col rounded-xl p-1">
                 <!-- The board's lane header, at the board's weights — dot, label, and the count as a pill
-                     rather than a loose number. It PINS while its own lane scrolls (the stacked board's
-                     behaviour, and the same argument: a column this tall is read a screen at a time, and a
-                     card only means "finished" while the lane it belongs to is still on screen). Opaque on
-                     the list's own ground, which is why both hosts hand it a canvas one — and it carries the
-                     gap under it as padding rather than leaving it to the section, so a card scrolling away
-                     passes under an unbroken band instead of flickering through a transparent strip. -->
-                <header class="sticky top-0 z-10 flex items-center gap-2 bg-canvas px-1 pb-2 pt-1">
+                     rather than a loose number. It is the SLAB'S CAP (see .lane): full-bleed to the lane's
+                     rounded top through the negative margins, painted in the lane's own fill so the two never
+                     seam, and PINNED while its own lane scrolls (the stacked board's behaviour, and the same
+                     argument: a column this tall is read a screen at a time, and a card only means "finished"
+                     while the lane it belongs to is still on screen). It was a bg-canvas band before, which in
+                     a pop-out — a canvas body — was a black rectangle with a hard edge against the first card.
+                     Its text starts where a card's content does, so the lane reads down one left edge. -->
+                <header class="lane-header sticky top-0 z-10 -mx-1 -mt-1 flex items-center gap-2 rounded-t-xl px-3.5 pb-2 pt-2.5">
                     <span class="h-2 w-2 shrink-0 rounded-full" :class="lane.dot"></span>
                     <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
                     <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ countIn(lane.key) }}</span>
                 </header>
-                <p v-if="cardsIn(lane.key).length === 0" class="px-1 pb-1 text-2xs text-subtle">No matches</p>
-                <div v-else class="flex min-w-0 flex-col gap-2">
+                <p v-if="cardsIn(lane.key).length === 0" class="px-2.5 pb-1.5 text-2xs text-subtle">No matches</p>
+                <div v-else class="flex min-w-0 flex-col gap-1.5">
                     <template v-for="{ conversation: c, agent } in cardsIn(lane.key)" :key="c.conversationId">
                         <!-- Renaming REPLACES the card rather than nesting a field inside it: an input in a
                              button is neither valid markup nor a usable caret. Enter commits, Esc cancels, blur
@@ -584,13 +586,13 @@ const closeTab = (event: Event, id: string): void => {
                  not footnotes, and the board makes the same call with its own off-board hits (real cards, in a
                  group with a header). Only the ink is dropped a step — a muted title, no status glyph — since
                  nothing here is a session you are currently in. -->
-            <section v-if="filtering && notOpenCount > 0" class="flex min-w-0 flex-col">
-                <header class="sticky top-0 z-10 flex items-center gap-2 bg-canvas px-1 pb-2 pt-1">
+            <section v-if="filtering && notOpenCount > 0" class="lane flex min-w-0 flex-col rounded-xl p-1">
+                <header class="lane-header sticky top-0 z-10 -mx-1 -mt-1 flex items-center gap-2 rounded-t-xl px-3.5 pb-2 pt-2.5">
                     <Icon name="search" class="shrink-0 text-2xs text-subtle" />
                     <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Not open</span>
                     <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ notOpenCount }}</span>
                 </header>
-                <div class="flex min-w-0 flex-col gap-2">
+                <div class="flex min-w-0 flex-col gap-1.5">
                     <button
                         v-for="agent in notOpen"
                         :key="agent.id"
@@ -672,11 +674,11 @@ const closeTab = (event: Event, id: string): void => {
  * transparent pill blends into a column of pills; a bordered card is what makes each session a countable
  * thing. Scoped selectors outweigh chat.css's single-class rules, so these win without !important.
  *
- * `--color-card` on the list's canvas ground, exactly as the board's cards sit on their lanes: a card has to
- * be LIGHTER than what it lies on to read as an object rather than as an outline. The fill this replaced was
- * a 45% wash of the canvas colour, which in the pop-out — whose body IS canvas — composited to the ground it
- * was drawn on, leaving nothing but the 1px border. Both hosts hand this list a canvas ground (the rail is
- * the window's body, the docked sheet paints one), so one value is right in both. */
+ * `--color-card` on the LANE's fill, exactly as the board's cards sit on their lanes: a card has to be
+ * LIGHTER than what it lies on to read as an object rather than as an outline, and `.lane` is mixed to land
+ * between canvas and card in both schemes precisely so this holds. The fill this replaced was a 45% wash of
+ * the canvas colour, which in the pop-out — whose body IS canvas — composited to the ground it was drawn on,
+ * leaving nothing but the 1px border. */
 .rail-card {
     border-color: var(--color-line);
     background: var(--color-card);
