@@ -5,8 +5,8 @@ import { usePanels } from "../extensions/usePanels";
 
 /* Live things in the sandbox, split by class: operator-panel dev servers that are up (with their assigned
  * port + preview) and service-type capabilities reporting active. Panels are not capabilities, so this is the
- * only at-a-glance view spanning both. Shared by the Status tab (full lists) and the Overview at-a-glance
- * (count + deep-link).
+ * only view spanning both. Shared by the Status tab (the full lists) and the hub's tab strip, where the same
+ * count is the Status pill's badge — one source, so the pill and the lists can never disagree.
  *
  * VPNs are deliberately NOT counted here: a tunnel has its own card (useVpn / VpnCard) with the state and
  * controls it needs, and counting it in both places would double-report the same thing. */

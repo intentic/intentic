@@ -1,34 +1,36 @@
 <script setup lang="ts">
-import { Card, Row, RowGroup, StatusBadge } from "@intentic-app/ui";
+import { Card, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, nextTick, ref } from "vue";
-import { useChat } from "../../composables/chat/useChat";
-import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
-import { useRunning } from "../../composables/sandbox/useRunning";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
-import { useMissingSecretCount } from "../../composables/secrets/useSecrets";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { errorMessage } from "../../composables/useAsyncAction";
-import { presenceOthers } from "../../composables/usePresence";
 import SandboxBehindCard from "./SandboxBehindCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
 
-/* The Sandbox hub's "Overview" tab — the calm landing. Sandbox identity (name + logo, inline-editable by the
- * owner, absorbing the old SandboxSettingsDialog), the self-reported image + version + URL, online status, the
- * non-blocking update prompt, and a compact "at a glance" block that deep-links to the other tabs. The platform
- * stores only the binding; the image/version/URL are relayed live via the daemon's /info. */
+/* The Sandbox hub's "Overview" tab — WHAT THIS BOX IS. Sandbox identity (name + logo, inline-editable by the
+ * owner, absorbing the old SandboxSettingsDialog), the self-reported image + version + URL, online status, and
+ * the non-blocking update prompt. The platform stores only the binding; the image/version/URL are relayed live
+ * via the daemon's /info.
+ *
+ * IT DOES NOT INDEX THE OTHER TABS. It used to end in an "at a glance" block: five rows deep-linking to Agent,
+ * Secrets, Capabilities, Status and Access, each with a status chip. Every one of those was a second way to say
+ * something already on screen — four of the five pointed at tabs in the strip directly above them (and named
+ * them differently: "Running now" for Status), the Status tab already wore the same running count as a pill
+ * badge, presence is in the rail, and missing secrets badge the sandbox chip. The fifth left the hub entirely,
+ * for a page the rail's "+" opens. What was left on a healthy sandbox read "Ready · Ready · 4 · 0 · —": five
+ * rows and a chevron
+ * each to report that nothing needs doing, which is the exact pattern this app rejects everywhere else (the
+ * rail's VPN indicator, the Extensions tab's silent nominal case). The one condition it carried that had no
+ * other home — nothing connected to run a turn with — is an attention item now (sandboxAttention), so it rides
+ * the chip badge with the other four instead of a row that says "Ready" for the rest of the sandbox's life. */
 
 const sandbox = useSandbox();
 const { info, installed, latest, updateAvailable } = useSandboxVersion();
-const { claudeConnected } = useChat();
-const { capabilities } = useCapabilities();
-const { runningCount } = useRunning();
-const { countPending, missingRequiredCount } = useMissingSecretCount();
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
-const othersHere = computed(() => presenceOthers.value.length);
 
 // Inline identity editing (owner only): rename + pick a logo. The picked file never uploads — it is downscaled
 // to a small square data URL in the browser and stored as a string (sandbox.update). Only changed fields sent.
@@ -243,67 +245,5 @@ const save = async (): Promise<void> => {
         <!-- This daemon predates routes the app knows: names the gap instead of letting them 404 unexplained.
              Version-independent, so it also fires in local dev where every package is 0.0.0. Self-hides. -->
         <SandboxBehindCard />
-
-        <!-- At a glance: compact deep-links into the detail tabs, so the landing stays calm. -->
-        <RowGroup label="At a glance">
-            <RouterLink to="/sandbox/agent" class="block">
-                <Row
-                    icon="sparkles"
-                    title="Agent account"
-                    description="The Claude account Claude Code runs as, stored in your sandbox."
-                    interactive
-                    chevron
-                >
-                    <template #control>
-                        <StatusBadge
-                            :variant="claudeConnected ? 'success' : 'warning'"
-                            :label="claudeConnected ? 'Ready' : 'Needs authorization'"
-                            size="xs"
-                            dot
-                        />
-                    </template>
-                </Row>
-            </RouterLink>
-
-            <RouterLink to="/sandbox/secrets" class="block">
-                <Row icon="key" title="Secrets" description="Credentials and generated values stored inside this sandbox." interactive chevron>
-                    <template #control>
-                        <StatusBadge v-if="countPending" variant="neutral" label="Checking" size="xs" />
-                        <StatusBadge
-                            v-else-if="missingRequiredCount > 0"
-                            variant="warning"
-                            :label="`${missingRequiredCount} missing`"
-                            size="xs"
-                            dot
-                        />
-                        <StatusBadge v-else variant="success" label="Ready" size="xs" dot />
-                    </template>
-                </Row>
-            </RouterLink>
-
-            <RouterLink to="/capabilities" class="block">
-                <Row icon="th-large" title="Capabilities" description="Tools, services and integrations this sandbox can use." interactive chevron>
-                    <template #control
-                        ><span class="text-2xs text-subtle">{{ capabilities.length }}</span></template
-                    >
-                </Row>
-            </RouterLink>
-
-            <RouterLink to="/sandbox/status" class="block">
-                <Row icon="bolt" title="Running now" description="Live operator panels and active services." interactive chevron>
-                    <template #control
-                        ><span class="text-2xs text-subtle">{{ runningCount }}</span></template
-                    >
-                </Row>
-            </RouterLink>
-
-            <RouterLink to="/sandbox/access" class="block">
-                <Row icon="users" title="Access" description="Who can reach this sandbox." interactive chevron>
-                    <template #control>
-                        <span v-if="othersHere > 0" class="text-2xs text-success">{{ othersHere }} here now</span>
-                    </template>
-                </Row>
-            </RouterLink>
-        </RowGroup>
     </div>
 </template>
