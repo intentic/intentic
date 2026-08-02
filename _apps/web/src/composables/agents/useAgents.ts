@@ -116,15 +116,21 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
         return;
     }
     invalidateStaleDiffs(agents);
-    // An id leaving the roster by another hand than this browser's — the daemon's retention sweep, an archive
-    // or discard on another device — is the one signal the pull-only archive list ever gets that it changed,
-    // so it is its invalidation. Without it the Finished header's count (and the door it gates) kept whatever
-    // the last visit read until the next one. Local moves are excluded: they already wrote both halves, and
-    // `pending` is exactly the set of them still unconfirmed. A reset board has no ids to depart, so the
-    // reconnect's first snapshot stays quiet.
+    /* WHAT LEFT THE ROSTER BY ANOTHER HAND THAN THIS BROWSER'S — the daemon's retention sweep, an archive or
+     * discard on another device. Local moves are excluded: they already wrote both halves, and `pending` is
+     * exactly the set of them still unconfirmed. A reset board has no ids to depart, so the reconnect's first
+     * snapshot stays quiet.
+     *
+     * It is the one signal the pull-only archive list ever gets that it changed, so it is its invalidation —
+     * without it the Finished header's count (and the door it gates) kept whatever the last visit read until
+     * the next one. And it takes the departed agents' CHAT TABS with it, for the same reason archiving from
+     * this board does (see the archive note below): one agent is a card and a tab, and the sweep that keeps
+     * the board clean was leaving the chat list to grow for the life of the sandbox. */
     const incoming = new Set(agents.map((agent) => agent.id));
-    if (registry.value.some((agent) => !incoming.has(agent.id) && !pending.has(agent.id))) {
+    const departed = new Set(registry.value.filter((agent) => !incoming.has(agent.id) && !pending.has(agent.id)).map((agent) => agent.id));
+    if (departed.size > 0) {
         void loadArchived();
+        useChat().closeRetired(departed);
     }
     appliedRev = rev;
     applySnapshot(agents, rev);
@@ -193,10 +199,10 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly unread: boolean;
 }
 
-// How many finished agents the lane shows before the rest collapse behind one row. The lane's job is to
-// CONFIRM what just completed, not to be the sandbox's permanent record — everything older is still one click
-// away, and the daemon's retention sweep is what eventually retires it. Also the thing standing between the
-// board and a TransitionGroup running FLIP over several hundred cards.
+// How many finished entries a Finished lane shows before the rest collapse behind one row. The lane's job is
+// to CONFIRM what just completed, not to be the sandbox's permanent record — everything older is still one
+// click away, and the daemon's retention sweep is what eventually retires it. Also the thing standing between
+// the board and a TransitionGroup running FLIP over several hundred cards.
 export const FINISHED_WINDOW = 6;
 
 /* The window applied, as ONE answer: the cards on screen and the number the row beneath them collapses. They
@@ -210,11 +216,20 @@ export const FINISHED_WINDOW = 6;
  * (see cardsFor): hiding a card the user themselves named is the board deciding they meant a different one.
  *
  * It is pinned at the TAIL — beside the row it came from, so the lane's own recency order is otherwise intact —
- * and counted OUT of that row, which is the whole reason this is one function rather than two. */
-export const windowFinished = (finished: readonly FleetAgent[], selectedId: string | undefined): { shown: FleetAgent[]; hidden: number } => {
+ * and counted OUT of that row, which is the whole reason this is one function rather than two.
+ *
+ * BOTH FINISHED LANES RUN THROUGH IT — the board's, and the chat list's (ChatTabList), whose lane is the same
+ * lane one card wide and grew without bound while this one stayed capped. Generic over the entry rather than
+ * duplicated for it: the two lanes hold different things (fleet agents there, open chats here) and the same
+ * rule, and a second copy of the pin-the-selected exception is how the two surfaces start to disagree. */
+export const windowFinished = <T>(
+    finished: readonly T[],
+    selectedId: string | undefined,
+    idOf: (entry: T) => string,
+): { shown: T[]; hidden: number } => {
     const shown = finished.slice(0, FINISHED_WINDOW);
     const beyond = finished.slice(FINISHED_WINDOW);
-    const pinned = selectedId === undefined ? undefined : beyond.find((agent) => agent.id === selectedId);
+    const pinned = selectedId === undefined ? undefined : beyond.find((entry) => idOf(entry) === selectedId);
     if (pinned === undefined) {
         return { shown, hidden: beyond.length };
     }

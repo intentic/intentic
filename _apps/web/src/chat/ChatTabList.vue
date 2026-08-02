@@ -17,7 +17,7 @@ import {
 import { sessionCategory } from "../composables/sessionCategory";
 import IdentityTile from "../components/IdentityTile.vue";
 import { markSegments, useAgentFilter } from "../composables/agents/useAgentFilter";
-import { type FleetAgent, useAgents } from "../composables/agents/useAgents";
+import { type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import FilterField from "../components/FilterField.vue";
 import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
@@ -171,9 +171,37 @@ const LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
  * directive, a `ref` or a dynamic prop: it would be stale out there in exactly the same way. */
 const occupiedLanes = computed(() => LANES.filter((lane) => lanes.value[lane.key].length > 0));
 
+/* --- The Finished window ------------------------------------------------------------------------
+ * THE BOARD'S CAP, ON THE BOARD'S OWN LANE — windowFinished, the same function /agents runs (see the note on
+ * it). Attention and Active are self-emptying: a card leaves them the moment its turn settles. Finished is the
+ * terminal shelf, so without a cap it is the one lane that only ever grows, and this list is the surface where
+ * that hurts most — the docked sheet is dismissed between uses, but the popped-out rail is mounted once and
+ * read for hours, so its Finished lane was a column of a hundred landed agents by the end of a working day
+ * while the board beside it stayed six deep.
+ *
+ * The window is a cap on BROWSING, not a close: every chat is still open, still cycled by Alt+PageUp/Down and
+ * still one click away behind the row. What actually keeps the list short is the retention sweep now closing
+ * what it retires (useChat.closeRetired) and "Clear" below; this is what keeps the lane readable in between.
+ *
+ * Lifted by a FILTER (a result set is not a browsing list — hiding four of a query's six hits behind a row
+ * would be the list deciding which of the user's own matches they meant) and by the row's own expand. The
+ * ACTIVE chat is pinned in whatever its age, exactly as the board pins the card it has selected: this list is
+ * the switcher for the panel beside it, and a switcher that drops the row for the thing it is showing reads as
+ * having lost the conversation. */
+const showAllFinished = ref(false);
+const windowed = computed(() => !filtering.value && !showAllFinished.value);
+const finishedWindow = computed(() =>
+    windowFinished(lanes.value.finished, windowed.value ? activeId.value : undefined, (entry) => entry.conversation.conversationId),
+);
+const hiddenFinished = computed(() => finishedWindow.value.hidden);
+
 // A lane's visible chats, and how many of its own it is showing. Same `n of m` the board's lane headers carry,
-// for the same reason: a lane that silently shrinks is a lane that has stopped saying anything.
-const cardsIn = (lane: FleetLane): OpenChat[] => lanes.value[lane].filter(tabMatches);
+// for the same reason: a lane that silently shrinks is a lane that has stopped saying anything. The denominator
+// is the LANE, not the window — the row beneath the cards is what accounts for the difference.
+const cardsIn = (lane: FleetLane): OpenChat[] => {
+    const source = lane === `finished` && windowed.value ? finishedWindow.value.shown : lanes.value[lane];
+    return source.filter(tabMatches);
+};
 const countIn = (lane: FleetLane): string =>
     filtering.value ? `${cardsIn(lane).length} of ${lanes.value[lane].length}` : String(lanes.value[lane].length);
 
@@ -488,6 +516,26 @@ const closeTab = (event: Event, id: string): void => {
                     <span class="h-2 w-2 shrink-0 rounded-full" :class="lane.dot"></span>
                     <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
                     <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ countIn(lane.key) }}</span>
+                    <span class="flex-1"></span>
+                    <!-- "CLEAR", in the slot and the word the board's Finished lane uses — the same act on the
+                         same lane, at the scale the lane is at: there it archives the agents, here it closes
+                         their chats. Both are lossless and neither asks, which is what earns the one-press
+                         treatment; the tooltip names where the chats go. It was reachable only through a card's
+                         right-click menu before, which is a hunt for a target to perform an action that has no
+                         target — the lane is the target, so the lane's header is where it belongs.
+                         Gone while filtering, exactly as the board's is: this closes the WHOLE lane, and
+                         offering it above a lane reading "1 of 12" is offering a bulk action whose scope is not
+                         the one on screen. -->
+                    <button
+                        v-if="lane.key === 'finished' && !filtering"
+                        type="button"
+                        :aria-label="`Close all ${lanes.finished.length} finished chats`"
+                        v-tooltip.bottom="`Close all ${lanes.finished.length} — they stay in Past chats`"
+                        class="shrink-0 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                        @click="emit('close', finishedTabs())"
+                    >
+                        Clear
+                    </button>
                 </header>
                 <p v-if="cardsIn(lane.key).length === 0" class="px-2.5 pb-1.5 text-2xs text-subtle">No matches</p>
                 <div v-else class="flex min-w-0 flex-col gap-1.5">
@@ -671,6 +719,18 @@ const closeTab = (event: Event, id: string): void => {
                         </button>
                     </template>
                 </div>
+                <!-- The lane's tail, not a pager: the count is the point ("there are 12 more open"), and the
+                     row is what keeps them one press away instead of gone. The board's own row, at the rail's
+                     width. Gone while filtering — the window is lifted there, so there is nothing behind it. -->
+                <button
+                    v-if="lane.key === 'finished' && !filtering && hiddenFinished > 0"
+                    type="button"
+                    class="mt-1.5 inline-flex items-center justify-center gap-1 rounded-lg border border-dashed border-line py-1.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                    @click="showAllFinished = !showAllFinished"
+                >
+                    <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                    {{ showAllFinished ? "Show fewer" : `${hiddenFinished} earlier` }}
+                </button>
             </section>
 
             <!-- WHAT THE QUERY FOUND THAT ISN'T OPEN HERE. This list holds the chats of this window, which is

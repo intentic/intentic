@@ -57,7 +57,9 @@ let app: App | undefined;
 const mountList = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
-    app = createApp({ render: () => h(ChatTabList) });
+    // Wired the way ChatPanel wires it — the list emits verbs and its host performs them, so a press on a close
+    // affordance here has the same consequence it does in the app.
+    app = createApp({ render: () => h(ChatTabList, { onClose: (ids: ReadonlySet<string>) => useChat().closeTabs(ids) }) });
     app.component(`Icon`, { render: () => null });
     app.directive(`tooltip`, {});
     app.use(router);
@@ -171,4 +173,101 @@ it(`drops a lane the last chat left, so no empty header is left standing`, async
     await settle();
     expect(lanesOnScreen(el)).toEqual([`Attention`]);
     expect(cardsOnScreen(el)).toEqual([`waiting`]);
+});
+
+/* THE FINISHED LANE IS THE ONLY ONE THAT GROWS. Attention and Active empty themselves — a card leaves them the
+ * moment its turn settles — so on the surface that is mounted for hours, an uncapped Finished lane is a column
+ * of every agent the day produced. The board has always capped its own (windowFinished); this list drew the
+ * same lane with no cap at all, which is the "my popped-out Finished lane keeps growing" report. */
+const seedFinished = (count: number): void =>
+    setAgents(
+        Array.from({ length: count }, (_, at) => ({
+            id: `done${at}`,
+            title: `landed run ${at}`,
+            status: `landed`,
+            provider: `claude`,
+            harness: `native`,
+            // Newest first, so `done0` leads the lane and `done${count - 1}` is the one furthest behind the fold.
+            updatedAt: 2_000 - at,
+            attention: { plan: false, question: false, permission: false, conflict: false },
+        })) satisfies AgentSummary[],
+        100,
+    );
+
+// Opening them oldest-first leaves the NEWEST as the focused chat — inside the window, so these cases are about
+// the cap alone and not about the pin.
+const openFinished = (count: number): void => {
+    for (let at = count - 1; at >= 0; at--) {
+        openFromBoard(`done${at}`);
+    }
+};
+
+const tailRow = (el: HTMLElement): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll(`button`)].find((button) => /earlier|Show fewer/.test(button.textContent ?? ``));
+const clearButton = (el: HTMLElement): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Clear`);
+
+it(`caps the Finished lane and says how many it is holding back`, async () => {
+    seedFinished(10);
+    const el = await mountList();
+
+    openFinished(10);
+
+    await settle();
+    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`]);
+    // The header still counts the whole lane — the row below is what accounts for the difference.
+    expect(el.querySelector(`section header span:nth-of-type(3)`)?.textContent?.trim()).toBe(`10`);
+    expect(tailRow(el)?.textContent?.trim()).toBe(`4 earlier`);
+});
+
+it(`opens the rest in place, and folds them back`, async () => {
+    seedFinished(10);
+    const el = await mountList();
+    openFinished(10);
+    await settle();
+
+    tailRow(el)?.click();
+
+    await settle();
+    expect(cardsOnScreen(el)).toHaveLength(10);
+    expect(tailRow(el)?.textContent?.trim()).toBe(`Show fewer`);
+
+    tailRow(el)?.click();
+
+    await settle();
+    expect(cardsOnScreen(el)).toHaveLength(6);
+});
+
+// The list is the switcher for the panel beside it, so the one card it may never drop is the chat that panel is
+// showing — the board's own exception, and the reason the window takes a selection at all.
+it(`pins the chat being read into the window, however far down the lane it is`, async () => {
+    seedFinished(10);
+    const el = await mountList();
+    openFinished(10);
+    await settle();
+
+    openFromBoard(`done9`); // the oldest finished chat, four rows behind the fold
+
+    await settle();
+    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done9`]);
+    // Seven on screen out of ten: the row may only claim the three it actually hides.
+    expect(tailRow(el)?.textContent?.trim()).toBe(`3 earlier`);
+});
+
+// The exit the lane never had. It was reachable only by right-clicking a card — a hunt for a target to perform
+// an action whose target is the lane — which is what left "Close finished" being described as a manual chore.
+it(`clears the whole lane from its header, whatever the window is showing`, async () => {
+    seedFinished(10);
+    const el = await mountList();
+    openFinished(10);
+    await settle();
+    expect(clearButton(el)).toBeDefined();
+
+    clearButton(el)?.click();
+
+    await settle();
+    // Every finished chat is closed, not just the six that were on screen, and the list is left with the fresh
+    // chat closeTabs installs rather than nothing at all.
+    expect(lanesOnScreen(el)).toEqual([`Active`]);
+    expect(cardsOnScreen(el).filter((id) => id.startsWith(`done`))).toEqual([]);
 });

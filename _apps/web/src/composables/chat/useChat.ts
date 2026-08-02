@@ -1018,6 +1018,37 @@ const closeTabs = (ids: ReadonlySet<string>): void => {
     setConversations(next, activeId.value);
 };
 
+/* THE SAME CLOSE, ASKED FOR BY THE DAEMON RATHER THAN BY THE USER — the tabs of agents that left the roster
+ * without this browser doing it: the retention sweep filing a finished agent away (the daemon's
+ * agents/archive.ts), or an archive or discard performed on another device.
+ *
+ * It exists because the two halves of "an agent is a card and a tab" only ever moved together when the press
+ * happened HERE: archiving from this board closes the chat with the card (useAgents.archive), while the sweep
+ * that does the same thing on its own left the tab behind. That is the whole of why the chat list's Finished
+ * lane grew without bound while /agents stayed clean — the sweep is the board's cleaner and was the chat
+ * list's litter. Nothing is lost either way (see closeTabs): the transcript is in History, and reopening the
+ * agent from there brings the tab straight back.
+ *
+ * TWO TABS ARE SPARED, and both are about not taking something out from under the user:
+ *   · the FOCUSED chat — the sweep runs on a clock the user cannot see, and a panel that empties itself
+ *     mid-read is the worst thing an unattended cleaner can do. It reads as archived (ChatTabList's box mark)
+ *     and closes like any other tab when the user is done with it.
+ *   · one holding UNSENT INPUT — composer text, a staged attachment, a message queued behind a turn. Every
+ *     other thing a chat holds survives a close; these do not. */
+const unsent = (conversation: Conversation): boolean =>
+    conversation.draft.value.trim() !== `` || conversation.attachments.value.length > 0 || conversation.queued.value.length > 0;
+
+const closeRetired = (ids: ReadonlySet<string>): void => {
+    const retired = new Set(
+        conversations.value
+            .filter((conversation) => ids.has(conversation.conversationId) && conversation.conversationId !== activeId.value && !unsent(conversation))
+            .map((conversation) => conversation.conversationId),
+    );
+    if (retired.size > 0) {
+        closeTabs(retired);
+    }
+};
+
 // --- Active-conversation actions (forwarded) --------------------------------------------------
 // The composer's one send path, whatever the conversation is doing: an idle chat starts a turn, a running one
 // takes the message mid-turn (or holds it until it settles). See Conversation.enqueue.
@@ -1704,6 +1735,7 @@ export function useChat() {
         tabReveal,
         setActive,
         closeTabs,
+        closeRetired,
         send,
         queued,
         removeQueued,

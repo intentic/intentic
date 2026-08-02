@@ -150,7 +150,7 @@ const highlightId = computed(() => flashId.value ?? (mobile.value ? undefined : 
 // The Finished window is only in force while the lane is BROWSING its own recent tail. The archive is a
 // different list entirely, and both a filter and an explicit expand lift the cap outright — see cardsFor.
 const windowed = computed(() => !archiveOpen.value && !filtering.value && !showAllFinished.value);
-const finishedWindow = computed(() => windowFinished(lanes.value.finished, windowed.value ? highlightId.value : undefined));
+const finishedWindow = computed(() => windowFinished(lanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id));
 // The lane's visible cards. Finished shows its window (or the archive, when open); the other two lanes are
 // self-emptying and show everything.
 //

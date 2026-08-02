@@ -40,20 +40,23 @@ describe("windowFinished", () => {
             unread: false,
         }));
     const ids = (agents: readonly FleetAgent[]): string[] => agents.map((agent) => agent.id);
+    // The board reads its entries' own id; the chat list reaches through a wrapper for its conversation's (see
+    // ChatTabList). The rule is the same either way, which is why the window takes the reader rather than a type.
+    const byId = (agent: FleetAgent): string => agent.id;
 
     it("shows a short lane whole, with nothing to collapse", () => {
-        expect(windowFinished(lane(3), undefined)).toEqual({ shown: lane(3), hidden: 0 });
+        expect(windowFinished(lane(3), undefined, byId)).toEqual({ shown: lane(3), hidden: 0 });
     });
 
     it("caps a long lane at the window and counts out the rest", () => {
-        const { shown, hidden } = windowFinished(lane(10), undefined);
+        const { shown, hidden } = windowFinished(lane(10), undefined, byId);
 
         expect(shown).toHaveLength(FINISHED_WINDOW);
         expect(hidden).toBe(4);
     });
 
     it("keeps the selected card whatever its age — pinned at the tail, and counted OUT of the row that hides the rest", () => {
-        const { shown, hidden } = windowFinished(lane(10), `a8`);
+        const { shown, hidden } = windowFinished(lane(10), `a8`, byId);
 
         expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
         // Seven cards on screen out of ten: the row below them may only claim the three it actually hides.
@@ -61,18 +64,28 @@ describe("windowFinished", () => {
     });
 
     it("leaves the lane alone when the selection is already inside the window — no card is ever shown twice", () => {
-        expect(windowFinished(lane(10), `a2`)).toEqual(windowFinished(lane(10), undefined));
+        expect(windowFinished(lane(10), `a2`, byId)).toEqual(windowFinished(lane(10), undefined, byId));
     });
 
     it("leaves it alone for a selection this lane does not hold — an active agent, an archived one, a plain chat", () => {
-        expect(windowFinished(lane(10), `nowhere`)).toEqual(windowFinished(lane(10), undefined));
+        expect(windowFinished(lane(10), `nowhere`, byId)).toEqual(windowFinished(lane(10), undefined, byId));
     });
 
     it("drops the tail row entirely when the pin was the only card behind it", () => {
-        const { shown, hidden } = windowFinished(lane(7), `a6`);
+        const { shown, hidden } = windowFinished(lane(7), `a6`, byId);
 
         expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`]);
         expect(hidden).toBe(0);
+    });
+
+    // The id the chat list windows by lives one level down, on the conversation the entry wraps — the case the
+    // extractor exists for, and the one a `T extends { id }` constraint would have forced a duplicate field for.
+    it("windows entries whose id is not their own field — the chat list's wrapped conversations", () => {
+        const chats = lane(10).map((agent) => ({ conversation: { conversationId: agent.id } }));
+        const { shown, hidden } = windowFinished(chats, `a8`, (entry) => entry.conversation.conversationId);
+
+        expect(shown.map((entry) => entry.conversation.conversationId)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
+        expect(hidden).toBe(3);
     });
 });
 
@@ -698,5 +711,88 @@ describe("the archive list", () => {
         // The sandbox switch: another daemon's archive must not be offered on this board.
         resetArchive();
         expect(archived.value).toEqual([]);
+    });
+});
+
+/* THE SWEEP'S OTHER HALF. One agent is a card and a tab, and the two only ever moved together when the press
+ * happened in this browser: archiving from the board closed the chat with the card, while the daemon's own
+ * retention sweep took the card and left the tab. So the board stayed six deep while the chat list's Finished
+ * lane grew for the life of the sandbox — the thing the user reports as "my popped-out chat never cleans up".
+ * Same departure signal as the archive list above, applied to the strip. */
+describe("tabs the daemon retired", () => {
+    const agent = (id: string): AgentSummary => ({
+        id,
+        status: `landed`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        attention: { plan: false, question: false, permission: false, conflict: false },
+    });
+    const openTabs = (): string[] => useChat().conversations.value.map((conversation) => conversation.conversationId);
+    // A tab the roster has latched as registered — an untouched draft would be swept by the tab list's own
+    // rules, and would prove nothing about this one.
+    const openAgentTab = (id: string): Conversation => {
+        const conversation = new Conversation(id);
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        return conversation;
+    };
+
+    beforeEach(() => {
+        vi.mocked(sandboxJson)
+            .mockReset()
+            .mockResolvedValue({} as never);
+        resetAgents();
+        resetArchive();
+        // The chat the user is sitting in, which is not fleet work and cards nothing. Focused, so the strip's
+        // "at most one untouched draft, and only the focused one" rule keeps it through every write below.
+        useChat().conversations.value = [new Conversation(`here`)];
+        useChat().setActive(`here`);
+    });
+
+    it("closes the chat of an agent the sweep filed away", () => {
+        openAgentTab(`a`);
+        setAgents([agent(`a`), agent(`b`)], 1);
+
+        // The retention sweep archived `a`: the next roster frame simply arrives without it.
+        setAgents([agent(`b`)], 2);
+
+        expect(openTabs()).toEqual([`here`]);
+    });
+
+    // The sweep runs on a clock the user cannot see, so the one thing it must never do is empty the panel that
+    // is being read. The tab says it is archived and closes like any other once the user moves on.
+    it("spares the chat the user is looking at", () => {
+        openAgentTab(`a`);
+        setAgents([agent(`a`)], 1);
+        useChat().setActive(`a`);
+
+        setAgents([], 2);
+
+        expect(openTabs()).toContain(`a`);
+    });
+
+    // Everything else a chat holds survives a close — the transcript is in History, the turn detaches, the
+    // branch is on the daemon. A half-typed message does not.
+    it("spares one holding unsent input", () => {
+        const drafted = openAgentTab(`a`);
+        openAgentTab(`b`);
+        setAgents([agent(`a`), agent(`b`)], 1);
+        drafted.draft.value = `and one more thing —`;
+
+        setAgents([], 2);
+
+        expect(openTabs()).toEqual([`here`, `a`]);
+    });
+
+    // The departure signal is "left by another hand". A reconnect resets the board, so its first snapshot has
+    // nothing to compare against — and must not read as the whole fleet being swept.
+    it("keeps every tab across a reconnect's first snapshot", () => {
+        openAgentTab(`a`);
+        setAgents([agent(`a`)], 7);
+        resetAgents();
+
+        setAgents([agent(`a`)], 0);
+
+        expect(openTabs()).toEqual([`here`, `a`]);
     });
 });
