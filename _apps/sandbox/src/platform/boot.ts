@@ -22,19 +22,22 @@ import type { Logger } from "pino";
  * for. That also makes the gate independent of construction order: `converged` is read per request, so it
  * cannot matter whether the app was built before or after main() declared the chain. */
 
-export interface BootStepDeclaration {
-    readonly key: string;
+export interface BootStepDeclaration<Key extends string = string> {
+    readonly key: Key;
     readonly label: string;
 }
 
-export interface BootTracker {
+// `Key` is how a caller that knows its whole chain up front (main.ts) gets the declaration checked by tsc
+// instead of by the throw below. Nothing forces it — a tracker with no chain (tests, the preview) stays on the
+// `string` default.
+export interface BootTracker<Key extends string = string> {
     // Resolves when the chain has converged. The data routes await this; /health and /events never do.
     readonly converged: Promise<void>;
     // Declare the chain, in the order it runs, and close the gate behind it.
-    declare(steps: readonly BootStepDeclaration[]): void;
+    declare(steps: readonly BootStepDeclaration<Key>[]): void;
     // Run one declared step, recording its state and elapsed time. Returns whatever `run` returns; a rejection
     // marks the step failed and propagates, so a caller's own catch still decides what a failure costs.
-    step<T>(key: string, run: () => Promise<T>): Promise<T>;
+    step<T>(key: Key, run: () => Promise<T>): Promise<T>;
     // Open the gate: `converged` resolves and the progress reads ready.
     finish(): void;
     progress(): BootProgress;

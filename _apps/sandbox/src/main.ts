@@ -47,6 +47,7 @@ import { publicRoot } from "./public/public-files.js";
 import { createPublicHandler } from "./public/public-serve.js";
 import { linkClaudeState } from "./sessions/session-store.js";
 import { createAnnouncer } from "./platform/announce.js";
+import type { BootTracker } from "./platform/boot.js";
 import { claimBootMarker } from "./platform/boot-marker.js";
 import { claimContainerHome } from "./platform/home-owner.js";
 import { startLoopWatchdog } from "./platform/loop-watchdog.js";
@@ -72,13 +73,15 @@ import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/work
 // The chain NAMES ITSELF, in the table below. Every awaited step is declared here before any of it runs, so
 // /health and /events can report which one is in flight and how far along the boot is — the browser holds its
 // reads and shows the wait rather than painting an operable workspace over a daemon that answers nothing (see
-// platform/boot.ts). A step added below without an entry here throws on its first run.
+// platform/boot.ts). A step added below without an entry here does not compile: the `boot` alias in main() is
+// narrowed to these keys, so an undeclared one is a type error rather than a throw that strands the gate shut.
 const BOOT_STEPS = [
     { key: "authorizedKeys", label: "Restoring desktop enrollments" },
     { key: "claudeState", label: "Linking conversation state" },
     { key: "sshHosts", label: "Linking ssh hosts" },
     { key: "rootRepo", label: "Preparing the workspace repo" },
     { key: "referenceShelf", label: "Ensuring the reference shelf" },
+    { key: "staleExports", label: "Sweeping interrupted exports" },
     { key: "repoGitDirs", label: "Healing repository git dirs" },
     { key: "agentsRegistry", label: "Loading conversations" },
     { key: "skills", label: "Converging agent skills" },
@@ -282,8 +285,11 @@ const main = async (): Promise<void> => {
 
     // Every awaited step below runs through the tracker: it stamps the step's state and elapsed time, logs the
     // slow ones (a boot that takes minutes has ONE slow step, and until it is named every slow boot reads as
-    // "the daemon is just slow"), and streams the transition to whatever browser is watching.
-    const boot = services.boot;
+    // "the daemon is just slow"), and streams the transition to whatever browser is watching. Narrowed to the
+    // declared keys so the table above is enforced at compile time — a step whose entry someone forgot used to
+    // throw on its first run, which aborts the chain, leaves the gate shut forever and reads to the user as a
+    // browser stuck on the boot screen behind a daemon whose log says only "unhandled rejection".
+    const boot: BootTracker<(typeof BOOT_STEPS)[number]["key"]> = services.boot;
 
     // ~/.ssh and ~/.claude are the CONTAINER's filesystem, shared by every process in it — so the jobs below that
     // converge them onto THIS run's roots (the three steps here, plus the git-access restore further down) run
