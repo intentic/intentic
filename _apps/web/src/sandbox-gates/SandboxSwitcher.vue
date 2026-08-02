@@ -54,9 +54,18 @@ onMounted(() => {
     }
 });
 
-const pick = (id: string): void => {
-    sandbox.select(id);
+/* Switching to a sandbox that has never reported in is not switching to anything: it has no daemon, so the
+ * shell can only paint a connecting gate that cannot resolve. What that row actually is, is an unfinished
+ * setup — so picking it goes back there and resumes it, which is also the only place it can become a
+ * workspace. (The router's requireSetup keeps the same row out of the shell on a cold load; this is the same
+ * rule from inside, for an account that has one working sandbox and one it never started.) */
+const pick = (option: SandboxSummary): void => {
     panel.value?.hide();
+    if (option.lastSeenAt === null) {
+        void router.push({ path: `/setup`, query: { sandbox: option.id } });
+        return;
+    }
+    sandbox.select(option.id);
 };
 
 // The sandbox management hub has no rail tile — this chip is its home (identity → tabbed settings surface), and
@@ -202,7 +211,7 @@ const confirmRemove = async (): Promise<void> => {
                 type="button"
                 class="group flex items-center gap-2.5 rounded-md px-2 py-1 text-left text-sm transition-colors"
                 :class="option.id === sandbox.activeSandboxId.value ? 'bg-primary-600/15' : 'hover:bg-content/5'"
-                @click="pick(option.id)"
+                @click="pick(option)"
             >
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-card text-muted">
                     <img v-if="option.image" :src="option.image" alt="" class="h-full w-full object-cover" />
@@ -217,7 +226,13 @@ const confirmRemove = async (): Promise<void> => {
                     :class="sandbox.reachable.value ? 'bg-success' : 'bg-subtle'"
                     v-tooltip.top="sandbox.reachable.value ? 'online' : 'offline'"
                 ></span>
-                <span v-if="option.role === 'member'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
+                <!-- Says what it is before it is clicked, so the jump back to setup reads as the answer to the
+                     row rather than as the switcher losing its place. Same chrome as "Shared" — both are facts
+                     about the row, not states of the connection (that is the dot above). -->
+                <span v-if="option.lastSeenAt === null" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
+                    >Setup</span
+                >
+                <span v-else-if="option.role === 'member'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
                     >Shared</span
                 >
                 <Icon

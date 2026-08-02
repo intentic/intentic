@@ -144,9 +144,12 @@ const attachedName = computed(() => (name.value.trim() === `` ? derivedName.valu
 
 // Step 1 collapses to a summary once the sandbox exists — its title carries the name — in both lanes: an
 // already-named row is why the attach lane stops asking for a name at all.
+// A resumed sandbox that has ACTUALLY run before is being reconnected; one that was named and never started is
+// just being picked back up, and calling that "Reconnect" claims a history it doesn't have.
+const neverStarted = computed(() => created.value !== null && created.value.lastSeenAt === null);
 const step1Title = computed(() => {
     if (created.value !== null) {
-        return resuming.value && lane.value === `provision` ? `Reconnect "${name.value}"` : `Sandbox: ${name.value}`;
+        return resuming.value && lane.value === `provision` && !neverStarted.value ? `Reconnect "${name.value}"` : `Sandbox: ${name.value}`;
     }
     return lane.value === `attach` ? `Connect your sandbox` : `Name your sandbox`;
 });
@@ -200,13 +203,18 @@ const hasDocker = ref(false);
 const review = ref(false);
 // The filename the review path downloads to — named after what it is, in the folder the user is standing in.
 const SCRIPT_FILE = { unix: `intentic-connect.sh`, windows: `intentic-connect.ps1` } as const;
-// Both switches read as checkboxes, not buttons: each answers a question the sentence beside it asks, and a
-// pressed state is the answer. min-h-7 keeps them thumb-sized without breaking the text row they sit in.
-// The shared min-width is what makes the two rows read as a pair rather than as two ragged sentences: their
-// captions start in the same column at any width where both chips fit on their caption's line.
+// The command's options read as checkboxes, not buttons: each answers a question the caption beside it asks,
+// and a pressed state is the answer. min-h-7 keeps them thumb-sized without breaking the text row they sit in.
+// The shared min-width is what makes the rows read as a group rather than as ragged sentences: their captions
+// start in the same column at any width where every chip fits on its caption's line.
+//
+// MONOCHROME, deliberately. Ticked used to be green, which put a success colour on a card that already spends
+// amber on the stuck-wait, orange on the local-dev note and a status dot on the footer — five hues to say one
+// checkbox is ticked. Green also claims something these do not mean: nothing has succeeded, an option is on.
+// The glyph (check-square vs square) carries the boolean; the chrome only needs to look pressed.
 const chipClass = (on: boolean): string =>
     `inline-flex min-h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-2xs transition-colors md:min-w-[11.5rem] ${
-        on ? `border-success/40 bg-success/10 text-success` : `border-line text-muted hover:border-line-strong hover:text-content`
+        on ? `border-line-strong bg-overlay text-content` : `border-line text-muted hover:border-line-strong hover:text-content`
     }`;
 
 // The chosen target once its inputs are complete — what the setup code is minted for; undefined keeps it locked.
@@ -645,14 +653,30 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
     };
 });
 
-// When the gate's "Open setup" carried a sandbox id, resume setup for that sandbox (name + steps 2-4) instead
-// of a blank create form. Owned only — a member can't mint someone else's sandbox, so their id falls through
-// to create. The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained.
+/* Which sandbox this page is setting up. Two ways in:
+ *   • an id in the URL — the gate's "Open setup", the switcher's unfinished row, requireSetup's redirect
+ *   • nothing in the URL, and the account has NO working sandbox but does own an unfinished one
+ *
+ * The second exists because leaving mid-setup is normal — you name it, mean to paste the command on the other
+ * machine, and close the tab. Coming back to a blank "Name your sandbox" is worse than useless there: it hides
+ * the sandbox you already made, and on the free plan (one sandbox) the Create it offers can only 402 against
+ * that very row. So an account whose only sandbox is unfinished resumes it wherever it enters from.
+ *
+ * Gated on there being no connected sandbox anywhere, which is what keeps the switcher's "Add sandbox" honest
+ * — that button exists to make a SECOND sandbox, and it is only reachable from a shell that already has a
+ * working first one.
+ *
+ * Owned only — a member can't mint someone else's setup code, so their id falls through to the create form.
+ * The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained. */
 onMounted(async () => {
     void refreshPlan(); // so atLimit is accurate even on a direct navigation to /setup
     const loaded = await sandbox.list();
     const requested = route.query[`sandbox`];
-    const found = typeof requested === `string` ? loaded.find((entry) => entry.id === requested) : undefined;
+    const named = typeof requested === `string` ? loaded.find((entry) => entry.id === requested) : undefined;
+    const unfinished = loaded.some((entry) => entry.lastSeenAt !== null)
+        ? undefined
+        : loaded.find((entry) => entry.role === `owner` && entry.lastSeenAt === null);
+    const found = named ?? unfinished;
     if (found?.role !== `owner`) {
         return;
     }
@@ -685,6 +709,30 @@ const startFresh = (): void => {
     attachToken.value = ``;
     attachOutcome.value = undefined;
     void router.replace({ path: `/setup` }); // drop ?sandbox= so a reload doesn't re-resume
+};
+
+/* Delete the resumed sandbox and start over. Only offered for one that NEVER started, and only at the plan
+ * cap — which together are the one situation where `startFresh` alone is a dead end: it drops to a create form
+ * whose Create can only 402, because the row occupying the slot is the one being abandoned. There is nothing
+ * to lose in this case by construction (no daemon ever ran, so no workspace exists), and it is the only way
+ * back to a different name now that a never-started sandbox no longer opens the shell — where the switcher's
+ * trash icon used to be the escape hatch. */
+const discarding = ref(false);
+const discard = async (): Promise<void> => {
+    const abandoned = created.value;
+    if (abandoned === null || discarding.value) {
+        return;
+    }
+    discarding.value = true;
+    try {
+        await sandbox.remove(abandoned.id);
+        startFresh();
+        void refreshPlan(); // the freed slot is what makes the create form usable again
+    } catch (err) {
+        error.value = errorMessage(err, `Could not remove this sandbox.`);
+    } finally {
+        discarding.value = false;
+    }
 };
 
 // Watch the registry while we sit on /setup; the moment the daemon reports in, open the workspace.
@@ -990,13 +1038,25 @@ watch(commandReady, (ready) => {
                         </template>
                         <template v-else>
                             <template v-if="resuming">
+                                <!-- Two different histories, and only one of them is a reconnect. A sandbox that
+                                     ran before was torn down locally; one that was named and never started is
+                                     simply where the user left off — telling them a container was cleared would
+                                     be describing a machine that never existed. -->
                                 <p class="text-xs text-muted">
-                                    This sandbox still exists on the platform — the CLI cleanup only cleared its local container. Reconnect it below
-                                    to start a fresh daemon<template v-if="!atLimit">, or create a new sandbox instead</template>.
+                                    <template v-if="neverStarted">
+                                        You named this one but never started it — pick up where you left off<template v-if="!atLimit">
+                                            , or create a new sandbox instead</template
+                                        >.
+                                    </template>
+                                    <template v-else>
+                                        This sandbox still exists on the platform — the CLI cleanup only cleared its local container. Reconnect it
+                                        below to start a fresh daemon<template v-if="!atLimit">, or create a new sandbox instead</template>.
+                                    </template>
                                 </p>
-                                <!-- At the cap there is no second sandbox to offer, and the paragraph above already
-                             said so — so the alternative simply isn't there, rather than becoming a sales
-                             pitch aimed at someone in the middle of reconnecting a machine. -->
+                                <!-- At the cap there is no second sandbox to offer, so `startFresh` (which drops
+                                     to a blank create form) would only lead to a 402. Removing this one is the
+                                     move that actually frees the slot, and it is safe precisely here: a sandbox
+                                     that never started has no workspace to lose. -->
                                 <button
                                     v-if="!atLimit"
                                     type="button"
@@ -1004,6 +1064,15 @@ watch(commandReady, (ready) => {
                                     @click="startFresh"
                                 >
                                     Not this one? Create a new sandbox instead
+                                </button>
+                                <button
+                                    v-else-if="neverStarted"
+                                    type="button"
+                                    :class="cmp.linkButton(`text-muted underline hover:text-content`)"
+                                    :disabled="discarding"
+                                    @click="discard"
+                                >
+                                    {{ discarding ? `Removing…` : `Not this one? Remove it and start over` }}
                                 </button>
                             </template>
                             <!-- Offered from EVERY created state, not just a resumed one: the realisation that this

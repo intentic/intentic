@@ -140,6 +140,22 @@ const attempt = async (): Promise<void> => {
         signalConnection({ kind: `failed`, failure: classifyFailure({ unaddressed: true, message: `No sandbox is selected.` }) });
         return;
     }
+    /* Still no address after the refresh — so say that, BEFORE signalling `connect`. Reaching the try below
+     * without one is not an attempt that happens to fail: `sandboxRpc` cannot build a URL, and the first thing
+     * it does on the way to finding that out is ask for a bearer, which raises the browser→sandbox Google
+     * sign-in gate. So a sandbox that was named and never started asked the user to sign in to reach it, and
+     * behind that prompt the connecting gate read "Your sandbox reported in" — the optimistic copy the
+     * `connect` signal paints, about a machine that has never spoken to us.
+     *
+     * `unaddressed` is exactly this condition and already has honest words for it ("isn't connected yet —
+     * finish setup"), with setup as its offered action. It just has to be reached without pretending first. */
+    if (daemonUrl.value === undefined) {
+        signalConnection({
+            kind: `failed`,
+            failure: classifyFailure({ unaddressed: true, message: `This sandbox has never reported an address.` }),
+        });
+        return;
+    }
     // Qualify the fastest address for this sandbox IN THE BACKGROUND — never awaited, so a hung loopback
     // probe cannot delay the connect. The attempt below opens against the tunnel (or an already-resolved
     // shortcut); if the probe qualifies mid-stream the watch at the bottom retargets us onto it.

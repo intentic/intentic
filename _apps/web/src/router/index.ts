@@ -3,6 +3,7 @@ import { createRouter, createWebHistory, type RouteLocationRaw, type RouteRecord
 import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { setupRedirect } from "./setupGate";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -24,13 +25,10 @@ const requireAuth = async (): Promise<boolean | RouteLocationRaw> => {
     return true;
 };
 
-// Gate the workspace shell on having at least one sandbox (mirrors requireAuth). Zero sandboxes → onboarding at
-// /setup. With one or more, the shell renders; its switcher handles an unreachable active sandbox, so we no
-// longer bounce the whole shell to /setup on a dead daemon.
+// Gate the workspace shell on having a workspace to open — setupGate.ts owns the predicate and the reasoning.
 const requireSetup = async (): Promise<boolean | RouteLocationRaw> => {
     const { list } = useSandbox();
-    const sandboxes = await list();
-    return sandboxes.length === 0 ? `/setup` : true;
+    return setupRedirect(await list()) ?? true;
 };
 
 // Chat, Menu, and Terminal are full-screen tabs only on the mobile shell — the desktop shell docks chat and
