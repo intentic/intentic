@@ -238,7 +238,7 @@ const uncapitalized = (text: string): string => {
 /* A title read as one commit type plus one subject fragment. Undefined for a title with nothing in it; a
  * present reading with `type: undefined` for one whose kind could not be read (no prefix, no tag, no known
  * verb). EXPORTED for the second reader of the same convention: the session cards colour their identity tile
- * by this type (categoryHue), so the commit box and the tile can never read one title as two kinds of work. */
+ * by this type (sessionCategory), so the commit box and the tile can never read one title as two kinds of work. */
 export const readTitle = (title: string): { readonly type: string | undefined; readonly subject: string } | undefined => {
     // A trailing full stop belongs to a sentence, not a subject; a question mark carries the tone the title
     // meant and stays.

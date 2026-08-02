@@ -14,7 +14,8 @@ import {
     turnInFlight,
     unreadBadge,
 } from "../composables/agents/agentStatus";
-import { categoryHue, categoryLabel } from "../composables/categoryHue";
+import { sessionCategory } from "../composables/sessionCategory";
+import IdentityTile from "../components/IdentityTile.vue";
 import { markSegments, useAgentFilter } from "../composables/agents/useAgentFilter";
 import { type FleetAgent, useAgents } from "../composables/agents/useAgents";
 import FilterField from "../components/FilterField.vue";
@@ -29,7 +30,6 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { commandShortcut } from "../composables/commands/useCommands";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
-import ProviderLogo from "./ProviderLogo.vue";
 import { providerLabel } from "@intentic/sandbox-contract";
 
 /* THE OPEN CHATS, as the fleet board's three lanes in miniature — the switcher for every conversation this
@@ -44,12 +44,12 @@ import { providerLabel } from "@intentic/sandbox-contract";
  * two different products. What "in miniature" costs is only the facts that need width the rail lacks (the
  * branch, the token counters); it does not license a second visual grammar. The card's rows, top to bottom:
  *
- *   · the LEADING mark is the chat's IDENTITY TILE — the provider glyph on a tint of the chat's CATEGORY
- *     hue (categoryHue: the title's action word read as a kind of work — audits blue, redesigns purple, new
- *     work green, fixes red). One glyph slot answers two questions: whose runtime (the glyph), and what KIND
- *     of session (the colour). It hashed the chat id into a hue once, worn solid — identity, but identity
- *     nothing could be read from, and a lane of it was the loudest thing on screen. A chat whose title reads
- *     as nothing wears neutral chrome. Always present, so every title starts at one x.
+ *   · the LEADING mark is the chat's IDENTITY TILE (IdentityTile) — the kind-of-work glyph on a tint of the
+ *     chat's CATEGORY hue (sessionCategory: the title's action word read as a Conventional Commit type —
+ *     audits a blue magnifier, redesigns purple arrows, new work a green plus, fixes a red wrench). Shape and
+ *     colour carry the same fact twice, so the tile reads without a legend. A chat whose title reads as
+ *     nothing wears the provider mark on neutral chrome instead — for a draft, "whose runtime" is the most a
+ *     tile can truthfully say. Always present, so every title starts at one x.
  *   · the TRAILING glyph is the status, in a fixed slot at the end of the title row, with the × taking the
  *     slot beside it on hover (AgentCard's hover-action pattern).
  *   · the title is the card's one piece of CONTENT and takes the content tier (text-xs, semibold) over a
@@ -177,21 +177,16 @@ const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: str
     return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
 };
 
-// The model, as the label the pickers use — worth a word on the meta line the moment a fleet stops being one
-// model deep (an Opus session next to a Codex one is a real difference in what the card will cost and how it
-// behaves). No provider fallback here: the tile's glyph already says who runs it, and repeating that in text
-// would put the same word on every card of a one-provider fleet.
-const modelOf = (agent: FleetAgent): string | undefined => (agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : undefined);
-
-/* The identity tile's skin, ready to `v-bind` (the statusOf pattern — one derivation per render, not one per
- * bound attribute). Category-tinted when the title reads as a kind of work (categoryHue), neutral chrome —
- * Avatar's own — when it doesn't: a hue that means nothing is the flashiness this replaced. */
-const tileOf = (title: string | undefined): { class: string; style?: Record<string, number> } => {
-    const hue = categoryHue(title);
-    if (hue === undefined) {
-        return { class: `border border-line bg-content/5 text-muted` };
+/* The model, as the label the pickers use — worth a word on the meta line the moment a fleet stops being one
+ * model deep (an Opus session next to a Codex one is a real difference in what the card will cost and how it
+ * behaves). The card says WHO RUNS IT exactly once — AgentCard's rule: while the tile wears the provider mark
+ * (no category yet) this line needs no floor, and once the category glyph takes the tile, a card with no
+ * recorded model says the provider here instead. */
+const modelOf = (agent: FleetAgent): string | undefined => {
+    if (agent.model !== undefined) {
+        return modelLabelFor(agent.provider, agent.model);
     }
-    return { class: `category-tile`, style: { "--tile-hue": hue } };
+    return sessionCategory(agent.title) === undefined ? undefined : providerLabel(agent.provider);
 };
 
 /* HAS THE CARD'S SECOND LINE ANYTHING TO SAY? A fresh draft has no numbers, no age, no marks and no model, so
@@ -225,7 +220,7 @@ const noteOf = (agent: FleetAgent | undefined): string | undefined => {
         return undefined;
     }
     const model = agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : providerLabel(agent.provider);
-    return [categoryLabel(agent.title), model, activityLine(agent)].filter((part) => part !== undefined && part !== ``).join(` · `);
+    return [sessionCategory(agent.title)?.type, model, activityLine(agent)].filter((part) => part !== undefined && part !== ``).join(` · `);
 };
 
 /* What the query found that ISN'T open in this window — the whole point of the filter reaching past its own
@@ -440,15 +435,13 @@ const closeTab = (event: Event, id: string): void => {
                             @mouseleave="hidePreview"
                         >
                             <span class="flex w-full min-w-0 items-start gap-2">
-                                <!-- The IDENTITY TILE leads: the provider glyph on a tint of the chat's
-                                     category hue (see the header comment). Sized to the title's first line so
-                                     a two-line title hangs off it, not around it. -->
-                                <span
-                                    class="-mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md"
-                                    v-bind="tileOf(tabLabel(c))"
-                                >
-                                    <ProviderLogo :provider="agent?.provider ?? c.provider.value" class="text-2xs" />
-                                </span>
+                                <!-- The IDENTITY TILE leads (see the header comment). Sized to the title's
+                                     first line so a two-line title hangs off it, not around it. -->
+                                <IdentityTile
+                                    :title="tabLabel(c)"
+                                    :provider="agent?.provider ?? c.provider.value"
+                                    class="-mt-px h-[18px] w-[18px] text-2xs"
+                                />
                                 <!-- Two lines before the clamp — a card has the width for most titles whole.
                                      The content tier over a card of meta: this is the one line being READ.
                                      Neutral, always: the status colour lives in the glyph beside it, and a
@@ -609,9 +602,7 @@ const closeTab = (event: Event, id: string): void => {
                             <!-- The same identity tile as the lanes above: a hit here is a destination, and
                                  the category tint says what kind of work it will turn out to be. Only the
                                  TEXT ink drops a step, since nothing here is a session you are currently in. -->
-                            <span class="-mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md" v-bind="tileOf(agent.title)">
-                                <ProviderLogo :provider="agent.provider" class="text-2xs" />
-                            </span>
+                            <IdentityTile :title="agent.title" :provider="agent.provider" class="-mt-px h-[18px] w-[18px] text-2xs" />
                             <span class="line-clamp-2 min-w-0 flex-1 text-xs font-medium leading-4 text-muted">
                                 <span
                                     v-for="(run, at) in markSegments(agent.title ?? 'Untitled agent', needle)"

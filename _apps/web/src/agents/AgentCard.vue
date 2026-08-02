@@ -2,7 +2,6 @@
 import { cmp, formatTokens, ProgressRing, useDevice } from "@intentic-app/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import ProviderLogo from "../chat/ProviderLogo.vue";
 import OriginMark from "../components/OriginMark.vue";
 import { dropActionFor, type PendingAction } from "../composables/agents/laneDrop";
 import {
@@ -19,7 +18,9 @@ import {
     turnInFlight,
     unreadBadge,
 } from "../composables/agents/agentStatus";
-import { categoryHue, categoryLabel } from "../composables/categoryHue";
+import { providerLabel } from "@intentic/sandbox-contract";
+import { sessionCategory } from "../composables/sessionCategory";
+import IdentityTile from "../components/IdentityTile.vue";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { markSegments } from "../composables/agents/useAgentFilter";
 import { canArchive, type FleetAgent } from "../composables/agents/useAgents";
@@ -57,9 +58,9 @@ const emit = defineEmits<{ open: []; review: []; resolve: []; land: []; archive:
 
 const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
-// The identity tile's category hue (categoryHue over the title), undefined for a title that reads as nothing
-// — one computed, because the tile binds it three ways (class, style, tooltip).
-const tileHue = computed(() => categoryHue(props.agent.title));
+// The identity tile's category (sessionCategory over the title), undefined for a title that reads as nothing
+// — read here as well as inside IdentityTile because the tooltip (the colour's legend) is this card's to say.
+const category = computed(() => sessionCategory(props.agent.title));
 const router = useRouter();
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
@@ -108,7 +109,15 @@ const landing = computed(() => props.pending === `land`);
 const handingOver = computed(() => props.pending === `resolve`);
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
-const model = computed(() => (props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined));
+/* The card says WHO RUNS IT exactly once. While the tile wears the provider mark (no category yet), this
+ * line needs no floor; once the category glyph takes the tile, a card with no recorded model would say the
+ * provider nowhere — so the provider lands here, and only then. */
+const model = computed(() => {
+    if (props.agent.model !== undefined) {
+        return modelLabelFor(props.agent.provider, props.agent.model);
+    }
+    return category.value === undefined ? undefined : providerLabel(props.agent.provider);
+});
 const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
 // The title with the filter's term marked, and one plain run when no filter is on.
 const titleRuns = computed(() => markSegments(displayTitle.value, props.query?.toLowerCase() ?? ``));
@@ -187,21 +196,13 @@ const grab = (event: PointerEvent): void => {
         @keydown.space.self.prevent="openCard"
     >
         <div class="flex items-center gap-2">
-            <!-- The IDENTITY TILE — the provider glyph on a tint of this agent's CATEGORY hue (categoryHue:
-                 the title's action word read as a kind of work — audits blue, redesigns purple, new work
-                 green, fixes red). One glyph slot answers whose runtime AND what kind of session; the tint is
-                 also the cross-reference to the same session's card on the chat rail. It hashed the id into a
-                 hue once, worn solid — colour that could only be re-found, never read, and a board of it was
-                 louder than anything the cards actually said. The tooltip is the legend; an unreadable title
-                 wears neutral chrome. -->
-            <span
-                v-tooltip.top="tileHue === undefined ? undefined : categoryLabel(agent.title)"
-                class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
-                :class="tileHue === undefined ? 'border border-line bg-content/5 text-muted' : 'category-tile'"
-                :style="tileHue === undefined ? undefined : { '--tile-hue': tileHue }"
-            >
-                <ProviderLogo :provider="agent.provider" class="text-xs" />
-            </span>
+            <!-- The IDENTITY TILE (IdentityTile) — the kind-of-work glyph on a tint of this agent's CATEGORY
+                 hue (sessionCategory: the title's action word read as a Conventional Commit type — audits a
+                 blue magnifier, redesigns purple arrows, new work a green plus, fixes a red wrench). Shape
+                 and colour say the same thing twice, and the tint is also the cross-reference to the same
+                 session's card on the chat rail. The tooltip is the legend; an unreadable title wears the
+                 provider mark on neutral chrome instead. -->
+            <IdentityTile v-tooltip.top="category?.type" :title="agent.title" :provider="agent.provider" class="h-5 w-5 text-xs" />
             <input
                 v-if="edit.editing"
                 v-model="edit.draft"

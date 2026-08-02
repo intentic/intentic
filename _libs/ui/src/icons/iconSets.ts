@@ -23,6 +23,7 @@ export type IconName =
     | "backward"
     | "bars"
     | "bolt"
+    | "book"
     | "box"
     | "check"
     | "check-circle"
@@ -114,7 +115,8 @@ export type IconName =
     | "wave-pulse"
     | "wifi"
     | "window-maximize"
-    | "window-minimize";
+    | "window-minimize"
+    | "wrench";
 
 export type IconSet = "phosphor" | "solar" | "remix" | "hugeicons" | "primeicons";
 
@@ -132,6 +134,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "arrows-h": "ph:arrows-horizontal",
         bars: "ph:list",
         bolt: "ph:lightning",
+        book: "ph:book-open",
         box: "ph:package",
         check: "ph:check",
         "check-circle": "ph:check-circle",
@@ -225,6 +228,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         wifi: "ph:wifi-high",
         "window-maximize": "ph:arrows-out",
         "window-minimize": "ph:arrows-in",
+        wrench: "ph:pipe-wrench",
     },
     solar: {
         "align-left": "solar:align-left-linear",
@@ -237,6 +241,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "arrows-h": "solar:transfer-horizontal-linear",
         bars: "solar:hamburger-menu-linear",
         bolt: "solar:bolt-linear",
+        book: "solar:book-2-linear",
         box: "solar:box-linear",
         check: "solar:check-read-linear",
         "check-circle": "solar:check-circle-linear",
@@ -331,6 +336,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         wifi: "solar:wi-fi-router-linear",
         "window-maximize": "solar:maximize-linear",
         "window-minimize": "solar:minimize-square-linear",
+        wrench: "solar:sledgehammer-linear",
     },
     remix: {
         "align-left": "ri:align-left",
@@ -343,6 +349,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "arrows-h": "ri:arrow-left-right-line",
         bars: "ri:menu-line",
         bolt: "ri:flashlight-line",
+        book: "ri:book-open-line",
         box: "ri:box-3-line",
         check: "ri:check-line",
         "check-circle": "ri:checkbox-circle-line",
@@ -436,6 +443,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         wifi: "ri:wifi-line",
         "window-maximize": "ri:fullscreen-line",
         "window-minimize": "ri:fullscreen-exit-line",
+        wrench: "ri:wrench-line",
     },
     hugeicons: {
         "align-left": "hugeicons:text-align-left",
@@ -448,6 +456,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "arrows-h": "hugeicons:arrow-left-right",
         bars: "hugeicons:menu-01",
         bolt: "hugeicons:energy",
+        book: "hugeicons:book-open-01",
         box: "hugeicons:package",
         check: "hugeicons:tick-02",
         "check-circle": "hugeicons:checkmark-circle-02",
@@ -541,6 +550,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         wifi: "hugeicons:wifi-01",
         "window-maximize": "hugeicons:maximize-01",
         "window-minimize": "hugeicons:minimize-02",
+        wrench: "hugeicons:wrench-01",
     },
     primeicons: {
         "align-left": "prime:align-left",
@@ -553,6 +563,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "arrows-h": "prime:arrows-h",
         bars: "prime:bars",
         bolt: "prime:bolt",
+        book: "prime:book",
         box: "prime:box",
         check: "prime:check",
         "check-circle": "prime:check-circle",
@@ -646,5 +657,6 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         wifi: "prime:wifi",
         "window-maximize": "prime:window-maximize",
         "window-minimize": "prime:window-minimize",
+        wrench: "prime:wrench",
     },
 };
