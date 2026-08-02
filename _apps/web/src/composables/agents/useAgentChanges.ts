@@ -138,12 +138,16 @@ export function useAgentChanges(agentId: Ref<string>) {
     const viewed = computed<ReadonlySet<string>>(() => viewedByAgent.value[agentId.value] ?? NONE);
     // Counted over the CURRENT rows, so a file the agent has since reverted stops inflating the progress.
     const viewedCount = computed(() => files.value.filter((file) => viewed.value.has(file.key)).length);
-    const setViewed = (key: string, on: boolean): void => {
+    // A SET of keys, not one: the panel ticks whole headings off (a repo, a package), and a per-key setter made
+    // that N set copies and N reactive writes for one gesture — every row of the list repainting N times.
+    const setViewed = (keys: readonly string[], on: boolean): void => {
         const next = new Set(viewed.value);
-        if (on) {
-            next.add(key);
-        } else {
-            next.delete(key);
+        for (const key of keys) {
+            if (on) {
+                next.add(key);
+            } else {
+                next.delete(key);
+            }
         }
         viewedByAgent.value = { ...viewedByAgent.value, [agentId.value]: next };
     };

@@ -19,6 +19,8 @@ import { moduleGroups, type ModuleGroup } from "../pages/workspace/changeModules
 import { useChangeGrouping } from "../composables/workspace/useChangeGrouping";
 import { useModules } from "../composables/workspace/useModules";
 import AgentConflictReport from "./AgentConflictReport.vue";
+import ReviewGroupCheck from "./ReviewGroupCheck.vue";
+import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "../composables/agents/reviewGroupPass";
 import { basename, parentDir } from "@intentic-app/ui/path";
 import ChangeStatusMark from "../components/ChangeStatusMark.vue";
 
@@ -43,14 +45,16 @@ import ChangeStatusMark from "../components/ChangeStatusMark.vue";
  *     left, and the Segmented filters down to it.
  *   - A REVIEW HAS PROGRESS. Files can be ticked off as you look at them (viewed, GitHub-style), the toolbar
  *     shows the count, and `v` ticks the current file and advances — so a 30-file scan has a place to stop and
- *     resume rather than being a wall of paths.
+ *     resume rather than being a wall of paths. Whole HEADINGS tick too (ReviewGroupCheck, `⇧V`): the mark
+ *     tracks the reader's attention rather than gating anything, and attention is allocated by package.
  *   - A CONFLICT IS A PROPERTY OF FILES. When a land refuses, the report above says how many refused and why;
  *     the LIST says which. Every blocked row carries its cause (REASON_COPY — the report's own vocabulary and
  *     the report's own glyph), each repo heading carries its count so a collapsed group cannot hide one, and
  *     the filter narrows to exactly them. Without this the two halves of a conflict lived apart: a paragraph
  *     naming three paths, above thirty rows that all looked alike, and the user matching strings by eye.
  *
- * Keyboard, while focus isn't in a text field or inside Monaco: ↑/↓ or j/k move, v marks viewed and advances.
+ * Keyboard, while focus isn't in a text field or inside Monaco: ↑/↓ or j/k move, v marks viewed and advances,
+ * ⇧V marks the current heading's rows and advances past them.
  * Land/discard stay gated on the turn: both are refused daemon-side while it streams (CONFLICT), so they are
  * disabled up front when this browser is the one streaming. */
 
@@ -263,13 +267,55 @@ const move = (delta: number): void => {
 
 // --- viewed pass ---------------------------------------------------------------------------------------
 const isViewed = (file: AgentReviewFile): boolean => changes.viewed.value.has(file.key);
-const toggleViewed = (file: AgentReviewFile): void => changes.setViewed(file.key, !isViewed(file));
+const toggleViewed = (file: AgentReviewFile): void => changes.setViewed([file.key], !isViewed(file));
 // The scanning loop: tick this file off and drop onto the next one, so a pass is one key per file.
 const viewAndAdvance = (): void => {
     const file = selected.value;
     if (file !== undefined) {
-        changes.setViewed(file.key, true);
+        changes.setViewed([file.key], true);
         move(1);
+    }
+};
+
+/* THE SAME TICK AT A HEADING'S SCOPE — the rules are reviewGroupPass, which states why each one is what it is;
+ * what the panel supplies is the SCOPE. Every call below passes the rows the heading is currently drawing:
+ * filtered, so standing in Code cannot tick a package's tests off, and grouped, so with module grouping on the
+ * unit is the package the user means by "this one's fine" rather than the whole repo. */
+const groupProgress = (rows: readonly AgentReviewFile[]): number => viewedIn(rows, changes.viewed.value);
+const groupLabel = (rows: readonly AgentReviewFile[]): string => groupCountLabel(rows, changes.viewed.value);
+const toggleGroupViewed = (rows: readonly AgentReviewFile[]): void =>
+    changes.setViewed(
+        rows.map((file) => file.key),
+        groupPassOn(rows, changes.viewed.value),
+    );
+
+// The innermost group the selection sits in — the module bucket when the list is grouped by module, the repo's
+// single bucket when it isn't. "This whole package is fine" is a judgement about the smaller of the two.
+const selectedGroup = computed<readonly AgentReviewFile[]>(() => {
+    const file = selected.value;
+    if (file === undefined) {
+        return [];
+    }
+    return viewOf(file.repo).buckets.find((bucket) => bucket.rows.some((row) => row.key === file.key))?.rows ?? [];
+});
+
+/* ⇧V — the keyboard peer of the heading's tick: accept the rest of this group and land on the next one, so a
+ * pass over packages is one key per package the way a pass over files is one key per file. Without it the
+ * bulk tick is a mouse-only gesture in a panel whose whole scan (j/k/v) is built for the keyboard. */
+const viewGroupAndAdvance = (): void => {
+    const rows = selectedGroup.value;
+    if (rows.length === 0) {
+        return;
+    }
+    // Always ON, unlike the heading's click: this is the scanning loop, and a key that accepts a group must not
+    // silently un-accept the one group you had already finished.
+    changes.setViewed(
+        rows.map((file) => file.key),
+        true,
+    );
+    const next = rowAfterGroup(visibleRows.value, rows);
+    if (next !== undefined) {
+        select(next);
     }
 };
 
@@ -296,6 +342,11 @@ const onKey = (event: KeyboardEvent): void => {
     if (event.key === `v`) {
         event.preventDefault();
         viewAndAdvance();
+        return;
+    }
+    if (event.key === `V`) {
+        event.preventDefault();
+        viewGroupAndAdvance();
     }
 };
 onMounted(() => window.addEventListener(`keydown`, onKey));
@@ -515,39 +566,62 @@ const endResize = (event: PointerEvent): void => {
 
                 <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
                     <div v-for="group in groups" :key="group.repo">
-                        <!-- Sticky, because the repo a path belongs to is the one thing scrolling takes away. -->
-                        <button
-                            type="button"
-                            class="sticky top-0 z-10 flex w-full items-center gap-1.5 border-b border-line/60 bg-canvas px-2 py-1 text-left transition-colors hover:bg-overlay"
-                            @click="toggleGroup(group.repo)"
+                        <!-- Sticky, because the repo a path belongs to is the one thing scrolling takes away.
+                             The heading is a row of two controls, not one: collapsing it and ticking it off are
+                             different jobs, and a tick nested inside the collapse target would be a button
+                             inside a button. The tick sits in the same right-hand column as the rows' own, so
+                             what the pass has finished reads as one rail down the edge of the list. -->
+                        <div
+                            class="group/head sticky top-0 z-10 flex w-full items-center border-b border-line/60 bg-canvas pr-1 transition-colors hover:bg-overlay"
                         >
-                            <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
-                            <span class="min-w-0 truncate text-2xs font-semibold uppercase tracking-wide text-muted">{{ group.repo }}</span>
-                            <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ group.files.length }}</span>
-                            <span
-                                v-if="group.blocked > 0"
-                                class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1.5 py-px text-2xs font-medium text-warning"
+                            <button
+                                type="button"
+                                class="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left"
+                                @click="toggleGroup(group.repo)"
                             >
-                                <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
-                            </span>
-                            <span class="flex-1"></span>
-                            <DiffStat :additions="group.additions" :deletions="group.deletions" />
-                        </button>
+                                <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
+                                <span class="min-w-0 truncate text-2xs font-semibold uppercase tracking-wide text-muted">{{ group.repo }}</span>
+                                <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ groupLabel(group.files) }}</span>
+                                <span
+                                    v-if="group.blocked > 0"
+                                    class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1.5 py-px text-2xs font-medium text-warning"
+                                >
+                                    <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
+                                </span>
+                                <span class="flex-1"></span>
+                                <DiffStat :additions="group.additions" :deletions="group.deletions" />
+                            </button>
+                            <ReviewGroupCheck
+                                :name="group.repo"
+                                :total="group.files.length"
+                                :viewed="groupProgress(group.files)"
+                                @toggle="toggleGroupViewed(group.files)"
+                            />
+                        </div>
 
                         <template v-if="!collapsed.has(group.repo)">
                             <template v-for="bucket in viewOf(group.repo).buckets" :key="`${group.repo}/${bucket.key}`">
-                                <!-- The module its run of rows belongs to, said once — a label, not a control: the
-                                 actions in this panel are the review's (viewed, land, open) and none of them
-                                 has a module-sized scope. -->
+                                <!-- The module its run of rows belongs to, said once — and the one action in
+                                 this panel that has a module-sized scope. Land is atomic and open is a single
+                                 file, but VIEWED is the reader's own attention, and attention is allocated by
+                                 package: "I read three of these, the rest of the package is fine" is the
+                                 judgement this heading exists to make sayable. -->
                                 <div
                                     v-if="viewOf(group.repo).named"
-                                    class="flex items-center gap-1.5 border-b border-line/40 bg-canvas/60 px-2 py-0.5"
+                                    class="group/head flex items-center gap-1.5 border-b border-line/40 bg-canvas/60 py-0.5 pl-2 pr-1"
                                 >
                                     <Icon :name="bucket.packaged ? 'box' : 'folder'" class="shrink-0 text-2xs text-subtle" />
                                     <span class="min-w-0 truncate text-2xs font-medium text-muted" v-tooltip.right.overflow="bucket.name">{{
                                         bucket.name
                                     }}</span>
-                                    <span class="shrink-0 text-2xs text-subtle">{{ bucket.rows.length }}</span>
+                                    <span class="shrink-0 text-2xs text-subtle">{{ groupLabel(bucket.rows) }}</span>
+                                    <span class="flex-1"></span>
+                                    <ReviewGroupCheck
+                                        :name="bucket.name"
+                                        :total="bucket.rows.length"
+                                        :viewed="groupProgress(bucket.rows)"
+                                        @toggle="toggleGroupViewed(bucket.rows)"
+                                    />
                                 </div>
                                 <div
                                     v-for="file in bucket.rows"
@@ -695,7 +769,11 @@ const endResize = (event: PointerEvent): void => {
                                 type="button"
                                 :class="[ICON_BUTTON, isViewed(selected) ? 'text-success' : '']"
                                 @click="toggleViewed(selected)"
-                                v-tooltip.bottom="isViewed(selected) ? 'Reviewed — click to unmark (v)' : 'Mark reviewed and go to the next file (v)'"
+                                v-tooltip.bottom="
+                                    isViewed(selected)
+                                        ? 'Reviewed — click to unmark (v)'
+                                        : 'Mark reviewed and go to the next file (v) · ⇧V for the rest of this group'
+                                "
                                 :aria-label="`Mark ${selected.label} as reviewed`"
                             >
                                 <Icon :name="isViewed(selected) ? 'check-square' : 'check'" class="text-2xs" />
