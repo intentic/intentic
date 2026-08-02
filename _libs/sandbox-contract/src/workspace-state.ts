@@ -1,4 +1,5 @@
 import type { FileContribution } from "@intentic/extension-api";
+import type { StateFile } from "./state-portability.js";
 
 /* WHICH WORKSPACE FILE BACKS WHICH CORE VIEW — one declaration, read by both sides of the wire.
  *
@@ -29,16 +30,18 @@ import type { FileContribution } from "@intentic/extension-api";
  * by the automations extension, because the extension had no way to say so itself. A key belongs to whoever
  * queries it. */
 
-// A core entry is an extension's `contributes.files` entry plus the one thing only the core list needs: the
-// right to declare NO invalidations, which for a daemon-owned file is the answer more often than not.
-export interface WorkspaceStateFile {
-    /* Workspace-root-relative, forward-slash — the space `workspaceChanged` paths arrive in. Matching is by
-     * PREFIX, which lets one entry cover three shapes without a second matching rule:
-     *   - an exact file      `.intentic/settings.json`
-     *   - a directory        `.intentic/drafts/`     (one file per draft)
-     *   - a name family      `.intentic/environment.` (…Dockerfile, .custom.Dockerfile, .approved.Dockerfile)
-     * A directory entry keeps its trailing slash so it can never prefix-match a sibling file. */
-    readonly path: string;
+/* A core entry is an extension's `contributes.files` entry plus the two things only the core list needs: the
+ * right to declare NO invalidations (for a daemon-owned file, the answer more often than not), and a
+ * portability class, because the daemon's own state is what an environment export has to reason about.
+ *
+ * `path` is workspace-root-relative, forward-slash — the space `workspaceChanged` paths arrive in. Matching is
+ * by PREFIX, which lets one entry cover three shapes without a second matching rule:
+ *   - an exact file      `.intentic/settings.json`
+ *   - a directory        `.intentic/drafts/`     (one file per draft)
+ *   - a name family      `.intentic/environment.custom.` (…Dockerfile and anything later named beside it)
+ * A directory entry keeps its trailing slash so it can never prefix-match a sibling file. Entries may NEST —
+ * see stateFileFor, which resolves the longest match rather than the first. */
+export interface WorkspaceStateFile extends StateFile {
     /* The browser query keys this file's contents feed. EMPTY is a real answer, not a gap — a file the browser
      * renders nothing from, or one deliberately kept off the push path — and `why` says which. Never a prefix
      * test over `.intentic/` as a whole: one stray write must not cost every view a refetch, which is the
@@ -49,13 +52,39 @@ export interface WorkspaceStateFile {
 }
 
 export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
-    // A capability add/remove recomposes the environment overlay and can add or drop a repo's panel.
-    { path: ".intentic/capabilities.json", invalidates: ["capabilities", "environment", "panels"] },
-    { path: ".intentic/environment.", invalidates: ["environment"] },
-    { path: ".intentic/settings.json", invalidates: ["settings"] },
+    /* A capability add/remove recomposes the environment overlay and can add or drop a repo's panel.
+     *
+     * Each entry's `config` carries that capability's credential (an mcp server's token, a Komodo key, an ssh
+     * key), so the manifest is a secret in full. It is also what composeEnvironment reads its Dockerfile
+     * fragments from, which makes this the entry where the owner's export choice has the most visible
+     * consequence: a bundle exported WITHOUT secrets rebuilds a stock overlay, and the import report has to
+     * name every capability the target needs re-added before its environment matches again. */
+    { path: ".intentic/capabilities.json", invalidates: ["capabilities", "environment", "panels"], portability: "secret" },
+
+    /* The overlay Dockerfile, four files that a single `.intentic/environment.` prefix used to cover. They are
+     * split here because they answer PORTABILITY differently while answering invalidation identically, and the
+     * split is the whole difference between an export that reproduces an environment and one that reproduces a
+     * stale copy of it:
+     *   - custom is the owner-approved SOURCE OF TRUTH and the only one that must travel;
+     *   - approved is COMPOSED from custom + the capability fragments + this container's base image, and is
+     *     rewritten on the target's first boot — carrying it would ship a FROM naming an image the target may
+     *     not be on (see composeEnvironment's baseImageOf);
+     *   - the proposal and the per-tool drafts under environment.d/ are the agent's pending requests, which the
+     *     owner has not answered yet; they travel so the question survives the move. */
+    { path: ".intentic/environment.custom.Dockerfile", invalidates: ["environment"], portability: "carry" },
+    { path: ".intentic/environment.Dockerfile", invalidates: ["environment"], portability: "carry" },
+    { path: ".intentic/environment.d/", invalidates: ["environment"], portability: "carry" },
+    {
+        path: ".intentic/environment.approved.Dockerfile",
+        invalidates: ["environment"],
+        portability: "derived",
+        note: "The target composes its own overlay on first boot; rebuild it there to install the tools it names.",
+    },
+
+    { path: ".intentic/settings.json", invalidates: ["settings"], portability: "carry" },
     // Written by the AGENT's file tools (the drafts skill), read by the owner's approval inbox — the one entry
     // here whose whole point is that a change arrives from outside the browser that renders it.
-    { path: ".intentic/drafts/", invalidates: ["drafts"] },
+    { path: ".intentic/drafts/", invalidates: ["drafts"], portability: "carry" },
     // ---- declared by the extension that renders them (contributes.files), not here ----
     // The path is the DAEMON's (automations-store writes both), the query keys are the intentic.automations
     // extension's. It declares them in its own manifest and the browser unions the two lists, so uninstalling
@@ -64,11 +93,13 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
         path: ".intentic/automations.json",
         invalidates: [],
         why: "Declared by the intentic.automations extension's contributes.files — `automations` is its query key, not core's.",
+        portability: "carry",
     },
     {
         path: ".intentic/approvals/",
         invalidates: [],
         why: "Declared by the intentic.automations extension's contributes.files — `automation-approvals` is its query key, not core's.",
+        portability: "carry",
     },
 
     /* ---- reached by no query, for reasons that are not oversights ----
@@ -81,16 +112,24 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
         path: ".intentic/webchat-installs.json",
         invalidates: [],
         why: "Which origins have loaded a Doorbell's widget, written on a 30s flush timer while a customer's site serves page views. The install panel that renders it fetches on open and polls itself while it is on screen, which is the whole window in which the answer changes for anyone. Pushing instead would bill every connected browser a refetch per flush, for a panel almost nobody has open.",
+        portability: "carry",
     },
     {
         path: ".intentic/thread-sessions.json",
         invalidates: [],
         why: "Thread bookkeeping (an inbound thread — a Doorbell visitor, a Discord or Slack channel — → sandbox conversation + provider session), written on EVERY inbound message. Nothing in the browser reads it: what a thread produces is a conversation, and the fleet board already learns about that from the agent registry's own push. Naming a key here would bill every connected browser a refetch per inbound message — the request storm this table's own note warns about — to refresh nothing it can see.",
+        portability: "carry",
     },
+    /* Values are a primitive union an extension chooses the meaning of, and "an API key for the service I talk
+     * to" is squarely within it — so this is classed by what it CAN hold, not by what any particular extension
+     * happens to put there. The alternative reads the wrong way round: a bundle that leaked one extension's
+     * token would have been correct about all the others. */
     {
         path: ".intentic/extension-settings.json",
         invalidates: [],
         why: "Held in a module-level shallowRef store per extension (web's extensionSettingsStore) with no query observer, and deliberately so: api.settings.get must answer SYNCHRONOUSLY from an extension's first activate() line, and the store outlives every component scope. A module-level QueryObserver is the one shape that would make invalidation refetch, and this app already ruled it out — it detaches on the queryClient.clear() at logout (see useSandbox's sandbox-list mirror). So a remote member's setting edit reaches this browser on its next load, not live.",
+        portability: "secret",
+        note: "Re-enter each extension's settings on the Extensions tab.",
     },
     /* Unlike the settings file above it, the on/off switch IS observed by a query — the Extensions tab's list,
      * which carries each row's switch position — so a flip made elsewhere (another member, the agent writing the
@@ -99,11 +138,14 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
     {
         path: ".intentic/extension-enablement.json",
         invalidates: ["extensions"],
+        portability: "carry",
     },
     {
         path: ".intentic/members.json",
         invalidates: [],
         why: "Not this view's source at all: SandboxAccess renders the PLATFORM's invite records (apiClient.invite.list), and this file is the daemon's ENFORCED copy — written first so a grant the enforcer never got is never recorded, then never read back. A change here means the two disagreed, which the write order makes fail-closed rather than stale.",
+        portability: "identity",
+        note: "Re-invite collaborators from the Access tab — a grant is the platform's record, and the target enforces its own copy.",
     },
 
     // ---- daemon-owned, nothing derives from watching them ----
@@ -116,40 +158,76 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
      * is +119 watched directories against ~593 today (a fifth more), with 314 continuously-rewritten transcripts
      * inside the newly-watched set, to make ONE memory directory live. Notes change at agent-turn cadence, so the
      * poll costs a request a minute and the alternative costs a permanent 20% on the watcher. */
+    /* THE STORE THAT IS TWO THINGS, hence two entries — this is the case stateFileFor's longest-match rule
+     * exists for. `.intentic/claude/` is where linkClaudeState parks the Claude CLI's per-conversation state,
+     * and (when AGENT_AUTH_DIR is unset, which is the production layout) it is ALSO the provider credential
+     * root. The subtree under `projects/` is the half a bundle exists to carry — the agent's memory notes and
+     * every conversation's transcript — while its siblings hold the OAuth that must not leave the sandbox. */
     {
         path: ".intentic/claude/",
         invalidates: [],
         why: "Agent session transcripts — see the note above on why the memory notes under it stay polled.",
+        portability: "secret",
+        note: "Sign the agent's AI accounts in again on the Agent tab.",
+    },
+    {
+        path: ".intentic/claude/projects/",
+        invalidates: [],
+        why: "Same store as the entry above; split from it for portability, not for invalidation.",
+        portability: "carry",
     },
     {
         path: ".intentic/ci.json",
         invalidates: [],
         why: "Webhook secret + conclusion memory; the Pipelines view reads it through /ci/runs, not off disk.",
+        portability: "secret",
+        note: "Re-add the CI webhook on the Pipelines view — its secret is per-sandbox.",
     },
     {
         path: ".intentic/komodo.json",
         invalidates: [],
         why: "Per-connection 'when the owner last looked at Deployments'; the view reads it through /komodo/{capability}/overview, not off disk — and it is written BY that view being opened, so invalidating on it would refetch the board in answer to the browser's own click.",
+        portability: "carry",
     },
-    { path: ".intentic/bridge-tokens.json", invalidates: [], why: "Hashed ACP bridge tokens, listed on demand by the owner." },
+    {
+        path: ".intentic/bridge-tokens.json",
+        invalidates: [],
+        why: "Hashed ACP bridge tokens, listed on demand by the owner.",
+        portability: "identity",
+        note: "Mint fresh ACP bridge tokens — the old ones authenticate against the source sandbox.",
+    },
     {
         path: ".intentic/owner.json",
         invalidates: [],
         why: "Bound once on first use; a change here means the sandbox was re-owned, which re-authenticates anyway.",
+        portability: "identity",
     },
-    { path: ".intentic/workspace.json", invalidates: [], why: "The workspace identity, read from the /events hello frame rather than as a file." },
-    { path: ".intentic/templates.json", invalidates: [], why: "Scaffold templates, read when the scaffold dialog opens." },
+    {
+        path: ".intentic/workspace.json",
+        invalidates: [],
+        why: "The workspace identity, read from the /events hello frame rather than as a file.",
+        portability: "identity",
+    },
+    { path: ".intentic/templates.json", invalidates: [], why: "Scaffold templates, read when the scaffold dialog opens.", portability: "carry" },
+    /* Classed `derived` for size rather than for safety, and it is the one entry where that costs the owner
+     * something real: the profiles ARE logged-in sessions. They are also gigabytes of a store Chromium rewrites
+     * constantly and versions against its own build, so carrying them ships bulk that the target's Chromium may
+     * refuse anyway. The note is what keeps the loss visible instead of silent. */
     {
         path: ".intentic/browser/",
         invalidates: [],
         why: "Browser-login profiles: Chromium rewrites these constantly. Descent-ignored by the watcher outright.",
+        portability: "derived",
+        note: "Log the agent's browser back into any site it needs — profiles do not travel.",
     },
     {
         path: ".intentic/extensions/",
         invalidates: [],
         why: "Extension checkouts — whole git clones. The `extensions` query is driven by the capability manifest above, not by their contents.",
+        portability: "derived",
+        note: "Extensions re-clone from the capability manifest on the target's next reconcile.",
     },
-    { path: ".intentic/plugins/", invalidates: [], why: "Agent plugin dirs, read by the SDK's loader each turn." },
+    { path: ".intentic/plugins/", invalidates: [], why: "Agent plugin dirs, read by the SDK's loader each turn.", portability: "carry" },
 ];
 
 /* The query keys a batch of changed paths makes stale, deduped and stable. The browser's `/events` handler calls

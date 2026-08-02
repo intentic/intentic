@@ -76,6 +76,8 @@ export * from "./events.js";
 export * from "./sse.js";
 export * from "./routes.js";
 export * from "./workspace-state.js";
+export * from "./state-portability.js";
+export * from "./history-state.js";
 export * from "./agent-catalog.js";
 export * from "./host-protocol.js";
 export * from "./hostnames.js";

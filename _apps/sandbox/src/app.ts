@@ -32,7 +32,9 @@ import {
     syncSshHostname,
     verifySyncToken,
 } from "./platform/sync.js";
-import { approveEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
+import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
+import { packBundle } from "./portability/bundle.js";
+import { BundleFormatError, restoreBundle } from "./portability/restore.js";
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserLoginRoute } from "./browser/browser-login.js";
@@ -743,6 +745,66 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         await rejectEnvironment(services);
         return c.json(await readEnvironment(services));
+    });
+
+    /* The environment BUNDLE: this sandbox's two volumes packed for a move, and the restore that unpacks one.
+     *
+     * Raw Hono rather than oRPC for the same reason the upload routes are — both directions are a stream of
+     * arbitrary size, and neither end may hold it. Owner-only in both directions and not merely by convention:
+     * an export reads every repo and (at the owner's choice) every credential the sandbox holds, and an import
+     * overwrites the workspace a fleet may be working in.
+     *
+     * `?secrets=1` is the owner's export choice, carried as a query param because it changes the BYTES, not the
+     * framing — a bundle records the choice it was made with and the import report explains what the choice
+     * cost. Default off: the safe bundle is the one you can hand to somebody else.
+     */
+    app.get("/bundle", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const secrets = c.req.query("secrets") === "1";
+        const stamp = new Date().toISOString().slice(0, 10);
+        const name = services.config.sandbox.name === "" ? "sandbox" : services.config.sandbox.name;
+        return c.body(packBundle(services, { secrets, now: Date.now() }), 200, {
+            "content-type": "application/gzip",
+            "content-disposition": `attachment; filename="intentic-${name}-${stamp}.tar.gz"`,
+            // The bundle is assembled as it streams, so its length is unknown until it ends — say so rather
+            // than let a proxy buffer the whole workspace to compute one.
+            "transfer-encoding": "chunked",
+        });
+    });
+
+    app.post("/bundle", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const body = c.req.raw.body;
+        if (body === null) {
+            return c.json({ error: "empty body" }, 400);
+        }
+        try {
+            const report = await restoreBundle(
+                body,
+                { workspaceRoot: services.workspace.root, historyRoot: services.config.historyRoot },
+                MAX_UPLOAD_BYTES,
+            );
+            // The restore wrote manifests the daemon's own state is derived from (capabilities, the custom
+            // overlay section), so recompose before answering — the Environment card then renders the target's
+            // own composition, against ITS base image, instead of whatever the source last had.
+            await composeEnvironment(services);
+            services.history.notifyUserWrite();
+            return c.json(report);
+        } catch (error) {
+            if (error instanceof BundleFormatError) {
+                return c.json({ error: error.message }, 400);
+            }
+            if (error instanceof UploadTooLargeError) {
+                return c.json({ error: "bundle too large" }, 413);
+            }
+            throw error;
+        }
     });
 
     // An installed extension's prebuilt ESM bundle — raw JS bytes, so a plain Hono route like /environment

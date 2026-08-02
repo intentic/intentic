@@ -3207,6 +3207,53 @@ export const EnvironmentSchema = z.object({
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export const EnvironmentApproveSchema = z.object({ hash: z.string().min(1) });
 
+/* ---- portability: exporting a sandbox's environment and restoring it into a fresh one ----
+ *
+ * A sandbox is four stores, not one: `/work` (the workspace and the daemon's manifests), `/history` (every
+ * repo's real git dir, the fleet registry, the ledgers), the CONTAINER (the built overlay image plus the env
+ * the run contract replays) and the AI-provider credential root. A bundle carries the first two, declared entry
+ * by entry in WORKSPACE_STATE_FILES / HISTORY_STATE_FILES. It cannot carry the other two, and the honest
+ * consequence is that an import ends in a REPORT rather than a claim of equivalence — the container has no
+ * docker socket, so only the host can rebuild the image the overlay describes.
+ */
+
+// What the bundle says about itself, written as its first tar entry so a reader learns the shape before the
+// bytes. `secrets` is the owner's export-time choice; the restorer re-derives every decision from the manifests
+// rather than trusting this, and uses it only to explain what is missing.
+export const BundleManifestSchema = z.object({
+    // Bumped when the layout changes in a way an older daemon would misread. Refused rather than guessed at.
+    version: z.literal(1),
+    // Where it came from, for the report's first line. Never used to authorize anything.
+    sandbox: z.object({ name: z.string() }).optional(),
+    createdAt: z.number(),
+    secrets: z.boolean(),
+    /* The environment the target has to reproduce, carried as FACTS rather than as the composed file (which the
+     * target recomposes against its OWN base image on first boot). `customDockerfile` is the owner-approved
+     * source section; `capabilities` names what contributed the remaining fragments, so the report can list what
+     * to re-add when the configs themselves did not travel. */
+    environment: z.object({
+        customDockerfile: z.string().optional(),
+        baseImage: z.string().optional(),
+        approvedHash: z.string().optional(),
+        capabilities: z.array(z.object({ id: z.string(), kind: z.string() })),
+    }),
+    // Every path class the bundle deliberately left out, with the manifest's own note where it has one. This is
+    // what turns "the export skipped things" from a silence into a list the owner can act on.
+    excluded: z.array(z.object({ path: z.string(), portability: z.string(), note: z.string().optional() })),
+});
+export type BundleManifest = z.infer<typeof BundleManifestSchema>;
+
+// What a restore actually did. `needsAction` is the part that matters: the environment rebuild command, the
+// credentials to re-enter, the logins to redo — each one a thing the target cannot do for itself.
+export const ImportReportSchema = z.object({
+    restored: z.object({ workspaceFiles: z.number(), historyFiles: z.number(), repos: z.array(z.string()), bytes: z.number() }),
+    // Entries the bundle carried that this daemon refused to write (an identity file, an escaping path) — empty
+    // for any bundle a matching exporter produced, and a tamper signal when it is not.
+    refused: z.array(z.string()),
+    needsAction: z.array(z.object({ subject: z.string(), detail: z.string() })),
+});
+export type ImportReport = z.infer<typeof ImportReportSchema>;
+
 // ---- secrets: user-supplied env-var secrets the daemon writes to desired-state/.env ----
 // The web posts a Cloudflare token / GitHub PAT / another-host SSH key straight to the sandbox daemon (never
 // through the platform); `apply` reloads .env each run so a new secret is picked up with NO restart. `list`
