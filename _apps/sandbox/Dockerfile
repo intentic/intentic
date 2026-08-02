@@ -1,5 +1,5 @@
 # The per-project AI-agent sandbox image (published as registry.gitlab.com/radarsu/intentic/sandbox). The
-# monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the seven baked packages
+# monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the six baked packages
 # (turbo, warm cache) and prunes their production trees + the iq models into .image-out/, which enters this
 # build as the named context `trees`. Every layer here is a pinned tool install (registry-cache-stable) or a
 # cheap tree COPY, so a source change rebuilds in seconds — no pnpm install / turbo run inside a cacheless
@@ -136,22 +136,31 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 # from source, and corepack strips the exec bit off its bundled node-gyp gyp_main.py (else Error 126).
 RUN corepack enable && corepack prepare pnpm@11.13.1 --activate \
     && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
+# node-gyp on PATH, for the native rebuild that runs after the tree COPYs below (node-pty, @discordjs/opus) and
+# for an agent compiling a native dep by hand. Installed HERE, above those COPYs, because it used to share the
+# rebuild's RUN — where every source change re-downloaded it, unpinned, before any compiling started. Pinned
+# like every other tool in this image so a bad upstream release fails a deliberate bump, not the next pipeline.
+# ponytail: bump alongside the node base image — node-gyp tracks the headers it compiles against.
+#
+# EVERY `npm install` IN THIS FILE ENDS IN A CACHE CLEAN. npm keeps the downloaded tarball in ~/.npm/_cacache
+# next to the package it unpacked, and cacache stores that tarball exactly as the registry served it — already
+# gzipped — so an uncleaned layer pays for the same bytes twice in every pull, and the second copy barely
+# compresses. Measured in the published image: 420 MiB of tarballs left behind by the global installs and another
+# 45 MiB by the playwright layer, ~23% of a 2 GB pull, for a cache nothing reads (installs in /work are pnpm's,
+# and its store lives on the volume).
+RUN npm install -g node-gyp@13.0.1 && node-gyp --version && npm cache clean --force
 # The `opencode` CLI on PATH — the Grok provider (grok/opencode.ts) spawns `opencode serve` via
 # @opencode-ai/sdk's createOpencodeServer, which shells out to this binary. xAI OAuth tokens are persisted by
 # OpenCode under XDG_DATA_HOME, which the service pins to the workspace's .intentic so they survive restarts.
 # The agent's shell also drives it directly (`opencode run`) to delegate tasks to Grok (agent/delegation.ts).
 # Pin the CLI in lockstep with the SDK version in _apps/sandbox/package.json so the client/server wire API matches.
 # ponytail: bump this together with @opencode-ai/sdk; a version skew surfaces as server-start / event-shape errors.
-RUN npm install -g opencode-ai@1.17.15 && opencode --version
+RUN npm install -g opencode-ai@1.17.15 && opencode --version && npm cache clean --force
 # OpenCode privacy defaults, in the GLOBAL config (the only level where autoupdate:false is honored): no
 # auto-update (the CLI is version-pinned above) and no session sync to opncd.ai, even manual /share. The
 # daemon's server-spawn config (grok/opencode.ts) merges over this file, so runtime overrides are unaffected.
 RUN mkdir -p /root/.config/opencode \
     && printf '{ "autoupdate": false, "share": "disabled" }\n' > /root/.config/opencode/opencode.json
-# The `codex` CLI on PATH — the agent's shell delegates tasks to the user's connected Codex account
-# (`codex exec`, agent/delegation.ts), authenticated via the CODEX_HOME injected per turn. Pin in lockstep
-# with @openai/codex-sdk in _apps/sandbox/package.json (the Codex primary adapter), same rationale as opencode.
-RUN npm install -g @openai/codex@0.142.5 && codex --version
 # The `cli-proxy-api` binary on PATH — CLIProxyAPI, the translator that lets the Claude Code harness drive
 # Codex/Grok/Kimi/Google models on the user's SUBSCRIPTION OAuth: agent/translator.ts spawns it as the server (a
 # routed turn's ANTHROPIC_BASE_URL points at it), and its Management/device flows connect the subscriptions. A
@@ -159,13 +168,12 @@ RUN npm install -g @openai/codex@0.142.5 && codex --version
 # ponytail: bump the pin deliberately; a wire-API or Management-endpoint change surfaces as a translator-only
 # failure (native-harness turns never touch it).
 ARG CLIPROXY_VERSION=7.2.110
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
-    && arch="$(dpkg --print-architecture)" \
+RUN arch="$(dpkg --print-architecture)" \
     && mkdir -p /tmp/cliproxy \
     && curl -fsSL "https://github.com/router-for-me/CLIProxyAPI/releases/download/v${CLIPROXY_VERSION}/CLIProxyAPI_${CLIPROXY_VERSION}_linux_${arch}.tar.gz" | tar -xz -C /tmp/cliproxy \
     && install -m 0755 "$(find /tmp/cliproxy -type f -name cli-proxy-api | head -n1)" /usr/local/bin/cli-proxy-api \
     && test -x /usr/local/bin/cli-proxy-api \
-    && rm -rf /tmp/cliproxy /var/lib/apt/lists/*
+    && rm -rf /tmp/cliproxy
 # cloudflared on PATH — `intentic deploy apply` shells out to `cloudflared access tcp` to reach a self-host's SSH
 # through its Cloudflare tunnel when the host is registered with via:"cloudflared" (a NAT'd local machine).
 # Pinned to the same version connect.sh runs as the tunnel sidecar. Placed HERE, before the tree COPYs below,
@@ -244,9 +252,20 @@ RUN arch="$(dpkg --print-architecture)" \
 # browser, ran `npx playwright install` mid-turn, and burned a quarter of its session pulling 114 MiB into a
 # container layer that a recreate then threw away. ~180 MiB of image is the cheaper side of that trade. The
 # download lands in /root/.cache/ms-playwright, which is exactly where executablePath() looks.
+#
+# THE HEADLESS SHELL IS DELETED AGAIN IMMEDIATELY. `install chromium` fetches two browsers — chromium (389 MiB
+# on disk) and chromium-headless-shell (262 MiB) — and playwright only ever launches the shell for the
+# `chromium-headless-shell` channel or its own default headless launch. Neither happens here: both MCP specs
+# (browser-tools.ts browserServerSpec / isolatedBrowserSpec, headed and --headless) pass --executable-path from
+# chromium.executablePath(), which is the full browser, and browser-login.ts launches headed. There is no flag
+# to fetch one without the other, so it goes after the fact, in the same layer that downloaded it.
+# If a future launch drops --executable-path or asks for the shell channel, this rm is what breaks it — restore
+# the shell there rather than resolving a missing-browser error at runtime.
 COPY --from=trees playwright-version /opt/playwright-version
 RUN npx --yes playwright@"$(cat /opt/playwright-version)" install --with-deps chromium \
-    && rm -rf /var/lib/apt/lists/* /root/.npm/_npx
+    && rm -rf /root/.cache/ms-playwright/chromium_headless_shell-* \
+    && rm -rf /var/lib/apt/lists/* /root/.npm/_npx \
+    && npm cache clean --force
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
 # connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as
@@ -259,15 +278,6 @@ RUN chmod +x /opt/intentic-cli/dist/cli.js \
 COPY --from=trees iq /opt/iq
 RUN chmod +x /opt/iq/dist/cli.js \
     && ln -s /opt/iq/dist/cli.js /usr/local/bin/iq
-# The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
-# daemon writes/removes its skill at /work/.claude/skills/lsp). It drives the TS language service (its own
-# bundled typescript) over whatever tsconfig project the agent points it at in /work. `lsp diag` and the
-# sandbox's post-edit hook both route through a resident `lsp daemon`, started on demand by whichever asks
-# first and shared via one socket per repo — so no service runs for a workspace without TypeScript in it.
-# Same chmod + symlink rationale as iq/intentic — tsc keeps the file's shebang, so the linked cli.js runs directly.
-COPY --from=trees lsp /opt/lsp
-RUN chmod +x /opt/lsp/dist/cli.js \
-    && ln -s /opt/lsp/dist/cli.js /usr/local/bin/lsp
 # `tsx` as a shim over node's own type stripping. Agents reach for tsx to run a one-off .ts script because that
 # is what the ecosystem taught them, and a project that lists it in devDependencies resolves its own — but a
 # scratch script outside any package hit `tsx: not found` and the agent went looking for workarounds. Node 24
@@ -292,12 +302,40 @@ COPY --from=trees sandbox /opt/sandbox
 # is already compiled in the tarball — only the .node needs building), and opus's loader requires the exact
 # glibc-tagged prebuild dir its node-pre-gyp install lays down after the stale tags are removed.
 # The registry-prebuilt natives (sharp, ast-grep, onnxruntime, davey) are manylinux — safe as copied.
-RUN npm install -g node-gyp \
-    && cd /opt/sandbox/node_modules/.pnpm/node-pty@*/node_modules/node-pty \
+RUN cd /opt/sandbox/node_modules/.pnpm/node-pty@*/node_modules/node-pty \
     && node-gyp rebuild \
     && cd /opt/sandbox/node_modules/.pnpm/@discordjs+opus@*/node_modules/@discordjs/opus \
     && rm -rf prebuild build-tmp-napi-v3 \
-    && npm run install
+    && npm run install \
+    && npm cache clean --force
+# The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
+# daemon writes/removes its skill at /work/.claude/skills/lsp). It drives the TS language service (its own
+# bundled typescript) over whatever tsconfig project the agent points it at in /work. `lsp diag` and the
+# sandbox's post-edit hook both route through a resident `lsp daemon`, started on demand by whichever asks
+# first and shared via one socket per repo — so no service runs for a workspace without TypeScript in it.
+#
+# Symlinked out of the DAEMON'S tree rather than deployed as a tree of its own: @intentic/lsp is a dependency of
+# @intentic/sandbox, so /opt/sandbox already contains this exact package (and its bundled typescript) — a second
+# `pnpm deploy` root shipped a 54 MiB duplicate of it, 14.6 MiB of the pull. Node resolves the CLI's imports from
+# the target's realpath inside /opt/sandbox/node_modules, the pane-log-clean precedent below. The chmod is the
+# iq/intentic rationale — and it doubles as this layer's existence check: a tree that stopped carrying the
+# package fails the build here instead of leaving `lsp` off PATH.
+RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
+    && ln -s /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js /usr/local/bin/lsp
+# The `codex` CLI on PATH — the agent's shell delegates tasks to the user's connected Codex account
+# (`codex exec`, agent/delegation.ts), authenticated via the CODEX_HOME injected per turn.
+#
+# Also symlinked out of the daemon's tree, and here the duplicate was worse than wasted bytes: @openai/codex-sdk
+# (the Codex primary adapter) depends on @openai/codex at an EXACT version, so the tree already carries the
+# platform binary — 350 MiB of it — and the `npm install -g @openai/codex@…` this replaces added a second,
+# separately-pinned 280 MiB copy, 220 MiB of the pull. The two pins were supposed to move together and had
+# already drifted: the image shipped codex-cli 0.142.5 on PATH while the SDK drove 0.146.0. Resolving the
+# wrapper out of the tree makes that skew unrepresentable, and deletes the pin nobody has to remember.
+# The wrapper (not the vendored binary) is the symlink target: it is what picks the platform package, so this
+# stays arch-agnostic. `codex --version` is the guard — a tree layout change fails the build, loudly.
+RUN codex_bin="$(find /opt/sandbox/node_modules/.pnpm -maxdepth 6 -path '*@openai/codex/bin/codex.js' | head -n1)" \
+    && ln -s "$codex_bin" /usr/local/bin/codex \
+    && codex --version
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors is data-only (manifest + connector skills + client image fragments) so it copies straight

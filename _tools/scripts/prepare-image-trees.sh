@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the sandbox image's payload OUTSIDE Docker: compile the seven baked packages with turbo (warm cache —
+# Build the sandbox image's payload OUTSIDE Docker: compile the six baked packages with turbo (warm cache —
 # in CI this replays release:verify's work instead of re-compiling the monorepo inside a cacheless container),
 # prune each to a production tree under .image-out/, and fetch the iq models once (.image-out/iq-models is
 # CI-cached keyed on the fetch script, and survives re-runs here). The Dockerfile consumes .image-out as the
@@ -9,14 +9,17 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli --filter=@intentic/iq \
-    --filter=@intentic/lsp --filter=@intentic/ext-discord --filter=@intentic/ext-imap --filter=@intentic/ext-slack
+    --filter=@intentic/ext-discord --filter=@intentic/ext-imap --filter=@intentic/ext-slack
 
 out=.image-out
 # Regenerate the deploy trees but PRESERVE the cached model dir (and its completeness marker).
-rm -rf "$out/sandbox" "$out/cli" "$out/iq" "$out/lsp" "$out/extensions"
-# Seven independent trees, each pruned out of the same content-addressed store into a directory of its own —
+rm -rf "$out/sandbox" "$out/cli" "$out/iq" "$out/extensions"
+# Six independent trees, each pruned out of the same content-addressed store into a directory of its own —
 # which is what a store is for, so they are pruned at once rather than one after another (1m26s in series,
 # measured in the images job of pipeline 2725042409, and paid again by the release).
+# @intentic/lsp is NOT a tree of its own: it is a dependency of @intentic/sandbox, so turbo builds it under that
+# filter (build dependsOn ^build) and the sandbox's deploy carries it — the image symlinks `lsp` straight out of
+# /opt/sandbox rather than shipping a 54 MiB second copy of the same package.
 pids=()
 deploy() {
     pnpm --filter "$1" deploy --prod "$2" &
@@ -25,7 +28,6 @@ deploy() {
 deploy @intentic/sandbox "$out/sandbox"
 deploy @intentic/cli "$out/cli"
 deploy @intentic/iq "$out/iq"
-deploy @intentic/lsp "$out/lsp"
 deploy @intentic/ext-discord "$out/extensions/discord"
 deploy @intentic/ext-imap "$out/extensions/imap"
 deploy @intentic/ext-slack "$out/extensions/slack"
