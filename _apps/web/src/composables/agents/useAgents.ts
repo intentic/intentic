@@ -340,7 +340,7 @@ watch(
  * The source is a string rather than the roster itself: a deep watch would re-run on every usage frame of
  * every running turn, and titles change a handful of times per conversation. */
 watch(
-    () => registry.value.map((agent) => `${agent.id}=${agent.title ?? ``}`).join(` `),
+    () => registry.value.map((agent) => `${agent.id}=${agent.title ?? ``}`).join(`\u0000`),
     () => {
         const { conversations } = useChat();
         for (const agent of registry.value) {
