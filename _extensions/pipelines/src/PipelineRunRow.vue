@@ -22,6 +22,9 @@ const props = defineProps<{
     // Both are cross-run facts too, and together they set how loudly the row asks to be fixed.
     open: boolean;
     superseded: PipelineRun | undefined;
+    // The model the fix will open on (the sandbox's agent-run model), for the button to name before the click.
+    // Undefined ⇒ nothing pinned, so there is nothing honest to promise.
+    fixModelLabel: string | undefined;
 }>();
 const emit = defineEmits<{
     rerun: [run: PipelineRun];
@@ -48,25 +51,30 @@ const headline = computed(() => props.run.title ?? `#${props.run.runId}`);
 const trigger = computed(() => triggerLabel(props.run.trigger));
 const jobCount = computed(() => stages.value.reduce((total, stage) => total + stage.jobs.length, 0));
 
-/* A demoted Fix button has to say WHY it is quiet, or it reads as a broken one. The two reasons are different
- * enough to be worth different words: a superseded failure is over, while a failure behind the head of an open
- * breakage is very much alive — just not the run to start from. */
-const fixHint = computed(() => {
+/* WHAT THE BUTTON SAYS ABOUT ITSELF before it spends anything. Two things can be worth saying and they stack.
+ *
+ * WHICH MODEL, always: this is a one-click action that opens a full isolated session, and there is no picker
+ * anywhere near it — by design, since a picker per button would be a second place to configure what Sandbox ▸
+ * Agent ▸ Models already owns. The cost of that choice is that the button itself has to state the answer.
+ *
+ * WHY IT IS QUIET, for a demoted one — a Fix button at Re-run's weight reads as broken otherwise. The two
+ * reasons differ enough to be worth different words: a superseded failure is over, while a failure behind the
+ * head of an open breakage is very much alive, just not the run to start from. */
+const fixHint = computed<string | undefined>(() => {
+    const opensOn = props.fixModelLabel === undefined ? undefined : `Opens an isolated agent on ${props.fixModelLabel}`;
     if (props.open) {
-        return undefined;
+        return opensOn;
     }
-    if (props.superseded !== undefined) {
-        return `${props.run.branch} has passed since — this failure is history, but you can still start an agent on it`;
-    }
-    return `Behind a newer failure on ${props.run.branch} — that one is the run to fix`;
+    const demoted =
+        props.superseded !== undefined
+            ? `${props.run.branch} has passed since — this failure is history, but you can still start an agent on it`
+            : `Behind a newer failure on ${props.run.branch} — that one is the run to fix`;
+    return opensOn === undefined ? demoted : `${demoted}. ${opensOn}`;
 });
 </script>
 
 <template>
-    <div
-        class="group border-l-[3px] transition-colors"
-        :class="[tone.rowBorder, expanded ? `bg-content/[0.02]` : `hover:bg-content/[0.02]`]"
-    >
+    <div class="group border-l-[3px] transition-colors" :class="[tone.rowBorder, expanded ? `bg-content/[0.02]` : `hover:bg-content/[0.02]`]">
         <!-- Run header row -->
         <div class="flex w-full items-center gap-3 px-4 py-3">
             <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />
@@ -102,10 +110,7 @@ const fixHint = computed(() => {
                         <span class="font-mono">{{ superseded.sha.slice(0, 7) }}</span>
                     </a>
                     <!-- Only unusual origins earn a chip; a plain push is every repo's default. -->
-                    <span
-                        v-if="trigger"
-                        class="shrink-0 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle"
-                    >
+                    <span v-if="trigger" class="shrink-0 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle">
                         {{ trigger }}
                     </span>
                 </div>
@@ -183,11 +188,7 @@ const fixHint = computed(() => {
                     :title="expanded ? `Hide job graph` : `Show job graph`"
                     @click="expanded = !expanded"
                 >
-                    <Icon
-                        name="chevron-down"
-                        class="text-2xs text-subtle transition-transform"
-                        :class="expanded ? `rotate-180` : ``"
-                    />
+                    <Icon name="chevron-down" class="text-2xs text-subtle transition-transform" :class="expanded ? `rotate-180` : ``" />
                 </button>
             </div>
         </div>
@@ -213,8 +214,8 @@ const fixHint = computed(() => {
                 <div class="flex items-center justify-between">
                     <span class="text-2xs font-semibold uppercase tracking-wide text-subtle">Job graph</span>
                     <span class="text-2xs text-subtle">
-                        {{ stages.length }} {{ stages.length === 1 ? `stage` : `stages` }} ·
-                        {{ jobCount }} {{ jobCount === 1 ? `job` : `jobs` }} · drag to pan, scroll to zoom
+                        {{ stages.length }} {{ stages.length === 1 ? `stage` : `stages` }} · {{ jobCount }} {{ jobCount === 1 ? `job` : `jobs` }} ·
+                        drag to pan, scroll to zoom
                     </span>
                 </div>
                 <PipelineDagGraph :stages="stages" />

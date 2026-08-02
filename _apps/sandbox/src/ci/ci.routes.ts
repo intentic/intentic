@@ -124,6 +124,9 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 prompt,
                 conversationId,
                 isolated: true,
+                // Nobody chose a model for this: it is one click on a red row. `agentRunModel` answers for it
+                // (turn-resume.ts), which is also what the button's own tooltip names before the click.
+                unattended: true,
                 title: `Fix CI: ${run?.title ?? input.repo}`.slice(0, TITLE_MAX),
             };
             /* Use the SAME detached-run boundary as POST /agent. The old fire-and-forget generator bypassed the
@@ -132,7 +135,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
              * while the work happened invisibly. This call returns synchronously with the run registered; its
              * provider work still outlives the request. It is also what gives the fix its ordinary fleet card:
              * `conversationId` is what streamAgent registers on, whatever placement the turn asked for. */
-            const started = startConversationTurn(services, wake, turn);
+            const started = await startConversationTurn(services, wake, turn);
             if (started === undefined) {
                 // Minted ids are unique, so this is an invariant breach rather than a user-level busy state.
                 throw new ORPCError("CONFLICT", { message: "the CI fix conversation is already running" });

@@ -1,4 +1,13 @@
-import { type CiFixResponse, CiFixResponseSchema, type CiRunsResponse, CiRunsResponseSchema, type PipelineRun } from "@intentic/sandbox-contract";
+import {
+    type CiFixResponse,
+    CiFixResponseSchema,
+    type CiRunsResponse,
+    CiRunsResponseSchema,
+    parsePinned,
+    type PipelineRun,
+    pinnedModelLabel,
+    SandboxSettingsSchema,
+} from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
@@ -44,7 +53,22 @@ export function usePipelines() {
         mutationFn: async (run: PipelineRun): Promise<CiFixResponse> => CiFixResponseSchema.parse(await api.sandbox.json(`/ci/fix`, body(run))),
     });
 
+    /* WHAT THE FIX BUTTON IS ABOUT TO SPEND. The daemon resolves this itself (the turn goes out `unattended` and
+     * takes the sandbox's `agentRunModel`), so nothing here needs it to WORK — it is read purely so the button
+     * can name it beforehand. That asymmetry is the point: a one-click action with no picker anywhere near it
+     * has to say what it will bill somewhere, and the only place left is the button itself. Undefined ⇒ nothing
+     * pinned, and the button rightly promises nothing rather than guessing at the composer's current pick. */
+    const fixModel = useQuery({
+        queryKey: api.sandbox.key(`ci-fix-model`),
+        queryFn: async (): Promise<string> => SandboxSettingsSchema.parse(await api.sandbox.json(`/settings`)).agentRunModel,
+        enabled,
+    });
+
     return {
+        fixModelLabel: computed<string | undefined>(() => {
+            const choice = parsePinned(fixModel.data.value ?? ``);
+            return choice === undefined ? undefined : pinnedModelLabel(choice);
+        }),
         repos: computed(() => query.data.value?.repos ?? []),
         runs: computed(() => query.data.value?.runs ?? []),
         error: computed(() => query.error.value?.message),

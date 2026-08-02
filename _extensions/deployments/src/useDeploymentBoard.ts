@@ -7,6 +7,9 @@ import {
     type DeployOverviewResponse,
     DeployOverviewResponseSchema,
     type DeployResource,
+    parsePinned,
+    pinnedModelLabel,
+    SandboxSettingsSchema,
 } from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
@@ -72,9 +75,24 @@ export function useDeploymentBoard(capability: Ref<string>) {
             DeployFixResponseSchema.parse(await api.sandbox.json(`/komodo/${capability.value}/fix`, post({ kind: resource.kind, id: resource.id }))),
     });
 
+    /* WHAT THE FIX BUTTON IS ABOUT TO SPEND — the sandbox's agent-run model, read only so the button can name
+     * it. The daemon resolves the same setting itself (the turn goes out `unattended`), so nothing here needs
+     * this to work: it exists because a one-click action that opens a full isolated session, with no picker
+     * anywhere near it, has to state what it will bill somewhere. Undefined ⇒ nothing pinned, and the button
+     * promises nothing rather than guessing. Identical to ext-pipelines' — the two buttons are the same act. */
+    const fixModel = useQuery({
+        queryKey: api.sandbox.key(`komodo-fix-model`),
+        queryFn: async (): Promise<string> => SandboxSettingsSchema.parse(await api.sandbox.json(`/settings`)).agentRunModel,
+        enabled,
+    });
+
     return {
         board: computed(() => query.data.value),
         error: computed(() => query.error.value?.message),
+        fixModelLabel: computed<string | undefined>(() => {
+            const choice = parsePinned(fixModel.data.value ?? ``);
+            return choice === undefined ? undefined : pinnedModelLabel(choice);
+        }),
         // isPending, not isLoading: true from mount until the FIRST response, INCLUDING the window where
         // `enabled` still gates the fetch on the sandbox handshake — the window in which isLoading is false
         // and an "nothing deployed" empty state would flash at someone whose board is about to arrive.

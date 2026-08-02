@@ -266,6 +266,10 @@ export function useRuns() {
                     conversationId: story.conversationId,
                     isolated: true,
                     permissionMode: `bypassPermissions`,
+                    // Unattended like every surface-started run — but this one keeps a picker, because a run
+                    // fans a whole session out PER STORY and the tier is therefore a per-run decision about
+                    // spend. An explicit model wins over the setting; an empty one lets it answer.
+                    unattended: true,
                     agent: input.provider,
                     ...(input.model === undefined || input.model === `` ? {} : { model: input.model }),
                 };

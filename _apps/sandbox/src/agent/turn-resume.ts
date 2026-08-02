@@ -1,4 +1,4 @@
-import { type AgentTurn, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
+import { type AgentTurn, parsePinned, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { fireAutomation, type WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
@@ -152,6 +152,41 @@ const resumedTurn = (
     };
 };
 
+/* WHAT AN UNATTENDED TURN RUNS ON. A turn a surface started names no model, because there was no picker in
+ * front of anyone when it started (see AgentTurn.unattended) — so the owner's `agentRunModel` answers for it,
+ * and `agentRunEffort` beside it.
+ *
+ * Resolved HERE, at the one boundary every detached turn passes through, rather than at each of the five
+ * surfaces that start one. Two things follow from that placement and neither is incidental: a surface added
+ * tomorrow inherits the setting by declaring what it is, and the model lands on the turn BEFORE the journal
+ * records it — so a run resumed after a daemon death comes back on the model it was started on rather than
+ * re-resolving against a setting the user has since changed.
+ *
+ * Fills only what is absent, which is what keeps the flag from overriding a real choice: Acceptance names a
+ * model per run (it fans one session out per story, so the tier is a per-run decision worth its own control),
+ * and every resume below re-runs a turn that already carries whatever this resolved the first time. An empty
+ * setting resolves nothing and the turn keeps its unset model — the daemon then falls to the provider's live
+ * catalog default exactly as a composer turn with an unloaded catalog does. */
+const withAgentRunModel = async <T extends AgentTurn>(services: Services, turn: T): Promise<T> => {
+    if (turn.unattended !== true || turn.model !== undefined) {
+        return turn;
+    }
+    const { agentRunModel, agentRunEffort } = await services.sandboxSettings.get();
+    const pinned = parsePinned(agentRunModel);
+    if (pinned === undefined) {
+        return turn;
+    }
+    return {
+        ...turn,
+        // The pin carries the provider too (`${provider}:${model}`), and it has to: a model id is only
+        // meaningful to the provider that vends it, so honouring one without the other would send a Codex id
+        // to Claude. An effort the user never pinned stays absent rather than becoming an invented "low".
+        agent: pinned.provider,
+        model: pinned.model,
+        ...(agentRunEffort !== "" ? { effort: agentRunEffort } : {}),
+    };
+};
+
 /* THE one way the daemon starts a conversation's detached turn — POST /agent and all three
  * automatic resumes below. Every start needs the same three things and none of them belong at a call site: the
  * two push observers (a turn parking and a turn settling are the moments worth waking a phone for, and
@@ -162,12 +197,13 @@ const resumedTurn = (
  * Undefined means turn-runs found a live turn already on the conversation, which SUPERSEDES the resume exactly
  * like a hand retry does. `attempts` is how many boots have already re-run this turn; only the boot pass passes
  * it. */
-export const startConversationTurn = (
+export const startConversationTurn = async (
     services: Services,
     wake: WakeFn,
-    turn: AgentTurn & { conversationId: string },
+    started: AgentTurn & { conversationId: string },
     attempts = 0,
-): TurnRun | undefined => {
+): Promise<TurnRun | undefined> => {
+    const turn = await withAgentRunModel(services, started);
     const { conversationId, prompt } = turn;
     // Start adoption now, then make the pump wait for it before invoking the provider. A first turn opens an
     // empty record; a legacy conversation adopts only its OLD turns.
@@ -208,7 +244,7 @@ const fireAuthResume = async (services: Services, wake: WakeFn, failure: AuthFai
     if (replacement === undefined || replacement === failure.refusedToken) {
         return;
     }
-    if (startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.auth)) !== undefined) {
+    if ((await startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.auth))) !== undefined) {
         services.logger.info({ conversationId, account: failure.account }, "auth auto-resume fired");
     }
 };
@@ -250,7 +286,7 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
         // conversation and supersedes the resume, and a retained entry would re-fire on every pass. A resume that
         // dies on the outage AGAIN is re-recorded by its own turn, with the breaker one step further along.
         pendingOutage.delete(conversationId);
-        if (startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.outage)) !== undefined) {
+        if ((await startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.outage))) !== undefined) {
             services.logger.info({ conversationId, provider: failure.provider, waiting: stranded.length }, "provider-outage auto-resume fired");
         }
     }
@@ -337,7 +373,7 @@ export const resumeInterruptedTurns = async (services: Services, wake: WakeFn, n
             // death it guards against.
             await bumpAttempt(services, entry);
             const { conversationId } = entry.turn;
-            if (startConversationTurn(services, wake, restartTurnOf(entry), entry.attempts + 1) !== undefined) {
+            if ((await startConversationTurn(services, wake, restartTurnOf(entry), entry.attempts + 1)) !== undefined) {
                 services.logger.info({ conversationId }, "restart auto-resume fired");
             }
             continue;

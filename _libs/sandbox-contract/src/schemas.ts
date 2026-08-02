@@ -121,6 +121,17 @@ export const AgentTurnSchema = z
         history: z.array(SessionTranscriptMessageSchema).max(200).optional(),
         // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
         model: z.string().optional(),
+        /* NOBODY PICKED A MODEL FOR THIS TURN — a surface started it (Fix with agent, a Maintenance chore, a
+         * Documentation or Acceptance run, the fix a failed pre-push check proposes) rather than a person at a
+         * composer. That is the whole distinction the flag carries, and it is why it cannot be inferred: a chat
+         * turn ALSO arrives with no `model` whenever the live catalog hasn't loaded yet, and the two want
+         * opposite defaults — the chat wants the provider's own catalog default, an unattended run wants the
+         * tier its owner chose for work that spends money while they are not watching.
+         *
+         * The daemon fills `agent`/`model`/`effort` from agentRunModel/agentRunEffort for any turn that says
+         * this and names none of them (startConversationTurn). Naming one still wins: Acceptance picks per run
+         * because it fans a session out per story, and that pick is the user's, made a second ago. */
+        unattended: z.boolean().optional(),
         // How tool calls are gated for this turn (the SDK's permissionMode, verbatim). 'plan' runs the
         // propose → approve → execute flow; 'default' prompts per tool on the permission side channel;
         // 'acceptEdits' auto-accepts file edits; 'bypassPermissions' runs everything. The agent can move
@@ -1029,6 +1040,22 @@ export const SandboxSettingsSchema = z.object({
      * never name a provider this sandbox has no credential for and it improves by itself when one is added.
      * Storing a resolved id here instead would go stale exactly like a pinned model does. */
     quickModel: z.string().default(""),
+    /* WHAT AN AGENT RUN OPENS ON — the tier above quickModel, and the answer for every turn a SURFACE starts
+     * rather than a person at a composer: Fix with agent on a pipeline or a deployment, a Maintenance chore, a
+     * Documentation or Acceptance run, the fix a failed pre-push check proposes. `${provider}:${model}`
+     * (quickModelKey) plus the reasoning effort beside it; both empty ⇒ whatever the chat composer would have
+     * started with, which is the honest floor because it is the model the user already chose to work with.
+     *
+     * PINNED, NOT DERIVED — the deliberate opposite of quickModel one line above, and the reason these are two
+     * settings rather than one. A quick helper exists to stay OFF the frontier tier, so cheapest-connected is
+     * the right automatic answer. An agent run has to read a failing suite, or a container log, or a story, and
+     * repair the thing: the tier is a judgement about how much the job is worth, nothing here can make it, and
+     * a wrong guess is billed in whole sessions rather than in tokens.
+     *
+     * The daemon applies this to any turn flagged `unattended` that names no model of its own — one rule, so a
+     * surface added tomorrow inherits it by saying what it is instead of re-deriving where models come from. */
+    agentRunModel: z.string().default(""),
+    agentRunEffort: z.string().default(""),
     // How long a finished agent stays on the board before it is archived automatically (days; 0 ⇒ never).
     // Unlike every other flag here this one defaults ON, because the lane it governs is the board's only
     // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
@@ -1074,15 +1101,6 @@ export const SandboxSettingsSchema = z.object({
     // `timedOut`. Never a pass: a suite that did not finish has said nothing about the tree, and the one thing
     // this check exists to prevent is a green light nobody earned.
     prepushTimeoutMs: z.number().min(60_000).max(3_600_000).default(900_000),
-    /* WHAT THE SUGGESTED FIX SESSION RUNS ON when the check fails — `${provider}:${model}` (quickModelKey), and
-     * the reasoning effort beside it. Both empty ⇒ whatever the chat composer would have started with, which is
-     * the right default precisely because it is the model the user already chose to work with.
-     *
-     * Pinned here rather than resolved cheapest-first like `quickModel`: this is not a one-click helper, it is a
-     * turn that has to read a failing suite and repair it, so the choice is the user's and worth stating. The
-     * suggestion dialog seeds from these and stays editable — the setting decides where the dialog OPENS. */
-    prepushFixModel: z.string().default(""),
-    prepushFixEffort: z.string().default(""),
     /* ASK FOR PROOF BEFORE A TURN THAT EDITED CODE ENDS. The daemon keeps a per-turn ledger of which code
      * files were written and which commands the agent ran that constitute a check (test/typecheck/lint/build);
      * when the turn tries to stop with edits that no PASSING check followed, it gets one bounded follow-up

@@ -37,7 +37,7 @@ const props = defineProps<{ capability?: string }>();
 // The rail passes the capability id through the activation's props; a directly-mounted view with none falls
 // back to the conventional default id, which is what a single connection is named.
 const capability = computed(() => props.capability ?? `komodo`);
-const { board, error, isPending, act, link, logs, fix, refetch } = useDeploymentBoard(toRef(capability));
+const { board, error, isPending, act, link, logs, fix, fixModelLabel, refetch } = useDeploymentBoard(toRef(capability));
 
 // Opening the view IS reading it: stamp read state so the rail stops flagging incidents now on screen. Only
 // on mount — re-stamping as the board polls would swallow a breakage that lands while the tab sits in the
@@ -348,6 +348,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                                 :logs="logsFor.get(resource.id)"
                                 :logs-pending="logsPendingId === resource.id"
                                 :error="failures.get(resource.id)"
+                                :fix-model-label="fixModelLabel"
                                 @act="runAction"
                                 @logs="loadLogs"
                                 @fix="askAgent($event, $event.id)"

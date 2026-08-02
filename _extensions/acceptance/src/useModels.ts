@@ -1,4 +1,4 @@
-import { type CatalogOption, ModelsSchema, modelsFor, PROVIDERS } from "@intentic/sandbox-contract";
+import { type CatalogOption, ModelsSchema, modelsFor, parsePinned, PROVIDERS, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
@@ -10,15 +10,30 @@ import { host } from "./host";
 
 export const PROVIDER_OPTIONS: readonly CatalogOption[] = PROVIDERS.map(({ label, value }) => ({ label, value }));
 
-/* "Default" is a real choice, not a placeholder: sending no model lets the daemon resolve the provider's own,
- * which is what the user's subscription is pointed at. It carries a SENTINEL value rather than the empty string
- * the wire wants, because a Select whose model value is "" renders its label blank — the control then looks
- * unset while it is in fact set, which is the one thing a picker must never do. `modelForTurn` converts back. */
+/* "Default" is a real choice, not a placeholder: sending no model lets the daemon resolve one, which for an
+ * unattended turn like ours means the sandbox's `agentRunModel` and — where that is unpinned too — the
+ * provider's own catalog default. It carries a SENTINEL value rather than the empty string the wire wants,
+ * because a Select whose model value is "" renders its label blank: the control then looks unset while it is in
+ * fact set, which is the one thing a picker must never do. `modelForTurn` converts back. */
 export const DEFAULT_MODEL_VALUE = "default";
 const DEFAULT_MODEL: CatalogOption = { label: `Default`, value: DEFAULT_MODEL_VALUE };
 
 // The value to put on the turn: the sentinel means "say nothing and let the daemon choose".
 export const modelForTurn = (selected: string): string => (selected === DEFAULT_MODEL_VALUE ? `` : selected);
+
+/* WHERE THE BAR OPENS — the sandbox's own agent-run model (Sandbox ▸ Agent ▸ Models), which is what every
+ * OTHER surface-started run spends. Read here rather than left to the daemon because this bar is the one place
+ * that lets you change it per run, and a control that silently starts somewhere other than where it shows is
+ * worse than no control. Undefined ⇒ nothing pinned, and the bar's own defaults stand. */
+export function useAgentRunModel() {
+    const api = host();
+    const query = useQuery({
+        queryKey: computed(() => api.sandbox.key(`acceptance`, `agent-run-model`)),
+        enabled: computed(() => api.sandbox.reachable()),
+        queryFn: async () => SandboxSettingsSchema.parse(await api.sandbox.json(`/settings`)).agentRunModel,
+    });
+    return computed(() => parsePinned(query.data.value ?? ``));
+}
 
 export function useModels(provider: Ref<string>) {
     const api = host();

@@ -890,7 +890,7 @@ export const createAgentRoutes = (services: Services) => {
         // Start the conversation's turn as a detached run — the ack carries the run id and the turn executes
         // regardless of what happens to this request (the request signal is deliberately not wired in; the
         // only cancel is /agent/stop). CONFLICT = another window/device is mid-turn on this conversation.
-        run: i.run.handler(({ input }) => {
+        run: i.run.handler(async ({ input }) => {
             if (input.conversationId === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "conversationId required" });
             }
@@ -899,7 +899,7 @@ export const createAgentRoutes = (services: Services) => {
             // whose tab is asleep or closed, which is exactly when nobody is reading the response. Every send
             // goes through notifyIfAway, so a user watching the turn finish is told nothing. The journal entry
             // rides along too — see startConversationTurn.
-            const run = startConversationTurn(services, streamAgent, { ...input, conversationId });
+            const run = await startConversationTurn(services, streamAgent, { ...input, conversationId });
             if (run === undefined) {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
             }

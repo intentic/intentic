@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentTurn, RestoredMessage } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentTurn, type RestoredMessage, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { fileApprovalsStore } from "../automations/approvals-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
@@ -63,7 +63,7 @@ const settle = async (conversationId: string): Promise<void> => {
 test("a started turn records its settled transcript, whatever provider ran it", async () => {
     const root = mkdtempSync(join(tmpdir(), "turn-resume-"));
     const record = fileTranscriptRecord(join(root, "transcripts"));
-    const started = startConversationTurn(fakeServices(root), fakeWake([], [{ kind: "delta", text: "shipped" }, { kind: "done" }]), {
+    const started = await startConversationTurn(fakeServices(root), fakeWake([], [{ kind: "delta", text: "shipped" }, { kind: "done" }]), {
         prompt: "ship it",
         conversationId: "tr-record",
         agent: "codex",
@@ -75,6 +75,59 @@ test("a started turn records its settled transcript, whatever provider ran it", 
         { role: "user", text: "ship it" },
         { role: "assistant", text: "shipped" },
     ]);
+});
+
+/* WHAT AN UNATTENDED TURN RUNS ON. Every surface that starts an agent for the user — Fix with agent, a
+ * Maintenance chore, a Documentation or Acceptance run — comes through here naming no model, because there was
+ * no picker in front of anybody when it started. These four cases are the whole rule, and the reason it lives at
+ * this boundary rather than at each of those five call sites. */
+const ranWith = async (settings: Partial<SandboxSettings>, turn: AgentTurn & { conversationId: string }): Promise<AgentTurn> => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "agent-run-model-")));
+    await services.sandboxSettings.set({ ...SandboxSettingsSchema.parse({}), ...settings });
+    const seen: AgentTurn[] = [];
+    await startConversationTurn(
+        services,
+        async function* (_services, input) {
+            seen.push(input);
+            yield { kind: "done" };
+        },
+        turn,
+    );
+    await settle(turn.conversationId);
+    return seen[0]!;
+};
+
+test("an unattended turn takes the agent-run model, provider and effort", async () => {
+    const ran = await ranWith(
+        { agentRunModel: "codex:gpt-5.6", agentRunEffort: "high" },
+        { prompt: "fix CI", conversationId: "ar-fill", unattended: true },
+    );
+    // The provider rides along with the id and has to: a model id is only meaningful to the provider that vends
+    // it, so honouring one without the other would send a Codex id to Claude.
+    expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "high" });
+});
+
+test("an unattended turn that names its own model keeps it", async () => {
+    // Acceptance's per-run picker: a choice the user made a second ago outranks the standing setting.
+    const ran = await ranWith(
+        { agentRunModel: "codex:gpt-5.6" },
+        { prompt: "walk the story", conversationId: "ar-explicit", unattended: true, agent: "claude", model: "claude-opus-4-5" },
+    );
+    expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5" });
+});
+
+test("a turn nobody flagged unattended is left alone", async () => {
+    // The chat sends no model whenever its live catalog has not loaded yet. That must still resolve to the
+    // PROVIDER's catalog default, not to the agent-run pin — the two look identical on the wire without the flag,
+    // which is exactly why the flag exists rather than being inferred from a missing model.
+    const ran = await ranWith({ agentRunModel: "codex:gpt-5.6" }, { prompt: "hello", conversationId: "ar-chat" });
+    expect(ran.model).toBeUndefined();
+    expect(ran.agent).toBeUndefined();
+});
+
+test("an unpinned agent-run model leaves the turn unset rather than inventing one", async () => {
+    const ran = await ranWith({ agentRunModel: "" }, { prompt: "fix CI", conversationId: "ar-unpinned", unattended: true });
+    expect(ran.model).toBeUndefined();
 });
 
 /* THE AUTH RESUME — the failure a rotation causes and the recovery the user should never have to perform.

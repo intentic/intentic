@@ -28,6 +28,9 @@ const props = defineProps<{
     // The last failure from an action on THIS row. It belongs here rather than in a page banner: a 500 from
     // Komodo about `atlas` is unreadable as a red slab at the top of a board of forty rows.
     error: string | undefined;
+    // The model the fix will open on (the sandbox's agent-run model), for the button to name before the click.
+    // Undefined ⇒ nothing pinned, so there is nothing honest to promise.
+    fixModelLabel: string | undefined;
 }>();
 const emit = defineEmits<{
     act: [resource: DeployResource, action: DeployAction];
@@ -163,7 +166,14 @@ const logText = computed(() => {
                 <!-- The one thing this surface can do that Komodo's own UI cannot: put an agent on the failure
                      with the repo that holds the bug already open. It is the only primary button on the row,
                      and it wears the same chrome as Pipelines' "Fix with agent" because it is the same act. -->
-                <Button label="Ask the agent to fix" size="small" :loading="busy" :disabled="busy" @click="emit(`fix`, resource)">
+                <Button
+                    label="Ask the agent to fix"
+                    size="small"
+                    :loading="busy"
+                    :disabled="busy"
+                    v-tooltip.top="fixModelLabel === undefined ? undefined : `Opens an isolated agent on ${fixModelLabel}`"
+                    @click="emit(`fix`, resource)"
+                >
                     <template #icon><Icon name="sparkles" /></template>
                 </Button>
                 <Button

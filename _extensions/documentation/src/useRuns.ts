@@ -189,14 +189,15 @@ export function useRuns(repo: Ref<string>) {
             });
     });
 
-    /* No provider or model is sent: `POST /agent` defaults them, which means a documentation run uses whatever the
-     * owner's other agents use. A picker here would be a second place to configure the same thing, and the first
-     * surprise of a run finishing on a model the user did not expect. */
+    /* No provider or model is sent, only `unattended`: the daemon then fills in `agentRunModel`, which is the
+     * one place a documentation run and every other surface-started run get their answer from. A picker here
+     * would be a second place to configure the same thing, and the first surprise of a run finishing on a model
+     * the user did not expect. */
     const startAgent = async (conversationId: string, prompt: string): Promise<void> => {
         await api.sandbox.request(`/agent`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
-            body: JSON.stringify({ prompt, conversationId, isolated: true, permissionMode: `bypassPermissions` }),
+            body: JSON.stringify({ prompt, conversationId, isolated: true, permissionMode: `bypassPermissions`, unattended: true }),
         });
     };
 

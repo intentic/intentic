@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Button, cmp, Icon, Picker } from "@intentic/extension-ui";
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { type Story, targetKeyOf } from "./stories";
-import { DEFAULT_MODEL_VALUE, modelForTurn, PROVIDER_OPTIONS, useModels } from "./useModels";
+import { DEFAULT_MODEL_VALUE, modelForTurn, PROVIDER_OPTIONS, useAgentRunModel, useModels } from "./useModels";
 import type { StartRunInput } from "./useRuns";
 import type { useTargets } from "./useTargets";
 
@@ -43,21 +43,38 @@ const emit = defineEmits<{
     clear: [];
 }>();
 
-const provider = ref(`claude`);
-const model = ref(DEFAULT_MODEL_VALUE);
+/* WHO RUNS IT, and where that answer comes from before anybody touches the two pickers: the sandbox's
+ * `agentRunModel`, the same setting every other surface-started run spends. A hand pick wins from the instant it
+ * is made, which is why this is one "picked yet?" ref with a fallback rather than a watcher seeding the refs —
+ * a watcher would re-seed under the user the moment the settings query refetched, and the bar would silently
+ * undo a choice they had already made. */
+const picked = ref<{ provider: string; model: string }>();
+const agentRunModel = useAgentRunModel();
+const provider = computed(() => picked.value?.provider ?? agentRunModel.value?.provider ?? `claude`);
+const model = computed(() => picked.value?.model ?? agentRunModel.value?.model ?? DEFAULT_MODEL_VALUE);
 const { models } = useModels(provider);
 
-// A provider switch invalidates a pinned model — its ids belong to the provider that vends them.
-watch(provider, () => (model.value = DEFAULT_MODEL_VALUE));
-
 /* The Picker's model is `T | undefined` because a picker CAN be cleared; neither of these ever is (both carry a
- * real default), so an undefined emission is ignored rather than written through. */
+ * real default), so an undefined emission is ignored rather than written through. A provider switch invalidates
+ * the model with it — model ids belong to the provider that vends them. */
 const setProvider = (value: string | undefined): void => {
-    provider.value = value ?? provider.value;
+    if (value !== undefined) {
+        picked.value = { provider: value, model: DEFAULT_MODEL_VALUE };
+    }
 };
 const setModel = (value: string | undefined): void => {
-    model.value = value ?? model.value;
+    if (value !== undefined) {
+        picked.value = { provider: provider.value, model: value };
+    }
 };
+
+// What Run will spend, said in the two numbers that decide it: one session per story, on a named model. The
+// pickers state the model too, but not the multiplication — and 21 frontier sessions is the most expensive
+// press in this app.
+const spend = computed<string>(() => {
+    const label = models.value.find((option) => option.value === model.value)?.label ?? model.value;
+    return `${chosen.length} ${chosen.length === 1 ? `session` : `sessions`}${model.value === DEFAULT_MODEL_VALUE ? `` : ` on ${label}`}`;
+});
 
 // First-appearance order of the (repo, group) pairs the scope touches — the keys the run's `targets` map is
 // built from, and the things the gate is asked about.
@@ -155,6 +172,9 @@ const submit = (): void => {
                 <Icon name="exclamation-triangle" class="shrink-0" />
                 {{ blockedNote }}
             </span>
+            <!-- The price of the press, next to the press. Hidden once something is blocking the run, because
+                 then the number is not what the user has to act on. -->
+            <span v-else-if="chosen.length > 0" class="text-2xs text-muted">{{ spend }}</span>
             <Button :label="`Run ${storyCount(chosen.length)}`" size="small" :disabled="!canRun" @click="submit">
                 <template #icon><Icon name="play" /></template>
             </Button>

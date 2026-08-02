@@ -14,7 +14,7 @@ import { usePipelines } from "./usePipelines";
  * auto-fetches its jobs and renders an inline GitLab-style connected-circles pipeline graph. Clicking
  * a stage circle pops over job details; clicking the chevron expands a full horizontal job flow. */
 
-const { repos, runs, error, isPending, rerun, cancel, fix } = usePipelines();
+const { repos, runs, error, isPending, rerun, cancel, fix, fixModelLabel } = usePipelines();
 
 // Opening the view IS reading it: stamp read state so the rail stops flagging breakages now on screen. Only
 // on mount — re-stamping as runs stream in would swallow a failure that lands while the tab sits in the
@@ -229,6 +229,7 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                             :recurring="recurringFor(run)"
                             :open="open.has(run)"
                             :superseded="superseded.get(run)"
+                            :fix-model-label="fixModelLabel"
                             @rerun="act($event, rerun)"
                             @cancel="act($event, cancel)"
                             @fix="fixRun($event)"

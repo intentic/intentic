@@ -199,11 +199,14 @@ export const createKomodoRoutes = (services: Services, wake: WakeFn = streamAgen
                 prompt,
                 conversationId,
                 isolated: true,
+                // One click on a broken container, with no model picker anywhere near it — `agentRunModel`
+                // answers for it, the same as the CI fix this is deliberately identical to.
+                unattended: true,
                 title: `Fix deployment: ${resource.name}`.slice(0, TITLE_MAX),
             };
             // The same detached-run boundary as POST /agent and the CI fix — registering on the run map is what
             // gives the fix an ordinary fleet card the UI can navigate to.
-            const started = startConversationTurn(services, wake, turn);
+            const started = await startConversationTurn(services, wake, turn);
             if (started === undefined) {
                 // Minted ids are unique, so this is an invariant breach rather than a user-level busy state.
                 throw new ORPCError("CONFLICT", { message: "the deployment fix conversation is already running" });

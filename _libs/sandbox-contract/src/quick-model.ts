@@ -1,4 +1,4 @@
-import { ACCESS_COST, accessFor, PROVIDERS } from "./agent-catalog.js";
+import { ACCESS_COST, accessFor, modelsFor, PROVIDERS } from "./agent-catalog.js";
 import { compareCheapestFirst, familyOf, tierRankOf } from "./model-order.js";
 import type { AgentProvider } from "./schemas.js";
 
@@ -46,8 +46,8 @@ export interface QuickModelChoice {
 export const quickModelKey = (choice: QuickModelChoice): string => `${choice.provider}:${choice.model}`;
 
 // Split on the FIRST colon only: a provider id never contains one and a model id might. Exported because the
-// key shape is shared: `prepushFixModel` pins the suggested fix session's model the same way, and the dialog
-// that seeds from it has to read one back.
+// key shape is shared: `agentRunModel` pins what a surface-started run opens on the same way, and both the
+// daemon (filling an unattended turn) and the dialogs that seed from it have to read one back.
 export const parsePinned = (pinned: string): QuickModelChoice | undefined => {
     const separator = pinned.indexOf(`:`);
     if (separator <= 0 || separator === pinned.length - 1) {
@@ -55,6 +55,14 @@ export const parsePinned = (pinned: string): QuickModelChoice | undefined => {
     }
     return { provider: pinned.slice(0, separator), model: pinned.slice(separator + 1) };
 };
+
+/* A pin as a person reads it: the catalog's own label for the id, or the id itself for one the static catalog
+ * has not caught up with (the picker offers a custom-id escape hatch, so this is a real case rather than a
+ * defensive branch). Beside parsePinned because the two are always wanted together — by any surface that has to
+ * name what a click is about to spend BEFORE it spends it, and the two loudest of those are extensions that
+ * share no other code with each other. */
+export const pinnedModelLabel = (choice: QuickModelChoice): string =>
+    modelsFor(choice.provider).find((option) => option.value === choice.model)?.label ?? choice.model;
 
 // The cheapest row a provider publishes — its whole catalog read from the cheap end. Undefined for a catalog
 // that hasn't loaded yet, which is a real state: every provider serves a floor, but only once something has

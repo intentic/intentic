@@ -879,8 +879,8 @@ const askSync = (verb: string, what: string, targets: readonly SyncTarget[]): vo
         if (settled.status === `failed`) {
             proposedFix.value = composeSession({
                 prompt: fixPrompt(settled),
-                model: sandboxSettings.value?.prepushFixModel,
-                effort: sandboxSettings.value?.prepushFixEffort,
+                model: sandboxSettings.value?.agentRunModel,
+                effort: sandboxSettings.value?.agentRunEffort,
                 // Isolated, like any other fleet agent: the work under test is committed on a branch, so the fix
                 // belongs in a worktree of its own and arrives as a diff to review rather than as edits landing
                 // underneath the push the user is still deciding about.

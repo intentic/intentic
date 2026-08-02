@@ -1,19 +1,16 @@
 <script setup lang="ts">
-import { type AgentProvider, parsePinned } from "@intentic/sandbox-contract";
-import { Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic-app/ui";
+import { Row, RowGroup } from "@intentic-app/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, ref, watch } from "vue";
-import { providerReady } from "../../../composables/chat/access";
-import { effortsFor } from "../../../composables/chat/effortScale";
-import { pickerEntries } from "../../../composables/chat/modelPicker";
-import { providerDisplayLabel } from "../../../composables/chat/providerCatalog";
+import { ref, watch } from "vue";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
-import ProviderLogo from "../../../chat/ProviderLogo.vue";
 
 /* WHAT PROVES THE WORK. Two checks with nothing in common but that question: one the daemon asks of a turn that
  * edited code and proved nothing, and one the workspace runs at the last moment before code leaves the machine.
- * The fix model belongs here rather than with the other model pick because it is meaningless without the check
- * above it — it names where the suggested fix session opens, and the row hides itself when no check is set. */
+ *
+ * WHICH MODEL the failed check's suggested fix opens on is NOT here — it is `agentRunModel`, up in the Models
+ * group, because that session is an agent run like the Fix button on a red pipeline and a Maintenance chore.
+ * Keeping a second pinned model down here would have meant this tab quietly governing the same thing twice,
+ * with two settings free to disagree about a question that has one answer. */
 
 const { settings, patch } = useSandboxSettings();
 
@@ -48,56 +45,6 @@ const savePrepushCommand = (): void => {
         patch({ prepushCommand });
     }
 };
-
-/* WHICH MODEL THE PROPOSED FIX OPENS ON. Every connected provider's full catalog in CATALOG order — pointedly
- * not cheapest-first like the quick model's list, because these are opposite jobs: the quick model exists to
- * keep a one-click helper off the frontier tier, while this one has to read a failing suite and repair it. The
- * empty row means "whatever the composer is set to", which is the honest floor — it is the model the user
- * already chose to work with, and it keeps following them as they change it. */
-const fixModelOptions = computed<PickerOptions>(() => {
-    const byProvider = new Map<AgentProvider, { value: string; label: string }[]>();
-    for (const entry of pickerEntries.value) {
-        // A provider with no credential is not offered: pinning a model this sandbox cannot send to would leave
-        // the dialog opening on a locked row every time, which is a setting that only ever costs a correction.
-        // ACP agents own their own model (empty id), so there is nothing here to pin.
-        if (!providerReady(entry.provider) || entry.value === ``) {
-            continue;
-        }
-        const options = byProvider.get(entry.provider) ?? [];
-        byProvider.set(entry.provider, options);
-        options.push({ value: entry.key, label: entry.label });
-    }
-    return [
-        { options: [{ value: ``, label: `Composer default`, description: `Whatever your chat is set to` }] },
-        ...[...byProvider].map(([provider, options]) => ({ label: providerDisplayLabel(provider), options })),
-    ];
-});
-
-// The pinned choice, parsed — the effort scale below is a property of the MODEL, so there is nothing to offer
-// until one is named.
-const fixModel = computed(() => parsePinned(settings.value?.prepushFixModel ?? ``));
-/* `thinking: false` because the setting pins a starting effort, not a turn: extended thinking is a per-turn
- * Claude knob the suggestion dialog still owns, and Conversation.effort re-clamps this pick against whatever it
- * is when the session actually opens.
- *
- * "Default" leads with the empty value, matching the model row above it, and is not decoration: an unpinned
- * effort really does mean "whatever the composer is set to", and rendering the scale's lowest segment as
- * selected instead would claim this sandbox had pinned `low` when it had pinned nothing. */
-const fixEffortOptions = computed(() =>
-    fixModel.value === undefined
-        ? []
-        : [
-              { label: `Default`, value: `` },
-              ...effortsFor(fixModel.value.provider, fixModel.value.model, false).map((e) => ({ label: e.label, value: e.value })),
-          ],
-);
-
-// The effort scale belongs to the model, so a new model drops the old pick rather than carrying one its scale
-// may not contain. Empty re-seeds from the composer — the same floor the model row itself defaults to.
-const setPrepushFixModel = (value: string): void => patch({ prepushFixModel: value, prepushFixEffort: `` });
-
-// A pinned key is `${provider}:${model}` — the provider prefix drives the row's brand mark.
-const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`:`)) as AgentProvider;
 </script>
 
 <template>
@@ -153,43 +100,6 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                         :disabled="settings === undefined"
                         class="min-w-0 flex-1 bg-transparent font-mono text-xs text-content placeholder:text-subtle focus:outline-none"
                         @change="savePrepushCommand"
-                    />
-                </div>
-            </template>
-        </Row>
-
-        <!-- Only meaningful with a command configured, so it hides without one rather than sitting there
-             governing nothing — the same reason the terse-holdout row appears only once the steer is on. -->
-        <Row
-            v-if="(settings?.prepushCommand ?? ``) !== ``"
-            icon="bolt"
-            title="Model for fixing a failed check"
-            description="Where the suggested fix session opens when the check fails. Nothing runs on its own — the prompt, this model and its effort are all editable in the dialog before you start it."
-        >
-            <template #control>
-                <Picker
-                    :model-value="settings?.prepushFixModel ?? ``"
-                    :options="fixModelOptions"
-                    :disabled="settings === undefined"
-                    class="w-56 py-1.5 text-xs"
-                    aria-label="Model for fixing a failed check"
-                    @update:model-value="(value: string | undefined) => setPrepushFixModel(value ?? ``)"
-                >
-                    <template #icon="{ option }">
-                        <Icon v-if="option.value === ``" name="comments" class="shrink-0 text-xs text-muted" aria-hidden="true" />
-                        <ProviderLogo v-else :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
-                    </template>
-                </Picker>
-            </template>
-            <!-- The effort scale belongs to the model, so it appears only once one is pinned — and a model
-                 whose runtime forwards no effort at all publishes none, which correctly draws nothing. -->
-            <template v-if="fixEffortOptions.length > 0" #below>
-                <div class="flex items-center justify-between gap-3">
-                    <span class="text-xs text-muted">Reasoning effort</span>
-                    <Segmented
-                        :model-value="settings?.prepushFixEffort ?? ``"
-                        :options="fixEffortOptions"
-                        @update:model-value="(prepushFixEffort: string) => patch({ prepushFixEffort })"
                     />
                 </div>
             </template>

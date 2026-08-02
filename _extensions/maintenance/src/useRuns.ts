@@ -190,6 +190,10 @@ export function useRuns() {
                     title: `${verdict.chore.title} — ${verdict.repo}`.slice(0, 80),
                     conversationId: manifest.conversationId,
                     isolated: true,
+                    // A chore is started by a row, not by a person choosing a model, so the daemon answers with
+                    // the owner's `agentRunModel` (Sandbox ▸ Agent ▸ Models). No picker here on purpose: it
+                    // would be a second place to configure one thing, and this view starts many runs at once.
+                    unattended: true,
                 }),
             }),
         );
