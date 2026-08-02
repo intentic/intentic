@@ -27,8 +27,18 @@ const intenticZoneOf = (context: OrpcContext): string | undefined => {
 // token is encrypted at rest, so it is decrypted here); daemonUrl + lastSeenAt come from the daemon's announce.
 // `providedTunnel` flags a daemonUrl under intentic's own zone, so the infra operator panel mints host tunnels
 // via the daemon's connect-token relay (POST /sandbox/host-tunnel) instead of asking for the user's Cloudflare token.
+// `setupCodeClaimedAt` rides along for the setup wizard: it is the platform's only evidence that the pasted
+// command reached a machine, and the wizard's wait reads very differently before and after it.
 const toSummary = (
-    sandbox: { id: string; name: string; image: string | null; daemonUrl: string | null; lastSeenAt: Date | null; token: string },
+    sandbox: {
+        id: string;
+        name: string;
+        image: string | null;
+        daemonUrl: string | null;
+        lastSeenAt: Date | null;
+        setupCodeClaimedAt: Date | null;
+        token: string;
+    },
     role: "owner" | "member",
     context: OrpcContext,
 ) => {
@@ -39,6 +49,7 @@ const toSummary = (
         image: sandbox.image,
         daemonUrl: sandbox.daemonUrl,
         lastSeenAt: sandbox.lastSeenAt === null ? null : sandbox.lastSeenAt.toISOString(),
+        setupCodeClaimedAt: sandbox.setupCodeClaimedAt === null ? null : sandbox.setupCodeClaimedAt.toISOString(),
         token: decryptSecret(context.config, sandbox.token),
         role,
         providedTunnel: sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`),
@@ -210,9 +221,17 @@ export const sandboxRoutes = {
         payload[`OWNER_EMAIL`] = user.email.toLowerCase();
         const code = randomBytes(8).toString(`base64url`);
         const expiresAt = new Date(Date.now() + SETUP_CODE_TTL_MS);
+        // The claim stamp belongs to the code, so a fresh code starts unclaimed. Without this, re-minting (the
+        // user switches Cloudflare zone, or resumes a sandbox that was connected once before) would leave the
+        // wizard reporting "your machine picked this up" about a command that no longer exists.
         await context.prisma.sandbox.update({
             where: { id: sandbox.id },
-            data: { setupCode: code, setupCodeExpiresAt: expiresAt, setupPayload: encryptSecret(context.config, JSON.stringify(payload)) },
+            data: {
+                setupCode: code,
+                setupCodeExpiresAt: expiresAt,
+                setupCodeClaimedAt: null,
+                setupPayload: encryptSecret(context.config, JSON.stringify(payload)),
+            },
         });
         return { code, hostname, expiresAt: expiresAt.toISOString() };
     }),

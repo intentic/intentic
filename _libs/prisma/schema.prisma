@@ -143,6 +143,11 @@ model Sandbox {
     // re-runnable from the same copied command — and overwritten whenever setup mints a fresh one.
     setupCode          String?         @unique
     setupCodeExpiresAt DateTime?
+    // When a machine last redeemed the CURRENT code at /setup/claim — the only proof the platform has that the
+    // pasted command actually ran somewhere. The setup wizard reads it to tell "you haven't run it yet" apart
+    // from "it's running and pulling the image", which is the difference between a spinner and an instruction.
+    // Cleared on every mint: a fresh code describes a fresh run, and a stale stamp would report the old one.
+    setupCodeClaimedAt DateTime?
     // The KEY=value map /setup/claim returns alongside CONNECT_TOKEN (= token above): intentic mode
     // {TUNNEL_TOKEN, SANDBOX_HOSTNAME}; own-Cloudflare mode {ZONE, SUBDOMAIN} — never the user's CF token.
     setupPayload       Json?

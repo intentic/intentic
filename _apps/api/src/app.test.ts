@@ -67,7 +67,9 @@ describe(`POST /setup/claim`, () => {
         expect(values[`TUNNEL_TOKEN`]).toBe(`cached-token`);
         expect(values[`SANDBOX_HOSTNAME`]).toBe(HOSTNAME);
         expect(values[`SYNC_PAIR_TOKEN`]).toMatch(/^[\w-]{20,}$/);
-        expect(update).not.toHaveBeenCalled();
+        // The claim's ONE write: the stamp that tells the setup wizard the pasted command reached a machine.
+        // Nothing else about the row moves here — the tunnel was provisioned and cached at mint.
+        expect(update).toHaveBeenCalledExactlyOnceWith({ where: { id: `s1` }, data: { setupCodeClaimedAt: expect.any(Date) } });
     });
 
     it(`404s an expired code with no oracle`, async () => {

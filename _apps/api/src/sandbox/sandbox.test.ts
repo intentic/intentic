@@ -5,7 +5,17 @@ import type { OrpcContext } from "../context.js";
 import { sandboxRoutes } from "./sandbox.routes.js";
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
-const sandboxRow = { id: `s1`, name: `dev`, image: null, ownerId: `u1`, token: `tok`, daemonUrl: null, lastSeenAt: null, tunnelToken: null };
+const sandboxRow = {
+    id: `s1`,
+    name: `dev`,
+    image: null,
+    ownerId: `u1`,
+    token: `tok`,
+    daemonUrl: null,
+    lastSeenAt: null,
+    setupCodeClaimedAt: null,
+    tunnelToken: null,
+};
 
 // Minimal prisma fake: each test overrides just the calls its route makes.
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => overrides as unknown as OrpcContext[`prisma`];
@@ -208,6 +218,9 @@ describe(`sandbox routes`, () => {
             data: {
                 setupCode: result.code,
                 setupCodeExpiresAt: expect.any(Date),
+                // The claim stamp belongs to the code: a fresh command starts unclaimed, so the setup wizard
+                // never reports the previous one as picked up.
+                setupCodeClaimedAt: null,
                 // Stored as the (encryptable) JSON string; with no SECRETS_KEY it stays plaintext JSON. OWNER_EMAIL
                 // is seeded (lowercased) so the daemon binds only the creator's Google identity as owner.
                 setupPayload: JSON.stringify({ ZONE: `example.com`, SUBDOMAIN: `sandbox-abc`, OWNER_EMAIL: `owner@example.com` }),

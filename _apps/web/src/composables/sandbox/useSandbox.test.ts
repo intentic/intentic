@@ -15,6 +15,7 @@ const summary = (id: string): SandboxSummary => ({
     image: null,
     daemonUrl: null,
     lastSeenAt: null,
+    setupCodeClaimedAt: null,
     token: `token-${id}`,
     role: `owner`,
     providedTunnel: false,

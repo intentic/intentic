@@ -194,6 +194,11 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         // command (the user's opt-in), so returning it unconditionally is harmless when sync is off.
         lines.push(`SYNC_PAIR_TOKEN=${randomBytes(32).toString(`base64url`)}`);
         lines.push(...Object.entries(payload).map(([key, value]) => `${key}=${value}`));
+        // The one moment the platform learns the pasted command reached a machine. Everything after this point
+        // happens inside the user's Docker and is invisible until the daemon announces minutes later — so the
+        // setup wizard leans on this stamp to stop telling someone who has not opened a terminal that we are
+        // waiting on their sandbox. Re-claimable, so this overwrites: the stamp marks the LATEST attempt.
+        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { setupCodeClaimedAt: new Date() } });
         return c.text(lines.join(`\n`));
     });
 

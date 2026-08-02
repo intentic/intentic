@@ -154,6 +154,36 @@ const step1Title = computed(() => {
 // Step 3 shows one command at a time; the preferred OS is a persisted singleton shared across screens.
 const { cmdOs } = useOsPreference();
 
+// The third Run tab: manage the sandbox with the user's own docker-compose.yml instead of the install
+// script. Local state layered over the persisted OS preference — picking Compose must not overwrite the
+// unix/windows choice other screens share (CommandOs stays a two-value type).
+const composeSelected = ref(false);
+const runTab = computed<`unix` | `windows` | `compose`>({
+    get: () => (composeSelected.value ? `compose` : cmdOs.value),
+    set: (value) => {
+        composeSelected.value = value === `compose`;
+        if (value !== `compose`) {
+            cmdOs.value = value;
+        }
+    },
+});
+// Two of the three labels shed a qualifier on a phone, where the three tabs share one line: the shell
+// ("PowerShell") and the vendor ("Docker") are both restated by the panel each tab opens, and a tab that wraps
+// to two lines while its neighbours don't stops reading as one control.
+// The third tab is on a different axis from the first two — it is not another OS, it is the path for someone
+// who would rather read a file than run a script — and its label can't say so without outgrowing the row. The
+// title says it on a desktop and the panel's own first line says it everywhere, which is where the reader who
+// needs it actually arrives.
+const runTabOptions = computed(() => [
+    { label: `Linux / macOS`, value: `unix` as const },
+    { label: mobile.value ? `Windows` : `Windows (PowerShell)`, value: `windows` as const },
+    {
+        label: mobile.value ? `Compose` : `Docker Compose`,
+        value: `compose` as const,
+        title: `No script runs — read the whole file, then start it yourself`,
+    },
+]);
+
 /* The two controls over the SHAPE of the pasted command. Both exist because a copy-paste install is the point
  * people balk at — not because it does more than an .exe would, but because it arrives with none of an
  * installer's affordances: no publisher, no preview, no file list, no uninstaller. These give the command back
@@ -178,9 +208,6 @@ const chipClass = (on: boolean): string =>
     `inline-flex min-h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-2xs transition-colors md:min-w-[11.5rem] ${
         on ? `border-success/40 bg-success/10 text-success` : `border-line text-muted hover:border-line-strong hover:text-content`
     }`;
-
-// The command is out and we're watching the registry for the daemon's announce — drives step 4's "waiting…".
-const waiting = computed(() => setup.value !== null);
 
 // The chosen target once its inputs are complete — what the setup code is minted for; undefined keeps it locked.
 const target = computed<SetupCodeTarget | undefined>(() => {
@@ -235,6 +262,84 @@ const lockedReason = computed(() => {
     }
     return setupError.value ?? `Preparing your install command…`;
 });
+
+/* --- the handoff (step 3) ---
+ *
+ * Step 3 is a HANDOFF to a machine this browser cannot see, and every way people get stuck here comes from the
+ * card not modelling that. It used to have exactly one state — a spinner and "waiting for your sandbox to report
+ * in", shown from the moment the code was minted — so a person who had not opened a terminal and a person whose
+ * Docker pull was four minutes deep saw the identical screen, forever. It read as "the platform is provisioning
+ * something", which is the one thing it never means, and the only button-shaped thing left on the card was
+ * "Check now". So people sat and pressed it.
+ *
+ * `handoff` is that missing model, in the order it actually happens:
+ *   • `locked`  — the chosen path isn't ready, so there is no command yet (lockedReason says what's missing)
+ *   • `yours`   — the command is on screen and NOTHING is in flight; the next move is the user's, in a terminal
+ *   • `pasted`  — they copied it, so we are waiting on their terminal rather than on our own infrastructure
+ *   • `claimed` — a machine redeemed the setup code at /setup/claim: the command demonstrably ran, and the
+ *                 minutes of invisible Docker work that follow are finally a wait this page has earned
+ *
+ * The `claimed` state is the one that needed a server change (Sandbox.setupCodeClaimedAt): the claim is the only
+ * evidence the platform ever gets that the pasted command reached a machine, and without it the card cannot
+ * tell "you haven't run it yet" from "it's running and slow" — which is exactly the ambiguity people resolve,
+ * wrongly, by waiting. */
+type Handoff = "locked" | "yours" | "pasted" | "claimed";
+
+// This browser put the command on the clipboard. Page-level and persistent, unlike CopyButton's own 1.5s
+// flash: it is the hinge the card turns on, not a button animation.
+const copied = ref(false);
+// Server-side proof the command ran somewhere: when a machine last redeemed THIS code. Minting clears the
+// stamp server-side, so a value here always describes the command currently on screen.
+const claimedAt = ref<string | null>(null);
+
+// There is a command out there and we're watching the registry — drives the card's footer. Gated on
+// `commandReady` rather than a bare mint, so a re-mint's stale command never narrates a wait of its own.
+const waiting = computed(() => commandReady.value);
+const handoff = computed<Handoff>(() => {
+    if (!commandReady.value) {
+        return `locked`;
+    }
+    if (claimedAt.value !== null) {
+        return `claimed`;
+    }
+    return copied.value ? `pasted` : `yours`;
+});
+
+/* The card escalates on its own, because the failure it guards against is silent: someone who has not realised
+ * the command has to be run somewhere else will never do anything this page can react to, so nothing but
+ * elapsed time can trigger the correction. `armedAt` is when the command became runnable — reset by a re-mint,
+ * which hands out a different command. */
+const now = ref(Date.now());
+const armedAt = ref<number | undefined>(undefined);
+const clock = setInterval(() => (now.value = Date.now()), 1000);
+watch(commandReady, (ready) => {
+    armedAt.value = ready ? Date.now() : undefined;
+});
+
+// When the card stops being polite about the likeliest reason nothing has reached us — the command is still
+// sitting on a clipboard. Long enough to walk to another machine; short enough to catch someone who has
+// settled in to watch this page. The compose path is a file to paste into an editor and edited there, so the
+// same nudge on that tab would fire at somebody doing exactly the right thing.
+const nudgeAfterMs = computed(() => (runTab.value === `compose` ? 3 * 60_000 : 40_000));
+// And when it stops assuming the command was never run, and starts helping the person whose terminal errored.
+const STALLED_MS = 3 * 60_000;
+// A claimed code with no daemon behind it yet: the first image pull is genuinely slow, so this waits much
+// longer before suggesting the terminal has something to say.
+const SLOW_BUILD_MS = 6 * 60_000;
+
+const waitedMs = computed(() => (armedAt.value === undefined ? 0 : now.value - armedAt.value));
+const nudging = computed(() => handoff.value !== `claimed` && waitedMs.value > nudgeAfterMs.value);
+const stalled = computed(() => handoff.value !== `claimed` && waitedMs.value > STALLED_MS);
+const slowBuild = computed(
+    () => claimedAt.value !== null && handoff.value === `claimed` && now.value - new Date(claimedAt.value).getTime() > SLOW_BUILD_MS,
+);
+
+// Copying is the last thing this browser can observe before the user leaves for a terminal, so it is also the
+// most informative funnel milestone between "was shown a command" and "ran one".
+const onCopied = (): void => {
+    copied.value = true;
+    track(`sandbox_command_copied`, { tab: runTab.value, review: review.value, sync: syncEnabled.value });
+};
 
 // LOCAL DEV ONLY: connect.{sh,ps1} redeems the setup code against PLATFORM_URL (host-side; the container never
 // reads it), so when the platform is served locally we ride the localhost origin into the command. For the
@@ -292,12 +397,26 @@ const check = async (): Promise<void> => {
     if (pending === null || checking.value) {
         return;
     }
+    // The code this poll is asking about. A response that lands after a re-mint answers for a command that no
+    // longer exists, and its claim stamp would report the PREVIOUS command as picked up — the one lie this
+    // card must never tell, since the whole point of the stamp is that it is trustworthy.
+    const askedFor = mintedFor.value;
     checking.value = true;
     try {
         const live = await sandbox.refresh();
         // A reachable platform clears any earlier "can't reach" warning — it must not outlive its cause.
         status.value = undefined;
-        const seen = live.find((entry) => entry.id === pending.id)?.lastSeenAt ?? null;
+        const row = live.find((entry) => entry.id === pending.id);
+        if (askedFor === mintedFor.value) {
+            const claim = row?.setupCodeClaimedAt ?? null;
+            if (claim !== null && claimedAt.value === null) {
+                // The funnel's missing middle: they did paste it into a terminal. Everything between here and
+                // `sandbox_connected` is Docker's, so a drop-off after this event is a different bug entirely.
+                track(`sandbox_command_claimed`, { resuming: resuming.value });
+            }
+            claimedAt.value = claim;
+        }
+        const seen = row?.lastSeenAt ?? null;
         if (seen !== null && seen !== baseline.value) {
             // Onboarding's make-or-break milestone: the pasted command produced a live daemon.
             track(`sandbox_connected`, { resuming: resuming.value });
@@ -404,6 +523,10 @@ const mint = async (chosen: SetupCodeTarget, key: string): Promise<void> => {
         }
         setup.value = minted;
         mintedFor.value = key;
+        // A fresh code is a fresh command, so the handoff starts over: the clipboard holds the old one, and the
+        // server has just cleared the claim stamp this mirrors (see setupCode in sandbox.routes.ts).
+        copied.value = false;
+        claimedAt.value = null;
     } catch (err) {
         if (chosen.mode === `intentic` && isNotFound(err)) {
             intenticAvailable.value = false;
@@ -499,36 +622,6 @@ const cleanupCommand = computed(() => (cmdOs.value === `windows` ? psCommand(`cl
 // The script this step hands out, readable in a browser tab without running anything.
 const sourceUrl = computed(() => scriptUrl(cmdOs.value === `windows` ? `ps1` : `sh`));
 
-// The third Run tab: manage the sandbox with the user's own docker-compose.yml instead of the install
-// script. Local state layered over the persisted OS preference — picking Compose must not overwrite the
-// unix/windows choice other screens share (CommandOs stays a two-value type).
-const composeSelected = ref(false);
-const runTab = computed<`unix` | `windows` | `compose`>({
-    get: () => (composeSelected.value ? `compose` : cmdOs.value),
-    set: (value) => {
-        composeSelected.value = value === `compose`;
-        if (value !== `compose`) {
-            cmdOs.value = value;
-        }
-    },
-});
-// Two of the three labels shed a qualifier on a phone, where the three tabs share one line: the shell
-// ("PowerShell") and the vendor ("Docker") are both restated by the panel each tab opens, and a tab that wraps
-// to two lines while its neighbours don't stops reading as one control.
-// The third tab is on a different axis from the first two — it is not another OS, it is the path for someone
-// who would rather read a file than run a script — and its label can't say so without outgrowing the row. The
-// title says it on a desktop and the panel's own first line says it everywhere, which is where the reader who
-// needs it actually arrives.
-const runTabOptions = computed(() => [
-    { label: `Linux / macOS`, value: `unix` as const },
-    { label: mobile.value ? `Windows` : `Windows (PowerShell)`, value: `windows` as const },
-    {
-        label: mobile.value ? `Compose` : `Docker Compose`,
-        value: `compose` as const,
-        title: `No script runs — read the whole file, then start it yourself`,
-    },
-]);
-
 const composeArgs = computed<ComposeArgs | undefined>(() => {
     if (setup.value === null) {
         return undefined;
@@ -577,6 +670,10 @@ const startFresh = (): void => {
     setup.value = null;
     mintedFor.value = undefined;
     setupError.value = undefined;
+    // The handoff belonged to the abandoned sandbox's command: a copy already made, and a claim already
+    // recorded, are both facts about a machine the next sandbox has nothing to do with.
+    copied.value = false;
+    claimedAt.value = null;
     subdomain.value = ``;
     derivedPrefix.value = ``;
     // The attach lane's inputs described the sandbox being abandoned — a stale domain would otherwise be sitting
@@ -591,6 +688,7 @@ const startFresh = (): void => {
 const timer = setInterval(() => void check(), 3000);
 onUnmounted(() => {
     clearInterval(timer);
+    clearInterval(clock);
     clearTimeout(mintTimer);
 });
 
@@ -987,8 +1085,16 @@ watch(commandReady, (ready) => {
                  reshape the command, and the uninstaller — an install you can see the undo for is a far
                  smaller decision than one you can't, and a hover is not where you look for that reassurance.
                  Step 4 folded in here too: waiting for the daemon asked nothing of the user, so a card of its
-                 own was chrome around one sentence — and that sentence belongs under the command that causes it. -->
-            <StepSection v-if="created && lane === `provision`" :step="3" title="Run your sandbox">
+                 own was chrome around one sentence — and that sentence belongs under the command that causes it.
+
+                 EVERY VISIBLE ACTOR ON THIS CARD IS THE USER. The title used to read "Run your sandbox", which
+                 names no one — people read it as something the platform was doing for them, sat through a
+                 spinner that started before they had done anything, and pressed the only button on the card
+                 ("Check now") until they gave up. The one sentence that explained the handoff lived inside the
+                 hint. So: the title gives the instruction and names the machine, the lead says outright that
+                 this step does not happen in the browser, and the wait at the bottom is a state machine over
+                 the handoff (see `handoff`) rather than one perpetual "waiting…". -->
+            <StepSection v-if="created && lane === `provision`" :step="3" title="Run this on your computer">
                 <template #actions>
                     <InfoHint label="What running your sandbox does" text="What this does">
                         <p class="mb-1 text-sm font-semibold text-content">What this does</p>
@@ -1034,10 +1140,26 @@ watch(commandReady, (ready) => {
                             </a>
                         </div>
                     </InfoHint>
-                    <Button label="Check now" size="small" severity="secondary" :text="true" :loading="checking" @click="check">
-                        <template #icon><Icon name="refresh" /></template>
-                    </Button>
                 </template>
+
+                <!-- The instruction the whole card was missing, in the first thing read after the title and
+                     never behind a disclosure. It has to carry three facts, because each one is separately a
+                     reason people stall: that this step is not in the browser, WHICH machine it is on, and that
+                     the page cannot do it for them. On a phone the third fact is the pressing one — the device
+                     reading this cannot be the device running it — so it leads there instead. -->
+                <p class="flex items-start gap-2.5 text-xs leading-relaxed text-content">
+                    <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
+                    <span class="min-w-0">
+                        <template v-if="mobile">
+                            <span class="font-medium">This step needs a computer.</span> Copy the command below, then open a terminal on the machine
+                            that should host your sandbox — your laptop, or a server you have a shell on — and paste it there.
+                        </template>
+                        <template v-else>
+                            <span class="font-medium">This is the one step that doesn't happen in the browser.</span> Open a terminal on the machine
+                            that should host your sandbox — this computer, or a server you have a shell on — paste the command below, and press Enter.
+                        </template>
+                    </span>
+                </p>
 
                 <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
                      the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name + the
@@ -1080,23 +1202,36 @@ watch(commandReady, (ready) => {
                                 :text="selectedCommand"
                                 :label="mobile ? `Copy command` : `Copy`"
                                 :stretch="mobile"
+                                @copied="onCopied"
                             />
                         </div>
                         <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
                         <template v-else-if="splitCommand">
+                            <!-- The RUN half is the copy that means the handoff has started; copying the fetch
+                                 half is halfway through reading the script, not halfway to a sandbox. -->
                             <Code :code="splitCommand.fetch" :lang="selectedCommandLang" :wrap="true" label="1. Download it, and read it" />
-                            <Code :code="splitCommand.run" :lang="selectedCommandLang" :wrap="true" label="2. Run the file you just read" />
+                            <Code
+                                :code="splitCommand.run"
+                                :lang="selectedCommandLang"
+                                :wrap="true"
+                                label="2. Run the file you just read"
+                                @copied="onCopied"
+                            />
                         </template>
                         <template v-else>
                             <!-- Clamped on a phone: the command is a thing to COPY, and wrapped in full it is
                                  nine lines of env vars between the button that copies it and the step that
                                  comes next. The dev command is the long one, but even the hosted one-liner
-                                 wraps to four lines at 390px. -->
+                                 wraps to four lines at 390px.
+                                 The label is the block's title bar, and it says TERMINAL — a dark monospace box
+                                 in a page of cards otherwise reads as a documentation snippet, which is a thing
+                                 to look at rather than a thing to run somewhere else. -->
                             <Code
                                 :code="selectedCommand"
                                 :lang="selectedCommandLang"
                                 :wrap="true"
                                 :copyable="false"
+                                :label="mobile ? `Terminal — on your computer` : `Terminal — on the machine that will run your sandbox`"
                                 :clamp-lines="mobile ? 4 : undefined"
                             />
                             <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
@@ -1176,14 +1311,94 @@ watch(commandReady, (ready) => {
                     </div>
                 </template>
 
-                <!-- Step 4's whole job, as the footer of the step it reports on. -->
-                <p v-if="waiting" class="flex items-start gap-2 border-t border-line pt-3 text-xs text-muted">
-                    <Icon name="spinner" spin class="mt-0.5 shrink-0 text-info" />
-                    <span
-                        >Waiting for your sandbox to report in — it announces itself the moment it starts, and your workspace opens
-                        automatically.</span
+                <!-- Step 4's whole job, as the footer of the step it reports on — now saying WHICH of the two
+                     waits this is. A spinner from the moment a code was minted is what made a screen where the
+                     user has done nothing look identical to one where Docker is four minutes into an image
+                     pull, and "your workspace opens automatically" is a promise about the second that reads, in
+                     the first, as permission to sit still. So the icon leads: a hollow circle for a wait that is
+                     not running, a spinner only once something actually is. `Check now` lives here rather than
+                     in the header, because here it is beside the thing it re-checks and is plainly a courtesy
+                     next to the sentence carrying the real instruction — up there it was the most
+                     button-shaped thing on the card, and people pressed it instead of opening a terminal. -->
+                <div v-if="waiting" class="flex flex-col gap-2 border-t border-line pt-3">
+                    <p class="flex items-start gap-2 text-xs" :class="handoff === `claimed` ? `text-content` : `text-muted`">
+                        <Icon v-if="handoff === `claimed`" name="spinner" spin class="mt-0.5 shrink-0 text-success" />
+                        <Icon v-else-if="handoff === `pasted`" name="spinner" spin class="mt-0.5 shrink-0 text-info" />
+                        <Icon v-else name="circle" class="mt-0.5 shrink-0 text-subtle" />
+                        <span class="min-w-0">
+                            <template v-if="handoff === `claimed`">
+                                <span class="font-medium text-success">Your machine picked it up.</span> Docker is starting your sandbox now — the
+                                first run pulls the image, so a few minutes is normal. Your workspace opens by itself.
+                            </template>
+                            <template v-else-if="handoff === `pasted`">
+                                <span class="font-medium text-content">Copied.</span> Now paste it into that terminal and press Enter — we're watching
+                                for your sandbox and will open the workspace the moment it starts.
+                            </template>
+                            <template v-else>
+                                <span class="font-medium text-content">Nothing is running yet.</span> The moment you run the command on that machine,
+                                this page notices on its own and opens your workspace — there's nothing to refresh here.
+                            </template>
+                        </span>
+                    </p>
+
+                    <!-- The correction, on a timer, because the mistake this card exists to prevent is SILENT:
+                         somebody who has not understood that the command runs elsewhere never does anything the
+                         page can react to, so elapsed time is the only trigger there is. -->
+                    <div v-if="nudging" :class="cmp.alertWarning('flex flex-col gap-2')">
+                        <p class="flex items-start gap-2">
+                            <Icon name="clock" class="mt-0.5 shrink-0" />
+                            <span class="min-w-0">
+                                <span class="font-medium">Still nothing here.</span> This command has to be pasted into a terminal on the machine that
+                                will run your sandbox — nothing happens on this page until you do.
+                            </span>
+                        </p>
+                        <!-- After three minutes, stop assuming it was never run and start helping the person
+                             whose terminal answered back. Both readings get an action they can take. -->
+                        <p v-if="stalled" class="pl-6 text-2xs opacity-90">
+                            Already ran it? Look at that terminal — a failure there (no Docker, no permission, a network it can't reach) stops the
+                            sandbox before it can report in. The command is safe to run again as-is.
+                        </p>
+                        <div class="flex flex-wrap items-center gap-2 pl-6">
+                            <CopyButton
+                                v-if="runTab !== `compose` && splitCommand === undefined"
+                                :text="selectedCommand"
+                                label="Copy the command again"
+                                @copied="onCopied"
+                            />
+                            <a
+                                v-if="environment.production"
+                                :href="sourceUrl"
+                                target="_blank"
+                                rel="noreferrer"
+                                class="inline-flex items-center gap-1 text-2xs hover:underline"
+                            >
+                                See what it runs <Icon name="external-link" />
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- A claim with no daemon behind it is a genuinely different failure from silence: the
+                         command ran, so the terminal is where the answer is. Much longer fuse — the first image
+                         pull legitimately takes minutes. -->
+                    <p v-if="slowBuild" class="flex items-start gap-2 text-2xs text-warning">
+                        <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
+                        <span class="min-w-0">
+                            Your machine picked this up a while ago but the sandbox still hasn't reported in. Check that terminal for an error — it is
+                            the only place the reason shows up. The command is safe to re-run.
+                        </span>
+                    </p>
+
+                    <!-- The courtesy, sized like one. -->
+                    <button
+                        type="button"
+                        :class="cmp.linkButton(`gap-1 text-2xs text-subtle hover:text-content`)"
+                        :disabled="checking"
+                        @click="check"
                     >
-                </p>
+                        <Icon name="refresh" :spin="checking" />
+                        {{ checking ? `Checking…` : `Check now` }}
+                    </button>
+                </div>
                 <p v-if="status" class="text-2xs text-warning">{{ status }}</p>
             </StepSection>
         </div>

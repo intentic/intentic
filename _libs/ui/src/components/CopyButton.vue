@@ -24,6 +24,11 @@ const {
     stretch?: boolean;
 }>();
 
+// Fired only on a write that actually landed, for the caller whose FLOW turns on the copy having happened —
+// setup's install command is handed to a terminal this browser cannot see, so the copy is the last thing it
+// can observe before the user leaves for it. The button's own "Copied" flash is separate and still local.
+const emit = defineEmits<{ copied: [] }>();
+
 const copied = ref(false);
 // The pressed button, which is also the window the write must go through — see clipboardOf.
 const root = ref<HTMLButtonElement>();
@@ -41,6 +46,7 @@ const copy = async (): Promise<void> => {
         // clipboard.write([new ClipboardItem({ 'text/plain': promise })]).
         await clipboardOf(root.value).writeText(typeof text === `function` ? await text() : text);
         copied.value = true;
+        emit(`copied`);
         setTimeout(() => (copied.value = false), 1500);
     } catch {
         // Clipboard may be unavailable (insecure context); the user can still select the text.

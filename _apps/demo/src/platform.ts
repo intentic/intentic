@@ -19,6 +19,7 @@ export const DEMO_SANDBOX: SandboxSummary = {
     image: null,
     daemonUrl: DEMO_DAEMON_ORIGIN,
     lastSeenAt: new Date().toISOString(),
+    setupCodeClaimedAt: null,
     token: `demo-connect-token`,
     role: `owner`,
     providedTunnel: false,

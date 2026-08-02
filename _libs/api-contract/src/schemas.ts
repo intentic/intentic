@@ -341,13 +341,17 @@ export interface PlanStreamEvent {
 // `role` is the caller's relationship to it (owner can manage access; member has access only). `providedTunnel`
 // is server-computed: the reported daemonUrl lives under intentic's own zone (an intentic-provided tunnel), so
 // the infra operator panel knows to mint host tunnels via the daemon's relay (POST /sandbox/host-tunnel) instead
-// of asking for the user's Cloudflare token. sandbox.list returns owned ∪ shared.
+// of asking for the user's Cloudflare token. `setupCodeClaimedAt` (ISO) is when a machine last redeemed the
+// sandbox's CURRENT setup code — the setup wizard's only evidence that the pasted command actually ran, which
+// is what lets it stop showing a spinner at someone who has not opened a terminal yet. sandbox.list returns
+// owned ∪ shared.
 export const SandboxSummarySchema = z.object({
     id: z.string(),
     name: z.string(),
     image: z.string().nullable(),
     daemonUrl: z.string().nullable(),
     lastSeenAt: z.string().nullable(),
+    setupCodeClaimedAt: z.string().nullable(),
     token: z.string(),
     role: z.enum(["owner", "member"]),
     providedTunnel: z.boolean(),

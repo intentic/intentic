@@ -32,6 +32,10 @@ const {
     clampLines?: number;
 }>();
 
+// Passed straight through from the built-in copy button, for a caller whose flow turns on the copy having
+// happened (setup's install command, which is run somewhere this browser cannot see).
+const emit = defineEmits<{ copied: [] }>();
+
 const { highlight } = useHighlighter();
 const html = ref<string | undefined>(undefined);
 
@@ -99,7 +103,7 @@ watch(
         <div class="flex flex-col gap-1.5">
             <div v-if="label || copyable" class="flex items-center justify-between">
                 <span class="text-2xs font-medium text-muted">{{ label }}</span>
-                <CopyButton v-if="copyable" :text="code" label="Copy" />
+                <CopyButton v-if="copyable" :text="code" label="Copy" @copied="emit(`copied`)" />
             </div>
             <div ref="block" class="relative">
                 <div v-if="html" v-html="html"></div>

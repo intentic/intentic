@@ -9,7 +9,7 @@
 //
 // `primeicons` is the original set, kept as a baseline for comparison — rendered through the same
 // Iconify pipeline via the `prime:` collection (no font/CSS dependency). Iconify's `prime` snapshot
-// lacks `gitlab`, so that one name falls back to a monochrome Phosphor logo.
+// lacks `gitlab` and `terminal`, so those two names fall back to Phosphor.
 
 export type IconName =
     | "align-left"
@@ -102,6 +102,7 @@ export type IconName =
     | "stop"
     | "sun"
     | "sync"
+    | "terminal"
     | "th-large"
     | "times"
     | "trash"
@@ -216,6 +217,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         stop: "ph:stop-circle",
         sun: "ph:sun",
         sync: "ph:arrows-clockwise",
+        terminal: "ph:terminal-window",
         "th-large": "ph:squares-four",
         times: "ph:x",
         trash: "ph:trash",
@@ -324,6 +326,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         stop: "solar:stop-circle-linear",
         sun: "solar:sun-linear",
         sync: "solar:restart-linear",
+        terminal: "solar:programming-linear",
         "th-large": "solar:widget-linear",
         times: "solar:close-circle-linear",
         trash: "solar:trash-bin-trash-linear",
@@ -431,6 +434,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         stop: "ri:stop-circle-line",
         sun: "ri:sun-line",
         sync: "ri:restart-line",
+        terminal: "ri:terminal-box-line",
         "th-large": "ri:layout-grid-line",
         times: "ri:close-line",
         trash: "ri:delete-bin-line",
@@ -538,6 +542,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         stop: "hugeicons:stop-circle",
         sun: "hugeicons:sun-03",
         sync: "hugeicons:arrow-reload-horizontal",
+        terminal: "hugeicons:computer-terminal-01",
         "th-large": "hugeicons:grid-view",
         times: "hugeicons:cancel-01",
         trash: "hugeicons:delete-02",
@@ -645,6 +650,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         stop: "prime:stop",
         sun: "prime:sun",
         sync: "prime:sync",
+        terminal: "ph:terminal-window",
         "th-large": "prime:th-large",
         times: "prime:times",
         trash: "prime:trash",
