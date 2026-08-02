@@ -6,6 +6,7 @@ import { RouterLink, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands } from "../core-views/registry";
+import { badgeClass } from "../core-views/viewBadge";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { identityHue } from "../composables/identityHue";
@@ -28,12 +29,6 @@ interface AreaRow {
     // show its count.
     readonly badge?: ViewBadge;
 }
-
-const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
-    info: `bg-primary-600/15 text-link`,
-    warning: `bg-warning/15 text-warning`,
-    danger: `bg-danger/15 text-danger`,
-};
 
 // Activation.icon is an open string in the public extension API; trusted to name one of the app's icons.
 const extensionRow = (active: ActiveExtension): AreaRow => {
@@ -194,12 +189,9 @@ const logout = async (): Promise<void> => {
                     <span v-else class="text-xs font-semibold text-muted">{{ area.label.slice(0, 2).toUpperCase() }}</span>
                 </span>
                 <span class="min-w-0 flex-1 truncate">{{ area.label }}</span>
-                <span
-                    v-if="area.badge"
-                    class="shrink-0 rounded-full px-1.5 py-px text-2xs font-semibold"
-                    :class="BADGE_TONE[area.badge.tone ?? `info`]"
-                    >{{ area.badge.tooltip ?? area.badge.count }}</span
-                >
+                <span v-if="area.badge" class="shrink-0 rounded-full px-1.5 py-px text-2xs font-semibold" :class="badgeClass(area.badge)">{{
+                    area.badge.tooltip ?? area.badge.count
+                }}</span>
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
             </RouterLink>
         </section>

@@ -13,6 +13,7 @@ import { useTerminalActivity } from "../composables/terminal/useTerminalActivity
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 import { commandShortcut } from "../composables/commands/useCommands";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
+import { badgeClass } from "../core-views/viewBadge";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
@@ -48,14 +49,6 @@ interface AreaTile {
     readonly badge?: ViewBadge;
 }
 
-// Badge tone → chip classes. `info` is the resting tone every core count has always used; `danger` is reserved
-// for "broken", which is why nothing in the core shell claims it.
-const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
-    info: `bg-primary-600/15 text-link`,
-    warning: `bg-warning/15 text-warning`,
-    danger: `bg-danger/15 text-danger`,
-};
-const badgeClass = (badge: ViewBadge): string => BADGE_TONE[badge.tone ?? `info`];
 const badgeText = ({ count = 0 }: ViewBadge): string => (count > 99 ? `99+` : String(count));
 // ONE label per tile, badge included. The badge used to carry a tooltip of its own, nested inside the tile's —
 // and `mouseenter` fires on an element AND every ancestor it entered, so hovering the count opened both boxes,
