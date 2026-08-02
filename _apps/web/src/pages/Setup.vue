@@ -8,7 +8,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ToggleSwitch from "primevue/toggleswitch";
 import { track } from "../composables/analytics";
-import { apiClient, isPaymentRequired } from "../composables/useApi";
+import { apiClient } from "../composables/useApi";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
@@ -62,7 +62,7 @@ const route = useRoute();
 // Drives the two places a phone needs different CONTENT rather than different layout (which the md: classes
 // below handle): the run tabs' labels and the size of the controls that carry them.
 const { mobile } = useDevice();
-const { user, upgradeOpen, entitlements, refreshPlan } = useAuth();
+const { user, entitlements, refreshPlan } = useAuth();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 
 // The sandbox created in this setup session (holds its connection token). Null until the user names + creates it.
@@ -74,11 +74,16 @@ const creating = ref(false);
 const error = ref<string | null>(null);
 
 // Whether the account is at its owned-sandbox cap — mirrors the server gate (router.ts) and the switcher
-// preflight, so we upsell before the user names + creates a sandbox that would only 402.
+// preflight, so nobody fills in a name for a Create that could only 402.
 const atLimit = computed(() => {
     const limit = entitlements.value?.sandboxLimit;
     return limit !== undefined && sandbox.sandboxes.value.filter((entry) => entry.role === `owner`).length >= limit;
 });
+
+// Is there a workspace to go BACK to — some sandbox other than the one being set up here that has actually
+// reported in. Both halves matter: a row this page created moments ago is not somewhere to return to, and
+// neither is one that has never had a daemon (its shell would open on a connecting gate that never resolves).
+const otherWorkspace = computed(() => sandbox.sandboxes.value.some((entry) => entry.id !== created.value?.id && entry.lastSeenAt !== null));
 
 // Step 2 mode. Default is the zero-config intentic-provided path; "own" is the bring-your-own-Cloudflare toggle.
 const mode = ref<"intentic" | "own">(`intentic`);
@@ -270,22 +275,37 @@ const status = ref<string | undefined>(undefined);
 // True while a registry check is in flight — gives "Check now" a visible checking state.
 const checking = ref(false);
 
-// Poll the platform registry for the daemon's boot registration (POST /sandbox/announce writes daemonUrl +
-// lastSeenAt). When lastSeenAt advances past the baseline, a daemon has come up for this sandbox — open the
-// workspace. Same-origin, no DNS resolution of the sandbox hostname.
+/* Poll the platform registry for the daemon's boot registration (POST /sandbox/announce writes daemonUrl +
+ * lastSeenAt). When lastSeenAt advances past the baseline, a daemon has come up for this sandbox — open the
+ * workspace. Same-origin, no DNS resolution of the sandbox hostname.
+ *
+ * The row is looked up by `created.id` IN THE LIST THE REFRESH RETURNED, never through `sandbox.active`. Those
+ * are the same sandbox only while the selection happens to point at the one being set up, and `reconcileActive`
+ * moves the selection to `live[0]` whenever the active id is absent from a list response — which is exactly
+ * what a just-created row is until the server read catches up with the write. For an account that already owns
+ * a connected sandbox, that fallback put a real `lastSeenAt` in front of a baseline of null, so naming a second
+ * sandbox redirected straight into the FIRST one's workspace: setup looked complete, the command was never run,
+ * and `sandbox_connected` fired for a daemon that does not exist. Asking about `created` asks the question this
+ * screen is actually waiting on. */
 const check = async (): Promise<void> => {
-    if (created.value === null || checking.value) {
+    const pending = created.value;
+    if (pending === null || checking.value) {
         return;
     }
     checking.value = true;
     try {
-        await sandbox.refresh();
+        const live = await sandbox.refresh();
         // A reachable platform clears any earlier "can't reach" warning — it must not outlive its cause.
         status.value = undefined;
-        const seen = sandbox.active.value?.lastSeenAt ?? null;
+        const seen = live.find((entry) => entry.id === pending.id)?.lastSeenAt ?? null;
         if (seen !== null && seen !== baseline.value) {
             // Onboarding's make-or-break milestone: the pasted command produced a live daemon.
             track(`sandbox_connected`, { resuming: resuming.value });
+            // Point the workspace at the sandbox this page just set up. The same `reconcileActive` fallback that
+            // used to trigger this redirect can also have moved the selection away while we were waiting, and
+            // opening someone's older sandbox at the end of setting up a new one is the same wrong answer
+            // arriving one step later.
+            sandbox.select(pending.id);
             await router.push(`/`);
         }
     } catch {
@@ -306,10 +326,9 @@ const createSandbox = async (): Promise<void> => {
     try {
         created.value = await sandbox.create(name.value.trim());
     } catch (err) {
-        // A plan-gate hit (free limit reached) opens the Upgrade dialog; the gate's message still renders inline.
-        if (isPaymentRequired(err)) {
-            upgradeOpen.value = true;
-        }
+        // A plan-gate hit renders the server's message inline like any other failure. It does NOT raise the
+        // Upgrade dialog: a modal sell on top of a half-finished setup is the same pitch this screen just
+        // stopped making, and the message already names the cap.
         error.value = errorMessage(err, `Could not create your sandbox.`);
     } finally {
         creating.value = false;
@@ -348,13 +367,12 @@ const connectDomain = async (): Promise<void> => {
         const row = created.value ?? (await sandbox.create(attachedName.value));
         created.value = row;
         await sandbox.attach(row.id, url);
-        // Same milestone as the provision lane's announce — the user has a live sandbox in the workspace.
+        // Same milestone as the provision lane's announce — the user has a live sandbox in the workspace, and
+        // the workspace has to open on THAT one (see check()).
         track(`sandbox_connected`, { resuming: resuming.value, attached: true });
+        sandbox.select(row.id);
         await router.push(`/`);
     } catch (err) {
-        if (isPaymentRequired(err)) {
-            upgradeOpen.value = true;
-        }
         error.value = errorMessage(err, `Could not connect your sandbox.`);
     } finally {
         attaching.value = false;
@@ -645,10 +663,13 @@ watch(commandReady, (ready) => {
                  escape hatch takes the first line on its own (`order-first w-full`) so the title keeps the full
                  width instead of collapsing to "Set up / your / workspace" beside a button pushed off-screen. -->
             <header class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <!-- Escape hatch for a returning user: they already own a sandbox, so /'s requireSetup guard
-                     lets them back into the workspace. Hidden for a new user (0 sandboxes) who'd just bounce back. -->
+                <!-- Escape hatch for a returning user: they have a workspace that already works, so /'s
+                     requireSetup guard lets them back into it. Hidden for a new user, who'd only bounce back —
+                     which is what `length > 0` was for, and what it stopped doing the moment this page created
+                     a row of its own: naming a sandbox made "Back to workspace" appear beside the very first
+                     step, offering a finished workspace to someone who has not run anything yet. -->
                 <Button
-                    v-if="sandbox.sandboxes.value.length > 0"
+                    v-if="otherWorkspace"
                     label="Back to workspace"
                     severity="secondary"
                     :text="true"
@@ -815,15 +836,14 @@ watch(commandReady, (ready) => {
                     </button>
                 </template>
                 <template v-else-if="created === null">
-                    <!-- At the plan cap: upsell here instead of a name form whose Create can only 402. -->
-                    <template v-if="atLimit">
-                        <p class="text-xs text-muted">
-                            You're on the Free plan, which includes one sandbox — and it's already in use. Upgrade to Pro to run more.
-                        </p>
-                        <Button label="Upgrade to Pro" class="w-full justify-center md:w-auto md:self-start" @click="upgradeOpen = true">
-                            <template #icon><Icon name="star" /></template>
-                        </Button>
-                    </template>
+                    <!-- At the plan cap: say so plainly instead of offering a name form whose Create can only
+                         402. No upgrade pitch — this screen's job is to get a machine connected, and someone
+                         who came here to do that is the worst possible audience for a plan sell; upgrading
+                         lives in the account panel, where a person goes when that is the thing they want. -->
+                    <p v-if="atLimit" class="text-xs text-muted">
+                        Every sandbox your plan includes is already in use, so there's none spare to set up here. Reconnect one from the switcher, or
+                        remove one you've finished with.
+                    </p>
                     <template v-else>
                         <p class="text-xs text-muted">Give this sandbox a name so you can tell it apart in the switcher — you can run several.</p>
                         <div class="flex flex-col gap-2 md:flex-row md:items-center">
@@ -859,16 +879,10 @@ watch(commandReady, (ready) => {
                             This sandbox still exists on the platform — the CLI cleanup only cleared its local container. Reconnect it below to start
                             a fresh daemon<template v-if="!atLimit">, or create a new sandbox instead</template>.
                         </p>
-                        <!-- Free-at-limit: the honest alternative is upgrading, not a create form that 402s. -->
-                        <button
-                            v-if="atLimit"
-                            type="button"
-                            :class="cmp.linkButton(`text-muted underline hover:text-content`)"
-                            @click="upgradeOpen = true"
-                        >
-                            Need another sandbox? Upgrade to Pro
-                        </button>
-                        <button v-else type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="startFresh">
+                        <!-- At the cap there is no second sandbox to offer, and the paragraph above already
+                             said so — so the alternative simply isn't there, rather than becoming a sales
+                             pitch aimed at someone in the middle of reconnecting a machine. -->
+                        <button v-if="!atLimit" type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="startFresh">
                             Not this one? Create a new sandbox instead
                         </button>
                     </template>
@@ -966,13 +980,60 @@ watch(commandReady, (ready) => {
 
             <!-- Step 3: run the sandbox — and the whole reason this page loses people. A copy-paste command is
                  no more dangerous than an .msi, but it arrives without any of an installer's affordances: no
-                 publisher, no preview of what will happen, no list of what it changes, no uninstaller. What the
-                 old "What this does" hint held is therefore ON the card now (a nervous reader does not hover an
-                 ⓘ), next to the two controls that let them reshape the command instead of abandoning it.
+                 publisher, no preview of what will happen, no list of what it changes, no uninstaller.
+                 What it does and what it leaves behind is in the hint, where a reader who wants it can pull it
+                 up and a reader who doesn't never pays for it in card height. Three things stay ON the card,
+                 because each is something to ACT on rather than something to know: the two switches that
+                 reshape the command, and the uninstaller — an install you can see the undo for is a far
+                 smaller decision than one you can't, and a hover is not where you look for that reassurance.
                  Step 4 folded in here too: waiting for the daemon asked nothing of the user, so a card of its
                  own was chrome around one sentence — and that sentence belongs under the command that causes it. -->
             <StepSection v-if="created && lane === `provision`" :step="3" title="Run your sandbox">
                 <template #actions>
+                    <InfoHint label="What running your sandbox does" text="What this does">
+                        <p class="mb-1 text-sm font-semibold text-content">What this does</p>
+                        <p class="mb-3 text-2xs leading-relaxed text-muted">One command on the machine that will host your sandbox. It:</p>
+                        <ul class="flex flex-col gap-2 text-2xs text-muted">
+                            <li class="flex items-start gap-2">
+                                <Icon name="box" class="mt-0.5 text-link" />
+                                <span
+                                    >Starts your sandbox in <span class="text-content">Docker</span> — 2 containers, 3 volumes and 1 network, every
+                                    one named <code>intentic-*</code></span
+                                >
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <Icon name="cloud" class="mt-0.5 text-link" />
+                                <span>Opens a <span class="text-content">private Cloudflare tunnel</span> so your browser can reach it</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <Icon name="lock" class="mt-0.5 text-success" />
+                                <span>No inbound ports, <span class="text-content">nothing deployed</span> — just a reachable workspace</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <Icon name="file" class="mt-0.5 text-link" />
+                                <span
+                                    >Outside Docker it writes <code>~/.intentic/logs</code
+                                    ><template v-if="syncEnabled"
+                                        >, plus the sync agent in <code>~/.intentic/sync</code> — which runs as you, no root</template
+                                    ></span
+                                >
+                            </li>
+                        </ul>
+                        <div class="mt-3 border-t border-line pt-2 text-2xs text-subtle">
+                            <p>
+                                Missing Docker is installed for you — you'll be asked first. Docker Engine on Linux, Docker Desktop on macOS/Windows;
+                                a first Windows install may need a reboot.
+                            </p>
+                            <a
+                                href="https://docs.docker.com/get-docker/"
+                                target="_blank"
+                                rel="noreferrer"
+                                class="mt-1 inline-flex items-center gap-1 text-link hover:underline"
+                            >
+                                Or install Docker yourself <Icon name="external-link" />
+                            </a>
+                        </div>
+                    </InfoHint>
                     <Button label="Check now" size="small" severity="secondary" :text="true" :loading="checking" @click="check">
                         <template #icon><Icon name="refresh" /></template>
                     </Button>
@@ -1057,19 +1118,18 @@ watch(commandReady, (ready) => {
                         </template>
                     </div>
 
-                    <!-- Everything ABOUT the command, as one block on the card's rhythm rather than four rows
-                         each taking a full step-sized gap: the two switches over its shape, then what it will
-                         do, leave behind and how to undo. Script tabs only — compose declares itself. -->
+                    <!-- What you can DO about the command, as one block on the card's rhythm rather than three
+                         rows each taking a full step-sized gap: the two switches over its shape, then the undo.
+                         Script tabs only — compose declares itself. -->
                     <div v-if="runTab !== `compose`" class="flex flex-col gap-2">
                         <!-- The two switches over the SHAPE of the command, each beside the sentence that justifies
-                         it — a checkbox whose reason is a hover away is a checkbox nobody ticks. They sit
-                         directly under the command so the rewrite is visible one row up, next to the Copy that
-                         picks it up. -->
+                         it — these are the one thing that does NOT belong in the hint, because a checkbox whose
+                         reason is a hover away is a checkbox nobody ticks. They sit directly under the command so
+                         the rewrite is visible one row up, next to the Copy that picks it up. -->
                         <div v-if="environment.production" class="flex flex-col gap-1.5">
                             <!-- Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
-                                 the Docker prerequisite is a FACT rather than a control's caption, and it moves
-                                 into the list below — a lone caption here would start its column with nothing
-                                 in front of it while the row under it is indented past a chip. -->
+                                 there is no switch here and the Docker prerequisite is left to the hint, which
+                                 names the engine per platform and the reboot a first Windows install may want. -->
                             <div v-if="runTab === `unix`" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
                                 <button type="button" :aria-pressed="hasDocker" :class="chipClass(hasDocker)" @click="hasDocker = !hasDocker">
                                     <Icon :name="hasDocker ? `check-square` : `square`" />
@@ -1101,45 +1161,18 @@ watch(commandReady, (ready) => {
                             </div>
                         </div>
 
-                        <!-- What the command will do, what it leaves behind, and how to take it all back. Plain rows,
-                         no frame: this is already the third level of nesting, and a border around it would read
-                         as a warning about its own contents. -->
-                        <ul class="flex flex-col gap-1.5 text-2xs leading-relaxed text-muted">
-                            <li v-if="runTab === `windows`" class="flex items-start gap-2">
-                                <Icon name="desktop" class="mt-0.5 shrink-0 text-subtle" />
-                                <span class="min-w-0"
-                                    >Installs Docker Desktop if it's missing — it asks first, and a first install may need a reboot.</span
-                                >
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="box" class="mt-0.5 shrink-0 text-subtle" />
-                                <span class="min-w-0">Creates 2 containers, 3 volumes and 1 network, every one named <code>intentic-*</code>.</span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="cloud" class="mt-0.5 shrink-0 text-subtle" />
-                                <span class="min-w-0">Opens a private Cloudflare tunnel so your browser can reach it — no inbound ports.</span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="file" class="mt-0.5 shrink-0 text-subtle" />
-                                <span class="min-w-0">
-                                    Outside Docker it writes <code>~/.intentic/logs</code
-                                    ><template v-if="syncEnabled">
-                                        — plus the sync agent in <code>~/.intentic/sync</code>, which runs as you, no root</template
-                                    >.
-                                </span>
-                            </li>
-                            <!-- The uninstaller, shown before the install rather than after it: an action you can see
-                             the undo for is a far smaller decision than one you can't. -->
-                            <li class="flex items-start gap-2">
-                                <Icon name="undo" class="mt-0.5 shrink-0 text-subtle" />
-                                <span class="min-w-0">
-                                    <!-- break-words, not break-all: a phone splits this mid-URL otherwise
+                        <!-- The uninstaller, shown BEFORE the install rather than after it, and the one piece of
+                             this that stays out of the hint: everything else here is something to know, and
+                             this is something to run. -->
+                        <p class="flex items-start gap-2 text-2xs leading-relaxed text-muted">
+                            <Icon name="undo" class="mt-0.5 shrink-0 text-subtle" />
+                            <span class="min-w-0">
+                                <!-- break-words, not break-all: a phone splits this mid-URL otherwise
                                      ("https://intentic.de / v/cleanup"), when breaking at its spaces fits. -->
-                                    Removes all of it, whenever: <code class="break-words text-content">{{ cleanupCommand }}</code>
-                                    <CopyButton :text="cleanupCommand" />
-                                </span>
-                            </li>
-                        </ul>
+                                Removes all of it, whenever: <code class="break-words text-content">{{ cleanupCommand }}</code>
+                                <CopyButton :text="cleanupCommand" />
+                            </span>
+                        </p>
                     </div>
                 </template>
 
