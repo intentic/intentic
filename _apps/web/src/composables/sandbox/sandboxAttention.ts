@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../chat/providerAccounts";

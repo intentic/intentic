@@ -1,4 +1,4 @@
-import { useHighlighter } from "@intentic-app/ui";
+import { useHighlighter } from "@intentic/ui";
 
 /* The comment-free view of a file that the diff surface shows by default (useLayout.showComments).
  *
@@ -10,7 +10,7 @@ import { useHighlighter } from "@intentic-app/ui";
  *
  * The comment spans come from the same TextMate grammar Shiki already loaded to COLOR the file — every language
  * we ship highlighting for gets this for free, and there is no per-language comment table to drift. Types are
- * derived off useHighlighter rather than imported from shiki, which is a dependency of @intentic-app/ui only. */
+ * derived off useHighlighter rather than imported from shiki, which is a dependency of @intentic/ui only. */
 
 type ShikiCore = NonNullable<Awaited<ReturnType<ReturnType<typeof useHighlighter>[`ensureLang`]>>>;
 type Grammar = ReturnType<ShikiCore[`getLanguage`]>;

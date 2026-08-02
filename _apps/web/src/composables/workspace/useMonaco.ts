@@ -1,4 +1,4 @@
-import { useHighlighter, useTheme } from "@intentic-app/ui";
+import { useHighlighter, useTheme } from "@intentic/ui";
 import type * as Monaco from "monaco-editor-core";
 import { watch } from "vue";
 import { useImportedTheme } from "../theme/useImportedTheme";

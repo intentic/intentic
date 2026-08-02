@@ -1,6 +1,6 @@
-import type { FigureAccent } from "@intentic-app/ui/markdown";
-import type { BarItem } from "@intentic-app/ui";
-import { seriesColor } from "@intentic-app/ui/series";
+import type { FigureAccent } from "@intentic/ui/markdown";
+import type { BarItem } from "@intentic/ui";
+import { seriesColor } from "@intentic/ui/series";
 import type { UsageRollupRow } from "@intentic/sandbox-contract";
 
 /* Every number and every mark on the Usage tab, as pure functions over the daemon's rollup rows. The screen
@@ -292,8 +292,7 @@ export const rankByCost = (
 // The bar's palette SLOT: its provider's when the bar belongs to exactly one provider, the achromatic tail
 // otherwise. Never a ramp keyed to the bar's own length — that double-encodes what the length already says.
 // A slot rather than a colour, because <BarChart> takes accents and owns the slot→var step for every figure.
-export const rankedAccent = (entry: RankedEntry): FigureAccent =>
-    entry.providers.length === 1 ? providerAccent(entry.providers[0]!) : `neutral`;
+export const rankedAccent = (entry: RankedEntry): FigureAccent => (entry.providers.length === 1 ? providerAccent(entry.providers[0]!) : `neutral`);
 
 // One ranked cost list → the shared bar figure's items. The money formatting, the fold/unattributed rows'
 // quieter type and the collision-proof key all live here, where the domain is, rather than in the chart.

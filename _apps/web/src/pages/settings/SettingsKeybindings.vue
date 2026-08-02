@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, FilterBar, Row, RowGroup } from "@intentic-app/ui";
+import { cmp, FilterBar, Row, RowGroup } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { commands } from "../../composables/commands/useCommands";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../composables/commands/keybindings";

@@ -1,12 +1,12 @@
 import { ref } from "vue";
-import { useTheme } from "@intentic-app/ui";
+import { useTheme } from "@intentic/ui";
 import { THEME_TOKEN_VARS, vscodeThemeToTokens, type ImportedTheme } from "./vscodeTheme";
 
 /* Apply an imported VSCode/OpenVSX theme to the live app — the user-facing half of the theme-import lever (the
  * mapper in vscodeTheme.ts is the pure core). Bringing your VSCode look is the #1 switch-blocker, so this is a
  * direct "familiar for developers" win. The imported theme's tokens are written as inline `--color-*` overrides on
  * <html>: inline custom properties beat the CSS-defined brand tokens (themes.css), so this layers cleanly over the
- * existing data-mode/data-theme system without forking @intentic-app/ui. Persisted to localStorage (per the
+ * existing data-mode/data-theme system without forking @intentic/ui. Persisted to localStorage (per the
  * useLayout/useKeymap client-preference idiom) and re-applied on load.
  *
  * Scope (honest): this maps the ~13 chrome IDENTITY tokens, not the full primary/surface RAMPS, and does not yet

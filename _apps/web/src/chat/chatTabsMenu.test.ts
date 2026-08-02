@@ -18,7 +18,7 @@ import { createApp, h, nextTick } from "vue";
 // same work at import time is simply the file's load. The globals below still land first; vi.hoisted runs
 // above every import in the transformed module, which is exactly what it is for.
 import ChatTabs from "./ChatTabs.vue";
-import { installUi } from "@intentic-app/ui";
+import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { resetChat, useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { NavGroup } from "@intentic-app/ui";
+import type { NavGroup } from "@intentic/ui";
 import HubLayout from "../hub/HubLayout.vue";
 import type { HubTab } from "../hub/hubNav";
 import SettingsAppearance from "./settings/SettingsAppearance.vue";

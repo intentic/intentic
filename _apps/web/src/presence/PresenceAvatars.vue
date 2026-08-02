@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Avatar } from "@intentic-app/ui";
+import { Avatar } from "@intentic/ui";
 import { computed } from "vue";
 import { identityHue } from "../composables/identityHue";
 import { type PresenceMember, presenceActivity } from "../composables/usePresence";

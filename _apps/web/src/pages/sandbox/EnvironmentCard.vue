@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { EnvironmentSchema } from "@intentic-app/api-contract";
-import { Card, Code, StatusBadge } from "@intentic-app/ui";
+import { Card, Code, StatusBadge } from "@intentic/ui";
 import { useQueryClient } from "@tanstack/vue-query";
 import Button from "primevue/button";
 import { computed } from "vue";

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Code, StatusBadge } from "@intentic-app/ui";
+import { Card, Code, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { daemonBehind, missingRoutes } from "../../composables/sandbox/useDaemonRoutes";
 

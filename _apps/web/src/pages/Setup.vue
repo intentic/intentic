@@ -2,7 +2,7 @@
 import type { SandboxSummary, SetupCode, SetupCodeTarget } from "@intentic-app/api-contract";
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
-import { cmp, Code, commandLang, CopyButton, InfoHint, Segmented, StepSection, useDevice, useOsPreference } from "@intentic-app/ui";
+import { cmp, Code, commandLang, CopyButton, InfoHint, Segmented, StepSection, useDevice, useOsPreference } from "@intentic/ui";
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -1431,7 +1431,7 @@ watch(commandReady, (ready) => {
                                 <p v-if="platformUrlOverride" class="flex items-center gap-2 text-warning">
                                     <Icon name="box" class="shrink-0" />
                                     <span
-                                        >Local dev: stage installers with <code>pnpm --filter @intentic-app/desktop stage:downloads</code>, then run
+                                        >Local dev: stage installers with <code>pnpm --filter @intentic/desktop-app stage:downloads</code>, then run
                                         the site.</span
                                     >
                                 </p>

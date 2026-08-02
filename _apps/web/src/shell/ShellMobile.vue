@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic-app/ui";
+import { useDevice } from "@intentic/ui";
 import { RouterView } from "vue-router";
 import MobileTabBar from "./MobileTabBar.vue";
 import SandboxGate from "../sandbox-gates/SandboxGate.vue";

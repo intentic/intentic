@@ -1,4 +1,4 @@
-# @intentic-app/desktop
+# @intentic/desktop-app
 
 The Windows/Linux desktop app — the no-terminal way to run an intentic sandbox on your own computer, and the
 thing that updates it afterwards. Install it, sign in, click **Run on this computer**.
@@ -95,7 +95,7 @@ Each one works identically from an external browser, where the OS routes it to t
 
 ## Layout
 
-- `src/` — the launcher UI (Vue + `@intentic-app/ui`): setup progress and the sandbox manager. Two components
+- `src/` — the launcher UI (Vue + `@intentic/ui`): setup progress and the sandbox manager. Two components
   and one bridge module; the archived three-persona wizard is not here.
 - `src-tauri/src/` — the Tauri 2 shell. `windows.rs` (two windows + link interception), `scripts.rs` (the
   script runner), `commands.rs` (the launcher's backend), `auth.rs` (the sign-in handoff), `state.rs`,
@@ -112,15 +112,15 @@ like `intentic-sync` and `intentic-host`, and for the same reason: this project'
 member-only, so a release-asset download 404s for the anonymous visitor who just clicked Download on the site.
 
 Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in CI (generate a pair with
-`pnpm --filter @intentic-app/desktop exec tauri signer generate`; the pubkey is committed in
+`pnpm --filter @intentic/desktop-app exec tauri signer generate`; the pubkey is committed in
 `tauri.conf.json`). Without it the build still produces plain installers and skips `latest.json`.
 
 ## Developing it
 
 ```sh
-pnpm --filter @intentic-app/desktop dev         # the launcher UI alone, in a browser
-pnpm --filter @intentic-app/desktop tauri:dev   # the full app
-INTENTIC_APP_URL=https://localhost:47145 pnpm --filter @intentic-app/desktop tauri:dev   # against a local web
+pnpm --filter @intentic/desktop-app dev         # the launcher UI alone, in a browser
+pnpm --filter @intentic/desktop-app tauri:dev   # the full app
+INTENTIC_APP_URL=https://localhost:47145 pnpm --filter @intentic/desktop-app tauri:dev   # against a local web
 ```
 
 - **Linux builds need system packages** — `webkit2gtk-4.1`, `gtk-3`, `libayatana-appindicator3`, `librsvg2`

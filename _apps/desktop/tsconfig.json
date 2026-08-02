@@ -6,7 +6,7 @@
         "types": ["vite/client"],
         // Consume the design system straight from source, like the web app does.
         "paths": {
-            "@intentic-app/ui": ["../../_libs/ui/src/index.ts"]
+            "@intentic/ui": ["../../_libs/ui/src/index.ts"]
         }
     },
     "extends": "@intentic/tsconfig/tsconfig.vue.json",

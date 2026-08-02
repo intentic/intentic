@@ -1,6 +1,6 @@
 import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, ProcessStatus, RepoFacts } from "@intentic/extension-api";
 import { extensionApiVersion, extensionIdOf, flattenQuery, mergeQuery, sandboxRouteAllowed } from "@intentic/extension-api";
-import { useTheme } from "@intentic-app/ui";
+import { useTheme } from "@intentic/ui";
 import { type AgentProvider, type ExtensionSummary, parsePinned, WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { requestModelPick } from "../composables/chat/hostModelPicker";

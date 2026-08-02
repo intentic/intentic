@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic-app/ui";
+import { useDevice } from "@intentic/ui";
 import type * as Monaco from "monaco-editor-core";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useLayout } from "../../../composables/useLayout";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SettingContribution, SettingValue } from "@intentic/extension-api";
-import { cmp, Picker } from "@intentic-app/ui";
+import { cmp, Picker } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { onMounted } from "vue";
 import { extensionSettingsStore } from "../../composables/extensions/useExtensionSettings";

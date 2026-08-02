@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { AnchoredOverlay } from "@intentic-app/ui";
+import { AnchoredOverlay } from "@intentic/ui";
 import { createApp, defineComponent, h, ref } from "vue";
 
 // The barrel reaches window.matchMedia (useDevice) at import — hence jsdom plus the stub jsdom itself doesn't
@@ -22,7 +22,7 @@ vi.hoisted(() => {
     } as unknown as typeof globalThis.ResizeObserver;
 });
 
-/* THE OTHER HALF OF anchorPlacement.test.ts, and pinned here for the same reason: @intentic-app/ui carries no
+/* THE OTHER HALF OF anchorPlacement.test.ts, and pinned here for the same reason: @intentic/ui carries no
  * test runner of its own, and the surfaces that break without this (the composer's model and mode pickers, the
  * tab strip's history menu) live in this app. That file pins the geometry an anchored panel is GIVEN. This one
  * pins that the geometry REACHES the box — everything between placeAnchored's answer and the pixels.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, Code } from "@intentic-app/ui";
+import { Card, cmp, Code } from "@intentic/ui";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";

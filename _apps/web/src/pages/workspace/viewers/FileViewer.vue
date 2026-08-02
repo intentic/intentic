@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceFileResponse, WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { CopyButton, useDevice } from "@intentic-app/ui";
+import { CopyButton, useDevice } from "@intentic/ui";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { sandboxBlob, SandboxHttpError } from "../../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../../composables/useAsyncAction";

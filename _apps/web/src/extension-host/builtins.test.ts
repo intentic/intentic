@@ -8,7 +8,7 @@ import type {
     ViewRegistration,
 } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-api";
-import { ICON_SETS } from "@intentic-app/ui";
+import { ICON_SETS } from "@intentic/ui";
 import * as activity from "@intentic/ext-activity";
 import * as logs from "@intentic/ext-logs";
 import { describe, expect, it, vi } from "vitest";
@@ -18,7 +18,7 @@ import { describe, expect, it, vi } from "vitest";
  * view whose detect() behaves, so the builtin path contributes the same activations the old inline array did. */
 
 // The builtins list's import chain pulls every extension package, and theirs pulls app-wide singletons that read
-// browser globals at module scope (@intentic-app/ui's useDevice reads window.matchMedia, environment.ts reads
+// browser globals at module scope (@intentic/ui's useDevice reads window.matchMedia, environment.ts reads
 // window.env) — hence jsdom plus the stubs, and the dynamic import below so they are installed first.
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({

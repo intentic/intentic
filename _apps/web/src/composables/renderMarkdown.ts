@@ -4,7 +4,7 @@ import {
     renderMarkdown as renderEngine,
     type RenderedMarkdown,
     type StreamingMarkdown,
-} from "@intentic-app/ui/markdown";
+} from "@intentic/ui/markdown";
 import { linkifyFileRefs } from "./markdownFileLinks";
 
 /* The app's markdown entry point: the design system's engine (which every surface, extensions included,
@@ -16,7 +16,7 @@ import { linkifyFileRefs } from "./markdownFileLinks";
  * design system without giving the app a second renderer to keep in step. Every call site imports from here,
  * so nothing in the app can accidentally render prose WITHOUT its file links. */
 
-export { markdownParseCount, settledEnd } from "@intentic-app/ui/markdown";
+export { markdownParseCount, settledEnd } from "@intentic/ui/markdown";
 export type { RenderedMarkdown, StreamingMarkdown };
 
 /* The app's decorator, in the one shape both ways of rendering prose take it. A surface that renders to a

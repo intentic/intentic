@@ -10,7 +10,7 @@ import { type App, createApp, defineComponent, h } from "vue";
 import { REASON_COPY } from "../composables/agents/conflictResolution";
 
 // The component's import chain pulls in app-wide singletons that read browser globals at import time
-// (@intentic-app/ui's useDevice reads window.matchMedia; environment.ts reads window.env). vi.hoisted runs
+// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env). vi.hoisted runs
 // before the imports evaluate. matches:false keeps the device DESKTOP, where the report's ladder is complete.
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({

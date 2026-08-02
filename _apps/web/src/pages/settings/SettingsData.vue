@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup } from "@intentic-app/ui";
+import { Row, RowGroup } from "@intentic/ui";
 import Button from "primevue/button";
 import { ref } from "vue";
 import { useRouter } from "vue-router";

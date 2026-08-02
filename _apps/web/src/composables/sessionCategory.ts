@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import { readTitle } from "./workspace/commitSuggestion";
 
 /* WHAT KIND OF WORK A SESSION IS — the category its identity tile wears, as a tint AND a glyph, on the fleet

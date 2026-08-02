@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { StatusBadge } from "@intentic-app/ui";
+import { StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { ref } from "vue";
 import { sandboxLogs, type SandboxStatus } from "../desktop";

@@ -409,7 +409,7 @@ feature — the same "substrate → UI" arc as Runs 3→4. A developer bringing 
 **What I built.**
 - [useImportedTheme.ts](_apps/web/src/composables/theme/useImportedTheme.ts): applies an imported theme by writing
   its tokens as inline `--color-*` overrides on `<html>` — inline custom properties beat the CSS-defined brand
-  tokens, so it layers over the existing `data-mode`/`data-theme` system **without forking `@intentic-app/ui`**
+  tokens, so it layers over the existing `data-mode`/`data-theme` system **without forking `@intentic/ui`**
   (keeping the run self-contained; no lib rebuild). Flips `data-mode` to the theme's mode so PrimeVue's dark preset
   matches. Persisted to localStorage (the useLayout/useKeymap idiom), re-applied on load, sanitized on read.
   `importThemeJson` parses → `vscodeThemeToTokens` → apply + persist, letting a JSON parse error propagate for

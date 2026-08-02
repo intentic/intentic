@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, BottomSheet, useDevice } from "@intentic-app/ui";
+import { AnchoredOverlay, BottomSheet, useDevice } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import ChatModelPicker from "../chat/ChatModelPicker.vue";
 import ProviderLogo from "../chat/ProviderLogo.vue";

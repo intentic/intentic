@@ -8,7 +8,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { errorMessage, useAsyncAction } from "../useAsyncAction";
 import { resetUploadQueue } from "./useUploadQueue";
 import { readExpandedDirs, writeExpandedDirs } from "./workspaceSnapshot";
-import { basename, parentDir } from "@intentic-app/ui/path";
+import { basename, parentDir } from "@intentic/ui/path";
 
 // Shared, module-level feedback for user file actions (rename, delete, save, move…) so the explorer, the tree
 // rows, and the editor all report through ONE busy spinner + error line. Errors are surfaced, not thrown — a

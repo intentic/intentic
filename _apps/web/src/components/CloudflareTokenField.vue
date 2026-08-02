@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Picker, type PickerOption } from "@intentic-app/ui";
+import { cmp, Picker, type PickerOption } from "@intentic/ui";
 import { computed } from "vue";
 import { CF_TOKEN_KEY, type useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import SecretField from "./SecretField.vue";
@@ -52,7 +52,13 @@ const token = computed({ get: () => cf.cfToken.value, set: cf.setToken });
     <div v-else-if="cf.zonesError.value" :class="cmp.alertDanger('text-2xs')">{{ cf.zonesError.value }}</div>
     <label v-else-if="cf.zones.value.length > 1" class="ui-field">
         <span class="ui-field-label">Cloudflare zone</span>
-        <Picker v-model="cf.selectedZone.value" :options="zoneOptions" placeholder="Pick the domain to use" class="w-full" aria-label="Cloudflare zone" />
+        <Picker
+            v-model="cf.selectedZone.value"
+            :options="zoneOptions"
+            placeholder="Pick the domain to use"
+            class="w-full"
+            aria-label="Cloudflare zone"
+        />
         <span class="text-xs text-muted">This token can reach several domains — choose which one to use.</span>
     </label>
     <!-- The one-zone case still confirms WHICH, because a token that sees a different domain than the user

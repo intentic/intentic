@@ -83,7 +83,7 @@ export const openDesktopLink = (link: string): void => {
  *     when one exists in its assets, else redirects to the newest release's asset.
  *   • local dev: the site's own dev server (`pnpm --filter @intentic-dev/site dev`, port 4321), which serves
  *     _apps/site/public/ at the root — stage installers into public/desktop/ with
- *     `pnpm --filter @intentic-app/desktop stage:downloads`, so the download is your own build.
+ *     `pnpm --filter @intentic/desktop-app stage:downloads`, so the download is your own build.
  * File names are the release-stable ones from _tools/scripts/build-desktop.sh. */
 const DESKTOP_FILES = {
     windows: { vanity: `windows`, file: `Intentic-setup.exe` },

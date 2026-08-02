@@ -13,7 +13,7 @@ An autonomous agent still needs a human in the loop. AI has to have its context 
 - **Plan-and-review by default** — agents propose before they act; every change is a diff you land or discard; environment changes need your explicit approval.
 - **Capabilities** — wire an agent into GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers, Claude plugins, and more, a click each. Credentials stay inside the sandbox.
 - **Automations** — wake an agent on a schedule, a webhook, or a live event (a push, an alert, a payment, an email), each run leaving a transcript.
-- **Ownership by construction** — code and credentials never leave your machine; the platform stores only your identity and the sandbox's URL and sits off the command path. What runs on your machine is MIT on GitLab, so you can verify it.
+- **Ownership by construction** — code and credentials never leave your machine; the platform stores only your identity and the sandbox's URL and sits off the command path. What runs on your machine is MIT on [GitHub](https://github.com/radarsu/intentic), so you can verify it.
 - **Your subscriptions, your hardware, a flat fee** — each agent runs on your own Claude, ChatGPT, or SuperGrok plan; intentic never meters your model usage.
 
 ## How it runs
@@ -53,6 +53,29 @@ Dev serves over HTTPS via the committed `@intentic-app/localhost-https` cert (Go
 This monorepo also contains a standalone **deployment engine** — a declarative, reconciling infrastructure tool driven by the `intentic deploy` command group (`init` · `resolve` · `plan` · `apply` · `destroy` · `adopt` · `restore` · …). It turns `i.have` / `i.want` intent into real self-hosted infrastructure on hosts you own.
 
 It is **not part of the intentic product.** It is one of the many tools a specialized agent can reach for — no more a "feature" than `psql` or `docker` — and it lives in this repo only for convenience. Its walkthrough, capabilities, and known limits are documented separately in **[docs/deploy-engine.md](docs/deploy-engine.md)** (and [LOCAL.md](LOCAL.md) for running it against your own PC).
+
+## The public mirror
+
+Everything that runs on the user's machine is published as MIT source at
+**[github.com/radarsu/intentic](https://github.com/radarsu/intentic)** — the sandbox, the CLIs, the desktop
+app, the extensions, and the libs they stand on. The platform half of this repo (`_apps/{api,web,site,demo}`
+and its libs) stays here.
+
+It is a **snapshot per release, not a history mirror**: the release job materialises the public path set into a
+scratch tree and lands it as one commit tagged `v<version>`, so nothing about a file's past is ever exported
+and no force-push is ever needed. Three files carry the whole mechanism:
+
+- `_tools/scripts/public.sh` — the manifest: what goes out, what is pruned, and the overlay of files the mirror
+  has that this repo doesn't (its README, its root `package.json`, its GitHub Actions workflow).
+- `_tools/scripts/publish-github.sh` — the export, run from `release-prepare.sh`: commit, tag, GitHub Release
+  with the installers and machine-agent binaries attached.
+- `_tools/scripts/verify-mirror.sh` — the guard, run by the `mirror:verify` CI job on every merge request:
+  materialise, reconcile the subset lockfile, install frozen, type-check. **A public package that grows a
+  workspace dependency on a private one fails here**, which is the one failure mode a subset has and this
+  repo cannot see.
+
+The pushed tag is also what publishes to npm: GitHub Actions builds the closure and publishes all 23 packages
+with provenance over npm's OIDC trusted publishing, so there is no npm token in this repo's CI at all.
 
 ## Architecture & contributing
 

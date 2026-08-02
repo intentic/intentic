@@ -7,7 +7,7 @@ import {
     type TranslatorAccount,
     providerLabel,
 } from "@intentic/sandbox-contract";
-import { cmp, formatTokens, InfoHint, Row, RowGroup } from "@intentic-app/ui";
+import { cmp, formatTokens, InfoHint, Row, RowGroup } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";

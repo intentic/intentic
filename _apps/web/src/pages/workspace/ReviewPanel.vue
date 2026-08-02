@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { GitChange, GitDiffSide, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
-import { cmp, useDevice } from "@intentic-app/ui";
+import { cmp, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import { computed, ref, shallowRef, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";

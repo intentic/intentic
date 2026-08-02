@@ -7,7 +7,7 @@
 // useless. This is the only file that needs a document; the rest of the suite stays on `node`.
 import { beforeEach, describe, expect, it, test } from "vitest";
 import { watchEffect } from "vue";
-import { copyCodeFromEvent, escapeHtml } from "@intentic-app/ui/markdown";
+import { copyCodeFromEvent, escapeHtml } from "@intentic/ui/markdown";
 import { createStreamingMarkdown, markdownParseCount, renderMarkdown, settledEnd } from "./renderMarkdown";
 
 // The one invariant that keeps a streamed chat bubble alive: renderMarkdown must NEVER throw and must always
@@ -101,7 +101,7 @@ describe(`fence infos mapped onto a shipped grammar`, () => {
     };
 
     it(`colours a jsonc fence with the json grammar`, async () => {
-        expect(await colours("```jsonc\n{ \"a\": 1 } // and a comment\n```")).toBe(true);
+        expect(await colours('```jsonc\n{ "a": 1 } // and a comment\n```')).toBe(true);
     });
 
     it(`colours a figure fence as the JSON its body is`, async () => {

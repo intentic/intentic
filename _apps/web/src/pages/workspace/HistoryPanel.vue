@@ -3,7 +3,7 @@ import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intent
 import { ref } from "vue";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { useHistory } from "../../composables/workspace/useHistory";
-import { cmp, type IconName, timeAgo } from "@intentic-app/ui";
+import { cmp, type IconName, timeAgo } from "@intentic/ui";
 import { type DiffTabPayload } from "./workspaceTabs";
 import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
 
@@ -86,13 +86,7 @@ const confirmRestore = (id: string): void => {
             <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Checkpoints</span>
             <span class="flex-1"></span>
             <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin aria-label="Working" />
-            <button
-                type="button"
-                :class="cmp.iconButton()"
-                @click="refetch()"
-                v-tooltip.right="'Refresh'"
-                aria-label="Refresh checkpoints"
-            >
+            <button type="button" :class="cmp.iconButton()" @click="refetch()" v-tooltip.right="'Refresh'" aria-label="Refresh checkpoints">
                 <Icon name="refresh" class="text-xs" :spin="isLoading" />
             </button>
         </div>

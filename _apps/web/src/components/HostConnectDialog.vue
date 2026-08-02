@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Code } from "@intentic-app/ui";
+import { Code } from "@intentic/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, watch } from "vue";
@@ -81,8 +81,8 @@ onBeforeUnmount(stop);
 
             <div class="rounded-md border border-subtle px-3 py-2">
                 <p class="text-2xs text-muted">
-                    Once connected, the agent may: <b>{{ permissions }}</b> — and nothing else. Those switches live on this card, the computer enforces
-                    them itself, and Revoke here cuts it off immediately.
+                    Once connected, the agent may: <b>{{ permissions }}</b> — and nothing else. Those switches live on this card, the computer
+                    enforces them itself, and Revoke here cuts it off immediately.
                 </p>
             </div>
         </div>

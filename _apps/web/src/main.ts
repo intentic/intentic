@@ -1,4 +1,4 @@
-import { installUi } from "@intentic-app/ui";
+import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";

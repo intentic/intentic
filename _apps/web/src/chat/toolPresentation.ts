@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import type { ToolCallContent } from "@intentic/sandbox-contract";
 import type { ChatTool } from "../composables/chat/transcript";
 import { codeLangForPath } from "../pages/workspace/fileType";

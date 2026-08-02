@@ -4,7 +4,7 @@ import { styles } from "./styles.js";
 
 /* These pin the widget to intentic's palette with NUMBERS, because that is the only way the claim survives.
  * "Looks like the app" is not checkable, and the values below were not chosen here — they were sampled out of a
- * screenshot of the running app and re-derived from @intentic-app/ui's oklch tokens, which agreed. If a token
+ * screenshot of the running app and re-derived from @intentic/ui's oklch tokens, which agreed. If a token
  * moves in the app, one of these fails and says which. */
 
 const config = (overrides: Partial<WebchatPublicConfig> = {}): WebchatPublicConfig => ({

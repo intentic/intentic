@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceFileResponse } from "@intentic-app/api-contract";
-import { formatBytes } from "@intentic-app/ui";
+import { formatBytes } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FILE_WINDOW_BYTES, readFileWindow } from "../../../composables/workspace/fileWindow";
 import { errorMessage } from "../../../composables/useAsyncAction";

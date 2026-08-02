@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic-app/capability-catalog";
 import { type InventoryEntry } from "@intentic-app/api-contract";
-import { Card, cmp, Code, ConfirmDialog, InfoHint, StatusBadge } from "@intentic-app/ui";
+import { Card, cmp, Code, ConfirmDialog, InfoHint, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import SecretField from "../../components/SecretField.vue";

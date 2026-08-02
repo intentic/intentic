@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import type { TodoItem } from "@intentic/sandbox-contract";
 
 /* The agent's task checklist (TodoWrite / the Task tool family) as it stood at ONE point in the turn.

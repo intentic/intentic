@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-api";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { cmp, FilterBar, RowGroup, Segmented, StatusBadge } from "@intentic-app/ui";
+import { cmp, FilterBar, RowGroup, Segmented, StatusBadge } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { type ExtensionSection, sectionsOf } from "../../composables/extensions/extensionCategories";
 import { useExtensionList } from "../../composables/extensions/useExtensionList";

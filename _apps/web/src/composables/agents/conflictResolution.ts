@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import type { LandConflict, LandConflictReason } from "@intentic/sandbox-contract";
 import { ERRANDS, errandPrompt } from "../chat/errands";
 

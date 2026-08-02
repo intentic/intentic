@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BuiltinPromptText, SystemPromptMode } from "@intentic/sandbox-contract";
-import { cmp, CopyButton, Row, RowGroup, Segmented } from "@intentic-app/ui";
+import { cmp, CopyButton, Row, RowGroup, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -267,7 +267,14 @@ const terseHoldoutPercent = computed<number>(() => asPercent(settings.value?.ter
                             <!-- Blur already saves; the button is for the user who can't tell that it did.
                                  `mousedown.prevent` keeps focus in the textarea, so pressing it doesn't blur-save
                                  the field and unmount the button out from under the click that was landing on it. -->
-                            <Button v-if="promptDirty" label="Save" size="small" :loading="save.isPending.value" @mousedown.prevent @click="savePrompt" />
+                            <Button
+                                v-if="promptDirty"
+                                label="Save"
+                                size="small"
+                                :loading="save.isPending.value"
+                                @mousedown.prevent
+                                @click="savePrompt"
+                            />
                         </span>
                     </div>
                 </template>

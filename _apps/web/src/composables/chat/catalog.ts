@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import { type AgentCapabilities, type ModelBadge, modesFor, type PermissionMode } from "@intentic/sandbox-contract";
 import type { ConversationStatus } from "./conversation";
 

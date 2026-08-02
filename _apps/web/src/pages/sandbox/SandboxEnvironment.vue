@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic-app/ui";
+import { cmp } from "@intentic/ui";
 import { computed } from "vue";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 import BundleCard from "./BundleCard.vue";

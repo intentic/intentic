@@ -1,5 +1,5 @@
-import type { FigureAccent } from "@intentic-app/ui/markdown";
-import { seriesColor } from "@intentic-app/ui/series";
+import type { FigureAccent } from "@intentic/ui/markdown";
+import { seriesColor } from "@intentic/ui/series";
 import type { InputSavings, TurnExperiment } from "@intentic/sandbox-contract";
 import { formatCompact } from "./usageChart";
 

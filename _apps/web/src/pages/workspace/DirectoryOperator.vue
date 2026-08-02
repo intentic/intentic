@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Segmented } from "@intentic-app/ui";
+import { Segmented } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";

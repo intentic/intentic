@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Segmented } from "@intentic-app/ui";
+import { cmp, Segmented } from "@intentic/ui";
 import type { Loop, LoopContext } from "@intentic/sandbox-contract";
 import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";

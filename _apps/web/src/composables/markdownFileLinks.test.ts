@@ -13,7 +13,7 @@ vi.mock("./queryPersistence", () => ({
 }));
 
 const { fileLinkDecorator, renderMarkdown } = await import("./renderMarkdown");
-const { renderMarkdown: renderEngine } = await import("@intentic-app/ui/markdown");
+const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
 
 // A previewed FILE renders through the kit's <Markdown> with the app's decorator (see MarkdownViewer), which is
 // the only surface that knows a directory to resolve against — so the document cases below go in the same way.

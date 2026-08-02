@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { StatusBadge } from "@intentic-app/ui";
+import { StatusBadge } from "@intentic/ui";
 import { type ReconcileContext, statusGerund, statusLabel, statusVariant } from "../composables/extensions/reconcileStatus";
 
 /* One resource's reconcile verdict as a row: its id (mono) beside a status badge, with the reason (if any) as

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ResourceView } from "@intentic-app/api-contract";
-import { DagGraph, type DagEdge, type DagNode } from "@intentic-app/ui";
+import { DagGraph, type DagEdge, type DagNode } from "@intentic/ui";
 import { computed, reactive } from "vue";
 import { statusDot, statusLabel } from "../../composables/extensions/reconcileStatus";
 import { groupAccent, resourceIcon, resourceLogoUrl } from "../../composables/extensions/resourceVisual";

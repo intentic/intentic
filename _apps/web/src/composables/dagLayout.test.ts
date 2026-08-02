@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { type DagEdge, type DagNode, layoutSignature } from "@intentic-app/ui/dag";
+import { type DagEdge, type DagNode, layoutSignature } from "@intentic/ui/dag";
 
-/* DagGraph refits its viewport when this signature changes. It lives here rather than in @intentic-app/ui because
+/* DagGraph refits its viewport when this signature changes. It lives here rather than in @intentic/ui because
  * the design system ships no test runner (same reason as figures.test.ts).
  *
  * The bug it exists for: the refit watcher used to key on the node COUNT. A count is not an identity, so two

@@ -2,7 +2,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
-import { clipboardOf, useDevice } from "@intentic-app/ui";
+import { clipboardOf, useDevice } from "@intentic/ui";
 import { boundCommand } from "../commands/useCommands";
 import { isApplePlatform } from "../commands/keybindings";
 import { useSandbox } from "../sandbox/useSandbox";

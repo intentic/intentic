@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic-app/ui";
+import { useDevice } from "@intentic/ui";
 import { useRouter } from "vue-router";
 import { globalTerminalSource } from "../composables/terminal/useTerminalPanel";
 import TerminalPanel from "./TerminalPanel.vue";

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Picker, Segmented } from "@intentic-app/ui";
+import { Picker, Segmented } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { startAgent } from "../../composables/agents/agentActions";
 import { useCodebaseHealth } from "../../composables/workspace/useCodebaseHealth";

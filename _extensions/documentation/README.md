@@ -24,7 +24,7 @@ what the app must *read* rather than draw: identity, the map, anchors, provenanc
 | --- | --- | --- |
 | **Facts** — package graph, sizes, revisions | `bin/intentic-docs` | a script is exact and free; a model is plausible and wrong |
 | **Judgement** — what a thing is for, which packages form a component, what to read first, what surprises | the agent, in `doc.md` / `repo.md` + a few JSON fields | the only part that needs a mind, and the only part worth reviewing |
-| **Presentation** — theme, layout, dark mode, dagre, a11y | the app (`@intentic-app/ui`) | nothing authored carries a colour, a coordinate or a size |
+| **Presentation** — theme, layout, dark mode, dagre, a11y | the app (`@intentic/ui`) | nothing authored carries a colour, a coordinate or a size |
 
 ## Where documents live
 

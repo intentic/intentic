@@ -1,4 +1,4 @@
-import type { StatusVariant } from "@intentic-app/ui";
+import type { StatusVariant } from "@intentic/ui";
 import type { ExtensionHostStatus } from "../../extension-host/loader";
 
 /* HOW AN EXTENSION'S HOST STATE READS ON A ROW — and, deliberately, when it doesn't read at all.

@@ -1,4 +1,4 @@
-import { useDevice } from "@intentic-app/ui";
+import { useDevice } from "@intentic/ui";
 import { createRouter, createWebHistory, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
 import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";

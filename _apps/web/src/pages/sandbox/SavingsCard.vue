@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, InfoHint } from "@intentic-app/ui";
+import { Card, InfoHint } from "@intentic/ui";
 
 /* ONE savings card's frame — and the same frame for all three, which is the whole point of it existing.
  *

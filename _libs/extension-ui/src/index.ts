@@ -1,5 +1,5 @@
 /* The UI kit extensions render with. This entrypoint is the package's ONE public surface (the repo's
- * re-export exception): a curated slice of the app design system (@intentic-app/ui) plus the PrimeVue
+ * re-export exception): a curated slice of the app design system (@intentic/ui) plus the PrimeVue
  * primitives extension views actually use. At runtime the kit is HOST-PROVIDED — the web app maps this module
  * into its import map (extension-host/hostModules.ts), so third-party bundles marking it external get the
  * shell's own component instances and theming; in-repo builtin extension packages bundle this same module and
@@ -64,7 +64,7 @@ export {
     timeWindowWords,
     useDevice,
     useTheme,
-} from "@intentic-app/ui";
+} from "@intentic/ui";
 /* The figure vocabulary that <Markdown> renders from prose and <MarkdownFigure> renders from data. Types only —
  * an extension needs them to BUILD a figure out of facts it already holds (a dependency graph, a staleness
  * tally) rather than round-tripping through markdown to draw one. The parser and the document splitter stay out
@@ -79,7 +79,7 @@ export type {
     FigureAccent,
     StatsFigure,
     StatsFigureItem,
-} from "@intentic-app/ui/markdown";
+} from "@intentic/ui/markdown";
 export { default as Button } from "primevue/button";
 export { default as Checkbox } from "primevue/checkbox";
 export { default as Dialog } from "primevue/dialog";

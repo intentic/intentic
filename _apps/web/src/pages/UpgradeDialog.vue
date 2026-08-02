@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic-app/ui";
+import { cmp } from "@intentic/ui";
 import type { Pricing } from "@intentic-app/api-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";

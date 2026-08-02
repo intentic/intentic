@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { InfoDialog, InfoTable } from "@intentic-app/ui";
+import { InfoDialog, InfoTable } from "@intentic/ui";
 
 /* The (i) beside the Agent tab's "Code search" group. Two settings that compose and are easy to confuse — one
  * teaches the assistant to search, the other searches before it decides to — so both are explained as an

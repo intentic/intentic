@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, BottomSheet, Icon, useDevice } from "@intentic-app/ui";
+import { AnchoredOverlay, BottomSheet, Icon, useDevice } from "@intentic/ui";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { type AgentCommand, providerLabel } from "@intentic/sandbox-contract";
@@ -37,7 +37,7 @@ import LoopDialog from "../agents/LoopDialog.vue";
 import { stopLoop } from "../composables/agents/useLoops";
 import ChatTabs from "./ChatTabs.vue";
 import ChatTabsMobile from "./ChatTabsMobile.vue";
-import { formatTokens, ProgressRing } from "@intentic-app/ui";
+import { formatTokens, ProgressRing } from "@intentic/ui";
 import ProviderLogo from "./ProviderLogo.vue";
 import UsageRing from "../components/UsageRing.vue";
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ViewBadge } from "@intentic/extension-api";
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import { computed, onUnmounted, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";

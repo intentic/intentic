@@ -20,7 +20,7 @@ const componentOf = (provider: RegisteredDocumentProvider): Component => {
 </script>
 
 <script setup lang="ts">
-import { cmp } from "@intentic-app/ui";
+import { cmp } from "@intentic/ui";
 import { computed } from "vue";
 import { documentProvider } from "./documentRegistry";
 import ExtensionErrorBoundary from "./ExtensionErrorBoundary.vue";

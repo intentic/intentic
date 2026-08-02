@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { cmp, RowGroup, Segmented, StatusBadge } from "@intentic-app/ui";
+import { cmp, RowGroup, Segmented, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";

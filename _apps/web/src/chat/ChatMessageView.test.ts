@@ -24,11 +24,11 @@ vi.hoisted(() => {
     };
 });
 
-vi.mock("@intentic-app/ui", async () => {
+vi.mock("@intentic/ui", async () => {
     const { ref } = await import("vue");
     return { useDevice: () => ({ mobile: ref(false) }) };
 });
-vi.mock("@intentic-app/ui/markdown", () => ({ copyCodeFromEvent: vi.fn() }));
+vi.mock("@intentic/ui/markdown", () => ({ copyCodeFromEvent: vi.fn() }));
 // withoutResumeNote is the real behaviour, not a stub: the errand row depends on it to recognise an errand a
 // resumed turn re-sent (errands.ts), and a mock that returned the text unchanged would hide that.
 vi.mock("@intentic/sandbox-contract", async () => {

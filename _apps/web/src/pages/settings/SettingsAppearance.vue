@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Row, RowGroup, Segmented, useExplorerStyle, useIconSet, useTheme } from "@intentic-app/ui";
-import { explorerTreatment } from "@intentic-app/ui";
+import { Row, RowGroup, Segmented, useExplorerStyle, useIconSet, useTheme } from "@intentic/ui";
+import { explorerTreatment } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { showWorkTerminals } from "../../composables/terminal/useWorkTerminals";

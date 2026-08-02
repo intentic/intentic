@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-app/desktop",
+    "name": "@intentic/desktop-app",
     "version": "0.0.0",
     "private": true,
     "type": "module",
@@ -14,7 +14,7 @@
         "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml"
     },
     "dependencies": {
-        "@intentic-app/ui": "workspace:*",
+        "@intentic/ui": "workspace:*",
         "@tauri-apps/api": "catalog:",
         "@tauri-apps/plugin-dialog": "catalog:",
         "primevue": "catalog:",

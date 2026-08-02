@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useHighlighter } from "@intentic-app/ui";
+import { useHighlighter } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 
 /* A Read tool card's body: the file's contents syntax-highlighted by the shared Shiki highlighter (the same

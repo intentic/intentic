@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useListNavigation } from "@intentic-app/ui";
+import { useListNavigation } from "@intentic/ui";
 import ComposerPopover from "./ComposerPopover.vue";
 import { computed, ref, toRef } from "vue";
 import { useFuzzyFiles } from "../composables/workspace/useFuzzyFiles";
-import { basename, parentDir } from "@intentic-app/ui/path";
+import { basename, parentDir } from "@intentic/ui/path";
 
 /* The composer's @-mention picker: an inline panel above the textarea listing workspace files matching the
  * active token (client-ranked over the cached tree — the QuickOpen data path, useFuzzyFiles). The parent owns
@@ -30,7 +30,6 @@ const pickActive = (): boolean => {
 };
 
 defineExpose({ move, pickActive });
-
 </script>
 
 <template>

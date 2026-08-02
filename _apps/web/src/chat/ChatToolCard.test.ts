@@ -9,7 +9,7 @@ import { type App, createApp, defineComponent, h } from "vue";
 import type { ChatTool } from "../composables/chat/transcript";
 
 // ChatToolCard's import chain pulls in app-wide singletons that read browser/runtime globals at import time:
-// @intentic-app/ui's useDevice reads window.matchMedia (its device refs are module-level), and environment.ts
+// @intentic/ui's useDevice reads window.matchMedia (its device refs are module-level), and environment.ts
 // reads window.env (set by env.js before the app in the real page). jsdom provides neither, so both are stood up
 // in vi.hoisted — which runs before the imports evaluate — mirroring what the real page sets up.
 vi.hoisted(() => {

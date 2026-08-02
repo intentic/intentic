@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { InfoDialog, InfoTable } from "@intentic-app/ui";
+import { InfoDialog, InfoTable } from "@intentic/ui";
 
 /* The (i) beside the Agent tab's "Command output" group — what the shell-output filter does, for an owner
  * deciding whether to turn it on and how far to trust it.
@@ -39,7 +39,6 @@ const GLOBAL_CLEANERS = [
     [`redact secrets`, `Masks credential-shaped values after a token/password/key name, and credentials in URLs`],
     [`collapse repeats`, `Output identical to an earlier run this session isn't shown twice`],
 ];
-
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic-app/ui";
+import { cmp } from "@intentic/ui";
 import { computed, nextTick, ref, watch } from "vue";
 import { isStep, stepLabel, type RunEvent } from "../desktop";
 

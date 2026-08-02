@@ -1,4 +1,4 @@
-# @intentic-app/ui
+# @intentic/ui
 
 Shared **Vue UI primitives + theme** for the platform web app. A small, reusable layer on top of PrimeVue + Tailwind 4 that [`@intentic-app/web`](../../_apps/web) composes — layout containers, a code/markdown primitive, the dark/light theme composable, and the design tokens.
 
@@ -24,4 +24,4 @@ Consumed by the web app: `installUi(app)` runs once in `main.ts`; components imp
 
 - `<script setup lang="ts">` SFCs + composables (module-level `ref` singletons), same as the web app; keep it free of app-specific logic so it stays reusable.
 - The CSS cascade layer is named `primeng` (`installUi`'s `cssLayer.name` + `styles/shared/primeng.css`) — keep that name so `utilities` stays last and Tailwind utilities beat PrimeVue component styles.
-- Semantic CSS variables (`--color-*`, `--radius-*`) are the styling contract — prefer them over hard-coded values. Consumed directly from source (no build step); `pnpm --filter @intentic-app/ui typecheck` runs `vue-tsc`.
+- Semantic CSS variables (`--color-*`, `--radius-*`) are the styling contract — prefer them over hard-coded values. Consumed directly from source (no build step); `pnpm --filter @intentic/ui typecheck` runs `vue-tsc`.

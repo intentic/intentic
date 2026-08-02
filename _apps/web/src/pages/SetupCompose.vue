@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Code, useDevice } from "@intentic-app/ui";
+import { Code, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import type { ComposeArgs } from "./setupCompose";
 import { composeBootstrap, composeFile } from "./setupCompose";

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, cmp, ContextMenu } from "@intentic-app/ui";
+import { AnchoredOverlay, cmp, ContextMenu } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";

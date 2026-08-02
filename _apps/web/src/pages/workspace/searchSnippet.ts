@@ -1,5 +1,5 @@
 import type { WorkspaceSearchHit, WorkspaceSearchSpan } from "@intentic-app/api-contract";
-import { type CodeToken, useHighlighter } from "@intentic-app/ui";
+import { type CodeToken, useHighlighter } from "@intentic/ui";
 import { ref } from "vue";
 
 /* One content-search result line, ready to render: the slice of the line worth showing, cut into coloured

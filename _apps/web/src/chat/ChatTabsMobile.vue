@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BottomSheet } from "@intentic-app/ui";
+import { BottomSheet } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { useAgents } from "../composables/agents/useAgents";

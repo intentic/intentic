@@ -1,7 +1,7 @@
 # @intentic/extension-ui
 
 The **UI kit an extension renders with** — a curated slice of the app design system
-([`@intentic-app/ui`](../ui)) plus the PrimeVue primitives extension views actually use. One of the two
+([`@intentic/ui`](../ui)) plus the PrimeVue primitives extension views actually use. One of the two
 packages an extension may depend on (with [`@intentic/extension-api`](../extension-api)).
 
 ## Host-provided at runtime
@@ -13,7 +13,7 @@ that marks it external resolves to the **shell's own** component instances and t
 PrimeVue, one theme across the host and every extension. In-repo builtin extensions bundle this same module
 and land on the same instances.
 
-The scope reads oddly — an `@intentic/*` package depending on the app-side `@intentic-app/ui` — but it is
+The scope reads oddly — an `@intentic/*` package depending on the app-side `@intentic/ui` — but it is
 deliberate: the dependency is build-time-only (for in-repo builtins); at runtime the import map supplies the
 shell's instances, so no second copy is shipped.
 

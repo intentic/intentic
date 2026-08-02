@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DraftStatus, DraftSummary } from "@intentic-app/api-contract";
-import { cmp, Page, PageHeader, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic-app/ui";
+import { cmp, Page, PageHeader, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
 import Button from "primevue/button";
 import { useAsyncAction } from "../composables/useAsyncAction";
 import { useDrafts } from "../composables/extensions/useDrafts";

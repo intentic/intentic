@@ -196,7 +196,7 @@ window.__intentic = { adoptPopout: (name, win) => adopters.get(name)?.(win) === 
  * PrimeVue also MEASURES its room and re-aligns on resize against the opener's viewport — which is how the
  * model picker came to open off the bottom of a short pop-out window, on top of the pill that owns it, where no
  * click could reach it. The dismissal it swallowed there was its own. So the composer's pickers and the
- * past-chats panel are AnchoredOverlay now (`@intentic-app/ui`), which derives document, viewport and listeners
+ * past-chats panel are AnchoredOverlay now (`@intentic/ui`), which derives document, viewport and listeners
  * from the ANCHOR and is therefore right in either window by construction. New overlays inside a poppable panel
  * belong there too; this stays for the PrimeVue components still in use (ContextMenu, Dialog), where it is the
  * only seam short of reimplementing them. */

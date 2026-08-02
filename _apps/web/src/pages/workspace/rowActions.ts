@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import { documentsAt } from "../../core-views/documentRegistry";
 
 /* WHAT A DIRECTORY ROW OFFERS BESIDE ITS NAME — one model for every icon on the right-hand end of a tree row.

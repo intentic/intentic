@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useTheme } from "@intentic-app/ui";
+import { useTheme } from "@intentic/ui";
 import { ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";

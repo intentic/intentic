@@ -2,7 +2,7 @@
  *
  * The barrel is a .vue component graph with import-time side effects (useDevice reads window.matchMedia), so
  * anything that pulls it needs a DOM and the Vue plugin. This engine is plain TypeScript exercised from plain
- * unit tests, and the app imports it from modules that are too — hence a subpath (`@intentic-app/ui/markdown`)
+ * unit tests, and the app imports it from modules that are too — hence a subpath (`@intentic/ui/markdown`)
  * that costs neither. The <Markdown> component, being a component, stays on the barrel. */
 
 export { type CodeBlock, codeBlockHtml, copyCodeFromEvent, escapeHtml } from "./code.js";

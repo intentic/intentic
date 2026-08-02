@@ -5,7 +5,7 @@
 // throws nothing and fails no type check; it just draws a lie.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, h } from "vue";
-import { BarChart } from "@intentic-app/ui";
+import { BarChart } from "@intentic/ui";
 import UsageColumnChart from "./UsageColumnChart.vue";
 import UsageSparkline from "./UsageSparkline.vue";
 import { type RankedEntry, rankedBars, type SpendBucket, type UsageTotals } from "./usageChart";

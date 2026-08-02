@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup } from "@intentic-app/ui";
+import { Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { ref, watch } from "vue";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";

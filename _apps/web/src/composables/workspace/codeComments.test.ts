@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { stripComments } from "./codeComments";
 
-// The @intentic-app/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import — hence
+// The @intentic/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import — hence
 // jsdom plus the stub jsdom itself doesn't ship. Nothing under test touches the DOM.
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({

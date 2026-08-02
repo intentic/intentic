@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Code, CopyButton } from "@intentic-app/ui";
+import { Card, Code, CopyButton } from "@intentic/ui";
 import Button from "primevue/button";
 import { useBridgeTokens } from "../../composables/sandbox/useBridgeTokens";
 

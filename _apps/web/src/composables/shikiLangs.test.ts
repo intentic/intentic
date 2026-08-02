@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { useHighlighter } from "@intentic-app/ui";
-import { LANGS } from "@intentic-app/ui/langs";
+import { useHighlighter } from "@intentic/ui";
+import { LANGS } from "@intentic/ui/langs";
 import { expect, test, vi } from "vitest";
 import { codeLangForPath } from "../pages/workspace/fileType";
 
@@ -12,7 +12,7 @@ import { codeLangForPath } from "../pages/workspace/fileType";
  * check is whether an id's dynamic import still RESOLVES: a renamed or dropped @shikijs/langs entry type-checks
  * perfectly and degrades to exactly the same plain text. Hence the load-everything test below.
  *
- * The @intentic-app/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import —
+ * The @intentic/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import —
  * hence jsdom plus the stub jsdom itself doesn't ship. Nothing under test touches the DOM. */
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({

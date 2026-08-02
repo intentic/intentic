@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { placeAnchored, type Placement, ProgressRing, type Side } from "@intentic-app/ui";
+import { placeAnchored, type Placement, ProgressRing, type Side } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref } from "vue";
 import { formatAge, formatReset, formatUtilization, type PlanHeadroom, usageDetail, usageTone } from "../composables/chat/usageStatus";
 

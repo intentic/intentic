@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { placeAnchored } from "@intentic-app/ui";
+import { placeAnchored } from "@intentic/ui";
 
 // The barrel reaches window.matchMedia (useDevice) at import — hence jsdom plus the stub jsdom itself doesn't
 // ship. The geometry under test is pure arithmetic and touches no DOM.
@@ -16,7 +16,7 @@ vi.hoisted(() => {
 });
 
 /* The geometry behind every anchored panel in a POPPABLE panel (the composer's model/mode pickers, the tab
- * strip's history menu). It lives in @intentic-app/ui, which carries no test runner of its own — so it is
+ * strip's history menu). It lives in @intentic/ui, which carries no test runner of its own — so it is
  * pinned here, where the surfaces that broke without it live.
  *
  * WHAT THESE PIN IS A BUG THAT CAME BACK TWICE. PrimeVue's Popover measures the room around a trigger with the

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { BarChart, Card, cmp, Segmented } from "@intentic-app/ui";
+import { BarChart, Card, cmp, Segmented } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../composables/agents/useAgents";

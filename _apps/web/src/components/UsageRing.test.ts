@@ -9,7 +9,7 @@ import { createApp, h, nextTick } from "vue";
 import type { PlanHeadroom } from "../composables/chat/usageStatus";
 import UsageRing from "./UsageRing.vue";
 
-// The @intentic-app/ui barrel this component reaches for (the ring, the placement) calls window.matchMedia at
+// The @intentic/ui barrel this component reaches for (the ring, the placement) calls window.matchMedia at
 // import time, through useDevice — and jsdom ships no such thing.
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, StatusBadge } from "@intentic-app/ui";
+import { Card, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, nextTick, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";

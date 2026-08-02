@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { InfoHint, Row } from "@intentic-app/ui";
+import { InfoHint, Row } from "@intentic/ui";
 import { nextTick, ref, useTemplateRef } from "vue";
 import UsageRing from "../../components/UsageRing.vue";
 import type { PlanHeadroom } from "../../composables/chat/usageStatus";

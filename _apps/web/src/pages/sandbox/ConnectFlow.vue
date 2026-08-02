@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentProvider } from "@intentic/sandbox-contract";
-import { cmp, CopyButton } from "@intentic-app/ui";
+import { cmp, CopyButton } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import { useChat } from "../../composables/chat/useChat";

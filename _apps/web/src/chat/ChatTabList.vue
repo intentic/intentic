@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ContextMenu, type IconName } from "@intentic-app/ui";
+import { ContextMenu, type IconName } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { createTitleEdit } from "../composables/agents/titleEdit";

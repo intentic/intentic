@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ViewBadge } from "@intentic/extension-api";
-import { Avatar, type IconName } from "@intentic-app/ui";
+import { Avatar, type IconName } from "@intentic/ui";
 import { computed, onMounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";

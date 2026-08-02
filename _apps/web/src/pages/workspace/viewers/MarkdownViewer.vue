@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Markdown, Segmented } from "@intentic-app/ui";
+import { Markdown, Segmented } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../composables/renderMarkdown";
 import { openFileRefFromEvent } from "../../../composables/workspace/openFileRef";

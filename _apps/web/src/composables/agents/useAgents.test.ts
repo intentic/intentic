@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // canArchive is pure, but it lives beside the fleet store, so importing it pulls useChat -> the app shell. Cut
 // the edges that need a browser at module-eval, exactly as useChat.test.ts does: the router (createWebHistory wants
-// window, and its @intentic-app/ui barrel drags in .vue files the node test env can't transform), plus the three
+// window, and its @intentic/ui barrel drags in .vue files the node test env can't transform), plus the three
 // modules that reach environment.ts's window.env read — analytics (direct), useSandbox (via useApi), and
 // sandboxClient (via useGoogleIdentity). The projection under test touches none of them.
 vi.mock("../../router", () => ({ router: { push: vi.fn() } }));

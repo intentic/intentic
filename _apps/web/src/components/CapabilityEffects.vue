@@ -3,7 +3,7 @@
      form; `compact` is the icon-only strip under a connected instance (labels move into title tooltips). -->
 <script setup lang="ts">
 import type { CapabilityEffect } from "@intentic-app/capability-catalog";
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import { computed } from "vue";
 
 const { effects, compact = false } = defineProps<{ effects: readonly CapabilityEffect[]; compact?: boolean }>();

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Segmented, useDevice } from "@intentic-app/ui";
+import { Segmented, useDevice } from "@intentic/ui";
 import type { DiffLayout } from "../../../composables/useLayout";
 import { useLayout } from "../../../composables/useLayout";
 import DiffStat from "../../../components/DiffStat.vue";
 import { type ChangeStatus } from "../workspaceTabs";
-import { basename, parentDir } from "@intentic-app/ui/path";
+import { basename, parentDir } from "@intentic/ui/path";
 import ChangeStatusMark from "../../../components/ChangeStatusMark.vue";
 
 /* The bar above a diff — WHICH file, and HOW it is being read. Every diff surface in the app renders this one:
@@ -38,7 +38,6 @@ const { path, status, additions, deletions, from } = defineProps<{
 
 const { mobile } = useDevice();
 const { showComments, toggleShowComments, diffLayout, setDiffLayout } = useLayout();
-
 
 // Two panes don't fit a phone, so the control is desktop-only and DiffView forces unified there — the stored
 // preference is left alone rather than being overwritten by a form factor the user didn't choose.

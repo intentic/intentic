@@ -22,7 +22,7 @@
       "what": "The launcher window: run the handed-over setup, then manage the containers on this machine."
     }
   ],
-  "name": "@intentic-app/desktop",
+  "name": "@intentic/desktop-app",
   "oneLiner": "A window around the editor, plus the small program on your machine that sets a sandbox up and keeps it updated.",
   "provenance": {
     "generatedAt": 1785703634000,

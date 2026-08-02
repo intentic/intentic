@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, type IconName, Picker, type PickerOption } from "@intentic-app/ui";
+import { cmp, type IconName, Picker, type PickerOption } from "@intentic/ui";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
 import { AppsListSchema } from "@intentic-app/api-contract";
 import Button from "primevue/button";

@@ -2,7 +2,7 @@
 import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
-import { formatBytes } from "@intentic-app/ui";
+import { formatBytes } from "@intentic/ui";
 
 // Non-blocking upload feedback, anchored bottom-right of the workspace body. Driven entirely by useUploadQueue —
 // the drop targets and the upload button all funnel through it, so a second drop mid-upload just appends here.

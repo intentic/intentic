@@ -17,7 +17,7 @@ export interface InventoryServiceDescriptor {
     readonly service: ServiceKind;
     readonly label: string;
     readonly logo?: string | undefined;
-    // An @intentic-app/ui IconName fallback glyph, rendered when no simple-icons `logo` fits the brand.
+    // An @intentic/ui IconName fallback glyph, rendered when no simple-icons `logo` fits the brand.
     readonly icon?: string | undefined;
     readonly description: string;
     readonly fields: readonly InventoryFieldDescriptor[];
@@ -101,16 +101,7 @@ export interface CapabilityField {
 // The logical section a card sits under in the "+" grid — a display grouping (by what it's for), not the
 // technical `kind`. `platform` cards unlock a new workspace area; the rest are connectors to existing tools.
 export type CapabilityCategory =
-    | "platform"
-    | "code"
-    | "observability"
-    | "data"
-    | "communication"
-    | "business"
-    | "machines"
-    | "servers"
-    | "deploy"
-    | "extend";
+    "platform" | "code" | "observability" | "data" | "communication" | "business" | "machines" | "servers" | "deploy" | "extend";
 
 // The grid's sections, in render order, with their headers. Cards are grouped by `category` under these.
 export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; readonly label: string; readonly hint: string }[] = [
@@ -160,7 +151,7 @@ export interface CapabilityCatalogEntry {
     // A simple-icons slug (https://cdn.simpleicons.org/<logo>). A "/<hex>" suffix forces a color for icons
     // invisible on the dark canvas (e.g. github's near-black). Undefined → the `icon` glyph, else per-kind.
     readonly logo?: string | undefined;
-    // An @intentic-app/ui IconName rendered when no simple-icons `logo` fits the brand (before the per-kind
+    // An @intentic/ui IconName rendered when no simple-icons `logo` fits the brand (before the per-kind
     // fallback). undefined → the generic per-kind icon.
     readonly icon?: string | undefined;
     readonly description: string;
@@ -272,10 +263,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         category: "machines",
         logo: "windows",
         description: "Let the agent work on your Windows computer — PowerShell, your files, your apps, its screen.",
-        fields: [
-            { key: "platform", label: "", value: "windows" },
-            ...HOST_SCOPE_FIELDS,
-        ],
+        fields: [{ key: "platform", label: "", value: "windows" }, ...HOST_SCOPE_FIELDS],
         hint: 'The name is how you and the agent refer to this computer ("check the logs on my-laptop"). After adding it, click Connect and run the one-liner on that machine.',
         guide: {
             steps: [
@@ -293,10 +281,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         category: "machines",
         logo: "linux/f5f5f5",
         description: "Let the agent work on your Linux computer — your shell, your files, your desktop session.",
-        fields: [
-            { key: "platform", label: "", value: "linux" },
-            ...HOST_SCOPE_FIELDS,
-        ],
+        fields: [{ key: "platform", label: "", value: "linux" }, ...HOST_SCOPE_FIELDS],
         hint: 'The name is how you and the agent refer to this computer ("run the tests on my-desktop"). After adding it, click Connect and run the one-liner on that machine.',
         guide: {
             steps: [

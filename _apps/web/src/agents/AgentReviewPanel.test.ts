@@ -16,7 +16,7 @@ import { sandboxKey } from "../composables/sandbox/useSandbox";
 import { router } from "../router";
 
 // The panel's import chain pulls in app-wide singletons that read browser globals at import time
-// (@intentic-app/ui's useDevice reads window.matchMedia; environment.ts reads window.env). matches:false keeps
+// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env). matches:false keeps
 // the device DESKTOP — the form factor where the list and the diff are on screen together.
 vi.hoisted(() => {
     globalThis.ResizeObserver ??= class {

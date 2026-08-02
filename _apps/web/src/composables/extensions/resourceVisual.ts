@@ -1,5 +1,5 @@
 import type { ResourceGroup } from "@intentic-app/api-contract";
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 
 /* How a desired-state resource looks in the dependency graph: the icon (or brand logo) that says what it is,
  * and the category accent that says which coarse group it belongs to. One source of truth so the graph node,

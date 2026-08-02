@@ -16,7 +16,7 @@ import type { FigureAccent } from "@intentic/extension-ui";
  * WHY THE PROSE IS NOT IN HERE. The obvious alternative is a fat JSON document with `responsibilities: string[]`
  * and `flows: [{ steps }]`. It was rejected: it forces every explanation into one predeclared shape, splits a
  * narrative from the figures that belong inside it, and turns an unreadable JSON diff into the review surface.
- * So the DOCUMENT is markdown (with typed figure fences — see @intentic-app/ui/markdown's figures.ts), and these
+ * So the DOCUMENT is markdown (with typed figure fences — see @intentic/ui/markdown's figures.ts), and these
  * structures carry only what the app must READ rather than render: identity, the map, anchors, provenance.
  *
  * Every parser here is total. A document set is written by a model into a repo the owner then reads; a field
@@ -135,7 +135,8 @@ const str = (value: unknown): string | undefined => {
     return trimmed === `` ? undefined : trimmed;
 };
 
-const strings = (value: unknown): string[] => (Array.isArray(value) ? value.flatMap((item) => (str(item) === undefined ? [] : [str(item) as string])) : []);
+const strings = (value: unknown): string[] =>
+    Array.isArray(value) ? value.flatMap((item) => (str(item) === undefined ? [] : [str(item) as string])) : [];
 
 const num = (value: unknown): number | undefined => (typeof value === `number` && Number.isFinite(value) ? value : undefined);
 

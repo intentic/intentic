@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { InfoDialog, InfoTable } from "@intentic-app/ui";
+import { InfoDialog, InfoTable } from "@intentic/ui";
 
 /* The (i) beside the Agent tab's "Instructions" group — what the assistant is told before you type anything.
  * Two settings, and they are not peers in weight: terse is a preference, the system prompt is a decision.

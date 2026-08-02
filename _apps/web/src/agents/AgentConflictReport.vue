@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { LandConflict } from "@intentic/sandbox-contract";
-import { cmp, useDevice } from "@intentic-app/ui";
+import { cmp, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { agentBlockers, type Blocker, blockerLabel, blockersOf, REASON_COPY, userBlockers } from "../composables/agents/conflictResolution";
 

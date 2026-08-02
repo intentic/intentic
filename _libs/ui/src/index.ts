@@ -13,7 +13,7 @@ export { default as ContextMenu } from "./components/ContextMenu.vue";
 export { default as CopyButton } from "./components/CopyButton.vue";
 export { type CountItem, default as CountBar } from "./components/CountBar.vue";
 export { default as DagGraph } from "./components/DagGraph.vue";
-// Types only. The DAG layout FUNCTIONS ship as `@intentic-app/ui/dag` for the same reason the markdown engine
+// Types only. The DAG layout FUNCTIONS ship as `@intentic/ui/dag` for the same reason the markdown engine
 // does: they are plain TypeScript, and a unit test should not have to boot this barrel's component graph (and a
 // DOM with it) to call one. See the note above renderMarkdown's subpath.
 export { type DagEdge, type DagNode } from "./components/dagLayout.js";
@@ -60,7 +60,7 @@ export { default as StatusBadge, type StatusVariant } from "./components/StatusB
 export { default as StepSection } from "./components/StepSection.vue";
 export { Theme } from "./styles/theme.js";
 export { installUi } from "./plugin.js";
-// The markdown ENGINE is not re-exported here — it ships as `@intentic-app/ui/markdown` so plain .ts modules
+// The markdown ENGINE is not re-exported here — it ships as `@intentic/ui/markdown` so plain .ts modules
 // and unit tests can use it without dragging in this barrel's component graph. See markdown/index.ts.
 export { vTw } from "./composables/tw.js";
 export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js";
@@ -68,17 +68,17 @@ export { formatBytes, formatTokens, timeAgo } from "./format.js";
 // The app's one "how far back" vocabulary — the 1h/24h/7d/All pills, the cutoff they mean, and the words a
 // caller says about them. Activity and Logs had each written all three.
 export { sinceOf, TIME_WINDOWS, type TimeWindow, timeWindowWords, withinWindow } from "./timeWindow.js";
-// Path splitting is NOT re-exported here — it ships as `@intentic-app/ui/path`, for the same reason the
+// Path splitting is NOT re-exported here — it ships as `@intentic/ui/path`, for the same reason the
 // markdown engine does: `fileType.ts` and `explorerPaste.ts` are unit-tested plain TypeScript, and neither
 // should have to boot this barrel's component graph (and a DOM with it) to split a string on "/".
 //
-// The Shiki grammar table is NOT re-exported here either, and ships as `@intentic-app/ui/langs`. Same reason,
+// The Shiki grammar table is NOT re-exported here either, and ships as `@intentic/ui/langs`. Same reason,
 // same caller: `fileType.ts` maps every extension the app knows onto a `ShikiLang`, and that is the module the
 // mapping has to be checked against.
 //
 // `seriesColor` above is the one export that ships BOTH ways, and deliberately. A Vue caller reaches it here
 // (the documentation sidebar paints an authored accent, and it has already booted this graph to render at
-// all); a plain-TypeScript caller reaches the same function at `@intentic-app/ui/series`, because the
+// all); a plain-TypeScript caller reaches the same function at `@intentic/ui/series`, because the
 // usage/savings projections are unit-tested in a node environment and this barrel pulls Picker.vue →
 // useDevice → `window` in behind it. One implementation, two doors, and the subpath is the one that must
 // stay open — a test that has to stub matchMedia to compute a colour is a test about the wrong thing.

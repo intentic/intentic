@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { type IconName, useDevice } from "@intentic-app/ui";
-import { copyCodeFromEvent } from "@intentic-app/ui/markdown";
+import { type IconName, useDevice } from "@intentic/ui";
+import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";

@@ -13,7 +13,7 @@ import type { PendingAction } from "../composables/agents/laneDrop";
 import type { FleetAgent } from "../composables/agents/useAgents";
 
 // The card's import chain pulls in app-wide singletons that read browser globals at import time
-// (@intentic-app/ui's useDevice reads window.matchMedia; environment.ts reads window.env). matches:false keeps
+// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env). matches:false keeps
 // the device DESKTOP, which is the form factor that renders the drill-in affordance beside the button.
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({

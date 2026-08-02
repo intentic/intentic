@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Page, PageHeader } from "@intentic-app/ui";
+import { Page, PageHeader } from "@intentic/ui";
 import InfraDeclare from "./InfraDeclare.vue";
 
 /* The infrastructure extension: the want-first declare surface of the intent repo. No onboarding gate — the

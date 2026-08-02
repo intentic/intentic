@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, InfoHint } from "@intentic-app/ui";
+import { cmp, InfoHint } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import CloudflareTokenField from "../../components/CloudflareTokenField.vue";

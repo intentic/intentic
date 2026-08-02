@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import type { WorkspaceSearchHit } from "@intentic-app/api-contract";
-import { useHighlighter } from "@intentic-app/ui";
+import { useHighlighter } from "@intentic/ui";
 import { expect, test, vi } from "vitest";
 import { snippetPieces, snippetWindow } from "./searchSnippet";
 
-// The @intentic-app/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import —
+// The @intentic/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import —
 // hence jsdom plus the stub jsdom itself doesn't ship. Nothing under test touches the DOM.
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({

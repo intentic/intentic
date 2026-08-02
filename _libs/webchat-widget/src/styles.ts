@@ -9,7 +9,7 @@ import type { WebchatPublicConfig } from "@intentic/sandbox-contract";
  * how an embedded widget ends up in a site's 22px display serif. Resetting at the host and restating what we
  * want below is what makes the widget look identical on every site. */
 
-/* Intentic's warm neutral ramp (hue 65), converted from the oklch in @intentic-app/ui primitive-colors.css to
+/* Intentic's warm neutral ramp (hue 65), converted from the oklch in @intentic/ui primitive-colors.css to
  * literal hex. Only the steps the roles below actually name.
  *
  * Hex, not oklch(), and not variables read from the host: this sheet ships to a stranger's browser, where
@@ -30,7 +30,7 @@ const NEUTRAL = {
 } as const;
 
 /* The app's ROLE tokens, per scheme — a transcription of the `:root` and `[data-mode="dark"]` blocks in
- * @intentic-app/ui semantic-colors.css, under the same names so the two can be read side by side. Everything
+ * @intentic/ui semantic-colors.css, under the same names so the two can be read side by side. Everything
  * visible below is expressed in these, so "does the widget match the app" is a question about this table
  * rather than about forty rules.
  *
@@ -182,7 +182,7 @@ export const styles = (config: WebchatPublicConfig): string => {
     all: initial;
     ${tokens("light", accent)}
     --gap: 1.25rem;
-    /* The app's radius scale (@intentic-app/ui tokens.css), by the names it uses them under: controls at lg,
+    /* The app's radius scale (@intentic/ui tokens.css), by the names it uses them under: controls at lg,
        bubbles at lg, the panel at xl, the composer shell at 2xl. */
     --radius-md: 0.5rem;
     --radius-lg: 0.75rem;

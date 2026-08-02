@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import type { ChatTool } from "../composables/chat/transcript";

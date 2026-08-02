@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BrowserPage } from "@intentic/sandbox-contract";
-import { Icon } from "@intentic-app/ui";
+import { Icon } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { activePageOf } from "../composables/browser/activePage";

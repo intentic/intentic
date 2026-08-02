@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SearchBar, useDevice, useListNavigation } from "@intentic-app/ui";
+import { SearchBar, useDevice, useListNavigation } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";

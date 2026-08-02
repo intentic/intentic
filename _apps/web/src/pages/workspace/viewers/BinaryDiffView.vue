@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatBytes, ImageView, isRenderableImage, useDevice } from "@intentic-app/ui";
+import { formatBytes, ImageView, isRenderableImage, useDevice } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { sandboxBlob } from "../../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../../composables/useAsyncAction";

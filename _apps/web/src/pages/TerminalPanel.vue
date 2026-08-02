@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, ConfirmDialog, ContextMenu, type IconName, useDevice } from "@intentic-app/ui";
+import { cmp, ConfirmDialog, ContextMenu, type IconName, useDevice } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
@@ -866,13 +866,7 @@ const endResize = (event: PointerEvent): void => {
                      burial the chat's pop-out had, on a toolbar that has room to say it out loud. Beside the
                      close × because both answer "where does this panel live", and it flips with the state so
                      the one control is the whole round trip. -->
-                <button
-                    type="button"
-                    :class="cmp.iconButton()"
-                    @click="popout.toggle()"
-                    v-tooltip.top="popoutHint"
-                    :aria-label="popoutHint"
-                >
+                <button type="button" :class="cmp.iconButton()" @click="popout.toggle()" v-tooltip.top="popoutHint" :aria-label="popoutHint">
                     <Icon :name="popout.poppedOut.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
                 </button>
                 <button

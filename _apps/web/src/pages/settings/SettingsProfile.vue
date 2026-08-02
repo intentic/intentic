@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Avatar, Card, cmp } from "@intentic-app/ui";
+import { Avatar, Card, cmp } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";

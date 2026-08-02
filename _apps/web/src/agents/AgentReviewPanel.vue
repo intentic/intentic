@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FileDiffResponse } from "@intentic-app/api-contract";
-import { cmp, explorerColorClass, iconForEntry, Segmented, useDevice, useExplorerStyle } from "@intentic-app/ui";
+import { cmp, explorerColorClass, iconForEntry, Segmented, useDevice, useExplorerStyle } from "@intentic/ui";
 import { isTestPath } from "@intentic/sandbox-contract";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -21,7 +21,7 @@ import { useModules } from "../composables/workspace/useModules";
 import AgentConflictReport from "./AgentConflictReport.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "../composables/agents/reviewGroupPass";
-import { basename, parentDir } from "@intentic-app/ui/path";
+import { basename, parentDir } from "@intentic/ui/path";
 import ChangeStatusMark from "../components/ChangeStatusMark.vue";
 
 /* One agent's work, as a REVIEW: the file list on the left, that file's diff on the right, in this view — the

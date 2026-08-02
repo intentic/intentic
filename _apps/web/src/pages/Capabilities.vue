@@ -10,7 +10,7 @@ import {
     connectorCard,
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace } from "@intentic-app/api-contract";
-import { cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic-app/ui";
+import { cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic/ui";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import { type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
@@ -684,7 +684,11 @@ const submitLabel = computed(() =>
                             }}</span>
                             <!-- A connected computer's liveness is the fact its row exists to carry: "added" and
                                  "asleep" and "working" are three different situations for the person reading it. -->
-                            <span v-if="selected.kind === 'host'" class="text-2xs" :class="hostFor(instance.id)?.online ? 'text-success' : 'text-subtle'">
+                            <span
+                                v-if="selected.kind === 'host'"
+                                class="text-2xs"
+                                :class="hostFor(instance.id)?.online ? 'text-success' : 'text-subtle'"
+                            >
                                 {{ hostFor(instance.id)?.online ? "online" : "offline" }}
                             </span>
                             <span v-if="selected.kind === 'host' && hostFor(instance.id)?.facts" class="font-mono text-2xs text-subtle">{{

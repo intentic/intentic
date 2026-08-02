@@ -24,7 +24,7 @@
         "@intentic-app/api-contract": "workspace:*",
         "@intentic-app/capability-catalog": "workspace:*",
         "@intentic-app/localhost-https": "workspace:*",
-        "@intentic-app/ui": "workspace:*",
+        "@intentic/ui": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/ext-acceptance": "workspace:*",
         "@intentic/ext-activity": "workspace:*",

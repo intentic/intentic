@@ -1,4 +1,4 @@
-import { basename, parentDir } from "@intentic-app/ui/path";
+import { basename, parentDir } from "@intentic/ui/path";
 // Pure paste planning for the file explorer — no Vue, so it's unit-checkable (explorerPaste.test.ts).
 // `taken` is the set of names ALREADY in the target directory; the caller reads it off the loaded tree.
 

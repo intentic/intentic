@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic-app/ui";
+import { cmp, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
 import type { VpnLink } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";

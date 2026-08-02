@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic-app/ui";
+import { useDevice } from "@intentic/ui";
 import { ref } from "vue";
 
 /* The one text filter, so the surfaces that carry it can't drift.

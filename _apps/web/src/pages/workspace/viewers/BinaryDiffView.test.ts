@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
 // The component's import chain pulls in app-wide singletons that read browser/runtime globals at import time
-// (@intentic-app/ui's useDevice reads window.matchMedia; environment.ts reads window.env). vi.hoisted runs
+// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env). vi.hoisted runs
 // before the imports evaluate, mirroring what the real page has in place by then.
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({

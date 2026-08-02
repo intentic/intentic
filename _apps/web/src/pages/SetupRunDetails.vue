@@ -13,7 +13,7 @@
      remedy — put it in the layout, not over it (CredentialGuide reached the same conclusion for the capability
      forms). This is the third time, so the content moved out to where both surfaces can share it. -->
 <script setup lang="ts">
-import { CopyButton } from "@intentic-app/ui";
+import { CopyButton } from "@intentic/ui";
 
 // `syncEnabled` only changes what the command writes outside Docker, which is the one fact here that isn't
 // fixed. `cleanup` is the undo, passed in because it tracks the same OS choice as the command itself.

@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import { withoutResumeNote } from "@intentic/sandbox-contract";
 import type { ChatMessage } from "./transcript";
 

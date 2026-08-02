@@ -1,6 +1,6 @@
 import type { AgentChangesResponse } from "@intentic-app/api-contract";
 import type { LandMode, LandResult } from "@intentic/sandbox-contract";
-import { useDevice } from "@intentic-app/ui";
+import { useDevice } from "@intentic/ui";
 import type { Conversation } from "../chat/conversation";
 import { focusComposer, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";

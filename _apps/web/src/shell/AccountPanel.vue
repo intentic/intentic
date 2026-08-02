@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Avatar } from "@intentic-app/ui";
+import { Avatar } from "@intentic/ui";
 import Popover from "primevue/popover";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";

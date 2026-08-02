@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, LoopState } from "@intentic/sandbox-contract";
 
 /* WHERE AN AGENT STANDS, and how each surface draws it. Every projection of a fleet agent's state lives here —

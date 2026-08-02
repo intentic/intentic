@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { cmp, RowGroup } from "@intentic-app/ui";
+import { cmp, RowGroup } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/providerAccounts";

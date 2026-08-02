@@ -24,7 +24,7 @@ const tab = (id: string) => ({
 // the router builds a history, and useSandbox reaches environment.ts's window.env. The useSandbox stub serves
 // both consumers — agentActions reads `sandboxKey`, and sandboxClient reads its base through the real
 // useEndpoint, whose daemonBase falls through to `daemonUrl` when no loopback shortcut is resolved.
-vi.mock("@intentic-app/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
+vi.mock("@intentic/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
 vi.mock("../chat/useChat", () => ({
     // `active` is read by a module-scope watcher in useAgents (the "seen while you watch it" rule), which
     // evaluates the moment that module loads.

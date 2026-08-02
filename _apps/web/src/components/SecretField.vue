@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic-app/ui";
+import { cmp } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { devFillGet } from "../composables/devFill";

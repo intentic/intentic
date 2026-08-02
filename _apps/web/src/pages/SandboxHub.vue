@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { NavGroup } from "@intentic-app/ui";
+import type { NavGroup } from "@intentic/ui";
 import { computed } from "vue";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { usePanels } from "../composables/extensions/usePanels";
@@ -87,9 +87,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
     { key: `box`, label: `This box`, items: boxRows(runningCount.value) },
     { key: `configuration`, label: `Configuration`, items: CONFIGURATION },
     { key: `reach`, label: `Reach`, items: REACH },
-    ...(contributed.value.length === 0
-        ? []
-        : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
+    ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
 ]);
 </script>
 

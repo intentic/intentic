@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup } from "@intentic-app/ui";
+import { Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 
@@ -64,7 +64,11 @@ const setAutomationFailureLimit = (event: Event): void => {
              until somebody looks. 0 = never, and it is the default: an hourly poll against an API having a bad
              afternoon is broken for three fires and fine on the fourth, and an automation disabled at 3 a.m. is
              one nobody re-enables until they notice. -->
-        <Row icon="stop" title="Stop a failing automation" description="Disable an automation after this many failed runs in a row. 0 never disables one.">
+        <Row
+            icon="stop"
+            title="Stop a failing automation"
+            description="Disable an automation after this many failed runs in a row. 0 never disables one."
+        >
             <template #control>
                 <input
                     type="number"

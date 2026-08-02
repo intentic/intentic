@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useListNavigation } from "@intentic-app/ui";
+import { useListNavigation } from "@intentic/ui";
 import ComposerPopover from "./ComposerPopover.vue";
 import type { AgentCommand } from "@intentic/sandbox-contract";
 import { computed } from "vue";

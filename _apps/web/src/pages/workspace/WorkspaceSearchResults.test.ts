@@ -30,8 +30,8 @@ const tokenized = vi.hoisted(() => {
 
 // The real barrel, with the one function whose COST is the subject recorded instead of run. Grammar loading is
 // what a mount cannot afford here; every call is a scheduled tokenize, which is exactly what is being counted.
-vi.mock("@intentic-app/ui", async (importOriginal) => {
-    const actual = await importOriginal<typeof import("@intentic-app/ui")>();
+vi.mock("@intentic/ui", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@intentic/ui")>();
     return {
         ...actual,
         useHighlighter: () => ({

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic-app/api-contract";
-import { Code, commandLang, ConfirmDialog, type IconName, OS_OPTIONS, Segmented, useOsPreference } from "@intentic-app/ui";
+import { Code, commandLang, ConfirmDialog, type IconName, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";

@@ -5,7 +5,7 @@
 // Every id referenced here is bundled offline: scripts/generateIconData.ts trims the used icons out of the
 // full @iconify-json sets into src/icons/iconData.generated.ts, which installUi() registers via addCollection.
 // So no runtime Iconify API fetch — all five sets stay available for the Settings switcher. Regenerate
-// (pnpm --filter @intentic-app/ui generate:icons) whenever these mappings change.
+// (pnpm --filter @intentic/ui generate:icons) whenever these mappings change.
 //
 // `primeicons` is the original set, kept as a baseline for comparison — rendered through the same
 // Iconify pipeline via the `prime:` collection (no font/CSS dependency). Iconify's `prime` snapshot

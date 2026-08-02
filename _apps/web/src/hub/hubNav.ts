@@ -1,5 +1,5 @@
 import type { ViewBadge } from "@intentic/extension-api";
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 
 /* <HubLayout>'s row model, in a plain module for the reason <NavRail>'s own group model lives in one (see
  * navRail.ts): a hub builds its rows in a computed from its own data, and a type it can only reach through a

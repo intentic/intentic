@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ResourceGroupSchema, type Deployment } from "@intentic-app/api-contract";
-import { Card, cmp, CopyButton, InfoHint, Page, PageHeader, StatusBadge } from "@intentic-app/ui";
+import { Card, cmp, CopyButton, InfoHint, Page, PageHeader, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";
 import PlanStepRow from "../../components/PlanStepRow.vue";

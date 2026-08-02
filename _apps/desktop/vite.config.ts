@@ -9,7 +9,7 @@ export default defineConfig({
     plugins: [vue(), tailwindcss()],
     resolve: {
         alias: {
-            "@intentic-app/ui": fileURLToPath(new URL(`../../_libs/ui/src/index.ts`, import.meta.url)),
+            "@intentic/ui": fileURLToPath(new URL(`../../_libs/ui/src/index.ts`, import.meta.url)),
         },
     },
     clearScreen: false,

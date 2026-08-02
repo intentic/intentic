@@ -43,7 +43,7 @@ stranger's stylesheet from reshaping the chat. The first line of that stylesheet
 shadow root blocks selectors but *not* inherited properties — without it the widget wears the host site's font.
 
 **The palette is the app's, arithmetic and all.** `styles.ts` transcribes intentic's role tokens — `card`,
-`overlay`, `line`, `content`, `muted` — from `@intentic-app/ui`'s `semantic-colors.css`, and builds the two chat
+`overlay`, `line`, `content`, `muted` — from `@intentic/ui`'s `semantic-colors.css`, and builds the two chat
 surfaces the way `chat.css` does: an assistant bubble is `overlay` at 35% over the card, a visitor bubble the
 same at 55%. So the accent is never a bubble's background. It shows up as a tinted edge, a 14% wash under the
 send button, and the composer's focus ring, exactly as it does in the app — white on the brand orange is 3.15:1,

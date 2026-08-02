@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Code, commandLang, Segmented, useOsPreference } from "@intentic-app/ui";
+import { Code, commandLang, Segmented, useOsPreference } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed } from "vue";
 import { DESKTOP_DOWNLOADS, desktopRecreateLink, desktopVersion, openDesktopLink } from "../environments/desktop";

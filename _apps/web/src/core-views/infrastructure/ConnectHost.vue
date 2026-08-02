@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { HostTunnelSchema, type HostTunnel } from "@intentic-app/api-contract";
-import { cmp, Code, commandLang, InfoHint, OS_OPTIONS, Segmented, useOsPreference } from "@intentic-app/ui";
+import { cmp, Code, commandLang, InfoHint, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onUnmounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";

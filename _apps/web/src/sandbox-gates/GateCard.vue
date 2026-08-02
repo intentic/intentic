@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, type IconName } from "@intentic-app/ui";
+import { Icon, type IconName } from "@intentic/ui";
 
 /* THE FULL-SCREEN NOTICE — what stands in the workspace outlet when there is no workspace to show: the daemon
  * is unreachable, or still booting, or reachable but refusing this account.

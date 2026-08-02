@@ -8,8 +8,8 @@ import { effectiveKeybinding } from "../composables/commands/useKeymap";
 import { useQuickOpen } from "../composables/useQuickOpen";
 import { useFuzzyFiles } from "../composables/workspace/useFuzzyFiles";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
-import { iconForEntry, type IconName } from "@intentic-app/ui";
-import { basename, parentDir } from "@intentic-app/ui/path";
+import { iconForEntry, type IconName } from "@intentic/ui";
+import { basename, parentDir } from "@intentic/ui/path";
 
 /* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type — client-
  * ranked over the explorer's cached tree (useFuzzyFiles), so results land in the same frame as the keystroke;
@@ -53,7 +53,6 @@ const rowCount = computed(() => (commandMode.value ? commandRows.value.length : 
 
 // Snap the highlight back to the top whenever the result set changes under it.
 watch([rows, commandRows], () => (activeIndex.value = 0));
-
 
 const setRowEl = (path: string, el: unknown): void => {
     if (el) {

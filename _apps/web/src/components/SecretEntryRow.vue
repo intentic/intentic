@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { cmp, CopyButton } from "@intentic-app/ui";
+import { cmp, CopyButton } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { reveal, useSecrets } from "../composables/secrets/useSecrets";
 import { errorMessage } from "../composables/useAsyncAction";

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, StatusBadge } from "@intentic-app/ui";
+import { Card, StatusBadge } from "@intentic/ui";
 import HostRecreate from "../../components/HostRecreate.vue";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 

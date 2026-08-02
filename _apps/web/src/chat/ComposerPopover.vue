@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, type IconName } from "@intentic-app/ui";
+import { Icon, type IconName } from "@intentic/ui";
 
 /* The panel that opens ABOVE the composer while a trigger character is live — `@` for a file, `/` for a
  * command. Chrome only: the raised surface, and the header that names what is being picked.

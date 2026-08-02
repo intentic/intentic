@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic-app/ui";
+import { cmp } from "@intentic/ui";
 import Popover from "primevue/popover";
 import ToggleSwitch from "primevue/toggleswitch";
 import { ref } from "vue";

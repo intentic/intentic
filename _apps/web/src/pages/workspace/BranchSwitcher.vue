@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { timeAgo } from "@intentic-app/ui";
+import { timeAgo } from "@intentic/ui";
 import Popover from "primevue/popover";
 import { computed, ref } from "vue";
 import { useBranches } from "../../composables/workspace/useBranches";

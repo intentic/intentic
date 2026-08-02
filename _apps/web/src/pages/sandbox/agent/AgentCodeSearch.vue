@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Row, RowGroup } from "@intentic-app/ui";
+import { cmp, Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSavings } from "../../../composables/sandbox/useSavings";

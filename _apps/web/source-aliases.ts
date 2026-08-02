@@ -28,25 +28,25 @@ export const sourceAliases = (): Record<string, string> => ({
     // Listed before the barrel: a string alias also matches `<key>/…`, so the more specific subpath has to win
     // the lookup. It exists so plain .ts (and its unit tests) can reach the markdown engine without loading
     // the design system's component graph — see _libs/ui/src/markdown/index.ts.
-    "@intentic-app/ui/markdown": here("../../_libs/ui/src/markdown/index.ts"),
+    "@intentic/ui/markdown": here("../../_libs/ui/src/markdown/index.ts"),
     // Same reason and the same ordering requirement: the DAG layout is plain TypeScript that DagGraph and its
     // unit tests both call, and a test for a pure function must not have to boot the component graph (and a DOM
     // with it) to reach it.
-    "@intentic-app/ui/dag": here("../../_libs/ui/src/components/dagLayout.ts"),
+    "@intentic/ui/dag": here("../../_libs/ui/src/components/dagLayout.ts"),
     // Same reason and the same ordering requirement again: splitting a path into name + directory is what every
     // file row in the app does, including the ones in unit-tested pure modules (fileType.ts, explorerPaste.ts).
-    "@intentic-app/ui/path": here("../../_libs/ui/src/path.ts"),
+    "@intentic/ui/path": here("../../_libs/ui/src/path.ts"),
     // And again, for the same module: fileType.ts maps every extension the app knows onto a `ShikiLang`, so the
     // grammar table is what that mapping is type-checked against. A plain map of dynamic-import thunks — nothing
     // from shiki/core is loaded by naming it.
-    "@intentic-app/ui/langs": here("../../_libs/ui/src/composables/shikiLangs.ts"),
+    "@intentic/ui/langs": here("../../_libs/ui/src/composables/shikiLangs.ts"),
     // Same again: the chart palette's slot→colour lookup is called by the usage/savings PROJECTIONS, which are
     // pure functions with their own unit tests — reaching it through the barrel boots Picker.vue and wants a DOM.
-    "@intentic-app/ui/series": here("../../_libs/ui/src/components/seriesAccent.ts"),
+    "@intentic/ui/series": here("../../_libs/ui/src/components/seriesAccent.ts"),
     // And once more: the 1h/24h/7d/All vocabulary is arithmetic over a timestamp, called by the feeds' pure
     // projections and pinned by their unit tests — none of which should need a DOM to ask how far back "7d" is.
-    "@intentic-app/ui/time": here("../../_libs/ui/src/timeWindow.ts"),
-    "@intentic-app/ui": here("../../_libs/ui/src/index.ts"),
+    "@intentic/ui/time": here("../../_libs/ui/src/timeWindow.ts"),
+    "@intentic/ui": here("../../_libs/ui/src/index.ts"),
     "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
     // The "+" grid's card and category data. It was the ONE first-party lib missing from this map, and the
     // cost was a silent wrong answer rather than a build error: the app resolved its `dist` instead, so a new

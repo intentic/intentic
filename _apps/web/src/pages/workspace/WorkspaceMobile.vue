@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { BottomSheet, cmp, ConfirmDialog, PullToRefresh, Segmented } from "@intentic-app/ui";
+import { BottomSheet, cmp, ConfirmDialog, PullToRefresh, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -24,13 +24,13 @@ import { rendersAsBytes } from "./fileType";
 import type { DiffTabPayload } from "./workspaceTabs";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { filesToEntries } from "./dropEntries";
-import { iconForEntry } from "@intentic-app/ui";
+import { iconForEntry } from "@intentic/ui";
 import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import UploadProgress from "./UploadProgress.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
-import { parentDir } from "@intentic-app/ui/path";
+import { parentDir } from "@intentic/ui/path";
 
 /* The mobile Workspace: a drill-down file browser — one directory per screen — plus the Changes / History
  * panels, with a full-screen read-only viewer. All navigation state (segment aside) lives in the ROUTE

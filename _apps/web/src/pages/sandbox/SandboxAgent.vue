@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic-app/ui";
+import { cmp } from "@intentic/ui";
 import { computed } from "vue";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";

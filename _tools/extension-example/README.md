@@ -30,7 +30,7 @@ Building it surfaced three things that no amount of reading would have:
    extension resolves only when the app happens to use it elsewhere. The design system's shipped `.ui-*` classes
    and role tokens are the reliable surface, and `seed/src/ExampleView.vue` uses only those.
 3. **`@intentic/extension-ui` has no npm artifact**, so an outside author has no types for the component kit the
-   host provides at runtime. Publishing it needs `@intentic-app/ui` published or a rolled-up `.d.ts`; until then,
+   host provides at runtime. Publishing it needs `@intentic/ui` published or a rolled-up `.d.ts`; until then,
    plain markup is the honest example.
 
 ## It is published, and the chain has been walked

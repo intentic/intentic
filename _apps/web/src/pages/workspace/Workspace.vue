@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic-app/ui";
+import { useDevice } from "@intentic/ui";
 import { defineAsyncComponent } from "vue";
 
 /* The /workspace route, split by form factor: the VSCode-like explorer + tabs + resizable panes under a

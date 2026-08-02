@@ -157,6 +157,24 @@ test:
     - pnpm typecheck
     - pnpm turbo run build test
 
+# The public GitHub mirror, proven before it can be published. verify-mirror.sh materialises the export
+# (_tools/scripts/public.sh) into a scratch tree, reconciles the lockfile against the subset, installs it
+# frozen, and type-checks it — the three failures a subset has and the monorepo cannot: a public package
+# growing a workspace dependency on a private one, a root devDependency the export doesn't carry, a lockfile
+# that can't prune to the packages that remain.
+#
+# It runs on main as well as on merge requests, and the release job `needs` it, because the release publishes
+# the mirror unattended: this is the job that makes a one-shot cutover safe. A red mirror blocks the release
+# and nothing else — the monorepo itself is unaffected by anything found here.
+mirror:verify:
+  stage: test
+  interruptible: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - bash _tools/scripts/verify-mirror.sh
+
 # The desktop app (_apps/desktop): Rust fmt/clippy/tests + the launcher UI build. Runs only when the desktop
 # tree changes — on MRs as the gate, and on main so a broken desktop surfaces before the release job's
 # build-desktop.sh cross-builds the same crate. clippy compiles against real webkit2gtk, covering the Linux
@@ -191,7 +209,7 @@ desktop:check:
   script:
     # The launcher UI first: `tauri build` would run it anyway, and a Vue error is worth failing on in seconds
     # rather than after a cargo build.
-    - pnpm --filter @intentic-app/desktop build
+    - pnpm --filter @intentic/desktop-app build
     - cargo fmt --manifest-path _apps/desktop/src-tauri/Cargo.toml --all --check
     - cargo clippy --manifest-path _apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
     - cargo test --manifest-path _apps/desktop/src-tauri/Cargo.toml
@@ -305,20 +323,23 @@ images:platform:
     - pnpm turbo run docker:release --filter=@intentic-app/api --filter=@intentic-app/web
     - DEPLOY_VERSION=$CI_COMMIT_SHORT_SHA bash _tools/scripts/deploy-platform.sh
 
-# Release: semantic-release over the test job's verified build (npm publish, GitLab Release with the
-# cross-compiled intentic-sync binaries, and the sandbox/dind-host images at the release version + moving
-# `stable` tag).
+# Release: semantic-release over the test job's verified build — the cross-compiled machine agents and the
+# desktop installers, the sandbox/dind-host images at the release version + moving `stable` tag, and the
+# export to the public GitHub mirror, whose pushed tag is what publishes the npm packages (publish-github.sh).
 release:
   extends: .dind
   stage: release
-  # Only test — deliberately NOT the images job. The release builds its own sandbox tree because semantic-release's
+  # test AND mirror:verify — deliberately NOT the images job. The release builds its own sandbox tree because semantic-release's
   # prepareCmd stamps the release version into every package.json first, and the sandbox READS that at runtime
   # (src/version.ts; ensure-intent's dependencySpec switches `link:` → `~<version>` on it). The images job's
   # sha-/latest images are built unstamped (0.0.0 = dev mode), so they are NOT retaggable as a release. The
   # duplicated work is bounded by the inline layer cache both jobs read off the published sandbox:latest /
   # :stable (publish-images.sh), and running parallel to images keeps it off the critical path — provided the
   # runner has slots free (gitlab-runner concurrent >= 4).
-  needs: ["test"]
+  # mirror:verify is the second gate for one reason: this job publishes the public mirror unattended, and an
+  # export that doesn't install is a broken public repo AND no npm release (the mirror's tag is what triggers
+  # the npm publish). Proving it on the merge request is what keeps that safe.
+  needs: ["test", "mirror:verify"]
   resource_group: release
   # The publish is heavy (a cold image build pushes ~1.5 GB). Give it room beyond the 1h default so a cold
   # first-build can't fail the job AFTER the release already succeeded. NOTE: if the job still stops at
@@ -332,15 +353,15 @@ release:
     # build-desktop.sh cross-builds the Tauri app here too; same shared cargo store as desktop:check.
     CARGO_HOME: /ci-cache/cargo
     CARGO_TARGET_DIR: /ci-cache/desktop-target
-  # npm auth for publishing: a granular access token (masked CI var NPM_TOKEN, write access to @intentic/*)
-  # written to ~/.npmrc. Tokenless OIDC trusted publishing is not an option — npm's token exchange rejects
-  # this project's self-hosted runner. NPM_TOKEN is a granular token (classic tokens were removed 2025-12);
-  # it expires (≤90 days), so rotate it on npmjs.org and update the CI var before it lapses.
+  # GITHUB_TOKEN (masked CI variable) is the only credential this job needs for the public side: a fine-grained
+  # PAT on radarsu/intentic with Contents read+write, which publish-github.sh uses to push the snapshot commit,
+  # the tag, and the Release with its installers. There is NO npm credential here any more — the packages are
+  # published by GitHub Actions off that tag, tokenless, through npm's OIDC trusted publishing, which the
+  # self-hosted runner here could never use and which is what earns the packages their provenance badge.
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   before_script:
     - !reference [.pnpm-setup, script]
-    - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - git remote set-url --push origin "https://oauth2:${GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:

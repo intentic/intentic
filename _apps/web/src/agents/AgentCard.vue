@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, formatTokens, ProgressRing, useDevice } from "@intentic-app/ui";
+import { cmp, formatTokens, ProgressRing, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import OriginMark from "../components/OriginMark.vue";

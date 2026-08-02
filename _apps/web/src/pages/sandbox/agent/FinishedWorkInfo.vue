@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { InfoDialog, InfoTable } from "@intentic-app/ui";
+import { InfoDialog, InfoTable } from "@intentic/ui";
 
 /* The (i) beside the Agent tab's "Finished work" group — what happens to an agent's work once it stops, and to
  * the agent itself. Both settings spend something real if you leave them alone: one leaves finished work
@@ -33,8 +33,8 @@ const AT_A_GLANCE = [
             <div class="overflow-hidden rounded-lg border border-line">
                 <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">On — the default</p>
                 <p class="px-2.5 py-2 text-2xs text-muted">
-                    A clean finish applies straight away. You come back to the work already in your workspace, and nothing is waiting on you to
-                    notice it.
+                    A clean finish applies straight away. You come back to the work already in your workspace, and nothing is waiting on you to notice
+                    it.
                 </p>
             </div>
             <div class="overflow-hidden rounded-lg border border-line">

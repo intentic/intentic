@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { WorkspaceSearchGroup, WorkspaceSearchHit } from "@intentic-app/api-contract";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { iconForEntry } from "@intentic-app/ui";
+import { iconForEntry } from "@intentic/ui";
 import { codeLangForPath } from "./fileType";
 import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "./searchSnippet";
-import { basename, parentDir } from "@intentic-app/ui/path";
+import { basename, parentDir } from "@intentic/ui/path";
 
 /* Workspace search results for the explorer sidebar: a count line, then file header rows + indented hit rows
  * (line number + snippet, syntax-coloured, with every matched span <mark>ed from the daemon's char offsets —
@@ -134,7 +134,6 @@ watch(
         scrollTop.value = 0;
     },
 );
-
 
 /* "Matches", not "results": a row here is a matching LINE with all of its occurrences marked, which is also
  * what the engine counts — so the number is the number of rows the search found, and saying "results" would

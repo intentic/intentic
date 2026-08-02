@@ -35,7 +35,7 @@ vi.hoisted(() => {
     } as unknown as typeof ResizeObserver;
 });
 
-import { Markdown } from "@intentic-app/ui";
+import { Markdown } from "@intentic/ui";
 
 const render = (source: string): HTMLElement => {
     const host = document.createElement(`div`);

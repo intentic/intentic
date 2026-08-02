@@ -2,6 +2,11 @@
     "name": "@intentic/constants",
     "version": "0.0.0",
     "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/radarsu/intentic.git",
+        "directory": "_tools/constants"
+    },
     "types": "./dist/index.d.ts",
     "files": [
         "dist"

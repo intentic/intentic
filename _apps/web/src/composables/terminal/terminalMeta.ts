@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import { ref, watch } from "vue";
 import { useSandbox } from "../sandbox/useSandbox";
 

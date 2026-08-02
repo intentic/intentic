@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, BottomSheet, useDevice } from "@intentic-app/ui";
+import { AnchoredOverlay, BottomSheet, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { modelRequest, settleModelPick } from "../composables/chat/hostModelPicker";
 import type { PickerEntry } from "../composables/chat/modelPicker";

@@ -21,7 +21,7 @@
      scrolling row of pills is the idiom every mobile tab bar already uses; the failure above is a desktop
      failure, caused by a 48rem content cap that does not apply once the page is the whole screen. -->
 <script setup lang="ts">
-import { type IconName, type NavGroup, NavRail, Row, Segmented, SplitView } from "@intentic-app/ui";
+import { type IconName, type NavGroup, NavRail, Row, Segmented, SplitView } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { badgeClass, badgeText } from "../core-views/viewBadge";

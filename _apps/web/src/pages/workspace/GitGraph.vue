@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { GitActionResult, GitChange, GitCommit } from "@intentic-app/api-contract";
-import { cmp, ContextMenu, Picker, Segmented, timeAgo } from "@intentic-app/ui";
+import { cmp, ContextMenu, Picker, Segmented, timeAgo } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, watch } from "vue";

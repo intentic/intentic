@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-api";
-import { cmp, StatusBadge } from "@intentic-app/ui";
+import { cmp, StatusBadge } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import type { ExtensionEntry } from "../../composables/extensions/useExtensionList";

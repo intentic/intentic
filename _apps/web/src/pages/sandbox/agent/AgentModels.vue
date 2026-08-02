@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type AgentProvider, parsePinned, quickModelKey } from "@intentic/sandbox-contract";
-import { Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic-app/ui";
+import { Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic/ui";
 import { computed } from "vue";
 import { providerReady } from "../../../composables/chat/access";
 import { effortsFor } from "../../../composables/chat/effortScale";

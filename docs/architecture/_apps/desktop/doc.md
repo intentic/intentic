@@ -1,4 +1,4 @@
-# @intentic-app/desktop
+# @intentic/desktop-app
 
 The Windows and Linux desktop app: a window around the editor, and a small program on your machine that can do
 the things a web page cannot.

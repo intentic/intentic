@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic-app/ui";
+import { Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
 import VpnCard from "../../components/VpnCard.vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";

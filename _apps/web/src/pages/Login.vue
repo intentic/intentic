@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { IconName } from "@intentic-app/ui";
+import type { IconName } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed } from "vue";
 import { useAuth } from "../composables/useAuth";

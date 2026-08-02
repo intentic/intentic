@@ -54,7 +54,7 @@ const AUDIENCE = [
         `sentence, that difficulty is itself worth writing down.`,
 ].join(`\n`);
 
-// The figure vocabulary, verbatim. This is the contract with @intentic-app/ui/markdown's figures.ts — a fence
+// The figure vocabulary, verbatim. This is the contract with @intentic/ui/markdown's figures.ts — a fence
 // whose body does not parse renders as a code block, which is a visible, self-correcting failure.
 const FIGURES = [
     `## Figures`,
@@ -109,17 +109,18 @@ const provenanceRule = (source: string): string =>
 
 // Takes the repo flag rather than printing a `<repo>` placeholder: the brief already knows which repository this
 // is, and a command the agent has to fill in is a command it can fill in wrong.
-const validateRule = (repoFlag: string): string => [
-    `## Finish by validating`,
-    ``,
-    `\`intentic-docs\` is on your PATH. Before you finish:`,
-    ``,
-    `    intentic-docs validate${repoFlag} --from staging`,
-    ``,
-    `It checks that every document parses, that provenance is present, that each \`doc.json\` has a \`doc.md\` ` +
-        `beside it, and that every \`keyFiles\` path still exists. Fix what it reports and run it again until it ` +
-        `passes. A \`keyFiles\` entry pointing at a file that is not there is the clearest possible signal that a ` +
-        `document is wrong, so it is worth getting right rather than working around.`,
+const validateRule = (repoFlag: string): string =>
+    [
+        `## Finish by validating`,
+        ``,
+        `\`intentic-docs\` is on your PATH. Before you finish:`,
+        ``,
+        `    intentic-docs validate${repoFlag} --from staging`,
+        ``,
+        `It checks that every document parses, that provenance is present, that each \`doc.json\` has a \`doc.md\` ` +
+            `beside it, and that every \`keyFiles\` path still exists. Fix what it reports and run it again until it ` +
+            `passes. A \`keyFiles\` entry pointing at a file that is not there is the clearest possible signal that a ` +
+            `document is wrong, so it is worth getting right rather than working around.`,
     ].join(`\n`);
 
 export interface MapBriefInput {
@@ -163,8 +164,7 @@ export const mapBrief = (input: MapBriefInput): string => {
         `**Vocabulary.** List the terms this repo uses in a way an outsider would guess wrong. Every package agent ` +
             `is handed this glossary, so it is what stops the set from inventing a different word per page.`,
         ``,
-        `**Reading order.** The packages a newcomer should open first, in order. Three to six, not a ranking of all ` +
-            `of them.`,
+        `**Reading order.** The packages a newcomer should open first, in order. Three to six, not a ranking of all ` + `of them.`,
         ``,
         `## Write exactly two files`,
         ``,
@@ -271,15 +271,16 @@ export const packageBrief = (input: PackageBriefInput): string => {
             `space here); the two or three things you would have to explain to a new maintainer; what is surprising. ` +
             `No heading called "API". No list of exports.`,
         FIGURES,
-        provenanceRule(`this package's own \`sourceRev\` from the \`intentic-docs facts\` output — the entry whose \`dir\` is \`${dir}\`, not the repository's \`head\`.`),
+        provenanceRule(
+            `this package's own \`sourceRev\` from the \`intentic-docs facts\` output — the entry whose \`dir\` is \`${dir}\`, not the repository's \`head\`.`,
+        ),
         [
             `## Rules`,
             ``,
             `- Write ONLY these two files, under \`${stagingDir(repo)}\`. Another agent is documenting each other ` +
                 `package right now, and \`${REPO_DOC_TAIL}\` belongs to the map — editing either is how a run corrupts ` +
                 `itself.`,
-            `- Do not modify the code you are documenting. Finding a defect is worth writing down; fixing it is ` +
-                `someone else's turn.`,
+            `- Do not modify the code you are documenting. Finding a defect is worth writing down; fixing it is ` + `someone else's turn.`,
             `- JSON with keys in a stable order and two-space indent.`,
         ].join(`\n`),
         validateRule(repoFlag),

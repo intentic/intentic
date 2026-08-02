@@ -22,7 +22,7 @@
 @import "../../../_libs/ui/src/styles/shared/prose.css";
 @import "./chat/chat.css";
 
-/* Scan the @intentic-app/ui library's source for class names (it lives outside this app's tree,
+/* Scan the @intentic/ui library's source for class names (it lives outside this app's tree,
  * so Tailwind won't auto-detect it). */
 @source "../../../_libs/ui/src/**/*.{ts,html,vue}";
 

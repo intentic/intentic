@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RestoredMessage, SubagentSession } from "@intentic/sandbox-contract";
-import { Icon, type IconName } from "@intentic-app/ui";
+import { Icon, type IconName } from "@intentic/ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";

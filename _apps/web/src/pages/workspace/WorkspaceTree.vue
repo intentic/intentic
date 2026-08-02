@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { ConfirmDialog, ContextMenu, type IconName, useExplorerStyle } from "@intentic-app/ui";
+import { ConfirmDialog, ContextMenu, type IconName, useExplorerStyle } from "@intentic/ui";
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, type VNode, watch } from "vue";
@@ -11,7 +11,7 @@ import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { isRecentlyChanged } from "../../composables/workspace/useWorkspaceLive";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import PresenceAvatars from "../../presence/PresenceAvatars.vue";
-import { explorerTreatment, iconForEntry } from "@intentic-app/ui";
+import { explorerTreatment, iconForEntry } from "@intentic/ui";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { filesToEntries } from "./dropEntries";
 import { movableInto, pastePairs } from "./explorerPaste";
@@ -19,7 +19,7 @@ import { nestSiblings, type NestedEntry } from "./fileNesting";
 import { revealTargets } from "./revealPath";
 import type { RowAction } from "./rowActions";
 import { selectRange, stepLead } from "./treeSelect";
-import { basename, parentDir } from "@intentic-app/ui/path";
+import { basename, parentDir } from "@intentic/ui/path";
 
 interface Row {
     readonly entry: WorkspaceTreeEntry;

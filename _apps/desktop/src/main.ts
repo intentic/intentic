@@ -1,4 +1,4 @@
-import { installUi } from "@intentic-app/ui";
+import { installUi } from "@intentic/ui";
 import { createApp } from "vue";
 import App from "./App.vue";
 import "./styles.css";

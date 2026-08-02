@@ -6,7 +6,7 @@
     "type": "module",
     "repository": {
         "type": "git",
-        "url": "git+https://gitlab.com/radarsu/intentic.git",
+        "url": "git+https://github.com/radarsu/intentic.git",
         "directory": "_libs/graph"
     },
     "files": [

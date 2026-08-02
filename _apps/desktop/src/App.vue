@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp } from "@intentic-app/ui";
+import { Card, cmp } from "@intentic/ui";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref } from "vue";

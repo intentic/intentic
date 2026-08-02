@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { type IconName, useExplorerStyle } from "@intentic-app/ui";
+import { type IconName, useExplorerStyle } from "@intentic/ui";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
-import { explorerColorClass, iconForEntry } from "@intentic-app/ui";
+import { explorerColorClass, iconForEntry } from "@intentic/ui";
 import { type WorkspaceTab } from "./workspaceTabs";
-import { basename } from "@intentic-app/ui/path";
+import { basename } from "@intentic/ui/path";
 import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
 
 /* The open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or plan preview.
@@ -170,7 +170,7 @@ watch(
                 <Icon name="wave-pulse" v-else-if="tab.kind === 'health'" class="text-2xs text-link" />
                 <!-- The provider's own glyph, an open string like every extension-supplied icon (a bundle may name
                      one this app has never heard of) — an unknown name renders the set's fallback, never an error. -->
-                <Icon v-else-if="tab.kind === 'document'" :name="(tab.icon as IconName)" class="text-2xs text-link" />
+                <Icon v-else-if="tab.kind === 'document'" :name="tab.icon as IconName" class="text-2xs text-link" />
                 <ChangeStatusMark v-else :status="tab.status" />
                 <span class="max-w-40 truncate">{{ tabLabel(tab) }}</span>
                 <span class="relative flex h-3 w-3 shrink-0 items-center justify-center" @click="onClose($event, tab.id)">

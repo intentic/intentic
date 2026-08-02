@@ -137,7 +137,7 @@ describe(`FILE_REF`, () => {
 
     it(`needs a directory segment and an extension, so ordinary words are never links`, () => {
         expect(matchOf(`run package.json through it`)).toBeUndefined();
-        expect(matchOf(`import from @intentic-app/ui`)).toBeUndefined();
+        expect(matchOf(`import from @intentic/ui`)).toBeUndefined();
         expect(matchOf(`the and/or case`)).toBeUndefined();
     });
 

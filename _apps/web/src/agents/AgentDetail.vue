@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BottomSheet, cmp, Segmented, useDevice } from "@intentic-app/ui";
+import { BottomSheet, cmp, Segmented, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import Popover from "primevue/popover";
 import { computed, ref, watch } from "vue";

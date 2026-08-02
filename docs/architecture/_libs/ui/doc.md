@@ -1,4 +1,4 @@
-# @intentic-app/ui
+# @intentic/ui
 
 The shared look and feel — buttons, cards, charts, rendered prose.
 

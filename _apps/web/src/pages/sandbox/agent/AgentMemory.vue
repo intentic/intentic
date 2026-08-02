@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, CopyButton } from "@intentic-app/ui";
+import { Card, cmp, CopyButton } from "@intentic/ui";
 import Button from "primevue/button";
 import { ref } from "vue";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../../composables/extensions/memoryImport";

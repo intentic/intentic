@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic-app/ui";
+import { cmp } from "@intentic/ui";
 import Button from "primevue/button";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";

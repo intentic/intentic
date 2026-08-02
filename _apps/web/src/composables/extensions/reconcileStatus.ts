@@ -1,4 +1,4 @@
-import type { StatusVariant } from "@intentic-app/ui";
+import type { StatusVariant } from "@intentic/ui";
 import { readIntenticLines } from "../intenticStream";
 
 /* The shared reconcile-action vocabulary, used everywhere the resolve → plan → apply pipeline surfaces a

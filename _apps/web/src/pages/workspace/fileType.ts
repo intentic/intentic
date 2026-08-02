@@ -1,4 +1,4 @@
-import type { ShikiLang } from "@intentic-app/ui/langs";
+import type { ShikiLang } from "@intentic/ui/langs";
 
 /* THE CORE'S ANSWER TO "WHAT IS THIS FILE?" — and deliberately a small one.
  *

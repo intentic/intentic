@@ -1,4 +1,4 @@
-import { sinceOf, withinWindow } from "@intentic-app/ui/time";
+import { sinceOf, withinWindow } from "@intentic/ui/time";
 import { expect, test } from "vitest";
 
 /* The app's one "how far back" vocabulary (_libs/ui/src/timeWindow.ts) — Activity and Logs both narrow their

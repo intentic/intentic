@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
-import { cmp, useDevice } from "@intentic-app/ui";
+import { cmp, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";

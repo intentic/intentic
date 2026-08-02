@@ -18,7 +18,7 @@
  * renders as an ordinary code block: the reader sees the source instead of a blank space, and a malformed
  * figure costs one figure rather than the page. That is the property a JSON document model cannot have.
  *
- * This module is pure TypeScript with no Vue and no DOM — it ships on the `@intentic-app/ui/markdown` subpath
+ * This module is pure TypeScript with no Vue and no DOM — it ships on the `@intentic/ui/markdown` subpath
  * and is unit-tested without mounting anything. MarkdownFigure.vue owns the component switch. */
 
 // The five categorical slots the design system's chart palette exposes (semantic-colors.css), plus its

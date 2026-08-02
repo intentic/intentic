@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, ConfirmDialog, ContextMenu, type IconName, Segmented } from "@intentic-app/ui";
+import { cmp, ConfirmDialog, ContextMenu, type IconName, Segmented } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";

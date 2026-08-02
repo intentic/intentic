@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { InviteRecord } from "@intentic-app/api-contract";
-import { Avatar, cmp, RowGroup } from "@intentic-app/ui";
+import { Avatar, cmp, RowGroup } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";

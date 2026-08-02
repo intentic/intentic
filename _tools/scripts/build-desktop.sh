@@ -9,14 +9,14 @@
 # (idempotent), so the release job needs no extra before_script.
 #
 # Updater signing: set TAURI_SIGNING_PRIVATE_KEY (+ optional _PASSWORD) as masked CI variables — generate a
-# pair once with `pnpm --filter @intentic-app/desktop exec tauri signer generate`. The committed pubkey lives
+# pair once with `pnpm --filter @intentic/desktop-app exec tauri signer generate`. The committed pubkey lives
 # in tauri.conf.json. Without the variable the installers still build; the .sig files and latest.json are
 # skipped, which means no auto-update for that release.
 #
-# The artifacts land in _apps/desktop/dist-bin/ so publish-agent-binaries.sh can ship them verbatim — the
-# desktop app is distributed exactly like intentic-sync and intentic-host, through the PUBLIC generic Package
-# Registry. That is not a preference: this project's Releases feature is member-only, so a release-asset
-# download 404s for the anonymous visitor who just clicked Download on the site.
+# The artifacts land in _apps/desktop/dist-bin/, from where the release ships them twice: attached to the
+# GitHub Release (publish-github.sh — the download surface the site and the updater point at) and to this
+# project's GitLab generic Package Registry (publish-agent-binaries.sh), which stays for as long as installs
+# built before the GitHub cutover are still polling the endpoint baked into their binary.
 set -euo pipefail
 
 VERSION="${1:?usage: build-desktop.sh <version>}"
@@ -24,9 +24,11 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APP="$ROOT/_apps/desktop"
 TAURI_DIR="$APP/src-tauri"
 OUT="$APP/dist-bin"
-# Where the updater fetches an installer FROM — the same public generic-registry path publish-agent-binaries.sh
-# uploads to, pinned to this exact version so a manifest always points at the build it describes.
-DOWNLOADS="https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-desktop/${VERSION}"
+# Where the updater fetches an installer FROM: the GitHub Release for this exact version, so a manifest always
+# points at the build it describes. ONE set of URLs regardless of which endpoint served the manifest — the
+# GitLab copy of latest.json carries these same GitHub links, so an install that predates the cutover and still
+# polls the old endpoint downloads from the new one.
+DOWNLOADS="https://github.com/radarsu/intentic/releases/download/v${VERSION}"
 
 echo "==> desktop release build v${VERSION}"
 
@@ -94,7 +96,7 @@ if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
     cat >"$OUT/latest.json" <<MANIFEST
 {
     "version": "${VERSION}",
-    "notes": "https://gitlab.com/radarsu/intentic/-/releases/v${VERSION}",
+    "notes": "https://github.com/radarsu/intentic/releases/tag/v${VERSION}",
     "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "platforms": {
         "linux-x86_64": { "signature": "${appimage_sig}", "url": "${DOWNLOADS}/Intentic.AppImage" },

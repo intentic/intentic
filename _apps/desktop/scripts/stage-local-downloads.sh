@@ -4,9 +4,9 @@
 # dev "Get it" links (http://localhost:4321/desktop/…) download your local build instead of a
 # release. The deployed worker prefers these same asset paths too, so nothing forks between envs.
 #
-#   pnpm --filter @intentic-app/desktop stage:downloads               # Linux bundles (deb/rpm/AppImage)
-#   pnpm --filter @intentic-app/desktop stage:downloads -- --windows  # + Windows NSIS via cargo-xwin
-#   pnpm --filter @intentic-app/desktop stage:downloads -- --stage-only  # just copy what's already built
+#   pnpm --filter @intentic/desktop-app stage:downloads               # Linux bundles (deb/rpm/AppImage)
+#   pnpm --filter @intentic/desktop-app stage:downloads -- --windows  # + Windows NSIS via cargo-xwin
+#   pnpm --filter @intentic/desktop-app stage:downloads -- --stage-only  # just copy what's already built
 #
 # Each bundle is built independently and failures don't abort the rest — whatever succeeded is
 # staged, so a missing AppImage prerequisite never blocks the .deb/.rpm downloads.

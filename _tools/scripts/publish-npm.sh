@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 # Publish the first-party npm packages at <version>, idempotently — versions already on npm are SKIPPED.
 # This makes the release safe to re-run: a failed run just re-publishes whatever didn't land yet.
-# Auth comes from ~/.npmrc: in CI the release job writes a granular npm token there (NPM_TOKEN); locally
-# it's the maintainer's own `pnpm login` session. (npm's tokenless OIDC trusted publishing is unusable
-# here — its token exchange rejects this project's self-hosted GitLab runner.)
+#
+# Runs in GitHub Actions (.github/workflows/npm-publish.yml), on the `v*` tag that publish-github.sh pushes to
+# the public mirror. Auth is TOKENLESS: npm exchanges the workflow's OIDC id-token for a short-lived
+# credential, so there is no NPM_TOKEN to rotate, and every tarball carries a provenance attestation linking
+# it to the public commit and workflow run that built it. Each package must have this repository and this
+# workflow registered as its trusted publisher on npmjs.com — one that hasn't been fails here in the token
+# exchange, which is the correct outcome: a package nobody can attest is not published.
+#
+# pnpm packs, npm publishes. pnpm is the only one of the two that rewrites `workspace:*` and `catalog:` specs
+# into real versions while building the tarball; npm is the only one that speaks OIDC and --provenance.
+# Splitting the step in two is what lets a pnpm workspace publish attested tarballs at all.
 #   bash _tools/scripts/publish-npm.sh 1.15.1
 set -euo pipefail
 VERSION="${1:?usage: publish-npm.sh <version>}"
@@ -11,29 +19,38 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
 cd "$DIR/../.."
 
+# Versions are stamped by set-versions.sh before the mirror is exported, so by the time this runs every
+# package.json already carries $VERSION. Checked rather than assumed: a mismatch means the tag and the tree
+# disagree, and the tarball would go out under a version nobody asked for.
 names=()
 for d in "${PUB[@]}"; do
-  names+=("$(grep -m1 '"name"' "$d/package.json" | sed -E 's/.*"name"[^"]*"([^"]+)".*/\1/')")
+  names+=("$(node -p "require('./$d/package.json').name")")
+  stamped="$(node -p "require('./$d/package.json').version")"
+  [ "$stamped" = "$VERSION" ] || { echo "$d is at $stamped, not the released $VERSION" >&2; exit 1; }
 done
 
-# The "already on npm?" probes run FIRST and all at once — 21 round trips to the registry, ~2.5s each, which
-# is 52s of the 2m03s this script took in pipeline 2725042409 and buys nothing to spend in series. The publish
-# loop below stays SERIAL on purpose: PUB is in topological order (packages.sh), and a dependent published
-# ahead of its dependency references a version npm cannot resolve yet. That window is short, and it is also
-# exactly the failure the ordering exists to prevent.
-probe_dir="$(mktemp -d)"
-trap 'rm -rf "$probe_dir"' EXIT
+# The "already on npm?" probes run FIRST and all at once — 23 round trips to the registry, ~2.5s each, which
+# is a minute of pure waiting to spend in series for nothing. The publish loop below stays SERIAL on purpose:
+# PUB is in topological order (packages.sh), and a dependent published ahead of its dependency references a
+# version npm cannot resolve yet. That window is short, and it is also exactly the failure the ordering exists
+# to prevent.
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
 for i in "${!names[@]}"; do
-  ( pnpm view "${names[$i]}@$VERSION" version >/dev/null 2>&1 && touch "$probe_dir/$i" ) &
+  ( npm view "${names[$i]}@$VERSION" version >/dev/null 2>&1 && touch "$work/on-npm-$i" ) &
 done
 wait
 
-# Versions are stamped by set-versions.sh (in the release's prepareCmd) before this runs; here we only publish.
 for i in "${!PUB[@]}"; do
-  if [ -e "$probe_dir/$i" ]; then
+  if [ -e "$work/on-npm-$i" ]; then
     echo "  skip     ${names[$i]}@$VERSION (already on npm)"
-  else
-    echo "  publish  ${names[$i]}@$VERSION"
-    pnpm --dir "${PUB[$i]}" publish --access public --no-git-checks
+    continue
   fi
+  echo "  publish  ${names[$i]}@$VERSION"
+  # One tarball per subdir so the glob is unambiguous — npm's scoped-name mangling (@intentic/cli ->
+  # intentic-cli-<version>.tgz) is a rule this script has no reason to re-implement.
+  out="$work/tgz-$i"
+  mkdir -p "$out"
+  pnpm --dir "${PUB[$i]}" pack --pack-destination "$out"
+  npm publish "$out"/*.tgz --access public --provenance
 done

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { type BarsFigure, type DagFigure, parseFigure, splitFigureSegments, type StatsFigure } from "@intentic-app/ui/markdown";
+import { type BarsFigure, type DagFigure, parseFigure, splitFigureSegments, type StatsFigure } from "@intentic/ui/markdown";
 
-/* The figure fences generated documentation is authored with. Lives here rather than in @intentic-app/ui
+/* The figure fences generated documentation is authored with. Lives here rather than in @intentic/ui
  * because the design system ships no test runner and the markdown engine's other tests (renderMarkdown.test.ts)
  * are already in this suite. The module is pure — no DOM — so this file stays on the default `node` environment.
  *
@@ -49,7 +49,14 @@ describe(`parseFigure`, () => {
     });
 
     it(`drops an edge that names a node the figure does not declare`, () => {
-        const figure = dag({ nodes: [{ id: `a` }, { id: `b` }], edges: [{ from: `a`, to: `b` }, { from: `a`, to: `ghost` }, { from: `nope`, to: `b` }] });
+        const figure = dag({
+            nodes: [{ id: `a` }, { id: `b` }],
+            edges: [
+                { from: `a`, to: `b` },
+                { from: `a`, to: `ghost` },
+                { from: `nope`, to: `b` },
+            ],
+        });
         expect(figure?.edges).toEqual([{ from: `a`, to: `b`, dashed: false }]);
     });
 
@@ -75,9 +82,14 @@ describe(`parseFigure`, () => {
 
     it(`drops a bar with no magnitude and a negative one`, () => {
         // A negative value is not clamped to zero: a zero-length bar claims a measurement that was not made.
-        expect(bars({ items: [{ label: `a`, value: -5 }, { label: `b`, value: 3 }] })?.items).toEqual([
-            { label: `b`, value: 3, display: undefined, accent: undefined },
-        ]);
+        expect(
+            bars({
+                items: [
+                    { label: `a`, value: -5 },
+                    { label: `b`, value: 3 },
+                ],
+            })?.items,
+        ).toEqual([{ label: `b`, value: 3, display: undefined, accent: undefined }]);
         expect(bars({ items: [{ label: `a` }] })).toBeUndefined();
         expect(bars({ items: [{ label: `a`, value: Number.NaN }] })).toBeUndefined();
     });

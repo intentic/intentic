@@ -39,7 +39,10 @@
     },
     "plugins": {
         "updater": {
-            "endpoints": ["https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-desktop/latest/latest.json"],
+            "endpoints": [
+                "https://github.com/radarsu/intentic/releases/latest/download/latest.json",
+                "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-desktop/latest/latest.json"
+            ],
             "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNGRjUyN0VFM0JERDFFMjQKUldRa0h0MDc3aWYxUHdFNWRXNjU5cnhNZzZ6ZjZqc0U1QW96SlArbmVKMkNsVkdCK1dBQjJKb0cK"
         },
         "deep-link": {
