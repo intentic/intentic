@@ -8,7 +8,8 @@ import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath } from "../core-views/registry";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
-import { presenceActivity, presenceHue, presenceOthers } from "../composables/usePresence";
+import { identityHue } from "../composables/identityHue";
+import { presenceActivity, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* The mobile Menu tab: everything the desktop rail and its popovers hold, as one thumb-friendly page —
@@ -155,7 +156,7 @@ const logout = async (): Promise<void> => {
                         :size="32"
                         :name="member.name ?? member.email"
                         :src="member.picture"
-                        :hue="presenceHue(member.email)"
+                        :hue="identityHue(member.email)"
                         :idle="member.idle"
                     />
                     <span class="min-w-0 flex-1">

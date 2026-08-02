@@ -8,7 +8,8 @@ import { apiClient, isPaymentRequired } from "../../composables/useApi";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
-import { presenceActivity, presenceHue, presenceOthers } from "../../composables/usePresence";
+import { identityHue } from "../../composables/identityHue";
+import { presenceActivity, presenceOthers } from "../../composables/usePresence";
 
 /* The Sandbox hub's "Access" tab. Owner-only invites for the ACTIVE sandbox: inviting is two writes — the
  * daemon's ENFORCED /members list (pushed first from the owner's browser, since the server can't reach the
@@ -278,7 +279,7 @@ const revoke = async (target: string): Promise<void> => {
                     class="flex items-center gap-2.5 px-4 py-3"
                     :class="member.idle ? 'opacity-60' : ''"
                 >
-                    <Avatar :size="32" :name="member.name ?? member.email" :src="member.picture" :hue="presenceHue(member.email)" />
+                    <Avatar :size="32" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" />
                     <div class="min-w-0 flex-1">
                         <div class="truncate text-sm font-medium text-content">{{ member.name ?? member.email }}</div>
                         <div class="truncate text-xs text-muted">{{ presenceActivity(member) }}</div>

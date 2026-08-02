@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Avatar } from "@intentic-app/ui";
 import { computed } from "vue";
-import { type PresenceMember, presenceActivity, presenceHue } from "../composables/usePresence";
+import { identityHue } from "../composables/identityHue";
+import { type PresenceMember, presenceActivity } from "../composables/usePresence";
 
 /* WHO ELSE IS HERE — the app's one co-presence roster, in both the shapes it is needed in.
  *
@@ -55,7 +56,7 @@ const overflowNames = computed(() => members.slice(MAX_AVATARS).map(nameOf).join
             :size="size"
             :name="nameOf(member)"
             :src="member.picture"
-            :hue="presenceHue(member.email)"
+            :hue="identityHue(member.email)"
             :idle="member.idle"
             :ring="size >= 24 ? 2 : 1"
             v-tooltip="tooltipFor(member)"

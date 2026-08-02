@@ -7,6 +7,7 @@ import OriginMark from "../components/OriginMark.vue";
 import { dropActionFor, type PendingAction } from "../composables/agents/laneDrop";
 import {
     activityIcon,
+    activityLine,
     agentStatusMeta,
     attentionReason,
     contextPct,
@@ -16,7 +17,9 @@ import {
     loopMeta,
     reviewAction,
     turnInFlight,
+    unreadBadge,
 } from "../composables/agents/agentStatus";
+import { identityFill } from "../composables/identityHue";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { markSegments } from "../composables/agents/useAgentFilter";
 import { canArchive, type FleetAgent } from "../composables/agents/useAgents";
@@ -57,18 +60,9 @@ const meta = computed(() => agentStatusMeta(props.agent.status));
 const router = useRouter();
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
-/* WHAT THE LIVE LINE SAYS. Normally the agent's own last tool (or the todo it is on) — but a parent whose
- * children are working is not itself the interesting fact, and its own tool line goes quiet for exactly as long
- * as it waits on them. So the children lead, and what the parent was doing trails. */
-const activityText = computed(() => {
-    const activity = props.agent.activity;
-    const own = activity === undefined ? undefined : (activity.todo ?? [activity.tool, activity.target].filter(Boolean).join(` · `));
-    const running = props.agent.subagents?.running ?? 0;
-    if (running === 0) {
-        return own;
-    }
-    return [`${running} subagent${running === 1 ? `` : `s`}`, own].filter(Boolean).join(` · `);
-});
+// What the live line says — the shared derivation (agentStatus.activityLine), because the rail's cards carry
+// the same line and the two surfaces must never narrate the same turn differently.
+const activityText = computed(() => activityLine(props.agent));
 // Archiving is offered wherever it means something — which is NOT the same as "the Finished lane" (see
 // canArchive): every card whose archive the daemon would take and that isn't holding a question for the user,
 // dead ends in the Attention lane included. It sits beside the rename pencil rather than behind the drag
@@ -116,18 +110,15 @@ const displayTitle = computed(() => props.agent.title ?? (props.agent.status ===
 // The title with the filter's term marked, and one plain run when no filter is on.
 const titleRuns = computed(() => markSegments(displayTitle.value, props.query?.toLowerCase() ?? ``));
 const matchRuns = computed(() => (props.match === undefined ? undefined : markSegments(props.match, props.query?.toLowerCase() ?? ``)));
-// The unread chip, in the two flavours worth telling apart: an agent nobody has opened yet is "New"; one you
-// HAVE opened that has worked since is "Updated" — with "New" on both, every returning agent reads as a
-// stranger. The marker behind it lives on the daemon entry, so opening it anywhere clears it everywhere.
-const unread = computed(() =>
-    !props.agent.unread
-        ? undefined
-        : props.agent.seenAt === undefined
-          ? // "New" already says you have not opened it; a hint repeating that is the badge in a smaller font.
-            // "Updated" is the one that hides a fact — WHEN you last looked — so only it earns a hover.
-            { label: `New`, hint: undefined }
-          : { label: `Updated`, hint: `Worked since you last opened it — ${relativeTime(props.agent.seenAt)}` },
-);
+// The unread chip (agentStatus.unreadBadge — the rail's cards wear the same one). "New" already says you have
+// not opened it; "Updated" is the flavour that hides a fact — WHEN you last looked — so only it earns a hover.
+const unread = computed(() => {
+    const badge = unreadBadge(props.agent);
+    if (badge === undefined) {
+        return undefined;
+    }
+    return { label: badge.label, hint: badge.seenAt === undefined ? undefined : `Worked since you last opened it — ${relativeTime(badge.seenAt)}` };
+});
 
 const edit = createTitleEdit(
     () => props.agent.id,
@@ -193,7 +184,16 @@ const grab = (event: PointerEvent): void => {
         @keydown.space.self.prevent="openCard"
     >
         <div class="flex items-center gap-2">
-            <ProviderLogo :provider="agent.provider" class="shrink-0 text-sm text-muted" />
+            <!-- The IDENTITY TILE — the provider glyph on this agent's own identity hue (identityHue, the same
+                 8-hue hash a member's avatar wears). The colour is the cross-reference between this card and
+                 the same session's card on the chat rail: one glyph slot answers whose runtime AND which chat,
+                 where a board of one provider used to be a column of identical grey marks. -->
+            <span
+                class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white"
+                :style="{ background: identityFill(agent.id) }"
+            >
+                <ProviderLogo :provider="agent.provider" class="text-xs" />
+            </span>
             <input
                 v-if="edit.editing"
                 v-model="edit.draft"

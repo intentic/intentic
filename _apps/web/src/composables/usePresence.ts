@@ -78,17 +78,6 @@ export const presenceActivity = (member: PresenceMember): string => {
     return `Online`;
 };
 
-// Deterministic per-member accent (initials background / ring): the email hashes into one of 8 fixed hues,
-// so a member keeps their color across sessions and browsers with no assignment state.
-const HUES = [210, 350, 160, 40, 280, 20, 130, 320];
-export const presenceHue = (email: string): number => {
-    let hash = 0;
-    for (const char of email) {
-        hash = (hash * 31 + char.charCodeAt(0)) | 0;
-    }
-    return HUES[Math.abs(hash) % HUES.length]!;
-};
-
 export const resetPresence = (): void => {
     users.value = [];
 };

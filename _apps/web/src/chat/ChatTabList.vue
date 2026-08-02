@@ -5,13 +5,16 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import {
     activityIcon,
+    activityLine,
     agentStatusMeta,
     attentionReason,
     type FleetLane,
     formatCost,
     formatElapsed,
     turnInFlight,
+    unreadBadge,
 } from "../composables/agents/agentStatus";
+import { identityFill } from "../composables/identityHue";
 import { markSegments, useAgentFilter } from "../composables/agents/useAgentFilter";
 import { type FleetAgent, useAgents } from "../composables/agents/useAgents";
 import FilterField from "../components/FilterField.vue";
@@ -38,18 +41,23 @@ import { providerLabel } from "@intentic/sandbox-contract";
  *
  * IT IS THE BOARD'S CARD IN A COLUMN ONE CARD WIDE, and that is a design rule rather than a resemblance —
  * /agents and this list are read minutes apart by the same eye, so anything they draw differently reads as
- * two different products. What "in miniature" costs is the facts that need width (the branch, the model, the
- * live command); it does not license a second visual grammar. So the three things a card is scanned BY are
- * laid out exactly as AgentCard lays them out:
+ * two different products. What "in miniature" costs is only the facts that need width the rail lacks (the
+ * branch, the token counters); it does not license a second visual grammar. The card's rows, top to bottom:
  *
- *   · the LEADING glyph is the provider, always present, so every title in the column starts at one x. It
- *     used to be the status glyph, which changes shape per card and had the origin/archive marks stacked
- *     behind it — a left edge that jittered from row to row, and the one thing a scan needs to be still.
+ *   · the LEADING mark is the chat's IDENTITY TILE — the provider glyph on the chat's own identity hue
+ *     (identityHue, the same 8-hue hash a member's avatar wears). One glyph slot answers two questions:
+ *     whose runtime (the glyph), and WHICH chat (the colour) — a column of a dozen same-provider sessions
+ *     used to be a dozen identical asterisks, and "the amber one" is how a person actually re-finds a card.
+ *     Always present, so every title starts at one x.
  *   · the TRAILING glyph is the status, in a fixed slot at the end of the title row, with the × taking the
  *     slot beside it on hover (AgentCard's hover-action pattern).
  *   · the title is the card's one piece of CONTENT and takes the content tier (text-xs, semibold) over a
  *     card of text-2xs meta — the board's own hierarchy. A card set entirely in one size is a card with no
  *     first line to land on, which is what made a column of these read as a wall.
+ *   · the META line carries the card's facts at the board's own picks: the attention/unread chip, provenance
+ *     marks, the model, cost, the diff, the message count, and the age right-aligned.
+ *   · a RUNNING card adds the board's live line — tool glyph, what it is doing, and the ticking elapsed — in
+ *     link, so the sessions that are working are findable in a column of stopped ones.
  *
  * Cards sit on the LIST's own ground rather than their host's: an opaque card surface over canvas, the board's
  * lane exactly. The old skin was a translucent wash of the canvas colour, which in the pop-out (a canvas body)
@@ -57,9 +65,9 @@ import { providerLabel } from "@intentic/sandbox-contract";
  * whole of why the rail read flatter than the board. Both hosts hand this list a canvas ground now, so one
  * rule holds in both.
  *
- * Colour is spent the way the board spends it: status in the glyph, the reason in a chip, the live readout in
- * link (a running card's elapsed and tool glyph), diffs in success/danger — and everything else neutral, so an
- * accent on screen always means something.
+ * Colour is spent the way the board spends it: identity in the tile, status in the glyph, the reason in a
+ * chip, the live readout in link, diffs in success/danger — and everything else neutral, so an accent on
+ * screen always means something.
  *
  * The list reads the stores and emits verbs rather than writing them: the panel that hosts it is what hands
  * each verb to useChat, exactly as the strip always did. */
@@ -168,9 +176,16 @@ const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: str
     return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
 };
 
-/* HAS THE CARD'S SECOND LINE ANYTHING TO SAY? A fresh draft has no numbers, no age, no marks and nothing in
- * flight, so the row would render as an empty strip under its title — which is exactly what the old card did,
- * leaving a lone provider glyph floating on a line of its own. Asked per card rather than assumed from
+// The model, as the label the pickers use — worth a word on the meta line the moment a fleet stops being one
+// model deep (an Opus session next to a Codex one is a real difference in what the card will cost and how it
+// behaves). No provider fallback here: the tile's glyph already says who runs it, and repeating that in text
+// would put the same word on every card of a one-provider fleet.
+const modelOf = (agent: FleetAgent): string | undefined =>
+    agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : undefined;
+
+/* HAS THE CARD'S SECOND LINE ANYTHING TO SAY? A fresh draft has no numbers, no age, no marks and no model, so
+ * the row would render as an empty strip under its title — which is exactly what the old card did, leaving a
+ * lone provider glyph floating on a line of its own. Asked per card rather than assumed from
  * `agent !== undefined`. */
 const hasMeta = (entry: OpenChat): boolean => {
     const agent = entry.agent;
@@ -179,33 +194,27 @@ const hasMeta = (entry: OpenChat): boolean => {
     }
     return (
         attentionReason(agent) !== undefined ||
+        unreadBadge(agent) !== undefined ||
         originOf(entry.conversation) !== undefined ||
         isArchived(entry.conversation) ||
+        modelOf(agent) !== undefined ||
         agent.costUsd !== undefined ||
         (agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)) ||
-        turnInFlight(agent) ||
+        (agent.turns !== undefined && agent.turns > 0) ||
         agent.updatedAt > 0
     );
 };
 
-/* TWO FACTS THE CARD SHOWS AS A MARK RATHER THAN A LINE — their words ride the card's hover preview.
- * The model: the provider glyph already carries it, and a fleet is usually one model deep, so the name was a
- * column of identical text down the list. What the turn is doing right now: the glyph says "it is working",
- * which is the actionable half — the command itself was the noisiest, least stable line on a card (a path that
- * changes every few seconds), and it cost a whole row of a list whose cards are read as a stack.
- *
- * They used to be two `v-tooltip`s on two glyphs INSIDE a card that already opens a HoverCard on the same
- * hover — three boxes for one pointer, two of them landing in the card the third had just claimed. This is
- * what HoverCard.note is for, and what the Changes panel's chips already do with it. */
+// The card's hover preview note: the model (with the provider as its floor) and the UNTRUNCATED live activity —
+// the card's own meta line clamps both, so the hover is where a long command or model name is read whole.
 const noteOf = (agent: FleetAgent | undefined): string | undefined => {
     if (agent === undefined) {
         return undefined;
     }
     const model = agent.model !== undefined ? modelLabelFor(agent.provider, agent.model) : providerLabel(agent.provider);
-    const doing =
-        agent.activity === undefined ? undefined : (agent.activity.todo ?? [agent.activity.tool, agent.activity.target].filter(Boolean).join(` `));
-    return [model, doing].filter((part) => part !== undefined && part !== ``).join(` · `);
+    return [model, activityLine(agent)].filter((part) => part !== undefined && part !== ``).join(` · `);
 };
+
 
 /* What the query found that ISN'T open in this window — the whole point of the filter reaching past its own
  * list. Live fleet agents first (the likeliest thing to want), then the archive, each as a row that opens the
@@ -224,13 +233,13 @@ const notOpen = computed<FleetAgent[]>(() => {
 });
 const notOpenCount = computed(() => notOpen.value.length + sessionMatches.value.length);
 
-let archiveAsked = false;
-watch(filtering, (on) => {
-    if (on && !archiveAsked) {
-        archiveAsked = true;
-        void loadArchived();
-    }
-});
+/* THE ARCHIVE IS LOADED AT MOUNT, not at first keystroke. The open chats a long session accumulates are mostly
+ * agents the daemon's retention sweep has already ARCHIVED — off the live roster, findable by agentById only
+ * once loadArchived has run. Without this, every such card rendered as a bare title over an idle dot: no cost,
+ * no diff, no age, no status — the wall of nothing the pop-out rail was reported showing. The board pays the
+ * same fetch at its own mount for the same reason; the filter's "Not open" group needs it too, so one ask at
+ * mount serves both. */
+onMounted(() => void loadArchived());
 
 // One second ticks every running card's elapsed readout together (the board's `now` pattern) — armed while
 // this list is on screen, which for the docked sheet means only while it is open.
@@ -418,13 +427,15 @@ const closeTab = (event: Event, id: string): void => {
                             @mouseenter="showPreview($event, c, agent)"
                             @mouseleave="hidePreview"
                         >
-                            <span class="flex w-full min-w-0 items-start gap-1.5">
-                                <!-- The provider LEADS, as it does on the board: the one glyph every card has,
-                                     so the titles beside it line up down the whole column. It also carries the
-                                     model — the name itself would be a quarter of this line repeating what a
-                                     fleet run on one model says on every card, so it stays on the hover. -->
-                                <span class="flex h-4 shrink-0 items-center">
-                                    <ProviderLogo :provider="agent?.provider ?? c.provider.value" class="text-xs text-muted" />
+                            <span class="flex w-full min-w-0 items-start gap-2">
+                                <!-- The IDENTITY TILE leads: the provider glyph on the chat's own hue (see the
+                                     header comment). Sized to the title's first line so a two-line title hangs
+                                     off it, not around it. -->
+                                <span
+                                    class="-mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md text-white"
+                                    :style="{ background: identityFill(c.conversationId) }"
+                                >
+                                    <ProviderLogo :provider="agent?.provider ?? c.provider.value" class="text-2xs" />
                                 </span>
                                 <!-- Two lines before the clamp — a card has the width for most titles whole.
                                      The content tier over a card of meta: this is the one line being READ.
@@ -469,10 +480,11 @@ const closeTab = (event: Event, id: string): void => {
                                 </span>
                             </span>
                             <template v-if="agent !== undefined">
-                                <!-- The crucial numbers, one wrapping line: why it needs you, where it came
-                                     from, cost, diff, and — right-aligned — the running elapsed (ticking) or
-                                     the last-activity age. Quiet by default: these are reference numbers, not
-                                     events, so the only colour on the line is the one that means something. -->
+                                <!-- The crucial facts, one wrapping line at the board's own picks: why it needs
+                                     you (or that it's unread), where it came from, the model, cost, diff, how
+                                     long a conversation it has been — and the age, right-aligned. Quiet by
+                                     default: these are reference numbers, not events, so the only colour on
+                                     the line is the one that means something. -->
                                 <span
                                     v-if="hasMeta({ conversation: c, agent })"
                                     class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
@@ -482,6 +494,19 @@ const closeTab = (event: Event, id: string): void => {
                                         class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
                                         >{{ attentionReason(agent) }}</span
                                     >
+                                    <!-- The board's unread chip, in the attention chip's slot: both answer "why
+                                         should I look at this one", and a card never needs both ("needs you"
+                                         outranks "you haven't looked"). -->
+                                    <span
+                                        v-else-if="unreadBadge(agent) !== undefined"
+                                        v-tooltip.top="
+                                            unreadBadge(agent)!.seenAt === undefined
+                                                ? undefined
+                                                : `Worked since you last opened it — ${relativeTime(unreadBadge(agent)!.seenAt!)}`
+                                        "
+                                        class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px font-semibold text-link"
+                                        >{{ unreadBadge(agent)!.label }}</span
+                                    >
                                     <!-- Came in from outside (a Discord mention, a visitor, a webhook), and
                                          off the board, still open — both are marks about the card's PROVENANCE
                                          rather than its name, so they ride the meta line the way the board
@@ -490,40 +515,39 @@ const closeTab = (event: Event, id: string): void => {
                                     <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
                                         <Icon name="box" class="text-2xs text-subtle" />
                                     </span>
-                                    <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
+                                    <span v-if="modelOf(agent) !== undefined" class="max-w-24 truncate">{{ modelOf(agent) }}</span>
+                                    <span v-if="agent.costUsd !== undefined" class="shrink-0">{{ formatCost(agent.costUsd) }}</span>
                                     <span
                                         v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)"
-                                        class="font-mono"
+                                        class="shrink-0 font-mono"
                                     >
                                         <span class="text-success">+{{ agent.diff.insertions }}</span>
                                         <span class="text-danger"> −{{ agent.diff.deletions }}</span>
                                     </span>
-                                    <!-- The now-column, right-aligned: what it is doing (the tool's glyph, its
-                                         command on hover) and how long it has been at it. Both are held through
-                                         a stop's UNWIND (turnInFlight, not `running`): the turn is still live
-                                         there, the elapsed keeps its meaning, and the glyph freezes on what it
-                                         was doing when the user stopped it. Blinking the whole column off a beat
-                                         before the card settles is the same flicker the stopping state exists
-                                         to remove.
-                                         IN LINK WHILE THE TURN IS LIVE, the one accent on an otherwise neutral
-                                         card and the board's own (AgentCard's ticking elapsed is link too). A
-                                         running card has to be findable in a column of stopped ones, and this
-                                         readout — a clock that visibly moves — is the fact that says so. It
-                                         settles back to subtle as a plain age the moment the turn ends. -->
-                                    <span
-                                        class="ml-auto flex shrink-0 items-center gap-1.5"
-                                        :class="turnInFlight(agent) ? 'font-medium text-link' : ''"
-                                    >
-                                        <Icon
-                                            v-if="turnInFlight(agent) && agent.activity !== undefined"
-                                            :name="activityIcon(agent.activity.tool)"
-                                            class="text-2xs"
-                                        />
-                                        <span v-if="turnInFlight(agent) && agent.startedAt !== undefined">{{
-                                            formatElapsed(agent.startedAt, now)
-                                        }}</span>
-                                        <span v-else-if="agent.updatedAt > 0">{{ relativeTime(agent.updatedAt) }}</span>
+                                    <span v-if="agent.turns !== undefined && agent.turns > 0" class="shrink-0" aria-label="Turns">
+                                        <Icon name="comments" class="mr-0.5 text-2xs" />{{ agent.turns }}
                                     </span>
+                                    <!-- The age keeps to the settled cards: a running card's clock is the live
+                                         line's ticking elapsed below, and two clocks on one card disagree by
+                                         construction. -->
+                                    <span v-if="!turnInFlight(agent) && agent.updatedAt > 0" class="ml-auto shrink-0">{{
+                                        relativeTime(agent.updatedAt)
+                                    }}</span>
+                                </span>
+                                <!-- THE LIVE LINE, the board's own: what the turn is doing this second and how
+                                     long it has been at it, in link — the one accent that makes a working card
+                                     findable in a column of stopped ones. Held through a stop's UNWIND
+                                     (turnInFlight, not `running`): the turn is still live there, the elapsed
+                                     keeps its meaning, and the line freezes on what it was doing when the user
+                                     stopped it — blinking it off a beat before the card settles is the same
+                                     flicker the stopping state exists to remove. -->
+                                <span v-if="turnInFlight(agent)" class="flex w-full min-w-0 items-center gap-1.5 text-2xs font-medium text-link">
+                                    <Icon
+                                        :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)"
+                                        class="shrink-0 text-2xs"
+                                    />
+                                    <span class="min-w-0 flex-1 truncate">{{ activityLine(agent) ?? `Working…` }}</span>
+                                    <span v-if="agent.startedAt !== undefined" class="shrink-0">{{ formatElapsed(agent.startedAt, now) }}</span>
                                 </span>
                                 <!-- WHY this chat survived the filter, when the reason isn't its title (that one
                                      is marked in place above). The board's cards carry the same line for the
@@ -569,9 +593,15 @@ const closeTab = (event: Event, id: string): void => {
                         class="chat-tab rail-card flex w-full min-w-0 shrink-0 flex-col gap-1.5 rounded-lg p-2.5 text-left text-2xs"
                         @click="emit('open', agent.id)"
                     >
-                        <span class="flex w-full min-w-0 items-start gap-1.5">
-                            <span class="flex h-4 shrink-0 items-center">
-                                <ProviderLogo :provider="agent.provider" class="text-xs text-muted" />
+                        <span class="flex w-full min-w-0 items-start gap-2">
+                            <!-- The same identity tile as the lanes above: a hit here is a destination, and the
+                                 colour is what it will be re-found by once open. Only the TEXT ink drops a
+                                 step, since nothing here is a session you are currently in. -->
+                            <span
+                                class="-mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md text-white"
+                                :style="{ background: identityFill(agent.id) }"
+                            >
+                                <ProviderLogo :provider="agent.provider" class="text-2xs" />
                             </span>
                             <span class="line-clamp-2 min-w-0 flex-1 text-xs font-medium leading-4 text-muted">
                                 <span

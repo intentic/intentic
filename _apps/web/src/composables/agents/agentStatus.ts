@@ -278,6 +278,27 @@ export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string
     };
 };
 
+/* THE UNREAD BADGE, in the two flavours worth telling apart: an agent nobody has opened yet is "New"; one you
+ * HAVE opened that has worked since is "Updated" — with "New" on both, every returning agent reads as a
+ * stranger. The marker behind it lives on the daemon entry, so opening it anywhere clears it everywhere.
+ * `seenAt` rides out for the hover the "Updated" flavour earns (WHEN you last looked is the fact the one word
+ * hides); the caller formats it, because this module owns no clock and no time words. */
+export const unreadBadge = (agent: { unread: boolean; seenAt?: number }): { label: "New" | "Updated"; seenAt?: number } | undefined =>
+    !agent.unread ? undefined : agent.seenAt === undefined ? { label: `New` } : { label: `Updated`, seenAt: agent.seenAt };
+
+/* WHAT THE LIVE LINE SAYS. Normally the agent's own last tool (or the todo it is on) — but a parent whose
+ * children are working is not itself the interesting fact, and its own tool line goes quiet for exactly as long
+ * as it waits on them. So the children lead, and what the parent was doing trails. */
+export const activityLine = (agent: Pick<AgentSummary, "activity" | "subagents">): string | undefined => {
+    const activity = agent.activity;
+    const own = activity === undefined ? undefined : (activity.todo ?? [activity.tool, activity.target].filter(Boolean).join(` · `));
+    const running = agent.subagents?.running ?? 0;
+    if (running === 0) {
+        return own;
+    }
+    return [`${running} subagent${running === 1 ? `` : `s`}`, own].filter(Boolean).join(` · `);
+};
+
 // Dollars with sensible precision: sub-cent turns still show something, big totals stay short.
 export const formatCost = (usd: number): string => (usd >= 10 ? `$${usd.toFixed(0)}` : usd >= 0.1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(3)}`);
 

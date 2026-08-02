@@ -56,6 +56,9 @@ export const sourceAliases = (): Record<string, string> => ({
     // that only wants to compose an ask must not resolve every schema in the contract to get there.
     "@intentic/sandbox-contract/chores": here("../../_libs/sandbox-contract/src/chores/index.ts"),
     "@intentic/sandbox-contract": here("../../_libs/sandbox-contract/src/index.ts"),
+    // The extension-registry file format — imported by the wire contract (schemas.ts), so without this line
+    // the dev server resolves it to a dist/ that only exists once the lib has been built.
+    "@intentic/registry": here("../../_libs/registry/src/index.ts"),
     "@intentic/extension-api": here("../../_libs/extension-api/src/index.ts"),
     ...extensionAliases,
 });
