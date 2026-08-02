@@ -57,9 +57,18 @@ export const komodoConnections = async (capabilities: CapabilitiesStore): Promis
 export const komodoConnectionFor = async (capabilities: CapabilitiesStore, capability: string): Promise<KomodoConnection | undefined> =>
     (await komodoConnections(capabilities)).find((connection) => connection.capability === capability);
 
-// POST {module}/{Operation} with a bare `{params}` body — the form Komodo's own TS client uses. (Core also
-// accepts POST /read with a {type, params} envelope; the path form keeps the operation visible in a stack
-// trace and in any proxy log.)
+/* POST {module}/{Operation} with the params object as the WHOLE body.
+ *
+ * Komodo Core's variant route reads the body as the params and re-wraps it itself
+ * (`serde_json::from_value(json!({"type": variant, "params": <body>}))`) — so a body of `{params: {...}}`
+ * arrives as `params.params` and every required field reads as absent. That shipped, and it was invisible for
+ * exactly as long as this client only called the no-argument lists: `ListStacks` has no required field, so the
+ * doubly-wrapped body deserialized fine and the board rendered. Everything that takes an argument failed —
+ * `GetStackLog` with "missing field `stack`", and, more quietly, every execute behind the row buttons.
+ *
+ * The other spelling — POST /{module} with a `{type, params}` envelope — is what _libs/providers' engine
+ * client uses. Both are correct; this one keeps the operation in the URL, where a stack trace and a proxy log
+ * can both see it. */
 const call = async <T>(
     connection: KomodoConnection,
     fetchFn: FetchFn,
@@ -75,7 +84,7 @@ const call = async <T>(
             "x-api-key": connection.apiKey,
             "x-api-secret": connection.apiSecret,
         },
-        body: JSON.stringify({ params }),
+        body: JSON.stringify(params),
         signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!response.ok) {

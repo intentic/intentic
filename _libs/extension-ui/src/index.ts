@@ -16,6 +16,8 @@ export {
     ConfirmDialog,
     ContextMenu,
     CopyButton,
+    CountBar,
+    type CountItem,
     DagGraph,
     type DagEdge,
     type DagNode,

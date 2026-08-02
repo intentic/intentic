@@ -12,6 +12,7 @@ export const extensionUiNames = [
     "ConfirmDialog",
     "ContextMenu",
     "CopyButton",
+    "CountBar",
     "DagGraph",
     "Dialog",
     "Icon",

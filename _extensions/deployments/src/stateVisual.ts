@@ -18,20 +18,80 @@ export interface StateTone {
     readonly variant: StatusVariant;
     readonly text: string;
     readonly dot: string;
+    // The row's left accent stripe — ext-pipelines' `rowBorder`, so a stopped container and a canceled CI run
+    // are the same grey by construction. It is what lets a board be scanned by colour down its edge instead of
+    // by reading a chip on every line.
+    readonly rowBorder: string;
 }
 
 export const STATE_TONE: Record<DeployState, StateTone> = {
-    running: { icon: `check-circle`, spin: false, label: `Running`, variant: `success`, text: `text-success`, dot: `bg-success` },
-    deploying: { icon: `spinner`, spin: true, label: `Deploying`, variant: `info`, text: `text-info`, dot: `bg-info` },
-    unhealthy: { icon: `exclamation-circle`, spin: false, label: `Unhealthy`, variant: `danger`, text: `text-danger`, dot: `bg-danger` },
-    stopped: { icon: `stop`, spin: false, label: `Stopped`, variant: `neutral`, text: `text-subtle`, dot: `bg-subtle` },
-    unknown: { icon: `question-circle`, spin: false, label: `Unknown`, variant: `neutral`, text: `text-subtle`, dot: `bg-subtle` },
+    running: {
+        icon: `check-circle`,
+        spin: false,
+        label: `Running`,
+        variant: `success`,
+        text: `text-success`,
+        dot: `bg-success`,
+        rowBorder: `border-l-success`,
+    },
+    deploying: { icon: `spinner`, spin: true, label: `Deploying`, variant: `info`, text: `text-info`, dot: `bg-info`, rowBorder: `border-l-info` },
+    unhealthy: {
+        icon: `exclamation-circle`,
+        spin: false,
+        label: `Unhealthy`,
+        variant: `danger`,
+        text: `text-danger`,
+        dot: `bg-danger`,
+        rowBorder: `border-l-danger`,
+    },
+    stopped: {
+        icon: `stop`,
+        spin: false,
+        label: `Stopped`,
+        variant: `neutral`,
+        text: `text-subtle`,
+        dot: `bg-subtle`,
+        rowBorder: `border-l-subtle/40`,
+    },
+    unknown: {
+        icon: `question-circle`,
+        spin: false,
+        label: `Unknown`,
+        variant: `neutral`,
+        text: `text-subtle`,
+        dot: `bg-subtle`,
+        rowBorder: `border-l-subtle/40`,
+    },
 };
 
 export const SERVER_TONE: Record<DeployServerState, StateTone> = {
-    ok: { icon: `check-circle`, spin: false, label: `Ok`, variant: `success`, text: `text-success`, dot: `bg-success` },
-    unreachable: { icon: `exclamation-circle`, spin: false, label: `Unreachable`, variant: `danger`, text: `text-danger`, dot: `bg-danger` },
-    disabled: { icon: `stop`, spin: false, label: `Disabled`, variant: `neutral`, text: `text-subtle`, dot: `bg-subtle` },
+    ok: {
+        icon: `check-circle`,
+        spin: false,
+        label: `Ok`,
+        variant: `success`,
+        text: `text-success`,
+        dot: `bg-success`,
+        rowBorder: `border-l-success`,
+    },
+    unreachable: {
+        icon: `exclamation-circle`,
+        spin: false,
+        label: `Unreachable`,
+        variant: `danger`,
+        text: `text-danger`,
+        dot: `bg-danger`,
+        rowBorder: `border-l-danger`,
+    },
+    disabled: {
+        icon: `stop`,
+        spin: false,
+        label: `Disabled`,
+        variant: `neutral`,
+        text: `text-subtle`,
+        dot: `bg-subtle`,
+        rowBorder: `border-l-subtle/40`,
+    },
 };
 
 // `panel` is the incident strip's own border + wash. Spelled out per tone rather than interpolated for the
@@ -53,3 +113,12 @@ export const gaugeTone = (percent: number): string => {
     }
     return percent >= 75 ? `bg-warning` : `bg-success`;
 };
+
+/* What a container image reads as in a row: the repository's last segment and its tag.
+ *
+ * `registry.gitlab.com/radarsu/atlas/registry-api:main` becomes `registry-api:main`. Four services of one stack
+ * share the first forty characters of that string, so a column of them is forty characters of identical noise
+ * ahead of the eight that differ — the reader's eye has nowhere to land. The full reference is never dropped,
+ * only demoted to the row's tooltip, which is where a registry host belongs: you check it when something is
+ * wrong, you do not read it forty times a day. */
+export const imageLabel = (image: string): string => image.split(`/`).at(-1) ?? image;

@@ -25,13 +25,11 @@ const ROWS = [
          indistinguishable from an empty board. The bars themselves carry no text, so there is nothing to read. -->
     <div class="animate-fade-in" role="status" aria-busy="true" aria-label="Loading pipelines">
         <!-- Summary bar: the three status counters and the pass-rate ring. -->
-        <div class="mb-5 flex flex-wrap items-center gap-3">
-            <div class="flex items-center gap-4 rounded-lg border border-line bg-card px-4 py-2.5">
-                <div v-for="i in 3" :key="i" class="flex h-5 items-center gap-1.5">
-                    <span class="skeleton h-2 w-2 rounded-full"></span>
-                    <span class="skeleton h-3 w-4"></span>
-                    <span class="skeleton h-3 w-12"></span>
-                </div>
+        <div class="mb-5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            <div v-for="i in 3" :key="i" class="flex h-5 items-center gap-1.5">
+                <span class="skeleton h-2 w-2 rounded-full"></span>
+                <span class="skeleton h-3 w-4"></span>
+                <span class="skeleton h-3 w-12"></span>
             </div>
             <div class="flex h-5 items-center gap-2">
                 <span class="skeleton h-5 w-5 rounded-full"></span>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
-import { cmp, Icon, InfoHint, Page, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
+import { cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markPipelinesSeen } from "./ciAttention";
 import { openFailures, supersededBy } from "./ciStreaks";
@@ -75,7 +75,9 @@ const byRepo = computed(() => {
 const runsOf = (repo: CiRepo): PipelineRun[] => byRepo.value.get(repo.repo) ?? [];
 
 // ---- summary counts ----
-const counts = computed(() => {
+// Worst first, and `passed` is the one that renders at zero: a board whose whole tally is silent reads as a
+// broken view rather than as a quiet one.
+const counts = computed<CountItem[]>(() => {
     const c = { running: 0, success: 0, failed: 0, other: 0 };
     for (const run of runs.value) {
         if (run.status === `running`) c.running++;
@@ -83,7 +85,12 @@ const counts = computed(() => {
         else if (run.status === `failed`) c.failed++;
         else c.other++;
     }
-    return c;
+    return [
+        { label: `failed`, value: c.failed, variant: `danger` },
+        { label: `running`, value: c.running, variant: `info`, pulse: true },
+        { label: `passed`, value: c.success, variant: `success`, always: true },
+        { label: `other`, value: c.other, variant: `neutral` },
+    ];
 });
 
 const successRate = computed(() => {
@@ -167,30 +174,8 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
 
             <template v-else>
                 <!-- ---- Summary bar ---- -->
-                <div v-if="runs.length > 0" class="mb-5 flex flex-wrap items-center gap-3">
-                    <div class="flex items-center gap-4 rounded-lg border border-line bg-card px-4 py-2.5">
-                        <div v-if="counts.failed > 0" class="flex items-center gap-1.5">
-                            <span class="h-2 w-2 rounded-full bg-danger"></span>
-                            <span class="text-sm font-semibold text-danger">{{ counts.failed }}</span>
-                            <span class="text-xs text-muted">failed</span>
-                        </div>
-                        <div v-if="counts.running > 0" class="flex items-center gap-1.5">
-                            <span class="h-2 w-2 animate-pulse rounded-full bg-info"></span>
-                            <span class="text-sm font-semibold text-info">{{ counts.running }}</span>
-                            <span class="text-xs text-muted">running</span>
-                        </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="h-2 w-2 rounded-full bg-success"></span>
-                            <span class="text-sm font-semibold text-success">{{ counts.success }}</span>
-                            <span class="text-xs text-muted">passed</span>
-                        </div>
-                        <div v-if="counts.other > 0" class="flex items-center gap-1.5">
-                            <span class="h-2 w-2 rounded-full bg-subtle"></span>
-                            <span class="text-sm font-semibold text-subtle">{{ counts.other }}</span>
-                            <span class="text-xs text-muted">other</span>
-                        </div>
-                    </div>
-                    <div v-if="successRate !== undefined" class="flex items-center gap-2">
+                <CountBar v-if="runs.length > 0" :items="counts" class="mb-5">
+                    <span v-if="successRate !== undefined" class="flex items-center gap-2">
                         <ProgressRing
                             :value="successRate"
                             :size="20"
@@ -198,8 +183,8 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                             :class="successRate >= 80 ? `text-success` : successRate >= 50 ? `text-warning` : `text-danger`"
                         />
                         <span class="text-xs text-muted">{{ successRate }}% pass rate</span>
-                    </div>
-                </div>
+                    </span>
+                </CountBar>
 
                 <!-- ---- What keeps breaking ----
                      Above the runs on purpose: on a repo that fails often the list answers "did it fail" (yes,
