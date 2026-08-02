@@ -243,6 +243,43 @@ test("drafts from parallel agents compose into one proposal, in a stable order",
     expect(proposal!.content.indexOf("cowsay")).toBeLessThan(proposal!.content.indexOf("ffmpeg"));
 });
 
+/* Folding drafts in happens on a READ, so it may write only when the fold produces something new.
+ *
+ * An unconditional write is a change as far as the workspace watcher can tell, and the browser binds
+ * `.intentic/environment.` to the `environment` query (WORKSPACE_STATE_FILES) — so GET /environment pushed a
+ * frame that invalidated the query that refetched GET /environment, forever, paced by the watcher's 250ms
+ * debounce. Four requests a second, each frame also dragging a tree walk and a `git status` behind it. */
+test("re-reading unchanged drafts writes nothing, so the watcher has no change to report", async () => {
+    const services = stubServices();
+    await services.files.write(join(draftsDir(services), "ffmpeg.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
+
+    const written: string[] = [];
+    const counted = unstubbed<Services>("services", {
+        config: services.config,
+        workspace: services.workspace,
+        logger: services.logger,
+        capabilities: services.capabilities,
+        files: unstubbed<Services["files"]>("files", {
+            read: services.files.read,
+            remove: services.files.remove,
+            write: async (path, content) => {
+                written.push(path);
+                await services.files.write(path, content);
+            },
+        }),
+    });
+
+    // The first read composes something the disk does not have yet, so it persists the proposal exactly once.
+    expect((await readEnvironment(counted)).proposal?.content).toContain("ffmpeg");
+    expect(written).toEqual([proposalPath(counted)]);
+
+    // Every read after it composes the same bytes, and so must be silent.
+    written.length = 0;
+    await readEnvironment(counted);
+    await readEnvironment(counted);
+    expect(written).toEqual([]);
+});
+
 test("a draft carries the already-approved custom section forward", async () => {
     const services = stubServices();
     await services.files.write(proposalPath(services), CUSTOM);

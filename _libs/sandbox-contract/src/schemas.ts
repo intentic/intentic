@@ -3153,9 +3153,12 @@ export const SubagentIdParamSchema = z.object({ id: z.string() });
 
 // ---- environment: the overlay Dockerfile extending the sandbox image ----
 // The approved file is DAEMON-COMPOSED: pinned FROM + capability fragments + the owner-approved custom section.
-// The agent writes the proposal file (.intentic/environment.Dockerfile — custom-section content only, no FROM)
-// with its normal file tools; the owner approves it in the browser, which stores it as the custom file and
-// recomposes the approved artifact whose sha256 the rebuild executor pins. Status is derived, never stored:
+// The agent drafts one file per thing it needs (.intentic/environment.d/<tool>.Dockerfile — custom-section
+// content only, no FROM) with its normal file tools, and the daemon folds those into the single proposal file
+// (.intentic/environment.Dockerfile) the owner reads. The owner approves it in the browser, which stores it as
+// the custom file and recomposes the approved artifact whose sha256 the rebuild executor pins. Both composed
+// files are written only when the composition CHANGES — see writeComposed, and the read loop it exists to end.
+// Status is derived, never stored:
 // applied = sha256(approved) === appliedHash; pending rebuild = approved present but hashes differ; proposed =
 // proposal present with a hash different from custom's.
 

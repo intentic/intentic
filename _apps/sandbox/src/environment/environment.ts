@@ -69,6 +69,26 @@ const HEADER =
     "# Capability fragments are daemon-owned; the custom section mirrors .intentic/environment.custom.Dockerfile.";
 const CUSTOM_MARKER = "# ---- custom (owner-approved) ----";
 
+/* Persist a DERIVED file only when it actually derives to something new.
+ *
+ * Every file this module writes is composed from other state, so a recompose that lands on what is already
+ * there has changed nothing — but an unconditional write says otherwise to the one reader that cannot check:
+ * the workspace watcher, which reports the mtime bump, which the browser turns into "the `environment` query
+ * is stale" (WORKSPACE_STATE_FILES binds `.intentic/environment.` to it).
+ *
+ * That is a closed loop when the recompose happens on a READ. `readEnvironment` folds pending drafts into the
+ * proposal, so with any draft on disk: GET /environment writes → the watcher pushes → the browser invalidates
+ * `environment` → GET /environment writes → … paced only by the watcher's 250ms debounce, which is four
+ * requests a second forever, each frame also dragging a tree walk and a `git status` along behind it.
+ * Comparing first ends it: the first read after a real draft change writes once, and the next composes the
+ * same bytes and stays silent. */
+const writeComposed = async (services: Services, path: string, content: string): Promise<void> => {
+    if ((await services.files.read(path)) === content) {
+        return;
+    }
+    await services.files.write(path, content);
+};
+
 // Regenerate the approved (composed) overlay from the capability manifest + the custom file. Returns the
 // composed hash, or undefined when no overlay should exist. Called on capability add/remove, approve, and boot
 // (boot converges fragment drift: a daemon update that changes a fragment flips the derived state to "pending
@@ -90,12 +110,12 @@ export const composeEnvironment = async (services: Services): Promise<string | u
         // The running container was built from an overlay that now has nothing left in it: keep a bare overlay
         // so the owner has a hash-pinned rebuild path back to stock.
         const bare = `${HEADER}\n\nFROM ${base}\n`;
-        await services.files.write(approvedPath(services), bare);
+        await writeComposed(services, approvedPath(services), bare);
         return sha256Hex(bare);
     }
     const sections = [HEADER, `FROM ${base}`, ...fragments, ...(custom === "" ? [] : [CUSTOM_MARKER, custom])];
     const content = `${sections.join("\n\n")}\n`;
-    await services.files.write(approvedPath(services), content);
+    await writeComposed(services, approvedPath(services), content);
     return sha256Hex(content);
 };
 
@@ -127,7 +147,7 @@ const mergeProposalDrafts = async (services: Services): Promise<void> => {
         return;
     }
     const custom = ((await services.files.read(customPath(services))) ?? "").trim();
-    await services.files.write(proposalPath(services), `${[...(custom === "" ? [] : [custom]), drafts].join("\n\n")}\n`);
+    await writeComposed(services, proposalPath(services), `${[...(custom === "" ? [] : [custom]), drafts].join("\n\n")}\n`);
 };
 
 const fileState = async (services: Services, path: string): Promise<{ content: string; hash: string } | undefined> => {
