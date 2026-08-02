@@ -65,12 +65,15 @@ const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 ${frame
              and sharing it means you cannot keep your place in either. The right gutter keeps the thumb off the
              rightmost few pixels of every row — which is exactly where the trailing marks sit. -->
         <div class="ui-softscroll min-h-0 flex-1 overflow-y-auto" :class="framed ? `p-1.5` : `pr-2`">
-            <section v-for="group in groups" :key="group.key">
-                <h3
-                    v-if="group.label !== undefined"
-                    class="flex items-center gap-2 pb-1 pl-2 pr-1 pt-3 first:pt-0"
-                    :class="headingClass"
-                >
+            <!-- THE GAP BETWEEN GROUPS RIDES THE SECTION, not the heading. It was `pt-3 first:pt-0` on the <h3>
+                 below, which reads as "space every heading off the group above it, except the first" — and did
+                 the opposite: an <h3> is by definition the FIRST CHILD of its own <section>, so `first:` matched
+                 on every group and the `pt-3` never applied anywhere. Every heading sat 6px under the last row
+                 of the previous group and 10px above its own, which is proximity backwards: the label was
+                 nearer to the group it does not describe. Four groups then read as one long list with words in
+                 it. On the <section>, `first:` means what it says — only the rail's opening group is flush. -->
+            <section v-for="group in groups" :key="group.key" class="pt-3 first:pt-0">
+                <h3 v-if="group.label !== undefined" class="flex items-center gap-2 pb-1 pl-2 pr-1" :class="headingClass">
                     <span
                         v-if="group.accent !== undefined"
                         class="size-1.5 shrink-0 rounded-full"
