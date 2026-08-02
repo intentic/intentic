@@ -25,6 +25,7 @@ export const extensionUiNames = [
     "NavRail",
     "Page",
     "PageHeader",
+    "Panel",
     "PanelHeader",
     "Picker",
     "Popover",

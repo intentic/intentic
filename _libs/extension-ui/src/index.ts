@@ -34,6 +34,7 @@ export {
     NavRail,
     Page,
     PageHeader,
+    Panel,
     PanelHeader,
     Picker,
     type PickerGroup,

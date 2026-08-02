@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, PanelHeader, type TimeWindow, timeWindowWords } from "@intentic/extension-ui";
+import { cmp, Icon, Panel, PanelHeader, type TimeWindow, timeWindowWords } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { byDay, type Episode, type Source } from "./episodes";
 import EpisodeRow from "./EpisodeRow.vue";
@@ -19,27 +19,33 @@ const { episodes, source, window, truncated, isLoading } = defineProps<{
 }>();
 
 const days = computed(() => byDay(episodes, Date.now()));
-
 </script>
 
 <template>
-    <section class="flex min-h-0 flex-1 flex-col rounded-lg border border-line bg-card">
-        <PanelHeader>
-            <template #title><span :class="cmp.sectionLabel()">{{ source?.label ?? `All sources` }}</span></template>
-            <template #actions>
-                <span class="text-2xs text-subtle">
-                    {{ episodes.length }} {{ episodes.length === 1 ? `entry` : `entries` }} {{ timeWindowWords(window) }}
-                </span>
-            </template>
-        </PanelHeader>
+    <Panel grow>
+        <template #header>
+            <PanelHeader>
+                <template #title
+                    ><span :class="cmp.sectionLabel()">{{ source?.label ?? `All sources` }}</span></template
+                >
+                <template #actions>
+                    <span class="text-2xs text-subtle">
+                        {{ episodes.length }} {{ episodes.length === 1 ? `entry` : `entries` }} {{ timeWindowWords(window) }}
+                    </span>
+                </template>
+            </PanelHeader>
+        </template>
 
-        <!-- A connection that should be up and isn't says so here, where the person who selected it is looking. -->
-        <p v-if="source?.lastError" :class="cmp.alertDanger('mx-4 mt-3 px-3 py-2 text-2xs')">{{ source.lastError }}</p>
-        <p v-else-if="source?.gateway === `idle`" class="mx-4 mt-3 text-2xs text-muted">
-            Idle — no enabled listener automation for {{ source.label }} yet, so nothing is being listened for.
-        </p>
+        <!-- A connection that should be up and isn't says so here, where the person who selected it is looking.
+             Above the scroll, so it stays put while the feed under it moves. -->
+        <template v-if="source?.lastError || source?.gateway === `idle`" #strips>
+            <p v-if="source?.lastError" :class="cmp.alertDanger('mx-4 mt-3 px-3 py-2 text-2xs')">{{ source.lastError }}</p>
+            <p v-else class="mx-4 mt-3 text-2xs text-muted">
+                Idle — no enabled listener automation for {{ source.label }} yet, so nothing is being listened for.
+            </p>
+        </template>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+        <div class="px-4 py-2">
             <div v-for="day in days" :key="day.label" class="mb-1">
                 <div class="sticky top-0 z-1 flex items-center gap-2 bg-card py-1">
                     <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ day.label }}</span>
@@ -62,5 +68,5 @@ const days = computed(() => byDay(episodes, Date.now()));
                 Showing the most recent entries only — this window holds more than the feed fetches at once.
             </p>
         </div>
-    </section>
+    </Panel>
 </template>

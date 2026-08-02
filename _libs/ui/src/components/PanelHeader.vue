@@ -25,7 +25,9 @@ defineProps<{ title?: string; description?: string }>();
                 </h2>
                 <slot name="badges" />
             </div>
-            <p v-if="description !== undefined" class="mt-1 text-xs text-muted">{{ description }}</p>
+            <p v-if="description !== undefined || $slots[`description`]" class="mt-1 text-xs text-muted">
+                <slot name="description">{{ description }}</slot>
+            </p>
             <p v-if="$slots[`meta`]" class="mt-1 flex flex-wrap items-center gap-x-1.5 text-2xs text-subtle"><slot name="meta" /></p>
         </div>
         <div v-if="$slots[`actions`]" class="flex shrink-0 items-center gap-1.5">

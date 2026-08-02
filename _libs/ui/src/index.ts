@@ -37,6 +37,9 @@ export { default as NavRail } from "./components/NavRail.vue";
 export { type NavGroup } from "./components/navRail.js";
 export { default as Page } from "./components/Page.vue";
 export { default as PageHeader } from "./components/PageHeader.vue";
+// The frame <PanelHeader> sits in — and the home of the min-h-0/overflow-hidden scroll contract that three
+// callers had each rediscovered, one of them incorrectly.
+export { default as Panel } from "./components/Panel.vue";
 // The header row INSIDE a bordered surface. Sibling to PageHeader, which sits above a page — the distinction is
 // load-bearing, see the component's own note.
 export { default as PanelHeader } from "./components/PanelHeader.vue";

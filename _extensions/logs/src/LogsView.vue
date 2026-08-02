@@ -5,6 +5,7 @@ import {
     FilterBar,
     formatBytes,
     InfoHint,
+    Panel,
     PanelHeader,
     Row,
     RowGroup,
@@ -145,27 +146,37 @@ watch(tail, () => {
         </p>
         <p v-else-if="visible.length === 0" :class="cmp.emptyState(`py-6`)">No files match the current filters.</p>
 
-        <section v-if="selected" class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-card">
-            <PanelHeader>
-                <template #title><span class="font-mono text-xs">{{ selected }}</span></template>
-                <template #actions>
-                    <span v-if="tail?.truncated" class="text-2xs text-subtle">tail of {{ formatBytes(tail.sizeBytes) }}</span>
-                    <Segmented
-                        v-model="bytesChoice"
-                        :options="[
-                            { label: `64 KB`, value: `65536` },
-                            { label: `256 KB`, value: `262144` },
-                            { label: `1 MB`, value: `1048576` },
-                        ]"
-                    />
-                </template>
-            </PanelHeader>
-            <div v-if="tailError" :class="cmp.alertDanger('m-4 mb-0')">
-                {{ tailError }}
-            </div>
+        <!-- `:scroll="false"` — the tail pane below drives its own scroll (it jumps to the newest lines on every
+             refresh), and a panel scroller wrapped around a scroller gives you two scrollbars and neither works. -->
+        <Panel v-if="selected" :scroll="false">
+            <template #header>
+                <PanelHeader>
+                    <template #title
+                        ><span class="font-mono text-xs">{{ selected }}</span></template
+                    >
+                    <template #actions>
+                        <span v-if="tail?.truncated" class="text-2xs text-subtle">tail of {{ formatBytes(tail.sizeBytes) }}</span>
+                        <Segmented
+                            v-model="bytesChoice"
+                            :options="[
+                                { label: `64 KB`, value: `65536` },
+                                { label: `256 KB`, value: `262144` },
+                                { label: `1 MB`, value: `1048576` },
+                            ]"
+                        />
+                    </template>
+                </PanelHeader>
+            </template>
+
+            <template v-if="tailError" #strips>
+                <div :class="cmp.alertDanger('m-4 mb-0')">{{ tailError }}</div>
+            </template>
+
+            <!-- The pane keeps its own ref and max height: the tail auto-scrolls to the newest lines, which is a
+                 scroll this component drives rather than one the panel merely provides. -->
             <div ref="pane" class="max-h-128 overflow-auto p-4">
                 <Code :code="tail?.text ?? (tailLoading ? `Loading…` : ``)" lang="log" :wrap="true" :copyable="false" />
             </div>
-        </section>
+        </Panel>
     </div>
 </template>

@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import type { MemoryFileEntry } from "@intentic/sandbox-contract";
-import { Button, Code, CopyButton, formatBytes, Icon, Markdown, Segmented, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import {
+    Button,
+    Code,
+    cmp,
+    CopyButton,
+    formatBytes,
+    Icon,
+    Markdown,
+    Panel,
+    PanelHeader,
+    Segmented,
+    StatusBadge,
+    type StatusVariant,
+} from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { INDEX_NAME, linkifyNoteRefs, noteTitle, parseNote } from "./memoryNote";
 import { freshness } from "./noteTime";
@@ -93,29 +106,27 @@ const onProseClick = (event: MouseEvent): void => {
 </script>
 
 <template>
-    <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-line bg-card">
-        <!-- Stacked until there is room for both: at rail width the title and a five-control cluster on one
-             row leave the note's name reading as "Fix…", and the name is the whole point of the header. -->
-        <header class="flex shrink-0 flex-col gap-2 border-b border-line px-4 py-3 md:flex-row md:items-start md:justify-between md:gap-3">
-            <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                    <button
-                        v-if="standalone"
-                        type="button"
-                        class="-ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
-                        aria-label="Back to all notes"
-                        @click="emit(`back`)"
-                    >
-                        <Icon name="arrow-left" class="text-xs" />
+    <Panel grow>
+        <!-- The stacking rule this header needed — title on its own row until there is width for the control
+             cluster — is <PanelHeader>'s now: this pane is the narrowest real instance of it, and so the one
+             that found the failure. -->
+        <template #header>
+            <PanelHeader :title="title">
+                <template #lead>
+                    <button v-if="standalone" type="button" :class="cmp.iconButton(`-ml-1`)" aria-label="Back to all notes" @click="emit(`back`)">
+                        <Icon name="arrow-left" />
                     </button>
                     <Icon :name="isIndex ? `sparkles` : `file`" class="shrink-0 text-xs text-subtle" />
-                    <h2 class="min-w-0 truncate text-sm font-medium text-content">{{ title }}</h2>
+                </template>
+                <template #badges>
                     <StatusBadge v-if="parsed.type" :variant="typeVariant" size="xs" :label="parsed.type" />
                     <StatusBadge v-if="draft !== undefined" variant="warning" size="xs" label="Unsaved" />
-                </div>
-                <p v-if="isIndex" class="mt-1 text-xs text-muted">Loaded at the start of every session — every note below it hangs off this.</p>
-                <p v-else-if="parsed.description" class="mt-1 text-xs text-muted">{{ parsed.description }}</p>
-                <p class="mt-1 flex flex-wrap items-center gap-x-1.5 text-2xs text-subtle">
+                </template>
+                <template #description>
+                    <span v-if="isIndex">Loaded at the start of every session — every note below it hangs off this.</span>
+                    <span v-else-if="parsed.description">{{ parsed.description }}</span>
+                </template>
+                <template #meta>
                     <span class="truncate font-mono">{{ name }}</span>
                     <template v-if="entry">
                         <span aria-hidden="true">·</span>
@@ -123,86 +134,86 @@ const onProseClick = (event: MouseEvent): void => {
                         <span aria-hidden="true">·</span>
                         <span :title="new Date(entry.modifiedAt).toLocaleString()">edited {{ freshness(entry.modifiedAt) }}</span>
                     </template>
-                </p>
-            </div>
+                </template>
 
-            <div class="flex shrink-0 items-center gap-1.5">
-                <template v-if="draft !== undefined">
-                    <Button label="Cancel" size="small" severity="secondary" @click="cancelEdit" />
-                    <Button label="Save" size="small" :loading="save.isPending.value" @click="saveDraft">
-                        <template #icon><Icon name="save" /></template>
-                    </Button>
+                <template #actions>
+                    <template v-if="draft !== undefined">
+                        <Button label="Cancel" size="small" severity="secondary" @click="cancelEdit" />
+                        <Button label="Save" size="small" :loading="save.isPending.value" @click="saveDraft">
+                            <template #icon><Icon name="save" /></template>
+                        </Button>
+                    </template>
+                    <template v-else>
+                        <Segmented
+                            v-model="view"
+                            size="xs"
+                            :options="[
+                                { label: `Preview`, value: `preview` },
+                                { label: `Source`, value: `source`, title: `The raw markdown, frontmatter included` },
+                            ]"
+                        />
+                        <CopyButton :text="raw" v-tooltip.top="'Copy the raw note'" />
+                        <button
+                            type="button"
+                            :class="cmp.iconButton(`h-7 w-7`)"
+                            aria-label="Edit this note"
+                            v-tooltip.top="'Edit'"
+                            @click="startEdit"
+                        >
+                            <Icon name="pencil" />
+                        </button>
+                        <button
+                            type="button"
+                            :class="cmp.iconButton(`h-7 w-7 hover:bg-danger/10 hover:text-danger`)"
+                            aria-label="Forget this note"
+                            v-tooltip.top="'Forget'"
+                            @click="confirming = true"
+                        >
+                            <Icon name="trash" />
+                        </button>
+                    </template>
                 </template>
-                <template v-else>
-                    <Segmented
-                        v-model="view"
-                        size="xs"
-                        :options="[
-                            { label: `Preview`, value: `preview` },
-                            { label: `Source`, value: `source`, title: `The raw markdown, frontmatter included` },
-                        ]"
-                    />
-                    <CopyButton :text="raw" v-tooltip.top="'Copy the raw note'" />
-                    <button
-                        type="button"
-                        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
-                        aria-label="Edit this note"
-                        v-tooltip.top="'Edit'"
-                        @click="startEdit"
-                    >
-                        <Icon name="pencil" class="text-xs" />
-                    </button>
-                    <button
-                        type="button"
-                        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-danger/10 hover:text-danger"
-                        aria-label="Forget this note"
-                        v-tooltip.top="'Forget'"
-                        @click="confirming = true"
-                    >
-                        <Icon name="trash" class="text-xs" />
-                    </button>
-                </template>
-            </div>
-        </header>
+            </PanelHeader>
+        </template>
 
         <!-- Destructive and irreversible, so it is confirmed in place: the sentence names what is lost, and the
-             two answers sit apart from every other control on the pane. -->
-        <div v-if="confirming" class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-danger/30 bg-danger/10 px-4 py-2.5">
-            <span class="text-xs text-danger">Forget “{{ title }}”? The agent stops recalling it — this can't be undone.</span>
-            <div class="flex shrink-0 items-center gap-1.5">
-                <Button label="Keep it" size="small" severity="secondary" @click="confirming = false" />
-                <Button label="Forget it" size="small" severity="danger" :loading="remove.isPending.value" @click="forget" />
+             two answers sit apart from every other control on the pane. Rides #strips so a long note can never
+             scroll the question away from the answer. -->
+        <template v-if="confirming || noteError || mutationError" #strips>
+            <div v-if="confirming" class="flex flex-wrap items-center justify-between gap-2 border-b border-danger/30 bg-danger/10 px-4 py-2.5">
+                <span class="text-xs text-danger">Forget “{{ title }}”? The agent stops recalling it — this can't be undone.</span>
+                <div class="flex shrink-0 items-center gap-1.5">
+                    <Button label="Keep it" size="small" severity="secondary" @click="confirming = false" />
+                    <Button label="Forget it" size="small" severity="danger" :loading="remove.isPending.value" @click="forget" />
+                </div>
             </div>
-        </div>
+            <div v-if="noteError || mutationError" class="border-b border-danger/30 bg-danger/10 px-4 py-2 text-xs text-danger">
+                {{ noteError ?? mutationError }}
+            </div>
+        </template>
 
-        <div v-if="noteError || mutationError" class="shrink-0 border-b border-danger/30 bg-danger/10 px-4 py-2 text-xs text-danger">
-            {{ noteError ?? mutationError }}
-        </div>
-
-        <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
-            <!-- One textarea, holding the whole file: a memory note is short, hand-written markdown, and a
-                 structured editor over it would only get in the way of the correction being made. -->
-            <textarea
-                v-if="draft !== undefined"
-                v-model="draft"
-                spellcheck="false"
-                aria-label="Note source"
-                class="scrollbar-thin h-full min-h-64 w-full resize-none bg-transparent px-4 py-3 font-mono text-xs leading-relaxed text-content focus:outline-none"
-                @keydown.ctrl.s.prevent="saveDraft"
-                @keydown.meta.s.prevent="saveDraft"
-                @keydown.esc="cancelEdit"
-            ></textarea>
-            <p v-else-if="isLoading" class="px-4 py-6 text-xs text-subtle">Loading…</p>
-            <!-- Delegated click: the note links and the code blocks' copy buttons both live inside v-html. -->
-            <Markdown
-                v-else-if="view === `preview`"
-                :source="parsed.body"
-                :decorate="decorate"
-                class="px-5 py-4"
-                style="--prose-measure: 74ch"
-                @click="onProseClick"
-            />
-            <Code v-else :code="raw" lang="markdown" :wrap="true" :copyable="false" class="px-3 py-3" />
-        </div>
-    </section>
+        <!-- One textarea, holding the whole file: a memory note is short, hand-written markdown, and a
+             structured editor over it would only get in the way of the correction being made. -->
+        <textarea
+            v-if="draft !== undefined"
+            v-model="draft"
+            spellcheck="false"
+            aria-label="Note source"
+            class="scrollbar-thin h-full min-h-64 w-full resize-none bg-transparent px-4 py-3 font-mono text-xs leading-relaxed text-content focus:outline-none"
+            @keydown.ctrl.s.prevent="saveDraft"
+            @keydown.meta.s.prevent="saveDraft"
+            @keydown.esc="cancelEdit"
+        ></textarea>
+        <p v-else-if="isLoading" class="px-4 py-6 text-xs text-subtle">Loading…</p>
+        <!-- Delegated click: the note links and the code blocks' copy buttons both live inside v-html. -->
+        <Markdown
+            v-else-if="view === `preview`"
+            :source="parsed.body"
+            :decorate="decorate"
+            class="px-5 py-4"
+            style="--prose-measure: 74ch"
+            @click="onProseClick"
+        />
+        <Code v-else :code="raw" lang="markdown" :wrap="true" :copyable="false" class="px-3 py-3" />
+    </Panel>
 </template>
