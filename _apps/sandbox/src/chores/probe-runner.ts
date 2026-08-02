@@ -71,7 +71,9 @@ export const runProbe = async (spec: ProbeSpec, cwd: string, nowMs: number): Pro
         await execFileAsync("sh", ["-c", spec.available], { cwd, timeout: 30_000 });
     } catch {
         // The tool is not part of this repository. Not a failure and not a clean result — see ProbeStateSchema.
-        return finish({ state: "unavailable", reason: `this repository has no ${spec.title.toLowerCase()} to measure` });
+        // The reason is the spec's own, naming what is missing: a sentence built from the probe's title reads as
+        // "there are no security advisories", which is the claim an unmeasured probe is not allowed to make.
+        return finish({ state: "unavailable", reason: spec.unavailable });
     }
 
     let stdout: string;

@@ -36,6 +36,11 @@ export interface ProbeSpec {
     readonly timeoutMs: number;
     // Exit 0 ⇒ this repo can be measured. Runs in the repo's own directory, like the command.
     readonly available: string;
+    /* What is MISSING when `available` says no, named here rather than derived from the title. The obvious
+     * derivation — "this repository has no security advisories to measure" — states the one thing an unmeasured
+     * probe must never claim, that there are none, and it is the same conflation the block above exists to
+     * prevent. Phrased as a bare clause ("no lockfile"), because the panel groups these under its own lead-in. */
+    readonly unavailable: string;
     // `sh -c`, in the repo's directory. Stdout is the parser's input; a non-zero exit is NOT a failure by itself
     // (pnpm outdated and pnpm audit both exit non-zero precisely when they have something to report), so the
     // runner judges by whether the parser recognised the output.
@@ -216,6 +221,7 @@ export const PROBES: readonly ProbeSpec[] = [
         ttlMs: DAY_MS,
         timeoutMs: 5 * 60_000,
         available: `test -f package.json`,
+        unavailable: `no package.json`,
         // `-r` so a monorepo reports every workspace package, not just the root's own handful. `|| true` because
         // pnpm exits non-zero exactly when it HAS findings, and the runner judges by whether the parse succeeded.
         command: `pnpm outdated -r --json 2>/dev/null || true`,
@@ -231,6 +237,7 @@ export const PROBES: readonly ProbeSpec[] = [
         // A lockfile, not a package.json: auditing resolves the actual installed tree, and without one pnpm
         // reports against nothing.
         available: `test -f pnpm-lock.yaml || test -f package-lock.json`,
+        unavailable: `no lockfile`,
         command: `pnpm audit --json 2>/dev/null || true`,
         parse: parseAudit,
     },
@@ -244,6 +251,7 @@ export const PROBES: readonly ProbeSpec[] = [
         // The repo's OWN knip, never a floating one: `pnpm dlx knip` would download a version that disagrees with
         // the repo's knip.json about what counts as an entry point, and then report its whole public API as dead.
         available: `pnpm exec knip --version >/dev/null 2>&1`,
+        unavailable: `knip is not a devDependency`,
         command: `pnpm exec knip --reporter json --no-exit-code 2>/dev/null || true`,
         parse: parseKnip,
     },
@@ -255,6 +263,7 @@ export const PROBES: readonly ProbeSpec[] = [
         ttlMs: 7 * DAY_MS,
         timeoutMs: 20 * 60_000,
         available: `test -f package.json`,
+        unavailable: `no package.json`,
         // `--threshold 100` so jscpd never fails the command on its own opinion of what is too much duplication —
         // that judgement is the chore's, made from the percentage, not the tool's exit code.
         command:

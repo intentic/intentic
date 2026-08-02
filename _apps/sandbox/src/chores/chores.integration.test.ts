@@ -38,6 +38,16 @@ describe(`runProbe`, () => {
         expect(result.facts).toBeUndefined();
     });
 
+    /* And it names what is MISSING rather than describing itself. The reason a probe could not run is the only
+     * sentence the panel has for that repository, and one built from the probe's own title — "this repository has
+     * no security advisories to measure" — says the exact thing an unmeasured probe is never allowed to say. */
+    test(`an unavailable probe's reason is what is missing, never a restatement of the probe`, async () => {
+        const dir = await scaffold({ "package.json": `{}` });
+        const result = await runProbe(fakeSpec({ available: `exit 1` }), dir, 1000);
+        expect(result.reason).toBe(probeSpec(`outdated`).unavailable);
+        expect(result.reason).not.toContain(probeSpec(`outdated`).title.toLowerCase());
+    });
+
     test(`a command that dies carries the tail of what it printed, so the panel can say why`, async () => {
         const dir = await scaffold({ "package.json": `{}` });
         const result = await runProbe(fakeSpec({ available: `true`, command: `echo "ERR_PNPM_NO_LOCKFILE" >&2; exit 1` }), dir, 1000);

@@ -167,7 +167,8 @@ const apiRepo = (now: number) => ({
             state: `unavailable` as const,
             ranAt: now - 0.6 * DAY,
             tookMs: 120,
-            reason: `knip is not a devDependency of this repository`,
+            // Verbatim what the daemon records for an unavailable probe — the spec's own `unavailable` clause.
+            reason: `knip is not a devDependency`,
         },
         probe(
             `jscpd`,

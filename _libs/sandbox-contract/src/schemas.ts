@@ -3740,7 +3740,10 @@ export const ProbeResultSchema = z.object({
     // deciding whether to force a refresh deserves to know what they are asking for.
     tookMs: z.number().int().nonnegative(),
     facts: ProbeFactsSchema.optional(),
-    // Why it is unavailable, or how it failed — a bounded quote of the tool's own output. Never invented here.
+    // On `failed`, how it broke — a bounded quote of the tool's own output, never a summary of it. On
+    // `unavailable`, what is missing, in the probe spec's own words ("no lockfile"): there is no tool output to
+    // quote when the tool never ran, and the alternative — a sentence built from the probe's name — would have an
+    // unmeasured probe claiming there is nothing to measure.
     reason: z.string().optional(),
 });
 export type ProbeResult = z.infer<typeof ProbeResultSchema>;

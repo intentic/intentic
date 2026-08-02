@@ -73,7 +73,13 @@ const unmeasuredDetail = (needs: readonly ProbeId[], probes: ReadonlyMap<ProbeId
         if (probe.state === `ok`) {
             return [];
         }
-        return [`${spec.title} · ${probe.state === `unavailable` ? `not available in this repository` : `failed`}${probe.reason === undefined ? `` : ` — ${probe.reason}`}`];
+        // An unavailable probe's reason already says what is missing ("no lockfile"), so prefixing it with "not
+        // available in this repository" only says the same thing twice. A failure has to keep its label: its
+        // reason is the tool's own output, which on its own reads as a fact rather than as a breakage.
+        if (probe.state === `unavailable`) {
+            return [`${spec.title} · ${probe.reason ?? `not available in this repository`}`];
+        }
+        return [`${spec.title} · failed${probe.reason === undefined ? `` : ` — ${probe.reason}`}`];
     });
 
 export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLedgerEntry | undefined): ChoreVerdict => {
