@@ -36,9 +36,13 @@ const WINDOW_NAMES: Record<string, string> = {
     overage: `Overage credits`,
 };
 
+// A pool the provider scopes to one model or one surface is always a slice of the WEEKLY allowance, and reads
+// as one: "Weekly · Fable" beside "Weekly · all models", rather than a bare "Fable" that says nothing about
+// which allowance it is a slice of.
+const SCOPED_KINDS = [`model:`, `surface:`];
 export const usageWindowLabel = (window: UsageWindow): string =>
     window.label !== undefined
-        ? window.kind.startsWith(`model:`)
+        ? SCOPED_KINDS.some((prefix) => window.kind.startsWith(prefix))
             ? `Weekly · ${window.label}`
             : window.label
         : (WINDOW_NAMES[window.kind] ?? window.kind);

@@ -297,6 +297,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         }),
         // No usage measured by default — an account that hasn't run a turn since its window reset reports none.
         accountUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
+        // …and nothing sweeps for one: the reader would need a live OAuth usage endpoint to reach.
+        claudeUsage: { refresh: async () => {}, start: () => () => {} },
         // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
         cliProxy: unstubbed("cliProxy", {
             accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }),

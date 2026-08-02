@@ -1,6 +1,7 @@
 import { type AccountUsage, type KeyedProvider, reportsPlanLimits, type UsageWindow } from "@intentic/sandbox-contract";
+import { asNumber, asRecord, asString, clampPercent, resetFromIso } from "./payload.js";
 
-/* The READER for the routed subscriptions — the counterpart to claudeUsageWindows, and the other half of what
+/* The READER for the routed subscriptions — the counterpart to claude-usage.ts, and the other half of what
  * fills account-usage.ts next door. Its whole job is to come back with an AccountUsage; where that snapshot is
  * then kept, merged or drawn is not its business.
  *
@@ -28,31 +29,8 @@ interface ApiCallResult {
     readonly body?: string;
 }
 
-const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-    value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-
-const asNumber = (value: unknown): number | undefined => {
-    if (typeof value === "number") {
-        return Number.isFinite(value) ? value : undefined;
-    }
-    if (typeof value !== "string" || value.trim() === "") {
-        return undefined;
-    }
-    const parsed = Number(value.endsWith("%") ? value.slice(0, -1) : value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-const asString = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim() : undefined);
-const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
-
-// An ISO-8601 reset instant as the epoch SECONDS the wire carries. Google and Kimi both name their resets this
-// way (Codex sends numbers, hence resetSeconds below) — one parse, so an unreadable instant is dropped by the
-// same rule on both rather than by two copies that could disagree about what "unparseable" means.
-const resetFromIso = (value: unknown): number | undefined => {
-    const parsed = Date.parse(asString(value) ?? "");
-    return Number.isNaN(parsed) ? undefined : Math.floor(parsed / 1000);
-};
-
+// Codex alone sends its resets as NUMBERS — an epoch instant or a relative offset — where the others send
+// ISO-8601 (resetFromIso, payload.ts).
 const resetSeconds = (absolute: unknown, relative: unknown, measuredAt: number): number | undefined => {
     const direct = asNumber(absolute);
     if (direct !== undefined) {

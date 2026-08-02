@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
 import { cmp, RowGroup } from "@intentic-app/ui";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/providerAccounts";
+import { useChat } from "../../composables/chat/useChat";
 import {
     formatAge,
     formatReset,
@@ -45,6 +46,15 @@ import {
  * cannot separate. Beside a printed percentage that is fine, which is why the meters keep it; as a colour-only
  * strip of 31 cells it would carry the whole message in the one channel that fails. Height says it instead, and
  * colour agrees with it. */
+
+/* Ask for the readings this panel exists to draw, rather than drawing whichever ones the page happened to load
+ * with. A plan's pools are ACCOUNT-wide — the desktop app, another Claude Code and claude.ai itself spend the
+ * same allowance — so a percentage is only ever as true as it is recent, and a browser left open all afternoon
+ * has an afternoon-old one. The connection read is what refreshes them (the daemon waits on a quota sweep
+ * before answering it), so arriving on this tab is exactly the moment to ask. AiAccountSection does the same
+ * for the rings it draws. */
+const { refreshConnections } = useChat();
+onMounted(() => void refreshConnections());
 
 const rows = computed(() => planLimitRows(providerAccounts.value, translatorAccounts.value));
 const groups = computed(() => planLimitGroups(rows.value, providerRefusals.value));

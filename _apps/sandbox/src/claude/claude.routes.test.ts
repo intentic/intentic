@@ -21,6 +21,9 @@ const claudeClient = (claudeStore: ClaudeRoutesDeps["claudeStore"]) =>
             unstubbed<ClaudeRoutesDeps>("claude deps", {
                 claudeStore,
                 accountUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
+                // The list waits on a sweep before answering; there is no endpoint to sweep under test, and
+                // what the sweep would have written is exactly what `accountUsage` is standing in for.
+                claudeUsage: { refresh: async () => {}, start: () => () => {} },
             }),
         ),
     );

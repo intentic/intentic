@@ -44,6 +44,7 @@ import { verificationHooks } from "./agent-verification.js";
 import { bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
 import { EventQueue } from "./event-queue.js";
 import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
+import { readClaudeUsage } from "../usage/claude-usage.js";
 import type { TurnLimit } from "../usage/translator-usage.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
 import { TaskChecklist } from "./task-checklist.js";
@@ -183,68 +184,6 @@ export interface AgentRequest {
 // (it resolves a control request, which no canned generator answers).
 export type AgentQuery = AsyncIterable<SDKMessage> & {
     readonly supportedCommands?: () => Promise<readonly SlashCommand[]>;
-};
-
-// A window the usage endpoint reports, or nothing when it has no reading for that pool. `resets_at` is
-// ISO-8601 there and epoch SECONDS on our wire (the unit the SDK's own rate_limit frame uses).
-const usageWindow = (
-    kind: string,
-    reading: { utilization: number | null; resets_at: string | null } | null | undefined,
-    label?: string,
-): UsageWindow | undefined => {
-    if (reading?.utilization === null || reading?.utilization === undefined) {
-        return undefined;
-    }
-    const resets = reading.resets_at === null ? Number.NaN : Date.parse(reading.resets_at);
-    return {
-        kind,
-        ...(label !== undefined ? { label } : {}),
-        utilization: reading.utilization,
-        ...(Number.isNaN(resets) ? {} : { resetsAt: Math.floor(resets / 1000) }),
-    };
-};
-
-/* Every plan-limit pool for this turn's credential, read straight from Anthropic's OAuth usage endpoint — the
- * same data behind Claude Code's own /usage dialog, at no token cost. Deliberately NOT the SDK's usage control
- * request: the CLI only reports rate limits for a profile it signed in itself, and a daemon turn hands it a
- * bare env token, so that read answers `rate_limits: null` on every turn — which is how this pipeline shipped
- * without ever producing a reading.
- *
- * This exists because the stream's rate_limit_event names exactly ONE window (whichever the CLI treated as
- * binding for that request), and persisting it as the account's headroom is how a Usage tab came to say
- * "Weekly limit 1%" for an account that was really at 98% on its all-models weekly pool. All pools or none.
- *
- * Best-effort by construction: a usage read must never be able to fail — or stall, hence the timeout — a turn
- * that has already produced its answer, so every failure reads as "no reading". */
-const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage";
-type UsageReading = { utilization: number | null; resets_at: string | null } | null;
-const claudeUsageWindows = async (oauthToken: string, fetchFn: typeof fetch): Promise<UsageWindow[]> => {
-    const limits = await fetchFn(USAGE_ENDPOINT, {
-        headers: { Authorization: `Bearer ${oauthToken}`, "anthropic-beta": "oauth-2025-04-20" },
-        signal: AbortSignal.timeout(10_000),
-    })
-        .then((response) =>
-            response.ok
-                ? (response.json() as Promise<{
-                      five_hour?: UsageReading;
-                      seven_day?: UsageReading;
-                      seven_day_opus?: UsageReading;
-                      seven_day_sonnet?: UsageReading;
-                      seven_day_oauth_apps?: UsageReading;
-                  }>)
-                : undefined,
-        )
-        .catch(() => undefined);
-    if (limits === undefined) {
-        return [];
-    }
-    return [
-        usageWindow("five_hour", limits.five_hour),
-        usageWindow("seven_day", limits.seven_day),
-        usageWindow("seven_day_opus", limits.seven_day_opus),
-        usageWindow("seven_day_sonnet", limits.seven_day_sonnet),
-        usageWindow("seven_day_oauth_apps", limits.seven_day_oauth_apps),
-    ].filter((window) => window !== undefined);
 };
 
 // The SDK `query` is injected so tests drive a fake message stream — no API calls, no bundled binary.
@@ -1323,11 +1262,12 @@ export async function* runAgent(
         canUseTool: permissionGate(request, push),
     };
 
-    // A turn that authenticated with a stored account's OAuth token can read that plan's limit pools at settle;
-    // translator endpoint and container-env turns have no pools to read — and no account to
-    // file a reading under (agent.routes persists only attributed frames).
+    // A turn that authenticated with a stored account's OAuth token can read that plan's limit pools at settle
+    // (usage/claude-usage.ts, the same reader the idle sweep uses); translator, endpoint and container-env turns
+    // have no pools to read — and no account to file a reading under (agent.routes persists only attributed
+    // frames).
     const oauthToken = request.oauthToken;
-    const readUsage = oauthToken === undefined ? undefined : (): Promise<UsageWindow[]> => claudeUsageWindows(oauthToken, usageFetch);
+    const readUsage = oauthToken === undefined ? undefined : (): Promise<UsageWindow[]> => readClaudeUsage(oauthToken, usageFetch);
 
     const pump = (async () => {
         try {

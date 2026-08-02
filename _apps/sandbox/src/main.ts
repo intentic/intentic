@@ -597,6 +597,13 @@ const main = async (): Promise<void> => {
     // backstop for when it is anyway.
     startClaudeRefresh(services.claudeStore);
 
+    // Read every Claude account's plan limits now, and every few minutes after. The account list waits on its
+    // own sweep, so this is for the readings nobody is looking at: which account an unattributed turn runs on is
+    // decided by what is on file (accountWithHeadroom), and before this the file only ever knew about accounts
+    // that had recently run a turn — so an account another Claude Code had spent all week still looked like the
+    // one with the most room.
+    services.claudeUsage.start();
+
     // Warm the resident search engine (sweep + symbols + the embedding backlog) so the first search hits a ready
     // index. Incremental — a valid on-disk index survives boot instead of being dropped and rebuilt — and it runs
     // on the engine's own worker thread: this used to be minutes of parse/chunk/SQLite work on THIS loop, which

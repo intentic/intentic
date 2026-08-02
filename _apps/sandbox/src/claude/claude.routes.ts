@@ -8,7 +8,20 @@ import { buildAuthorizeUrl, exchangeCode, newAccount, renameAccount, toAccount }
 // object is never mutated in place — the store hands back a fresh view per call, but it isn't ours to edit.
 const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): OauthAccount => (usage === undefined ? account : { ...account, usage });
 
-export type ClaudeRoutesDeps = Pick<Services, "accountUsage" | "claudeModels" | "claudeStore">;
+export type ClaudeRoutesDeps = Pick<Services, "accountUsage" | "claudeModels" | "claudeStore" | "claudeUsage">;
+
+/* How long the account list will wait for a fresh plan-limit reading before answering with what is on file.
+ *
+ * It waits at all because the read is free — no tokens, one round-trip per account — and because a percentage
+ * this list cannot back up is worth less than no percentage: these pools are account-wide, so a reading taken
+ * at the end of the last turn describes an allowance that the desktop app, another Claude Code or claude.ai
+ * itself may have spent since. Waiting is what makes this list say the same thing the provider's own usage
+ * dialog says, which is the only standard it can be judged against.
+ *
+ * And it waits only THIS long because the list is also how the Agent tab learns which accounts exist at all. A
+ * quota endpoint having a slow minute must cost the rings their freshness, never the page its connections — so
+ * the sweep keeps running past the deadline and lands for the next read. */
+const USAGE_WAIT_MS = 1_500;
 
 // Claude subscription OAuth — the sandbox owns the credential, the platform never sees it. `start` hands the
 // browser the authorize URL + PKCE material; `exchange` stores the tokens as a new account; `accounts` lists
@@ -34,10 +47,12 @@ export const createClaudeRoutes = (services: ClaudeRoutesDeps) => {
             await services.claudeStore.write(renamed);
             return toAccount(renamed);
         }),
-        // Each account carries its last known usage window, so the picker can show what's left on each without
-        // spending a turn on it. Absent for an account that hasn't run a Claude turn since its window last
-        // reset — the UI reads that as unknown, not as empty.
+        // Each account carries its plan-limit reading, so the picker can show what's left on each without
+        // spending a turn on it — brought up to date first (see USAGE_WAIT_MS), because an account's allowance
+        // moves whether or not this sandbox is the one spending it. Absent only for an account no reading has
+        // ever been obtained for; the UI reads that as unknown, not as empty.
         accounts: i.accounts.handler(async () => {
+            await services.claudeUsage.refresh(USAGE_WAIT_MS);
             const [accounts, usage] = await Promise.all([services.claudeStore.list(), services.accountUsage.read()]);
             return { accounts: accounts.map((account) => withUsage(account, usage[account.id])) };
         }),

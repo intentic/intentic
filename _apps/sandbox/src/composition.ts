@@ -54,6 +54,7 @@ import { createSessions, type MintedSession } from "./auth/session.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
 import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
+import { type ClaudeUsageRefresher, createClaudeUsageRefresher } from "./usage/claude-usage.js";
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
 import { createCodexAgent } from "./codex/codex-agent.js";
 import { type CodexCatalog, createCodexCatalog } from "./codex/codex-catalog.js";
@@ -290,6 +291,10 @@ export interface Services {
     // routed subscriptions; /claude/accounts and /translator/accounts each merge it into their own rows, so
     // every account the user can see reports its headroom from one place.
     readonly accountUsage: AccountUsageStore;
+    // Keeps the Claude half of that store current for accounts NO turn is running on — the native counterpart
+    // to cliProxy.refreshUsage. /claude/accounts waits on it (briefly) so a Usage tab reports what claude.ai
+    // would report at that moment rather than what was true at the end of the last turn.
+    readonly claudeUsage: ClaudeUsageRefresher;
     // The last time each PROVIDER refused a turn outright (historyRoot/provider-refusals.json) — a spent plan or
     // a credential the API would not take. The observed counterpart to the polled snapshot above: streamAgent
     // records it from the turn that was refused, and /agent/refusals serves it to the account surfaces, which
@@ -542,6 +547,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         : undefined;
 
     const claudeStore = fileClaudeStore(join(authRoot, "claude"), logger);
+    // Reads each Claude account's plan limits into the store above. Hoisted here because two callers share it:
+    // /claude/accounts waits on a sweep before answering, and main.ts keeps one running on a timer.
+    const claudeUsage = createClaudeUsageRefresher({ store: claudeStore, usage: accountUsage });
 
     // Hoisted: the members below that measure themselves (the worktree op chains, the git routes' Changes scan)
     // must file into the SAME tracker the summary line reads, or each would rank its own slice in isolation.
@@ -639,6 +647,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         pushSender: createPushSender(pushStore, logger),
         claudeStore,
         accountUsage,
+        claudeUsage,
         providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
         claudeModels: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
         codexModels: createCodexCatalog(config, join(codexBase, "models.json")),
