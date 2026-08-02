@@ -5,7 +5,7 @@ import type { AgentEvent, AgentOrigin, AgentTurn } from "@intentic/sandbox-contr
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
 import { automationPending } from "../push/notifications.js";
-import type { AutomationRecord } from "./automations-store.js";
+import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -35,6 +35,35 @@ export interface TurnStream {
 // the streamed message). Provider-neutral: the daemon delivers the assistant text; tools are for other actions.
 const STREAM_NOTE =
     "Your reply is delivered to the user live as you type it — just answer normally in plain text. Do NOT send it yourself with any tool (no curl/API post of your reply); use provider send tools only to act elsewhere (react, or post to a different channel).";
+
+/* THE SPIN-LOOP GUARD. An automation that fails is normal; one that fails EVERY time is misconfigured, and the
+ * scheduler will otherwise keep spending a turn's worth of tokens on it on every tick — nightly, hourly, or
+ * once a minute — until a human happens to look at the row.
+ *
+ * So after `automationFailureLimit` consecutive errors the job is disabled rather than fired again. Disabled,
+ * not deleted and not marked broken: `enabled` is the field the user's own toggle writes, so re-enabling it is
+ * the switch they already know, and the run history that earned the quarantine stays on the row underneath it.
+ *
+ * Returns the sentence to put on the run's activity record, or undefined when nothing was quarantined — the
+ * guard is off (0), the streak is short, or the automation was edited away underneath this fire. */
+const quarantineIfSpinning = async (services: Services, id: string): Promise<string | undefined> => {
+    const { automationFailureLimit } = await services.sandboxSettings.get();
+    if (automationFailureLimit <= 0) {
+        return undefined;
+    }
+    const record = await services.automations.get(id);
+    if (record === undefined || !record.enabled) {
+        return undefined;
+    }
+    const failures = consecutiveFailures(record.runs);
+    if (failures < automationFailureLimit) {
+        return undefined;
+    }
+    const { runs: _runs, ...automation } = record;
+    await services.automations.upsert({ ...automation, enabled: false });
+    services.logger.warn({ automation: id, failures }, "automation disabled after consecutive failures");
+    return `Disabled after ${failures} consecutive failed runs (automationFailureLimit is ${automationFailureLimit}). Fix the cause and re-enable it.`;
+};
 
 // Run the guard command in the workspace root; exit 0 ⇒ wake. An event's payload is in AUTOMATION_PAYLOAD so
 // guards can filter on it. On failure the stderr/stdout tail becomes the run's detail ("Skipped by guard" in
@@ -267,6 +296,8 @@ export const fireAutomation = async (
             ...(failure === undefined ? { outcome: "completed" as const } : { outcome: "error" as const, detail: failure }),
             conversationId,
         });
+        // Read AFTER recording so this fire's own outcome is part of the streak the guard weighs.
+        const quarantined = failure === undefined ? undefined : await quarantineIfSpinning(services, automation.id);
         // The runtime session is the activity feed's join key between an inbound trigger and the outbound calls its
         // wake produced (the sniffer stamps the same id on them).
         void services.activity
@@ -277,7 +308,9 @@ export const fireAutomation = async (
                 ...(automation.trigger.kind === "listener" ? { provider: automation.trigger.provider } : {}),
                 ...(runtimeSessionId !== undefined ? { sessionId: runtimeSessionId } : {}),
                 outcome: failure === undefined ? "ok" : "error",
-                ...(failure !== undefined ? { error: failure } : {}),
+                // The quarantine rides the run's own activity row rather than a second event: it is the reason
+                // this fire was the last one, and the feed is where someone asks why an automation went quiet.
+                ...(failure !== undefined ? { error: quarantined === undefined ? failure : `${failure}\n\n${quarantined}` } : {}),
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
         // Handed back so a dispatcher owning a continuing thread (the Doorbell) can resume this exact session

@@ -726,6 +726,10 @@ export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"
 //   filterBackend     — which cleaner runs the compression: "native" (agent-output-filter, default) or "rtk"
 //                        (the image-baked rtk binary, rewritten at the PreToolUse hook) — an
 //                        A/B backend switch, so native and rtk can be benchmarked head-to-head.
+//   verifyOnStop      — a turn that edited code and ran no passing check gets ONE follow-up asking for proof,
+//                        naming the scripts this workspace defines; off ⇒ the turn ends when the model says so.
+//   automationFailureLimit — consecutive `error` runs after which an automation is disabled rather than left
+//                        firing forever; 0 (default) ⇒ never.
 // The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "off" (cleaning off),
 // outputHoldout 0, filterBackend "native" — a fresh sandbox starts with cleaning and iq off until the owner enables them.
 //
@@ -850,6 +854,33 @@ export const SandboxSettingsSchema = z.object({
      * suggestion dialog seeds from these and stays editable — the setting decides where the dialog OPENS. */
     prepushFixModel: z.string().default(""),
     prepushFixEffort: z.string().default(""),
+    /* ASK FOR PROOF BEFORE A TURN THAT EDITED CODE ENDS. The daemon keeps a per-turn ledger of which code
+     * files were written and which commands the agent ran that constitute a check (test/typecheck/lint/build);
+     * when the turn tries to stop with edits that no PASSING check followed, it gets one bounded follow-up
+     * naming the scripts this workspace actually defines (agent/agent-verification.ts).
+     *
+     * Off by default, and the reason is the same one prepushCommand has no enable flag: only the owner knows
+     * what verifies their workspace. A repo with known-failing baseline tests, or whose real check is a command
+     * no table can guess, would get an ask it cannot satisfy — and the ask costs a whole extra model turn, not
+     * a few tokens. So this is the opt-in you turn on once you know the nudge would be right here.
+     *
+     * It never runs anything itself and never claims more than it saw: a passing targeted run clears it, and
+     * the follow-up says in as many words not to report a targeted check as the suite being green. */
+    verifyOnStop: z.boolean().default(false),
+    /* STOP AN AUTOMATION THAT ONLY EVER FAILS. After this many consecutive `error` runs the scheduler disables
+     * it and says so on the row, instead of firing a job that has proven it cannot succeed every minute until
+     * someone notices. 0 ⇒ never, which is the default.
+     *
+     * Off by default because quarantining edits the USER'S OWN configuration, and the failure it reacts to is
+     * not always the automation's fault: an hourly poll against an API having a bad afternoon is broken for
+     * three fires and fine on the fourth, and a job disabled at 3 a.m. is one nobody re-enables until they
+     * notice it stopped. So the mechanism exists for the case it is unambiguously right for — a misconfigured
+     * job burning a turn's worth of tokens on every tick — and the owner is the one who decides their
+     * automations are the kind that should be stopped rather than retried.
+     *
+     * Only `error` counts. A `skipped` run is a guard doing its job, and an `interrupted` one means the daemon
+     * died mid-fire, which says nothing about the automation — counting either would quarantine healthy jobs. */
+    automationFailureLimit: z.number().min(0).max(20).default(0),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 

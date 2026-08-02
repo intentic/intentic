@@ -12,6 +12,21 @@ const RUNS_KEPT = 20;
 const AutomationRecordSchema = AutomationSchema.extend({ runs: z.array(AutomationRunSchema) });
 export type AutomationRecord = z.infer<typeof AutomationRecordSchema>;
 
+/* How many times in a row this automation has now failed — the number the spin-loop guard reads.
+ *
+ * Runs are newest-first, so this counts from the front and stops at the first run that was not an `error`. Only
+ * `error` breaks the streak's silence: a `completed` run obviously resets it, and so does a `skipped` one,
+ * because a guard saying no is the automation working exactly as configured. `interrupted` is the interesting
+ * case and it also resets — the daemon died under that fire, which says nothing about whether the automation
+ * itself is broken, and counting it would let a couple of container restarts quarantine a healthy job.
+ *
+ * Bounded by RUNS_KEPT, which is the honest ceiling: past 20 the history has already rolled and a longer
+ * streak is not knowable from the record. Any sane limit is far below that. */
+export const consecutiveFailures = (runs: readonly AutomationRun[]): number => {
+    const firstSurvivor = runs.findIndex((run) => run.outcome !== "error");
+    return firstSurvivor === -1 ? runs.length : firstSurvivor;
+};
+
 export interface AutomationsStore {
     readonly list: () => Promise<AutomationRecord[]>;
     readonly get: (id: string) => Promise<AutomationRecord | undefined>;

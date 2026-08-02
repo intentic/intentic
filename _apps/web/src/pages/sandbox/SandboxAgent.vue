@@ -77,6 +77,30 @@ const toggleTerseOutput = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, terseOutput: value });
 };
 
+// Ask for proof when a turn edited code and no check passed after it.
+const toggleVerifyOnStop = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, verifyOnStop: value });
+};
+
+/* The spin-loop guard's threshold, as a count in the box. 0 is a real value here — it means "never quarantine"
+ * — so unlike the holdout boxes an emptied field cannot fall back to the saved number without making 0
+ * unreachable; it clamps to the bound instead, and the input is written back so a refused number doesn't stay
+ * on screen. */
+const setAutomationFailureLimit = (event: Event): void => {
+    const current = sandboxSettings.value;
+    const input = event.target;
+    if (current === undefined || !(input instanceof HTMLInputElement)) {
+        return;
+    }
+    const limit = Math.min(20, Math.max(0, Math.round(Number(input.value) || 0)));
+    input.value = String(limit);
+    saveSandboxSettings.mutate({ ...current, automationFailureLimit: limit });
+};
+
 /* Both holdout controls are a percentage [0,100] in the box over a fraction [0,1] in settings, so they commit
  * the same way. Reading the ELEMENT rather than a plain number is the point: an emptied field is `Number("")`,
  * which is 0 — "measure nothing", saved silently, from a user who was mid-edit — so it falls back to what is
@@ -683,6 +707,29 @@ const importMemory = async (): Promise<void> => {
         <!-- Assistant — behavior-steering toggles (concise output, search backend). -->
         <RowGroup label="Assistant">
             <template #info><AssistantInfo /></template>
+            <!-- Verify before finishing — the daemon keeps a per-turn ledger of edited code against the checks
+                 that ran, and asks once when a turn tries to end with neither. Off by default because only the
+                 owner knows what verifies their workspace: a repo with failing baseline tests would get an ask
+                 it cannot satisfy, and the ask costs a whole model turn. -->
+            <Row
+                icon="shield"
+                title="Verify before finishing"
+                description="If a turn changes code and no check passes afterwards, ask the assistant once to run one."
+            >
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="sandboxSettings?.verifyOnStop ?? false"
+                        :disabled="sandboxSettings === undefined"
+                        @update:model-value="toggleVerifyOnStop"
+                    />
+                </template>
+                <template #below>
+                    <p v-if="sandboxSettings?.verifyOnStop === true" class="text-2xs text-muted">
+                        It names the test/lint/typecheck scripts this workspace actually defines, and asks at most twice per turn. Edits to
+                        documentation never trigger it.
+                    </p>
+                </template>
+            </Row>
             <!-- Terse responses — steers the assistant to answer concisely (no restating context/tool output),
                  cutting its own output tokens. A stable system-prompt suffix, so it doesn't hurt prompt-cache hits. -->
             <Row
@@ -1093,6 +1140,34 @@ const importMemory = async (): Promise<void> => {
                         :options="retentionOptions"
                         @update:model-value="setAgentRetentionDays"
                     />
+                </template>
+            </Row>
+            <!-- The spin-loop guard. A job that fails every time is misconfigured, and the scheduler will keep
+                 spending a turn on it every tick until somebody looks. 0 = never, and it is the default: an
+                 hourly poll against an API having a bad afternoon is broken for three fires and fine on the
+                 fourth, and an automation disabled at 3 a.m. is one nobody re-enables until they notice. -->
+            <Row
+                icon="stop"
+                title="Stop a failing automation"
+                description="Disable an automation after this many failed runs in a row. 0 never disables one."
+            >
+                <template #control>
+                    <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        aria-label="Consecutive failures before an automation is disabled"
+                        class="w-16 rounded-lg border border-line bg-canvas px-2 py-1 text-right text-xs text-content"
+                        :value="sandboxSettings?.automationFailureLimit ?? 0"
+                        :disabled="sandboxSettings === undefined"
+                        @change="setAutomationFailureLimit"
+                    />
+                </template>
+                <template #below>
+                    <p v-if="(sandboxSettings?.automationFailureLimit ?? 0) > 0" class="text-2xs text-muted">
+                        Only errored runs count — a guard skipping a run, or the daemon restarting under one, does not. The row says why it
+                        stopped, and its switch turns it back on.
+                    </p>
                 </template>
             </Row>
         </RowGroup>

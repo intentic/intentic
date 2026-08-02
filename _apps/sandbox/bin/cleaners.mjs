@@ -441,7 +441,10 @@ export const matchedCleaners = (command, enabled) =>
 // so it lives here (agent-output-filter owns the store) rather than in the pure cleanLines pipeline.
 
 // Sentinel the collapse emits; agent-output-filter recognises it to record `cache` in the stat line's `matched`.
-export const CACHE_MARKER = "(output identical to a previous run this session";
+// A PREFIX, not the whole line: the two collapses complete it differently ("a previous run this session" when
+// the same command repeats, "the output of `<cmd>` earlier this session" when a different one produced the
+// identical body), and attribution keys on what they share.
+export const CACHE_MARKER = "(output identical to ";
 
 const hashText = (text) => createHash("sha1").update(text).digest("hex");
 
@@ -484,12 +487,31 @@ export const openCacheStore = (terminalsDir, sessionKey) => {
 // Pure given `store` (an object with lookup/record): on a hit return the collapse marker, else record and pass the
 // body through. Tests inject an in-memory Map-backed store to stay deterministic.
 export const collapseCached = (body, command, store, logPath) => {
-    const commandHash = hashText(command);
+    const commandHash = `c:${hashText(command)}`;
+    const bodyKey = `b:${hashText(body)}`;
     const bodyHash = hashText(body);
+    const handle = logPath !== undefined && logPath !== "" ? ` · retrieve-output ${logPath}` : "";
     if (store.lookup(commandHash) === bodyHash) {
-        const handle = logPath !== undefined && logPath !== "" ? ` · retrieve-output ${logPath}` : "";
-        return { body: `${CACHE_MARKER}${handle})`, cached: true };
+        return { body: `${CACHE_MARKER}a previous run this session${handle})`, cached: true };
+    }
+    /* The other half of the same saving: this exact output already came back from a DIFFERENT command. Reading
+     * a file with `cat` and then with `sed -n`, re-running a suite through two spellings of the same script,
+     * `git diff` after a `git diff --stat` that changed nothing — each pays full price under a command-keyed
+     * cache, because the key it is keyed by is the thing that differed.
+     *
+     * Naming the earlier command is what makes the collapse safe to act on. "Duplicate output" alone leaves the
+     * model to guess WHICH earlier result this equals, and the guess is worth less than the tokens it saved;
+     * with the command named, the marker is a pointer into the transcript the model can actually follow. */
+    const earlier = store.lookup(bodyKey);
+    if (earlier !== undefined && earlier !== command) {
+        return { body: `${CACHE_MARKER}the output of \`${earlier}\` earlier this session${handle})`, cached: true };
     }
     store.record(commandHash, bodyHash);
+    // First writer of a body wins the back-reference: the earliest command is the one furthest up the
+    // transcript, so re-recording on every match would keep moving the pointer toward the reader and
+    // eventually name the call right above — which says nothing.
+    if (earlier === undefined) {
+        store.record(bodyKey, command);
+    }
     return { body, cached: false };
 };

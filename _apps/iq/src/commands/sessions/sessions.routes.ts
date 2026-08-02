@@ -255,9 +255,18 @@ const grab = buildCommand({
                 let shown = 0;
                 for (const excerpt of excerpts) {
                     const block = [
-                        `${excerpt.score.toFixed(2)}  ${excerpt.sessionId}/${excerpt.ordinal}  ${dateOf(excerpt.ts)}  ${excerpt.title ?? "(untitled)"}`,
+                        // `×N` marks a prompt that recurs — a scheduled job or a repeated ask. Saying it on the
+                        // one row it collapsed to is the point: the alternative is N rows that say it N times.
+                        `${excerpt.score.toFixed(2)}  ${excerpt.sessionId}/${excerpt.ordinal}  ${dateOf(excerpt.ts)}  ${excerpt.title ?? "(untitled)"}${excerpt.repeats > 0 ? `  ×${excerpt.repeats + 1}` : ""}`,
                         `    asked: ${cap(collapse(excerpt.prompt), 240)}`,
                         ...(excerpt.fragment === "" ? [] : [`    answered: ${cap(collapse(excerpt.fragment), 480)}`]),
+                        // What the session around the hit opened and closed on, so a mid-session match carries
+                        // the shape of the conversation it came from rather than only its own sentence.
+                        ...(excerpt.bookends === undefined
+                            ? []
+                            : [
+                                  `    session (${excerpt.bookends.turns} turns): opened "${cap(collapse(excerpt.bookends.first), 120)}" → ended "${cap(collapse(excerpt.bookends.last), 120)}"`,
+                              ]),
                     ].join("\n");
                     spent += Math.ceil(block.length / 4);
                     // Always show the top hit; past the budget, report the remainder instead of printing it.

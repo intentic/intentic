@@ -307,6 +307,30 @@ test("collapseCached: different output for the same command is not a hit", () =>
     expect(collapseCached("second", "date", store, "").cached).toBe(false);
 });
 
+test("collapseCached: an identical body from a DIFFERENT command collapses, naming the command that produced it", () => {
+    const store = memoryStore();
+    collapseCached("the file contents", "cat src/a.ts", store, "/logs/x.log");
+    const second = collapseCached("the file contents", "sed -n '1,50p' src/a.ts", store, "/logs/x.log");
+    expect(second.cached).toBe(true);
+    expect(second.body).toContain(CACHE_MARKER);
+    expect(second.body).toContain("`cat src/a.ts`");
+});
+
+// The back-reference must point at the FIRST producer, not the most recent one — a pointer that keeps walking
+// toward the reader eventually names the call directly above and stops being worth following.
+test("collapseCached: the back-reference keeps naming the earliest command, not the latest", () => {
+    const store = memoryStore();
+    collapseCached("same", "first-cmd", store, "");
+    collapseCached("same", "second-cmd", store, "");
+    expect(collapseCached("same", "third-cmd", store, "").body).toContain("`first-cmd`");
+});
+
+test("collapseCached: a body seen only under this same command still reads as a repeat, not a cross-reference", () => {
+    const store = memoryStore();
+    collapseCached("out", "ls", store, "");
+    expect(collapseCached("out", "ls", store, "").body).toContain("a previous run this session");
+});
+
 test("filterOutput: cache collapses a byte-identical success repeat, and is a no-op without a store", () => {
     const store = memoryStore();
     // Longer than the collapse marker, or the never-worse guard would rightly refuse to trade the output for it.

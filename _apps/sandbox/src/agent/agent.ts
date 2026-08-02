@@ -40,6 +40,7 @@ import { installSteeringHooks } from "./agent-installs.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
+import { verificationHooks } from "./agent-verification.js";
 import { bashTmuxHooks, type FilterBackend, tmuxRunEnabled } from "./agent-terminals.js";
 import { EventQueue } from "./event-queue.js";
 import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
@@ -129,6 +130,9 @@ export interface AgentRequest {
     // Env vars for the agent's shell from cli-kind capabilities (e.g. DISCORD_BOT_TOKEN) — the stored
     // credentials their CLI tools read. Merged into the SDK `env` each turn; absent ⇒ no extra env.
     readonly cliEnv?: Record<string, string>;
+    // Ask for proof before a turn that edited code ends (settings.verifyOnStop). Absent/false ⇒ the ledger and
+    // its Stop hook are not wired at all, so an unset workspace pays nothing — not even the bookkeeping.
+    readonly verifyOnStop?: boolean;
     // Absolute Claude Code plugin checkout dirs from plugin-kind capabilities, rebuilt each turn (see
     // pluginDirsOf). The SDK's plugin loader parses their skills/agents/hooks/commands/.mcp.json — the daemon
     // never does, so the plugin format tracks Claude Code via SDK upgrades alone.
@@ -1088,6 +1092,9 @@ const baseOptions = (
     hooks: mergeHooks(
         tmuxEnabled ? bashTmuxHooks(outputFilter(request), Object.keys(request.cliEnv ?? {}), request.isolation) : {},
         installSteeringHooks(),
+        // Verification: the per-turn ledger of what was edited against what was proven, and the one follow-up
+        // it asks for when a turn tries to end on unproven code. Opt-in — off, nothing is wired.
+        request.verifyOnStop === true ? verificationHooks(request.isolation?.plan) : {},
         // The worktree the namespace could not build. Only when this turn is isolated AND unanchored: with an
         // anchor the paths already mean the worktree, and rewriting them a second time would aim the tool at a
         // worktree-inside-the-worktree that does not exist.

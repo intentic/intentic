@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Automation } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { type AutomationsStore, fileAutomationsStore } from "./automations-store.js";
+import { type AutomationsStore, consecutiveFailures, fileAutomationsStore } from "./automations-store.js";
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
 const tempStore = (): { store: AutomationsStore; path: string } => {
@@ -57,4 +57,19 @@ test("a corrupt or schema-invalid manifest reads as empty rather than throwing",
     expect(await store.list()).toEqual([]);
     await writeFile(path, JSON.stringify([{ id: "x", trigger: { kind: "bogus" }, prompt: "p", enabled: true, runs: [] }]));
     expect(await store.list()).toEqual([]);
+});
+
+/* The streak the spin-loop guard reads. Runs arrive newest-first, and only `error` keeps a streak alive:
+ * `skipped` is a guard working as configured and `interrupted` is the daemon dying under the fire — counting
+ * either would quarantine automations that are perfectly healthy. */
+test("consecutiveFailures counts errors from the newest run and stops at the first survivor", () => {
+    const run = (outcome: "completed" | "skipped" | "error" | "interrupted") => ({ at: 1, outcome });
+    expect(consecutiveFailures([])).toBe(0);
+    expect(consecutiveFailures([run("error"), run("error"), run("completed")])).toBe(2);
+    expect(consecutiveFailures([run("completed"), run("error"), run("error")])).toBe(0);
+    // Every run on record failed — the streak is as long as the history can say, which is the honest ceiling.
+    expect(consecutiveFailures([run("error"), run("error")])).toBe(2);
+    // A guard saying no is not a failure, and neither is a restart.
+    expect(consecutiveFailures([run("error"), run("skipped"), run("error")])).toBe(1);
+    expect(consecutiveFailures([run("error"), run("interrupted"), run("error")])).toBe(1);
 });

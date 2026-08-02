@@ -298,6 +298,7 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
         terseOutput,
         terseHoldout,
         systemPromptMode,
+        verifyOnStop,
         systemPrompt: customPrompt,
     } = await services.sandboxSettings.get();
     /* THE TERSE EXPERIMENT'S COIN FLIP. The steer is eligible only where the daemon still appends to the
@@ -434,6 +435,8 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
             ...(outputHoldout > 0 ? { outputHoldout } : {}),
             ...(filterBackend !== "native" ? { filterBackend } : {}),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
+            // The verify-on-stop ledger, forwarded only when on so an unset workspace wires no hooks at all.
+            ...(verifyOnStop ? { verifyOnStop } : {}),
             // Which base the prompt is built on, plus either the owner's own text (under "custom") or what to
             // append to a built-in base — never both, which is what turnPromptPlacement decided above.
             systemPromptMode,

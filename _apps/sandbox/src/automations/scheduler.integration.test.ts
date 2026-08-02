@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentTurn, Automation } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentTurn, type Automation, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
@@ -10,11 +10,17 @@ import { fileApprovalsStore } from "./approvals-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import { createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
 
-// The scheduler only touches automations/approvals/activity/turnJournal/workspace/logger; `unstubbed` keeps the
-// fake that small. The journal is a real one on a temp dir — the in-flight entry is what several tests assert on.
-const fakeServices = (root: string): Services =>
+// The scheduler only touches automations/approvals/activity/turnJournal/workspace/logger/sandboxSettings;
+// `unstubbed` keeps the fake that small. The journal is a real one on a temp dir — the in-flight entry is what
+// several tests assert on.
+const fakeServices = (root: string, settings: Partial<SandboxSettings> = {}): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
+        // Read by the spin-loop guard after a failed run. Defaults parse from `{}`, so the guard is OFF unless a
+        // test asks for it — which is also the production default.
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+            get: async () => SandboxSettingsSchema.parse(settings),
+        }),
         approvals: fileApprovalsStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         activity: { append: async () => {}, list: async () => [] },
@@ -307,4 +313,51 @@ test("a run record carries the stable conversation even when the provider mints 
     // A provider that minted none is still openable through the daemon's conversation transcript.
     await fireAutomation(services, (await services.automations.get("sessionless")) as AutomationRecord, fakeWake([]));
     expect((await services.automations.get("sessionless"))?.runs[0]?.conversationId).toContain("a-sessionless-");
+});
+
+/* THE SPIN-LOOP GUARD. A job that fails every time is misconfigured, and the scheduler would otherwise keep
+ * spending a turn on it on every tick. At the configured streak it is disabled instead — and the run history
+ * that earned the quarantine stays on the row, because that is what tells the reader why it stopped. */
+const failing: WakeFn = async function* () {
+    yield { kind: "error", message: "no credits" };
+    yield { kind: "done" };
+};
+
+const fireUntil = async (services: Services, id: string, times: number): Promise<void> => {
+    for (let i = 0; i < times; i += 1) {
+        const record = await services.automations.get(id);
+        if (record !== undefined) {
+            await fireAutomation(services, record, failing);
+        }
+    }
+};
+
+test("an automation that keeps failing is disabled at the configured streak", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { automationFailureLimit: 2 });
+    await services.automations.upsert(automation("spinner"));
+    await fireUntil(services, "spinner", 1);
+    // One failure is not a pattern — the job stays live.
+    expect((await services.automations.get("spinner"))?.enabled).toBe(true);
+    await fireUntil(services, "spinner", 1);
+    const quarantined = await services.automations.get("spinner");
+    expect(quarantined?.enabled).toBe(false);
+    // The runs that earned it survive the disable, so the row can say why it stopped.
+    expect(quarantined?.runs.filter((run) => run.outcome === "error")).toHaveLength(2);
+});
+
+test("the guard is off by default — a job may fail forever until the owner asks for it", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("stubborn"));
+    await fireUntil(services, "stubborn", 5);
+    expect((await services.automations.get("stubborn"))?.enabled).toBe(true);
+});
+
+// A run that succeeds breaks the streak, so an intermittent failure never accumulates into a quarantine.
+test("a successful run resets the streak", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { automationFailureLimit: 2 });
+    await services.automations.upsert(automation("flaky"));
+    await fireUntil(services, "flaky", 1);
+    await fireAutomation(services, (await services.automations.get("flaky")) as AutomationRecord, fakeWake([]));
+    await fireUntil(services, "flaky", 1);
+    expect((await services.automations.get("flaky"))?.enabled).toBe(true);
 });

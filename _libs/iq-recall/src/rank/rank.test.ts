@@ -106,3 +106,50 @@ test("grab tolerates empty and operator-only queries", () => {
     expect(grabExcerpts(db, "")).toEqual([]);
     expect(grabExcerpts(db, '(" OR ')).toEqual([]);
 });
+
+/* Bookends: a hit in the middle of a session carries what that session opened and closed on. Session A has two
+ * turns, so its first and last differ — which is the case the field exists for. */
+test("grab carries the session's bookends so a mid-session hit has provenance", () => {
+    const top = grabExcerpts(db, "JWT refresh token rotation")[0]!;
+    expect(top.bookends?.turns).toBe(2);
+    expect(top.bookends?.first).toContain("Fix the JWT refresh token rotation");
+    expect(top.bookends?.last).not.toBe(top.bookends?.first);
+});
+
+/* Repeat collapse: the starvation guard. Five sessions running the same nightly prompt must not take five of
+ * the ten slots — they collapse to their best instance, which carries the count. Rows are inserted directly
+ * (the FTS triggers index them) with a vocabulary no other test queries, so the shared fixture is undisturbed. */
+test("near-identical prompts across sessions collapse to one row carrying the repeat count", () => {
+    const base = Date.now() - 60 * 60 * 1000;
+    for (let i = 0; i < 5; i += 1) {
+        db.run(
+            `INSERT INTO sessions (session_id, slug, title, version, git_branch, first_ts, last_ts) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            `bbbbbbbb-0000-4000-8000-00000000000${i}`,
+            "proj",
+            `Nightly zzquux audit ${i}`,
+            "1",
+            "main",
+            base + i,
+            base + i,
+        );
+        const sessionRowId = Number(db.get(`SELECT id FROM sessions WHERE session_id = ?`, `bbbbbbbb-0000-4000-8000-00000000000${i}`)!["id"]);
+        db.run(
+            `INSERT INTO turns (session_id, uuid, ordinal, ts, prompt, response, start_byte) VALUES (?, ?, 0, ?, ?, ?, 0)`,
+            sessionRowId,
+            `b-u${i}`,
+            base + i,
+            // The date is what differs between fires — exactly what the digit-flattening key ignores.
+            `Run the nightly zzquux audit for 2026-08-0${i}`,
+            "zzquux audit complete",
+        );
+    }
+    const excerpts = grabExcerpts(db, "nightly zzquux audit");
+    expect(excerpts).toHaveLength(1);
+    expect(excerpts[0]?.repeats).toBe(4);
+});
+
+// A genuinely distinct prompt is never folded into another, however similar the topic.
+test("distinct prompts on the same topic stay separate rows", () => {
+    const excerpts = grabExcerpts(db, "JWT refresh token rotation");
+    expect(excerpts.every((excerpt) => excerpt.repeats === 0)).toBe(true);
+});

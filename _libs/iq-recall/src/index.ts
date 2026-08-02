@@ -11,7 +11,7 @@ import { projectsDirOf } from "./transcript/slug.js";
 export type { ForkPoint } from "./fork/fork-point.js";
 export type { ForkResult } from "./fork/fork.js";
 export type { IngestStats } from "./ingest/ingest.js";
-export type { GrabOptions, TurnExcerpt } from "./rank/grab.js";
+export type { GrabOptions, SessionBookends, TurnExcerpt } from "./rank/grab.js";
 export type { MatchOptions, SessionMatch } from "./rank/match.js";
 export type { TopicFile, TopicOptions } from "./rank/files.js";
 export { readLines } from "./transcript/line-reader.js";
