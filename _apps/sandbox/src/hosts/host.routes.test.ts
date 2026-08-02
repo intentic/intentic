@@ -32,7 +32,7 @@ const routeFor = (
     return Object.assign(new Hono().all("/mcp/hosts/:id", createHostMcpRoute(services)), { remembered });
 };
 
-const post = (app: Hono, body: unknown, token = BRIDGE): Promise<Response> =>
+const post = async (app: Hono, body: unknown, token = BRIDGE): Promise<Response> =>
     app.request("/mcp/hosts/laptop", {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
