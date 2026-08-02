@@ -8,15 +8,17 @@ import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useAsyncAction } from "../../composables/useAsyncAction";
+import HostRecreate from "../../components/HostRecreate.vue";
 import DiffToolbar from "../workspace/viewers/DiffToolbar.vue";
 import DiffView from "../workspace/viewers/DiffView.vue";
 
 /* The sandbox's environment (its composed overlay Dockerfile, on the /sandbox hub). The daemon composes it
  * from the enabled capabilities' fragments plus the custom section the agent proposes; the OWNER reviews the
  * custom-section diff here and approves/rejects (capability fragments recompose automatically). Approval pins
- * the content's hash; the rebuild itself runs OUTSIDE the container — locally via the copyable one-liner
- * (whose hash argument guarantees only the reviewed content is built), or on the next `intentic deploy apply` for a
- * server-managed sandbox. Hidden until there is an overlay or a proposal. */
+ * the content's hash; the rebuild itself runs OUTSIDE the container (see HostRecreate) — a button in the
+ * desktop app or a copyable one-liner in a browser, whose hash argument guarantees only the reviewed content
+ * is built, or the next `intentic deploy apply` for a server-managed sandbox. Hidden until there is an
+ * overlay or a proposal. */
 
 const queryClient = useQueryClient();
 const { busy, error, run } = useAsyncAction();
@@ -30,7 +32,7 @@ const actionError = computed(() =>
 const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
 
 // The derived environment state (shared with the shell's rebuild banner via one vue-query fetch).
-const { state, query, proposal, pending, applied, serverManaged, rebuildCommand } = useEnvironment();
+const { state, query, proposal, pending, applied, serverManaged, slug } = useEnvironment();
 const load = (): void => void query.refetch();
 
 const decide = (path: string, body?: object): Promise<void> =>
@@ -100,13 +102,9 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                     Applies on the next <span class="font-mono">intentic deploy apply</span> against this sandbox's host.
                 </p>
             </template>
-            <template v-else>
+            <template v-else-if="slug">
                 <p class="text-xs font-medium text-content">To finish, rebuild your sandbox:</p>
-                <ol class="ml-4 list-decimal text-2xs text-subtle">
-                    <li>Open a terminal on the computer that runs your sandbox.</li>
-                    <li>Copy and run the command below. It takes a few minutes; your files (in /work) are kept.</li>
-                </ol>
-                <Code :code="rebuildCommand" lang="bash" label="Rebuild command" :wrap="true" />
+                <HostRecreate :slug="slug" :hash="pending.hash" action="Rebuild" />
             </template>
         </template>
 

@@ -180,6 +180,33 @@ model ReservedSandbox {
     @@map("reserved_sandbox")
 }
 
+// One sign-in, carried from the user's REAL BROWSER into the desktop app's webview (_apps/desktop).
+//
+// Google refuses OAuth from an embedded webview and Google Identity Services is FedCM-based, which the Linux
+// webview does not implement — so the app never asks Google for anything. It opens the platform's own
+// /desktop-auth page in the default browser, where sign-in is the ordinary flow, and that page parks the two
+// credentials the webview needs here for exactly one pickup:
+//   • `ott` — a Better Auth one-time token; the webview redeems it at /api/auth/one-time-token/verify, which
+//     answers with a Set-Cookie, so the platform session lands in the webview's own jar and nothing is
+//     injected from Rust.
+//   • `idToken` — a fresh Google ID token, spent ONCE at the daemon's system.session for a daemon session
+//     that renews silently thereafter. This is why the row exists at all: everything else could ride the
+//     deep link, but a deep link is passed as a process argument, which is readable by anything on the
+//     machine — so the link carries only this row's id.
+//
+// Both columns are encrypted at rest (api crypto.ts), the row is deleted on the first claim, and anything
+// older than its expiry is swept by retention.ts. Minutes, not hours: the app opens the link the moment the
+// browser redirects to it.
+model DesktopHandoff {
+    id        String   @id @default(cuid())
+    ott       String
+    idToken   String
+    expiresAt DateTime
+    createdAt DateTime @default(now())
+
+    @@map("desktop_handoff")
+}
+
 // A non-owner invited to a sandbox. Email-based (not a User relation) to mirror the daemon's email-based Google
 // auth and to allow granting access before the invitee's first sign-in. The owner is NOT listed here — ownership
 // lives on Sandbox.ownerId. The daemon is the actual enforcer (its .intentic/members.json); this table is the

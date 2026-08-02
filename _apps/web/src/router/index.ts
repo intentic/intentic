@@ -43,6 +43,26 @@ const routes: RouteRecordRaw[] = [
         component: () => import(`../pages/Login.vue`),
     },
     {
+        /* The desktop app's sign-in, in the user's REAL browser. The app can't run Google's flow in its own
+         * webview (see environments/desktop.ts), so it opens this page in the default browser: requireAuth
+         * makes it an ordinary sign-in, and the page then hands the credentials back over `intentic://auth`.
+         * A person who lands here without an app just sees an explanation. */
+        path: `/desktop-auth`,
+        name: `desktop-auth`,
+        meta: { title: `Sign in to Intentic` },
+        beforeEnter: [requireAuth],
+        component: () => import(`../pages/DesktopAuth.vue`),
+    },
+    {
+        // …and the other end, opened INSIDE the app's webview: redeem the handoff, which is what puts the
+        // session cookie in this webview's jar. Unguarded on purpose — the whole point is that there is no
+        // session here yet.
+        path: `/desktop-auth/complete`,
+        name: `desktop-auth-complete`,
+        meta: { title: `Signing in…` },
+        component: () => import(`../pages/DesktopAuthComplete.vue`),
+    },
+    {
         // Initial-setup / recovery view. Outside the shell; signed-in but bounced back to the workspace once the
         // sandbox is connected (redirectIfReady).
         path: `/setup`,

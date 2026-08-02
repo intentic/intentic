@@ -267,6 +267,31 @@ const cancelSignIn = (): void => {
     settle?.(undefined);
 };
 
+/* Take a credential that was minted somewhere else — the ONE case being the desktop app, whose webview cannot
+ * run GIS at all (FedCM is absent in WebKitGTK and Google refuses OAuth from an embedded webview), so its
+ * sign-in happens in the user's real browser and arrives here over the platform's handoff.
+ *
+ * It writes to the same cache the callback above writes to, deliberately: from this point the token is
+ * indistinguishable from a locally-minted one — the daemon verifies it against Google's JWKS either way, and
+ * spends it once for a daemon session that renews without Google. A malformed or already-expired JWT is
+ * refused rather than cached, because a cached dead token is a sign-in gate that never resolves. */
+const adoptIdToken = (credential: string): boolean => {
+    const expiry = idTokenExpiry(credential);
+    if (Date.now() >= expiry - 60_000) {
+        return false;
+    }
+    token = credential;
+    expiresAt = expiry;
+    signedInEmail.value = idTokenEmail(credential);
+    try {
+        localStorage.setItem(storageKey(environment.auth.googleClientId), credential);
+    } catch {
+        // Storage may be unavailable (private mode); the in-memory token still serves this session.
+    }
+    needsSignIn.value = false;
+    return true;
+};
+
 export function useGoogleIdentity() {
-    return { needsSignIn, signedInEmail, getIdToken, warmIdToken, clearCredential, renderButton, cancelSignIn };
+    return { needsSignIn, signedInEmail, getIdToken, warmIdToken, adoptIdToken, clearCredential, renderButton, cancelSignIn };
 }

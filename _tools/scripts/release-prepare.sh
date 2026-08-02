@@ -25,4 +25,9 @@ bash "$DIR/publish-agent-binaries.sh" _apps/sync intentic-sync "$VERSION"
 # The connected-computer agent ships for exactly the platforms the capability offers cards for (Windows, Linux).
 bash "$DIR/build-agent-binaries.sh" _apps/host intentic-host linux-x64 linux-arm64 windows-x64
 bash "$DIR/publish-agent-binaries.sh" _apps/host intentic-host "$VERSION"
+# The desktop app: installers rather than a bun binary, but the same distribution channel — it stages into
+# _apps/desktop/dist-bin, so the very same publisher ships it (and for the same reason: this project's
+# Releases are member-only, and the generic Package Registry is the one public download surface).
+bash "$DIR/build-desktop.sh" "$VERSION"
+bash "$DIR/publish-agent-binaries.sh" _apps/desktop intentic-desktop "$VERSION"
 bash "$DIR/publish-npm.sh" "$VERSION"

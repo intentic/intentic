@@ -157,6 +157,45 @@ test:
     - pnpm typecheck
     - pnpm turbo run build test
 
+# The desktop app (_apps/desktop): Rust fmt/clippy/tests + the launcher UI build. Runs only when the desktop
+# tree changes — on MRs as the gate, and on main so a broken desktop surfaces before the release job's
+# build-desktop.sh cross-builds the same crate. clippy compiles against real webkit2gtk, covering the Linux
+# target; the Windows msvc target is covered by that release cross-build.
+#
+# The cargo store rides /ci-cache like pnpm and turbo (see the note on the variables above): it is another
+# content-addressed store every run reads and appends to, which is exactly what a bind mount is for and what a
+# per-job zip archive is worst at. Absent volume ⇒ cold but never broken.
+desktop:check:
+  stage: test
+  interruptible: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: &desktop-changes
+        - _apps/desktop/**/*
+        - _apps/site/public/scripts/**/*
+        - _libs/ui/**/*
+        - pnpm-lock.yaml
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes: *desktop-changes
+  variables:
+    CARGO_HOME: /ci-cache/cargo
+    CARGO_TARGET_DIR: /ci-cache/desktop-target
+  before_script:
+    - !reference [.pnpm-setup, script]
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends
+      libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      build-essential libssl-dev pkg-config
+    - command -v cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal --component rustfmt,clippy
+    # rustup writes its env file into CARGO_HOME, which is overridden above for caching.
+    - source "${CARGO_HOME}/env"
+  script:
+    # The launcher UI first: `tauri build` would run it anyway, and a Vue error is worth failing on in seconds
+    # rather than after a cargo build.
+    - pnpm --filter @intentic-app/desktop build
+    - cargo fmt --manifest-path _apps/desktop/src-tauri/Cargo.toml --all --check
+    - cargo clippy --manifest-path _apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
+    - cargo test --manifest-path _apps/desktop/src-tauri/Cargo.toml
+
 # Hermetic infra e2e on merge requests — NON-BLOCKING sidecar (allow_failure). Boots a Docker-in-Docker host
 # via testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
 # external services or secrets. turbo scopes e2e:hermetic to @intentic/cli.
@@ -290,6 +329,9 @@ release:
     - !reference [.cache-defs, iq-models]
   variables:
     GIT_DEPTH: 0
+    # build-desktop.sh cross-builds the Tauri app here too; same shared cargo store as desktop:check.
+    CARGO_HOME: /ci-cache/cargo
+    CARGO_TARGET_DIR: /ci-cache/desktop-target
   # npm auth for publishing: a granular access token (masked CI var NPM_TOKEN, write access to @intentic/*)
   # written to ~/.npmrc. Tokenless OIDC trusted publishing is not an option — npm's token exchange rejects
   # this project's self-hosted runner. NPM_TOKEN is a granular token (classic tokens were removed 2025-12);

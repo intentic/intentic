@@ -4,17 +4,21 @@ import type { Config } from "./config.js";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic-app/prisma";
 
-// Data-retention sweep (GDPR storage limitation): expired sessions and verifications, plus sandbox-share
-// invites older than 90 days whose email never became an account (grant-before-signup emails must not
-// linger forever). Runs at boot, then daily. The privacy policy documents these windows — keep in sync.
+// Data-retention sweep (GDPR storage limitation): expired sessions, verifications and desktop sign-in
+// handoffs, plus sandbox-share invites older than 90 days whose email never became an account
+// (grant-before-signup emails must not linger forever). Runs at boot, then daily. The privacy policy
+// documents these windows — keep in sync.
 const DAY_MS = 24 * 60 * 60 * 1000;
 const INVITE_MAX_AGE_MS = 90 * DAY_MS;
 
-const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; verifications: number; invites: number }> => {
+const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; verifications: number; handoffs: number; invites: number }> => {
     const now = new Date();
-    const [sessions, verifications] = await Promise.all([
+    // A handoff normally lives seconds — the redeem deletes it — so this only ever catches the ones nobody
+    // picked up. They hold a Google ID token, which is exactly why an unclaimed one must not sit for a day.
+    const [sessions, verifications, handoffs] = await Promise.all([
         prisma.session.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.verification.deleteMany({ where: { expiresAt: { lt: now } } }),
+        prisma.desktopHandoff.deleteMany({ where: { expiresAt: { lt: now } } }),
     ]);
     const stale = await prisma.sandboxMember.findMany({
         where: { createdAt: { lt: new Date(now.getTime() - INVITE_MAX_AGE_MS) } },
@@ -29,7 +33,7 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
     const invites = await prisma.sandboxMember.deleteMany({
         where: { id: { in: stale.filter((invite) => !known.has(invite.email)).map((invite) => invite.id) } },
     });
-    return { sessions: sessions.count, verifications: verifications.count, invites: invites.count };
+    return { sessions: sessions.count, verifications: verifications.count, handoffs: handoffs.count, invites: invites.count };
 };
 
 export const startRetention = (prisma: PrismaClient, config: Config, logger: Logger): void => {

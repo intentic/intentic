@@ -17,7 +17,9 @@ const SCRIPT_URLS = {
     computerSh: `https://intentic.dev/computer`,
     computerPs1: `https://intentic.dev/computer.ps1`,
     rebuild: `https://intentic.dev/rebuild`,
+    rebuildPs1: `https://intentic.dev/rebuild.ps1`,
     update: `https://intentic.dev/update`,
+    updatePs1: `https://intentic.dev/update.ps1`,
     cleanup: `https://intentic.dev/cleanup`,
     cleanupPs1: `https://intentic.dev/cleanup.ps1`,
 } as const;
@@ -32,9 +34,12 @@ export const SCRIPT_PATHS = {
     desktopPs1: `_apps/site/public/scripts/sync.ps1`,
     computerSh: `_apps/site/public/scripts/computer.sh`,
     computerPs1: `_apps/site/public/scripts/computer.ps1`,
-    // One recreate script serves both flows — mode inferred from the argument shape (see recreate.sh).
+    // One recreate script serves both flows — mode inferred from the argument shape (see recreate.sh), or
+    // from named parameters in the PowerShell twin (-Slug, plus -Hash for a rebuild).
     rebuild: `_apps/site/public/scripts/recreate.sh`,
+    rebuildPs1: `_apps/site/public/scripts/recreate.ps1`,
     update: `_apps/site/public/scripts/recreate.sh`,
+    updatePs1: `_apps/site/public/scripts/recreate.ps1`,
     cleanup: `_apps/site/public/scripts/cleanup.sh`,
     cleanupPs1: `_apps/site/public/scripts/cleanup.ps1`,
 } as const;

@@ -15,6 +15,7 @@ import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import CloudflareTokenField from "../components/CloudflareTokenField.vue";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { DESKTOP_DOWNLOADS, desktopSetupLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { environment } from "../environments/environment";
 import { bashCommand, bashDownloadCommand, psCommand, psDownloadCommand, scriptUrl, type SplitCommand } from "../environments/scriptCommand";
 import SetupCompose from "./SetupCompose.vue";
@@ -202,6 +203,20 @@ const runTabOptions = computed(() => [
  * checkout's own script by path, so there is nothing to fetch and the developer can read it in their editor. */
 const hasDocker = ref(false);
 const review = ref(false);
+
+/* THE THIRD WAY TO RUN STEP 3 — the desktop app (_apps/desktop), when this page is being read INSIDE it.
+ *
+ * It is the same handoff the command is: the app claims this same setup code and runs the same connect
+ * script, so nothing about steps 1-2 or the announce-watch below changes. What it removes is the terminal —
+ * which is what people actually balk at here, and what the two switches above can only soften.
+ *
+ * A browser that is NOT the app still gets the link (the OS routes it to an installed app) plus somewhere to
+ * download one; the pasted command stays the primary path there, because it is the one that always works. */
+const desktop = computed(() => desktopVersion() !== undefined);
+// Inside the app the command is still one click away — a server is a perfectly ordinary place to want the
+// sandbox, and the app cannot run it there.
+const showServerCommand = ref(false);
+
 // The filename the review path downloads to — named after what it is, in the folder the user is standing in.
 const SCRIPT_FILE = { unix: `intentic-connect.sh`, windows: `intentic-connect.ps1` } as const;
 /* The command's options are checkboxes, and now they look like checkboxes: the design system's own control
@@ -357,6 +372,25 @@ const platformUrlOverride = computed<string | undefined>(() => {
     }
     return api.origin;
 });
+
+// Hand this setup over to the desktop app: the same code, claimed by the same connect script, run by a
+// process that is already on the machine. See environments/desktop.ts for why it is a link and not IPC.
+const runHere = (): void => {
+    const code = setup.value?.code;
+    if (code === undefined || created.value === null) {
+        return;
+    }
+    track(`desktop_setup_started`, { mode: mode.value, inApp: desktop.value, sync: syncEnabled.value });
+    openDesktopLink(
+        desktopSetupLink({
+            code,
+            name: created.value.name,
+            ...(mode.value === `own` ? { cfToken: cfToken.value.trim() } : {}),
+            ...(syncEnabled.value ? { syncDir: syncDir.value } : {}),
+            ...(platformUrlOverride.value ? { platformUrl: platformUrlOverride.value } : {}),
+        }),
+    );
+};
 
 // oRPC surfaces a disabled endpoint as NOT_FOUND (404) — the signal that the intentic-provided path is off.
 const isNotFound = (err: unknown): boolean => {
@@ -1220,7 +1254,32 @@ watch(commandReady, (ready) => {
                             <span>{{ lockedReason }}</span>
                         </div>
                         <template v-else>
-                            <div class="flex flex-col gap-2">
+                            <!-- Inside the desktop app the terminal is gone: one click hands this same setup code
+                                 to the app, which runs the same connect script on this machine and streams what it
+                                 says into its manager window. -->
+                            <div v-if="desktop" class="flex flex-col gap-3 rounded-xl border border-primary-600/40 bg-primary-600/5 p-4">
+                                <div class="flex items-center gap-2">
+                                    <Icon name="bolt" class="text-primary-400" />
+                                    <span class="text-sm font-semibold text-content">Run it on this computer</span>
+                                </div>
+                                <p class="text-2xs text-muted">
+                                    Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it answers
+                                    — no terminal.
+                                </p>
+                                <Button label="Set up on this computer" class="self-start" @click="runHere">
+                                    <template #icon><Icon name="bolt" /></template>
+                                </Button>
+                            </div>
+                            <button
+                                v-if="desktop"
+                                type="button"
+                                class="self-start text-xs text-muted underline hover:text-content"
+                                @click="showServerCommand = !showServerCommand"
+                            >
+                                {{ showServerCommand ? `Hide the server command` : `Running it on a server instead? Show the command` }}
+                            </button>
+
+                            <div v-if="!desktop || showServerCommand" class="flex flex-col gap-2">
                                 <!-- On a phone the picker and the copy button each take a full row: three pill tabs
                              sharing a 340px line wrapped every label to two lines, and the copy chip that
                              trailed them is the one control this step exists for. The single Copy belongs to
@@ -1343,6 +1402,39 @@ watch(commandReady, (ready) => {
                                         </a>
                                     </span>
                                 </div>
+                            </div>
+
+                            <!-- Read in an ordinary browser: the same handoff is one click away IF the app is
+                                 already installed (the OS routes the link), and one download away if it isn't.
+                                 Deliberately the quietest thing on the card — the command above is the path that
+                                 works on every machine, and this is an offer, not a redirect. Compose declares its
+                                 own shape and is chosen by people who want a file, so it is left alone. -->
+                            <div v-if="!desktop && runTab !== `compose`" class="flex flex-col gap-1 border-t border-line pt-3 text-2xs text-subtle">
+                                <span>
+                                    Rather not use a terminal? The
+                                    <button type="button" class="text-link hover:underline" @click="runHere">Intentic desktop app</button>
+                                    does this in one click — and updates your sandbox with a button afterwards.
+                                </span>
+                                <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    Get it:
+                                    <a :href="DESKTOP_DOWNLOADS.windows" class="inline-flex items-center gap-1 text-link hover:underline">
+                                        Windows <Icon name="external-link" />
+                                    </a>
+                                    <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="inline-flex items-center gap-1 text-link hover:underline">
+                                        Linux AppImage <Icon name="external-link" />
+                                    </a>
+                                    <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a>
+                                    <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>
+                                </span>
+                                <!-- Local dev: these point at the local site's /desktop/ assets, so the links serve
+                                     YOUR build once staged — the same story as the dev sandbox image above. -->
+                                <p v-if="platformUrlOverride" class="flex items-center gap-2 text-warning">
+                                    <Icon name="box" class="shrink-0" />
+                                    <span
+                                        >Local dev: stage installers with <code>pnpm --filter @intentic-app/desktop stage:downloads</code>, then run
+                                        the site.</span
+                                    >
+                                </p>
                             </div>
                         </template>
 

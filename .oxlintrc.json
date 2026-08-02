@@ -12,7 +12,10 @@
             "error",
             { "allow": ["**/*.css", "**/composables/sandbox/sandboxScope", "**/extension-host/hostModules", "**/popout-keeper"] }
         ],
-        "no-underscore-dangle": ["error", { "allow": ["__API_URL__", "__intentic", "__termFrames", "_core", "_renderService"] }],
+        "no-underscore-dangle": [
+            "error",
+            { "allow": ["__API_URL__", "__intentic", "__INTENTIC_DESKTOP__", "__termFrames", "_core", "_renderService"] }
+        ],
         "no-await-in-loop": "off"
     },
     "env": {
@@ -21,7 +24,6 @@
         "es2024": true
     },
     "ignorePatterns": [
-        "_archive",
         "**/node_modules",
         "**/.cache",
         "**/.turbo",

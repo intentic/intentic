@@ -4,8 +4,9 @@
       "accent": "1",
       "id": "editor",
       "name": "The editor",
-      "oneLiner": "The screen you actually look at — files, chat, terminals.",
+      "oneLiner": "The screen you actually look at \u2014 files, chat, terminals.",
       "packages": [
+        "_apps/desktop",
         "_apps/web",
         "_libs/ui"
       ]
@@ -97,12 +98,9 @@
     {
       "accent": "neutral",
       "id": "plumbing",
-      "name": "Plumbing & retired code",
-      "oneLiner": "Shared config, test harnesses, and one abandoned experiment.",
+      "name": "Plumbing",
+      "oneLiner": "Shared config and test harnesses.",
       "packages": [
-        "_archive/desktop-tauri/app",
-        "_archive/desktop-tauri/app/src-tauri",
-        "_archive/desktop-tauri/app/src-tauri/core",
         "_tools/constants",
         "_tools/dind-host",
         "_tools/e2e",
@@ -114,7 +112,7 @@
   ],
   "glossary": [
     {
-      "means": "One private box per project. Your files, your agents, your terminals — nobody else's.",
+      "means": "One private box per project. Your files, your agents, your terminals \u2014 nobody else's.",
       "term": "sandbox"
     },
     {
@@ -142,7 +140,7 @@
       "term": "extension"
     },
     {
-      "means": "Something you have connected — a GitHub account, a database, an API key.",
+      "means": "Something you have connected \u2014 a GitHub account, a database, an API key.",
       "term": "capability"
     },
     {

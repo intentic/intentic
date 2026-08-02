@@ -1,4 +1,5 @@
 import { billingRoutes } from "./billing/billing.routes.js";
+import { desktopRoutes } from "./desktop/desktop.routes.js";
 import { inviteRoutes } from "./invite/invite.routes.js";
 import { meRoutes } from "./me/me.routes.js";
 import { sandboxRoutes } from "./sandbox/sandbox.routes.js";
@@ -10,4 +11,5 @@ export const router = {
     billing: billingRoutes,
     sandbox: sandboxRoutes,
     invite: inviteRoutes,
+    desktop: desktopRoutes,
 };

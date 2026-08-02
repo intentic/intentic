@@ -100,6 +100,14 @@ export const navEntries: NavEntry[] = [
         href: compareHref(""),
         prefix: "/compare",
     },
+    // A bare link, and high in the bar on purpose: the download page is an ANSWER to the objection the
+    // quickstart raises ("run this command"), so it has to be visible from the page that raises it.
+    {
+        type: "link",
+        label: "Download",
+        href: "/download/",
+        prefix: "/download",
+    },
     {
         type: "link",
         label: "Release notes",

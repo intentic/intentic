@@ -43,7 +43,7 @@ tool it can run. Neither is in the way of you and your code.
 
 ## What each part is for
 
-**The editor** — The screen you actually look at — files, chat, terminals. · 2 packages, 85.1k lines
+**The editor** — The screen you actually look at — files, chat, terminals. · 3 packages, 85.7k lines
 
 **The sandbox** — One private box per project, where your code and the agents live. · 8 packages, 81.2k lines
 
@@ -55,18 +55,18 @@ tool it can run. Neither is in the way of you and your code.
 
 **Account & website** — Sign-in, billing and the public site. Off to one side of everything else. · 7 packages, 7.5k lines
 
-**Plumbing & retired code** — Shared config, test harnesses, and one abandoned experiment. · 9 packages, 5.0k lines
+**Plumbing** — Shared config and test harnesses. · 6 packages, 3.1k lines
 
 ```bars
 { "title": "Size of each part",
   "items": [
-    {"label": "The editor", "value": 85114, "display": "85.1k", "accent": "1"},
+    {"label": "The editor", "value": 85686, "display": "85.7k", "accent": "1"},
     {"label": "The sandbox", "value": 81231, "display": "81.2k", "accent": "2"},
     {"label": "Extensions", "value": 15686, "display": "15.7k", "accent": "3"},
     {"label": "Code search", "value": 13545, "display": "13.5k", "accent": "4"},
     {"label": "Deployment engine", "value": 27167, "display": "27.2k", "accent": "5"},
     {"label": "Account & website", "value": 7550, "display": "7.5k", "accent": "neutral"},
-    {"label": "Plumbing & retired code", "value": 4963, "display": "5.0k", "accent": "neutral"}
+    {"label": "Plumbing", "value": 3127, "display": "3.1k", "accent": "neutral"}
   ] }
 ```
 

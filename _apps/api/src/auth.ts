@@ -4,6 +4,7 @@ import { LEGAL_VERSION } from "@intentic/constants";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
+import { oneTimeToken } from "better-auth/plugins";
 import type { Config } from "./config.js";
 import { encryptSecret } from "./crypto.js";
 import { getStripe } from "./billing/stripe.js";
@@ -110,5 +111,11 @@ export const createAuth = (config: Config, prisma: PrismaClient) =>
                 update: { before: async (account) => ({ data: { ...account, ...encryptAccountTokens(config, account) } }) },
             },
         },
-        plugins: billingPlugins(config),
+        /* The one-time token plugin is how a sign-in crosses from the user's real browser into the desktop
+         * app's webview (see the DesktopHandoff model). It is the library's own answer to "move this session
+         * to another user agent": GET /one-time-token/generate mints one for the caller's session, POST
+         * /one-time-token/verify spends it and answers with the session cookie — so the webview obtains its
+         * cookie through an ordinary HTTP round trip, and nothing hand-rolls a session or forges a cookie.
+         * Three minutes by default, which is the right order for a link the app opens the instant it arrives. */
+        plugins: [...billingPlugins(config), oneTimeToken()],
     });

@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { Card, Code, StatusBadge } from "@intentic-app/ui";
+import { Card, StatusBadge } from "@intentic-app/ui";
+import HostRecreate from "../../components/HostRecreate.vue";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 
 /* "Update available" — the non-blocking prompt on the /sandbox hub when a newer sandbox image has shipped. The
  * daemon reports installed vs latest on /info; the update runs on the host (the sandbox holds no host Docker
- * socket — its own engine is nested, so it can't recreate its own container)
- * via the copy-paste one-liner — the same shape as the environment rebuild, minus the hash. A server-managed
- * sandbox updates on its host's next deploy, so it gets a note instead of a command. Hidden unless an update
- * is available. */
+ * socket — its own engine is nested, so it can't recreate its own container), which is what HostRecreate is
+ * for: a button in the desktop app, the copy-paste one-liner in a browser. A server-managed sandbox updates on
+ * its host's next deploy, so it gets a note instead. Hidden unless an update is available. */
 
-const { installed, latest, updateAvailable, serverManaged, updateCommand } = useSandboxVersion();
+const { installed, latest, updateAvailable, serverManaged, slug } = useSandboxVersion();
 </script>
 
 <template>
@@ -32,13 +32,9 @@ const { installed, latest, updateAvailable, serverManaged, updateCommand } = use
                 This sandbox updates on the next <span class="font-mono">intentic deploy apply</span> against its host.
             </p>
         </template>
-        <template v-else>
+        <template v-else-if="slug">
             <p class="text-xs font-medium text-content">To update, recreate your sandbox on the new image:</p>
-            <ol class="ml-4 list-decimal text-2xs text-subtle">
-                <li>Open a terminal on the computer that runs your sandbox.</li>
-                <li>Copy and run the command below. It takes a few minutes; your files (in /work) are kept.</li>
-            </ol>
-            <Code :code="updateCommand" lang="bash" label="Update command" :wrap="true" />
+            <HostRecreate :slug="slug" action="Update" />
         </template>
     </Card>
 </template>

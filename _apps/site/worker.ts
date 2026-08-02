@@ -20,9 +20,12 @@ const SCRIPTS: Record<string, string> = {
     "/cleanup.ps1": "cleanup.ps1",
     // Both vanity paths serve the ONE recreate script — the mode rides the argument shape the platform's
     // cards already hand out (<slug> <sha256> = rebuild, <slug> = update), so every pasted one-liner keeps
-    // working across the merge.
+    // working across the merge. The .ps1 siblings are the same two modes for a Windows host, where the mode
+    // rides named parameters instead (-Slug, plus -Hash for a rebuild).
     "/rebuild": "recreate.sh",
     "/update": "recreate.sh",
+    "/rebuild.ps1": "recreate.ps1",
+    "/update.ps1": "recreate.ps1",
 };
 
 // The Markdown mirror of /docs/quickstart/ lives at /docs/quickstart.md and is word-for-word the same
@@ -34,9 +37,37 @@ function canonicalForMarkdown(pathname: string): string | undefined {
     return withoutExt === "/index" ? "/" : `${withoutExt}/`;
 }
 
+/* Desktop-app downloads (_apps/desktop): stable vanity URLs, so the site and the app's own links never carry
+ * a version. An installer staged locally into public/desktop/ (stage-local-downloads.sh — gitignored, so a
+ * deploy normally ships none) is served directly; otherwise this redirects to the public generic Package
+ * Registry, which is where release-prepare.sh publishes them.
+ *
+ * The registry rather than a release asset, for the same reason sync.sh and computer.sh fetch their binaries
+ * there: this project's Releases feature is member-only, so a release-asset download 404s for exactly the
+ * anonymous visitor who just clicked Download. Names match build-desktop.sh's un-versioned artifact names. */
+const DESKTOP_LATEST = "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-desktop/latest";
+const DESKTOP_FILES: Record<string, string> = {
+    "/desktop": "Intentic-setup.exe",
+    "/desktop/windows": "Intentic-setup.exe",
+    "/desktop/linux": "Intentic.AppImage",
+    "/desktop/deb": "Intentic.deb",
+    "/desktop/rpm": "Intentic.rpm",
+};
+
 export default {
     async fetch(request: Request, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
         const url = new URL(request.url);
+
+        const download = DESKTOP_FILES[url.pathname.replace(/\/$/, "")];
+        if (download !== undefined) {
+            const staged = await env.ASSETS.fetch(new Request(new URL(`/desktop/${download}`, url), request));
+            if (staged.ok) {
+                const headers = new Headers(staged.headers);
+                headers.set("content-disposition", `attachment; filename="${download}"`);
+                return new Response(staged.body, { status: staged.status, headers });
+            }
+            return Response.redirect(`${DESKTOP_LATEST}/${download}`, 302);
+        }
 
         const canonical = canonicalForMarkdown(url.pathname);
         if (canonical !== undefined) {

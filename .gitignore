@@ -14,9 +14,11 @@
 **/npm-debug.log*
 **/pnpm-debug.log*
 
-# _archive holds frozen experiments (see _archive/*/README.md) — never build artifacts.
-_archive/**/target
-_archive/**/gen
+# desktop (Tauri): the Rust build tree, tauri-build's codegen, and installers staged into the site for a
+# local download test (_apps/desktop/scripts/stage-local-downloads.sh).
+_apps/desktop/src-tauri/target
+_apps/desktop/src-tauri/gen
+_apps/site/public/desktop
 /tmp
 **/tmp
 **/.astro-indexnow-cache.json

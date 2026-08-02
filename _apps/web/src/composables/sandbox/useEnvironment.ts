@@ -1,6 +1,5 @@
 import { EnvironmentSchema } from "@intentic-app/api-contract";
 import { computed } from "vue";
-import { bashCommand } from "../../environments/scriptCommand";
 import { sandboxJson } from "./sandboxClient";
 import { sandboxKey } from "./useSandbox";
 import { useSandboxQuery } from "./useSandboxQuery";
@@ -36,10 +35,9 @@ export function useEnvironment() {
     // Server-managed sandboxes use the provider's fixed container name; their rebuild rides `intentic deploy apply`
     // (the overlay content is git-reviewed in desired-state), not a local one-liner.
     const serverManaged = computed(() => state.value?.container === `intentic-sandbox-workspace`);
-    const rebuildCommand = computed(() => {
-        const slug = state.value?.container?.replace(/^intentic-sandbox-/, ``);
-        return slug !== undefined && pending.value !== undefined ? bashCommand(`rebuild`, ``, `${slug} ${pending.value.hash}`) : ``;
-    });
+    // Which sandbox a rebuild would name. HostRecreate pairs it with the approved overlay's hash — a button in
+    // the desktop app, the equivalent one-liner in a browser.
+    const slug = computed(() => state.value?.container?.replace(/^intentic-sandbox-/, ``));
 
-    return { state, query, proposal, pending, applied, serverManaged, rebuildCommand };
+    return { state, query, proposal, pending, applied, serverManaged, slug };
 }

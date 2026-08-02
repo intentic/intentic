@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic-app/ui";
 import Button from "primevue/button";
+import { computed } from "vue";
 import { useAuth } from "../composables/useAuth";
+import { DESKTOP_SIGN_IN_LINK, desktopVersion, openDesktopLink } from "../environments/desktop";
 
 const { signInWithGoogle } = useAuth();
+
+/* Inside the desktop app, the button below CANNOT work: Google refuses OAuth from an embedded webview, and
+ * the redirect would dead-end on a `disallowed_useragent` page with no way back. So the app gets a different
+ * button that hands the whole sign-in to the user's real browser and receives the result over a deep link
+ * (see environments/desktop.ts). Same account, same session — just not in this window. */
+const desktop = computed(() => desktopVersion() !== undefined);
 
 const year = new Date().getFullYear();
 
@@ -33,6 +41,10 @@ const features: readonly { icon: IconName; title: string; description: string }[
 ];
 
 const signIn = async (): Promise<void> => {
+    if (desktop.value) {
+        openDesktopLink(DESKTOP_SIGN_IN_LINK);
+        return;
+    }
     await signInWithGoogle();
 };
 </script>
@@ -100,7 +112,13 @@ const signIn = async (): Promise<void> => {
                     <p class="mt-2 text-sm text-muted">Sign in to your intentic workspace.</p>
                 </div>
 
-                <Button label="Continue with Google" severity="secondary" :outlined="true" class="w-full justify-center" @click="signIn">
+                <Button
+                    :label="desktop ? `Continue with Google in your browser` : `Continue with Google`"
+                    severity="secondary"
+                    :outlined="true"
+                    class="w-full justify-center"
+                    @click="signIn"
+                >
                     <template #icon><Icon name="google" /></template>
                 </Button>
 

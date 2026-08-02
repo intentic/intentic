@@ -1,6 +1,6 @@
 {
     "$schema": "./node_modules/knip/schema.json",
-    "ignore": ["_archive/**", "**/dist/**", "**/generated/**", "**/.astro/**", "**/*.d.ts", "**/*.d.mts", "**/__fixtures__/**"],
+    "ignore": ["**/dist/**", "**/generated/**", "**/.astro/**", "**/*.d.ts", "**/*.d.mts", "**/__fixtures__/**"],
     "ignoreExportsUsedInFile": { "interface": true, "type": true },
     "ignoreDependencies": ["tslib"],
     "ignoreBinaries": ["docker", "docker compose", "ssh", "mutagen", "cloudflared", "rg", "tmux", "psql", "bun"],
@@ -24,6 +24,9 @@
         },
         "_apps/demo": {
             "entry": ["src/main.ts", "index.html", "popout.html", "vite.config.ts"]
+        },
+        "_apps/desktop": {
+            "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh"]
         },
         "_apps/api": {
             "entry": ["src/main.ts", "src/**/*.test.ts"]

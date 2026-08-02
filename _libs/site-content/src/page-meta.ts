@@ -28,6 +28,14 @@ export const pageMeta: Record<string, PageMeta> = {
         datePublished: "2026-07-03",
     },
     "/about/": aboutMeta,
+    // The desktop app's download page. It is the answer to the objection the quickstart raises, so its
+    // description leads with what the app removes rather than what it is built with.
+    "/download/": {
+        title: "Download Intentic for Windows and Linux",
+        description:
+            "The Intentic desktop app runs your agent sandbox on your own computer without a terminal — it installs Docker if you need it, starts the sandbox, keeps it updated, and opens your workspace.",
+        datePublished: "2026-08-02",
+    },
     // The gallery's ROWS come from the registry repo at build time; only its framing is authored here.
     "/extensions/": {
         title: "Extensions — intentic",

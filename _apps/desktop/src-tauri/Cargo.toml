@@ -1,0 +1,39 @@
+[package]
+name = "intentic-desktop"
+version = "0.0.0"
+description = "Intentic desktop — sandbox onboarding and lifecycle for Windows/Linux"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+[lib]
+name = "intentic_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# Deliberately short. The machine work is done by the scripts this app bundles (src/scripts.rs), so there is no
+# HTTP client, no docker crate and no async runtime beyond Tauri's own — the crate that used to hold all of that
+# (intentic-desktop-core) is what made the first attempt unmaintainable.
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+# The sign-in handoff's nonce (auth.rs). Tauri already pulls uuid in transitively; naming it here is what makes
+# "the state a handoff must echo" something this crate generates rather than something it improvises.
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-updater = "2"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

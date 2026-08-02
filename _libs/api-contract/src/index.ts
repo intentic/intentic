@@ -96,6 +96,30 @@ export const billingContract = {
     plan: oc.route({ method: "GET", path: "/billing/plan" }).output(PlanInfoSchema),
 };
 
+/* Carrying ONE sign-in from the user's real browser into the desktop app's webview (_apps/desktop).
+ *
+ * Google refuses OAuth from an embedded webview and GIS is FedCM-based, which the Linux webview does not
+ * implement — so the app opens /desktop-auth in the DEFAULT browser instead. That page (session required, so
+ * this is the ordinary sign-in flow) parks two credentials for exactly one pickup and hands the app a link
+ * carrying only the row's id: `handoff` is the app's whole payload, because a deep link is passed as a process
+ * argument and is readable by anything on the machine.
+ *
+ * `redeem` is the mirror, and deliberately SESSIONLESS — the webview has no session yet; that is the point.
+ * It answers with the Better Auth one-time token (which the webview spends at /api/auth/one-time-token/verify
+ * for its own session cookie) and the Google ID token (spent once at the daemon's system.session). The row is
+ * deleted on the first redeem, so a replayed link finds nothing.
+ */
+export const desktopContract = {
+    handoff: oc
+        .route({ method: "POST", path: "/desktop/handoff" })
+        .input(z.object({ idToken: z.string().min(1) }))
+        .output(z.object({ handoff: z.string() })),
+    redeem: oc
+        .route({ method: "POST", path: "/desktop/redeem" })
+        .input(z.object({ handoff: z.string().min(1) }))
+        .output(z.object({ ott: z.string(), idToken: z.string() })),
+};
+
 // Aggregated contract router — consumed by the oRPC client (ContractRouterClient<typeof apiContract>)
 // and implemented on the server by the per-domain implement() route factories.
 export const apiContract = {
@@ -103,4 +127,5 @@ export const apiContract = {
     billing: billingContract,
     sandbox: sandboxContract,
     invite: inviteContract,
+    desktop: desktopContract,
 };
