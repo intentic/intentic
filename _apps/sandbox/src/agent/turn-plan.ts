@@ -58,6 +58,10 @@ export type TurnPlan =
           // ASSIGNED the retrieval, not that it found anything — see the ledger field's note on why the arms
           // have to be the coin flip's populations rather than the ones retrieval happened to serve.
           readonly contextArm?: boolean;
+          // Whether a note was actually prepended (UsageTurn.iqContextNote). The companion to `contextArm`, not
+          // a replacement for it: the arm keeps the experiment honest, this says how much of the treatment arm
+          // the treatment reached, which is the difference between a small effect and a diluted one.
+          readonly contextDelivered?: boolean;
           readonly request: AgentRequest;
       };
 
@@ -367,14 +371,17 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
     // The workspace context retrieved for this very message (turn-context.ts), if the flip gave this turn the
     // treatment arm and the retrieval found something worth prepending. Awaited here, where the notes are
     // assembled, so everything above ran while it was in flight.
+    // A skip carries WHY (turn-context.ts logs it); here only "was anything prepended" matters, because that is
+    // what the ledger has to be able to divide the arm by.
     const retrieved = await contextNote;
+    const contextDelivered = retrieved === undefined ? undefined : "note" in retrieved;
     const prompt = withTurnPreamble(
         [
             ...(placement.userNote !== undefined ? [placement.userNote] : []),
             ...(setupNotice !== undefined ? [setupNotice] : []),
             // After the standing protocol notes and before the slash note: those two are about how to read the
             // conversation, this is about the message itself, so it belongs against it.
-            ...(retrieved !== undefined ? [retrieved] : []),
+            ...(retrieved !== undefined && "note" in retrieved ? [retrieved.note] : []),
             ...(literalSlash ? [LITERAL_SLASH_NOTE] : []),
         ],
         promptWithAttachments,
@@ -385,6 +392,7 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
         ...(resolved.credentials.account !== undefined ? { account: resolved.credentials.account } : {}),
         ...(terseArm !== undefined ? { terseArm } : {}),
         ...(contextArm !== undefined ? { contextArm } : {}),
+        ...(contextDelivered !== undefined ? { contextDelivered } : {}),
         request: {
             ...context.base,
             prompt,
@@ -394,7 +402,12 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
             // daemon-wide default model when the turn didn't pin one (a per-automation `model` already rode into
             // `base` above and wins; empty ⇒ subscription default).
             ...(endpoint !== undefined
-                ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model, ...(allowance !== undefined ? { allowance } : {}) }
+                ? {
+                      baseUrl: endpoint.baseUrl,
+                      authToken: endpoint.authToken,
+                      model: endpoint.model,
+                      ...(allowance !== undefined ? { allowance } : {}),
+                  }
                 : {
                       ...(input.model === undefined && services.config.intenticAgentModel !== ""
                           ? { model: services.config.intenticAgentModel }

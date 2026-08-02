@@ -17,6 +17,7 @@ const turn = (overrides: Partial<UsageTurn>): UsageTurn => ({
     turns: 1,
     inputTokens: 100,
     outputTokens: 1000,
+    proseChars: 1000,
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
     costUsd: 0.01,
@@ -30,9 +31,9 @@ const storeOf = (turns: readonly UsageTurn[]): UsageStore =>
         turns: () => Promise.resolve([...turns]),
     }) as unknown as UsageStore;
 
-const terseArms = (on: number, off: number, onTokens: number, offTokens: number): UsageTurn[] => [
-    ...Array.from({ length: on }, (_, index) => turn({ terse: true, outputTokens: onTokens + (index % 2) })),
-    ...Array.from({ length: off }, (_, index) => turn({ terse: false, outputTokens: offTokens + (index % 2) })),
+const terseArms = (on: number, off: number, onProse: number, offProse: number): UsageTurn[] => [
+    ...Array.from({ length: on }, (_, index) => turn({ terse: true, proseChars: onProse + (index % 2) })),
+    ...Array.from({ length: off }, (_, index) => turn({ terse: false, proseChars: offProse + (index % 2) })),
 ];
 
 const contextArms = (on: number, off: number, onCost: number, offCost: number): UsageTurn[] => [
@@ -58,7 +59,7 @@ test("reports both arms but withholds the delta until each clears the threshold"
 
 test("reports the delta, its margin and what it was worth once both arms are big enough", async () => {
     const { output } = await readTurnExperiments(storeOf(terseArms(40, 30, 800, 1200)), {});
-    expect(output?.metric).toBe("outputTokens");
+    expect(output?.metric).toBe("proseChars");
     expect(output?.deltaPct).toBeCloseTo(-33.3, 0);
     // The arms are nearly constant here, so the margin is tiny — but it is always reported alongside.
     expect(output?.marginPct).toBeLessThan(1);
@@ -81,14 +82,57 @@ test("the pre-injection experiment is judged on cost, at sub-cent precision", as
 test("each experiment reads its own arms, so a turn in both counts in both", async () => {
     // The two coin flips are independent, so the other experiment's arm is just noise spread across these two.
     const both = [
-        ...Array.from({ length: 40 }, () => turn({ terse: true, iqContext: true, outputTokens: 800, costUsd: 0.04 })),
-        ...Array.from({ length: 30 }, () => turn({ terse: false, iqContext: false, outputTokens: 1200, costUsd: 0.06 })),
+        ...Array.from({ length: 40 }, () => turn({ terse: true, iqContext: true, proseChars: 800, costUsd: 0.04 })),
+        ...Array.from({ length: 30 }, () => turn({ terse: false, iqContext: false, proseChars: 1200, costUsd: 0.06 })),
     ];
     const { output, context } = await readTurnExperiments(storeOf(both), {});
     expect(output?.on.turns).toBe(40);
     expect(context?.on.turns).toBe(40);
-    expect(output?.metric).toBe("outputTokens");
+    expect(output?.metric).toBe("proseChars");
     expect(context?.metric).toBe("costUsd");
+});
+
+/* THE SECOND WITHHOLD. Clearing MIN_ARM_TURNS says the normal approximation holds, not that anything has been
+ * resolved: the terse steer crossed its thirtieth control turn and published +31.2% ± 35.1pp — an interval from
+ * −3.4% to +66.7%, which is no measurement at all, printed as an alarming number pointing the wrong way. The
+ * margin still goes out, because "smaller than ±35 points" is the true reading and the one that says to wait. */
+test("a delta whose margin spans zero is not a delta — only its resolution is reported", async () => {
+    // Arms drawn wide apart per turn but with means a hair apart: big n, big spread, no resolvable effect.
+    const noisy = [
+        ...Array.from({ length: 40 }, (_, index) => turn({ terse: true, proseChars: index % 2 === 0 ? 200 : 1800 })),
+        ...Array.from({ length: 40 }, (_, index) => turn({ terse: false, proseChars: index % 2 === 0 ? 100 : 1800 })),
+    ];
+    const { output } = await readTurnExperiments(storeOf(noisy), {});
+    expect(output?.on.turns).toBe(40);
+    expect(output?.marginPct).toBeGreaterThan(0);
+    expect(output?.deltaPct).toBeUndefined();
+    expect(output?.saved).toBeUndefined();
+});
+
+/* Pre-injection's arm is the coin flip and stays that way — re-labelling by what retrieval found would sort
+ * turns by how searchable their question was, which is a property of the question, not of the treatment. The
+ * cost of that correctness is a treatment arm the treatment did not reach, measured at four turns in five, and
+ * the delta is diluted by exactly that. So delivery rides alongside instead. */
+test("pre-injection reports how much of its treated arm the note actually reached", async () => {
+    const arms = [
+        ...Array.from({ length: 40 }, (_, index) => turn({ iqContext: true, iqContextNote: index < 10, costUsd: 0.05 })),
+        ...Array.from({ length: 30 }, () => turn({ iqContext: false, iqContextNote: false, costUsd: 0.06 })),
+    ];
+    const { context } = await readTurnExperiments(storeOf(arms), {});
+    // Of the treated arm, not of every turn: the control's non-delivery is what being the control means.
+    expect(context?.deliveredPct).toBe(25);
+});
+
+test("a metric a turn never recorded leaves it out of the population, rather than counting it as zero", async () => {
+    const mixed = [
+        ...Array.from({ length: 40 }, () => turn({ terse: true, proseChars: 800 })),
+        ...Array.from({ length: 30 }, () => turn({ terse: false, proseChars: 1200 })),
+        // Rows from before prose was measured. Averaged in as zeros they would drag both means toward nothing.
+        ...Array.from({ length: 20 }, () => turn({ terse: true, proseChars: undefined })),
+    ];
+    const { output } = await readTurnExperiments(storeOf(mixed), {});
+    expect(output?.on.turns).toBe(40);
+    expect(output?.on.mean).toBe(800);
 });
 
 test("only turns inside the window count", async () => {

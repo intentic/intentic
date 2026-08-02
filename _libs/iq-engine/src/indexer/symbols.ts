@@ -51,10 +51,21 @@ const declaratorRows = (path: string, lang: string, root: SgNode): SymbolRow[] =
         if (statementParent !== "program" && statementParent !== "export_statement") {
             continue;
         }
-        const name = declarator.field("name")?.text();
-        if (name === undefined) {
+        /* An identifier, or nothing. A declarator's name field is also where a DESTRUCTURING PATTERN lives, and
+         * `.text()` on one yields the pattern source rather than a name — `{ app }`, `[logPath, pattern]`, and
+         * in a `.vue` the whole multi-line `defineProps` destructure. 481 of those were in the index, 31 of them
+         * spanning lines, and every consumer of the symbol table was worse for it: `iq def` offered them as
+         * definitions, hits annotated themselves `⟨in { app } (const)⟩`, and the graph stage fed one to ripgrep
+         * as a pattern and killed the query outright.
+         *
+         * Skipped rather than expanded into the names it binds. Those are re-binds and imports (`app`,
+         * `version`, `utils`) — not what anyone means by the symbol defined here — and the statement is already
+         * indexed as a chunk, so nothing becomes unfindable by dropping it. */
+        const nameNode = declarator.field("name");
+        if (nameNode === null || nameNode.kind() !== "identifier") {
             continue;
         }
+        const name = nameNode.text();
         const value = declarator.field("value")?.kind();
         // Anchor the row on the whole statement (incl. `export const`) so the signature reads naturally.
         const statement = statementParent === "export_statement" ? declarator.parent()!.parent()! : declarator.parent()!;

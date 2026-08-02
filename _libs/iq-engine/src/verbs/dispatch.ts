@@ -153,6 +153,17 @@ const isCall = (ref: EngineHit): boolean => ref.tags.some((tag) => tag.kind === 
 // strongest caller RESOLVED rather than suggested (GraphRAG-lite over the symbol table plus one rg per symbol).
 // A bare `refs: iq refs X` spent the agent's next turn re-asking iq for something iq already knew, and the caller
 // is usually the other half of the answer: the public entry point that reaches the implementation just found.
+/* A NAME THIS STAGE CAN SEARCH FOR. The symbol table is built by extractors over every indexed language, and a
+ * template-heavy file (`.vue`, `.md` fences) can hand back a "name" that spans lines — at which point this stage
+ * puts a raw newline into an rg pattern and rg refuses the whole invocation:
+ *
+ *     Command failed, ripgrep: the literal '"\n"' is not allowed in a regex
+ *
+ * Which killed the QUERY, not the enhancement: two plain natural-language searches a day died here, having
+ * already paid for BM25, the embedder and the reranker. Whatever the extractors do, a name that is not one
+ * token simply is not an anchor, and skipping it costs one `related:` line. */
+const isSearchableName = (name: string): boolean => name !== "" && !/\s/.test(name);
+
 const relatedOf = async (db: IndexDb, groups: readonly RankedGroup[], rgBase: Omit<RgOptions, "pattern">): Promise<string[]> => {
     const cache = new Map<string, FileSymbolRange[]>();
     const seen = new Set<string>();
@@ -163,16 +174,22 @@ const relatedOf = async (db: IndexDb, groups: readonly RankedGroup[], rgBase: Om
             continue;
         }
         const symbol = enclosingSymbol(db, cache, hit.path, hit.line);
-        if (symbol === undefined || seen.has(symbol.name)) {
+        if (symbol === undefined || seen.has(symbol.name) || !isSearchableName(symbol.name)) {
             continue;
         }
         seen.add(symbol.name);
         anchors.push({ name: symbol.name, path: hit.path, line: symbol.line });
     }
     // One rg per symbol, all at once: sequentially they tripled this stage's latency for no ordering reason.
-    return Promise.all(
+    const lines = await Promise.all(
         anchors.map(async (anchor) => {
-            const refs = await refsOf(db, anchor.name, undefined, rgBase);
+            const refs = await refsOf(db, anchor.name, undefined, rgBase).catch(() => undefined);
+            // The guardrail behind the guard above: this stage is an enhancement on an answer that is already
+            // computed and already paid for, so ANY failure in it costs its own line and nothing else. The
+            // alternative — which is what shipped — is a query that dies after doing all of its real work.
+            if (refs === undefined) {
+                return undefined;
+            }
             // A call site answers "who reaches this"; an import only says a file mentions it. Prefer a caller in
             // source: "called from its own test" is the least informative true answer available.
             const caller =
@@ -185,6 +202,7 @@ const relatedOf = async (db: IndexDb, groups: readonly RankedGroup[], rgBase: Om
             return `${anchor.name} — def ${anchor.path}:${anchor.line}${from}${more}`;
         }),
     );
+    return lines.filter((line) => line !== undefined);
 };
 
 interface Chunk {

@@ -16,10 +16,16 @@ import type { UsageStore } from "./usage-store.js";
  * once (the flips are independent), which is exactly why each is read as its own two populations: the other
  * experiment's coin flip is then just noise, distributed evenly across both of these arms.
  *
- * WHY THE NUMBER IS WITHHELD UNTIL BOTH ARMS ARE BIG. Per-turn cost and output length are wildly
- * heteroscedastic — one turn is "yes", the next is a forty-tool refactor — so a delta over a handful of turns
- * is noise wearing a percentage sign. Below the threshold the arms are reported without a delta, which the
- * screen shows as "measuring", and a number that would swing from −34% to −8% overnight never reaches anyone. */
+ * WHY THE NUMBER IS WITHHELD, TWICE. Per-turn cost and output length are wildly heteroscedastic — one turn is
+ * "yes", the next is a forty-tool refactor — so a delta over a handful of turns is noise wearing a percentage
+ * sign. The first gate is arm size: below MIN_ARM_TURNS the arms are reported without a delta, which the screen
+ * shows as "measuring".
+ *
+ * Clearing it turned out not to be enough. The terse steer reached its thirtieth control turn and published
+ * +31.2% ± 35.1pp — an interval from −3.4% to +66.7%, which is no measurement at all — and it published it
+ * against the arm that had happened to draw the longer tasks. So the second gate is the margin itself: an
+ * interval that spans zero yields its resolution and no claim. Between them the two gates are one rule, that a
+ * number reaches the screen when it means something and not when it merely exists. */
 
 // Turns per arm before a delta is reported. Thirty is where the normal approximation behind the margin below
 // starts to hold for a distribution this skewed; it is also small enough to be reachable in a day of real use.
@@ -32,19 +38,24 @@ const Z_95 = 1.96;
 
 /* What a mechanism is judged on, and at what precision it is reported.
  *
- * The terse steer is judged on the model's OWN output tokens, which is the thing it steers. Pre-injection is
- * judged on cost: it spends input tokens on purpose to buy back the search turns the model would otherwise
- * have paid for, so an output-token verdict would score the buying without the spending and an input-token one
- * the reverse. Money is the only unit the trade nets out in.
+ * The terse steer is judged on the model's own PROSE, which is the thing it steers. It used to be judged on the
+ * turn's output tokens, and that is a different quantity: a real turn's output is 91.6% tool-call arguments,
+ * so a fifth off the narration moved the reported number by 1.6% and the measurement was left reporting which
+ * arm drew the bigger tasks. Pre-injection is judged on cost: it spends input tokens on purpose to buy back
+ * the search turns the model would otherwise have paid for, so an output verdict would score the buying
+ * without the spending and an input one the reverse. Money is the only unit the trade nets out in.
  *
- * The rounding rides with the metric because a dollar figure put through the token rounder is zero. */
+ * A metric can also be UNMEASURED on a turn (a row written before it was recorded), which is not the same as
+ * zero — `of` returns undefined there and the turn leaves the population rather than dragging the mean down.
+ *
+ * The rounding rides with the metric because a dollar figure put through the character rounder is zero. */
 interface Metric {
     readonly name: TurnExperiment["metric"];
-    readonly of: (turn: UsageTurn) => number;
+    readonly of: (turn: UsageTurn) => number | undefined;
     readonly round: (value: number) => number;
 }
 
-const OUTPUT_TOKENS: Metric = { name: "outputTokens", of: (turn) => turn.outputTokens, round: Math.round };
+const PROSE_CHARS: Metric = { name: "proseChars", of: (turn) => turn.proseChars, round: Math.round };
 // Sub-cent, because a mean turn costs cents and a per-turn delta is a fraction of one.
 const COST_USD: Metric = { name: "costUsd", of: (turn) => turn.costUsd, round: (value) => Math.round(value * 10_000) / 10_000 };
 
@@ -56,20 +67,35 @@ interface Arm {
 }
 
 const armOf = (turns: readonly UsageTurn[], metric: Metric): Arm => {
-    if (turns.length === 0) {
+    // A turn the metric was never recorded on is not a turn worth zero — it is a turn from before the metric
+    // existed, and averaging it in would pull both arms toward nothing at whatever rate the ledger happens to
+    // hold old rows.
+    const values = turns.map(metric.of).filter((value) => value !== undefined);
+    if (values.length === 0) {
         return { turns: 0, mean: 0, variance: 0 };
     }
-    const values = turns.map(metric.of);
     const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
     const variance = values.length < 2 ? 0 : values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1);
     return { turns: values.length, mean, variance };
+};
+
+// What fraction of an arm the mechanism actually reached, when the arm is intention-to-treat and delivery is a
+// separate fact (pre-injection). Undefined ⇒ not a separate question here, or no turn recorded it.
+const deliveredPctOf = (turns: readonly UsageTurn[], delivered: (turn: UsageTurn) => boolean | undefined): number | undefined => {
+    const known = turns.map(delivered).filter((value) => value !== undefined);
+    return known.length === 0 ? undefined : round1((known.filter((value) => value).length / known.length) * 100);
 };
 
 const round1 = (value: number): number => Math.round(value * 10) / 10;
 
 // Undefined ⇒ this experiment isn't running: no turn in the window recorded an arm for it, so there is nothing
 // to report. That is a different state from "measured, saved nothing", and the screen renders it as absence.
-const experimentOf = (turns: readonly UsageTurn[], arm: (turn: UsageTurn) => boolean | undefined, metric: Metric): TurnExperiment | undefined => {
+const experimentOf = (
+    turns: readonly UsageTurn[],
+    arm: (turn: UsageTurn) => boolean | undefined,
+    metric: Metric,
+    delivered?: (turn: UsageTurn) => boolean | undefined,
+): TurnExperiment | undefined => {
     // Only turns the experiment applied to. A turn with no arm stamped had the mechanism out of play entirely
     // (a custom system prompt drops the steer, an ineligible prompt is never retrieved for, and so does the
     // experiment being off) — pooling those into the off-arm would compare the treated turns against a
@@ -86,11 +112,19 @@ const experimentOf = (turns: readonly UsageTurn[], arm: (turn: UsageTurn) => boo
         return undefined;
     }
 
+    const deliveredPct =
+        delivered === undefined
+            ? undefined
+            : deliveredPctOf(
+                  turns.filter((turn) => arm(turn) === true),
+                  delivered,
+              );
     const arms = {
         metric: metric.name,
         on: { turns: on.turns, mean: metric.round(on.mean) },
         off: { turns: off.turns, mean: metric.round(off.mean) },
         minTurns: MIN_ARM_TURNS,
+        ...(deliveredPct !== undefined ? { deliveredPct } : {}),
     } as const;
     if (on.turns < MIN_ARM_TURNS || off.turns < MIN_ARM_TURNS || off.mean === 0) {
         return arms;
@@ -99,10 +133,22 @@ const experimentOf = (turns: readonly UsageTurn[], arm: (turn: UsageTurn) => boo
     // Welch: the arms have different sizes (the holdout is a minority by design) and different spreads, so the
     // pooled-variance form would understate the margin exactly where the control is smallest.
     const standardError = Math.sqrt(on.variance / on.turns + off.variance / off.turns);
+    const deltaPct = round1(((on.mean - off.mean) / off.mean) * 100);
+    const marginPct = round1(((Z_95 * standardError) / off.mean) * 100);
+    /* THE INTERVAL SPANS ZERO, so there is no effect to report — only a resolution. Clearing MIN_ARM_TURNS
+     * proves the normal approximation holds, not that it has resolved anything: the terse steer crossed its
+     * thirtieth control turn and published +31.2% ± 35.1pp, an interval from −3.4% to +66.7%. Publishing the
+     * midpoint of that is publishing noise with a sign on it, and a reader acts on the sign.
+     *
+     * The margin still goes out. "Whatever this is worth, it is inside ±35 points" is the honest reading, and
+     * it is the one that says to keep collecting rather than to go and change something. */
+    if (Math.abs(deltaPct) <= marginPct) {
+        return { ...arms, marginPct };
+    }
     return {
         ...arms,
-        deltaPct: round1(((on.mean - off.mean) / off.mean) * 100),
-        marginPct: round1(((Z_95 * standardError) / off.mean) * 100),
+        marginPct,
+        deltaPct,
         // What the mechanism was worth over the turns that actually ran with it — the window's realized saving,
         // not an extrapolation over turns it never touched.
         saved: metric.round((off.mean - on.mean) * on.turns),
@@ -115,7 +161,14 @@ export const readTurnExperiments = async (
     window: DayWindowQuery,
 ): Promise<{ readonly output?: TurnExperiment; readonly context?: TurnExperiment }> => {
     const turns = await usage.turns(window);
-    const output = experimentOf(turns, (turn) => turn.terse, OUTPUT_TOKENS);
-    const context = experimentOf(turns, (turn) => turn.iqContext, COST_USD);
+    const output = experimentOf(turns, (turn) => turn.terse, PROSE_CHARS);
+    // Delivery is asked of pre-injection alone: its arm is the coin flip, and a turn can be assigned the
+    // retrieval and still have nothing to prepend. The steer, once assigned, always lands.
+    const context = experimentOf(
+        turns,
+        (turn) => turn.iqContext,
+        COST_USD,
+        (turn) => turn.iqContextNote,
+    );
     return { ...(output !== undefined ? { output } : {}), ...(context !== undefined ? { context } : {}) };
 };

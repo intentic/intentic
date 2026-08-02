@@ -558,6 +558,12 @@ async function* runTurn(
     // ledger below appends numbers rather than re-narrowing unknowns. SUMMED, not last-wins: a turn emits one
     // frame per SDK turn, and a steered follow-up or an imp-mode round is a second one — the money is the total.
     let usage: UsageFrame | undefined;
+    /* The model's own prose this turn, in characters — the terse steer's metric, and the only one it can be
+     * scored on. The provider bills one output-token total and never says how much of it was narration; a real
+     * turn's output is over nine parts tool-call arguments, so the steer's whole effect lives inside a tenth of
+     * the number and cannot be seen there. Counted here because `delta` is the only frame that carries prose,
+     * and nothing downstream of this loop still knows which bytes were which. */
+    let proseChars = 0;
     const record = (event: Omit<ActivityEvent, "id" | "at" | "provider" | "direction">): void => {
         void services.activity
             .append({
@@ -619,6 +625,11 @@ async function* runTurn(
                     providerAnswered = true;
                     recordProviderSuccess(provider);
                 }
+            }
+            if (event.kind === "delta") {
+                // Every prose frame, subagent narration included: they run on the same steered system prompt,
+                // and a turn that delegates its writing would otherwise read as a turn that wrote nothing.
+                proseChars += event.text.length;
             }
             if (event.kind === "session") {
                 sessionId = event.sessionId;
@@ -772,11 +783,15 @@ async function* runTurn(
                     cacheCreationTokens: usage.cacheCreationTokens ?? 0,
                     costUsd: usage.costUsd ?? 0,
                     durationMs: usage.durationMs ?? 0,
+                    // Counted off this turn's own frames rather than taken from the provider, which reports one
+                    // output total and no breakdown — see UsageTurn.proseChars.
+                    proseChars,
                     // The turn experiments' arms, when this turn was in them — the ledger is the only place they
                     // are recorded, and without them the steer's and the pre-injection's effects are
                     // unmeasurable after the fact.
                     ...(plan.terseArm !== undefined ? { terse: plan.terseArm } : {}),
                     ...(plan.contextArm !== undefined ? { iqContext: plan.contextArm } : {}),
+                    ...(plan.contextDelivered !== undefined ? { iqContextNote: plan.contextDelivered } : {}),
                 })
                 .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
         }

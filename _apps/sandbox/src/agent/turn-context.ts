@@ -44,9 +44,30 @@ const CONVERSATIONAL = new Set(
     ),
 );
 
-// Fewer words than this and there is not enough query to retrieve on — a two-word follow-up ("the tests",
-// "keep going") means whatever the previous turn established, which the model has and the index does not.
-const MIN_QUERY_WORDS = 3;
+/* At least one CONTENT word, or there is nothing here to search for. That was already the rule — skip when
+ * every word is conversational — and what it was missing is that a bare NUMBER is not content either. One digit
+ * defeated the whole gate: "Go for these 2." retrieved, and so did "Go for 1.", each spending its 1.2k budget
+ * searching the index for words whose referent is in the previous turn.
+ *
+ * Deliberately not raised past one. An interrogative frame is made almost entirely of conversational words —
+ * "how do we rotate credentials?" has exactly two content words in it — and a threshold high enough to catch
+ * follow-ups takes the real questions with it. */
+const MIN_CONTENT_WORDS = 1;
+
+/* A prompt that OPENS by pointing backwards is continuing the previous turn, so it has to carry more than a
+ * word or two of its own before it is worth a search: "Go for the levers.", "Got for all of it." each cleared
+ * the rule above on a single noun that means nothing without the turn before it.
+ *
+ * A few words is all this can ask for. A resumptive opener followed by real substance ("Also, how does the
+ * scheduler decide which automation wakes a sandbox first?") is a genuine question and must still retrieve —
+ * which also means the reverse gets through: "Above ideas are bad. Nothing really important. Rethink it."
+ * carries six content words, is pure anaphora, and nothing lexical separates the two. That one is left. */
+const RESUMPTIVE_OPENER =
+    /^\s*(?:go (?:for|ahead|on)|got for|continue|carry on|keep going|proceed|do (?:it|that|both|this)|apply|fix (?:it|that|them|these|those)|try again|redo|instead|also|same|and |but |that |those |these |it )/i;
+const MIN_RESUMPTIVE_CONTENT_WORDS = 3;
+
+// A bare number carries no search intent of its own — it enumerates something the previous turn listed.
+const isContentWord = (word: string): boolean => !CONVERSATIONAL.has(word) && !/^\d+$/.test(word);
 
 /* A path or filename the user typed. The model can just open it, and it will: retrieval on top of an
  * already-named anchor spends tokens to point at the thing being pointed at. Both spellings count — a
@@ -73,8 +94,11 @@ export const retrievalQueryOf = (prompt: string): string | undefined => {
     if (EXPLICIT_PATH.test(text) || EXPLICIT_FILE.test(text)) {
         return undefined;
     }
-    const words = text.toLowerCase().match(/[a-z0-9][a-z0-9'_-]*/g) ?? [];
-    if (words.length < MIN_QUERY_WORDS || words.every((word) => CONVERSATIONAL.has(word))) {
+    const content = (text.toLowerCase().match(/[a-z0-9][a-z0-9'_-]*/g) ?? []).filter(isContentWord);
+    if (content.length < MIN_CONTENT_WORDS) {
+        return undefined;
+    }
+    if (RESUMPTIVE_OPENER.test(text) && content.length < MIN_RESUMPTIVE_CONTENT_WORDS) {
         return undefined;
     }
     if (text.length <= QUERY_MAX_CHARS) {
@@ -96,25 +120,42 @@ export const turnContextNote = (query: string, answer: string): string =>
 
 export interface TurnContextDeps {
     readonly iq: Pick<ResidentEngine, "run">;
-    readonly logger: Pick<Logger, "warn">;
+    readonly logger: Pick<Logger, "warn" | "debug">;
 }
 
-/* The note for this turn, or undefined when there is nothing worth prepending.
+/* WHY NOTHING WAS PREPENDED, when nothing was.
  *
- * Undefined is the ordinary outcome and never an error: an ineligible prompt, an index that hasn't caught up
- * with disk yet, a query that matched nothing, a retrieval that outran its deadline. Each of those is a turn
- * that proceeds exactly as it would have without the feature.
+ * Every one of these is an ordinary outcome rather than an error, and until now each was also SILENT: only a
+ * thrown retrieval reached the log, which over a day of use meant one line — while the mechanism declined to
+ * fire on four turns in five. That gap is what made the experiment unreadable from the outside, because a
+ * treatment turn that injected nothing is indistinguishable in the ledger from one that injected 1.2k tokens.
+ *
+ * `ineligible` is the prompt failing a gate above; the rest are retrieval itself declining. */
+export type TurnContextSkip = "ineligible" | "deadline" | "indexing" | "no-hits" | "failed";
+
+// The note, or the reason there isn't one. A union rather than an optional pair: exactly one of the two is
+// always the answer, and the ledger's delivery rate is only honest if a caller cannot read both as absent.
+export type TurnContextOutcome = { readonly note: string } | { readonly skipped: TurnContextSkip };
+
+/* The note for this turn, or the reason there is none.
+ *
+ * A skip is the ordinary outcome and never an error: an ineligible prompt, an index that hasn't caught up with
+ * disk yet, a query that matched nothing, a retrieval that outran its deadline. Each of those is a turn that
+ * proceeds exactly as it would have without the feature — and each is now NAMED, because "the mechanism was
+ * assigned to this turn" and "the mechanism did something on this turn" turned out to be different facts in
+ * four turns out of five, and nothing downstream could tell them apart.
  *
  * A THROWN RETRIEVAL IS SWALLOWED, against this repo's usual let-it-propagate rule, and the exception is
  * deliberate: this is an optimisation the user did not ask for on this turn, so a corrupt index or an rg that
  * died must cost the note and nothing else. Killing the user's turn over a failed search would make the feature
  * strictly worse than not having it — the same reasoning the resident engine's onIndexError already runs on. */
-export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string): Promise<string | undefined> => {
+export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string): Promise<TurnContextOutcome> => {
     const query = retrievalQueryOf(prompt);
     if (query === undefined) {
-        return undefined;
+        return { skipped: "ineligible" };
     }
     const controller = new AbortController();
+    let failed = false;
     const attempt = deps.iq
         .run(
             {
@@ -132,6 +173,7 @@ export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string)
         .catch((error: unknown) => {
             // The deadline aborts by design; only a genuine failure is worth a line in the log.
             if (!controller.signal.aborted) {
+                failed = true;
                 deps.logger.warn({ err: error }, "turn context: retrieval failed — the turn runs without pre-injected context");
             }
             return undefined;
@@ -151,8 +193,20 @@ export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string)
     clearTimeout(timer);
     // Exit 1 is "no hits" (grep convention); a `building` index has not yet caught up with disk, so what it
     // holds is a fraction of the workspace and an answer off it would be confidently partial.
-    if (outcome === undefined || outcome.exitCode !== 0 || outcome.result.groups.length === 0 || outcome.result.freshness.state === "building") {
-        return undefined;
+    // Debug, not warn: none of these is a fault, and the reason is only wanted in aggregate — "how often did the
+    // treatment arm actually get treated, and what took the rest of it away".
+    const skip = (skipped: TurnContextSkip): TurnContextOutcome => {
+        deps.logger.debug({ skipped, query }, "turn context: nothing prepended");
+        return { skipped };
+    };
+    if (outcome === undefined) {
+        return skip(failed ? "failed" : "deadline");
     }
-    return turnContextNote(query, outcome.text);
+    if (outcome.result.freshness.state === "building") {
+        return skip("indexing");
+    }
+    if (outcome.exitCode !== 0 || outcome.result.groups.length === 0) {
+        return skip("no-hits");
+    }
+    return { note: turnContextNote(query, outcome.text) };
 };

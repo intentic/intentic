@@ -71,7 +71,7 @@ describe(`stageLabel`, () => {
 // than trusted to three templates that drifted apart once already.
 
 const experiment = (overrides: Partial<TurnExperiment> = {}): TurnExperiment => ({
-    metric: `outputTokens`,
+    metric: `proseChars`,
     on: { turns: 133, mean: 38_500 },
     off: { turns: 14, mean: 28_100 },
     minTurns: 30,
@@ -81,8 +81,8 @@ const experiment = (overrides: Partial<TurnExperiment> = {}): TurnExperiment => 
 describe(`verdictOf`, () => {
     it(`states a measured saving as a signed, arrowed delta carrying its margin`, () => {
         const verdict = verdictOf(experiment({ deltaPct: -12, marginPct: 4, saved: 91_000 }));
-        expect(verdict).toMatchObject({ value: `↓12%`, unit: `output tokens per turn`, tone: `success` });
-        expect(verdict.detail).toBe(`±4pp (95%) · ~91K tokens saved in this range`);
+        expect(verdict).toMatchObject({ value: `↓12%`, unit: `prose written per turn`, tone: `success` });
+        expect(verdict.detail).toBe(`±4pp (95%) · ~91K chars saved in this range`);
     });
 
     it(`states an increase without alarm — an experiment that says the mechanism cost more is working`, () => {
@@ -100,6 +100,22 @@ describe(`verdictOf`, () => {
         expect(verdict).toMatchObject({ value: `Measuring`, tone: `muted` });
         // The shorter arm is the control's 14, against a threshold of 30.
         expect(verdict.detail).toBe(`needs 30 turns per arm — 16 more on the shorter one`);
+    });
+
+    /* MEASURED, NO EFFECT — its own verdict, because the reader's next move differs from "Measuring". The steer
+     * crossed thirty control turns and published +31.2% ± 35.1pp: an interval from −3.4% to +66.7%, rendered as
+     * an alarming number pointing the wrong way. The daemon now withholds the delta and sends the margin alone. */
+    it(`says so when the arms are big enough and the effect still isn't resolvable`, () => {
+        const verdict = verdictOf(experiment({ off: { turns: 31, mean: 28_100 }, marginPct: 35.1 }));
+        expect(verdict).toMatchObject({ value: `No effect`, unit: `measurable in prose written per turn`, tone: `muted` });
+        expect(verdict.detail).toBe(`anything real is inside ±35.1pp (95%) — keep collecting`);
+    });
+
+    // A delta over a mostly-untreated arm is a fraction of the delta over the treated ones, and the number alone
+    // cannot say so. Pre-injection's arm is the coin flip by design, so this clause travels with every figure.
+    it(`qualifies a figure by how much of the treated arm the mechanism actually reached`, () => {
+        const verdict = verdictOf(experiment({ metric: `costUsd`, deltaPct: -5, marginPct: 2, saved: 1.2, deliveredPct: 19 }));
+        expect(verdict.detail).toContain(`note actually landed on 19% of the treated arm`);
     });
 
     it(`treats an experiment that isn't running as a verdict of its own, not a missing card`, () => {

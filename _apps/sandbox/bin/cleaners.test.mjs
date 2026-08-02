@@ -68,6 +68,25 @@ test("cleanLines: a deliberate read is not capped at MAX, even behind a `cd … 
     }
 });
 
+/* What production hands `cleanLines` is the LAUNCHER line, not the shell statement — and every test above this
+ * one passed the shell statement, which is how a read detector that never fired on a bare `cat` survived. One
+ * day of real commands: 88 of 93 shell reads misread as logs, five gutted reads of the workspace README. */
+const WRAPPED = (inner) => `nsenter --mount=/proc/1/ns/mnt --wd='/work' -- nice -n 10 ionice -c 2 -n 7 bash -c '${inner}'`;
+
+test("cleanLines: a read is recognised through the nsenter/bash -c wrapper, with or without a `cd` prefix", () => {
+    const lines = Array.from({ length: 400 }, (_, i) => `line ${i}`);
+    for (const inner of ["cat /work/README.md", "sed -n 1,400p src/app.ts", "cd /work/intentic && cat src/app.ts", "git show HEAD -- src/app.ts"]) {
+        expect(cleanLines(lines, { command: WRAPPED(inner), exitCode: "0", enabled: new Set(CLEANERS) }).lines).toHaveLength(400);
+    }
+});
+
+test("cleanLines: a log is still capped through the wrapper — `cat` in a word is not the `cat` command", () => {
+    const lines = Array.from({ length: 400 }, (_, i) => `line ${i}`);
+    for (const inner of ["pnpm install --concat-logs", "cd /work && ls -R", "git log --oneline -400"]) {
+        expect(cleanLines(lines, { command: WRAPPED(inner), exitCode: "0", enabled: new Set(CLEANERS) }).lines.length).toBeLessThan(100);
+    }
+});
+
 test("cleanLines: a read past READ_MAX is trimmed from the end, not the middle", () => {
     const lines = Array.from({ length: 2400 }, (_, i) => `line ${i}`);
     const out = cleanLines(lines, { command: "cat big.ts", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
@@ -147,6 +166,46 @@ test("redact: masks secret-named assignments, AWS keys, and bearer tokens on suc
 test("redact: a quoted value is masked whole, and the quotes survive so the line still parses", () => {
     expect(redacted([`const key = { apiKey: "sk-ant-api03-9f2Kd" };`])).toEqual([`const key = { apiKey: "***" };`]);
     expect(redacted(["password: 'hunter2hunter2'"])).toEqual(["password: '***'"]);
+});
+
+/* The second regression, measured the same way as the first: over one day the redactor masked 182 lines a model
+ * then had to work from and caught zero secrets. Every case here was observed, not imagined.
+ *
+ * The token COUNTS are the ones that bite hardest — this workspace's own spend ledger is JSON full of fields
+ * named `…Tokens`, so masking them both destroys the number and breaks the parse for whatever reads it next.
+ * Note `outputTokens` beside `cacheReadTokens`: under the old six-character floor the mask fired as a function
+ * of MAGNITUDE, which is why it passed every small test and only failed on real data. */
+test("redact: a number is never a credential, however secret-shaped the field name is", () => {
+    const numbers = [
+        `{"conversationId":"x","cacheReadTokens":26170149,"cacheCreationTokens":27967}`,
+        `  "outputTokens": 94746,`,
+        `  readonly inputTokens: 1234567;`,
+        `contextTokens: 200_000`,
+        `  maxTokens: 200000`,
+        `node --max-tokens=131072 run.js`,
+        `expect(turn.outputTokens).toBe(1048576)`,
+    ];
+    expect(redacted(numbers)).toEqual(numbers);
+});
+
+// What length alone cannot tell apart: the long values in this repo are paths, template interpolations and the
+// NAMES of variables. A generated credential is none of those.
+test("redact: a path, a template interpolation or an env-var name is not a credential at any length", () => {
+    const structural = [
+        `const tokenPath = "/run/intentic/agent.token";`,
+        "runnerToken: `${STATE_DIR}/runner-token`,",
+        `password: "INTENTIC_FORGEJO_ADMIN_PASSWORD"`,
+        `token: "intentic-translator-local"`,
+        `apiKey: "tok-abc-123"`,
+        `const secret = "test-secret";`,
+    ];
+    expect(redacted(structural)).toEqual(structural);
+});
+
+test("redact: still takes a real credential — by issuer prefix at any length, or by entropy and length", () => {
+    expect(redacted([`ANTHROPIC_API_KEY=sk-ant-api03-abcdefghij`])).toEqual(["ANTHROPIC_API_KEY=***"]);
+    expect(redacted([`SLACK_TOKEN=xoxb-1234-5678-abcdefghij`])).toEqual(["SLACK_TOKEN=***"]);
+    expect(redacted([`API_KEY="a1b2c3d4e5f6g7h8i9j0k1"`])).toEqual([`API_KEY="***"`]);
 });
 
 // The regression this rule exists for: source code says "token" constantly, and every one of these reached a

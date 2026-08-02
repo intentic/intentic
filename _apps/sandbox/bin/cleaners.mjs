@@ -256,16 +256,55 @@ const SECRET_NAME = String.raw`[A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[
 // A single `=` or `:`, never `===`/`!==`/`=>` — that alone rules out every comparison and arrow function. The
 // optional closing quote is what covers a JSON config dump, where the key itself is quoted.
 const ASSIGN = String.raw`["']?\s*[:=](?![=>])\s*`;
-// A quoted literal is data rather than an expression, so it is masked whole from 8 characters up. (`\x60` is a
-// backtick: template-literal values are quoted too.)
-const QUOTED_VALUE = String.raw`(["'\x60])[^"'\x60\n]{8,}\2`;
-// A bare value must carry a digit or credential punctuation, hold no `.` (property access), and not be a call.
-// `ghp_abcd1234` and `sk-ant-api03-…` qualify; `string`, `undefined`, `readonly`, `computed(`, `await`,
-// `usage.inputTokens` and `endpoint.authToken` do not. The deliberate gap is a bare lowercase word with no
-// digit — `TOKEN=secretval` reads exactly like `token = identifier` and nothing in the text separates them.
-const BARE_VALUE = String.raw`(?=[\w+/=~-]*[\d_+/=~-])[\w+/=~-]{6,}(?![\w+/=~(-])`;
+// (`\x60` is a backtick: template-literal values are quoted too.)
+const QUOTED_VALUE = String.raw`(["'\x60])([^"'\x60\n]{6,})\2`;
+// No `.` (property access) and not a call: `usage.inputTokens` and `computed(` are expressions, not values.
+const BARE_VALUE = String.raw`[\w+/=~-]{6,}(?![\w+/=~(-])`;
+
+/* WHAT A CREDENTIAL VALUE LOOKS LIKE, given that the NAME already matched.
+ *
+ * The name alone is not enough, because source code says "token" constantly — that much the pattern above
+ * always knew. What it got wrong is the other half: it treated "≥6 characters carrying a digit" as
+ * credential-shaped, and in a workspace whose subject matter IS tokens that fires on the data. Measured over
+ * one day it masked 182 lines and caught zero secrets: `"cacheReadTokens":26170149` (breaking the JSON for
+ * every reader downstream), `readonly inputTokens: 1234567`, `maxTokens: 200000`, `--max-tokens=131072`, and
+ * every short fixture value in the test suite. Worse, the 6-character floor made the mask fire as a function of
+ * MAGNITUDE — `"outputTokens": 94746` survived and the same field one order up did not — so it passed every
+ * small test and only broke on production-scale numbers.
+ *
+ * The rule the original reached for is still the right one — a credential is MACHINE-GENERATED, so it carries
+ * letters and digits together — and what it was missing is that three other things do too. So, in order of
+ * confidence:
+ *   1. A known issuer prefix is a credential at any length. `sk-`, `ghp_`, `AKIA`, `eyJ` and friends are
+ *      unambiguous, and they are what actually leaks.
+ *   2. Otherwise the value must be entropic AND none of the three shapes that fake it:
+ *        · all digits — a count, and this workspace is made of them (`26170149`, `200_000`, `131072`);
+ *        · a path, URL or `${template}` — `${STATE_DIR}/runner-token`, `/run/intentic/agent.token`;
+ *        · SCREAMING_SNAKE — the NAME of a variable passed as a string, not its value.
+ *   3. And it must be longer than a human would type, which is what separates a generated key from the
+ *      fixture values the model needs to read (`"tok-abc-123"`, `"test-secret"`).
+ * The deliberate gap is unchanged from the original: an all-lowercase handwritten passphrase reads exactly like
+ * an identifier, and nothing in the text separates them. */
+const ISSUER_PREFIX = /^(?:sk-|pk-|rk-|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abposr]-|AKIA|ASIA|eyJ|AIza|ya29\.|glpat-|dop_v1_|shpat_|SG\.|npm_)/;
+const NUMERIC_VALUE = /^[\d_,.]+$/;
+const STRUCTURAL_VALUE = /[\s/\\${}]/;
+const ENV_NAME_VALUE = /^[A-Z0-9_]+$/;
+const ENTROPIC_VALUE = /^(?=[^\n]*\d)(?=[^\n]*[A-Za-z])/;
+const HANDWRITTEN_MAX = 12;
+const looksLikeCredential = (value) =>
+    ISSUER_PREFIX.test(value) ||
+    (value.length > HANDWRITTEN_MAX &&
+        ENTROPIC_VALUE.test(value) &&
+        !NUMERIC_VALUE.test(value) &&
+        !STRUCTURAL_VALUE.test(value) &&
+        !ENV_NAME_VALUE.test(value));
+
 const SECRET_PATTERNS = [
-    [new RegExp(`\\b(${SECRET_NAME}${ASSIGN})(?:${QUOTED_VALUE}|${BARE_VALUE})`, "gi"), "$1$2***$2"],
+    [
+        new RegExp(`\\b(${SECRET_NAME}${ASSIGN})(?:${QUOTED_VALUE}|(${BARE_VALUE}))`, "gi"),
+        // Quoted and bare arrive in different groups because only the quoted one has a quote to put back.
+        (match, assignment, quote, quoted, bare) => (looksLikeCredential(quoted ?? bare) ? `${assignment}${quote ?? ""}***${quote ?? ""}` : match),
+    ],
     [/\bAKIA[0-9A-Z]{16}\b/g, "***"],
     // Same rule for the bearer value: prose ("refuses every bearer token", "the bearer is valid") carries no
     // digit, every real bearer does.
@@ -311,9 +350,21 @@ const FAIL_TAIL = 500;
 // the very next call re-reads the whole file through Read, paying for it twice. So a read gets the Read tool's
 // own ceiling, and overshoot is trimmed from the END (where a file read naturally stops) rather than the middle.
 const READ_MAX = 2000;
-// Anchored at a segment start so `cd /work/intentic && cat src/app.ts` is recognised, and deliberately narrow:
-// `git log` without `-p` is history (a log, correctly capped), `git log -p` is a read.
-const READ_COMMAND = /(?:^|[;&|]\s*)(?:cat|bat|sed\s+-n|awk|git\s+(?:diff|show)\b|git\s+log\s+(?:[^;&|]*\s)?-p)\b/;
+/* Deliberately narrow on the RIGHT — `git log` without `-p` is history (a log, correctly capped), `git log -p`
+ * is a read — and deliberately permissive on the LEFT, which is the correction of a real measured failure.
+ *
+ * This used to anchor at a shell-statement start (`^` or after `;&|`). What it is handed is not the shell
+ * statement, though: it is the LAUNCHER line, `nsenter … -- bash -c '<what the model wrote>'`. So `cd x && cat
+ * y` was recognised (the `&&` supplied an anchor) and a bare `cat y` was not (the char before it is a quote) —
+ * a coin flip on syntax the model had no reason to think mattered. Over one day that misread 88 of 93 shell
+ * reads as logs and gutted the middle out of, among others, five reads of the workspace README.
+ *
+ * The lookbehind keeps the only thing the anchor was really buying — that `--concat`, `bobcat` and `x.cat` are
+ * not the `cat` command — while accepting the quote, the `--`, and the statement start alike. The remaining
+ * false positive is `<a log> | cat`, which grants a build log the read ceiling instead of the log cap. That
+ * trade is deliberate: over-keeping a log costs tokens once, while gutting a file read costs the read AND the
+ * re-read that follows it. */
+const READ_COMMAND = /(?<![\w.-])(?:cat|bat|sed\s+-n|awk|git\s+(?:diff|show)\b|git\s+log\s+(?:[^;&|]*\s)?-p)\b/;
 
 // The gated cleaning pipeline over already-split, ANSI/\r-cleaned lines. Exit-code-asymmetric: on success run the
 // matching command cleaners then the cap; on failure keep everything but a generous tail. `enabled` gates each id.

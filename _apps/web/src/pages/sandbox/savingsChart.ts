@@ -144,29 +144,46 @@ export const verdictOf = (experiment: TurnExperiment | undefined): ExperimentVer
         return { value: `Off`, unit: `not being measured`, tone: `muted`, detail: `` };
     }
 
-    const unit = experiment.metric === `costUsd` ? `cost per turn` : `output tokens per turn`;
+    const unit = experiment.metric === `costUsd` ? `cost per turn` : `prose written per turn`;
+    // What the arm was worth is a claim about the turns the mechanism REACHED, and pre-injection reaches only
+    // some of the arm it is assigned (a prompt that named its own file is retrieved for and finds nothing worth
+    // prepending). Said plainly wherever a figure appears, because a delta over a four-fifths-untreated arm is
+    // a fifth of the delta over the treated ones and a reader has no way to know that from the number.
+    const dilution = experiment.deliveredPct === undefined ? `` : ` · note actually landed on ${experiment.deliveredPct}% of the treated arm`;
 
-    // deltaPct/marginPct/saved are present together or not at all — the daemon withholds all three until both
-    // arms clear minTurns — so one check gates the whole verdict.
-    if (experiment.deltaPct === undefined || experiment.marginPct === undefined) {
+    // The margin arrives as soon as both arms clear minTurns; the delta waits for the margin to exclude zero.
+    // Two states, two shortfalls, and neither is allowed to borrow the other's headline.
+    if (experiment.marginPct === undefined) {
         const shortfall = Math.max(experiment.minTurns - experiment.on.turns, experiment.minTurns - experiment.off.turns);
         return {
             value: `Measuring`,
             unit,
             tone: `muted`,
-            detail: `needs ${experiment.minTurns} turns per arm — ${shortfall} more on the shorter one`,
+            detail: `needs ${experiment.minTurns} turns per arm — ${shortfall} more on the shorter one${dilution}`,
+        };
+    }
+    /* MEASURED, AND THE ANSWER IS "NOT YET DISTINGUISHABLE FROM NOTHING". A separate verdict from "Measuring"
+     * because it is a different fact — the arms are big enough, the spread is simply wider than the effect —
+     * and the reader's next move differs: one waits, the other asks whether the mechanism is worth its keep.
+     * The resolution is what it gets instead of a number, since that is the honest content of the reading. */
+    if (experiment.deltaPct === undefined) {
+        return {
+            value: `No effect`,
+            unit: `measurable in ${unit}`,
+            tone: `muted`,
+            detail: `anything real is inside ±${experiment.marginPct}pp (95%) — keep collecting${dilution}`,
         };
     }
 
-    // Dollars to the cent, tokens compact: a turn costs cents and thousands of tokens respectively, the same
-    // split the daemon rounds on (turn-experiments.ts).
-    const saved = experiment.metric === `costUsd` ? `$${(experiment.saved ?? 0).toFixed(2)}` : `${formatCompact(experiment.saved ?? 0)} tokens`;
+    // Dollars to the cent, characters compact: a turn costs cents and writes thousands of characters
+    // respectively, the same split the daemon rounds on (turn-experiments.ts).
+    const saved = experiment.metric === `costUsd` ? `$${(experiment.saved ?? 0).toFixed(2)}` : `${formatCompact(experiment.saved ?? 0)} chars`;
     return {
         // Direction is spelled with an arrow AND a sign, so it never rests on colour.
         value: `${experiment.deltaPct < 0 ? `↓` : `↑`}${Math.abs(experiment.deltaPct)}%`,
         unit,
         tone: experiment.deltaPct < 0 ? `success` : `content`,
-        detail: `±${experiment.marginPct}pp (95%)${(experiment.saved ?? 0) > 0 ? ` · ~${saved} saved in this range` : ``}`,
+        detail: `±${experiment.marginPct}pp (95%)${(experiment.saved ?? 0) > 0 ? ` · ~${saved} saved in this range` : ``}${dilution}`,
     };
 };
 

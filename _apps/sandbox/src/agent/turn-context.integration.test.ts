@@ -30,9 +30,19 @@ const outcome = (overrides: Partial<QueryOutcome> = {}): QueryOutcome => ({
 });
 
 const warn = vi.fn();
-const depsOf = (run: ResidentEngine["run"]): TurnContextDeps => ({ iq: { run }, logger: { warn } as unknown as Pick<Logger, "warn"> });
+const debug = vi.fn();
+const depsOf = (run: ResidentEngine["run"]): TurnContextDeps => ({
+    iq: { run },
+    logger: { warn, debug } as unknown as Pick<Logger, "warn" | "debug">,
+});
 
 const answering = (result: QueryOutcome = outcome()): TurnContextDeps => depsOf(() => Promise.resolve(result));
+
+// The note when there is one, so a test that is about the note's CONTENT does not restate the union each time.
+const noteOf = async (deps: TurnContextDeps, prompt: string): Promise<string | undefined> => {
+    const result = await retrieveTurnContext(deps, prompt);
+    return "note" in result ? result.note : undefined;
+};
 
 test("a question about the workspace is what gets retrieved for", () => {
     expect(retrievalQueryOf("how does the daemon decide which runtime serves a turn?")).toBe(
@@ -56,6 +66,26 @@ test("conversational turns are not questions about the code", () => {
     expect(retrievalQueryOf("")).toBeUndefined();
 });
 
+/* The gate above used to read "skip when EVERY word is conversational", and one word off the list defeated it —
+ * most often a bare number. These are real prompts from one day that each bought a 1.2k-token search of the
+ * index for words whose referent was in the previous turn. */
+test("a follow-up that points back at the last turn is not a query, however it is spelled", () => {
+    expect(retrievalQueryOf("Go for these 2.")).toBeUndefined();
+    expect(retrievalQueryOf("Go for 1.")).toBeUndefined();
+    expect(retrievalQueryOf(`Go for the "levers".`)).toBeUndefined();
+    expect(retrievalQueryOf("Got for all of it.")).toBeUndefined();
+});
+
+/* The other half of that gate, and its limit. A resumptive OPENING is not a veto — only a bar — because a
+ * message that starts by pointing back and then asks something real is a real question. The cost of keeping
+ * those is that pure anaphora with enough words gets through too, and nothing lexical tells the two apart. */
+test("a resumptive opener still retrieves once the message carries its own question", () => {
+    expect(retrievalQueryOf("Also, how does the scheduler decide which pending automation wakes a sandbox first?")).toBeDefined();
+    expect(retrievalQueryOf("how are branch points counted when the hotspots verb ranks a file?")).toBeDefined();
+    // An interrogative frame is nearly all stopwords: two content words is a real question and must survive.
+    expect(retrievalQueryOf("how do we rotate credentials?")).toBeDefined();
+});
+
 test("a slash command is a command, not a question", () => {
     expect(retrievalQueryOf("/review the diff")).toBeUndefined();
 });
@@ -72,7 +102,7 @@ test("a long prompt is searched by its opening, cut at a word boundary", () => {
 });
 
 test("the note carries the answer, names the query it ran, and says it is not the user's words", async () => {
-    const note = await retrieveTurnContext(answering(), "how does the daemon decide which runtime serves a turn?");
+    const note = await noteOf(answering(), "how does the daemon decide which runtime serves a turn?");
     expect(note).toBeDefined();
     expect(note!.startsWith(TURN_CONTEXT_NOTE_HEADER)).toBe(true);
     expect(note).toContain("Not the user's words");
@@ -83,37 +113,43 @@ test("the note carries the answer, names the query it ran, and says it is not th
 // The note is protocol the daemon staples on, so a reopened tab must not redraw it as something the user typed.
 test("the preamble round-trips: what restore gives back is the message alone", async () => {
     const prompt = "how does the daemon decide which runtime serves a turn?";
-    const note = await retrieveTurnContext(answering(), prompt);
+    const note = await noteOf(answering(), prompt);
     expect(stripTurnPreamble(withTurnPreamble([note!], prompt))).toBe(prompt);
 });
 
 test("an ineligible prompt never reaches the engine", async () => {
     const run = vi.fn();
-    expect(await retrieveTurnContext(depsOf(run as unknown as ResidentEngine["run"]), "go for it")).toBeUndefined();
+    expect(await retrieveTurnContext(depsOf(run as unknown as ResidentEngine["run"]), "go for it")).toEqual({ skipped: "ineligible" });
     expect(run).not.toHaveBeenCalled();
 });
 
-test("a weak answer is no answer: no hits, or an index that has not caught up with disk yet", async () => {
+/* WHY NOTHING WAS PREPENDED, named rather than merely absent. All four of these used to return the same
+ * undefined as a delivered note's opposite, so a turn assigned the treatment and a turn that got it were
+ * indistinguishable downstream — which is how the experiment came to report a delta over an arm that was four
+ * fifths untreated. */
+test("a weak answer is no answer, and says which kind of weak", async () => {
     const question = "how does the daemon decide which runtime serves a turn?";
-    expect(await retrieveTurnContext(answering(outcome({ exitCode: 1 })), question)).toBeUndefined();
+    expect(await retrieveTurnContext(answering(outcome({ exitCode: 1 })), question)).toEqual({ skipped: "no-hits" });
     const empty = outcome();
-    expect(await retrieveTurnContext(answering({ ...empty, result: { ...empty.result, groups: [] } }), question)).toBeUndefined();
+    expect(await retrieveTurnContext(answering({ ...empty, result: { ...empty.result, groups: [] } }), question)).toEqual({
+        skipped: "no-hits",
+    });
     // `building` means the index holds a fraction of the workspace, so its answer would be confidently partial.
     const building = outcome();
-    expect(
-        await retrieveTurnContext(answering({ ...building, result: { ...building.result, freshness: { state: "building" } } }), question),
-    ).toBeUndefined();
+    expect(await retrieveTurnContext(answering({ ...building, result: { ...building.result, freshness: { state: "building" } } }), question)).toEqual(
+        { skipped: "indexing" },
+    );
 });
 
 test("a failed retrieval costs the note and nothing else", async () => {
     warn.mockClear();
-    const note = await retrieveTurnContext(
+    const result = await retrieveTurnContext(
         depsOf(() => Promise.reject(new Error("index corrupt"))),
         "how does the daemon decide which runtime serves a turn?",
     );
     // The turn goes on. Killing it over a search this user never asked for would make the feature strictly
     // worse than not having it.
-    expect(note).toBeUndefined();
+    expect(result).toEqual({ skipped: "failed" });
     expect(warn).toHaveBeenCalledOnce();
 });
 
@@ -132,7 +168,7 @@ test("a retrieval that outruns its deadline is abandoned, not waited on", async 
         );
         const pending = retrieveTurnContext(deps, "how does the daemon decide which runtime serves a turn?");
         await vi.advanceTimersByTimeAsync(2_000);
-        expect(await pending).toBeUndefined();
+        expect(await pending).toEqual({ skipped: "deadline" });
         // The abort still goes out — it releases the half of a query that listens for it (the rg child).
         expect(aborted).toBe(true);
         // An abort is this deadline firing, which is a decision, not a failure worth logging.
@@ -160,7 +196,7 @@ test("against a real index: the note answers the question, and restore still giv
     try {
         await iq.warm();
         const prompt = "how do we rotate credentials?";
-        const note = await retrieveTurnContext({ iq, logger: { warn: () => {} } as unknown as Pick<Logger, "warn"> }, prompt);
+        const note = await noteOf({ iq, logger: { warn: () => {}, debug: () => {} } as unknown as Pick<Logger, "warn" | "debug"> }, prompt);
         expect(note).toBeDefined();
         expect(note).toContain("auth.ts:1");
         expect(note).toContain("refreshSessionToken");

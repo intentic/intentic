@@ -927,24 +927,45 @@ export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() }
  * appends, so it belongs to neither arm.
  *
  * `metric` says what `mean` counts and what `deltaPct` is a delta in. The terse steer is judged on the model's
- * OWN output tokens, which is the thing it steers. Pre-injection is judged on COST, because it spends input
- * tokens deliberately to buy back search turns — scored on output tokens it would look like a pure expense,
- * and scored on input tokens like a pure loss; the trade only nets out in money. */
+ * own PROSE, which is the thing it steers and the only part of its output that responds to being asked to be
+ * brief (see UsageTurn.proseChars for why the turn's total output tokens cannot answer this). Pre-injection is
+ * judged on COST, because it spends input tokens deliberately to buy back search turns — scored on output
+ * tokens it would look like a pure expense, and scored on input tokens like a pure loss; the trade only nets
+ * out in money. */
 export const TurnExperimentSchema = z.object({
-    metric: z.enum(["outputTokens", "costUsd"]),
+    metric: z.enum(["proseChars", "costUsd"]),
     on: SavingsArmSchema,
     off: SavingsArmSchema,
+    /* How much of the treatment arm the treatment actually REACHED, when that is knowable and less than all of
+     * it — pre-injection's arm is the coin flip (intention-to-treat, deliberately), and a turn can be assigned
+     * the retrieval and still have nothing to prepend. Measured at four turns in five, which is the difference
+     * between a mechanism worth little and one worth five times what the delta says.
+     *
+     * Absent ⇒ delivery is not a separate question for this experiment (the terse steer always lands) or no
+     * turn in the window recorded it. The screen shows the delta as diluted rather than silently scaling it:
+     * the correction is a division by a rate this small only when the rate is itself well measured. */
+    deliveredPct: z.number().optional(),
     // Turns per arm before a delta is reported at all. Carried on the wire so the screen's "measuring…" state
     // counts toward the daemon's real threshold instead of a number the browser guessed.
     minTurns: z.number(),
-    /* The three below are present TOGETHER, and only once both arms clear `minTurns` — a schema that can't
-     * express a half-measured experiment is how a 34%-that-becomes-8%-tomorrow never reaches the screen.
-     *   deltaPct  — change in the metric's mean per turn under the mechanism; negative is a saving.
-     *   marginPct — ± percentage points, 95% (Welch, unequal variances and unequal arms).
-     *   saved     — what the delta is worth over the turns that actually ran with it, in this window, in the
-     *               metric's own unit (tokens, or dollars). */
-    deltaPct: z.number().optional(),
+    /* THE RESOLUTION, present as soon as both arms clear `minTurns`: ± percentage points at 95% (Welch,
+     * unequal variances and unequal arms). Present even when the delta below is withheld, because "whatever
+     * this mechanism does, it is smaller than ±35 points" is a true and useful thing to be told — it is the
+     * reading that says to keep collecting rather than to act. */
     marginPct: z.number().optional(),
+    /* THE CLAIM, present only once there is one. Both together, and only when the margin does NOT span zero.
+     *
+     * A schema that can't express a half-measured experiment is how a 34%-that-becomes-8%-tomorrow never
+     * reaches the screen — and clearing `minTurns` turned out not to be enough to buy that. The terse steer
+     * crossed its thirtieth control turn and immediately reported +31.2% ± 35.1pp: a confidence interval
+     * running from −3.4% to +66.7%, which is to say no effect was measured at all, rendered as an alarming
+     * number pointing the wrong way. Thirty turns is where the normal approximation starts to hold, not where
+     * this much per-turn spread resolves an effect; requiring the interval to exclude zero is the same
+     * withhold-until-it-means-something rule applied to the thing that actually decides whether it does.
+     *   deltaPct — change in the metric's mean per turn under the mechanism; negative is a saving.
+     *   saved    — what the delta is worth over the turns that actually ran with it, in this window, in the
+     *              metric's own unit (characters, or dollars). */
+    deltaPct: z.number().optional(),
     saved: z.number().optional(),
 });
 export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
@@ -3325,6 +3346,35 @@ export const UsageTurnSchema = z.object({
      * would sort turns by how searchable their question was, which is a property of the question. The control
      * arm contains the same unsearchable questions in the same proportion, so they cancel. */
     iqContext: z.boolean().optional(),
+    /* Whether a note was actually PREPENDED on this turn — the companion to `iqContext`, and the answer to the
+     * question that field's design deliberately refuses to answer.
+     *
+     * Keeping the arm on the coin flip is right, and it costs something: the treatment arm contains turns the
+     * treatment never reached, so the delta it yields is diluted by however many those are. Measured over one
+     * day that was four turns in five, which makes the difference between "this mechanism is worth little" and
+     * "this mechanism is worth five times what the number says" — and nothing in the ledger could tell them
+     * apart, because a treated turn and an untreated one in the same arm looked identical.
+     *
+     * So the arm stays intention-to-treat and this records delivery beside it. Together they give both the
+     * unbiased estimate and the rate to divide it by; alone, either one misleads. Absent ⇒ outside the
+     * experiment, exactly as for the arm. */
+    iqContextNote: z.boolean().optional(),
+    /* Characters of the model's own PROSE this turn — the `delta` frames only, so no tool-call arguments and no
+     * thinking. What the terse steer is judged on, and the reason it can be judged at all.
+     *
+     * `outputTokens` cannot serve: measured over a day of real turns it is 91.6% tool-call arguments (an Edit's
+     * old_string and new_string, a Write's whole file body) and 7.8% prose. The steer moves prose. So a fifth
+     * off the model's narration moves the total by 1.6% — against a margin of ±35 points, which is to say the
+     * experiment was structurally unable to see its own treatment, and the number it printed instead was
+     * whichever arm happened to draw the bigger tasks.
+     *
+     * CHARACTERS, not tokens, because the provider bills a total and never breaks it down — a token figure here
+     * would be chars÷4 wearing a unit it had not earned. For a comparison of two arms the constant cancels
+     * anyway, and the honest unit is the one actually counted.
+     *
+     * Absent ⇒ the turn predates this being measured; `armOf` drops it from the population rather than reading
+     * it as a silent turn. */
+    proseChars: z.number().optional(),
 });
 export type UsageTurn = z.infer<typeof UsageTurnSchema>;
 

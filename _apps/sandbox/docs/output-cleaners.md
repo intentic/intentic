@@ -29,6 +29,23 @@ Each cleaner has a stable `id`, and there are two kinds:
 Global stages are `dedup` (collapse ≥3 identical consecutive lines), `cap` (head/tail truncation), and `redact`
 (mask secret-named assignments, AWS keys, bearer tokens, URL creds — on both success and failure).
 
+Two things `cap` and `redact` each learned the hard way, because both were measured wrong for a while and both
+cost the model real information:
+
+- **A deliberate read is not a log.** `cat`, `sed -n`, `awk`, `git diff/show`, `git log -p` get the Read tool's
+  2000-line ceiling and are trimmed from the END; everything else gets head 30 / tail 50. What `READ_COMMAND`
+  matches against is the LAUNCHER line (`nsenter … bash -c '…'`), not the shell statement — so it is anchored on
+  a non-word character rather than a statement start. Anchored the other way it recognised `cd x && cat y` and
+  missed a bare `cat y`, which over one day misread 88 of 93 shell reads as logs and gutted the middle out of,
+  among others, five reads of the workspace README.
+- **A number is never a credential.** The value has to look like one too: a known issuer prefix (`sk-`, `ghp_`,
+  `AKIA`, `eyJ`…) at any length, or letters-and-digits together, longer than a human types by hand, and not a
+  path, a `${template}` or a SCREAMING_SNAKE variable name. A plain "≥6 characters with a digit" rule masked 182
+  lines in a day and caught nothing: `"cacheReadTokens":26170149` (which also breaks the JSON for whatever reads
+  it next), `inputTokens: 1234567`, `--max-tokens=131072`, and every short fixture value in the test suite. Its
+  six-character floor made the mask fire on MAGNITUDE — `"outputTokens": 94746` survived and the same field one
+  order up did not — so it passed every small test and only failed on real data.
+
 **Add a cleaner:** append `{ id, match, apply }` (or a `strip(id, match, patterns)`) to `COMMAND_CLEANERS` —
 omit `match` for a shape cleaner — and it joins `CLEANERS` automatically. Keep it dependency-free (the filter
 must never break). Candidates surface from `discover` (below); today it names `grep`/`rg` grouping, by a wide
@@ -100,9 +117,22 @@ to intentic's per-turn tool loop; revisit if benchmarks show model output domina
 be re-run to see what it would have said unsteered. So **`terseHoldout`** (fraction [0,1], default 0) is a
 turn-level holdout: `turn-plan.ts` flips the coin, and the arm it picked is stamped on the spend ledger
 (`UsageTurn.terse` — absent means the turn was never in the experiment, e.g. a custom system prompt, which drops
-the steer with everything else). `usage/turn-experiments.ts` reads the two arms back: mean output tokens per turn,
-`n` per arm, and a Welch margin. Below `MIN_ARM_TURNS` (30) per arm it reports the arms and **no delta** — per-turn
-output is spread far too wide for a handful of turns to separate the steer from the work.
+the steer with everything else). `usage/turn-experiments.ts` reads the two arms back: mean **prose characters**
+per turn, `n` per arm, and a Welch margin.
+
+**It is judged on prose, not on output tokens**, because those are different quantities: measured over a day of
+real turns the model's output is 91.6% tool-call arguments (an Edit's two strings, a Write's file body) and 7.8%
+prose. The steer moves prose. Scored on the total, a fifth off the narration moves the number by 1.6% — well
+inside the margin — so the experiment could not see its own treatment, and what it reported instead was whichever
+arm had drawn the longer tasks. `UsageTurn.proseChars` counts the turn's `delta` frames; characters rather than
+tokens because the provider bills one total and never breaks it down, and for a two-arm comparison the constant
+cancels.
+
+**A number is withheld twice.** Below `MIN_ARM_TURNS` (30) per arm it reports the arms and no delta. Past that it
+reports the delta only if the 95% margin EXCLUDES zero — the steer crossed its thirtieth control turn and
+published +31.2% ± 35.1pp, an interval from −3.4% to +66.7%, which is no measurement at all rendered as an
+alarming number pointing the wrong way. The margin still goes out on its own: "smaller than ±35 points" is the
+true reading, and the one that says to keep collecting rather than to go and change something.
 
 ## Retrieval before the turn — `iqContext`
 
@@ -113,9 +143,25 @@ index, `composition.ts`) and prepends the ranked answer to the message as a turn
 searches opens with `path:line` anchors instead.
 
 **It is deliberately picky about firing**, because a miss is pure cost: a message that names its own file or
-path, a slash command, or one made only of conversational words retrieves nothing at all, and neither does a
-query that comes back with no hits or against an index still building. Retrieval is raced against a 2s deadline
-and can never fail a turn — a thrown query costs the note and is logged, nothing more.
+path, a slash command, or one carrying no content word retrieves nothing at all, and neither does a query that
+comes back with no hits or against an index still building. Retrieval is raced against a 2s deadline and can
+never fail a turn — a thrown query costs the note and is logged, nothing more.
+
+A bare NUMBER is not a content word, and a message that opens by pointing backwards ("go for", "continue", "do
+it", "also") needs a few of them before it is worth a search. One digit used to defeat the whole gate: "Go for
+these 2." retrieved, and so did "Go for 1." — each spending its 1.2k budget searching the index for words whose
+referent was in the previous turn. The bar stays low on purpose, because an interrogative frame is nearly all
+stopwords ("how do we rotate credentials?" has two content words in it) and a threshold high enough to catch
+every follow-up takes the real questions with it.
+
+**Assignment and delivery are separate facts, and the ledger carries both.** `UsageTurn.iqContext` is the coin
+flip — intention-to-treat, deliberately, because re-labelling a turn by what retrieval happened to find would
+sort turns by how searchable their question was, which is a property of the question and not of the treatment.
+The price of that correctness is a treatment arm the treatment did not reach: measured at four turns in five.
+So `UsageTurn.iqContextNote` records whether a note was actually prepended, and the report carries the rate as
+`deliveredPct`, which is the difference between a mechanism worth little and one worth five times what the delta
+says. Every skip also names itself in the debug log (`ineligible` / `deadline` / `indexing` / `no-hits` /
+`failed`) — before that only a *thrown* retrieval was logged, which over a full day meant one line.
 
 Why a preamble and not a tool: a tool costs a definition in every request plus a round trip when it fires. The
 graperoot benchmark this borrows from measured its own MCP form **15.8% more expensive** on complex prompts,

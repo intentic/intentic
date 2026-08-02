@@ -28,10 +28,10 @@ const { experiment, onLabel, offLabel, detail } = defineProps<{
     detail: string;
 }>();
 
-// Dollars are printed to the thousandth because a turn costs cents; tokens compact, because a turn costs
-// thousands. Same reason the daemon rounds them differently (turn-experiments.ts).
+// Dollars are printed to the thousandth because a turn costs cents; prose compact, because a turn writes
+// thousands of characters. Same reason the daemon rounds them differently (turn-experiments.ts).
 const money = computed(() => experiment.metric === `costUsd`);
-const formatMean = (value: number): string => (money.value ? `$${value.toFixed(3)}` : `${formatCompact(value)} tok`);
+const formatMean = (value: number): string => (money.value ? `$${value.toFixed(3)}` : `${formatCompact(value)} chars`);
 
 const max = computed(() => Math.max(experiment.on.mean, experiment.off.mean, Number.EPSILON));
 // Control first: it is the baseline the other bar is a claim against, and reading it second inverts the
