@@ -94,6 +94,7 @@ export * from "./output-fields.js";
 export * from "./schemas.js";
 export * from "./terminal-protocol.js";
 export * from "./title.js";
+export * from "./workflow-faults.js";
 
 // The aggregated contract — implemented on the server by the per-domain route factories and consumed by the
 // browser's typed oRPC client (ContractRouterClient<typeof sandboxContract>). The wire paths it declares are

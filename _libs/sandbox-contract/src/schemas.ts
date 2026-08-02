@@ -2897,84 +2897,8 @@ export const WorkflowSchema = z.object({
 });
 export type Workflow = z.infer<typeof WorkflowSchema>;
 
-/* Why the graph is not runnable, as a list of sentences. Empty ⇒ it is. Shared by the save route (which
- * refuses) and the designer (which shows them under the canvas as you type), because a rule enforced only
- * daemon-side is a rule the user meets as a failed save with no idea which node is wrong.
- */
-export const workflowFaults = (workflow: Pick<Workflow, "steps">): string[] => {
-    const faults: string[] = [];
-    const ids = new Set<string>();
-    for (const step of workflow.steps) {
-        if (ids.has(step.id)) {
-            faults.push(`Two steps share the id "${step.id}".`);
-        }
-        ids.add(step.id);
-    }
-    for (const step of workflow.steps) {
-        for (const need of step.needs) {
-            if (!ids.has(need)) {
-                faults.push(`"${step.title}" waits for "${need}", which is not a step in this workflow.`);
-            }
-        }
-        if (step.needs.includes(step.id)) {
-            faults.push(`"${step.title}" waits for itself.`);
-        }
-        // A step that continues a session needs exactly one session to continue. Zero (a root) has nothing to
-        // carry on from; two would have to pick, and picking silently is how a workflow quietly drops half its
-        // context.
-        if (step.handoff === "continue" && step.needs.length !== 1) {
-            faults.push(
-                step.needs.length === 0
-                    ? `"${step.title}" continues a session but starts the run — there is nothing to continue.`
-                    : `"${step.title}" continues a session but waits for ${step.needs.length} steps; it can only continue one.`,
-            );
-        }
-        // A step with nothing to produce and nothing to check cannot end except by running out of iterations.
-        if (step.output.kind === "none" && step.checks.length === 0) {
-            faults.push(`"${step.title}" has no output and no check, so nothing can tell it it is finished.`);
-        }
-    }
-    /* Two steps continuing the SAME session is the one graph that is legal on paper and broken in practice:
-     * both would run on one conversation, in parallel, against one worktree and one turn mutex — so they would
-     * serialize on a lock neither knows about and the second would inherit a session the first had moved on.
-     * A predecessor can be continued once; anything else that needs its result takes it as a handover. */
-    const continued = new Map<string, string[]>();
-    for (const step of workflow.steps) {
-        if (step.handoff === "continue" && step.needs.length === 1) {
-            const parent = step.needs[0] ?? "";
-            continued.set(parent, [...(continued.get(parent) ?? []), step.title]);
-        }
-    }
-    for (const [parent, titles] of continued) {
-        if (titles.length > 1) {
-            faults.push(`${titles.map((title) => `"${title}"`).join(" and ")} all continue "${parent}"'s session; only one step can.`);
-        }
-    }
-    // Cycles, by walking every path from every root. A workflow with a cycle has steps that can never start,
-    // and the scheduler would simply wait forever on them rather than saying so.
-    const byId = new Map(workflow.steps.map((step) => [step.id, step]));
-    const state = new Map<string, "open" | "closed">();
-    const walk = (id: string, trail: readonly string[]): void => {
-        if (state.get(id) === "closed") {
-            return;
-        }
-        if (state.get(id) === "open") {
-            faults.push(`These steps wait for each other in a circle: ${[...trail.slice(trail.indexOf(id)), id].join(" → ")}.`);
-            return;
-        }
-        state.set(id, "open");
-        for (const need of byId.get(id)?.needs ?? []) {
-            if (byId.has(need)) {
-                walk(need, [...trail, id]);
-            }
-        }
-        state.set(id, "closed");
-    };
-    for (const step of workflow.steps) {
-        walk(step.id, []);
-    }
-    return faults;
-};
+// The rules a graph has to clear before it can be saved or run — the acyclic `needs`, the once-only
+// continuation — are in workflow-faults.ts, because they are about the graph rather than about any field here.
 
 /* How one step ended. `skipped` is the one that carries information the others cannot: it means the step never
  * ran because something it waited for did not finish, which is why a failed workflow shows one red node and a
