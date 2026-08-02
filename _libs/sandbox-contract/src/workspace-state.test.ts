@@ -117,13 +117,31 @@ describe(`WORKSPACE_STATE_FILES`, () => {
         }
     });
 
-    it(`has no entry that prefix-matches another, so one write can't be billed twice`, () => {
-        for (const file of WORKSPACE_STATE_FILES) {
-            const overlapping = WORKSPACE_STATE_FILES.filter((other) => other !== file && other.path.startsWith(file.path));
+    it(`only nests under an entry that invalidates nothing, so one write can't be billed twice`, () => {
+        // Entries nest when one store answers PORTABILITY in two halves (`.intentic/claude/` is a credential
+        // root whose `projects/` subtree is the thing a bundle exists to carry) — stateFileFor's longest match
+        // is what keeps that unambiguous. Invalidation has no longest-match rule: staleQueryKeys unions every
+        // matching entry, so a nest under an entry that DOES invalidate would bill the outer view's queries for
+        // a write that belongs to the inner one. Nesting is therefore only legal beneath an empty `invalidates`.
+        for (const file of WORKSPACE_STATE_FILES.filter((entry) => entry.invalidates.length > 0)) {
+            const nested = WORKSPACE_STATE_FILES.filter((other) => other !== file && other.path.startsWith(file.path));
             expect(
-                overlapping.map((other) => other.path),
-                `${file.path} is a prefix of another entry`,
+                nested.map((other) => other.path),
+                `${file.path} invalidates ${file.invalidates.join(`, `)} and is a prefix of another entry`,
             ).toEqual([]);
+        }
+    });
+
+    it(`splits a nested entry from its parent for a reason the parent doesn't already carry`, () => {
+        // A nest that agrees with the entry it sits under is a duplicate: stateFileFor resolves to the same
+        // answer either way, so the split is dead weight the next reader has to diff to discover.
+        for (const file of WORKSPACE_STATE_FILES) {
+            for (const parent of WORKSPACE_STATE_FILES.filter((other) => other !== file && file.path.startsWith(other.path))) {
+                expect(
+                    parent.portability === file.portability && parent.invalidates.join() === file.invalidates.join(),
+                    `${file.path} says nothing its parent ${parent.path} doesn't already say`,
+                ).toBe(false);
+            }
         }
     });
 });
