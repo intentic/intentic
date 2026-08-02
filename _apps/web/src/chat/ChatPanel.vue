@@ -11,16 +11,7 @@ import { effectiveAccount } from "../composables/chat/providerAccounts";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { transcriptView } from "../composables/chat/transcriptClock";
 import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
-import {
-    bindingWindow,
-    formatReset,
-    formatUtilization,
-    formatWait,
-    isStale,
-    usageDetail,
-    usageStatusFor,
-    usageTone,
-} from "../composables/chat/usageStatus";
+import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useChat } from "../composables/chat/useChat";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
@@ -48,6 +39,7 @@ import ChatTabs from "./ChatTabs.vue";
 import ChatTabsMobile from "./ChatTabsMobile.vue";
 import { formatTokens, ProgressRing } from "@intentic-app/ui";
 import ProviderLogo from "./ProviderLogo.vue";
+import UsageRing from "../components/UsageRing.vue";
 
 /* The shared assistant. Presentational only — all state lives in the useChat singleton, so the transcript
  * persists as the user moves between workspace areas. The panel owns the layout (tabs, scroller, composer,
@@ -238,26 +230,22 @@ const loopHint = computed(() =>
 // Claude subscription headroom for the active conversation's account, pushed from the agent stream at no token
 // cost — a small ring once that account's first Claude turn reports its limits, tinted as the binding pool
 // fills. Keyed by account so switching accounts shows the right one. The ring tracks the FULLEST pool (the one
-// that will gate the next turn); the tooltip lists them all, because which one is binding shifts between turns.
-const usageRing = computed(() => {
+// that will gate the next turn); its card lists them all, because which one is binding shifts between turns.
+const usageChip = computed(() => {
     // Resolved through effectiveAccount: a conversation that never picked an account runs on the daemon's
     // first, and the usage map is keyed by that real id — looking up `undefined` kept this chip invisible on
     // every single-account setup.
-    const info = usageStatusFor(effectiveAccount(active.value.provider.value, active.value.account.value));
-    const window = bindingWindow(info);
-    if (info === undefined || window === undefined) {
+    const headroom = planHeadroom(usageStatusFor(effectiveAccount(active.value.provider.value, active.value.account.value)));
+    // No binding pool ⇒ nothing measured, or everything has reset. Unlike an account ROW, a chat's chip stays
+    // out of the way rather than pinning a 0% to the composer for a session that has not asked for anything.
+    if (headroom?.binding === undefined) {
         return undefined;
     }
-    const rounded = Math.round(window.utilization);
-    // Past 90% the question flips from "how much is left" to "when can I go again", so the binding pool's
-    // reset joins the visible label instead of hiding in the tooltip — the chat view is where a limit bites.
-    const reset = rounded >= 90 && window.resetsAt !== undefined ? ` · ${formatReset(window.resetsAt)}` : ``;
-    return {
-        value: window.utilization,
-        label: `${formatUtilization(rounded, isStale(info))}${reset}`,
-        tone: usageTone(rounded),
-        tooltip: usageDetail(info),
-    };
+    // Once a pool is effectively spent the question flips from "how much is left" to "when can I go again", so
+    // the binding pool's reset joins the VISIBLE label instead of waiting behind a hover — the chat view is
+    // where a limit bites.
+    const reset = headroom.percent >= SPENT_PERCENT && headroom.binding.resetsAt !== undefined ? ` · ${formatReset(headroom.binding.resetsAt)}` : ``;
+    return { headroom, label: `${formatUtilization(headroom.percent, headroom.stale)}${reset}` };
 });
 
 // Per-conversation context-window fill — a ring that warns as the chat approaches auto-compaction.
@@ -1434,17 +1422,18 @@ watch(
                         <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
                         <span class="@max-xs:hidden">{{ contextRing.label }}</span>
                     </span>
-                    <!-- The chip answers "am I about to get rate-limited"; a click goes to the screen that
-                         answers "and what has it cost me". -->
+                    <!-- The chip answers "am I about to get rate-limited" — hovering it opens the pool-by-pool
+                         card beside the composer, and a click goes to the screen that answers "and what has it
+                         cost me". -->
                     <button
-                        v-if="usageRing"
+                        v-if="usageChip"
                         type="button"
-                        class="inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-content"
-                        v-tooltip.top="usageRing.tooltip"
+                        class="inline-flex cursor-pointer items-center transition-colors hover:text-content"
                         @click="router.push('/sandbox/usage')"
                     >
-                        <ProgressRing :value="usageRing.value" :class="usageRing.tone" />
-                        <span class="@max-xs:hidden">{{ usageRing.label }}</span>
+                        <UsageRing :headroom="usageChip.headroom"
+                            ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageRing
+                        >
                     </button>
                     <button
                         type="button"

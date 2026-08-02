@@ -122,26 +122,65 @@ const attachedUsage = (account: string): AccountUsage | undefined =>
 export const usageStatusFor = (account: string | undefined): AccountUsage | undefined =>
     account === undefined ? undefined : liveUsage(account, attachedUsage(account));
 
-export interface UsageRing {
-    percent: number;
-    tone: string;
-    tooltip: string;
+export interface PlanLimitPool {
+    readonly kind: string;
+    readonly label: string;
+    // Rounded once here, so a meter's width and its printed number can't disagree.
+    readonly percent: number;
+    readonly resetsAt: number | undefined;
 }
 
-/* An account's headroom as a ring: the one number, its severity, and the full per-pool breakdown behind it.
- * Undefined only when there is NO reading — that is the state the connection row answers with a plain dot, and
- * it must stay distinguishable from a measured 0%.
+/* ONE READING, AS THE POOLS IT IS MADE OF — named, ordered worst-first, rounded once. Everything that draws
+ * plan limits starts here: the Usage tab's meters (planLimitRow), the ring's hover card, the sentence a screen
+ * reader hears. A pool that reads "Weekly · Opus 91% (resets Sun 5:00 AM)" in one of them therefore reads the
+ * same in the others, which is the whole reason this is a projection rather than three formatters. */
+export const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
+    orderedWindows(usage).map((window) => ({
+        kind: window.kind,
+        label: usageWindowLabel(window),
+        percent: Math.round(window.utilization),
+        resetsAt: window.resetsAt,
+    }));
+
+// The fullest of them — the pool that will gate the next turn, off the ROUNDED figures the meters draw, so a
+// headline number and the pool it names can never come from different arithmetic.
+export const bindingPool = (pools: readonly PlanLimitPool[]): PlanLimitPool | undefined =>
+    pools.reduce<PlanLimitPool | undefined>((worst, pool) => (worst === undefined || pool.percent > worst.percent ? pool : worst), undefined);
+
+export interface PlanHeadroom {
+    // The binding pool's figure — what the ring draws, and what its tone is taken from.
+    readonly percent: number;
+    readonly tone: string;
+    readonly stale: boolean;
+    readonly measuredAt: number;
+    readonly pools: readonly PlanLimitPool[];
+    // The pool `percent` came from. Undefined when every pool has reset — the one state where the account has
+    // been measured and there is nothing left to name.
+    readonly binding: PlanLimitPool | undefined;
+}
+
+/* AN ACCOUNT'S HEADROOM, PROJECTED ONCE — the one number a ring draws, its severity, and the per-pool
+ * breakdown the card behind it lists. Undefined only when there is NO reading: that is the state the connection
+ * row answers with a plain dot, and it must stay distinguishable from a measured 0%.
+ *
+ * Structured, not a sentence. This used to hand every surface a pre-joined tooltip string, which is how the
+ * rings ended up wearing a four-line slab of prose — "5-hour session 56% (resets Mon 12:30 AM) · Weekly · all
+ * models 15% (resets Sun 5:00 AM) · …" — over the very rows the reader was comparing. Pools, figures and
+ * resets travel as data so the card can draw them as a list of meters and the sentence survives only where a
+ * sentence is the right medium (usageDetail, spoken to a screen reader).
  *
  * The `?? 0` is the one deliberate difference from the composer chip. `usagePercent` returns undefined when
  * every window has reset (an empty array), which is right for a chip that should not be pinned by a stale
  * reading — but wrong for an account row, where a reset account IS at 0%: it was measured, its pools reopened,
  * and "you have room" beats "we don't know". */
-export const usageRing = (usage: AccountUsage | undefined): UsageRing | undefined => {
+export const planHeadroom = (usage: AccountUsage | undefined): PlanHeadroom | undefined => {
     if (usage === undefined) {
         return undefined;
     }
-    const percent = usagePercent(usage) ?? 0;
-    return { percent, tone: usageTone(percent), tooltip: usageDetail(usage) };
+    const pools = usagePools(usage);
+    const binding = bindingPool(pools);
+    const percent = binding?.percent ?? 0;
+    return { percent, tone: usageTone(percent), stale: isStale(usage), measuredAt: usage.measuredAt, pools, binding };
 };
 
 // Format an epoch-seconds reset instant as a short local weekday + time (e.g. "Mon 3:20 PM") — unambiguous for
@@ -189,17 +228,20 @@ export const isStale = (usage: AccountUsage, now: number = Date.now()): boolean 
 // A percentage, marked as a floor when the reading is old enough to have been overtaken elsewhere.
 export const formatUtilization = (percent: number, stale: boolean): string => `${stale ? `≥` : ``}${percent}%`;
 
-// The compact tooltip: every pool with its reset, then how stale the whole reading is. All of them, because
-// "which pool is binding" is the question the single number can't answer — and the reset rides in parentheses
-// because "wait 20 minutes" and "wait until Thursday" are different answers to the same percentage.
-export const usageDetail = (usage: AccountUsage): string =>
+/* THE SAME BREAKDOWN AS ONE SENTENCE — the ring's accessible name, and nothing else. A screen reader gets no
+ * hover, so the card that lists these pools as meters (UsageRing.vue) never reaches it; this line is how the
+ * same facts arrive there, and it is the reason the string form still exists after the card replaced it on
+ * screen. Every pool, because "which one is binding" is what the single number can't answer, and the reset
+ * rides in parentheses because "wait 20 minutes" and "wait until Thursday" are different answers to the same
+ * percentage. */
+export const usageDetail = (headroom: PlanHeadroom): string =>
     [
-        ...orderedWindows(usage).map(
-            (window) =>
-                `${usageWindowLabel(window)} ${formatUtilization(Math.round(window.utilization), isStale(usage))}` +
-                (window.resetsAt === undefined ? `` : ` (resets ${formatReset(window.resetsAt)})`),
+        ...headroom.pools.map(
+            (pool) =>
+                `${pool.label} ${formatUtilization(pool.percent, headroom.stale)}` +
+                (pool.resetsAt === undefined ? `` : ` (resets ${formatReset(pool.resetsAt)})`),
         ),
-        `measured ${formatAge(usage.measuredAt)}`,
+        `measured ${formatAge(headroom.measuredAt)}`,
     ].join(` · `);
 
 /* ---- plan limits, as rows ---------------------------------------------------------------------------------
@@ -218,14 +260,6 @@ export const usageDetail = (usage: AccountUsage): string =>
  * it is in: a plan that publishes no limits at all (`readable: false` — SuperGrok alone, now that Kimi's own
  * endpoint is read), or one that simply
  * has not been measured yet. */
-
-export interface PlanLimitPool {
-    readonly kind: string;
-    readonly label: string;
-    // Rounded once here, so a meter's width and its printed number can't disagree.
-    readonly percent: number;
-    readonly resetsAt: number | undefined;
-}
 
 export interface PlanLimitRow {
     // Unique across providers: a native account id is a uuid, a routed one is an auth-file name unique only
@@ -255,21 +289,8 @@ const planLimitRow = (
     needsReauth: boolean,
 ): PlanLimitRow => {
     const usage = liveUsage(key, attached);
-    const pools =
-        usage === undefined
-            ? []
-            : orderedWindows(usage).map((pool) => ({
-                  kind: pool.kind,
-                  label: usageWindowLabel(pool),
-                  percent: Math.round(pool.utilization),
-                  resetsAt: pool.resetsAt,
-              }));
-    // The fullest pool, off the rounded values the meters draw — an account is as constrained as its tightest
-    // allowance, and reading that off `pools` is what keeps the headline number and its named pool the same one.
-    const binding = pools.reduce<PlanLimitPool | undefined>(
-        (worst, pool) => (worst === undefined || pool.percent > worst.percent ? pool : worst),
-        undefined,
-    );
+    const pools = usage === undefined ? [] : usagePools(usage);
+    const binding = bindingPool(pools);
     return {
         id: `${provider}:${key}`,
         provider,

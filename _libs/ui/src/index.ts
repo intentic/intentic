@@ -2,7 +2,7 @@ export { clipboardOf } from "./clipboard.js";
 export { cmp } from "./cmp.js";
 export { default as AnchoredOverlay } from "./components/AnchoredOverlay.vue";
 export { default as Avatar } from "./components/Avatar.vue";
-export { type Cross, placeAnchored, type Side } from "./composables/anchorPlacement.js";
+export { type Cross, placeAnchored, type Placement, type Side } from "./composables/anchorPlacement.js";
 export { default as BarChart } from "./components/BarChart.vue";
 export { type BarItem } from "./components/barChart.js";
 export { default as BottomSheet } from "./components/BottomSheet.vue";

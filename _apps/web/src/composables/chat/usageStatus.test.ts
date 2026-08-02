@@ -16,11 +16,12 @@ import {
     type PlanLimitRow,
     planLimitRows,
     planLimitSummary,
+    type PlanHeadroom,
+    planHeadroom,
     refusalIsCurrent,
     refusalLine,
     usageDetail,
     usagePercent,
-    usageRing,
     usageStatusByAccount,
     usageStatusFor,
     usageWindowLabel,
@@ -28,6 +29,15 @@ import {
 
 const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: `seven_day`, utilization: 42.4, ...over });
 const usage = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: 0, ...over });
+// The projection every surface draws from. Undefined is reserved for an account nobody has measured, which is
+// its own case below — everywhere else the reading exists, so unwrapping it here keeps the assertions readable.
+const headroom = (over: Partial<AccountUsage> = {}): PlanHeadroom => {
+    const projected = planHeadroom(usage(over));
+    if (projected === undefined) {
+        throw new Error(`a measured account always projects`);
+    }
+    return projected;
+};
 
 describe(`usageWindowLabel`, () => {
     it(`keeps every weekly pool distinguishable — folding them is the bug it exists to prevent`, () => {
@@ -112,10 +122,13 @@ describe(`isStale / formatUtilization`, () => {
     });
 });
 
+/* The sentence a screen reader hears in place of the card. It is the ONLY string form of the breakdown left —
+ * the sighted reader gets a list of meters (UsageRing.vue) — so what is pinned here is that the spoken version
+ * still carries every fact the card draws. */
 describe(`usageDetail`, () => {
     it(`lists EVERY pool, because which one is binding is what a single number can't say`, () => {
         const detail = usageDetail(
-            usage({
+            headroom({
                 windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 98 })],
                 measuredAt: Date.now(),
             }),
@@ -126,7 +139,7 @@ describe(`usageDetail`, () => {
     it(`names each pool's reset beside its figure — "wait 20 minutes" and "wait until Thursday" are different answers`, () => {
         const resetsAt = 1_700_000_000;
         const detail = usageDetail(
-            usage({
+            headroom({
                 windows: [window({ kind: `five_hour`, utilization: 91, resetsAt }), window({ kind: `seven_day`, utilization: 40 })],
                 measuredAt: Date.now(),
             }),
@@ -136,7 +149,7 @@ describe(`usageDetail`, () => {
     });
 
     it(`marks every figure as a floor once the reading is old enough to have been overtaken elsewhere`, () => {
-        const detail = usageDetail(usage({ windows: [window({ kind: `seven_day`, utilization: 1 })], measuredAt: Date.now() - 8 * 3_600_000 }));
+        const detail = usageDetail(headroom({ windows: [window({ kind: `seven_day`, utilization: 1 })], measuredAt: Date.now() - 8 * 3_600_000 }));
         expect(detail).toBe(`Weekly · all models ≥1% · measured 8h ago`);
     });
 });
@@ -162,36 +175,43 @@ describe(`formatWait`, () => {
     });
 });
 
-/* The account row's ring. Every provider reaches this the same way — the daemon attaches the same AccountUsage
- * to a native account and to a routed subscription alike — so what is pinned here is the meaning of the ring
- * itself, which the Agent tab, the picker and the composer all have to agree on. */
-describe(`usageRing`, () => {
+/* The account row's ring, and the card behind it. Every provider reaches this the same way — the daemon
+ * attaches the same AccountUsage to a native account and to a routed subscription alike — so what is pinned
+ * here is the meaning of the projection itself, which the Agent tab, the picker and the composer all have to
+ * agree on. */
+describe(`planHeadroom`, () => {
     it(`renders no ring at all for an account nobody has measured`, () => {
         // The state the row answers with a plain dot. It must stay distinguishable from a measured 0%, which is
         // what a green "0%" ring over an unread account would destroy.
-        expect(usageRing(undefined)).toBeUndefined();
+        expect(planHeadroom(undefined)).toBeUndefined();
     });
 
     it(`reads a spent account as a full red ring rather than a healthy dot`, () => {
         // The exact shape a used-up Google or ChatGPT subscription arrives in — the bug this feature exists for.
-        const ring = usageRing(usage({ windows: [window({ kind: `google:weekly`, utilization: 100 })] }));
-        expect(ring?.percent).toBe(100);
-        expect(ring?.tone).toBe(`text-danger`);
+        const spent = headroom({ windows: [window({ kind: `google:weekly`, utilization: 100 })] });
+        expect(spent.percent).toBe(100);
+        expect(spent.tone).toBe(`text-danger`);
     });
 
     it(`treats a fully reset account as 0%, not as unknown`, () => {
         // usagePercent alone answers undefined here (no live windows). On an account row that is the wrong
         // answer: the account was measured and every pool reopened, so it has room rather than no reading.
-        const ring = usageRing(usage({ windows: [] }));
-        expect(ring?.percent).toBe(0);
-        expect(ring?.tone).toBe(`text-link`);
+        const reset = headroom({ windows: [] });
+        expect(reset.percent).toBe(0);
+        expect(reset.tone).toBe(`text-link`);
+        // No pool to name, which is what the card says instead of listing nothing.
+        expect(reset.binding).toBeUndefined();
     });
 
-    it(`shows the pool that bites first, not whichever the provider listed first`, () => {
-        const ring = usageRing(usage({ windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 91 })] }));
-        expect(ring?.percent).toBe(91);
-        expect(ring?.tooltip).toContain(`5-hour session`);
-        expect(ring?.tooltip).toContain(`Weekly · all models`);
+    it(`carries every pool, with the one that bites first named as the binding one`, () => {
+        // The card draws all of them and the ring draws this one — from a single projection, so the arc and the
+        // row it highlights can never come from different arithmetic.
+        const mixed = headroom({
+            windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 91, resetsAt: 1_700_000_000 })],
+        });
+        expect(mixed.percent).toBe(91);
+        expect(mixed.binding).toEqual({ kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: 1_700_000_000 });
+        expect(mixed.pools.map((pool) => pool.label)).toEqual([`5-hour session`, `Weekly · all models`]);
     });
 });
 
@@ -205,8 +225,8 @@ describe(`isSpent`, () => {
     it(`agrees with the ring's own danger tone at the boundary`, () => {
         const at = usage({ windows: [window({ utilization: 90 })] });
         const below = usage({ windows: [window({ utilization: 89 })] });
-        expect([isSpent(at), usageRing(at)?.tone]).toEqual([true, `text-danger`]);
-        expect([isSpent(below), usageRing(below)?.tone]).toEqual([false, `text-warning`]);
+        expect([isSpent(at), planHeadroom(at)?.tone]).toEqual([true, `text-danger`]);
+        expect([isSpent(below), planHeadroom(below)?.tone]).toEqual([false, `text-warning`]);
     });
 });
 

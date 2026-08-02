@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { ProgressRing } from "@intentic-app/ui";
 import { computed } from "vue";
 import { type AgentHarness, type KeyedProvider, limitationsOf } from "@intentic/sandbox-contract";
+import UsageRing from "../components/UsageRing.vue";
 import { relativeTime } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
 import { providerDisplayLabel } from "../composables/chat/providerCatalog";
 import type { PickerEntry } from "../composables/chat/modelPicker";
 import { translatorAccounts } from "../composables/chat/providerAccounts";
-import { liveUsage, usageRing } from "../composables/chat/usageStatus";
+import { liveUsage, planHeadroom } from "../composables/chat/usageStatus";
 import { accountsOf, subscriptionOnly } from "../composables/chat/useChat";
 import ModelPicker from "./ModelPicker.vue";
 import ProviderLogo from "./ProviderLogo.vue";
@@ -131,7 +131,7 @@ const routedRows = computed(() =>
         : translatorAccounts.value[routedProvider.value].map((entry) => ({
               name: entry.name,
               label: entry.label,
-              ring: usageRing(liveUsage(entry.name, entry.usage)),
+              headroom: planHeadroom(liveUsage(entry.name, entry.usage)),
           })),
 );
 
@@ -167,7 +167,9 @@ const ambiguousLabels = computed(() => {
  * chip use for this number, rather than as the bare percentage it was: three percentages down a column are read
  * one at a time and compared by arithmetic, where three arcs are compared at a glance — which is the only
  * question being asked here (which of these has the most room?). The exact figure, its per-pool breakdown and
- * how old the reading is stay one hover away, and a row with no ring at all means no reading, never "empty". */
+ * how old the reading is stay one hover away — the card UsageRing opens BESIDE the row, so reading one
+ * account's pools never covers the rows it is being compared against — and a row with no ring at all means no
+ * reading, never "empty". */
 const accountRows = computed(() =>
     accounts.value.map((entry) => {
         const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
@@ -180,7 +182,7 @@ const accountRows = computed(() =>
                       : undefined,
             // liveUsage, not the streamed map alone: the daemon's reading rides the row itself and is the newer
             // of the two whenever no turn has ended in this tab since — which is most of the time.
-            ring: usageRing(liveUsage(entry.id, entry.usage)),
+            headroom: planHeadroom(liveUsage(entry.id, entry.usage)),
         });
     }),
 );
@@ -233,22 +235,12 @@ const accountRows = computed(() =>
                             <!-- How much of this account's tightest limit pool is spent, so the switch decision is
                                  informed before it costs a turn. Absent ⇒ no reading at all (never measured, and
                                  not obtainable for this plan) — which is a different thing from a measured zero. -->
-                            <template v-if="a.ring">
-                                <ProgressRing
-                                    :value="a.ring.percent"
-                                    :size="14"
-                                    class="ml-auto"
-                                    :class="a.ring.tone"
-                                    v-tooltip.top="a.ring.tooltip"
-                                />
-                                <!-- The arc is aria-hidden, so the figure it draws is spoken here instead. -->
-                                <span class="sr-only">{{ a.ring.percent }}% used</span>
-                            </template>
+                            <UsageRing v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
                             <Icon
                                 v-if="a.needsReauth"
                                 name="exclamation-triangle"
                                 class="shrink-0 text-2xs text-warning"
-                                :class="{ 'ml-auto': !a.ring }"
+                                :class="{ 'ml-auto': !a.headroom }"
                                 v-tooltip.top="a.detail ?? 'This account needs to be reconnected'"
                             />
                         </button>
@@ -264,16 +256,7 @@ const accountRows = computed(() =>
                             class="flex min-h-8 min-w-0 items-center gap-2 rounded-lg border border-line px-2 py-1 text-xs"
                         >
                             <span class="min-w-0 truncate text-content">{{ a.label }}</span>
-                            <template v-if="a.ring">
-                                <ProgressRing
-                                    :value="a.ring.percent"
-                                    :size="14"
-                                    class="ml-auto"
-                                    :class="a.ring.tone"
-                                    v-tooltip.top="a.ring.tooltip"
-                                />
-                                <span class="sr-only">{{ a.ring.percent }}% used</span>
-                            </template>
+                            <UsageRing v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
                         </div>
                     </div>
                     <p class="text-2xs text-subtle">

@@ -16,7 +16,7 @@ import { relativeTime } from "../../composables/chat/catalog";
 import { providerRefusals } from "../../composables/chat/providerAccounts";
 import { providerTabs } from "../../composables/chat/providerCatalog";
 import { useChat } from "../../composables/chat/useChat";
-import { isSpent, liveUsage, refusalIsCurrent, refusalLine, type UsageRing, usageRing } from "../../composables/chat/usageStatus";
+import { isSpent, liveUsage, type PlanHeadroom, planHeadroom, refusalIsCurrent, refusalLine } from "../../composables/chat/usageStatus";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
@@ -169,8 +169,8 @@ const usageLine = (id: string): string | undefined => {
 };
 
 /* --- Usage ring per account ---------------------------------------------------------------------------------
- * Plan-limit utilization surfaced as a ProgressRing on the connection row, so this list answers at a glance
- * which accounts still have headroom and which are spent without a trip to the Usage tab.
+ * Plan-limit utilization surfaced as a ring on the connection row, so this list answers at a glance which
+ * accounts still have headroom and which are spent without a trip to the Usage tab.
  *
  * ONE path for every provider, because by the time a row reaches this component the difference between a native
  * account and a routed subscription is already gone: the daemon puts the same `usage` on both (see
@@ -178,18 +178,18 @@ const usageLine = (id: string): string | undefined => {
  * ring MEANS lives in usageStatus.ts with the composer's — the threshold, the tone and the merge with a live
  * turn's frame are shared, not re-decided here.
  *
- * Rows are decorated ONCE rather than per binding: three ring props off three separate calls per row (plus a
- * fourth for the dimming) recomputed the same snapshot four times per render, and that duplication is exactly
- * what let the ring and the row's own dimming disagree about which accounts were spent. */
+ * Rows are decorated ONCE rather than per binding: the row used to hand the ring three separate props off three
+ * separate calls per render (plus a fourth for the dimming), and that duplication is exactly what let the ring
+ * and the row's own dimming disagree about which accounts were spent. One projection, passed down whole. */
 
-// A row ready to render: the account, its ring, whether it is effectively spent, and when the reading behind
-// the ring was taken — the last one only so the provider's refusal line can tell whether a reading has
-// overtaken it (refusalIsCurrent), which is a question about the whole list rather than about any one row.
+// A row ready to render: the account, its headroom (the ring and the card behind it), and whether it is
+// effectively spent. The headroom also carries when the reading was taken, which the provider's refusal line
+// needs to tell whether a reading has overtaken it (refusalIsCurrent) — a question about the whole list rather
+// than about any one row.
 interface AccountRow<T> {
     account: T;
-    ring: UsageRing | undefined;
+    headroom: PlanHeadroom | undefined;
     exhausted: boolean;
-    measuredAt: number | undefined;
 }
 
 /* Decorate and sort in one pass. When a provider holds dozens of accounts the list is only useful if the ones
@@ -200,7 +200,7 @@ const rowsOf = <T,>(accounts: readonly T[], keyOf: (account: T) => string, usage
     const spent: AccountRow<T>[] = [];
     for (const account of accounts) {
         const usage = liveUsage(keyOf(account), usageOf(account));
-        const row = { account, ring: usageRing(usage), exhausted: isSpent(usage), measuredAt: usage?.measuredAt };
+        const row = { account, headroom: planHeadroom(usage), exhausted: isSpent(usage) };
         (row.exhausted ? spent : active).push(row);
     }
     return [...active, ...spent];
@@ -243,7 +243,7 @@ const refusal = computed(() => providerRefusals.value[managedProvider.value]);
 const refusalCurrent = computed(() =>
     refusalIsCurrent(
         refusal.value,
-        [...accountRows.value, ...translatorRows.value].map((row) => ({ measuredAt: row.measuredAt, percent: row.ring?.percent })),
+        [...accountRows.value, ...translatorRows.value].map((row) => ({ measuredAt: row.headroom?.measuredAt, percent: row.headroom?.percent })),
     ),
 );
 
@@ -419,7 +419,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                  none — the subscription row below IS their connection — so they skip straight to it. -->
             <template v-if="hasNativeAccounts">
                 <ConnectionRow
-                    v-for="{ account, ring, exhausted } in visibleNativeAccounts"
+                    v-for="{ account, headroom, exhausted } in visibleNativeAccounts"
                     :key="account.id"
                     :title="account.label"
                     :state="account.needsReauth ? `reauth` : `connected`"
@@ -427,9 +427,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :note="identityNote(account)"
                     :description="account.needsReauth ? (account.detail ?? `Signed out — reconnect to keep using it.`) : usageLine(account.id)"
                     :renamable="renamable"
-                    :usage-percent="ring?.percent"
-                    :usage-tone="ring?.tone"
-                    :usage-tooltip="ring?.tooltip"
+                    :headroom="headroom"
                     :exhausted="exhausted"
                     @rename="(label: string) => renameAccount(account.id, label)"
                 >
@@ -501,16 +499,14 @@ onUnmounted(() => clearTimeout(ringTimer));
                  asks for the landing URL back. Either way the shared poll lands the new account's row. -->
             <template v-if="routedProvider">
                 <ConnectionRow
-                    v-for="{ account, ring, exhausted } in translatorRows.slice(0, visibleRoutedLimit)"
+                    v-for="{ account, headroom, exhausted } in translatorRows.slice(0, visibleRoutedLimit)"
                     :key="account.name"
                     :title="ROUTED_ROW[routedProvider].title"
                     state="connected"
                     :note="account.label"
                     :description="ROUTED_ROW[routedProvider].hint"
                     :about="ROUTED_ROW[routedProvider].about"
-                    :usage-percent="ring?.percent"
-                    :usage-tone="ring?.tone"
-                    :usage-tooltip="ring?.tooltip"
+                    :headroom="headroom"
                     :exhausted="exhausted"
                 >
                     <template #control>
