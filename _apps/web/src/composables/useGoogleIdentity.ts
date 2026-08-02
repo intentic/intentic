@@ -70,7 +70,12 @@ const storageKey = (clientId: string): string => `intentic.gid.${clientId}`;
  * When none is valid, minting tries FedCM One Tap / auto re-authentication first — a returning user renews
  * silently — and only when that is skipped, dismissed, or blocked does `needsSignIn` raise the gate: a real
  * rendered "Sign in with Google" button, the surface for first-ever sign-ins and fallback. Both surfaces feed
- * the same credential callback. The sandbox daemon is the verifier; this never touches the platform. */
+ * the same credential callback. The sandbox daemon is the verifier; this never touches the platform.
+ *
+ * `warmIdToken` is that same first step with the fallback deliberately cut off — a prefetch for a screen that
+ * would LIKE the credential but has no standing to demand it. Raising a full-screen gate is an answer to the
+ * user asking for something; a prefetch is nobody asking, so it takes a silent renewal if Google offers one
+ * and otherwise leaves the sign-in to whichever call actually needs it. */
 
 // True when a token is needed — the workspace shell shows the sign-in gate (a rendered Google button) in
 // response, and flips back once the credential arrives.
@@ -186,18 +191,42 @@ const mint = async (): Promise<string | undefined> => {
     return result;
 };
 
-// A valid (not near-expiry) Google ID token, or undefined if GIS is unavailable or the user dismisses the
-// sign-in gate. Never hangs on a suppressed prompt — the guard surfaces the gate and waits for a real click.
-const getIdToken = async (): Promise<string | undefined> => {
-    // Re-read storage when the in-memory token is missing or near expiry — another tab may have renewed it.
+// The cached credential while it is still valid past the near-expiry guard, re-reading storage first when the
+// in-memory copy is missing or near expiry — another tab may have renewed it. Undefined means a mint is due.
+const cached = (): string | undefined => {
     if (token === undefined || Date.now() >= expiresAt - 60_000) {
         token = restore();
     }
-    if (token !== undefined && Date.now() < expiresAt - 60_000) {
-        return token;
+    return token !== undefined && Date.now() < expiresAt - 60_000 ? token : undefined;
+};
+
+// A valid (not near-expiry) Google ID token, or undefined if GIS is unavailable or the user dismisses the
+// sign-in gate. Never hangs on a suppressed prompt — the guard surfaces the gate and waits for a real click.
+const getIdToken = async (): Promise<string | undefined> => {
+    const valid = cached();
+    if (valid !== undefined) {
+        return valid;
     }
     inflight ??= mint();
     return inflight;
+};
+
+// Prefetch the credential: fire the silent prompt and let the shared callback cache whatever comes back. No
+// `settle`, no guard timer and nothing to await — a returning Google session renews in the background, and a
+// browser that would need UI for it is simply left alone. That absence is the point: with no caller waiting
+// there is nothing for a gate to unblock, so the gate would only be interrupting the screen.
+// A mint already in flight has a real caller behind it and will populate the same cache — leave it to it.
+const warmIdToken = async (): Promise<void> => {
+    if (cached() !== undefined || inflight !== undefined) {
+        return;
+    }
+    try {
+        await ensureInitialized();
+    } catch {
+        // GIS never loaded. A prefetch has nobody to report that to; the next real mint surfaces it.
+        return;
+    }
+    window.google?.accounts?.id?.prompt();
 };
 
 // Platform sign-out must also forget the browser→sandbox Google credential. This keeps the sandbox URL binding
@@ -239,5 +268,5 @@ const cancelSignIn = (): void => {
 };
 
 export function useGoogleIdentity() {
-    return { needsSignIn, signedInEmail, getIdToken, clearCredential, renderButton, cancelSignIn };
+    return { needsSignIn, signedInEmail, getIdToken, warmIdToken, clearCredential, renderButton, cancelSignIn };
 }

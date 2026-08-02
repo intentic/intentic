@@ -55,7 +55,7 @@ const route = useRoute();
 // below handle): the run tabs' labels and the size of the controls that carry them.
 const { mobile } = useDevice();
 const { user, upgradeOpen, entitlements, refreshPlan } = useAuth();
-const { getIdToken } = useGoogleIdentity();
+const { getIdToken, warmIdToken } = useGoogleIdentity();
 
 // The sandbox created in this setup session (holds its connection token). Null until the user names + creates it.
 const created = ref<SandboxSummary | null>(null);
@@ -558,14 +558,20 @@ watch(
 // Warm the browser→sandbox Google credential as soon as the install command is ready — while the user copies and
 // runs it — instead of lazily on the first daemon call after the post-connect redirect. The ID token is a
 // Google-signed JWT the daemon verifies; minting it needs no daemon, so having it cached means the workspace is
-// reachable the instant the daemon reports in (no connecting-gate stall). A returning Google session mints
-// silently; a first sign-in raises the app-level gate here on /setup — the calm setup context — instead of
-// popping over the connecting screen after the redirect. Fired once.
+// reachable the instant the daemon reports in (no connecting-gate stall). Fired once.
+//
+// SILENT, and it must stay that way. This fires the moment step 3 renders a command — the sandbox does not
+// exist yet, the command has not been copied, and the user may well close the tab instead. Warming through
+// `getIdToken` put a full-screen sign-in gate over that command whenever Google couldn't renew quietly (One Tap
+// cooldown, a browser that blocks FedCM), which reads as being asked to sign in twice to set up a machine that
+// isn't running. So the prefetch takes a silent renewal when Google offers one and asks for nothing when it
+// doesn't; the attach lane's own getIdToken below, and the first daemon call after connecting, are the moments
+// where signing in IS the next step and where the gate belongs.
 let credentialWarmed = false;
 watch(commandReady, (ready) => {
     if (ready && !credentialWarmed) {
         credentialWarmed = true;
-        void getIdToken();
+        void warmIdToken();
     }
 });
 </script>
