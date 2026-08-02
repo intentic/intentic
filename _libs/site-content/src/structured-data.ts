@@ -170,13 +170,16 @@ export function buildSoftwareAppSchema() {
             availability: "https://schema.org/InStock",
             description: "Free plan: one full sandbox — every capability, the agent, and automations included.",
         },
+        // Ordered the way the landing page argues: run many in parallel, on your hardware, nothing
+        // landing unread — then the reasons those agents are any good.
         featureList: [
+            "Run a fleet of coding agents in parallel, one isolated git worktree each",
             "One Docker sandbox per agent, on hardware you own",
+            "Diff review before anything lands in your working tree",
             "Bring your own agent: Claude Code, Codex, Grok, Kimi Code, or Gemini",
             "Environment overlays — the job's dev-tools really installed",
             "Capabilities: repos, databases, and services wired in as credentials the agent operates",
-            "Isolated worktrees with diff review before anything lands",
-            "Automations that wake an agent on a schedule or an event",
+            "Extensions: automations, Discord and Slack, a website Doorbell, memory, pipelines",
         ],
         author: founderRef,
         publisher: orgRef,

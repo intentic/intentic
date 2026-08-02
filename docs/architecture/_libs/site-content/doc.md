@@ -4,8 +4,8 @@ The website's words and page structure, as data.
 
 ```stats
 { "items": [
-    {"label": "Lines", "value": "915"},
-    {"label": "Files", "value": "8"},
+    {"label": "Lines", "value": "2216"},
+    {"label": "Files", "value": "10"},
     {"label": "Used by", "value": "1 packages"},
     {"label": "Tests", "value": "no"}
   ] }
@@ -14,6 +14,12 @@ The website's words and page structure, as data.
 ## The problem it solves
 
 Copy that lives inside page templates is hard to find and harder to change consistently.
+
+It is also where the site's *shape* is decided, not just its words. `landing.ts` is the clearest case:
+its `LandingContent` interface is the list of bands the homepage is allowed to have, so cutting the
+page from fourteen sections to six was a change to a type, and `Landing.astro` could not compile until
+it agreed. `product.ts` works the same way — a page's `group` drives which mega-menu column it appears
+in and where the footer lists it, so moving Doorbell out of the core surfaces was one field.
 
 ```dag
 { "title": "Its neighbours",
@@ -36,12 +42,12 @@ Dashed arrows are development-only — needed to build or test, not to run.
 ```bars
 { "title": "Size within Account & website",
   "items": [
-    {"label": "api", "value": 3611, "display": "3.6k", "accent": "neutral"},
-    {"label": "site-content (this one)", "value": 915, "display": "915", "accent": "neutral"},
-    {"label": "site", "value": 905, "display": "905", "accent": "neutral"},
-    {"label": "api-contract", "value": 651, "display": "651", "accent": "neutral"},
-    {"label": "astro-integrations", "value": 643, "display": "643", "accent": "neutral"},
-    {"label": "capability-catalog", "value": 615, "display": "615", "accent": "neutral"},
+    {"label": "api", "value": 3714, "display": "3.7k", "accent": "neutral"},
+    {"label": "site-content (this one)", "value": 2216, "display": "2.2k", "accent": "neutral"},
+    {"label": "site", "value": 1203, "display": "1.2k", "accent": "neutral"},
+    {"label": "capability-catalog", "value": 1116, "display": "1.1k", "accent": "neutral"},
+    {"label": "api-contract", "value": 664, "display": "664", "accent": "neutral"},
+    {"label": "astro-integrations", "value": 576, "display": "576", "accent": "neutral"},
     {"label": "prisma", "value": 210, "display": "210", "accent": "neutral"}
   ] }
 ```

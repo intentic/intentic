@@ -1,8 +1,6 @@
 ---
-import { compareHref } from "@intentic-dev/site-content/compare";
 import { faqGroups } from "@intentic-dev/site-content/faq";
 import type { LandingContent } from "@intentic-dev/site-content/landing";
-import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { APP_URL, DEMO_PATH, gitlabIssuesUrl, gitlabUrl } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
@@ -23,78 +21,16 @@ const icon = (paths: string) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">${paths}</svg>`;
 
 // Per-index glyphs; content stays pure copy.
-const anatomyIcons = [
-    icon('<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/>'),
-    icon('<path d="M12 3 3 7.5 12 12l9-4.5z"/><path d="m3 12 9 4.5L21 12M3 16.5 12 21l9-4.5"/>'),
-    icon('<path d="M9.5 17H8A5 5 0 0 1 8 7h1.5"/><path d="M14.5 7H16a5 5 0 0 1 0 10h-1.5"/><path d="M8.5 12h7"/>'),
-    icon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
-];
-const workforceIcons = [
-    icon('<rect x="5" y="8.5" width="14" height="10.5" rx="2"/><path d="M12 8.5V5M12 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M9.5 13v1.5M14.5 13v1.5"/>'),
-    icon('<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/>'),
-    icon('<circle cx="5" cy="12" r="2.4"/><circle cx="12" cy="12" r="2.4"/><circle cx="19" cy="12" r="2.4"/><path d="M7.4 12h2.2M14.4 12h2.2"/>'),
-];
 const factIcons = [
     icon('<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V21h13V9.5"/>'),
     icon('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>'),
     icon('<path d="M12 2.5 20 6v5.5c0 4.8-3.4 8.2-8 9.5-4.6-1.3-8-4.7-8-9.5V6z"/>'),
 ];
 const checkIcon = icon('<path d="M20 6 9 17l-5-5"/>');
-const minusIcon = icon('<path d="M6 12h12"/>');
 
-// Line glyphs for the new figures (same 1.5-stroke motif as the section icons above).
+// Line glyphs for the sandbox figure (same 1.5-stroke motif as the section icons above).
 const monitorGlyph = icon('<rect x="3" y="4" width="18" height="12.5" rx="1.5"/><path d="M8.5 20.5h7M12 16.5v4"/>');
 const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="m3.5 7 8.5 4.5L20.5 7M12 11.5v10"/>');
-const botGlyph = icon('<rect x="5" y="8.5" width="14" height="10.5" rx="2"/><path d="M12 8.5V5M12 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M9.5 13v1.5M14.5 13v1.5"/>');
-const lockGlyph = icon('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>');
-const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
-
-// Integrations-hub logos. Brand paths are verbatim simple-icons (CC0) — invisible-on-dark brands render
-// monochrome, so no per-brand colour fitting; ssh/mcp are in-house stroke glyphs in the site's line motif.
-const brandLogos: Record<string, { viewBox: string; body: string; stroke?: boolean }> = {
-    github: {
-        viewBox: "0 0 24 24",
-        body: '<path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>',
-    },
-    postgresql: {
-        viewBox: "0 0 24 24",
-        body: '<path d="M23.5594 14.7228a.5269.5269 0 0 0-.0563-.1191c-.139-.2632-.4768-.3418-1.0074-.2321-1.6533.3411-2.2935.1312-2.5256-.0191 1.342-2.0482 2.445-4.522 3.0411-6.8297.2714-1.0507.7982-3.5237.1222-4.7316a1.5641 1.5641 0 0 0-.1509-.235C21.6931.9086 19.8007.0248 17.5099.0005c-1.4947-.0158-2.7705.3461-3.1161.4794a9.449 9.449 0 0 0-.5159-.0816 8.044 8.044 0 0 0-1.3114-.1278c-1.1822-.0184-2.2038.2642-3.0498.8406-.8573-.3211-4.7888-1.645-7.2219.0788C.9359 2.1526.3086 3.8733.4302 6.3043c.0409.818.5069 3.334 1.2423 5.7436.4598 1.5065.9387 2.7019 1.4334 3.582.553.9942 1.1259 1.5933 1.7143 1.7895.4474.1491 1.1327.1441 1.8581-.7279.8012-.9635 1.5903-1.8258 1.9446-2.2069.4351.2355.9064.3625 1.39.3772a.0569.0569 0 0 0 .0004.0041 11.0312 11.0312 0 0 0-.2472.3054c-.3389.4302-.4094.5197-1.5002.7443-.3102.064-1.1344.2339-1.1464.8115-.0025.1224.0329.2309.0919.3268.2269.4231.9216.6097 1.015.6331 1.3345.3335 2.5044.092 3.3714-.6787-.017 2.231.0775 4.4174.3454 5.0874.2212.5529.7618 1.9045 2.4692 1.9043.2505 0 .5263-.0291.8296-.0941 1.7819-.3821 2.5557-1.1696 2.855-2.9059.1503-.8707.4016-2.8753.5388-4.1012.0169-.0703.0357-.1207.057-.1362.0007-.0005.0697-.0471.4272.0307a.3673.3673 0 0 0 .0443.0068l.2539.0223.0149.001c.8468.0384 1.9114-.1426 2.5312-.4308.6438-.2988 1.8057-1.0323 1.5951-1.6698zM2.371 11.8765c-.7435-2.4358-1.1779-4.8851-1.2123-5.5719-.1086-2.1714.4171-3.6829 1.5623-4.4927 1.8367-1.2986 4.8398-.5408 6.108-.13-.0032.0032-.0066.0061-.0098.0094-2.0238 2.044-1.9758 5.536-1.9708 5.7495-.0002.0823.0066.1989.0162.3593.0348.5873.0996 1.6804-.0735 2.9184-.1609 1.1504.1937 2.2764.9728 3.0892.0806.0841.1648.1631.2518.2374-.3468.3714-1.1004 1.1926-1.9025 2.1576-.5677.6825-.9597.5517-1.0886.5087-.3919-.1307-.813-.5871-1.2381-1.3223-.4796-.839-.9635-2.0317-1.4155-3.5126zm6.0072 5.0871c-.1711-.0428-.3271-.1132-.4322-.1772.0889-.0394.2374-.0902.4833-.1409 1.2833-.2641 1.4815-.4506 1.9143-1.0002.0992-.126.2116-.2687.3673-.4426a.3549.3549 0 0 0 .0737-.1298c.1708-.1513.2724-.1099.4369-.0417.156.0646.3078.26.3695.4752.0291.1016.0619.2945-.0452.4444-.9043 1.2658-2.2216 1.2494-3.1676 1.0128zm2.094-3.988-.0525.141c-.133.3566-.2567.6881-.3334 1.003-.6674-.0021-1.3168-.2872-1.8105-.8024-.6279-.6551-.9131-1.5664-.7825-2.5004.1828-1.3079.1153-2.4468.079-3.0586-.005-.0857-.0095-.1607-.0122-.2199.2957-.2621 1.6659-.9962 2.6429-.7724.4459.1022.7176.4057.8305.928.5846 2.7038.0774 3.8307-.3302 4.7363-.084.1866-.1633.3629-.2311.5454zm7.3637 4.5725c-.0169.1768-.0358.376-.0618.5959l-.146.4383a.3547.3547 0 0 0-.0182.1077c-.0059.4747-.054.6489-.115.8693-.0634.2292-.1353.4891-.1794 1.0575-.11 1.4143-.8782 2.2267-2.4172 2.5565-1.5155.3251-1.7843-.4968-2.0212-1.2217a6.5824 6.5824 0 0 0-.0769-.2266c-.2154-.5858-.1911-1.4119-.1574-2.5551.0165-.5612-.0249-1.9013-.3302-2.6462.0044-.2932.0106-.5909.019-.8918a.3529.3529 0 0 0-.0153-.1126 1.4927 1.4927 0 0 0-.0439-.208c-.1226-.4283-.4213-.7866-.7797-.9351-.1424-.059-.4038-.1672-.7178-.0869.067-.276.1831-.5875.309-.9249l.0529-.142c.0595-.16.134-.3257.213-.5012.4265-.9476 1.0106-2.2453.3766-5.1772-.2374-1.0981-1.0304-1.6343-2.2324-1.5098-.7207.0746-1.3799.3654-1.7088.5321a5.6716 5.6716 0 0 0-.1958.1041c.0918-1.1064.4386-3.1741 1.7357-4.4823a4.0306 4.0306 0 0 1 .3033-.276.3532.3532 0 0 0 .1447-.0644c.7524-.5706 1.6945-.8506 2.802-.8325.4091.0067.8017.0339 1.1742.081 1.939.3544 3.2439 1.4468 4.0359 2.3827.8143.9623 1.2552 1.9315 1.4312 2.4543-1.3232-.1346-2.2234.1268-2.6797.779-.9926 1.4189.543 4.1729 1.2811 5.4964.1353.2426.2522.4522.2889.5413.2403.5825.5515.9713.7787 1.2552.0696.087.1372.1714.1885.245-.4008.1155-1.1208.3825-1.0552 1.717-.0123.1563-.0423.4469-.0834.8148-.0461.2077-.0702.4603-.0994.7662zm.8905-1.6211c-.0405-.8316.2691-.9185.5967-1.0105a2.8566 2.8566 0 0 0 .135-.0406 1.202 1.202 0 0 0 .1342.103c.5703.3765 1.5823.4213 3.0068.1344-.2016.1769-.5189.3994-.9533.6011-.4098.1903-1.0957.333-1.7473.3636-.7197.0336-1.0859-.0807-1.1721-.151zm.5695-9.2712c-.0059.3508-.0542.6692-.1054 1.0017-.055.3576-.112.7274-.1264 1.1762-.0142.4368.0404.8909.0932 1.3301.1066.887.216 1.8003-.2075 2.7014a3.5272 3.5272 0 0 1-.1876-.3856c-.0527-.1276-.1669-.3326-.3251-.6162-.6156-1.1041-2.0574-3.6896-1.3193-4.7446.3795-.5427 1.3408-.5661 2.1781-.463zm.2284 7.0137a12.3762 12.3762 0 0 0-.0853-.1074l-.0355-.0444c.7262-1.1995.5842-2.3862.4578-3.4385-.0519-.4318-.1009-.8396-.0885-1.2226.0129-.4061.0666-.7543.1185-1.0911.0639-.415.1288-.8443.1109-1.3505.0134-.0531.0188-.1158.0118-.1902-.0457-.4855-.5999-1.938-1.7294-3.253-.6076-.7073-1.4896-1.4972-2.6889-2.0395.5251-.1066 1.2328-.2035 2.0244-.1859 2.0515.0456 3.6746.8135 4.8242 2.2824a.908.908 0 0 1 .0667.1002c.7231 1.3556-.2762 6.2751-2.9867 10.5405zm-8.8166-6.1162c-.025.1794-.3089.4225-.6211.4225a.5821.5821 0 0 1-.0809-.0056c-.1873-.026-.3765-.144-.5059-.3156-.0458-.0605-.1203-.178-.1055-.2844.0055-.0401.0261-.0985.0925-.1488.1182-.0894.3518-.1226.6096-.0867.3163.0441.6426.1938.6113.4186zm7.9305-.4114c.0111.0792-.049.201-.1531.3102-.0683.0717-.212.1961-.4079.2232a.5456.5456 0 0 1-.075.0052c-.2935 0-.5414-.2344-.5607-.3717-.024-.1765.2641-.3106.5611-.352.297-.0414.6111.0088.6356.1851z"/>',
-    },
-    sentry: {
-        viewBox: "0 0 24 24",
-        body: '<path d="M13.91 2.505c-.873-1.448-2.972-1.448-3.844 0L6.904 7.92a15.478 15.478 0 0 1 8.53 12.811h-2.221A13.301 13.301 0 0 0 5.784 9.814l-2.926 5.06a7.65 7.65 0 0 1 4.435 5.848H2.194a.365.365 0 0 1-.298-.534l1.413-2.402a5.16 5.16 0 0 0-1.614-.913L.296 19.275a2.182 2.182 0 0 0 .812 2.999 2.24 2.24 0 0 0 1.086.288h6.983a9.322 9.322 0 0 0-3.845-8.318l1.11-1.922a11.47 11.47 0 0 1 4.95 10.24h5.915a17.242 17.242 0 0 0-7.885-15.28l2.244-3.845a.37.37 0 0 1 .504-.13c.255.14 9.75 16.708 9.928 16.9a.365.365 0 0 1-.327.543h-2.287c.029.612.029 1.223 0 1.831h2.297a2.206 2.206 0 0 0 1.922-3.31z"/>',
-    },
-    discord: {
-        viewBox: "0 0 24 24",
-        body: '<path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/>',
-    },
-    outline: {
-        viewBox: "0 0 24 24",
-        body: '<path d="M 15.081 21.857 L 15.081 22.459 C 15.081 23.636 13.812 24.378 12.785 23.8 L 3.543 18.602 C 3.058 18.329 2.758 17.816 2.758 17.26 L 2.758 6.742 C 2.758 6.185 3.058 5.672 3.543 5.399 L 12.785 0.201 C 13.812 -0.378 15.082 0.365 15.081 1.544 L 15.081 2.145 L 16.178 1.814 C 17.167 1.517 18.163 2.258 18.162 3.29 L 18.162 3.915 L 19.511 3.746 C 20.431 3.632 21.243 4.348 21.242 5.275 L 21.242 18.726 C 21.243 19.652 20.431 20.37 19.511 20.254 L 18.162 20.085 L 18.162 20.71 C 18.163 21.743 17.167 22.484 16.178 22.186 L 15.081 21.857 Z M 15.081 20.249 L 16.621 20.71 L 16.621 3.29 L 15.081 3.753 L 15.081 20.249 Z M 18.162 5.467 L 18.162 18.534 L 19.702 18.726 L 19.702 5.275 L 18.162 5.467 Z M 4.298 6.742 L 4.298 17.26 L 13.54 22.459 L 13.54 1.544 L 4.298 6.742 Z M 5.838 7.765 L 7.379 6.995 L 7.379 17.005 L 5.838 16.235 L 5.838 7.765 Z"/>',
-    },
-    stripe: {
-        viewBox: "0 0 24 24",
-        body: '<path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z"/>',
-    },
-    ssh: {
-        viewBox: "0 0 24 24",
-        stroke: true,
-        body: '<rect x="3.25" y="4.5" width="17.5" height="6" rx="1.5"/><rect x="3.25" y="13" width="17.5" height="6" rx="1.5"/><path d="M6.5 7.5h.01M6.5 16h.01M14.5 7.5H18M14.5 16H18"/>',
-    },
-    mcp: {
-        viewBox: "0 0 24 24",
-        stroke: true,
-        body: '<path d="M9 2.5v5M15 2.5v5"/><path d="M6.5 7.5h11v3a5.5 5.5 0 0 1-11 0z"/><path d="M12 16v5.5"/>',
-    },
-};
-
-// Even radial layout for the integrations hub: node i sits on an ellipse (rx 46% / ry 41%) around
-// the centre, starting at 12 o'clock. Positions are percentages the markup drops into left/top.
-const round = (n: number) => Math.round(n * 100) / 100;
-const hubNodes = content.integrations.nodes.map((node, i) => {
-    const angle = (-90 + (360 / content.integrations.nodes.length) * i) * (Math.PI / 180);
-    return Object.assign({}, node, { x: round(50 + Math.cos(angle) * 46), y: round(50 + Math.sin(angle) * 41) });
-});
 ---
 
 <BaseLayout
@@ -211,386 +147,153 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
             </div>
         </section>
 
-        <!-- 1.5 · The product — real screenshots of the workspace -->
-        <section class="border-t border-line" id="tour">
+        <!-- 2 · The loop — assign several, each isolated, nothing lands unread.
+             This is the section that earns the headline's second half: the window is the board you watch,
+             the agent you answer, and the diff you read. Beat 02 carries the sandbox FIGURE rather than a
+             screenshot because a container is not a surface — there is no honest screen of "its tools are
+             really installed", and a mockup of one would be the first lie on the page. -->
+        <section class="border-t border-line" id="loop">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.tour.eyebrow}</div>
-                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.tour.heading}</h2>
-                <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.tour.sub}</p>
+                <div class="eyebrow">{content.loop.eyebrow}</div>
+                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.loop.heading}</h2>
+                <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.loop.sub}</p>
 
-                <!-- Hero: the fleet board in a browser window -->
-                <figure class="mt-12">
-                    <div class="overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
-                        <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
-                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
-                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
-                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
-                            <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">acme-shop · /agents</span>
-                        </div>
-                        <img
-                            src={content.tour.hero.src}
-                            alt={content.tour.hero.alt}
-                            width={content.tour.hero.width}
-                            height={content.tour.hero.height}
-                            loading="lazy"
-                            decoding="async"
-                            class="w-full"
-                        />
-                    </div>
-                    <figcaption class="mx-auto mt-4 max-w-2xl text-center text-xs leading-relaxed text-subtle">{content.tour.hero.caption}</figcaption>
-                </figure>
-
-                <!-- Every surface as a card into its own page. The landing used to carry a screenshot and a
-                     paragraph per surface; each of those is now a page that can afford four screenshots.
-                     Two columns, not three: at three the thumbnail was ~350px of a 1072px-wide shot, which is
-                     the app's interface at a third size — a grey rectangle you cannot read anything in. -->
-                <div class="mt-14 grid gap-6 sm:grid-cols-2">
+                <div class="mt-14 space-y-14 lg:mt-16 lg:space-y-20">
                     {
-                        productPages.map((page) => (
-                            <a href={productHref(page.slug)} class="card group overflow-hidden transition-colors hover:border-primary-600/40">
-                                {/* Never wider than the shot really is: the card is 602px and most shots are
-                                    1072 CSS px, but the docked-chat one is 368 — stretched to the card it was
-                                    a blurry 1.6×. Capped, it sits sharp and centred instead. */}
-                                <div class="flex aspect-16/10 justify-center overflow-hidden border-b border-line bg-canvas">
-                                    <img
-                                        src={page.hero.src}
-                                        alt={page.hero.alt}
-                                        width={page.hero.width}
-                                        height={page.hero.height}
-                                        style={`max-width:${page.hero.width / 2}px`}
-                                        loading="lazy"
-                                        decoding="async"
-                                        class="h-full w-full object-cover object-left-top transition-transform duration-300 group-hover:scale-[1.03]"
-                                    />
-                                </div>
-                                <div class="p-6">
-                                    <h3 class="text-base font-medium text-content group-hover:text-link">{page.navLabel}</h3>
-                                    <p class="mt-2 text-sm leading-relaxed text-muted">{page.menuBlurb}</p>
-                                </div>
-                            </a>
-                        ))
-                    }
-                </div>
-
-                <a href="/product/" class="mt-8 inline-block text-sm font-medium text-link hover:underline">{content.tour.cta} →</a>
-            </div>
-        </section>
-
-        <!-- 2 · Why specialized — prompt vs agent -->
-        <section class="border-t border-line" id="contrast">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.contrast.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.contrast.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.contrast.sub}</p>
-
-                <div class="mt-12 grid items-start gap-6 md:grid-cols-2">
-                    <div class="card p-6">
-                        <div class="flex items-baseline justify-between gap-3">
-                            <h3 class="text-sm font-medium text-muted">{content.contrast.prompt.label}</h3>
-                            <span class="text-2xs text-subtle">{content.contrast.prompt.caption}</span>
-                        </div>
-                        <ul class="mt-5 space-y-3">
-                            {
-                                content.contrast.prompt.points.map((point) => (
-                                    <li class="flex items-start gap-3 text-sm leading-relaxed text-subtle">
-                                        <span class="mt-0.5 shrink-0 text-line-strong">
-                                            <Fragment set:html={minusIcon} />
-                                        </span>
-                                        {point}
-                                    </li>
-                                ))
-                            }
-                        </ul>
-                    </div>
-
-                    <div class="card border-primary-600/30 bg-primary-600/[0.03] p-6">
-                        <div class="flex items-baseline justify-between gap-3">
-                            <h3 class="text-sm font-medium text-content">{content.contrast.agent.label}</h3>
-                            <span class="text-2xs text-link">{content.contrast.agent.caption}</span>
-                        </div>
-                        <ul class="mt-5 space-y-3">
-                            {
-                                content.contrast.agent.points.map((point) => (
-                                    <li class="flex items-start gap-3 text-sm leading-relaxed text-content">
-                                        <span class="mt-0.5 shrink-0 text-link">
-                                            <Fragment set:html={checkIcon} />
-                                        </span>
-                                        {point}
-                                    </li>
-                                ))
-                            }
-                        </ul>
-                    </div>
-                </div>
-
-                <a href={compareHref("")} class="mt-8 inline-block text-sm font-medium text-link hover:underline">
-                    {content.contrast.cta} →
-                </a>
-            </div>
-        </section>
-
-        <!-- 3 · Anatomy — the four layers of the environment, each one you can open -->
-        <section class="border-t border-line" id="anatomy">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.anatomy.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.anatomy.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.anatomy.sub}</p>
-                <a href="/product/sandbox/" class="mt-4 inline-block text-sm font-medium text-link hover:underline">See a real sandbox, layer by layer →</a>
-
-                <div class="mt-12 grid gap-10 sm:grid-cols-2 sm:gap-8 lg:gap-12">
-                    {
-                        content.anatomy.pillars.map((pillar, i) => (
-                            <div class="flex gap-4">
-                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-600/10 text-link">
-                                    <Fragment set:html={anatomyIcons[i] ?? ""} />
-                                </div>
-                                <div>
-                                    <h3 class="mt-1 text-sm font-medium text-content">{pillar.title}</h3>
-                                    <p class="mt-2 text-sm leading-relaxed text-muted">{pillar.body}</p>
-                                </div>
-                            </div>
-                        ))
-                    }
-                </div>
-            </div>
-        </section>
-
-        <!-- 4 · Inside a sandbox — the agent as a machine you own (container figure) -->
-        <section class="border-t border-line" id="sandbox">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.sandbox.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.sandbox.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.sandbox.sub}</p>
-                <a href="/product/sandbox/" class="mt-4 inline-block text-sm font-medium text-link hover:underline">Open the sandbox page →</a>
-
-                <figure class="mt-12">
-                    <!-- machine boundary -->
-                    <div class="relative mx-auto max-w-2xl rounded-2xl border border-dashed border-line-strong p-4 sm:p-6">
-                        <div class="eyebrow mb-4 flex items-center gap-2">
-                            <span class="text-subtle"><Fragment set:html={monitorGlyph} /></span>
-                            {content.sandbox.boundary}
-                        </div>
-
-                        <!-- the sandbox itself -->
-                        <div class="card border-primary-600/30 bg-primary-600/[0.03] p-5 shadow-xl shadow-black/30">
-                            <div class="flex items-center gap-3 border-b border-line pb-4">
-                                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-600/15 text-link">
-                                    <Fragment set:html={cubeGlyph} />
-                                </span>
-                                <div class="min-w-0">
-                                    <div class="font-mono text-sm text-content">{content.sandbox.agent.name}</div>
-                                    <div class="text-2xs text-subtle">{content.sandbox.agent.role}</div>
-                                </div>
-                                <span class="chip ml-auto bg-success/10 text-success">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-success"></span>running
-                                </span>
-                            </div>
-
-                            <div class="mt-4 space-y-4">
-                                {
-                                    content.sandbox.layers.map((layer) => (
-                                        <div class="flex flex-col gap-1.5">
-                                            <div class="eyebrow">{layer.label}</div>
-                                            <div class="flex flex-wrap gap-1.5">
-                                                {layer.items.map((item) => (
-                                                    <span class="rounded-md border border-line bg-overlay/50 px-2 py-0.5 font-mono text-2xs text-muted">{item}</span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))
-                                }
-                            </div>
-                        </div>
-                    </div>
-                </figure>
-            </div>
-        </section>
-
-        <!-- 5 · Connected — integrations hub-and-spoke -->
-        <section class="border-t border-line" id="integrations">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.integrations.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.integrations.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.integrations.sub}</p>
-                <a href="/product/capabilities/" class="mt-4 inline-block text-sm font-medium text-link hover:underline">See how a capability is wired →</a>
-
-                <!-- Radial hub (md+): the sandbox at the centre, its systems on the spokes -->
-                <div class="relative mx-auto mt-14 hidden h-[480px] w-full max-w-3xl overflow-visible md:block">
-                    <svg class="hub-spoke-layer absolute inset-0 z-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                        {hubNodes.map((node) => <line x1="50" y1="50" x2={node.x} y2={node.y} class="hub-spoke" vector-effect="non-scaling-stroke" />)}
-                    </svg>
-
-                    <!-- centre hub -->
-                    <div
-                        class="absolute top-1/2 left-1/2 z-10 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-2xl border border-primary-600/40 bg-primary-600/[0.06] text-center shadow-2xl shadow-black/40 backdrop-blur-sm"
-                    >
-                        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600/15 text-link">
-                            <Fragment set:html={cubeGlyph} />
-                        </span>
-                        <div class="mt-2 text-xs font-medium text-content">{content.integrations.hubLabel}</div>
-                        <div class="text-2xs text-subtle">{content.integrations.hubSub}</div>
-                    </div>
-
-                    <!-- system nodes -->
-                    {
-                        hubNodes.map((node) => (
-                            <div class="hub-node absolute z-10 flex w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center" style={`left:${node.x}%;top:${node.y}%`}>
-                                <span class="hub-logo flex h-11 w-11 items-center justify-center rounded-xl border border-line bg-card">
-                                    <svg
-                                        viewBox={brandLogos[node.logo].viewBox}
-                                        class="h-5 w-5"
-                                        fill={brandLogos[node.logo].stroke ? "none" : "currentColor"}
-                                        stroke={brandLogos[node.logo].stroke ? "currentColor" : undefined}
-                                        stroke-width={brandLogos[node.logo].stroke ? 1.6 : undefined}
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        aria-hidden="true"
-                                    >
-                                        <Fragment set:html={brandLogos[node.logo].body} />
-                                    </svg>
-                                </span>
-                                <div class="hub-name mt-2 text-xs font-medium text-muted">{node.name}</div>
-                                <div class="mt-0.5 text-[0.625rem] font-semibold tracking-wider text-subtle uppercase">{node.category}</div>
-                            </div>
-                        ))
-                    }
-                </div>
-
-                <!-- Grid fallback (mobile) -->
-                <div class="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 md:hidden">
-                    {
-                        content.integrations.nodes.map((node) => (
-                            <div class="card flex flex-col items-center gap-2 p-4 text-center">
-                                <span class="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-overlay/50 text-muted">
-                                    <svg
-                                        viewBox={brandLogos[node.logo].viewBox}
-                                        class="h-5 w-5"
-                                        fill={brandLogos[node.logo].stroke ? "none" : "currentColor"}
-                                        stroke={brandLogos[node.logo].stroke ? "currentColor" : undefined}
-                                        stroke-width={brandLogos[node.logo].stroke ? 1.6 : undefined}
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        aria-hidden="true"
-                                    >
-                                        <Fragment set:html={brandLogos[node.logo].body} />
-                                    </svg>
-                                </span>
-                                <div class="text-xs font-medium text-content">{node.name}</div>
-                                <div class="text-[0.625rem] font-semibold tracking-wider text-subtle uppercase">{node.category}</div>
-                            </div>
-                        ))
-                    }
-                </div>
-
-                <p class="mx-auto mt-10 max-w-xl text-center text-xs text-subtle md:text-left">{content.integrations.note}</p>
-            </div>
-        </section>
-
-        <!-- 6 · Workforce — one agent to a graph of them -->
-        <section class="border-t border-line" id="workforce">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.workforce.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.workforce.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.workforce.sub}</p>
-                <a href="/product/fleet/" class="mt-4 inline-block text-sm font-medium text-link hover:underline">See the fleet board →</a>
-
-                <div class="relative mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
-                    <div
-                        class="absolute top-5 right-[10%] left-[10%] hidden h-px bg-linear-to-r from-primary-500/40 via-line-strong to-primary-500/40 md:block"
-                        aria-hidden="true"
-                    >
-                    </div>
-                    {
-                        content.workforce.moments.map((moment, i) => (
-                            <div class="relative">
-                                <div class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-line-strong bg-canvas text-link">
-                                    <Fragment set:html={workforceIcons[i] ?? ""} />
-                                </div>
-                                <h3 class="mt-4 text-sm font-medium text-content">{moment.title}</h3>
-                                <p class="mt-2 max-w-xs text-sm leading-relaxed text-muted">{moment.body}</p>
-                            </div>
-                        ))
-                    }
-                </div>
-            </div>
-        </section>
-
-        <!-- 7 · In your tools — talk to the agent like a teammate (conversation mock) -->
-        <section class="border-t border-line" id="teammate">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.teammate.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.teammate.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.teammate.sub}</p>
-
-                <div class="mt-12 grid items-start gap-10 lg:grid-cols-[1.4fr_1fr]">
-                    <!-- chat thread mock -->
-                    <div class="card overflow-hidden shadow-2xl shadow-black/40">
-                        <div class="flex items-center gap-2 border-b border-line px-4 py-3">
-                            <svg viewBox="0 0 24 24" class="h-4 w-4 text-subtle" fill="currentColor" aria-hidden="true">
-                                <Fragment set:html={brandLogos.discord.body} />
-                            </svg>
-                            <span class="font-mono text-xs text-content">{content.teammate.surface}</span>
-                            <span class="ml-auto flex items-center gap-1.5 text-2xs text-subtle">
-                                <span class="h-1.5 w-1.5 rounded-full bg-success"></span>3 online
-                            </span>
-                        </div>
-
-                        <div class="space-y-4 p-4">
-                            {
-                                content.teammate.thread.map((msg) => (
-                                    <div class="flex gap-3">
-                                        {msg.agent ? (
-                                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600/15 text-link">
-                                                <Fragment set:html={botGlyph} />
-                                            </span>
-                                        ) : (
-                                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-overlay text-xs font-semibold text-muted">
-                                                {msg.author.charAt(0)}
-                                            </span>
-                                        )}
-                                        <div class="min-w-0">
-                                            <div class="flex items-center gap-2">
-                                                <span class={`text-xs font-semibold ${msg.agent ? "text-link" : "text-content"}`}>{msg.author}</span>
-                                                {msg.agent && (
-                                                    <span class="rounded bg-primary-600/20 px-1.5 py-0.5 text-[0.625rem] font-semibold tracking-wide text-link uppercase">Agent</span>
-                                                )}
-                                                <span class="text-2xs text-subtle">{msg.time}</span>
-                                            </div>
-                                            <div
-                                                class={`mt-1 inline-block rounded-lg px-3 py-2 text-sm leading-relaxed ${msg.agent ? "border border-primary-600/20 bg-primary-600/[0.05] text-content" : "bg-overlay/60 text-muted"}`}
-                                            >
-                                                {msg.text}
-                                            </div>
-                                        </div>
+                        content.loop.beats.map((beat, i) => {
+                            /* Layout follows the shot, the way the product pages do it: a wide capture is 1072 CSS px
+                               of real interface and takes the whole column, because halving it renders the app's own
+                               text at a third size. It also keeps beat 01 from reading as the hero's screenshot
+                               printed twice — the hero shows a cropped corner of the board, this shows all of it.
+                               The threshold is 3:2 rather than merely landscape: the review capture is 2144×1800, a
+                               tall panel that happens to be a hair wider than high, and given the whole column it is
+                               mostly the empty canvas under its own diff. That one keeps the cropped side-by-side. */
+                            const wideShot = beat.shot !== undefined && beat.shot.width >= beat.shot.height * 1.5 ? beat.shot : undefined;
+                            const words = (
+                                <>
+                                    <div class="text-5xl font-semibold tracking-tight text-primary-500/25 select-none" aria-hidden="true">
+                                        {beat.step}
                                     </div>
-                                ))
+                                    <h3 class="mt-3 text-xl font-semibold tracking-tight text-content">{beat.title}</h3>
+                                    <p class="mt-3 text-base leading-relaxed text-muted">{beat.body}</p>
+                                </>
+                            );
+
+                            if (wideShot !== undefined) {
+                                return (
+                                    <div>
+                                        <div class="max-w-2xl">{words}</div>
+                                        <figure class="m-0 mt-8 overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
+                                            <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
+                                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
+                                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
+                                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
+                                                <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">
+                                                    {wideShot.frameLabel}
+                                                </span>
+                                            </div>
+                                            <img
+                                                src={wideShot.src}
+                                                alt={wideShot.alt}
+                                                width={wideShot.width}
+                                                height={wideShot.height}
+                                                loading="lazy"
+                                                decoding="async"
+                                                class="w-full"
+                                            />
+                                        </figure>
+                                    </div>
+                                );
                             }
 
-                            <div class="mt-2 flex items-center gap-2 rounded-lg border border-line bg-overlay/40 px-3 py-2 text-xs text-subtle">
-                                Message {content.teammate.surface}…
-                            </div>
-                        </div>
-                    </div>
+                            return (
+                                <div class="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
+                                    <div class={i % 2 === 1 ? "lg:order-2" : ""}>{words}</div>
 
-                    <!-- caption -->
-                    <div class="lg:pt-6">
-                        <ul class="space-y-4">
-                            <li class="flex items-start gap-3 text-sm leading-relaxed text-muted">
-                                <span class="mt-0.5 shrink-0 text-link"><Fragment set:html={checkIcon} /></span>
-                                Assign work with an @mention; it plans, executes, and replies in the same thread.
-                            </li>
-                            <li class="flex items-start gap-3 text-sm leading-relaxed text-muted">
-                                <span class="mt-0.5 shrink-0 text-link"><Fragment set:html={checkIcon} /></span>
-                                It reads and sends messages itself — a real participant, not a notification bot.
-                            </li>
-                        </ul>
-                        <p class="mt-6 border-t border-line pt-5 text-xs leading-relaxed text-subtle">{content.teammate.note}</p>
-                    </div>
+                                    <div class={i % 2 === 1 ? "lg:order-1" : ""}>
+                                        {beat.shot && (
+                                            <figure class="m-0 overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
+                                                <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
+                                                    <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
+                                                    <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
+                                                    <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
+                                                    <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">
+                                                        {beat.shot.frameLabel}
+                                                    </span>
+                                                </div>
+                                                {/* A crop window, not a fit: a portrait capture scaled into half a column is
+                                                    the app at a third size — a shape you can see, not a screen you can read.
+                                                    So the shot is oversized and the window shows its top-left, where this
+                                                    surface puts the thing the beat claims. Pinned rather than left in flow:
+                                                    a block box with an aspect-ratio and `overflow-hidden` centres a child
+                                                    taller than itself, which scrolled the review past its own diff. */}
+                                                <div class="relative aspect-16/10 overflow-hidden">
+                                                    <img
+                                                        src={beat.shot.src}
+                                                        alt={beat.shot.alt}
+                                                        width={beat.shot.width}
+                                                        height={beat.shot.height}
+                                                        loading="lazy"
+                                                        decoding="async"
+                                                        class="absolute top-0 left-0 w-[145%] max-w-none"
+                                                    />
+                                                </div>
+                                            </figure>
+                                        )}
+
+                                        {beat.figure === "sandbox" && (
+                                            <figure class="m-0 rounded-2xl border border-dashed border-line-strong p-4 sm:p-6">
+                                                <div class="eyebrow mb-4 flex items-center gap-2">
+                                                    <span class="text-subtle">
+                                                        <Fragment set:html={monitorGlyph} />
+                                                    </span>
+                                                    {content.loop.sandbox.boundary}
+                                                </div>
+
+                                                <div class="card border-primary-600/30 bg-primary-600/[0.03] p-5 shadow-xl shadow-black/30">
+                                                    <div class="flex items-center gap-3 border-b border-line pb-4">
+                                                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-600/15 text-link">
+                                                            <Fragment set:html={cubeGlyph} />
+                                                        </span>
+                                                        <div class="min-w-0">
+                                                            <div class="font-mono text-sm text-content">{content.loop.sandbox.agent.name}</div>
+                                                            <div class="text-2xs text-subtle">{content.loop.sandbox.agent.role}</div>
+                                                        </div>
+                                                        <span class="chip ml-auto bg-success/10 text-success">
+                                                            <span class="h-1.5 w-1.5 rounded-full bg-success" />
+                                                            running
+                                                        </span>
+                                                    </div>
+
+                                                    <div class="mt-4 space-y-4">
+                                                        {content.loop.sandbox.layers.map((layer) => (
+                                                            <div class="flex flex-col gap-1.5">
+                                                                <div class="eyebrow">{layer.label}</div>
+                                                                <div class="flex flex-wrap gap-1.5">
+                                                                    {layer.items.map((item) => (
+                                                                        <span class="rounded-md border border-line bg-overlay/50 px-2 py-0.5 font-mono text-2xs text-muted">
+                                                                            {item}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </figure>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    }
                 </div>
+
+                <a href="/product/" class="mt-14 inline-block text-sm font-medium text-link hover:underline">{content.loop.cta} →</a>
             </div>
         </section>
 
-        <!-- 8 · Ownership — diagram + definition rows -->
+        <!-- 3 · Ownership — diagram + definition rows -->
         <section class="border-t border-line" id="ownership">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.ownership.eyebrow}</div>
@@ -634,121 +337,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
             </div>
         </section>
 
-        <!-- 9 · Shared, safely — one sandbox, owner + invited teammates (sharing diagram) -->
-        <section class="border-t border-line" id="sharing">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.sharing.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.sharing.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.sharing.sub}</p>
-
-                <div class="mt-12 flex flex-col gap-6 md:flex-row md:items-stretch">
-                    <!-- people -->
-                    <div class="flex flex-1 flex-col gap-3">
-                        {
-                            content.sharing.people.map((person) => (
-                                <div class={`card flex items-center gap-3 p-4 ${person.owner ? "border-primary-600/30 bg-primary-600/[0.03]" : ""}`}>
-                                    <span class={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${person.owner ? "bg-primary-600/15 text-link" : "bg-overlay text-muted"}`}>
-                                        {person.name.charAt(0)}
-                                    </span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-sm font-medium text-content">{person.name}</span>
-                                            <span class={`chip ${person.owner ? "bg-primary-600/15 text-link" : "bg-overlay text-muted"}`}>{person.role}</span>
-                                        </div>
-                                        <div class="mt-1 text-2xs text-subtle">{person.access}</div>
-                                    </div>
-                                </div>
-                            ))
-                        }
-                    </div>
-
-                    <!-- tunnels (md+) -->
-                    <div class="relative hidden w-44 shrink-0 md:block" aria-hidden="true">
-                        <svg class="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            <line x1="2" y1="16.5" x2="98" y2="50" class="hub-spoke" vector-effect="non-scaling-stroke" />
-                            <line x1="2" y1="50" x2="98" y2="50" class="hub-spoke" vector-effect="non-scaling-stroke" />
-                            <line x1="2" y1="83.5" x2="98" y2="50" class="hub-spoke" vector-effect="non-scaling-stroke" />
-                        </svg>
-                        <div class="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-2xs whitespace-nowrap text-subtle">
-                            <span class="text-link"><Fragment set:html={lockGlyph} /></span>private tunnels
-                        </div>
-                    </div>
-
-                    <!-- mobile connector -->
-                    <div class="flex items-center justify-center gap-1.5 text-2xs text-subtle md:hidden">
-                        <span class="text-link"><Fragment set:html={lockGlyph} /></span>private tunnels
-                        <span><Fragment set:html={chevronDownGlyph} /></span>
-                    </div>
-
-                    <!-- shared sandbox -->
-                    <div class="flex flex-1 items-center">
-                        <div class="card w-full border-primary-600/30 bg-primary-600/[0.03] p-6 text-center shadow-xl shadow-black/30">
-                            <span class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary-600/15 text-link">
-                                <Fragment set:html={cubeGlyph} />
-                            </span>
-                            <div class="mt-3 text-sm font-medium text-content">{content.sharing.sandboxLabel}</div>
-                            <div class="mt-1 font-mono text-2xs text-subtle">{content.sharing.sandboxSub}</div>
-                            <div class="mt-3 flex justify-center">
-                                <span class="chip bg-success/10 text-success">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-success"></span>running
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <p class="mt-8 max-w-2xl text-xs leading-relaxed text-subtle">{content.sharing.note}</p>
-            </div>
-        </section>
-
-        <!-- 10 · The whole picture — company teaser linking to the reference architecture -->
-        <section class="border-t border-line" id="company">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.company.eyebrow}</div>
-                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.company.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.company.sub}</p>
-
-                <div class="mt-12 rounded-2xl border border-line bg-card/40 p-5 sm:p-8">
-                    <div class="eyebrow mb-2.5">Role &amp; team sandboxes</div>
-                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                        {
-                            content.company.teams.map((name) => (
-                                <span class="flex items-center gap-2 rounded-lg border border-line bg-card px-3 py-2 text-xs font-medium text-content">
-                                    <span class="text-link">
-                                        <Fragment set:html={cubeGlyph} />
-                                    </span>
-                                    {name}
-                                </span>
-                            ))
-                        }
-                    </div>
-
-                    <div class="my-4 flex items-center gap-2 text-2xs text-subtle">
-                        <span aria-hidden="true">↓</span>each co-piloted, each over its own private tunnel<span class="h-px flex-1 bg-line"></span>
-                    </div>
-
-                    <div class="rounded-xl border border-primary-600/30 bg-primary-600/[0.05] p-4 text-center">
-                        <div class="eyebrow text-link">Shared services</div>
-                        <div class="mt-2 flex flex-wrap justify-center gap-2">
-                            {
-                                content.company.sharedServices.map((name) => (
-                                    <span class="rounded-md border border-primary-600/30 bg-canvas/60 px-2.5 py-1 text-2xs text-content">{name}</span>
-                                ))
-                            }
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
-                    <p class="max-w-md text-xs leading-relaxed text-subtle">
-                        Every block maps to a shipping primitive — sandboxes, capabilities, and automations.
-                    </p>
-                    <a href="/docs/reference-architecture/" class="text-sm font-medium text-link hover:underline">{content.company.cta} →</a>
-                </div>
-            </div>
-        </section>
-
-        <!-- 11 · Economics — your subscriptions, your hardware, a flat fee -->
+        <!-- 4 · Economics — your subscriptions, your hardware, a flat fee -->
         <section class="border-t border-line" id="economics">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.economics.eyebrow}</div>
@@ -795,7 +384,48 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
             </div>
         </section>
 
-        <!-- 12 · Get connected — ghost-numeral steps, no boxes -->
+        <!-- 5 · Extend it — the flexibility, stated once instead of demonstrated nine times.
+             This band is deliberately the quietest thing on the page: no screenshots, no figures, no
+             argument. Everything here used to be a section of its own, and together they were what made
+             a visitor lose track of what the product is. Each row is one line and a link to the page
+             that owns it — discoverable, indexable, and not competing with the claim above. -->
+        <section class="border-t border-line" id="extend">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">{content.extend.eyebrow}</div>
+                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.extend.heading}</h2>
+                <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.extend.sub}</p>
+
+                <!-- Each row places its three cells explicitly rather than auto-flowing them: name · line · arrow
+                     from sm up, and name · arrow over the line below it on a phone, where a fixed name column left
+                     the sentence 134px — about three words to a line. -->
+                <div class="mt-10 grid border-b border-line md:grid-cols-2 md:gap-x-14">
+                    {
+                        content.extend.rows.map((row) => (
+                            <a
+                                href={row.href}
+                                class="group grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-line py-4 sm:grid-cols-[10rem_1fr_auto] sm:items-baseline sm:gap-x-4"
+                            >
+                                <span class="col-start-1 row-start-1 text-sm font-medium text-content group-hover:text-link">{row.name}</span>
+                                <span class="col-start-1 row-start-2 text-sm leading-relaxed text-muted sm:col-start-2 sm:row-start-1">{row.body}</span>
+                                <span
+                                    class="col-start-2 row-start-1 text-subtle transition-colors group-hover:text-link sm:col-start-3"
+                                    aria-hidden="true"
+                                >
+                                    →
+                                </span>
+                            </a>
+                        ))
+                    }
+                </div>
+
+                <div class="mt-6 flex flex-wrap items-baseline justify-between gap-x-8 gap-y-3">
+                    <p class="max-w-xl text-xs leading-relaxed text-subtle">{content.extend.note}</p>
+                    <a href="/extensions/" class="text-sm font-medium text-link hover:underline">{content.extend.cta} →</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 6 · Get connected — ghost-numeral steps, no boxes -->
         <section class="border-t border-line" id="connect">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.connect.eyebrow}</div>
@@ -826,7 +456,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
             </div>
         </section>
 
-        <!-- 13 · FAQ — every answer open, in topic bands with a jump nav.
+        <!-- 7 · FAQ — every answer open, in topic bands with a jump nav.
              Nothing here is a disclosure widget: thirteen collapsed rows made a visitor click to find out
              whether the answer was even the one they wanted, and hid the answers from in-page search. The
              grouping is what keeps a fully open FAQ scannable — bands are short, and the nav jumps to one. -->
@@ -890,7 +520,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
             </div>
         </section>
 
-        <!-- 14 · Final CTA -->
+        <!-- 8 · Final CTA -->
         <section class="relative overflow-hidden border-t border-line">
             <div class="absolute inset-0 bg-linear-to-br from-primary-600/15 via-canvas to-canvas" aria-hidden="true"></div>
             <div class="fade-in relative mx-auto max-w-7xl px-6 py-20 text-center lg:py-28">

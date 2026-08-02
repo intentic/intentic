@@ -1,4 +1,5 @@
 import { compareHref } from "./compare";
+import { docsHref } from "./docs";
 
 export interface FaqItem {
     /** Anchor id — a question is linkable on its own (`/#can-intentic-read-my-secrets`). */
@@ -57,15 +58,9 @@ export const faqGroups: FaqGroup[] = [
                 question: "Can I run a separate agent for each job?",
                 answer: [
                     "Yes — that's the intended shape. Give each role its own sandbox (a migrations agent, a release captain, a support triager), each with the environment, access, and context its job needs. The free plan includes one sandbox; Pro runs as many as you have roles.",
-                    "Automations wake them on a schedule or an event, and one agent's run can fire the webhook that wakes another — so a whole workflow moves through specialized hands.",
+                    "The automations extension wakes them on a schedule or an event — a push, a Sentry alert, a Stripe payment, new email, a Discord message, or plain cron — each run a fresh session with its own transcript, optionally gated by a guard command you define. One agent's run can fire the webhook that wakes another, so a whole workflow moves through specialized hands.",
                 ],
-            },
-            {
-                id: "what-are-automations",
-                question: "What are automations?",
-                answer: [
-                    "Scheduled or event-driven agent wake-ups: GitHub/GitLab pushes, Sentry alerts, Stripe payments, new email, Discord messages, or plain cron — each run a fresh agent session with a transcript, optionally gated by a guard command you define.",
-                ],
+                more: { label: "Specialize a sandbox until it does a job alone", href: docsHref("autonomous-employees") },
             },
             {
                 id: "which-models",

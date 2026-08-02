@@ -1,6 +1,7 @@
 import { compareHref } from "./compare";
 import { docsHref, docsSections } from "./docs";
 import type { ShotImage } from "./landing";
+import type { ProductPage } from "./product";
 import { productHref, productPages } from "./product";
 import { DEMO_PATH } from "./site";
 
@@ -44,7 +45,7 @@ export type NavEntry =
       }
     | { type: "link"; label: string; href: string; prefix: string; external?: boolean };
 
-const productItems = (group: "run" | "environment"): MenuItem[] =>
+const productItems = (group: ProductPage["group"]): MenuItem[] =>
     productPages
         .filter((page) => page.group === group)
         .map((page) => ({
@@ -61,7 +62,18 @@ export const navEntries: NavEntry[] = [
         prefix: "/product",
         sections: [
             { label: "Run agents", items: productItems("run") },
-            { label: "Configure the environment", items: productItems("environment") },
+            { label: "The environment", items: productItems("environment") },
+            // The third column is the nav's version of the landing page's "Extend it" band: the surfaces
+            // that answer "what else can it do" sit apart from the ones that answer "what is it". Doorbell
+            // used to head the "Run agents" column, which read as a claim that a website chat widget is
+            // what this product is for.
+            {
+                label: "Extend it",
+                items: [
+                    ...productItems("extend"),
+                    { label: "Extension gallery", href: "/extensions/", description: "Everything published, and the commit you'd install" },
+                ],
+            },
         ],
         action: { label: "Try the live workspace", href: DEMO_PATH },
     },

@@ -86,25 +86,39 @@ payment event, a GitHub push, a new email — with a guard command deciding whet
 
 ## Selling points, ranked
 
-1. **The whole environment is editable, not just the prompt** — everyone lets you tune a system
+Ranked for the **landing page**, which gets one claim and about five arguments. The order changed on
+2026-08-02: #1 and #3 used to lead, and the site spent four bands on them. They are reasons to believe
+— true, and only legible to a reader already inside the agent-tooling debate. What is both unique and
+picturable in one read is #1 below, so that is what the page now claims and proves; the rest support it
+or live on `/product/*`, `/docs/*` and `/compare/`. See
+[landing-blueprint.md](landing-blueprint.md#core-thesis-the-spine) for the whole rationale.
+
+1. **A fleet in parallel, on hardware you own, nothing landing unread** — one sandbox and one git
+   worktree per agent, run ten at once, and the review boundary is a real branch: land it into your
+   tree or discard it (`_apps/sandbox/src/agents/worktrees.ts`, `land.ts`,
+   `_apps/web/src/pages/Agents.vue`). Local orchestrators share the instinct; none of them pair it with
+   the environment, the credentials and the reach below. (P1, P2, P4)
+2. **Ownership without giving up the cloud UX** — the moat: the only agent workspace where the
+   vendor is architecturally *unable* to read your code or drive your sandbox (identity-only hub,
+   off the command path; secrets AES-256-GCM at rest with no decrypt path, `_apps/api/src/crypto.ts`). (P1)
+3. **The whole environment is editable, not just the prompt** — everyone lets you tune a system
    prompt; intentic opens the image the dev-tools are installed in (owner-approved overlay), the
    systems the agent may reach (capabilities, with a "this will add to your sandbox" effects panel
    before you commit), and the context it loads each turn. You can't make the model smarter; you can
    make it better informed and better equipped. One workspace, two operators. (P2)
-2. **Ownership without giving up the cloud UX** — the moat: the only agent workspace where the
-   vendor is architecturally *unable* to read your code or drive your sandbox (identity-only hub,
-   off the command path; secrets AES-256-GCM at rest with no decrypt path, `_apps/api/src/crypto.ts`). (P1)
-3. **Co-piloted, not fire-and-forget** — AI still needs its context configured, its work
+4. **Co-piloted, not fire-and-forget** — AI still needs its context configured, its work
    supervised, and a human in the loop. The IDE surfaces (editor, files, diffs, terminal) and the
    observability surfaces (fleet board, plan mode, permission modes, changes review, transcripts)
    exist for exactly that. Trust is a UX feature, not a policy PDF. (P4)
-4. **Minutes to a live workspace** — Google sign-in, one copy-paste command, no Cloudflare account,
+5. **Economics that don't punish usage** — bring your own model subscription, run on your own
+   hardware, pay a flat platform fee. Never a meter on model tokens. It earns its band because "ten
+   agents" triggers "that must cost a fortune". (P7)
+6. **Minutes to a live workspace** — Google sign-in, one copy-paste command, no Cloudflare account,
    no open ports, workspace opens itself when the sandbox reports in. (P3)
-5. **From one agent to a workforce** — capabilities wire agents to your systems; automations make
-   them event-driven; Pro runs a whole team with daemon-enforced sharing and a fair free tier (1
-   full sandbox, nothing crippled). (P5, P6)
-6. **Economics that don't punish usage** — bring your own model subscription, run on your own
-   hardware, pay a flat platform fee. Never a meter on model tokens. (P7)
+7. **A lean core plus extensions** — automations, Discord/Slack, IMAP, memory, pipelines, previews and
+   the Doorbell webchat are things you bolt on, not what the product is (`_extensions/README.md`, the
+   VSCode bet). This is genuinely a selling point *and* the thing that blurred the site when it was
+   sold band by band; on the landing page it is one quiet index with links out. (P5, P6, Pro)
 
 ## Competitive frame
 

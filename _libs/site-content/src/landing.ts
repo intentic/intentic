@@ -1,3 +1,6 @@
+import { docsHref } from "./docs";
+import { productHref } from "./product";
+
 export interface LandingFact {
     title: string;
     body: string;
@@ -43,36 +46,24 @@ export interface HeroDemo {
     newTabLabel: string;
 }
 
-/** One side of the "a prompt vs the whole environment" comparison. */
-export interface LandingContrastColumn {
-    label: string;
-    caption: string;
-    points: string[];
+/**
+ * One beat of the loop. Same shape as a `ProductBlock`: the proof beside the words is a real captured
+ * surface, or — where no single screen shows the thing — a figure drawn in markup. Never a mockup.
+ */
+export interface LoopBeat {
+    /** The ghost numeral beside it. Authored, so the copy owns its own ordering. */
+    step: string;
+    title: string;
+    body: string;
+    shot?: ShotImage & { frameLabel: string };
+    figure?: "sandbox";
 }
 
-/** One system the sandbox connects to — a node in the integrations hub-and-spoke. */
-export interface IntegrationNode {
+/** One row of the extend band: a superpower, one line about it, and the page that owns it. */
+export interface ExtendRow {
     name: string;
-    category: string;
-    /** A key in Landing.astro's brandLogos map: a simple-icons slug, or an in-house glyph (ssh/mcp). */
-    logo: string;
-}
-
-/** One message in the "talk to it like a teammate" chat mock. */
-export interface ChatMessage {
-    author: string;
-    text: string;
-    time: string;
-    /** Renders the AGENT badge + tinted bubble — the specialized agent replying in-thread. */
-    agent?: boolean;
-}
-
-/** One participant in the shared-sandbox diagram — the owner, or an invited teammate. */
-export interface SharingPerson {
-    name: string;
-    role: string;
-    access: string;
-    owner?: boolean;
+    body: string;
+    href: string;
 }
 
 export interface LandingContent {
@@ -84,49 +75,41 @@ export interface LandingContent {
         shot: HeroShot;
         demo: HeroDemo;
     };
-    /* The product tour: the fleet board in full, then the six product pages as cards. The landing used to
-     * carry a screenshot and a paragraph per surface; those now have pages of their own, and repeating them
-     * here made the page long and the pages redundant. */
-    tour: LandingSectionIntro & { hero: ShotImage & { caption: string }; cta: string };
-    /* The band makes a sweeping claim about "everyone else", so it carries the link that owns it: the
-     * comparison shelf, where those competitors are named and the case for each is written out. */
-    contrast: LandingSectionIntro & { prompt: LandingContrastColumn; agent: LandingContrastColumn; cta: string };
-    anatomy: LandingSectionIntro & { pillars: LandingFact[] };
-    // The sandbox-container figure: an agent on a machine you own, its tools installed and context loaded.
-    sandbox: LandingSectionIntro & { boundary: string; agent: { name: string; role: string }; layers: AgentSpecRow[] };
-    // The integrations hub-and-spoke: the sandbox at center, the systems it operates around it.
-    integrations: LandingSectionIntro & { hubLabel: string; hubSub: string; nodes: IntegrationNode[]; note: string };
-    workforce: LandingSectionIntro & { moments: LandingFact[] };
-    // The conversation mock: assign work to the agent in Discord and it replies like a colleague.
-    teammate: LandingSectionIntro & { surface: string; thread: ChatMessage[]; note: string };
+    /* The spine: assign several → each works isolated in a sandbox of its own → nothing lands unread.
+     * This is the section that earns the headline's second half — it is the window. */
+    loop: LandingSectionIntro & {
+        beats: LoopBeat[];
+        // The container figure that beat 02 stands on: an agent on a machine you own, tools installed.
+        sandbox: { boundary: string; agent: { name: string; role: string }; layers: AgentSpecRow[] };
+        cta: string;
+    };
     ownership: LandingSectionIntro & { facts: LandingFact[] };
-    // The sharing diagram: an owner configures one sandbox; invited teammates share it over their own tunnels.
-    sharing: LandingSectionIntro & { people: SharingPerson[]; sandboxLabel: string; sandboxSub: string; note: string };
-    // The company teaser: a fleet of specialized agents (one per role/team) + the services they share — links to the full docs reference architecture.
-    company: LandingSectionIntro & { teams: string[]; sharedServices: string[]; cta: string };
     economics: LandingSectionIntro & { accounts: { name: string; detail: string }[]; points: string[] };
+    /* Everything the product can also be, in one screen of one-liners that link out. It is here so the
+     * flexibility is stated rather than demonstrated: nine sections of "and also" is what made a visitor
+     * lose the thread, and the honest framing is the one in _extensions/README.md — a lean core plus
+     * extensions. Nothing in this band argues; each row hands the reader to the page that owns it. */
+    extend: LandingSectionIntro & { rows: ExtendRow[]; note: string; cta: string };
     connect: LandingSectionIntro & { steps: LandingFact[]; commandNote: string };
     finalCta: { heading: string; sub: string };
 }
 
-// One thesis, told once: this is one workspace with two kinds of operator — you and your agents — and
-// every layer of the environment they work in is visible and yours to change. Elsewhere the prompt is
-// the only editable part; here it's the image the tools are installed in, the systems the agent may
-// reach, and the context it loads each turn. Every claim maps to a shipping mechanism: environment
-// overlays, capabilities/connectors, agent plugins/skills, isolated worktrees + land, sandboxes
-// (Pro = many), and automations.
+// One claim, proven once: you run a fleet of coding agents in parallel on hardware you own, and nothing
+// reaches your tree until you have read the diff. Every section below is a proof of that sentence or an
+// objection to it. What the product can ALSO do — Doorbell, Discord, automations, sharing, a whole
+// company of agents — is real, has pages of its own, and lives in one quiet band near the bottom.
 export const landingContent: LandingContent = {
     meta: {
         // Under 160 characters: a search result truncates past that, and this one has to survive
         // the cut with the claim and the price still in it.
         title: "intentic — An IDE for your agents. A window for you.",
         description:
-            "An IDE for your agents. Each gets its own sandbox on hardware you own — dev-tools really installed, wired to your systems. Claude Code, Codex, Grok. Free.",
+            "An IDE for your agents. Each gets its own sandbox and git branch on hardware you own — run ten in parallel, read every diff before it lands. Free.",
     },
     hero: {
         headlineLines: ["An IDE for your agents.", "A window for you."],
         subhead:
-            "Everyone else lets you edit the prompt. intentic lets you see and change the whole environment your agents work in — the dev-tools really installed, the systems they can reach, the context they load every turn. Run one, or ten in parallel, on hardware you own.",
+            "Every agent gets a sandbox of its own on hardware you own — the job's dev-tools really installed, wired to your systems — and its own git branch. Run one, or ten in parallel. The window is yours: watch the board, answer the ones that stop, read every diff before it lands.",
         chips: ["Free plan", "Bring your own agent", "Runs on your hardware"],
         shot: {
             src: "/assets/product/fleet-board.png",
@@ -141,144 +124,56 @@ export const landingContent: LandingContent = {
             newTabLabel: "Open the live workspace",
         },
     },
-    tour: {
-        eyebrow: "The product",
-        heading: "This is the actual workspace.",
-        sub: "Not a chat box bolted onto a model — a real IDE for a fleet of agents. Autonomy still needs a human in the loop: you configure each agent's context, watch every run, drive one, and review its diffs before anything lands. Works with Claude Code, Codex, Grok, Kimi Code, and Gemini.",
-        hero: {
-            src: "/assets/product/fleet-board.png",
-            width: 2144,
-            height: 1240,
-            alt: "The intentic agent fleet board — a kanban of running agents grouped into Attention, Active and Finished lanes, each card showing its model, branch, cost and diff stats.",
-            caption:
-                "The fleet board — every agent on its own isolated branch, sorted by what needs you. Run a whole team in parallel; finished work lands in your workspace.",
+    loop: {
+        eyebrow: "The loop",
+        heading: "Run several at once. Land them one at a time.",
+        sub: "Autonomy still needs a human in it. So the parallel half is safe by construction — one sandbox and one branch each — and the deciding half stays yours. Works with Claude Code, Codex, Grok, Kimi Code and Gemini.",
+        beats: [
+            {
+                step: "01",
+                title: "Give the work to as many agents as it needs",
+                body: "Each starts in plan mode on its own git worktree, cut from your base commit. The board sorts them by what needs you — a question, a plan waiting for approval, a land conflict — and everything else keeps running while you answer.",
+                shot: {
+                    src: "/assets/product/fleet-board.png",
+                    width: 2144,
+                    height: 1240,
+                    alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane offering Land now — every card showing model, branch, tokens, cost and diff stats.",
+                    frameLabel: "acme-shop · /agents",
+                },
+            },
+            {
+                step: "02",
+                title: "Each works in a sandbox of its own",
+                body: "Not a chat window — a container on your machine with the job's toolchain genuinely installed and its context loaded on every single turn. They never step on each other's files, and none of them touch your working tree.",
+                figure: "sandbox",
+            },
+            {
+                step: "03",
+                title: "Nothing lands until you have read the diff",
+                body: "Finished work arrives as a branch: every changed file, every hunk, the tests it ran. Land it into your tree as ordinary git changes you can still amend or revert — or discard it, and the worktree goes with it.",
+                shot: {
+                    src: "/assets/product/agent-review.png",
+                    width: 2144,
+                    height: 1800,
+                    alt: "The isolated review panel: four changed files with per-file line counts, a split diff of a database schema adding a deletedAt column, and a Land now button beside the agent's branch name.",
+                    frameLabel: "acme-shop · agent/soft-deletes",
+                },
+            },
+        ],
+        sandbox: {
+            boundary: "your machine · reached from your browser over a private tunnel",
+            agent: { name: "release-captain", role: "owns the weekly release" },
+            layers: [
+                { label: "Environment · installed", items: ["node 24", "pnpm", "docker", "psql"] },
+                { label: "Context · loaded every turn", items: ["6 skills", "release runbook", "house style"] },
+            ],
         },
         cta: "Every surface, with the screenshots",
-    },
-    contrast: {
-        eyebrow: "The difference",
-        heading: "Everyone else lets you edit the prompt.",
-        sub: "The prompt is the one layer you can already change anywhere. intentic opens the rest: the image its tools are installed in, the systems it's allowed to reach, the skills and runbooks it loads every turn — each layer visible in the workspace and yours to change. You can't make the model smarter. You can make it better informed and better equipped.",
-        prompt: {
-            label: "A prompt",
-            caption: "a system prompt and a few .md files",
-            points: [
-                "Describes your tools — none are installed.",
-                "No reach into your codebase, data, or services.",
-                "Starts from the same blank context every run.",
-                "Hands you generic output you finish by hand.",
-            ],
-        },
-        agent: {
-            label: "The whole environment",
-            caption: "a sandbox you can open and change",
-            points: [
-                "Its dev-tools and libraries are really installed.",
-                "Wired to your repos, databases, and services.",
-                "Curated context loads every single run.",
-                "Does the job end to end, shows its work as diffs.",
-            ],
-        },
-        cta: "Who “everyone else” is, name by name",
-    },
-    anatomy: {
-        eyebrow: "Anatomy",
-        heading: "Four layers you can open.",
-        sub: "Specializing an agent isn't writing a longer prompt — it's building it an environment. These are its four layers, and every one is visible in the workspace and editable by you.",
-        pillars: [
-            {
-                title: "Its own sandbox",
-                body: "A full workspace in a container on hardware you control — one per agent, so a whole team never steps on itself. Not a chat window: a machine the agent actually works on.",
-            },
-            {
-                title: "A curated environment",
-                body: "The libraries and dev-tools the job needs, baked into the image and really installed — a database client, a headless browser, your language toolchain. The agent proposes the layer; it ships on your approval.",
-            },
-            {
-                title: "Access to your systems",
-                body: "GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers, your own internal tools — added in a click. Credentials stay in the sandbox; the agent operates them from chat.",
-            },
-            {
-                title: "Curated context",
-                body: "Skills, runbooks, repos, and house style scoped to this one job, loaded every turn. Not a generic dump — the context that makes the output yours instead of the model's average.",
-            },
-        ],
-    },
-    sandbox: {
-        eyebrow: "Inside a sandbox",
-        heading: "One agent, one machine, its tools really installed.",
-        sub: "A specialized agent isn't a chat window — it's a container on hardware you own. The toolchain the job needs is baked into the image and genuinely runnable, and the context that makes the work yours loads on every turn.",
-        boundary: "your machine · reached from your browser over a private tunnel",
-        agent: { name: "release-captain", role: "owns the weekly release" },
-        layers: [
-            { label: "Environment · installed", items: ["node 24", "pnpm", "docker", "psql"] },
-            { label: "Context · loaded every turn", items: ["6 skills", "release runbook", "house style"] },
-        ],
-    },
-    integrations: {
-        eyebrow: "Connected",
-        heading: "Wired into the systems you already run.",
-        sub: "Add what the role actually touches as capabilities — code, data, chat, docs, servers — a click each. The credential is stored inside the sandbox and never shown back to you; the agent operates the service from chat.",
-        hubLabel: "your sandbox",
-        hubSub: "keys stay inside",
-        nodes: [
-            { name: "GitHub", category: "Code & issues", logo: "github" },
-            { name: "PostgreSQL", category: "Data", logo: "postgresql" },
-            { name: "Sentry", category: "Observability", logo: "sentry" },
-            { name: "Discord", category: "Communication", logo: "discord" },
-            { name: "Outline", category: "Knowledge base", logo: "outline" },
-            { name: "SSH hosts", category: "Servers", logo: "ssh" },
-            { name: "Stripe", category: "Payments", logo: "stripe" },
-            { name: "MCP", category: "Any tool", logo: "mcp" },
-        ],
-        note: "…plus any MCP server, Claude Code plugin, or self-hosted service — the catalog is open-ended, not a fixed list.",
-    },
-    workforce: {
-        eyebrow: "Workforce",
-        heading: "One agent, or a team that works while you don't.",
-        sub: "Once an agent is specialized, it's cheap to run more. Give each role its own sandbox, wake them on the events that matter, and let them hand work down the line.",
-        moments: [
-            {
-                title: "One sandbox per role",
-                body: "A migrations agent, a release captain, a support triager — each with the environment, access, and context its job needs. Pro runs as many sandboxes as you have roles.",
-            },
-            {
-                title: "Woken by events",
-                body: "A push, a Sentry alert, a Stripe payment, an inbound email, or a schedule starts a fresh specialized run and leaves a transcript. They keep working between your check-ins.",
-            },
-            {
-                title: "Chained into a graph",
-                body: "One agent's run can fire the webhook that wakes the next — triage hands to fix, fix hands to review — so work moves through specialized hands instead of one generalist's.",
-            },
-        ],
-    },
-    teammate: {
-        eyebrow: "In your tools",
-        heading: "Talk to it like a teammate, where your team already works.",
-        sub: "A specialized agent doesn't only answer behind a chat window here. Invite it into Discord and it reads and sends messages like any colleague — you assign the work, it does it, and it reports back with the receipts.",
-        surface: "#releases",
-        thread: [
-            { author: "Dana", time: "9:41", text: "@release-captain ship 2.4 once CI is green, and drop the changelog in #announcements 🙏" },
-            {
-                author: "release-captain",
-                agent: true,
-                time: "9:41",
-                text: "On it. Watching the pipeline — I'll tag the release, draft the changelog from the merged PRs, and post it the second it's green.",
-            },
-            {
-                author: "release-captain",
-                agent: true,
-                time: "9:58",
-                text: "✓ Tagged v2.4.0 · changelog posted in #announcements · deploy is live. 3 PRs shipped, no failures.",
-            },
-            { author: "Dana", time: "9:59", text: "🎉 thanks!" },
-        ],
-        note: "Reachable today in Discord and through an embeddable web-chat widget for your own site — the agent reads and sends messages itself, every credential staying inside its sandbox.",
     },
     ownership: {
         eyebrow: "Ownership",
         heading: "Real access is only safe if you own where it runs.",
-        sub: "A specialized agent holds your keys and touches your systems — so it runs in a sandbox on hardware you control, reached by your browser over a private tunnel. The platform stores your identity and a URL, and can't reach in.",
+        sub: "An agent holding your keys and working your repos is worth having only if it runs somewhere you control. Each sandbox is a container on your own hardware, reached by your browser over a private tunnel. The platform stores your identity and a URL, and can't reach in.",
         facts: [
             {
                 title: "The workspace never leaves your machine",
@@ -294,31 +189,10 @@ export const landingContent: LandingContent = {
             },
         ],
     },
-    sharing: {
-        eyebrow: "Shared, safely",
-        heading: "Invite your team into the same specialized sandbox.",
-        sub: "One agent, many people. The owner installs the tools and connects the systems; invited teammates share the very same sandbox — each reaching it from their own browser over their own private tunnel.",
-        people: [
-            { name: "You", role: "Owner", access: "installs tools · connects systems · full control", owner: true },
-            { name: "Sam", role: "Teammate", access: "chats, drives & reviews · mirrors ports" },
-            { name: "Ada", role: "Teammate", access: "chats, drives & reviews · mirrors ports" },
-        ],
-        sandboxLabel: "one specialized sandbox",
-        sandboxSub: "release-captain · on the owner's machine",
-        note: "Setup stays owner-gated and credentials never leave the box. Invite by email; sharing is a Pro feature — revoking or leaving never is.",
-    },
-    company: {
-        eyebrow: "The whole picture",
-        heading: "An entire company, assembled from specialized agents.",
-        sub: "Zoom out and the pattern repeats: one co-piloted agent per role and per team, each in its own sandbox on hardware you own, connected to the handful of services they all share. A topology you assemble from the same primitives, not a template you click.",
-        teams: ["Operations", "Governance", "Customer & Market", "Product Team A", "Product Team B", "Per-customer"],
-        sharedServices: ["GitHub", "Discord", "Outline", "Infisical"],
-        cta: "See the reference architecture",
-    },
     economics: {
         eyebrow: "Economics",
-        heading: "A whole team, on the subscriptions you already pay for.",
-        sub: "A fleet of agents sounds expensive. It isn't. Each one runs on your own Claude, ChatGPT, or SuperGrok subscription — connected once with a sign-in code — on hardware you already own. intentic is a flat subscription, never a meter on your model usage.",
+        heading: "A whole fleet, on the subscriptions you already pay for.",
+        sub: "Ten agents sounds expensive. It isn't. Each one runs on your own Claude, ChatGPT, SuperGrok, Kimi or Google account — connected once with a sign-in code — on hardware you already own. intentic is a flat subscription, never a meter on your model usage.",
         accounts: [
             { name: "Claude", detail: "Opus, Sonnet, Haiku — on your Claude plan" },
             { name: "Codex", detail: "on your ChatGPT plan" },
@@ -332,10 +206,49 @@ export const landingContent: LandingContent = {
             "Free for one sandbox; Pro unlocks the fleet and sharing.",
         ],
     },
+    extend: {
+        eyebrow: "Extend it",
+        heading: "A small core. Everything else is an extension.",
+        sub: "The workspace ships lean on purpose — the fleet, the sandbox, the editor, the review. Everything past that is an extension: a git repo with a manifest, allowed to do only what it declares. A few of the first-party ones, and where each is written up.",
+        rows: [
+            {
+                name: "Automations",
+                body: "Wake an agent on a push, an alert, a payment, an inbound email, a chat message, or plain cron.",
+                href: docsHref("autonomous-employees"),
+            },
+            {
+                name: "Discord & Slack",
+                body: "Assign work with an @mention; it replies in the thread like a colleague, with the receipts.",
+                href: productHref("capabilities"),
+            },
+            {
+                name: "Doorbell",
+                body: "Put the agent on your own website behind one script tag, with a read-only toolbox.",
+                href: productHref("doorbell"),
+            },
+            {
+                name: "Team sharing",
+                body: "Invite teammates into the same sandbox, each reaching it over their own private tunnel.",
+                href: productHref("sandbox"),
+            },
+            {
+                name: "Memory, pipelines, previews",
+                body: "Notes that persist between runs, CI runs it can fix, a dev-server panel per repo.",
+                href: "/extensions/",
+            },
+            {
+                name: "A whole company",
+                body: "One co-piloted agent per role and per team, sharing the handful of services they all use.",
+                href: docsHref("reference-architecture"),
+            },
+        ],
+        note: "An extension extends the agent as well as the UI — new tools, new skills, new layers in the image. Yours stays in your repo; a registry is just a list of sha-pinned pointers.",
+        cta: "Browse every extension",
+    },
     connect: {
         eyebrow: "Get connected",
         heading: "One command, and an agent has a home.",
-        sub: "Sign in, name the sandbox, paste one command on the machine that should host it. The workspace opens the moment the sandbox reports in — then you specialize the agent.",
+        sub: "Sign in, name the sandbox, paste one command on the machine that should host it. The workspace opens the moment the sandbox reports in — then you put your agents to work.",
         steps: [
             {
                 title: "Sign in with Google",
@@ -350,10 +263,10 @@ export const landingContent: LandingContent = {
                 body: "A personalized one-liner starts the sandbox on your machine. Docker is installed if missing — you're asked first.",
             },
         ],
-        commandNote: "Nothing deployed, nothing exposed — just a workspace your agent can call home.",
+        commandNote: "Nothing deployed, nothing exposed — just a workspace your agents can call home.",
     },
     finalCta: {
-        heading: "Stop editing prompts. Start editing environments.",
+        heading: "Put ten agents to work. Read every diff.",
         sub: "One command to a live sandbox. Free to start, on your hardware.",
     },
 };
