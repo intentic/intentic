@@ -8,19 +8,15 @@ import {
     type UsageWindow,
 } from "@intentic/sandbox-contract";
 import { ref } from "vue";
+import { providerAccounts, translatorAccounts } from "./providerAccounts";
 
-// The latest subscription usage snapshot PER ACCOUNT — every plan-limit window the provider reports, together.
-// Two writers, both keyed by the account the daemon says served the turn: the agent event stream (the
-// `account_usage` frame, read from the CLI's usage endpoint at turn end) and the daemon's persisted snapshots,
-// which ride the `/accounts` list so a fresh page load already knows each account's headroom instead of staying
-// blank until that account's next turn. Account-wide within an account, not per-conversation — the last turn on
-// any tab updates its account's entry. A module singleton so the composer chip, the rate-limit notice, and the
-// account picker can read it without threading it through each conversation.
+// Every plan-limit window a turn ENDING IN THIS TAB reported, keyed by the account the daemon says served it —
+// the `account_usage` frame, read from the provider's usage endpoint at turn end. Account-wide within an
+// account, not per-conversation: the last turn on any tab updates its account's entry. Only half of what is
+// known about an account, and the half that only exists while this window stays open — the durable half rides
+// the account lists (see usageStatusFor). A module singleton so the composer chip, the rate-limit notice and
+// the account picker can read it without threading it through each conversation.
 export const usageStatusByAccount = ref<Record<string, AccountUsage>>({});
-
-// The usage snapshot for an account, if one has been reported.
-export const usageStatusFor = (account: string | undefined): AccountUsage | undefined =>
-    account !== undefined ? usageStatusByAccount.value[account] : undefined;
 
 /* Naming the pools. Every one of these is a SEPARATE allowance, and conflating two of them is exactly the bug
  * this vocabulary exists to prevent: an account can sit at 1% of its weekly Opus pool while its weekly
@@ -103,6 +99,28 @@ export const liveUsage = (account: string, attached: AccountUsage | undefined): 
     }
     return streamed.measuredAt >= attached.measuredAt ? streamed : attached;
 };
+
+/* The same merge for a caller that holds an account ID AND NOTHING ELSE — the composer chip, the picker's rows,
+ * the sentence a refused turn prints. They are handed an account by the conversation, never the row it came
+ * from, so the attached half has to be looked up rather than passed in.
+ *
+ * That lookup is the whole point. This used to answer from the streamed map alone, which meant the chat
+ * surfaces reported whatever the last turn IN THIS BROWSER TAB happened to see: a tab left open showed an
+ * hours-old floor ("≥87%") while the account rows two routes away — same store, same account — drew the
+ * current number. A reading nobody can reconcile is worse than no reading, because it is the one the user
+ * checks before deciding whether to send. */
+const attachedUsage = (account: string): AccountUsage | undefined =>
+    // A provider's own account is keyed by id and a translator subscription by its auth-file name — the same
+    // two keys planLimitRows files them under, because it is the same shared store on the daemon's side.
+    Object.values(providerAccounts.value)
+        .flat()
+        .find((entry) => entry.id === account)?.usage ??
+    Object.values(translatorAccounts.value)
+        .flat()
+        .find((entry) => entry.name === account)?.usage;
+
+export const usageStatusFor = (account: string | undefined): AccountUsage | undefined =>
+    account === undefined ? undefined : liveUsage(account, attachedUsage(account));
 
 export interface UsageRing {
     percent: number;

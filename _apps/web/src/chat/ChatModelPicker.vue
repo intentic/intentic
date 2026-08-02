@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { SearchBar, useDevice, useListNavigation } from "@intentic-app/ui";
+import { ProgressRing, SearchBar, useDevice, useListNavigation } from "@intentic-app/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { type AgentHarness, type AgentProvider, limitationsOf, PROVIDERS } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type KeyedProvider, limitationsOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady } from "../composables/chat/access";
 import { BADGE_META, relativeTime } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
 import { acpProviders, endpointProviders, providerDisplayLabel, providerModelsState } from "../composables/chat/providerCatalog";
 import { customEntryFor, filterEntries, type PickerEntry, pickerBlocks, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
-import { formatUtilization, isStale, usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
-import { accountsOf, loadAllProviderModels, loadProviderModels } from "../composables/chat/useChat";
+import { translatorAccounts } from "../composables/chat/providerAccounts";
+import { liveUsage, usageRing } from "../composables/chat/usageStatus";
+import { accountsOf, loadAllProviderModels, loadProviderModels, subscriptionOnly } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
 
 /* The unified model picker (search + provider rail + one grouped list + session-control footer) — width-
@@ -275,9 +276,38 @@ const fastSpeedNotice = computed<string | undefined>(() => {
         : (FAST_MODE_REASONS[state.reason] ?? `The last turn ran at standard speed (${state.reason}).`);
 });
 
+/* THE SUBSCRIPTIONS THIS CONVERSATION WOULD RUN ON INSTEAD, for the three providers that own no account and for
+ * Grok under the Claude Code harness. They are not a picker: CLIProxyAPI holds every auth file and balances
+ * turns across them, so there is nothing here to choose and these rows are read-only.
+ *
+ * They are listed anyway, because the alternative was silence. This footer showed an account list for Claude
+ * and nothing whatsoever for ChatGPT, Kimi or Google — which reads as "this provider has no connections", one
+ * step from "why is my ChatGPT not signed in", rather than as "they are held somewhere else and there is
+ * nothing to pick". Same rings, same meaning, one line saying who chooses. */
+const routedProvider = computed<KeyedProvider | undefined>(() => {
+    const target = provider.value;
+    if (subscriptionOnly(target)) {
+        return target;
+    }
+    // Grok is the one provider served BOTH ways: its own account runs its own loop, and the subscription runs
+    // its models under the Claude Code harness. Which of the two is on screen follows the harness chip below.
+    return target === `grok` && harness.value === `claude-code` ? `grok` : undefined;
+});
+
+const routedRows = computed(() =>
+    routedProvider.value === undefined
+        ? []
+        : translatorAccounts.value[routedProvider.value].map((entry) => ({
+              name: entry.name,
+              label: entry.label,
+              ring: usageRing(liveUsage(entry.name, entry.usage)),
+          })),
+);
+
 const footerVisible = computed(
     () =>
         accounts.value.length > 1 ||
+        routedRows.value.length > 0 ||
         provider.value === `claude` ||
         harnessChoosable.value ||
         limitations.value.length > 0 ||
@@ -302,13 +332,13 @@ const ambiguousLabels = computed(() => {
  * self-explaining account earns no second line.
  *
  * HOW MUCH IS LEFT — how much of its TIGHTEST limit pool is spent, which is the whole point of the account list
- * being a list and used to cost a turn to find out. Only Claude reports limits, and only for accounts that have
- * run a turn since their last reset, so an undecorated row means "unknown", never "empty". The row shows the one
- * number; the tooltip breaks it into pools. */
+ * being a list and used to cost a turn to find out. Drawn as the same ring the connection list and the composer
+ * chip use for this number, rather than as the bare percentage it was: three percentages down a column are read
+ * one at a time and compared by arithmetic, where three arcs are compared at a glance — which is the only
+ * question being asked here (which of these has the most room?). The exact figure, its per-pool breakdown and
+ * how old the reading is stay one hover away, and a row with no ring at all means no reading, never "empty". */
 const accountRows = computed(() =>
     accounts.value.map((entry) => {
-        const usage = usageStatusFor(entry.id);
-        const percent = usagePercent(usage);
         const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
         return Object.assign({}, entry, {
             subtitle:
@@ -317,9 +347,9 @@ const accountRows = computed(() =>
                     : ambiguousLabels.value.has(entry.label)
                       ? `connected ${relativeTime(entry.connectedAt)}`
                       : undefined,
-            headroom: usage === undefined || percent === undefined ? undefined : formatUtilization(percent, isStale(usage)),
-            usageDetail: usage !== undefined ? usageDetail(usage) : undefined,
-            usageWarn: percent !== undefined && percent >= 75,
+            // liveUsage, not the streamed map alone: the daemon's reading rides the row itself and is the newer
+            // of the two whenever no turn has ended in this tab since — which is most of the time.
+            ring: usageRing(liveUsage(entry.id, entry.usage)),
         });
     }),
 );
@@ -546,16 +576,28 @@ onMounted(() => {
         <!-- Session controls that have no T3Chat analogue: which connected account serves the next turn, the
              harness axis (codex/grok), Claude's extended-thinking knob, and the mid-chat switch hint. -->
         <div v-if="footerVisible" class="flex shrink-0 flex-col gap-2 border-t border-line p-2">
+            <!-- WHOSE SETTINGS THESE ARE. The list above is a BROWSE surface — the rail filters it across every
+                 provider without touching the conversation — while everything below configures the conversation
+                 you are in. The two disagree whenever the rail is pointed elsewhere, and unlabelled they read as
+                 one screen: a column of Claude sign-ins under a list of GPT models looks like ChatGPT's account
+                 list. The provider's own mark and name, at the head of the block, is what keeps the footer
+                 legible as the session it belongs to. -->
+            <div class="flex items-center justify-between gap-2">
+                <span class="flex min-w-0 items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
+                    <ProviderLogo :provider="provider" class="shrink-0 text-xs" />
+                    <span class="truncate">{{ providerDisplayLabel(provider) }} session</span>
+                </span>
+                <!-- A ring is a glance; the Usage tab is where the windows, their reset times, and what has been
+                     spent against them actually live. -->
+                <RouterLink to="/sandbox/usage#accounts" class="shrink-0 text-2xs text-link hover:underline" @click="emit(`selected`)"
+                    >Headroom</RouterLink
+                >
+            </div>
             <template v-if="accounts.length > 1">
-                <div class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Account</span>
-                    <!-- The percent beside each row is a snapshot floor; the Usage tab is where the windows,
-                         their reset times, and what has been spent against them actually live. -->
-                    <RouterLink to="/sandbox/usage#accounts" class="text-2xs text-link hover:underline" @click="emit(`selected`)"
-                        >Headroom</RouterLink
-                    >
-                </div>
-                <div class="flex flex-col gap-1">
+                <!-- Labelled as a group: the header above names the PROVIDER, which is what a sighted reader
+                     needs beside a screen of another provider's models, and these rows still have to announce
+                     what they are. -->
+                <div class="flex flex-col gap-1" role="group" aria-label="Account">
                     <button
                         v-for="a in accountRows"
                         :key="a.id"
@@ -572,24 +614,42 @@ onMounted(() => {
                             <span v-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ a.subtitle }}</span>
                         </span>
                         <!-- How much of this account's tightest limit pool is spent, so the switch decision is
-                             informed before it costs a turn. Absent ⇒ never measured (or every window it had
-                             has since reset). -->
-                        <span
-                            v-if="a.headroom !== undefined"
-                            class="ml-auto shrink-0 tabular-nums text-2xs"
-                            :class="a.usageWarn ? 'text-warning' : 'text-subtle'"
-                            v-tooltip.top="a.usageDetail"
-                            >{{ a.headroom }}</span
-                        >
+                             informed before it costs a turn. Absent ⇒ no reading at all (never measured, and not
+                             obtainable for this plan) — which is a different thing from a measured zero. -->
+                        <template v-if="a.ring">
+                            <ProgressRing :value="a.ring.percent" :size="14" class="ml-auto" :class="a.ring.tone" v-tooltip.top="a.ring.tooltip" />
+                            <!-- The arc is aria-hidden, so the figure it draws is spoken here instead. -->
+                            <span class="sr-only">{{ a.ring.percent }}% used</span>
+                        </template>
                         <Icon
                             v-if="a.needsReauth"
                             name="exclamation-triangle"
                             class="shrink-0 text-2xs text-warning"
-                            :class="{ 'ml-auto': a.headroom === undefined }"
+                            :class="{ 'ml-auto': !a.ring }"
                             v-tooltip.top="a.detail ?? 'This account needs to be reconnected'"
                         />
                     </button>
                 </div>
+            </template>
+
+            <!-- The connections behind a routed provider: shown, not offered. See routedRows. -->
+            <template v-if="routedRows.length > 0">
+                <div class="flex flex-col gap-1" role="group" aria-label="Subscription">
+                    <div
+                        v-for="a in routedRows"
+                        :key="a.name"
+                        class="flex min-h-8 min-w-0 items-center gap-2 rounded-lg border border-line px-2 py-1 text-xs"
+                    >
+                        <span class="min-w-0 truncate text-content">{{ a.label }}</span>
+                        <template v-if="a.ring">
+                            <ProgressRing :value="a.ring.percent" :size="14" class="ml-auto" :class="a.ring.tone" v-tooltip.top="a.ring.tooltip" />
+                            <span class="sr-only">{{ a.ring.percent }}% used</span>
+                        </template>
+                    </div>
+                </div>
+                <p class="text-2xs text-subtle">
+                    {{ routedRows.length === 1 ? `Signed in through your subscription` : `Turns are spread across these automatically` }}
+                </p>
             </template>
 
             <!-- Harness axis (codex/grok): the provider's own runtime, or its model through the Claude Code

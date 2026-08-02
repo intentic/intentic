@@ -1,5 +1,6 @@
 import type { AccountUsage, OauthAccount, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
+import { providerAccounts, translatorAccounts } from "./providerAccounts";
 import {
     bindingWindow,
     formatAge,
@@ -21,6 +22,7 @@ import {
     usagePercent,
     usageRing,
     usageStatusByAccount,
+    usageStatusFor,
     usageWindowLabel,
 } from "./usageStatus";
 
@@ -236,6 +238,29 @@ describe(`liveUsage`, () => {
         const streamed = usage({ measuredAt: 100 });
         usageStatusByAccount.value = { "claude-1": streamed };
         expect(liveUsage(`claude-1`, undefined)).toEqual(streamed);
+        usageStatusByAccount.value = {};
+    });
+});
+
+/* The same merge for the surfaces that hold only an id — the composer chip, the picker's account rows, the
+ * sentence a refused turn prints. They used to read the streamed map alone, which is why a chat left open
+ * reported an hours-old floor while the account rows on the next route showed the current number. */
+describe(`usageStatusFor`, () => {
+    it(`finds the daemon's reading on whichever list the account is on`, () => {
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `Claude`, connectedAt: 0, usage: usage() }] };
+        translatorAccounts.value = { ...translatorAccounts.value, gemini: [{ name: `g-1`, label: `Google`, usage: usage({ measuredAt: 7 }) }] };
+
+        expect(usageStatusFor(`claude-1`)?.measuredAt).toBe(0);
+        // A routed subscription is keyed by its auth-file name, the key its row is drawn under.
+        expect(usageStatusFor(`g-1`)?.measuredAt).toBe(7);
+        expect(usageStatusFor(`nobody`)).toBeUndefined();
+        expect(usageStatusFor(undefined)).toBeUndefined();
+    });
+
+    it(`still prefers a turn's own frame once it is the newer of the two`, () => {
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `Claude`, connectedAt: 0, usage: usage() }] };
+        usageStatusByAccount.value = { "claude-1": usage({ measuredAt: 900 }) };
+        expect(usageStatusFor(`claude-1`)?.measuredAt).toBe(900);
         usageStatusByAccount.value = {};
     });
 });

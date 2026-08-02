@@ -436,7 +436,10 @@ const providerBase = (p: AgentProvider): string => {
 // Providers whose ONLY credential is the translator subscription: they have no native account handshake, so the
 // card shows the routed row alone and there is nothing for `startConnect` to arm. Grok is deliberately absent —
 // it has both a native xAI account and a routed subscription, and which one gates depends on the harness.
-const subscriptionOnly = (p: AgentProvider): p is "codex" | "kimi" | "gemini" => p === `codex` || p === `kimi` || p === `gemini`;
+// The providers with no account of their own: their turns authenticate through a subscription the bundled
+// translator holds, which is why they have no row in an account picker — CLIProxyAPI balances across every
+// auth file it has, so WHICH one serves a turn is not a choice anyone makes.
+export const subscriptionOnly = (p: AgentProvider): p is "codex" | "kimi" | "gemini" => p === `codex` || p === `kimi` || p === `gemini`;
 
 // Which account the manage/connect card acts on — decoupled from the chat-turn provider so connecting or
 // disconnecting one account never mutates the active conversation's provider.
