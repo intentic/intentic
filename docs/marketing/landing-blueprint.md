@@ -51,7 +51,7 @@ this page.
   `_apps/site/src/pages/index.astro` is the single entry.
 - Meta: title/description come from `_libs/site-content/src/page-meta.ts` /
   `_libs/site-content/src/site.ts` (ORG_DESCRIPTION) — one page, one set of strings.
-- Screenshots: `_apps/site/public/assets/product/`, all written by one harness —
+- Screenshots: `_apps/site/src/assets/product/`, all written by one harness —
   `node --experimental-strip-types _tools/e2e/shots/capture.mts` after
   `pnpm --filter @intentic-dev/demo build`. It drives the DEMO build of the real app (the recorded
   "acme-shop" workspace the live demo runs on), so the site, the demo and the shots tell one story and a
@@ -233,7 +233,7 @@ it is a row in `#extend`.
 - [ ] The `#trust` commit figures came from git, not from a paste — check a real `astro build`, not dev.
 - [ ] Full-page height at 1440 has not crept back over ~10,000 px (it was 16,254; it is 9,592).
 - [ ] Entitlement copy matches `_apps/api/src/billing/entitlements.ts` at build time; no dollar amounts on the page.
-- [ ] Every screenshot is real product UI (`_apps/site/public/assets/product/`); re-shoot on UI shifts.
+- [ ] Every screenshot is real product UI (`_apps/site/src/assets/product/`); re-shoot on UI shifts.
 - [ ] `prefers-reduced-motion` respected (`.fade-in` noscript fallback — keep).
 - [ ] Lighthouse ≥ 95 perf/SEO/a11y on `/` (static Astro + inlined CSS baseline — keep).
 - [ ] Follow-up asset (not launch-blocking): 30–60s screen capture — an agent given a job, its plan

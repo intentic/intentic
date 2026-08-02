@@ -1,5 +1,7 @@
 ---
 import type { ProductShot } from "@intentic-dev/site-content/product";
+import { Image } from "astro:assets";
+import { shotAsset, SHOT_WIDTHS } from "../lib/shots";
 
 /* One screenshot, framed. The browser frame carries the route the shot was taken on, so a reader can go open
  * the same screen in the live demo; the phone frame exists because a 430px-wide shot in a bare box reads as a
@@ -9,11 +11,18 @@ interface Props {
     shot: ProductShot;
     /** The hero is the page's LCP; everything below it waits until it is scrolled near. */
     priority?: boolean;
+    /**
+     * How wide the page paints this shot, so the browser can pick a rung of its srcset. The frame cannot
+     * know — a hero owns the whole column and a paired block owns half of it — so the page says. The phone
+     * frame is the exception below: it caps its own width, so it describes itself.
+     */
+    sizes: string;
     class?: string;
 }
 
-const { shot, priority = false, class: className = "" } = Astro.props;
-const loading = priority ? undefined : "lazy";
+const { shot, priority = false, sizes, class: className = "" } = Astro.props;
+const image = shotAsset(shot.name);
+const loading = priority ? "eager" : "lazy";
 const fetchpriority = priority ? "high" : undefined;
 ---
 
@@ -28,7 +37,7 @@ const fetchpriority = priority ? "high" : undefined;
                     <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">{shot.label}</span>
                 )}
             </div>
-            <img src={shot.src} alt={shot.alt} width={shot.width} height={shot.height} loading={loading} fetchpriority={fetchpriority} decoding="async" class="w-full" />
+            <Image src={image} alt={shot.alt} widths={SHOT_WIDTHS} sizes={sizes} loading={loading} fetchpriority={fetchpriority} decoding="async" class="w-full" />
         </div>
     )
 }
@@ -36,11 +45,11 @@ const fetchpriority = priority ? "high" : undefined;
 {
     shot.frame === "phone" && (
         <div class:list={["mx-auto w-full max-w-[27rem] overflow-hidden rounded-[2rem] border border-line-strong bg-card p-2 shadow-2xl shadow-black/50", className]}>
-            <img
-                src={shot.src}
+            <Image
+                src={image}
                 alt={shot.alt}
-                width={shot.width}
-                height={shot.height}
+                widths={SHOT_WIDTHS}
+                sizes="(min-width: 29rem) 416px, calc(100vw - 4rem)"
                 loading={loading}
                 fetchpriority={fetchpriority}
                 decoding="async"
@@ -52,11 +61,11 @@ const fetchpriority = priority ? "high" : undefined;
 
 {
     shot.frame === "bare" && (
-        <img
-            src={shot.src}
+        <Image
+            src={image}
             alt={shot.alt}
-            width={shot.width}
-            height={shot.height}
+            widths={SHOT_WIDTHS}
+            sizes={sizes}
             loading={loading}
             fetchpriority={fetchpriority}
             decoding="async"

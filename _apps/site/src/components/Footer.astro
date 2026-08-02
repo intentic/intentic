@@ -3,6 +3,8 @@ import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { APP_URL, gitlabIssuesUrl, gitlabUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
+import { Image } from "astro:assets";
+import logo from "../assets/intentic-full.png";
 
 const year = 2026;
 
@@ -37,7 +39,7 @@ const legalLinks = [
 <footer class="mt-auto border-t border-line pt-12 pb-10">
     <div class="mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 lg:grid-cols-5">
         <div class="col-span-2 sm:col-span-1">
-            <img src="/assets/intentic-full.png" alt={ORG_NAME} class="h-6 w-auto" width="126" height="24" />
+            <Image src={logo} alt={ORG_NAME} width={126} height={24} densities={[2]} class="h-6 w-auto" />
             <p class="mt-3 max-w-xs text-sm leading-relaxed text-muted">{ORG_TAGLINE}</p>
         </div>
 
@@ -112,15 +114,23 @@ const legalLinks = [
         </div>
     </div>
 
-    <div
-        class="mx-auto mt-10 flex max-w-7xl flex-col items-center justify-between gap-2 px-6 text-xs text-subtle sm:flex-row"
-    >
+    {/* The legal bar sets its links in 12px type, which leaves a hit box a fingertip cannot land on — the one
+        row of this site that failed the 24px target floor WCAG 2.2 and Lighthouse both use. The type stays
+        12px and the wording is unchanged; each link just carries a 24px-high box under it. */}
+    <div class="mx-auto mt-10 flex max-w-7xl flex-col items-center justify-between gap-2 px-6 text-xs text-subtle sm:flex-row">
         <span>© {year} {ORG_NAME}. Engine MIT licensed.</span>
-        <span class="flex gap-4">
-            {legalLinks.map((link) => <a href={link.href} class="transition-colors hover:text-link">{link.label}</a>)}
+        <span class="flex items-center gap-4">
+            {
+                legalLinks.map((link) => (
+                    <a href={link.href} class="inline-flex min-h-6 items-center transition-colors hover:text-link">
+                        {link.label}
+                    </a>
+                ))
+            }
         </span>
-        <span>
-            Open source on <a href={gitlabUrl} target="_blank" rel="noopener" class="transition-colors hover:text-link">
+        <span class="inline-flex items-center gap-1">
+            Open source on
+            <a href={gitlabUrl} target="_blank" rel="noopener" class="inline-flex min-h-6 items-center transition-colors hover:text-link">
                 GitLab
             </a>
         </span>

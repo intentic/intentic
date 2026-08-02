@@ -1,9 +1,11 @@
 ---
 import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { APP_URL, DEMO_PATH } from "@intentic-dev/site-content/site";
+import { Image } from "astro:assets";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
+import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
 
 /* The product index: every surface as a card, in the order the menu lists them. It is what the mega-menu is
  * a shortcut to — and the page a search engine, a shared link or a touch device lands on. */
@@ -53,26 +55,32 @@ const groups = [
                             landing's gallery: at three the thumbnail rendered a 1072 CSS px interface at a
                             third size, and the one portrait shot stretched to a blurry 1.6×. */}
                         <div class="mt-6 grid gap-6 sm:grid-cols-2">
-                            {group.slugs.map((page) => (
-                                <a href={productHref(page.slug)} class="card group overflow-hidden transition-colors hover:border-primary-600/40">
-                                    <div class="flex aspect-16/10 justify-center overflow-hidden border-b border-line bg-canvas">
-                                        <img
-                                            src={page.hero.src}
-                                            alt={page.hero.alt}
-                                            width={page.hero.width}
-                                            height={page.hero.height}
-                                            style={`max-width:${page.hero.width / 2}px`}
-                                            loading="lazy"
-                                            decoding="async"
-                                            class="h-full w-full object-cover object-left-top"
-                                        />
-                                    </div>
-                                    <div class="p-6">
-                                        <h3 class="text-base font-medium text-content group-hover:text-link">{page.navLabel}</h3>
-                                        <p class="mt-2 text-sm leading-relaxed text-muted">{page.menuBlurb}</p>
-                                    </div>
-                                </a>
-                            ))}
+                            {group.slugs.map((page) => {
+                                const image = shotAsset(page.hero.name);
+                                // Half the capture's own pixels — the "never wider than the shot really is" cap
+                                // above. `sizes` repeats it, or the portrait card asks for a 736px file to paint 368.
+                                const cap = `${image.width / 2}px`;
+                                return (
+                                    <a href={productHref(page.slug)} class="card group overflow-hidden transition-colors hover:border-primary-600/40">
+                                        <div class="flex aspect-16/10 justify-center overflow-hidden border-b border-line bg-canvas">
+                                            <Image
+                                                src={image}
+                                                alt={page.hero.alt}
+                                                widths={SHOT_WIDTHS}
+                                                sizes={`(min-width: 80rem) min(604px, ${cap}), (min-width: 40rem) min((100vw - 4.5rem) / 2, ${cap}), min(100vw - 3rem, ${cap})`}
+                                                style={`max-width:${cap}`}
+                                                loading="lazy"
+                                                decoding="async"
+                                                class="h-full w-full object-cover object-left-top"
+                                            />
+                                        </div>
+                                        <div class="p-6">
+                                            <h3 class="text-base font-medium text-content group-hover:text-link">{page.navLabel}</h3>
+                                            <p class="mt-2 text-sm leading-relaxed text-muted">{page.menuBlurb}</p>
+                                        </div>
+                                    </a>
+                                );
+                            })}
                         </div>
                     </section>
                 ))

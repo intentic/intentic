@@ -1,6 +1,6 @@
 # The interactive demo
 
-The landing page's hero and tour show hand-captured PNGs (`_apps/site/public/assets/product/`). This document
+The landing page's hero and tour show hand-captured PNGs (`_apps/site/src/assets/product/`). This document
 covers what sits behind the *click* on them: the **real app**, running against a fixture instead of a sandbox.
 Every section fills with plausible data, the sessions window opens, a turn streams into the chat, a diff opens.
 Nothing is re-implemented for marketing.
@@ -233,7 +233,7 @@ from breaking the demo outright. `DEMO_PATH` is a relative `/demo/`, so a previe
 - **Tour deep links** — `#see-it`'s seven shots could each open the overlay at the matching route, turning the
   section into seven doors into one app. The overlay already takes a URL; nothing but the wiring is missing.
 - **Screenshot regeneration** — the payoff phase: drive the demo build under Playwright (`_tools/e2e` already
-  drives this app) so `public/assets/product/*.png` stop being hand-captured. This is also the mitigation for the
+  drives this app) so `src/assets/product/*.png` stop being hand-captured. This is also the mitigation for the
   drift risk below.
 - **One `pnpm install`** — `_apps/demo` is a new workspace package, so the lockfile has to catch up before its
   `dev`/`build` scripts run anywhere.

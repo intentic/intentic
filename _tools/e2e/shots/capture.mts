@@ -8,7 +8,8 @@
  *   node --experimental-strip-types _tools/e2e/shots/capture.mts            # every shot
  *   node --experimental-strip-types _tools/e2e/shots/capture.mts fleet-board sandbox-usage
  *
- * Output: _apps/site/public/assets/product/<name>.png at devicePixelRatio 2. Whole surfaces, not crops — a page
+ * Output: _apps/site/src/assets/product/<name>.png at devicePixelRatio 2 — src/, not public/, because the site
+ * build resizes and re-encodes them (`_apps/site/src/lib/shots.ts`). Whole surfaces, not crops — a page
  * that wants the Attention lane alone crops in CSS (the landing hero does), so a layout change on the site
  * doesn't mean a re-shoot.
  */
@@ -18,7 +19,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { chromium, type Browser, type Page } from "@playwright/test";
 
 const DEMO_DIR = resolve(import.meta.dirname, "../../../_apps/site/public/demo");
-const OUT_DIR = resolve(import.meta.dirname, "../../../_apps/site/public/assets/product");
+const OUT_DIR = resolve(import.meta.dirname, "../../../_apps/site/src/assets/product");
 const PORT = 47_147;
 const ORIGIN = `http://localhost:${PORT}`;
 /* The demo builds under a base, because it ships inside the site's own deploy rather than on an origin of its

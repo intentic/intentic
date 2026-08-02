@@ -186,6 +186,10 @@ catalog:
   primevue: 4.5.5
   prisma: 7.9.1
   semantic-release: 25.0.8
+  # astro:assets' default image service loads `sharp` from the PROJECT, not from astro's own tree — so the
+  # site has to declare it even though astro carries the same optional dependency. Pinned to what astro 6.3
+  # already resolves, so the two share one copy.
+  sharp: 0.34.5
   shiki: 4.4.1
   ssh2: 1.17.0
   stripe: 22.4.0

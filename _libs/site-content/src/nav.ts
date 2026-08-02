@@ -52,7 +52,7 @@ const productItems = (group: ProductPage["group"]): MenuItem[] =>
             label: page.navLabel,
             href: productHref(page.slug),
             description: page.menuBlurb,
-            shot: { src: page.hero.src, alt: page.hero.alt, width: page.hero.width, height: page.hero.height },
+            shot: { name: page.hero.name, alt: page.hero.alt },
         }));
 
 export const navEntries: NavEntry[] = [

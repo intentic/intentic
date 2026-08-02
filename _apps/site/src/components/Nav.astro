@@ -2,6 +2,9 @@
 import type { NavEntry } from "@intentic-dev/site-content/nav";
 import { navEntries } from "@intentic-dev/site-content/nav";
 import { APP_URL, gitlabUrl, ORG_NAME } from "@intentic-dev/site-content/site";
+import { Image } from "astro:assets";
+import logo from "../assets/intentic-full.png";
+import { shotAsset, SHOT_WIDTHS } from "../lib/shots";
 import MobileNav from "./MobileNav.astro";
 
 const currentPath = Astro.url.pathname;
@@ -23,8 +26,10 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 
 <nav class="fixed top-0 right-0 left-0 z-100 border-b border-line bg-canvas/70 backdrop-blur-lg transition-colors duration-300">
     <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+        {/* The wordmark is what a phone paints largest before the hero image arrives, so it IS the LCP on
+            every page here — hence eager and fetchpriority=high, ahead of the stylesheet's other requests. */}
         <a href="/" class="flex items-center no-underline">
-            <img src="/assets/intentic-full.png" alt={ORG_NAME} class="h-6 w-auto" width="126" height="24" />
+            <Image src={logo} alt={ORG_NAME} width={126} height={24} densities={[2]} loading="eager" fetchpriority="high" class="h-6 w-auto" />
         </a>
 
         <button
@@ -40,7 +45,9 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
             {
                 navEntries.map((entry) => {
                     if (entry.type === "menu") {
-                        const preview = entry.sections.flatMap((section) => section.items).filter((item) => item.shot !== undefined);
+                        const preview = entry.sections
+                            .flatMap((section) => section.items)
+                            .flatMap((item) => (item.shot === undefined ? [] : [{ href: item.href, shot: item.shot }]));
                         return (
                             <li class="nav-item has-menu">
                                 <button type="button" class:list={["nav-link", { active: isActive(entry) }]} aria-expanded="false">
@@ -80,16 +87,20 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 
                                     {preview.length > 0 && (
                                         <div class="menu-preview">
-                                            {preview.map((item, i) => (
-                                                <img
-                                                    src={item.shot?.src}
-                                                    alt={item.shot?.alt}
-                                                    width={item.shot?.width}
-                                                    height={item.shot?.height}
+                                            {preview.map(({ href, shot }, i) => (
+                                                /* A fixed 34rem box — the menu only exists from md up, so
+                                                   this is one width, not a viewport formula. The rail asks
+                                                   for 170% below, but Tailwind's `img { max-width: 100% }`
+                                                   holds it to the box, and `sizes` follows what paints. */
+                                                <Image
+                                                    src={shotAsset(shot.name)}
+                                                    alt={shot.alt}
+                                                    widths={SHOT_WIDTHS}
+                                                    sizes="544px"
                                                     loading="lazy"
                                                     decoding="async"
                                                     class:list={["menu-preview-shot", { current: i === 0 }]}
-                                                    data-preview-for={item.href}
+                                                    data-preview-for={href}
                                                 />
                                             ))}
                                         </div>

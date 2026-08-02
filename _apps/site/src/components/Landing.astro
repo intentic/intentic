@@ -4,6 +4,8 @@ import { faqGroups } from "@intentic-dev/site-content/faq";
 import type { LandingContent } from "@intentic-dev/site-content/landing";
 import { APP_URL, DEMO_PATH, gitlabIssuesUrl, gitlabUrl } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
+import { Image } from "astro:assets";
+import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import CreatorLinks from "./CreatorLinks.astro";
 import Footer from "./Footer.astro";
@@ -30,6 +32,14 @@ const factIcons = [
     icon('<path d="M12 2.5 20 6v5.5c0 4.8-3.4 8.2-8 9.5-4.6-1.3-8-4.7-8-9.5V6z"/>'),
 ];
 const checkIcon = icon('<path d="M20 6 9 17l-5-5"/>');
+
+/* The hero is the LCP and it is a CROP: the frame shows 262% of its own width on a phone and 168% from sm up,
+ * so what the browser paints is that multiple of the column, not the column. Spelling the three cases out is
+ * the difference between fetching ~950px of screenshot and fetching all 2144. */
+const heroImage = shotAsset(content.hero.shot.name);
+const heroSizes = "(min-width: 64rem) calc((min(100vw, 80rem) - 6rem) * 0.84), (min-width: 40rem) calc(min(100vw - 3rem, 34rem) * 1.68), calc(min(100vw - 3rem, 34rem) * 2.62)";
+/* Same idea for the one portrait beat: 145% of half the column above lg, 145% of the whole one below it. */
+const cropBeatSizes = "(min-width: 64rem) calc((min(100vw, 80rem) - 6.5rem) * 0.725), calc((100vw - 3rem) * 1.45)";
 
 // Line glyphs for the sandbox figure (same 1.5-stroke motif as the section icons above).
 const monitorGlyph = icon('<rect x="3" y="4" width="18" height="12.5" rx="1.5"/><path d="M8.5 20.5h7M12 16.5v4"/>');
@@ -121,11 +131,12 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                              the page is that this is an IDE. The image stays the LCP, undimmed until hover;
                              nothing about the demo loads until it is asked for. -->
                         <div class="relative aspect-[5/7] overflow-hidden sm:aspect-6/5">
-                            <img
-                                src={content.hero.shot.src}
+                            <Image
+                                src={heroImage}
                                 alt={content.hero.shot.alt}
-                                width={content.hero.shot.width}
-                                height={content.hero.shot.height}
+                                widths={SHOT_WIDTHS}
+                                sizes={heroSizes}
+                                loading="eager"
                                 fetchpriority="high"
                                 decoding="async"
                                 class="w-[262%] max-w-none sm:w-[168%]"
@@ -171,7 +182,8 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                                The threshold is 3:2 rather than merely landscape: the review capture is 2144×1800, a
                                tall panel that happens to be a hair wider than high, and given the whole column it is
                                mostly the empty canvas under its own diff. That one keeps the cropped side-by-side. */
-                            const wideShot = beat.shot !== undefined && beat.shot.width >= beat.shot.height * 1.5 ? beat.shot : undefined;
+                            const shot = beat.shot === undefined ? undefined : { ...beat.shot, image: shotAsset(beat.shot.name) };
+                            const wideShot = shot !== undefined && shot.image.width >= shot.image.height * 1.5 ? shot : undefined;
                             const words = (
                                 <>
                                     <div class="text-5xl font-semibold tracking-tight text-primary-500/25 select-none" aria-hidden="true">
@@ -195,11 +207,11 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                                                     {wideShot.frameLabel}
                                                 </span>
                                             </div>
-                                            <img
-                                                src={wideShot.src}
+                                            <Image
+                                                src={wideShot.image}
                                                 alt={wideShot.alt}
-                                                width={wideShot.width}
-                                                height={wideShot.height}
+                                                widths={SHOT_WIDTHS}
+                                                sizes={COLUMN_SIZES}
                                                 loading="lazy"
                                                 decoding="async"
                                                 class="w-full"
@@ -214,14 +226,14 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                                     <div class={i % 2 === 1 ? "lg:order-2" : ""}>{words}</div>
 
                                     <div class={i % 2 === 1 ? "lg:order-1" : ""}>
-                                        {beat.shot && (
+                                        {shot && (
                                             <figure class="m-0 overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
                                                 <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
                                                     <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
                                                     <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
                                                     <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
                                                     <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">
-                                                        {beat.shot.frameLabel}
+                                                        {shot.frameLabel}
                                                     </span>
                                                 </div>
                                                 {/* A crop window, not a fit: a portrait capture scaled into half a column is
@@ -231,11 +243,11 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                                                     a block box with an aspect-ratio and `overflow-hidden` centres a child
                                                     taller than itself, which scrolled the review past its own diff. */}
                                                 <div class="relative aspect-16/10 overflow-hidden">
-                                                    <img
-                                                        src={beat.shot.src}
-                                                        alt={beat.shot.alt}
-                                                        width={beat.shot.width}
-                                                        height={beat.shot.height}
+                                                    <Image
+                                                        src={shot.image}
+                                                        alt={shot.alt}
+                                                        widths={SHOT_WIDTHS}
+                                                        sizes={cropBeatSizes}
                                                         loading="lazy"
                                                         decoding="async"
                                                         class="absolute top-0 left-0 w-[145%] max-w-none"

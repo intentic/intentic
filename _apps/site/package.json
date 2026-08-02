@@ -20,6 +20,7 @@
         "astro": "catalog:",
         "astro-indexnow": "catalog:",
         "astro-opengraph-images": "catalog:",
+        "sharp": "catalog:",
         "tailwindcss": "catalog:"
     },
     "devDependencies": {

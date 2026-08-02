@@ -6,6 +6,7 @@ import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
 import ProductFigure from "../../components/ProductFigure.astro";
 import ProductShotFigure from "../../components/ProductShotFigure.astro";
+import { COLUMN_SIZES, HALF_COLUMN_SIZES, shotAsset } from "../../lib/shots";
 
 /* One template, six pages. The pages are content (`_libs/site-content/src/product.ts`) rather than six near
  * identical .astro files, so a new surface is an entry in an array and its nav row, footer link, page meta
@@ -25,7 +26,8 @@ const next = productPages[(index + 1) % productPages.length];
 
 /* A portrait hero (the docked chat, a phone) is a panel, not a page: stretched to the 6xl column it would be
  * three screens tall. Sit it in a narrow centred column instead. */
-const portraitHero = page.hero.height > page.hero.width;
+const heroImage = shotAsset(page.hero.name);
+const portraitHero = heroImage.height > heroImage.width;
 ---
 
 <BaseLayout breadcrumbs={[{ name: "Product", path: "/product/" }, { name: page.navLabel, path: productHref(page.slug) }]}>
@@ -46,7 +48,11 @@ const portraitHero = page.hero.height > page.hero.width;
                 </div>
 
                 <div class:list={["mt-12", { "mx-auto max-w-sm": portraitHero }]}>
-                    <ProductShotFigure shot={page.hero} priority />
+                    <ProductShotFigure
+                        shot={page.hero}
+                        priority
+                        sizes={portraitHero ? "(min-width: 27rem) 384px, calc(100vw - 3rem)" : COLUMN_SIZES}
+                    />
                 </div>
 
                 <ul class="mt-8 grid gap-x-8 gap-y-4 border-t border-line pt-6 sm:grid-cols-3">
@@ -71,7 +77,8 @@ const portraitHero = page.hero.height > page.hero.width;
                 {
                     page.blocks.map((block, i) => {
                         // Landscape ⇒ the wide treatment. Held as the shot itself so the branch below is typed.
-                        const wideShot = block.shot !== undefined && block.shot.width > block.shot.height ? block.shot : undefined;
+                        const shot = block.shot === undefined ? undefined : { ...block.shot, image: shotAsset(block.shot.name) };
+                        const wideShot = shot !== undefined && shot.image.width > shot.image.height ? shot : undefined;
                         const bullets = block.bullets && (
                             <ul class:list={["mt-4", wideShot === undefined ? "space-y-2" : "grid gap-2 sm:grid-cols-2"]}>
                                 {block.bullets.map((bullet) => (
@@ -91,7 +98,7 @@ const portraitHero = page.hero.height > page.hero.width;
                                         <p class="mt-3 text-base leading-relaxed text-muted">{block.body}</p>
                                         {bullets}
                                     </div>
-                                    <ProductShotFigure shot={wideShot} class="mt-8" />
+                                    <ProductShotFigure shot={wideShot} sizes={COLUMN_SIZES} class="mt-8" />
                                 </div>
                             );
                         }
@@ -104,7 +111,7 @@ const portraitHero = page.hero.height > page.hero.width;
                                     {bullets}
                                 </div>
                                 <div class={i % 2 === 0 ? "lg:order-1" : "lg:order-2"}>
-                                    {block.shot && <ProductShotFigure shot={block.shot} />}
+                                    {shot && <ProductShotFigure shot={shot} sizes={HALF_COLUMN_SIZES} />}
                                     {block.figure && <ProductFigure figure={block.figure} />}
                                 </div>
                             </div>

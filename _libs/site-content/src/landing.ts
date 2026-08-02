@@ -19,14 +19,13 @@ export interface AgentSpecRow {
 }
 
 /**
- * A screenshot with its intrinsic pixel size. The dimensions are not decoration: without them the
- * browser cannot reserve the box before the PNG arrives, and the page reflows around it.
+ * A screenshot, named by the shot `_tools/e2e/shots/capture.mts` wrote — `fleet-board` is
+ * `_apps/site/src/assets/product/fleet-board.png`. Only the name and the alt text are content: the file's
+ * pixel size, format and variants belong to the build, which reads them off the file itself.
  */
 export interface ShotImage {
-    src: string;
+    name: string;
     alt: string;
-    width: number;
-    height: number;
 }
 
 /** The hero visual: the real fleet board, cropped by the frame to its Attention and Active lanes. */
@@ -124,9 +123,7 @@ export const landingContent: LandingContent = {
             "Each agent works in its own sandbox and its own git worktree, on hardware you own. Run ten at once; nothing lands in your tree until you have read the diff.",
         chips: ["Free plan", "Bring your own agent", "Runs on your hardware"],
         shot: {
-            src: "/assets/product/fleet-board.png",
-            width: 2144,
-            height: 1240,
+            name: "fleet-board",
             alt: "The intentic fleet board: an agent waiting on approval for a Stripe billing change and another with a question for you, beside three agents actively drafting a changelog and migrating queries — each card showing its model, branch, cost and diff stats.",
             frameLabel: "acme-shop · /agents",
         },
@@ -146,9 +143,7 @@ export const landingContent: LandingContent = {
                 title: "Give the work to as many agents as it needs",
                 body: "Each starts in plan mode on its own git worktree, cut from your base commit. The board sorts them by what needs you — a question, a plan waiting for approval, a land conflict — and everything else keeps running while you answer.",
                 shot: {
-                    src: "/assets/product/fleet-board.png",
-                    width: 2144,
-                    height: 1240,
+                    name: "fleet-board",
                     alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane offering Land now — every card showing model, branch, tokens, cost and diff stats.",
                     frameLabel: "acme-shop · /agents",
                 },
@@ -164,9 +159,7 @@ export const landingContent: LandingContent = {
                 title: "Nothing lands until you have read the diff",
                 body: "Finished work arrives as a branch: every changed file, every hunk, the tests it ran. Land it into your tree as ordinary git changes you can still amend or revert — or discard it, and the worktree goes with it.",
                 shot: {
-                    src: "/assets/product/agent-review.png",
-                    width: 2144,
-                    height: 1800,
+                    name: "agent-review",
                     alt: "The isolated review panel: four changed files with per-file line counts, a split diff of a database schema adding a deletedAt column, and a Land now button beside the agent's branch name.",
                     frameLabel: "acme-shop · agent/soft-deletes",
                 },
