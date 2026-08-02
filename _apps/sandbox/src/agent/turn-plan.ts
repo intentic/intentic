@@ -7,7 +7,7 @@ import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import type { Services } from "../composition.js";
 import { extensionAgentDirsOf } from "../extensions/installed-extensions.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
-import type { AgentRequest } from "./agent.js";
+import type { AgentRequest, ParkedSync } from "./agent.js";
 import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { withAttachmentNote } from "./attachment-note.js";
@@ -82,6 +82,13 @@ export interface TurnContext {
     readonly syncNote: string | undefined;
     // Mid-turn steering, present only where the Claude Code loop runs the turn.
     readonly steering: SteeringQueue | undefined;
+    /* Re-take the pre-turn rebase while the turn is parked on a card (agent.routes.ts owns the git and the
+     * bookkeeping; agent.ts picks the moments). Isolated turns only — a main-tree turn has no branch to move.
+     *
+     * Harness-only, like steering and for the same reason: the cards that park a turn long enough for the
+     * main line to move are the harness's own (the `ask` tool, the plan gate). A native codex/grok/ACP turn
+     * has no seam to call it from, so handing it one would be a field nothing reads. */
+    readonly resync?: () => Promise<ParkedSync | undefined>;
 }
 
 export const planTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
@@ -442,6 +449,8 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
             ...(placement.systemAppend !== undefined ? { systemAppend: placement.systemAppend } : {}),
             // Mid-turn steering (the /agent/steer queue streamAgent registered) — Claude Code harness only.
             ...(context.steering !== undefined ? { steering: context.steering } : {}),
+            // The rebase the cards take back while the user is answering them — isolated turns only.
+            ...(context.resync !== undefined ? { resync: context.resync } : {}),
         },
     };
 };

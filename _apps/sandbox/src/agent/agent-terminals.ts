@@ -1,4 +1,6 @@
+import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
+import { promisify } from "node:util";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { nsenterPrefix, type TurnPlacement } from "../agents/isolation.js";
 import { redirectCommand } from "../agents/worktree-redirect.js";
@@ -12,6 +14,37 @@ import { shellQuote, TMUX_RUN_BIN } from "../terminal/terminal-run.js";
 
 // Off when the wrapper isn't baked in (local dev, tests) or the operator opts out.
 export const tmuxRunEnabled = (): boolean => process.env["INTENTIC_AGENT_TMUX"] !== "0" && existsSync(TMUX_RUN_BIN);
+
+const execFileAsync = promisify(execFile);
+
+/* IS THE AGENT'S OWN SHELL STILL WORKING — asked before anything moves the files under it.
+ *
+ * Every Bash command runs in a window of this turn's tmux session (the rewrite below), and tmux-run sets
+ * `remain-on-exit` from inside the pane, so a finished command leaves its window behind as a DEAD pane. A live
+ * pane therefore means a command that has not returned: a background job the agent started, a build it left
+ * running, or the user typing in the terminal panel — which are the same thing to this question.
+ *
+ * The parked-card rebase is the caller (agent.ts, agents/sync.ts). A rebase swaps files under whatever is
+ * reading them, and the dirty-remainder commit it takes first would sweep a half-written file onto the branch;
+ * neither failure announces itself, and the whole point of that rebase is to REMOVE a class of silent
+ * surprise. So a busy shell simply skips it: the branch stays where it is and the land-time conflict flow is
+ * still there behind it, exactly as on a turn that never asked.
+ *
+ * No session (the agent has run no command this turn) or no tmux server ⇒ not busy. Both are `list-panes`
+ * exiting non-zero, and both mean the same thing: nothing of this turn's is running.
+ */
+export const agentShellBusy = async (sessionId: string): Promise<boolean> => {
+    const session = agentSessionName(sessionId);
+    if (session === undefined) {
+        return false;
+    }
+    try {
+        const { stdout } = await execFileAsync("tmux", ["list-panes", "-t", `=${session}`, "-F", "#{pane_dead}"]);
+        return stdout.split("\n").some((pane) => pane.trim() === "0");
+    } catch {
+        return false;
+    }
+};
 
 // tmux window name from the Bash tool's `description`, so the session's window list reads meaningfully.
 // Same safe charset as session names (it lands in the rewritten shell line unquoted).

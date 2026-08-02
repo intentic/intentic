@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { type AgentQuery, mergeHooks, type OauthRecoveryOptions, type QueryFn, runAgent } from "./agent.js";
 import { resolveRequest } from "./agent-requests.js";
 import { SteeringQueue } from "./agent-steering.js";
+import { noteDelegation, resetSubagents, settleDelegation } from "./subagents.js";
 
 // Build a fake QueryFn yielding canned SDK messages (cast to SDKMessage — tests exercise only the fields
 // runAgent reads), so the agent loop is verified without the SDK, a binary, or network.
@@ -407,6 +408,176 @@ test("an approved plan returns to the posture the turn started in when the reply
     // A turn that started in plan mode has nothing to restore; auto-accepting edits is the floor.
     const planned = await decide({ ...request, permissionMode: "plan" }, { tool: "ExitPlanMode", input: { plan: "# Plan" } }, approve);
     expect(planned.result).toMatchObject({ updatedPermissions: [{ type: "setMode", mode: "acceptEdits", destination: "session" }] });
+});
+
+/* THE REBASE A CARD SETTLES INTO. A plan approval is the longest park of the three cards and the one followed
+ * by the most writing, so the branch is put back on today's main line before the agent starts building against
+ * a tree it planned from. The route owns the git; these cases own WHEN it is asked for, which is the part that
+ * can quietly go wrong: fire on a rejection and the daemon rewrites a branch whose turn the user just stopped;
+ * fire under a running command and the ground moves beneath a build nobody is watching. */
+const parkedSync = {
+    frame: { kind: "worktree" as const, branch: "agent/c1", base: "abc1234", sync: { commits: 2, blocked: [] } },
+    note: "## Your branch moved onto newer main\n\nmoved under you",
+};
+
+test("an approved plan rebases the branch, announces it, and hands the agent the note", async () => {
+    withoutTmux();
+    const steering = new SteeringQueue();
+    let calls = 0;
+    const { frames } = await decide(
+        {
+            ...request,
+            steering,
+            resync: async () => {
+                calls += 1;
+                return parkedSync;
+            },
+        },
+        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        (event) => ({ kind: "plan", requestId: event.requestId, approve: true }),
+    );
+
+    expect(calls).toBe(1);
+    // The transcript hears it where it happened — after the card it settles, not at the top of the turn.
+    expect(frames.filter((frame) => frame.kind === "worktree")).toEqual([parkedSync.frame]);
+    expect(frames.findIndex((frame) => frame.kind === "worktree")).toBeGreaterThan(frames.findIndex((frame) => frame.kind === "resolved"));
+    // `allow` carries a decision and no sentence, so the model hears it as an injected message — wrapped as a
+    // preamble over an empty prompt, which is what makes a restored transcript drop it instead of redrawing it
+    // as the user's own words.
+    const steered: string[] = [];
+    steering.close();
+    for await (const message of steering) {
+        steered.push(message);
+    }
+    expect(steered).toHaveLength(1);
+    expect(steered[0]).toContain("## Your branch moved onto newer main");
+    expect(steered[0]?.endsWith("\n\n---\n\n")).toBe(true);
+});
+
+// A rejected plan stops the turn. Rewriting the branch there moves work the user just declined to continue.
+test("a rejected plan leaves the branch alone", async () => {
+    withoutTmux();
+    let calls = 0;
+    await decide(
+        {
+            ...request,
+            resync: async () => {
+                calls += 1;
+                return parkedSync;
+            },
+        },
+        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        (event) => ({ kind: "plan", requestId: event.requestId, approve: false, feedback: "not yet" }),
+    );
+
+    expect(calls).toBe(0);
+});
+
+// A branch already on today's main line is the ordinary answer: no frame, and nothing said to anyone.
+test("an approved plan on a current branch says nothing", async () => {
+    withoutTmux();
+    const steering = new SteeringQueue();
+    const { frames } = await decide(
+        { ...request, steering, resync: async () => undefined },
+        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        (event) => ({
+            kind: "plan",
+            requestId: event.requestId,
+            approve: true,
+        }),
+    );
+
+    expect(frames.some((frame) => frame.kind === "worktree")).toBe(false);
+    expect(steering.delivered).toBe(0);
+});
+
+/* THE QUIET-WORKTREE GATE, subagent half. The model is parked on the card; its children are not, and a
+ * subagent does its own editing. Rebasing under one swaps files mid-read and sweeps a half-written file into
+ * the commit the rebase takes first — the two failures that do not announce themselves, which is the whole
+ * reason this pass is worth skipping rather than forcing. (The shell half is agent-terminals.integration.test.) */
+test("a subagent still running holds the rebase off", async () => {
+    withoutTmux();
+    resetSubagents();
+    const conversationId = "c-parked";
+    let calls = 0;
+    noteDelegation(
+        { conversationId, cwd: "/work", sessionId: undefined },
+        { id: "bash-1", command: "codex exec --sandbox danger-full-access --cd /work 'port the tests'" },
+    );
+
+    await decide(
+        {
+            ...request,
+            conversationId,
+            permissionMode: "bypassPermissions" as const,
+            resync: async () => {
+                calls += 1;
+                return parkedSync;
+            },
+        },
+        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        (event) => ({ kind: "plan", requestId: event.requestId, approve: true }),
+    );
+
+    expect(calls).toBe(0);
+    // Settled, and the same approval now takes the rebase it just skipped.
+    settleDelegation("bash-1", { failed: false, output: "done" });
+    await decide(
+        {
+            ...request,
+            conversationId,
+            permissionMode: "bypassPermissions" as const,
+            resync: async () => {
+                calls += 1;
+                return parkedSync;
+            },
+        },
+        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        (event) => ({ kind: "plan", requestId: event.requestId, approve: true }),
+    );
+    expect(calls).toBe(1);
+});
+
+/* The answer outranks the rebase — asserted against a resync that THROWS rather than one that behaves, because
+ * the harness does not own that callback and a card must not die from a side channel. The person has already
+ * clicked: a git fault reaching this far would come back to them as a plan approval that did not take, losing
+ * the one thing the exchange was for to report a branch that simply stayed where it was. */
+test("a plan approval survives a sync that fails", async () => {
+    withoutTmux();
+    const { result } = await decide(
+        {
+            ...request,
+            permissionMode: "bypassPermissions" as const,
+            resync: async () => {
+                throw new Error("git exploded");
+            },
+        },
+        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        (event) => ({ kind: "plan", requestId: event.requestId, approve: true }),
+    );
+
+    expect(result).toMatchObject({ behavior: "allow", updatedPermissions: [{ type: "setMode", mode: "bypassPermissions" }] });
+});
+
+// The permission card is deliberately NOT a sync point: its tool call was computed against the tree as it was,
+// and moving a file under an approved Edit turns the user's "yes" into a failure they authored.
+test("a permission answer never moves the branch", async () => {
+    withoutTmux();
+    let calls = 0;
+    await decide(
+        {
+            ...request,
+            permissionMode: "default" as const,
+            resync: async () => {
+                calls += 1;
+                return parkedSync;
+            },
+        },
+        { tool: "Bash", input: { command: "pnpm test" } },
+        (event) => ({ kind: "permission", requestId: event.requestId, decision: "once" }),
+    );
+
+    expect(calls).toBe(0);
 });
 
 test("a non-success result becomes an error followed by done", async () => {

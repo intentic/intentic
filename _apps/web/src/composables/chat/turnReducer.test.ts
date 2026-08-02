@@ -374,6 +374,30 @@ describe(`effects`, () => {
         expect(state.messages.at(-1)?.role).toBe(`notice`);
     });
 
+    /* THE SECOND EMISSION, in the frame order a real answered question produces: the daemon rebases when the
+     * card settles, so this line is about something that happened HALFWAY DOWN the turn and must read there —
+     * under the question it followed, not above the turn's first word.
+     *
+     * It sorts itself out rather than being switched on: the card cleared the open bubble on its way in, so the
+     * placement above finds nothing to sit atop and appends. That is why neither the frame nor the reducer
+     * carries a "which moment is this" flag — the transcript already knows. */
+    it(`places a mid-turn rebase under the card that was just answered`, () => {
+        const { state } = run(
+            started(),
+            { kind: `question`, requestId: `q1`, questions: [{ question: `which?`, header: `Pick`, multiSelect: false, options: [] }] },
+            { kind: `resolved`, requestId: `q1`, reply: { kind: `question`, requestId: `q1`, answers: { "which?": [`this one`] } } },
+            { kind: `worktree`, branch: `agent/x`, base: `def4567`, sync: { commits: 2, blocked: [] } },
+            { kind: `delta`, text: `carrying on` },
+        );
+
+        expect(settled(state).messages.map((message) => message.role)).toEqual([`user`, `assistant`, `notice`, `assistant`]);
+        expect(settled(state).messages[2]?.text).toContain(`rebased onto your latest 2 commits`);
+        // And the standing it re-announces is where the branch sits NOW, which is the whole point of re-sending it.
+        expect(run(started(), { kind: `worktree`, branch: `agent/x`, base: `def4567` }).effects).toEqual([
+            { kind: `worktree`, branch: `agent/x`, base: `def4567` },
+        ]);
+    });
+
     it(`says so when the rebase was rolled back, so the land's refusal is expected`, () => {
         const { state } = run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 0, blocked: [`root`] } });
 

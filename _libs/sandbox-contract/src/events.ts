@@ -185,21 +185,26 @@ export const AgentTranscriptSchema = SessionTranscriptSchema.extend({ sessionId:
 // subagent itself, keyed by the same tool_use id those tagged frames carry.
 export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("session"), sessionId: z.string() }),
-    /* First frame of an isolated turn: the conversation's worktree identity — its branch (agent/<id>) and the
-     * ROOT repo's short base sha (the checkout moment). Emitted before any provider frames.
+    /* WHERE AN ISOLATED TURN IS STANDING: the conversation's worktree identity — its branch (agent/<id>) and
+     * the ROOT repo's short base sha. First frame of the turn, before any provider frames, and again each time
+     * the branch MOVES underneath it, which is why `base` names where the branch sits now rather than the
+     * moment it was checked out.
      *
      * `unenforced` marks the degraded container: no CAP_SYS_ADMIN, so the turn's worktree could not be
      * bind-mounted over the workspace root and the harness is rewriting tool paths into it instead. That
      * fallback covers what arrives as tool input and not what a subprocess computes for itself, so the
      * operator needs to know — this state used to be one line in the daemon log at boot, and the way it got
-     * noticed was files appearing in the main tree from agents that were supposed to be on branches.
+     * noticed was files appearing in the main tree from agents that were supposed to be on branches. Repeated
+     * on every emission, because it describes the turn and a client rebuilds its standing from the last frame.
      *
-     * `sync` reports the pre-turn rebase (agents/sync.ts), and rides here because this frame is already the
-     * turn's "where you are standing" announcement. Present only when the branch was BEHIND the main line —
-     * `commits` is how many main-line commits it gained, `blocked` names the repos whose rebase would not apply
-     * and was rolled back. Both can be non-empty at once in a multi-repo composition. It is a notice and never
-     * a question: the user is answering their agent, and the alternative to rebasing is not "stay safe" but
-     * "conflict at land time", which interrupts them harder. */
+     * `sync` reports a rebase (agents/sync.ts) and rides here because this frame is already the turn's "where
+     * you are standing" announcement. Present only when the branch was BEHIND the main line — `commits` is how
+     * many main-line commits it gained, `blocked` names the repos whose rebase would not apply and was rolled
+     * back. Both can be non-empty at once in a multi-repo composition. Two moments produce it: before the turn
+     * starts, and after a card the turn parked on is answered — a question or a plan approval waits minutes
+     * for a person, and the main line does not stop moving meanwhile. It is a notice and never a question: the
+     * user is answering their agent, and the alternative to rebasing is not "stay safe" but "conflict at land
+     * time", which interrupts them harder. */
     z.object({
         kind: z.literal("worktree"),
         branch: z.string(),

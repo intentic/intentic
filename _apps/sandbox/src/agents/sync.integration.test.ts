@@ -123,6 +123,51 @@ test("commits the worktree's dirty remainder first — a rebase refuses to start
     expect(await sh(worktree, "log", "-1", "--format=%s%n%an")).toBe("Agent: fix the thing\nintentic");
 });
 
+/* TWICE IN ONE TURN. The pass used to run once, at the turn's start; a turn that parks on a question or a plan
+ * approval now takes it again when the card settles (agent.ts), because the user's main line does not stop
+ * while they read. So each call has to measure from where the LAST one left the branch — a second report that
+ * re-counted the commits the first already replayed onto would tell the agent its ground had moved twice, and
+ * hand the turn's chore a span reaching back behind work that is already in main. */
+test("a second sync in the same turn reports only what moved since the first", async () => {
+    const { work, worktree, worktrees } = await setup();
+    await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n");
+    await sh(worktree, "add", "-A");
+    await commit(worktree, "agent work");
+    // The main line moves before the turn starts...
+    await writeFile(join(work, "other.ts"), "moved\n");
+    await sh(work, "add", "-A");
+    await commit(work, "user work");
+
+    const [first] = await sync(worktrees);
+    expect(first).toMatchObject({ commits: 1, moved: ["other.ts"], overlap: [] });
+
+    // ...and again while the agent sits on its question, this time touching the file the agent is holding.
+    await writeFile(join(work, "app.ts"), "USER\ntwo\nthree\nfour\nfive\n");
+    await sh(work, "add", "-A");
+    await commit(work, "user answered, then committed");
+
+    const [second] = await sync(worktrees);
+    expect(second).toMatchObject({ commits: 1, moved: ["app.ts"], overlap: ["app.ts"] });
+    expect(second?.onto).toBe(await sh(work, "rev-parse", "HEAD"));
+    // One agent commit, still on top — replayed twice, duplicated neither time.
+    expect(await sh(worktree, "rev-list", "--count", `${await sh(work, "rev-parse", "HEAD")}..HEAD`)).toBe("1");
+    expect(await readFile(join(worktree, "app.ts"), "utf8")).toBe("USER\ntwo\nthree\nfour\nAGENT\n");
+});
+
+// The ordinary answer at the second call: nobody committed while the card was up, so there is nothing to say
+// and nothing is moved. This is what keeps a parked card from costing a rebase it did not need.
+test("a second sync says nothing when the main line stood still", async () => {
+    const { work, worktree, worktrees } = await setup();
+    await writeFile(join(work, "other.ts"), "moved\n");
+    await sh(work, "add", "-A");
+    await commit(work, "user work");
+    expect((await sync(worktrees)).length).toBe(1);
+
+    const tip = await sh(worktree, "rev-parse", "HEAD");
+    expect(await sync(worktrees)).toEqual([]);
+    expect(await sh(worktree, "rev-parse", "HEAD")).toBe(tip);
+});
+
 test("rolls a conflicting rebase back and leaves the branch on its old base", async () => {
     const { work, worktree, worktrees } = await setup();
     const before = await sh(worktree, "rev-parse", "HEAD");

@@ -49,8 +49,8 @@ export const worktreeNote = (worktree: string, root: string): string =>
     `Use relative paths, or absolute paths under \`${worktree}\`. An absolute \`${root}/…\` path (from a memory, ` +
     `an AGENTS.md, or an earlier turn) writes outside your branch, where the work is neither reviewed nor landed.`;
 
-/* WHAT MOVED UNDERNEATH THIS BRANCH while the conversation was idle (agents/sync.ts took the rebase; this is
- * how the agent hears about it).
+/* WHAT MOVED UNDERNEATH THIS BRANCH while the conversation was waiting (agents/sync.ts took the rebase; this
+ * is how the agent hears about it).
  *
  * Three things earn their place and nothing else does. The ground MOVED, so a file the agent remembers from
  * three turns ago is not the file on disk. The rebase applied by TEXT, which is not the same as still working —
@@ -59,7 +59,13 @@ export const worktreeNote = (worktree: string, root: string): string =>
  * up front is the difference between an agent that expects it and one that treats it as its own bug.
  *
  * The OVERLAP is the note's point. "main moved 200 files" is noise a model will dutifully go and read; the two
- * of them this agent had also edited are the re-check instruction, and they are named. */
+ * of them this agent had also edited are the re-check instruction, and they are named.
+ *
+ * TWO MOMENTS, one note. `start` is the pre-turn rebase, where the agent is reading a tree it last saw turns
+ * ago and its memory of it is already suspect. `parked` is the rebase taken while the turn sat on a question
+ * or a plan approval, and there the staleness is SHARPER, not milder: the reads are minutes old and the model
+ * is holding line numbers and hunk context it is about to edit against. Same three facts, addressed to an
+ * agent that has to be told its fresh knowledge just went stale. */
 export const SYNC_NOTE_HEADER = "## Your branch moved onto newer main";
 
 // How many overlapping paths are worth naming before the list stops being read. The rest survive as a count —
@@ -69,7 +75,7 @@ const NAMED_PATHS = 10;
 const repoPaths = (repos: readonly RepoSync[], of: (repo: RepoSync) => readonly string[]): string[] =>
     repos.flatMap((repo) => of(repo).map((path) => (repo.repo === "root" ? path : `${repo.repo}/${path}`)));
 
-export const syncNote = (repos: readonly RepoSync[]): string | undefined => {
+export const syncNote = (repos: readonly RepoSync[], when: "start" | "parked"): string | undefined => {
     if (repos.length === 0) {
         return undefined;
     }
@@ -81,7 +87,9 @@ export const syncNote = (repos: readonly RepoSync[]): string | undefined => {
     const lines = [SYNC_NOTE_HEADER, ""];
     if (moved.length > 0) {
         lines.push(
-            `The user's main line moved while this conversation was idle, so your branch was rebased onto it before this turn — ` +
+            (when === "start"
+                ? `The user's main line moved while this conversation was idle, so your branch was rebased onto it before this turn — `
+                : `The user's main line moved while you were waiting for their answer, so your branch was just rebased onto it — `) +
                 `${commits} commit${commits === 1 ? "" : "s"} now sit underneath your work.`,
         );
         if (overlap.length > 0) {
@@ -95,7 +103,10 @@ export const syncNote = (repos: readonly RepoSync[]): string | undefined => {
         lines.push(
             "",
             `It applied cleanly line by line, which does not mean the result still builds${rest > 0 ? ` (${rest} other file${rest === 1 ? "" : "s"} moved too)` : ""}. ` +
-                `Check before you trust what you remember about this tree.`,
+                (when === "start"
+                    ? `Check before you trust what you remember about this tree.`
+                    : `Anything you read before you asked is now a stale read: line numbers have shifted and an edit anchored to them ` +
+                      `will be REJECTED rather than applied. Re-read what you are about to touch.`),
         );
     }
     if (blocked.length > 0) {

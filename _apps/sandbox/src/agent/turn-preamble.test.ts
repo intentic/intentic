@@ -65,13 +65,13 @@ const behind = (overrides: Partial<RepoSync> = {}): RepoSync => ({
 });
 
 test("an up-to-date branch has nothing to say", () => {
-    expect(syncNote([])).toBeUndefined();
+    expect(syncNote([], "start")).toBeUndefined();
 });
 
 // The overlap is the note's reason to exist: what the agent had also edited is the re-check instruction, and
 // the rest of main's movement is a count so it doesn't drown that out.
 test("the sync note names what the agent had also changed and counts the rest", () => {
-    const text = syncNote([behind()]) ?? "";
+    const text = syncNote([behind()], "start") ?? "";
 
     expect(text.startsWith(SYNC_NOTE_HEADER)).toBe(true);
     expect(text).toContain("3 commits now sit underneath your work");
@@ -83,11 +83,11 @@ test("the sync note names what the agent had also changed and counts the rest", 
 
 // A nested repo's paths are ambiguous on their own — the same qualification the review rows use.
 test("a nested repo's paths carry the repo that disambiguates them", () => {
-    expect(syncNote([behind({ repo: "intentic", overlap: ["src/app.ts"] })])).toContain("- intentic/src/app.ts");
+    expect(syncNote([behind({ repo: "intentic", overlap: ["src/app.ts"] })], "start")).toContain("- intentic/src/app.ts");
 });
 
 test("a rolled-back rebase tells the agent the land will refuse, and why it is not its doing", () => {
-    const text = syncNote([behind({ blocked: true })]) ?? "";
+    const text = syncNote([behind({ blocked: true })], "start") ?? "";
 
     expect(text).toContain("would NOT apply in root");
     expect(text).toContain("still on its old base");
@@ -97,8 +97,32 @@ test("a rolled-back rebase tells the agent the land will refuse, and why it is n
 });
 
 test("a composition can be half synced and half blocked, and says both", () => {
-    const text = syncNote([behind(), behind({ repo: "intentic", blocked: true, commits: 2 })]) ?? "";
+    const text = syncNote([behind(), behind({ repo: "intentic", blocked: true, commits: 2 })], "start") ?? "";
 
     expect(text).toContain("3 commits now sit underneath your work");
     expect(text).toContain("would NOT apply in intentic");
+});
+
+/* The parked note addresses an agent whose reads are MINUTES old rather than turns old, so the instruction is
+ * the sharper one: what you read before you asked will now be rejected as a stale anchor. Same three facts,
+ * different standing — a note that told a mid-turn agent to "check what you remember about this tree" would be
+ * describing the wrong problem. */
+test("the note taken while parked on a card says the reads just went stale, not that memory might be", () => {
+    const text = syncNote([behind()], "parked") ?? "";
+
+    expect(text).toContain("while you were waiting for their answer");
+    expect(text).toContain("just rebased");
+    expect(text).toContain("stale read");
+    expect(text).toContain("REJECTED");
+    // The overlap instruction is the note's point at either moment, so it survives the change of address.
+    expect(text).toContain("- src/app.ts");
+});
+
+// Both moments carry the same three facts; only the sentence that places them in time differs.
+test("either moment reports the same movement, blocks and counts", () => {
+    const parked = syncNote([behind(), behind({ repo: "intentic", blocked: true, commits: 2 })], "parked") ?? "";
+
+    expect(parked).toContain("3 commits now sit underneath your work");
+    expect(parked).toContain("would NOT apply in intentic");
+    expect(parked).toContain("1 other file moved too");
 });

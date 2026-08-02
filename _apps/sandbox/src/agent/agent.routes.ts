@@ -25,7 +25,7 @@ import { isIsolated } from "../agents/agents-store.js";
 import { landAgent } from "../agents/land.js";
 import { type RepoSync, syncConversation } from "../agents/sync.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
-import type { AgentRequest } from "./agent.js";
+import type { AgentRequest, ParkedSync } from "./agent.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { syncNote } from "./turn-preamble.js";
 import { resolveRequest } from "./agent-requests.js";
@@ -193,66 +193,121 @@ async function* runConversationTurn(
          * conversation parked on a question can sit for hours while the user commits around it, and everything
          * downstream of here — what the agent reads, what it edits, what the auto-land tries to apply — is
          * measured against a base that went stale in the meantime. Empty on the ordinary turn whose branch is
-         * already up to date, which is one `merge-base` per repo to establish. */
+         * already up to date, which is one `merge-base` per repo to establish.
+         *
+         * A CLOSURE rather than a straight call, because the turn's start is not the only moment the ground
+         * moves: a turn that parks on a question or a plan approval waits MINUTES for a person (measured
+         * median 2.6, p90 9.4), and the main line moves during one park in five. So the same pass runs again
+         * each time a card settles — the harness calls it back through `resync` (agent.ts) — and every record
+         * that names a base is advanced here, whichever moment took the rebase. */
+        const onto = new Map<string, string>();
         // Tracked because it sits on the critical path and its two costs differ by orders of magnitude: one
         // `merge-base` per repo when the branch is current, a whole checkout replay when it is not. runTurn's
         // own preflight marks start after this, so an unmeasured rebase would read as a turn that was simply
         // slow to begin — the exact attribution failure those marks exist to prevent.
-        const synced = await services.perf.track("agent.sync", { id: conversationId }, () =>
-            syncConversation(services.agentWorktrees, conversationId, worktree.repos, entry?.title),
-        );
-        // `base` is where the branch sits on the main line, so a rebase moves it — and a stale one is not
-        // cosmetic: standing.ts reads `tip !== base` as "this agent produced something", and would call a
-        // branch that only fast-forwarded a finished piece of work. The land bookkeeping beside it
-        // (landedTip/landedHead) is deliberately left alone: those shas are the provenance of a land that
-        // really happened, and anchorOf already knows to fall through to the merge-base once a rewrite has
-        // orphaned them (agents/agent-changes.ts).
-        const advanced = new Map(synced.filter((repo) => repo.blocked !== true).map((repo) => [repo.repo, repo.onto]));
-        if (advanced.size > 0) {
+        const syncOnto = async (): Promise<RepoSync[]> => {
+            const synced = await services.perf.track("agent.sync", { id: conversationId }, () =>
+                syncConversation(services.agentWorktrees, conversationId, worktree.repos, services.agents.entry(conversationId)?.title),
+            );
+            const moved = synced.filter((repo) => repo.blocked !== true);
+            if (moved.length === 0) {
+                return synced;
+            }
+            for (const repo of moved) {
+                onto.set(repo.repo, repo.onto);
+            }
+            // `base` is where the branch sits on the main line, so a rebase moves it — and a stale one is not
+            // cosmetic: standing.ts reads `tip !== base` as "this agent produced something", and would call a
+            // branch that only fast-forwarded a finished piece of work. The land bookkeeping beside it
+            // (landedTip/landedHead) is deliberately left alone: those shas are the provenance of a land that
+            // really happened, and anchorOf already knows to fall through to the merge-base once a rewrite has
+            // orphaned them (agents/agent-changes.ts).
             await services.agents.recordWorktree(
                 conversationId,
                 // oxlint-disable-next-line oxc/no-map-spread -- these are the registry's own persisted records; a fresh object per repo is the point, not a saving
                 (services.agents.entry(conversationId)?.repos ?? worktree.repos).map((composed) => ({
                     ...composed,
-                    base: advanced.get(composed.repo) ?? composed.base,
+                    base: onto.get(composed.repo) ?? composed.base,
                 })),
             );
-        }
+            // The open span below is captured once, at turn start, and a mid-turn rebase ORPHANS the sha it
+            // names: diffing a chore from a rewritten commit hands it this agent's work plus every main-line
+            // commit underneath it. Everything at or before `onto` is in main by definition, so the repos that
+            // just moved restart their span there — the same rung the turn-start capture lands on. Empty on
+            // that first call, where the span does not exist yet and the map below reads `onto` directly.
+            span = span.map((repo) => ({ repo: repo.repo, from: onto.get(repo.repo) ?? repo.from, dir: repo.dir }));
+            return synced;
+        };
+        // Reported per turn, not once at boot: the capability is a property of how the container was launched,
+        // and the only reason anyone noticed it was missing was work turning up in the main tree.
+        const enforced = await services.turnIsolation.available();
+        /* WHERE THIS TURN IS STANDING — the frame at the top of the turn, and again whenever a sync moves the
+         * branch out from under a parked card. `base` is read through `onto` rather than from the composition
+         * record, so it names where the branch sits NOW: a rebase is precisely the event that makes the
+         * frozen checkout-moment sha the wrong answer, and both emissions have to mean the same thing for the
+         * second one to be readable at all.
+         *
+         * The sync half is the human's (the agent's is a note): present only when the branch was BEHIND, it
+         * rides the frame that already announces the standing, so the transcript says why the ground moved at
+         * exactly the point it moved — a passive line, never a prompt. */
+        const worktreeFrame = (synced: readonly RepoSync[]): Extract<AgentEvent, { kind: "worktree" }> => {
+            const root = worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0];
+            return {
+                kind: "worktree",
+                branch: worktree.branch,
+                base: (root === undefined ? "" : (onto.get(root.repo) ?? root.base)).slice(0, 7),
+                ...(enforced ? {} : { unenforced: true }),
+                ...(synced.length > 0
+                    ? {
+                          sync: {
+                              commits: synced.filter((repo) => repo.blocked !== true).reduce((total, repo) => total + repo.commits, 0),
+                              blocked: synced.filter((repo) => repo.blocked === true).map((repo) => repo.repo),
+                          },
+                      }
+                    : {}),
+            };
+        };
+        const synced = await syncOnto();
         branch = worktree.branch;
         // Where each repo stood BEFORE this turn — the open span a chore diffs from. Captured up front because
         // the auto-land below advances landedTip; read afterwards, every repo would report as unchanged. A repo
         // the sync moved reads from the main-line sha it moved ONTO instead of its landedTip: the rebase
         // orphaned that sha, and diffing from it would hand the chore this agent's work plus every main-line
         // commit underneath it. Everything at or before `onto` is in main by definition, so it is the honest
-        // start — the same rung anchorOf lands on for a rewritten branch.
+        // start — the same rung anchorOf lands on for a rewritten branch, and the rung a mid-turn sync moves
+        // this span back to (syncOnto).
         span = worktree.repos.map(({ repo, base }) => ({
             repo,
-            from: advanced.get(repo) ?? entry?.repos.find((recorded) => recorded.repo === repo)?.landedTip ?? base,
+            from: onto.get(repo) ?? entry?.repos.find((recorded) => recorded.repo === repo)?.landedTip ?? base,
             dir: services.agentWorktrees.worktreeDir(conversationId, repo),
         }));
-        const base = (worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0])?.base.slice(0, 7) ?? "";
-        // Reported per turn, not once at boot: the capability is a property of how the container was launched,
-        // and the only reason anyone noticed it was missing was work turning up in the main tree.
-        const enforced = await services.turnIsolation.available();
-        yield {
-            kind: "worktree",
-            branch: worktree.branch,
-            base,
-            ...(enforced ? {} : { unenforced: true }),
-            // The human's half of the sync (the agent's is a preamble note). It rides the frame that already
-            // announces where this turn is standing, so the transcript says why the ground moved at exactly the
-            // point it moved — a passive line, never a prompt.
-            ...(synced.length > 0
-                ? {
-                      sync: {
-                          commits: synced.filter((repo) => repo.blocked !== true).reduce((total, repo) => total + repo.commits, 0),
-                          blocked: synced.filter((repo) => repo.blocked === true).map((repo) => repo.repo),
-                      },
-                  }
-                : {}),
+        yield worktreeFrame(synced);
+        /* The rebase the harness takes back whenever a card settles (agent.ts). It answers with the pair the
+         * two audiences need — the frame for the transcript, the note for the model — and with undefined on
+         * the ordinary answer, where the branch was already on today's main line and nothing needs saying.
+         *
+         * Only the moments where the model re-derives what to do next get this: a question's picks and an
+         * approved plan. NOT a permission card, whose tool call was already computed against the tree as it
+         * was — moving the file under an approved Edit is how a "yes" turns into a failure the user authored. */
+        const resync = async (): Promise<ParkedSync | undefined> => {
+            // A rebase must never cost the user their answer. At turn start a failing sync IS a failing turn —
+            // nothing has happened yet and the fault is worth surfacing — but here the person has already
+            // clicked, and a git fault that propagated would come back to them as a failed tool call in place
+            // of the answer they gave. So this one is best-effort and logged: the branch stays where it is, the
+            // turn carries on, and the land-time conflict flow is still behind it.
+            try {
+                const moved = await syncOnto();
+                // The note is absent on exactly the repos-empty answer, so it is the whole test: no movement,
+                // no frame and nothing to tell the model.
+                const note = syncNote(moved, "parked");
+                return note === undefined ? undefined : { frame: worktreeFrame(moved), note };
+            } catch (error) {
+                services.logger.warn({ err: error, id: conversationId }, "agents: sync on a settled card failed");
+                return undefined;
+            }
         };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
-        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd, synced }, steering)) {
+        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd, synced, resync }, steering)) {
             services.agents.observe(conversationId, event);
             if (event.kind === "error") {
                 failed = true;
@@ -349,7 +404,9 @@ async function* runTurn(
     services: Services,
     input: AgentTurn,
     signal: AbortSignal | undefined,
-    worktree: { readonly id: string; readonly cwd: string; readonly synced: readonly RepoSync[] } | undefined,
+    worktree:
+        | { readonly id: string; readonly cwd: string; readonly synced: readonly RepoSync[]; readonly resync: () => Promise<ParkedSync | undefined> }
+        | undefined,
     steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
     // Whatever turn runs on this conversation supersedes a pending usage-limit resume — the user retrying by
@@ -473,8 +530,9 @@ async function* runTurn(
         localCwd,
         effectiveCwd,
         cliEnv,
-        syncNote: syncNote(worktree?.synced ?? []),
+        syncNote: syncNote(worktree?.synced ?? [], "start"),
         steering,
+        ...(worktree !== undefined ? { resync: worktree.resync } : {}),
     });
     if (!plan.ok) {
         // The namespace anchor was built before the gates ran, so a refusal has to take it down too — it is a

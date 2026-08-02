@@ -136,13 +136,20 @@ const prependTurnNotice = (state: TurnState, text: string): TurnState => {
     };
 };
 
-/* WHY THIS AGENT'S BRANCH JUST MOVED — the human's half of the pre-turn rebase (daemon: agents/sync.ts).
+/* WHY THIS AGENT'S BRANCH JUST MOVED — the human's half of the rebase (daemon: agents/sync.ts).
  *
- * A conversation parked on a question goes stale while its user commits around it, so the daemon rebases the
- * branch onto the current workspace before the turn runs. It is told, not asked: at the moment someone is
- * answering their agent they have nothing to decide this with, and the alternative to rebasing is not "stay
- * safe", it is a land conflict half an hour later. So this is one muted line at the top of the turn, with no
- * button on it — the same weight as "Context compacted", and for the same reason.
+ * A conversation goes stale while its user commits around it, so the daemon rebases the branch onto the
+ * current workspace. It is told, not asked: at the moment someone is answering their agent they have nothing
+ * to decide this with, and the alternative to rebasing is not "stay safe", it is a land conflict half an hour
+ * later. So this is one muted line with no button on it — the same weight as "Context compacted", and for the
+ * same reason.
+ *
+ * TWO MOMENTS, and the line reads the same at both because it says the same thing: before the turn starts, and
+ * again after the user answers a question or approves a plan, where the wait was minutes long and the main
+ * line does not stop for it. Its PLACEMENT sorts itself out — prependTurnNotice puts the opening one above the
+ * bubble the turn is about to write into, and finds no open bubble at the second (a card clears it), so that
+ * one appends where it happened, under the answer that triggered it. Hence no "before this turn" here: the
+ * sentence has to be true at both.
  *
  * The blocked half is the line that earns its keep: a rebase that would not apply was rolled back, the agent is
  * working from the older base, and the conflict report at the end of the turn is now EXPECTED rather than a
@@ -150,7 +157,7 @@ const prependTurnNotice = (state: TurnState, text: string): TurnState => {
 const syncLine = (sync: { commits: number; blocked: readonly string[] }): string => {
     const moved =
         sync.commits > 0
-            ? `Your workspace moved on while this agent waited — its branch was rebased onto your latest ${sync.commits} commit${sync.commits === 1 ? `` : `s`} before this turn.`
+            ? `Your workspace moved on while this agent waited — its branch was rebased onto your latest ${sync.commits} commit${sync.commits === 1 ? `` : `s`}.`
             : undefined;
     const blocked =
         sync.blocked.length > 0

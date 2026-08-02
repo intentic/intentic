@@ -41,7 +41,8 @@ import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { verificationHooks } from "./agent-verification.js";
-import { bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
+import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
+import { withTurnPreamble } from "./turn-preamble.js";
 import { EventQueue } from "./event-queue.js";
 import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
 import { readClaudeUsage } from "../usage/claude-usage.js";
@@ -55,6 +56,7 @@ import {
     noteDelegation,
     noteSubagentTask,
     settleDelegation,
+    subagentCountsOf,
     subagentHooks,
     type SubagentTaskMessage,
     type SubagentTurn,
@@ -171,6 +173,20 @@ export interface AgentRequest {
     // Mid-turn steering: when present, the turn runs in the SDK's streaming-input mode and messages pushed
     // onto this queue (via /agent/steer) are injected between tool calls. Absent ⇒ single-message mode.
     readonly steering?: SteeringQueue;
+    /* PUT THE BRANCH BACK ON TODAY'S MAIN LINE — the pre-turn rebase (agents/sync.ts), offered again at the
+     * moments this turn stops and waits for a person. agent.routes.ts owns what it does; this module owns
+     * WHEN, because only the harness knows when the model is genuinely parked.
+     *
+     * A card is not a pause, it is a gap: measured over this sandbox's own transcripts a question card waits a
+     * median 2.6 minutes and a plan approval up to ten, and the user's main line moves during one park in
+     * five. Every one of those minutes the turn spends holding a base that is quietly going stale — and unlike
+     * the gap between turns, nothing reconciles it before the work resumes. The answer arrives, the model
+     * carries on against a dead base, and the auto-land at the end of the turn is where that surfaces.
+     *
+     * Answers with the pair the two audiences need — a frame for the transcript, a note for the model — and
+     * with undefined on the ordinary settle where the branch was already current. Absent on a main-tree turn
+     * (no branch to move) and on every runtime but the harness. */
+    readonly resync?: () => Promise<ParkedSync | undefined>;
     // Nobody is watching this turn: it was started by a benchmark, a schedule or another program rather than
     // by someone sitting in front of the chat. The interactive surface is then not merely useless but a
     // DEADLOCK — a plan approval or a question card parks the turn on an answer that can never arrive, and the
@@ -860,6 +876,63 @@ const formatAnswers = (questions: AskQuestion[], reply: Extract<AgentReply, { ki
     return `The user answered:\n${lines.join("\n")}`;
 };
 
+// What a rebase taken under a parked card produces: the frame that re-announces where the turn is standing,
+// and the note that tells the model its reads just went stale. Built by the route, which owns the git — this
+// module only decides when to ask for it and where the two halves go.
+export interface ParkedSync {
+    readonly frame: Extract<AgentEvent, { kind: "worktree" }>;
+    readonly note: string;
+}
+
+/* THE REBASE A SETTLED CARD EARNS, and the two conditions on taking it.
+ *
+ * ANSWERED, not merely settled: a dismissed question and a rejected plan both stop the turn, and moving the
+ * ground under work the user just pulled the plug on buys nothing and costs a diff they did not ask for.
+ * Reading `answered` from the caller rather than re-deriving it here keeps that decision at the card, where
+ * the difference between an answer and an abort stand-in is already known (agent-requests.ts).
+ *
+ * QUIET, because this is the one difference from the same pass at turn start: there, nothing of the turn's is
+ * running yet. Here the model is parked but the TURN need not be, and a rebase under a live writer fails in
+ * ways nobody sees — files swapped mid-read, and a half-written one swept into the commit the rebase takes
+ * first. Two writers can outlive the card and they are asked about separately because they are separately
+ * invisible: a command still running in the turn's shell (agent-terminals.ts — a background job, a build, a
+ * pane the user is typing in), and a subagent, which does its own editing and answers to nothing here. Either
+ * one skips the sync: the branch stays where it is, which is exactly where it would have stayed if the agent
+ * had never asked.
+ *
+ * The frame goes to the transcript at the point it happened; the note is returned for the caller to fold into
+ * whatever text the model reads next, so the news arrives in the same breath as the answer rather than as a
+ * separate turn nobody prompted. */
+const syncOnAnswer = async (
+    request: AgentRequest,
+    push: (event: AgentEvent) => void,
+    shell: { sessionId: string | undefined },
+    answered: boolean,
+): Promise<string | undefined> => {
+    if (!answered || request.resync === undefined) {
+        return undefined;
+    }
+    if (request.conversationId !== undefined && subagentCountsOf(request.conversationId).running > 0) {
+        return undefined;
+    }
+    if (shell.sessionId !== undefined && (await agentShellBusy(shell.sessionId))) {
+        return undefined;
+    }
+    /* THE ANSWER OUTRANKS THE REBASE, so a fault in it cannot reach the card. The user has already clicked;
+     * a throw from here would come back to them as a failed question or a plan approval that did not take —
+     * losing the one thing this whole exchange was for, to report a branch that simply stayed where it was.
+     *
+     * Silent because it is not silent where it happens: the implementation this calls owns the git and logs
+     * its own faults (agent.routes.ts). This is the harness refusing to let a side channel it does not own
+     * take down the card, not a swallowed error nobody will ever see. */
+    const synced = await request.resync().catch(() => undefined);
+    if (synced === undefined) {
+        return undefined;
+    }
+    push(synced.frame);
+    return synced.note;
+};
+
 // Cap the stderr tail folded into an error message so a chatty failure can't flood the UI.
 const STDERR_TAIL = 2000;
 
@@ -1058,7 +1131,11 @@ const baseOptions = (
 // the built-in NAME onto this tool (see toolAliases below) keeps the model's trained call site working while
 // the answer round-trips through our own card. `alwaysLoad` keeps it in the prompt instead of behind tool
 // search: a tool the model has to go looking for is a tool it writes plain-text options instead of using.
-const askServer = (request: AgentRequest, push: (event: AgentEvent) => void): McpSdkServerConfigWithInstance =>
+const askServer = (
+    request: AgentRequest,
+    push: (event: AgentEvent) => void,
+    shell: { sessionId: string | undefined },
+): McpSdkServerConfigWithInstance =>
     createSdkMcpServer({
         name: "ui",
         alwaysLoad: true,
@@ -1090,7 +1167,12 @@ const askServer = (request: AgentRequest, push: (event: AgentEvent) => void): Mc
                     // The picks belong in the frame log, not just in this tool result: they are what a replayed
                     // or second-window transcript freezes the card with (see the `resolved` frame).
                     push(resolved);
-                    return { content: [{ type: "text", text: formatAnswers(questions, reply) }] };
+                    // Then the ground, before the model acts on what it just heard. The note rides the same
+                    // tool result as the answer — one thing to read, at the one moment the model is re-deciding
+                    // what to do, instead of a second frame it has no reason to look for.
+                    const moved = await syncOnAnswer(request, push, shell, !reply.cancelled && reply.answers !== undefined);
+                    const text = formatAnswers(questions, reply);
+                    return { content: [{ type: "text", text: moved === undefined ? text : `${text}\n\n${moved}` }] };
                 },
             ),
         ],
@@ -1133,7 +1215,7 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
 // when the active mode actually requires a prompt (bypassPermissions never does; acceptEdits skips edits;
 // default skips reads), so there is no mode branching here — if we were called, the user is the decider.
 const permissionGate =
-    (request: AgentRequest, push: (event: AgentEvent) => void): CanUseTool =>
+    (request: AgentRequest, push: (event: AgentEvent) => void, shell: { sessionId: string | undefined }): CanUseTool =>
     async (toolName, input, options) => {
         // Nobody can answer, so refuse rather than park: a card raised here would hang the turn until its
         // timeout, which reads as the agent freezing rather than as a decision nobody was there to make.
@@ -1152,6 +1234,19 @@ const permissionGate =
             // everything). Setting it on the session is what actually moves the SDK out of plan mode.
             const mode = reply.mode ?? postPlanMode(request.permissionMode);
             push({ kind: "mode", mode });
+            /* Then the ground, before the agent starts building on a plan it wrote against an older tree —
+             * the longest park of the three cards, and the one followed by the most writing.
+             *
+             * An approved plan has no text channel back to the model: `allow` carries a decision, not a
+             * sentence. So the note rides the steering queue, the same road /agent/steer uses to tell a
+             * running turn something, wrapped as a preamble over an empty message — that is what makes a
+             * restored transcript DROP it rather than redraw the daemon's words as the user's
+             * (turn-preamble.ts, and both restore paths already skip a message that strips to nothing). The
+             * cost is the one grace window a delivered steer arms at the end of the turn. */
+            const moved = await syncOnAnswer(request, push, shell, true);
+            if (moved !== undefined) {
+                request.steering?.push(withTurnPreamble([moved], ""));
+            }
             return {
                 behavior: "allow",
                 updatedInput: input,
@@ -1238,6 +1333,15 @@ export async function* runAgent(
     // surface stays off rather than accumulating records nothing can list.
     const subagents: SubagentTurn | undefined =
         request.conversationId === undefined ? undefined : { conversationId: request.conversationId, cwd: request.cwd, sessionId: undefined };
+    /* The turn's tmux session, by the id the CLI mints for it — read by the parked cards to ask whether a
+     * command is still running before anything rebases under it. Mutable for the same reason the subagent
+     * handle is: the ask tool and the permission gate are wired here, before a fresh turn's id exists.
+     *
+     * Seeded from the RESUMED id rather than left empty, because the session outlives the turn and so do its
+     * panes: a background job an earlier turn started is still running in this same session, and it is exactly
+     * the writer this gate exists to notice. Empty only on a conversation's first turn, which by definition has
+     * no earlier pane to disturb. */
+    const shell: { sessionId: string | undefined } = { sessionId: request.sessionId };
     let stderr = "";
     const options: Options = {
         ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents),
@@ -1249,7 +1353,7 @@ export async function* runAgent(
         // same-named tool would override `ui`, but `ui` is reserved). An unattended turn gets no `ui`: a
         // question would be asked of a user who is not there, and the turn would wait for them forever.
         mcpServers: {
-            ...(request.unattended === true ? {} : { ui: askServer(request, push) }),
+            ...(request.unattended === true ? {} : { ui: askServer(request, push, shell) }),
             ...request.sdkServers,
             ...mcpServersOf(request.tools ?? []),
         },
@@ -1259,7 +1363,7 @@ export async function* runAgent(
         toolConfig: { askUserQuestion: { previewFormat: "markdown" } },
         planModeInstructions:
             "Propose a clear, concise approach for the user's request, then call ExitPlanMode to ask for approval before executing. When you need the user to choose between options, ask with the AskUserQuestion tool rather than writing the choices as plain text.",
-        canUseTool: permissionGate(request, push),
+        canUseTool: permissionGate(request, push, shell),
     };
 
     // A turn that authenticated with a stored account's OAuth token can read that plan's limit pools at settle
@@ -1283,6 +1387,11 @@ export async function* runAgent(
                 request.allowance,
                 subagents,
             )) {
+                // The turn's shell lives under the id this frame carries (agent-terminals.ts names the tmux
+                // session after it), so the cards learn it here rather than from a second seam into the stream.
+                if (event.kind === "session") {
+                    shell.sessionId = event.sessionId;
+                }
                 push(event);
             }
         } catch (error) {
