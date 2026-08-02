@@ -115,7 +115,11 @@ fn command_for(app: &AppHandle, run: &ScriptRun) -> Result<Command, String> {
         // pkexec itself and lose every one of them.
         let mut command = Command::new("pkexec");
         command.arg("env");
-        command.args(run.env.iter().map(|(name, value)| format!("{name}={value}")));
+        command.args(
+            run.env
+                .iter()
+                .map(|(name, value)| format!("{name}={value}")),
+        );
         command.args(["sh", &path]);
         command.args(&run.args);
         return Ok(command);
@@ -254,6 +258,13 @@ mod tests {
     #[test]
     fn platform_script_picks_one_sibling() {
         let chosen = platform_script("connect.sh", "connect.ps1");
-        assert_eq!(chosen, if cfg!(windows) { "connect.ps1" } else { "connect.sh" });
+        assert_eq!(
+            chosen,
+            if cfg!(windows) {
+                "connect.ps1"
+            } else {
+                "connect.sh"
+            }
+        );
     }
 }

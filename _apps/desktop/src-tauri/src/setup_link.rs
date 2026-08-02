@@ -113,7 +113,10 @@ mod tests {
         assert_eq!(args.code, "abc123");
         assert_eq!(args.name.as_deref(), Some("My Sandbox"));
         assert_eq!(args.sync_dir.as_deref(), Some("~/intentic/work"));
-        assert_eq!(args.platform_url.as_deref(), Some("https://api.intentic.dev"));
+        assert_eq!(
+            args.platform_url.as_deref(),
+            Some("https://api.intentic.dev")
+        );
         assert_eq!(args.cf_token, None);
     }
 

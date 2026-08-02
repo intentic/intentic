@@ -58,7 +58,10 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
     *state.pending.lock().unwrap() = None;
 
     let mut env: Vec<(String, String)> = Vec::new();
-    let platform_url = args.platform_url.clone().unwrap_or_else(|| state.platform_url());
+    let platform_url = args
+        .platform_url
+        .clone()
+        .unwrap_or_else(|| state.platform_url());
     env.push(("PLATFORM_URL".into(), platform_url));
     // The daemon emits CORS only for the origins WEB_ORIGIN names, and the origin that will call it is the one
     // this app's workspace window loads. Identical to the hosted default in production; the reason a desktop
@@ -191,8 +194,11 @@ pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<SandboxStatus>> {
         .iter()
         .map(|row| row.name.as_str())
         .filter(|name| {
-            name.strip_prefix(TUNNEL_PREFIX)
-                .is_none_or(|slug| !rows.iter().any(|row| row.name == format!("{CONTAINER_PREFIX}{slug}")))
+            name.strip_prefix(TUNNEL_PREFIX).is_none_or(|slug| {
+                !rows
+                    .iter()
+                    .any(|row| row.name == format!("{CONTAINER_PREFIX}{slug}"))
+            })
         })
         .collect();
 
@@ -237,7 +243,11 @@ pub async fn sandbox_power(slug: String, start: bool) -> CommandResult<()> {
 /// `<slug> <sha256>` builds the owner-approved environment overlay. The SPA shows both of these as a command
 /// to paste on the host, because the daemon cannot recreate its own container; this is that button.
 #[tauri::command]
-pub async fn sandbox_recreate(app: AppHandle, slug: String, hash: Option<String>) -> CommandResult<()> {
+pub async fn sandbox_recreate(
+    app: AppHandle,
+    slug: String,
+    hash: Option<String>,
+) -> CommandResult<()> {
     // Named on PowerShell, positional on sh — see setup_run for why the two are not interchangeable.
     let mut args = if cfg!(windows) {
         vec!["-Slug".into(), slug.clone()]

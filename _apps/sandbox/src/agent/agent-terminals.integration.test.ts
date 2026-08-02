@@ -25,8 +25,14 @@ let path: string | undefined;
 // One private server per case, taken down whatever the case did. `tmux` on PATH is the shim from here on, so
 // the probe under test, the fixtures below and the teardown all reach the same socket.
 const server = async (): Promise<{ tmux: (...args: string[]) => Promise<void> }> => {
+    // Resolved BEFORE the shim goes on PATH: from the next lines on `tmux` IS the shim, so it has to name the
+    // real binary by absolute path to reach past itself. Looked up rather than hardcoded to /usr/bin/tmux —
+    // that is Debian's answer, and a missing tmux should say so here rather than as a bash line-2 diagnostic.
+    const { stdout: binary } = await execFileAsync("sh", ["-c", "command -v tmux"]);
     dir = await mkdtemp(join(tmpdir(), "agent-shell-"));
-    await writeFile(join(dir, "tmux"), `#!/usr/bin/env bash\nexec /usr/bin/tmux -S ${JSON.stringify(join(dir, "sock"))} "$@"\n`, { mode: 0o755 });
+    await writeFile(join(dir, "tmux"), `#!/usr/bin/env bash\nexec ${JSON.stringify(binary.trim())} -S ${JSON.stringify(join(dir, "sock"))} "$@"\n`, {
+        mode: 0o755,
+    });
     path = process.env["PATH"];
     process.env["PATH"] = `${dir}:${path ?? ""}`;
     return { tmux: async (...args: string[]) => void (await execFileAsync("tmux", args)) };

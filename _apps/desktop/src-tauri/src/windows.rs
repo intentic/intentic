@@ -43,7 +43,9 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
     }
     let url: tauri::Url = match target.parse() {
         Ok(url) => url,
-        Err(_) => crate::state::APP_URL.parse().expect("static app url parses"),
+        Err(_) => crate::state::APP_URL
+            .parse()
+            .expect("static app url parses"),
     };
     let link_handler = app.clone();
     let builder = WebviewWindowBuilder::new(app, WORKSPACE, WebviewUrl::External(url))
@@ -95,7 +97,10 @@ pub fn show_launcher(app: &AppHandle) {
 pub fn handle_link(app: &AppHandle, link: &str) {
     match parse_link(link) {
         Some(Link::Setup(args)) => {
-            *app.state::<crate::state::AppState>().pending.lock().unwrap() = Some(*args);
+            *app.state::<crate::state::AppState>()
+                .pending
+                .lock()
+                .unwrap() = Some(*args);
             show_launcher(app);
             let _ = tauri::Emitter::emit(app, "desktop://pending-setup", ());
         }

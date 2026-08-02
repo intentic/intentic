@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { portSlotsFromToken, publicSlotFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacePaths } from "../workspace/workspace.js";
 
@@ -73,14 +73,14 @@ describe("createPreviewRouteEnsurer", () => {
 });
 
 describe("ensureAllPreviewRoutes", () => {
-    it("ensures every discovered repo + the whole port-slot pool in one batch — the boot-time pre-mint", async () => {
+    it("ensures every discovered repo + the whole port-slot pool + the outbox in one batch — the boot-time pre-mint", async () => {
         const root = mkdtempSync(join(tmpdir(), "preview-sweep-"));
         mkdirSync(join(root, "intent", ".git"), { recursive: true });
         mkdirSync(join(root, "extra", ".git"), { recursive: true });
         const batches: (readonly string[])[] = [];
         await ensureAllPreviewRoutes({
             workspace: workspacePaths(root),
-            // The slot labels are derived from this, so the stub has to carry one for the pool to exist.
+            // The port-slot and outbox labels are derived from this, so the stub has to carry one for them to exist.
             config: { connectToken: "" },
             ensurePreviewRoutes: async (labels: readonly string[]) => {
                 batches.push(labels);
@@ -88,7 +88,12 @@ describe("ensureAllPreviewRoutes", () => {
         } as unknown as Parameters<typeof ensureAllPreviewRoutes>[0]);
         expect(batches).toHaveLength(1);
         expect(batches[0]!.toSorted()).toEqual(
-            ["preview-extra", "preview-intent", ...portSlotsFromToken("").map((slot) => `port-${slot}`)].toSorted(),
+            [
+                "preview-extra",
+                "preview-intent",
+                ...portSlotsFromToken("").map((slot) => `port-${slot}`),
+                `public-${publicSlotFromToken("")}`,
+            ].toSorted(),
         );
     });
 });
