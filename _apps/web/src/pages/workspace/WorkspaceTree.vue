@@ -180,7 +180,7 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
     // subtree, and the name filter's matches — and with them the selection/keyboard axis built off these rows.
     // Nesting only applies unfiltered — a filter flattens every level so it can match folded names directly.
     const level = (nodes: readonly WorkspaceTreeEntry[]): readonly NestedEntry[] => {
-        const shown = layout.hideIgnored.value ? nodes.filter((entry) => entry.ignored !== true) : nodes;
+        const shown = layout.showIgnored.value ? nodes : nodes.filter((entry) => entry.ignored !== true);
         return fileNesting.value && needle === `` ? nestSiblings(shown) : shown.map((entry) => ({ entry }));
     };
 

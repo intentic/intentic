@@ -95,8 +95,9 @@ const filter = ref(``);
  *   Smart — iq's fused retrieval: the query is a question, its words scored separately against the index and
  *           reranked. Finds the file that ANSWERS the words; finds nothing to underline in them.
  *
- * The Ignored toggle widens BOTH the tree and the search to node_modules/.gitignore'd paths (secrets stay
- * hidden). The match switches beside it belong to Text alone — they change what the pattern means. */
+ * The Ignored chip widens whichever of the two is on screen — the tree under Name, the search under Text/Smart —
+ * to node_modules/.gitignore'd paths, off in both by default. The match switches beside it belong to Text alone:
+ * they change what the pattern means. */
 const searchScope = ref<"name" | SearchScope>(`name`);
 const contentMode = computed(() => searchScope.value !== `name`);
 const textMode = computed(() => searchScope.value === `text`);
@@ -413,7 +414,7 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
     // The explorer toolbar's Ignored chip, reachable from the palette — and from anywhere the sidebar is
     // collapsed, where the chip isn't on screen to click.
-    { command: `workspace.toggleIgnored`, title: `Toggle Ignored Files`, icon: `eye-slash`, handler: () => layout.toggleHideIgnored() },
+    { command: `workspace.toggleIgnored`, title: `Toggle Ignored Files`, icon: `eye`, handler: () => layout.toggleShowIgnored() },
     // The tab family is shared with the chat and terminal strips and resolved by focus (tabSurface.ts). The
     // workspace is the FALLBACK surface, so its gate is "the keystroke came from neither of the other two" —
     // a chord pressed with focus on the shell chrome, the explorer or the editor still closes an editor tab,
@@ -768,24 +769,24 @@ const endResize = (event: PointerEvent): void => {
                             <Icon class="text-2xs" :name="search.includeIgnored.value ? `eye` : `eye-slash`" />
                             Ignored
                         </button>
-                        <!-- The tree's own take on the same set. Shown (grayed) by default — the explorer's job is
-                             "what the LLM sees" — so this is the way out when the project itself is what you want
-                             to read: node_modules/dist/.turbo go away and the folders you work in close up. The
-                             icon says which way it stands, the highlight that it's the non-default one. -->
+                        <!-- The tree's own take on the same set, and it reads the same way round as the search chip
+                             above: dark is the default (the project alone — node_modules/dist/.turbo out of the
+                             way), lit means we're peeking at what the agent also sees, ignored entries listed and
+                             grayed. -->
                         <button
                             v-else
                             type="button"
                             class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-muted transition-colors hover:text-content"
-                            :class="{ 'bg-primary-600/15 text-link': layout.hideIgnored.value }"
-                            :aria-pressed="layout.hideIgnored.value"
+                            :class="{ 'bg-primary-600/15 text-link': layout.showIgnored.value }"
+                            :aria-pressed="layout.showIgnored.value"
                             v-tooltip.bottom="
-                                layout.hideIgnored.value
-                                    ? 'Hiding ignored files — node_modules, gitignored paths, the refs/ reference shelf'
-                                    : 'Showing ignored files — node_modules, gitignored paths, the refs/ reference shelf'
+                                layout.showIgnored.value
+                                    ? 'Showing ignored files — node_modules, gitignored paths, the refs/ reference shelf'
+                                    : 'Hiding ignored files — node_modules, gitignored paths, the refs/ reference shelf'
                             "
-                            @click="layout.toggleHideIgnored()"
+                            @click="layout.toggleShowIgnored()"
                         >
-                            <Icon class="text-2xs" :name="layout.hideIgnored.value ? `eye-slash` : `eye`" />
+                            <Icon class="text-2xs" :name="layout.showIgnored.value ? `eye` : `eye-slash`" />
                             Ignored
                         </button>
                         <!-- The /work repo's git history. Root IS a repo (ensureRootRepo versions the whole

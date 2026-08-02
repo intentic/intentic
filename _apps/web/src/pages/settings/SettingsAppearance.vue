@@ -26,7 +26,7 @@ const { fileNesting } = useFileNesting();
 const { groupByModule } = useChangeGrouping();
 // The explorer's ignored-entry switch — the same preference the workspace toolbar's Ignored chip flips, which is
 // where someone already staring at node_modules will reach for it; this is where they'll look for it afterwards.
-const { hideIgnored, toggleHideIgnored } = useLayout();
+const { showIgnored, toggleShowIgnored } = useLayout();
 
 // Import a VSCode theme JSON → recolor the app's chrome tokens live (the biggest "familiar for developers" lever).
 const { active: importedTheme, importThemeJson, clearImportedTheme } = useImportedTheme();
@@ -112,12 +112,12 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
             <Row
                 as="label"
-                icon="eye-slash"
-                title="Hide ignored files"
-                description="Leave node_modules, build output and .gitignore'd paths out of the explorer. Off by default — the tree shows the whole filesystem the agent sees, graying what's ignored."
+                icon="eye"
+                title="Show ignored files"
+                description="List node_modules, build output and .gitignore'd paths in the explorer, grayed — the whole filesystem the agent sees. Off by default, so the tree is the project alone."
             >
                 <template #control>
-                    <ToggleSwitch :model-value="hideIgnored" @update:model-value="toggleHideIgnored()" />
+                    <ToggleSwitch :model-value="showIgnored" @update:model-value="toggleShowIgnored()" />
                 </template>
             </Row>
         </RowGroup>
@@ -130,7 +130,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 as="label"
                 icon="box"
                 title="Group by module"
-                description="Head each run of changed files with the package it lives in, and let the row be the file — instead of a repo-relative path per row. Applies to the workspace Changes panel and an agent's review."
+                description="Head each run of changed files with the package it lives in, and let the row be the file — instead of a repo-relative path per row. On by default; a repo with no package manifests keeps its paths. Applies to the workspace Changes panel and an agent's review."
             >
                 <template #control><ToggleSwitch v-model="groupByModule" /></template>
             </Row>

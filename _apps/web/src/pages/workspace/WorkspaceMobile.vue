@@ -180,7 +180,7 @@ const listing = computed<readonly WorkspaceTreeEntry[]>(() => {
     const children = dir.value === `` ? tree.value : (entriesByPath.value.get(dir.value)?.children ?? lazyChildren.value.get(dir.value) ?? []);
     // The explorer's ignored-entry switch is shared with desktop (one browser, one preference), so a phone
     // drilling into a folder shows the same set of entries the tree would.
-    const shown = layout.hideIgnored.value ? children.filter((node) => node.ignored !== true) : children;
+    const shown = layout.showIgnored.value ? children : children.filter((node) => node.ignored !== true);
     const query = filter.value.trim().toLowerCase();
     return query === `` ? shown : shown.filter((node) => node.name.toLowerCase().includes(query));
 });
@@ -317,12 +317,12 @@ const onPick = (event: Event): void => {
                     v-if="segment === 'files'"
                     type="button"
                     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors active:bg-overlay"
-                    :class="layout.hideIgnored.value ? 'text-link' : 'text-muted'"
-                    :aria-pressed="layout.hideIgnored.value"
-                    :aria-label="layout.hideIgnored.value ? 'Show ignored files' : 'Hide ignored files'"
-                    @click="layout.toggleHideIgnored()"
+                    :class="layout.showIgnored.value ? 'text-link' : 'text-muted'"
+                    :aria-pressed="layout.showIgnored.value"
+                    :aria-label="layout.showIgnored.value ? 'Hide ignored files' : 'Show ignored files'"
+                    @click="layout.toggleShowIgnored()"
                 >
-                    <Icon :name="layout.hideIgnored.value ? `eye-slash` : `eye`" class="text-base" />
+                    <Icon :name="layout.showIgnored.value ? `eye` : `eye-slash`" class="text-base" />
                 </button>
                 <!-- The Changes list's reading: paths, or a header per module with the file on the row. Beside
                      the ignored-files chip because it is the same kind of control — a way of looking, flipped

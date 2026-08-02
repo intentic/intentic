@@ -112,8 +112,8 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     // useLayout is a module-level singleton — put the ignored-entry switch back to its default for the next test.
-    if (layout.hideIgnored.value) {
-        layout.toggleHideIgnored();
+    if (layout.showIgnored.value) {
+        layout.toggleShowIgnored();
     }
 });
 
@@ -167,24 +167,24 @@ describe(`the explorer after a reload`, () => {
     });
 });
 
-// The explorer shows "what the LLM sees", so ignored entries are listed (grayed) by default; the toolbar's
-// Ignored toggle is the way out for someone reading the project itself. It has to reach every level — a root
-// junk dir and a .gitignore'd artifact buried beside its source are both what makes the tree noisy.
+// The explorer is the project by default, so ignored entries stay out of it; the toolbar's Ignored toggle is the
+// way in for someone who wants to see what the agent also sees. Both directions have to reach every level — a
+// root junk dir and a .gitignore'd artifact buried beside its source are both what makes the tree noisy.
 describe(`the ignored-entry toggle`, () => {
-    it(`lists ignored entries by default`, async () => {
+    it(`leaves ignored entries out at every level by default`, async () => {
         restoreFrom([`src`]);
-
-        const el = await mount({ tree: IGNORED_TREE });
-
-        expect(rows(el)).toEqual([`src`, `main.ts`, `main.js`, `dist`, `README.md`]);
-    });
-
-    it(`drops them at every level once it is on`, async () => {
-        restoreFrom([`src`]);
-        layout.toggleHideIgnored();
 
         const el = await mount({ tree: IGNORED_TREE });
 
         expect(rows(el)).toEqual([`src`, `main.ts`, `README.md`]);
+    });
+
+    it(`lists them once it is on`, async () => {
+        restoreFrom([`src`]);
+        layout.toggleShowIgnored();
+
+        const el = await mount({ tree: IGNORED_TREE });
+
+        expect(rows(el)).toEqual([`src`, `main.ts`, `main.js`, `dist`, `README.md`]);
     });
 });

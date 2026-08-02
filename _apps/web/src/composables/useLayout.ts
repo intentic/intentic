@@ -38,12 +38,12 @@ const TERMINAL_OPEN_KEY = `ui-workspace-terminal-open`;
 // Which panel the workspace sidebar shows (files | changes | history). Persists like the terminal's open state.
 const SIDEBAR_PANEL_KEY = `ui-workspace-sidebar-panel`;
 
-// The file tree's own take on what the search box's includeIgnored (useSearchOptions) does: off by default (the tree lists everything, graying the ignored
-// entries — that IS the point of "what the LLM sees"), on when the user would rather browse the project alone
-// and not have node_modules/dist/.turbo between them and it. Separate from the search scope above because the
-// two answer different questions and want opposite defaults — a tree that hid them by default would be lying
-// about the filesystem the agent works on. Persists.
-const HIDE_IGNORED_KEY = `ui-workspace-hide-ignored`;
+// The file tree's own take on what the search box's includeIgnored (useSearchOptions) does, and it reads the same
+// way round: off by default, so the explorer is the project alone — no node_modules/dist/.turbo between the
+// reader and it — and on when they want to peek at what the agent also sees (the ignored entries listed, grayed).
+// Separate from the search scope because the two answer different questions: what the tree lists, versus what a
+// content search walks. Persists.
+const SHOW_IGNORED_KEY = `ui-workspace-show-ignored`;
 
 // Workspace edit mode — a single global switch (not per file): when on, every editable file opens directly in the
 // CodeMirror editor instead of the read-only viewer. Persists like the panels above.
@@ -124,7 +124,7 @@ const reviewListWidth = ref<number>(readWidth(REVIEW_LIST_WIDTH_KEY, clampReview
 const sidebarCollapsed = ref<boolean>(readBool(SIDEBAR_COLLAPSED_KEY));
 const terminalOpen = ref<boolean>(readBool(TERMINAL_OPEN_KEY));
 const sidebarPanel = ref<SidebarPanel>(readEnum(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`));
-const hideIgnored = ref<boolean>(readBool(HIDE_IGNORED_KEY));
+const showIgnored = ref<boolean>(readBool(SHOW_IGNORED_KEY));
 const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
 const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
 const diffLayout = ref<DiffLayout>(readEnum(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`));
@@ -197,9 +197,9 @@ const setSidebarPanel = (panel: SidebarPanel): void => {
     }
 };
 
-const toggleHideIgnored = (): void => {
-    hideIgnored.value = !hideIgnored.value;
-    write(HIDE_IGNORED_KEY, hideIgnored.value ? `1` : `0`);
+const toggleShowIgnored = (): void => {
+    showIgnored.value = !showIgnored.value;
+    write(SHOW_IGNORED_KEY, showIgnored.value ? `1` : `0`);
 };
 
 const setEditMode = (on: boolean): void => {
@@ -226,7 +226,7 @@ export function useLayout() {
         sidebarCollapsed,
         terminalOpen,
         sidebarPanel,
-        hideIgnored,
+        showIgnored,
         editMode,
         showComments,
         diffLayout,
@@ -243,7 +243,7 @@ export function useLayout() {
         setTerminalOpen,
         toggleTerminalVisibility,
         setSidebarPanel,
-        toggleHideIgnored,
+        toggleShowIgnored,
         setEditMode,
         toggleShowComments,
         setDiffLayout,
