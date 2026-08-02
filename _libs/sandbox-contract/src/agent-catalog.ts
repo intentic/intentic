@@ -1,4 +1,12 @@
-import { type AgentHarness, type AgentProvider, type Model, NATIVE_PROVIDERS, type NativeProvider, type PermissionMode } from "./schemas.js";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    type Model,
+    type ModelBadge,
+    NATIVE_PROVIDERS,
+    type NativeProvider,
+    type PermissionMode,
+} from "./schemas.js";
 
 /* The provider / harness / model catalog every picker shares (the chat menu, the automations dialog) — pure
  * data keyed by the wire vocabulary in schemas.ts, so the surfaces can't drift. Live state stays with the
@@ -162,6 +170,13 @@ export interface AgentCapabilities {
     readonly mcp: "full" | "http" | "none";
     // Reasoning-effort selection is forwarded to the model.
     readonly effort: boolean;
+    /* The runtime can serve a turn at fast speed when asked (AgentTurn.fast). A statement about the LOOP, not
+     * about the route: the Claude Code loop knows how to ask for it, which is why every provider this record
+     * hands the loop to reads true here — including the ones served through the translator, whose turns the
+     * harness will then refuse fast mode for because a translator endpoint is not first-party. That second
+     * question is answered where the endpoint is decided (planHarnessTurn), because it is a fact about the
+     * CREDENTIAL rather than about the runtime, and this record is a pure function of (provider, harness). */
+    readonly fastMode: boolean;
     // How an isolated conversation's worktree is enforced. "namespace" = the worktree IS /work inside the turn's
     // mount namespace (with the tool-input rewrite as the fallback when the container can't build one); "cwd" =
     // the turn is merely cwd'd into the worktree, so an absolute /work path still reaches the shared checkout —
@@ -186,6 +201,7 @@ const CLAUDE_CODE: AgentCapabilities = {
     questions: true,
     mcp: "full",
     effort: true,
+    fastMode: true,
     isolation: "namespace",
     commands: true,
     terminals: true,
@@ -201,6 +217,7 @@ const CODEX: AgentCapabilities = {
     questions: false,
     mcp: "none",
     effort: true,
+    fastMode: false,
     isolation: "cwd",
     commands: false,
     terminals: false,
@@ -216,6 +233,7 @@ const OPENCODE: AgentCapabilities = {
     questions: false,
     mcp: "none",
     effort: false,
+    fastMode: false,
     isolation: "cwd",
     commands: false,
     terminals: false,
@@ -232,6 +250,7 @@ const ACP: AgentCapabilities = {
     questions: false,
     mcp: "http",
     effort: false,
+    fastMode: false,
     isolation: "cwd",
     commands: true,
     terminals: true,
@@ -265,8 +284,14 @@ export const modesFor = (capabilities: AgentCapabilities): readonly PermissionMo
 export const clampMode = (mode: PermissionMode, capabilities: AgentCapabilities): PermissionMode =>
     modesFor(capabilities).includes(mode) ? mode : "bypassPermissions";
 
-// What this pair does NOT do, phrased for the person about to send a message to it — the honest half of the
-// picker, and the reason the record carries axes the daemon itself never branches on. Empty ⇒ the full ceiling.
+/* What this pair does NOT do, phrased for the person about to send a message to it — the honest half of the
+ * picker, and the reason the record carries axes the daemon itself never branches on. Empty ⇒ the full ceiling.
+ *
+ * `fastMode` is deliberately NOT disclosed here, and it is the one axis that can't be: every other axis is fully
+ * determined by the record, while fast mode also depends on the route and the model. The record says true for
+ * every provider the Claude Code loop serves — including the ones routed through the translator, which can never
+ * go fast — so a sentence derived from it would stay silent for exactly the turns that most need to hear it.
+ * fastAllowed answers the real question, and the `fast_mode` frame reports what the turn actually got. */
 export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.permissions === "plan" ? ["no per-tool approvals"] : []),
     ...(capabilities.questions ? [] : ["no clarifying questions"]),
@@ -329,3 +354,21 @@ export const effortAllowed = (effort: string, provider: AgentProvider, thinking:
  * 400 by spending the user's money. */
 export const sendableEffort = (effort: string | undefined, thinking: boolean | undefined): string | undefined =>
     effort === "max" && thinking !== true ? "high" : effort;
+
+/* WHETHER FAST SPEED CAN BE OFFERED for a provider/harness/model triple — the picker-side filter, the same
+ * shape and the same reason as effortAllowed: the composer must not show a control that does nothing.
+ *
+ * Three conditions, each answering a different question, and all three are load-bearing:
+ *
+ *   - the RUNTIME has to know how to ask (capabilities.fastMode). Only the Claude Code loop does.
+ *   - the ROUTE has to be first-party. Every non-Claude provider the Claude Code loop serves is served through
+ *     the sandbox's translator, and the harness refuses fast mode on a non-Anthropic endpoint ("not_first_party")
+ *     — so a `grok` turn on the claude-code harness reads true on the capability and still cannot go fast.
+ *   - the MODEL has to publish it, which is the `fast` badge Anthropic's own catalog reports per model
+ *     (claude-models.ts maps supportsFastMode onto it). Curating a list of ids here instead is what this repo
+ *     deliberately does not do — a model that gains or loses fast mode moves the badge, and this follows.
+ *
+ * `badges` absent ⇒ false. That is the honest reading: a catalog row that published no capabilities said
+ * nothing about fast mode, and the seed floor a picker shows before its first live load is exactly that row. */
+export const fastAllowed = (capabilities: AgentCapabilities, provider: AgentProvider, badges: readonly ModelBadge[] | undefined): boolean =>
+    capabilities.fastMode && provider === "claude" && (badges ?? []).includes("fast");

@@ -20,6 +20,9 @@ export interface TurnSettings {
     readonly model: string;
     readonly effort: string;
     readonly thinking: boolean;
+    // Whether to ask for fast speed. Already reconciled against the selected model when it gets here (see
+    // Conversation.turnSettings) — this is the answer to send, not the toggle's raw position.
+    readonly fast: boolean;
 }
 
 // A provider-minted resumable session and the runtime/account it belongs to — the trio is coherent by
@@ -87,6 +90,9 @@ export const turnRequestBody = (input: {
     model: input.settings.model || undefined,
     effort: input.settings.effort,
     thinking: input.settings.thinking,
+    // Sent only when asked for. `false` and "not asked" mean the same thing to the daemon, and omitting keeps
+    // the body honest about which turns actually reached for a paid speed-up.
+    ...(input.settings.fast ? { fast: true } : {}),
     // The turn's STARTING permission posture. The daemon hands it straight to the SDK, so all four modes are
     // real: 'plan' proposes-then-executes, 'default' prompts per tool on the permission card, 'acceptEdits'
     // auto-accepts edits, 'bypassPermissions' asks nothing.

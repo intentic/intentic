@@ -132,7 +132,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
  * the harness arm wraps its own preamble layer around whatever comes out of here, which stripTurnPreamble
  * peels back off. */
 const honoured = (services: Services, context: TurnContext, capabilities: AgentCapabilities): AgentRequest => {
-    const { permissionMode, effort, ...rest } = context.base;
+    const { permissionMode, effort, fast, ...rest } = context.base;
     // An isolated conversation's worktree is not the workspace root; a main-tree turn has nothing to say.
     const isolated = context.localCwd !== services.workspace.root;
     const notes = isolated
@@ -148,6 +148,11 @@ const honoured = (services: Services, context: TurnContext, capabilities: AgentC
         // one, so it travels as the absence it already meant.
         ...(permissionMode !== undefined && (capabilities.permissions === "modes" || permissionMode === "plan") ? { permissionMode } : {}),
         ...(effort !== undefined && capabilities.effort ? { effort } : {}),
+        // Fast speed, for the runtimes that can ask for it — the Claude Code loop alone. The second half of the
+        // rule (a routed turn's endpoint is not first-party, so the harness would refuse) is applied where the
+        // endpoint is chosen, in planHarnessTurn: this record is a pure function of (provider, harness) and
+        // cannot see a credential.
+        ...(fast === true && capabilities.fastMode ? { fast } : {}),
     };
 };
 
@@ -393,6 +398,13 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
         ],
         promptWithAttachments,
     );
+    /* Fast speed is a NATIVE-turn ask, so it is held back here and handed only to the branch that keeps the
+     * Anthropic credential. A routed turn (codex/grok/kimi/gemini/endpoint under this same loop) is pointed at
+     * the sandbox's translator, and the harness refuses fast mode on anything that isn't first-party — so
+     * forwarding it there would spend a control the turn cannot honour and report `not_first_party` for the
+     * user to decipher. Split off the base rather than overridden below because the field's absence is the
+     * whole meaning, and `fast: undefined` is not a thing this repo's tsconfig lets you write. */
+    const { fast, ...routable } = context.base;
     return {
         ok: true,
         run: services.agent,
@@ -401,13 +413,14 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
         ...(contextArm !== undefined ? { contextArm } : {}),
         ...(contextDelivered !== undefined ? { contextDelivered } : {}),
         request: {
-            ...context.base,
+            ...routable,
             prompt,
             // A routed turn (codex/grok under the Claude Code harness) pins the translator endpoint + bearer +
             // mapped model and withholds the Anthropic OAuth token (baseUrl in agent.ts drops
-            // CLAUDE_CODE_OAUTH_TOKEN). A native Claude turn keeps its OAuth token and falls back to the
-            // daemon-wide default model when the turn didn't pin one (a per-automation `model` already rode into
-            // `base` above and wins; empty ⇒ subscription default).
+            // CLAUDE_CODE_OAUTH_TOKEN) — and, for the same reason, never carries the fast-mode ask. A native
+            // Claude turn keeps its OAuth token, may go fast, and falls back to the daemon-wide default model
+            // when the turn didn't pin one (a per-automation `model` already rode into `base` above and wins;
+            // empty ⇒ subscription default).
             ...(endpoint !== undefined
                 ? {
                       baseUrl: endpoint.baseUrl,
@@ -419,6 +432,7 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
                       ...(input.model === undefined && services.config.intenticAgentModel !== ""
                           ? { model: services.config.intenticAgentModel }
                           : {}),
+                      ...(fast === true ? { fast } : {}),
                       ...(oauthToken !== undefined ? { oauthToken } : {}),
                       ...(refreshOauthToken !== undefined ? { refreshOauthToken } : {}),
                   }),

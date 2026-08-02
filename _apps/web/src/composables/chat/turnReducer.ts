@@ -81,7 +81,10 @@ export type TurnEffect =
       }
     // The turn is alive and waiting on the provider. Not a transcript write at all: the caller renders it where
     // the streaming indicator goes, and the next frame of real content retires it.
-    | { readonly kind: "providerRetry"; readonly retry: Extract<AgentEvent, { kind: "provider_retry" }> };
+    | { readonly kind: "providerRetry"; readonly retry: Extract<AgentEvent, { kind: "provider_retry" }> }
+    // What speed the harness is serving this turn at. Also not a transcript write: it belongs beside the
+    // composer's own fast control, which is where the user made the choice this is answering.
+    | { readonly kind: "fastMode"; readonly fast: Extract<AgentEvent, { kind: "fast_mode" }> };
 
 export interface TurnStep {
     readonly state: TurnState;
@@ -522,6 +525,8 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             });
         case `provider_retry`:
             return step(state, { kind: `providerRetry`, retry: event });
+        case `fast_mode`:
+            return step(state, { kind: `fastMode`, fast: event });
         case `rate_limit_info`:
         // The live gate, not a headroom reading: it names whichever single window the provider considered
         // binding for that request. `account_usage` carries every pool, and is what the readouts use.

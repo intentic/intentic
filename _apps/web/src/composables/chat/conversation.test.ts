@@ -107,7 +107,7 @@ const turnBodies = (): Record<string, unknown>[] =>
         .filter(([path]) => path === `/agent`)
         .map(([, init]) => JSON.parse(init!.body as string) as Record<string, unknown>);
 
-const settings = { agent: `claude`, harness: `native`, account: undefined, model: `opus`, effort: `high`, thinking: false } as const;
+const settings = { agent: `claude`, harness: `native`, account: undefined, model: `opus`, effort: `high`, thinking: false, fast: false } as const;
 
 describe(`Conversation`, () => {
     it(`streams deltas into the assistant bubble and captures session, model, and title`, async () => {
@@ -392,6 +392,7 @@ describe(`Conversation`, () => {
             model: conversation.model.value,
             effort: conversation.effort.value,
             thinking: false,
+            fast: false,
         });
         const body = turnBodies()[0]!;
         expect(body[`agent`]).toBe(`codex`);
@@ -1783,6 +1784,7 @@ describe(`Conversation`, () => {
             model: `opus`,
             effort: `medium`,
             thinking: false,
+            fast: false,
             account: `acct-dead`,
         });
 
@@ -1814,6 +1816,7 @@ describe(`Conversation`, () => {
             model: `opus`,
             effort: `medium`,
             thinking: false,
+            fast: false,
         });
 
         expect(conversation.messages.value.map((message) => message.role)).toEqual([`notice`]);
@@ -1834,6 +1837,7 @@ describe(`Conversation`, () => {
             model: `opus`,
             effort: `medium`,
             thinking: false,
+            fast: false,
             account: `acct-dead`,
         });
 
@@ -1855,7 +1859,15 @@ describe(`Conversation`, () => {
     it(`keeps the session resumable across a reconnect`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.send(`hi`, { agent: `claude`, harness: `native`, model: `opus`, effort: `medium`, thinking: false, account: `acct-dead` });
+        await conversation.send(`hi`, {
+            agent: `claude`,
+            harness: `native`,
+            model: `opus`,
+            effort: `medium`,
+            thinking: false,
+            fast: false,
+            account: `acct-dead`,
+        });
 
         conversation.rebindAccount(`acct-new`);
         await conversation.send(`again`, {
@@ -1864,6 +1876,7 @@ describe(`Conversation`, () => {
             model: `opus`,
             effort: `medium`,
             thinking: false,
+            fast: false,
             account: `acct-new`,
         });
 

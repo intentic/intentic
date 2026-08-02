@@ -714,7 +714,7 @@ const setAutoLand = async (id: string, autoLand: boolean | null): Promise<void> 
 const open = (
     agent: Pick<
         FleetAgent,
-        "id" | "provider" | "harness" | "sessionId" | "title" | "account" | "model" | "effort" | "thinking" | "status" | "branch"
+        "id" | "provider" | "harness" | "sessionId" | "title" | "account" | "model" | "effort" | "thinking" | "fast" | "status" | "branch"
     >,
 ): void => {
     openAgentConversation({
@@ -733,6 +733,7 @@ const open = (
         ...(agent.model !== undefined ? { model: agent.model } : {}),
         ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
         ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
+        ...(agent.fast !== undefined ? { fast: agent.fast } : {}),
     });
     markSeen(agent.id);
 };

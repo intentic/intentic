@@ -22,6 +22,7 @@ import {
     type AgentEvent,
     type AgentReply,
     type AskQuestion,
+    type FastModeState,
     type PermissionMode,
     sendableEffort,
     type SystemPromptMode,
@@ -126,6 +127,10 @@ export interface AgentRequest {
     // Reasoning controls forwarded to the SDK (effort level / extended thinking).
     readonly effort?: string;
     readonly thinking?: boolean;
+    // Ask the harness to serve this turn at fast speed. Only ever set for a NATIVE Claude turn — turn-plan
+    // withholds it from a routed one, whose translator endpoint the harness would refuse as not first-party —
+    // so by the time it is read here the only remaining questions (plan, model, pool) belong to the harness.
+    readonly fast?: boolean;
     // The agent's MCP tools for this turn: intent-declared internal services (set in this container's env) plus
     // platform-configured external integrations. Each becomes a remote `http` MCP server. The daemon merges
     // both sources before calling; absent ⇒ the agent runs with no MCP tools (its plain autonomous posture).
@@ -484,6 +489,28 @@ async function* streamSdk(
         mode = next;
         return { kind: "mode", mode: next };
     };
+    /* What speed the harness is actually serving this turn at, folded and de-duplicated exactly like the mode
+     * above: it is reported on `init` and again on the result, and restating an unchanged answer would put a
+     * second identical row in front of the user for no new information.
+     *
+     * De-duplicated on the PAIR rather than on the state, because the reason moves on its own and the move is
+     * the informative part: `init` can answer `off`/`pending` — the harness has not finished asking — and the
+     * result then names why, which is the difference between "we're checking" and "your plan doesn't include
+     * it". A state change alone is the other case worth a frame: a turn that exhausts the fast-mode pool
+     * mid-flight (it has its own, separate from the model's) drops to `cooldown` and finishes at standard
+     * speed, and the bill will say so whether or not the transcript does. */
+    let fastReported: string | undefined;
+    const fastModeChange = (state: FastModeState | undefined, reason: string | undefined): AgentEvent | undefined => {
+        if (state === undefined) {
+            return undefined;
+        }
+        const reported = `${state}:${reason ?? ""}`;
+        if (reported === fastReported) {
+            return undefined;
+        }
+        fastReported = reported;
+        return { kind: "fast_mode", state, ...(reason !== undefined ? { reason } : {}) };
+    };
     // Bound rather than inlined into sdkTurns: the turn also reads the session's slash-command list off this
     // handle at `init` (see below), which the bare AsyncIterable it is consumed as does not expose.
     const session = queryFn({ prompt, options });
@@ -703,6 +730,12 @@ async function* streamSdk(
                 if (changed !== undefined) {
                     yield changed;
                 }
+                // The harness's answer to "am I serving this turn fast?", at the earliest point it can be asked
+                // — before a single token has been spent, which is when it is still actionable.
+                const speed = fastModeChange(message.fast_mode_state, message.fast_mode_disabled_reason);
+                if (speed !== undefined) {
+                    yield speed;
+                }
                 // The session's slash commands — built-ins plus the workspace's own .claude/commands and any
                 // plugin/skill commands, all of which load because baseOptions sets settingSources. Read HERE
                 // rather than before the stream on purpose: supportedCommands() awaits the SDK's initialize
@@ -839,6 +872,13 @@ async function* streamSdk(
                 if (window !== undefined && window > 0) {
                     yield { kind: "context_usage", tokens: contextTokens, contextWindow: window };
                 }
+            }
+            // The settled answer on speed. Usually a no-op — `init` already said it and nothing moved — but it
+            // is the frame that catches a turn dropped into cooldown partway through, and the one that replaces
+            // an init-time `pending` with the real reason.
+            const speed = fastModeChange(message.fast_mode_state, message.fast_mode_disabled_reason);
+            if (speed !== undefined) {
+                yield speed;
             }
             if (message.subtype !== "success") {
                 yield { kind: "error", message: `agent did not complete (${message.subtype})` };
@@ -1064,6 +1104,22 @@ const baseOptions = (
     // hooks, and .mcp.json — plus the user tier. The SDK default is [] (loads nothing), so every filesystem
     // capability was invisible until now. New skills/subagents/hooks then arrive as files, no code change.
     settingSources: ["user", "project"],
+    /* THE FAST-MODE OPT-IN. Fast mode is off for an SDK consumer until it asks — the harness reports exactly
+     * that as `sdk_opt_in_required` — and this inline `settings` object is the ask. It lands in the harness's
+     * "flag settings" layer, above the user/project files loaded by settingSources and below managed policy, so
+     * a workspace that pins its own answer in .claude/settings.json is overridden for this turn and an
+     * IT-managed policy still wins. Everything else about fast mode (which plans have it, which models offer
+     * it, whether the pool is in cooldown) stays the harness's to decide — this only says the consumer is
+     * willing.
+     *
+     * `fastModePerSessionOptIn` is the load-bearing half. Without it the harness PERSISTS the choice to the
+     * settings file, and the sandbox's user tier is shared by every conversation in the container — so one
+     * chat's toggle would silently start billing every other chat, and every automation and doorbell turn, at
+     * fast-mode rates. Per-session keeps it what the composer says it is: a property of this turn.
+     *
+     * Omitted entirely when the turn didn't ask, rather than sent as `false`: a `false` in the flag layer would
+     * override a user's own settings.json opt-in, which is theirs to make on turns we say nothing about. */
+    ...(request.fast === true ? { settings: { fastMode: true, fastModePerSessionOptIn: true } } : {}),
     env: {
         ...process.env,
         // cli-kind capability credentials (e.g. DISCORD_BOT_TOKEN) the agent's shell reads. Rebuilt every turn,

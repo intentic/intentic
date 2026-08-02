@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { turnRequestBody } from "./turnRequest";
 
 // The turn selection a send runs under — the same shape the composer captures.
-const settings = { agent: `claude`, harness: `native`, account: undefined, model: `opus`, effort: `high`, thinking: false } as const;
+const settings = { agent: `claude`, harness: `native`, account: undefined, model: `opus`, effort: `high`, thinking: false, fast: false } as const;
 
 /* The wire body on its own. Every assertion here is about an OMISSION, because that is where the daemon's
  * defaults live: a key that isn't sent is the daemon resolving its own catalog default, running the native

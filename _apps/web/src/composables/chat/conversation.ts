@@ -9,6 +9,7 @@ import {
     type ContextUsage,
     deriveTitle,
     type EditorContext,
+    fastAllowed,
     type PermissionMode,
     providerLabel,
     type RestoredMessage,
@@ -20,7 +21,7 @@ import { sandboxRequest } from "../sandbox/sandboxClient";
 import { errorMessage } from "../useAsyncAction";
 import { clampEffort } from "./effortScale";
 import { rememberedAccountFor, selectedAccountId } from "./providerAccounts";
-import { providerTabs } from "./providerCatalog";
+import { providerModels, providerTabs } from "./providerCatalog";
 import { type CardKind, type ChatAttachment, type ChatMessage, isAwaitingDecision, transcriptOf, withCancelledCards } from "./transcript";
 import { readTranscript, saveTranscript } from "./transcriptCache";
 import { TranscriptClock } from "./transcriptClock";
@@ -209,6 +210,12 @@ export class Conversation {
     readonly account = ref<string | undefined>(rememberedAccountFor(turnDefaults.provider.value));
     readonly model = ref<string>(rememberedModelFor(turnDefaults.provider.value));
     readonly thinking = ref<boolean>(turnDefaults.thinking.value);
+    /* Ask for fast speed on this conversation's turns. Deliberately NOT seeded from turnDefaults, unlike every
+     * other control on this line: fast mode costs roughly twice per token, and the sticky-default machinery
+     * would carry one chat's toggle into every chat opened afterwards. A control that spends more money starts
+     * from off, every time, and says so per conversation. (The daemon takes the same position for the same
+     * reason — see the fastModePerSessionOptIn note in agent.ts.) */
+    readonly fast = ref<boolean>(false);
     // The reasoning effort the user ASKED for — which is not always runnable, because the tier scale belongs to
     // the MODEL: a pick made on Claude ('max', 'xhigh') is off Kimi K3's scale, and 'max' leaves Claude's own the
     // moment thinking is switched off. Everything that selects an effort writes this; everything that renders or
@@ -236,6 +243,13 @@ export class Conversation {
      * settles, so it can never outlive the wait it describes. */
     readonly providerRetry = ref<Extract<AgentEvent, { kind: `provider_retry` }> | undefined>();
 
+    /* What speed the harness actually served the last turn at, and — when it wasn't the one asked for — its
+     * reason. Kept ACROSS turns rather than cleared at the boundary like providerRetry above: the answer is a
+     * standing fact about this conversation's model and account ("your plan doesn't include fast mode") far
+     * more often than a property of one turn, and clearing it would make the notice flicker away exactly when
+     * the user goes looking for why the toggle did nothing. A turn that changes the answer replaces it. */
+    readonly fastMode = ref<Extract<AgentEvent, { kind: `fast_mode` }> | undefined>();
+
     /* What the runtime behind this conversation's provider/harness pair can actually do — the same record the
      * daemon plans the turn against (capabilitiesOf), so the composer can't offer a control nothing applies.
      * Every consumer reads the field it cares about: the mode menu takes `permissions`, the effort segments
@@ -246,6 +260,19 @@ export class Conversation {
     // its SteeringQueue on. Used for WORDING alone (the composer says "steer" vs "queue"): delivery asks the
     // daemon and falls back to the queue on a refusal, so a drift here can't lose a message.
     readonly steerable = computed(() => this.capabilities.value.steering);
+
+    // Whether the fast control is offered at all: the runtime, the route and the selected MODEL all have to
+    // allow it (fastAllowed). Read from the live catalog rather than remembered, so switching to a model that
+    // doesn't publish fast mode takes the control away by itself — the same way the effort segments follow the
+    // model's own tier list. The pick is left alone underneath: come back to a fast-capable model and the
+    // toggle is where the user left it.
+    readonly fastOffered = computed(() =>
+        fastAllowed(
+            this.capabilities.value,
+            this.provider.value,
+            (providerModels.value[this.provider.value] ?? []).find((option) => option.value === this.model.value)?.badges,
+        ),
+    );
 
     /* What a failed turn does to this conversation, and how one that is coming back is waited out — the outage
      * countdown and the credential-renewal spinner the composer draws are this unit's own state. Public because
@@ -364,6 +391,14 @@ export class Conversation {
         turnDefaults.thinking.value = value;
     }
 
+    // Not written to turnDefaults — see the `fast` ref. Switching it also drops the last answer: the notice
+    // under the composer describes a turn that ran under the OLD setting, and leaving it up next to a freshly
+    // flipped toggle reads as the answer to the flip.
+    setFast(value: boolean): void {
+        this.fast.value = value;
+        this.fastMode.value = undefined;
+    }
+
     // Point the conversation's next turn at a specific account of its current provider (the account switcher).
     // Mid-chat, an account change — like a provider change — retires the session at the next send.
     selectAccount(id: string): void {
@@ -475,6 +510,7 @@ export class Conversation {
         // The PICK, not what it currently clamps to — a branch inherits the user's choice, not one model's ceiling.
         this.effortPick.value = source.effortPick.value;
         this.thinking.value = source.thinking.value;
+        this.fast.value = source.fast.value;
         // The pick again, for the same reason: a fork inherits the posture the user chose, not the one the
         // source's runtime happened to allow it.
         this.modePick.value = source.modePick.value;
@@ -785,6 +821,10 @@ export class Conversation {
             model: this.model.value,
             effort: this.effort.value,
             thinking: this.thinking.value,
+            // The pick AND the offer: a toggle left on from a fast-capable model must not ride along to one
+            // that doesn't publish fast mode, where the harness would refuse it and the user would read the
+            // refusal as a bug. Same shape as `effort` clamping to the model's own tier list.
+            fast: this.fast.value && this.fastOffered.value,
         };
     }
 
@@ -1146,6 +1186,11 @@ export class Conversation {
                 // A wait, not a failure: the turn is still running. Held only while it is (see endTurn), so a
                 // stale "retrying…" can never sit under a finished answer.
                 this.providerRetry.value = effect.retry;
+                return;
+            case `fastMode`:
+                // Deliberately NOT cleared at the turn boundary (see the ref): the answer usually outlives the
+                // turn that reported it.
+                this.fastMode.value = effect.fast;
                 return;
             case `error`:
                 this.failures.apply(effect, turn);

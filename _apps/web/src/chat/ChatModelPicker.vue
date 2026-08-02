@@ -42,7 +42,7 @@ const { conversation } = defineProps<{ conversation: Conversation }>();
  * teleports behind a `v-if="open"` and BottomSheet does the same, in both ChatPanel and SuggestedSessionBox.
  * These are the refs of the conversation as it was at mount, so a host that swapped the prop in place would go
  * on editing the previous one. Remount, don't rebind. */
-const { provider, harness, model, thinking, streaming, messages, account, capabilities } = conversation;
+const { provider, harness, model, thinking, fast, fastOffered, fastMode, streaming, messages, account, capabilities } = conversation;
 // The active provider's connected accounts. Module state rather than the conversation's, because an account
 // list belongs to the sandbox — the conversation only picks WHICH of them its next turn runs on.
 const accounts = computed(() => accountsOf(provider.value));
@@ -231,6 +231,49 @@ const activeAccountId = computed(() => account.value ?? accounts.value[0]?.id);
  * approvals, and nothing else in the app was ever going to say so — the controls simply stopped working. An
  * empty list (the Claude Code loop, which is the ceiling) renders nothing at all. */
 const limitations = computed(() => limitationsOf(capabilities.value));
+
+/* WHY THE FAST TOGGLE DIDN'T DO WHAT IT SAYS — the sentence for each reason the harness can give (its own
+ * FastModeDisabledReason vocabulary, forwarded verbatim on the `fast_mode` frame).
+ *
+ * Every one of these is a state the user can be in with the control switched on and nothing visibly different
+ * about the turn except the speed, so each needs to say what happened AND whether they can do anything about
+ * it. An unrecognized reason is not swallowed: a newer harness may report something this build hasn't heard
+ * of, and the raw word beats silence — it is at least searchable. */
+const FAST_MODE_REASONS: Record<string, string> = {
+    free: `Fast speed needs a paid plan.`,
+    preference: `Fast speed is switched off in this account's Claude settings.`,
+    extra_usage_disabled: `Fast speed needs extra usage enabled on this account.`,
+    model_not_allowed: `This model doesn't offer fast speed.`,
+    not_first_party: `Fast speed isn't available on a routed endpoint.`,
+    disabled_by_env: `Fast speed is disabled by this sandbox's environment.`,
+    sdk_opt_in_required: `The harness declined the fast-speed request.`,
+    network_error: `Couldn't reach Anthropic to confirm fast speed.`,
+    pending: `Still confirming fast speed.`,
+};
+
+/* The one line under the toggle, and only when the answer DISAGREES with the ask. Three cases, in the order
+ * they matter: cooldown (asked, had it, spent the separate fast-mode pool — it comes back by itself), refused
+ * (asked, never got it — the reason says whether that is fixable), and served-anyway (didn't ask but got it,
+ * which happens when the account's own Claude settings turn fast mode on, and is worth saying because it is
+ * being billed). Agreement renders nothing: a notice confirming that a control did what it says is noise. */
+const fastSpeedNotice = computed<string | undefined>(() => {
+    const state = fastMode.value;
+    if (state === undefined) {
+        return undefined;
+    }
+    if (state.state === `cooldown`) {
+        return `Fast speed is rate-limited right now — turns run at standard speed until it resets.`;
+    }
+    if (state.state === `on`) {
+        return fast.value ? undefined : `Ran at fast speed — this account has fast mode switched on by default.`;
+    }
+    if (!fast.value) {
+        return undefined;
+    }
+    return state.reason === undefined
+        ? `The last turn ran at standard speed.`
+        : (FAST_MODE_REASONS[state.reason] ?? `The last turn ran at standard speed (${state.reason}).`);
+});
 
 const footerVisible = computed(
     () =>
@@ -583,6 +626,33 @@ onMounted(() => {
                     <Icon name="bolt" class="text-2xs" />
                     <span>{{ thinking ? "On" : "Off" }}</span>
                 </button>
+            </div>
+
+            <!-- FAST SPEED. Offered only where all three conditions hold (fastAllowed: the Claude Code loop, a
+                 first-party route, a model whose catalog row publishes the `fast` badge) — so it appears and
+                 disappears with the model rather than sitting greyed out with an explanation nobody reads. The
+                 price is stated on the control itself: it is the one composer toggle that changes what a turn
+                 costs per token, and a user who flips it should not have to go looking for that. -->
+            <div v-if="fastOffered" class="flex flex-col gap-1">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Fast speed</span>
+                    <button
+                        type="button"
+                        class="composer-ghost h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
+                        :class="{ 'composer-active': fast }"
+                        @click="conversation.setFast(!fast)"
+                        :aria-pressed="fast"
+                        aria-label="Toggle fast speed"
+                    >
+                        <Icon name="bolt" class="text-2xs" />
+                        <span>{{ fast ? "On" : "Off" }}</span>
+                    </button>
+                </div>
+                <span class="text-2xs text-subtle">Same model, up to ~2.5x faster output, at roughly double the per-token price.</span>
+                <!-- What the harness actually did with the ask. Only ever shown when it DIFFERS from what was
+                     asked for: agreeing with the toggle is what the toggle already says, and a notice under a
+                     working control trains people to ignore notices. -->
+                <span v-if="fastSpeedNotice !== undefined" class="text-2xs text-subtle">{{ fastSpeedNotice }}</span>
             </div>
 
             <!-- The honest half of the choice: what this runtime can't do, named before the user relies on it.

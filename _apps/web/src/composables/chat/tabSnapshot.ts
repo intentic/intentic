@@ -34,6 +34,10 @@ export interface StoredTab {
     readonly model?: string;
     readonly effort?: string;
     readonly thinking?: boolean;
+    // The fast-speed pick, persisted per TAB for the same reason and NOT remembered globally: it is a property
+    // of this chat, and a reload should show the same chat back — but a new chat starts from off (turnDefaults
+    // deliberately doesn't carry it; see Conversation.fast).
+    readonly fast?: boolean;
     // `account` is the one the SESSION was minted on, which is not always the tab's current pick — a mid-chat
     // switch takes effect at the next send, and until then the two differ on purpose (that difference is what
     // retires the session then). Restoring both keeps a reload from either forging the match or faking the
@@ -102,6 +106,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readText(`model`, raw[`model`]),
         ...readText(`effort`, raw[`effort`]),
         ...(typeof raw[`thinking`] === `boolean` ? { thinking: raw[`thinking`] } : {}),
+        ...(typeof raw[`fast`] === `boolean` ? { fast: raw[`fast`] } : {}),
         ...(raw[`harness`] === `claude-code` || raw[`harness`] === `native` ? { harness: raw[`harness`] as AgentHarness } : {}),
         ...(validSession !== undefined ? { session: validSession } : {}),
         ...(typeof raw[`title`] === `string` ? { title: raw[`title`] } : {}),

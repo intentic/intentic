@@ -1178,3 +1178,94 @@ test("a failing supportedCommands never breaks the turn", async () => {
     expect(events.some((event) => event.kind === "commands")).toBe(false);
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
+
+/* THE FAST-MODE OPT-IN. Fast mode is off for an SDK consumer until it asks — the harness's own word for that
+ * state is `sdk_opt_in_required` — so a turn that wants it has to say so in the inline settings object, and a
+ * turn that doesn't must say NOTHING rather than `false`: the flag layer sits above the user's own
+ * settings.json, so writing false there would override an opt-in the owner made for themselves on turns this
+ * composer never expressed an opinion about.
+ *
+ * `fastModePerSessionOptIn` is the half that keeps the bill honest. Without it the harness persists the choice
+ * to the settings file — which in this container is shared by every conversation, every automation and every
+ * doorbell turn — so one chat's toggle would quietly move all of them onto fast-mode pricing. */
+test("fast speed is asked for per session, and only by the turn that wanted it", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+
+    await collect({ ...request, fast: true }, capture);
+    expect(captured.at(-1)?.settings).toEqual({ fastMode: true, fastModePerSessionOptIn: true });
+
+    // Not `{fastMode: false}` — an absent ask must leave the lower-precedence settings layers alone.
+    await collect(request, capture);
+    expect(captured.at(-1)?.settings).toBeUndefined();
+});
+
+/* WHAT SPEED THE TURN ACTUALLY RAN AT, which is the half that makes the toggle above safe to ship. Fast mode
+ * declines silently and for a lot of reasons the composer cannot see (the plan, the model, the pool, the
+ * endpoint), so asking for it and not getting it is otherwise indistinguishable from getting it — same frames,
+ * same text, a bill that differs by 2x. */
+test("the speed the harness served is reported once, and again only when it changes", async () => {
+    withoutTmux();
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "system", subtype: "init", session_id: "s", model: "opus", fast_mode_state: "on" },
+            // The settled result agrees with init — no second frame, because a notice that repeats itself is
+            // one the user learns to stop reading.
+            { type: "result", subtype: "success", result: "ok", fast_mode_state: "on" },
+        ),
+    );
+
+    expect(events.filter((event) => event.kind === "fast_mode")).toEqual([{ kind: "fast_mode", state: "on" }]);
+});
+
+test("a turn that drops into cooldown mid-flight says so", async () => {
+    withoutTmux();
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "system", subtype: "init", session_id: "s", model: "opus", fast_mode_state: "on" },
+            // Fast mode draws on its own rate-limit pool; exhausting it finishes the turn at standard speed.
+            { type: "result", subtype: "success", result: "ok", fast_mode_state: "cooldown" },
+        ),
+    );
+
+    expect(events.filter((event) => event.kind === "fast_mode")).toEqual([
+        { kind: "fast_mode", state: "on" },
+        { kind: "fast_mode", state: "cooldown" },
+    ]);
+});
+
+/* The reason moves on its own, and the move is the informative half: `init` can answer "off, still checking"
+ * and the result then names the actual blocker. De-duplicating on the STATE alone would swallow that second
+ * frame and leave the user with a permanent "confirming…" for a turn that had long since been refused. */
+test("a reason that arrives after the state is still reported", async () => {
+    withoutTmux();
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "system", subtype: "init", session_id: "s", model: "opus", fast_mode_state: "off", fast_mode_disabled_reason: "pending" },
+            { type: "result", subtype: "success", result: "ok", fast_mode_state: "off", fast_mode_disabled_reason: "extra_usage_disabled" },
+        ),
+    );
+
+    expect(events.filter((event) => event.kind === "fast_mode")).toEqual([
+        { kind: "fast_mode", state: "off", reason: "pending" },
+        { kind: "fast_mode", state: "off", reason: "extra_usage_disabled" },
+    ]);
+});
+
+// A harness that reports nothing about speed yields no frame at all — an absent answer is not "off", and
+// rendering one would put a notice under every turn on every runtime that never had fast mode to begin with.
+test("a harness that says nothing about speed produces no frame", async () => {
+    withoutTmux();
+    const events = await collect(
+        request,
+        fakeQuery({ type: "system", subtype: "init", session_id: "s", model: "opus" }, { type: "result", subtype: "success", result: "ok" }),
+    );
+
+    expect(events.some((event) => event.kind === "fast_mode")).toBe(false);
+});

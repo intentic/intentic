@@ -134,6 +134,14 @@ export const AgentTurnSchema = z
         allowedTools: z.array(z.string().min(1)).optional(),
         effort: z.string().optional(),
         thinking: z.boolean().optional(),
+        /* Ask the harness to serve this turn at fast speed — the same tokens at a higher rate, for a higher
+         * per-token price. A REQUEST, never a promise: the harness answers it against the plan, the model and
+         * the endpoint, and reports what it actually did on the `fast_mode` frame. Absent/false ⇒ standard
+         * speed, which is also what a runtime that doesn't declare the capability gets (turn-plan drops it).
+         *
+         * Not a sandbox setting, for the same reason effort isn't: it changes what a turn COSTS, so it belongs
+         * to the turn that spends it rather than to the workspace it ran in. */
+        fast: z.boolean().optional(),
         // The opt-in editor context chip: what the user is looking at, folded into the prompt daemon-side.
         editorContext: EditorContextSchema.optional(),
     })
@@ -433,13 +441,16 @@ export const AgentSummarySchema = z.object({
     status: AgentStatusSchema,
     provider: AgentProviderSchema,
     harness: AgentHarnessSchema,
-    // What the agent's last turn ran with — the model, its reasoning effort, and whether extended thinking was
-    // on. Recorded per agent because they are facts about THIS conversation: a client opening it seeds its
-    // composer from them, rather than from whatever that browser last picked in some other tab. Absent for an
-    // agent whose turns predate the record (model has always been kept; the other two are newer).
+    // What the agent's last turn ran with — the model, its reasoning effort, whether extended thinking was on,
+    // and whether fast speed was asked for. Recorded per agent because they are facts about THIS conversation: a
+    // client opening it seeds its composer from them, rather than from whatever that browser last picked in some
+    // other tab. Absent for an agent whose turns predate the record (model has always been kept; the rest are
+    // newer). `fast` is what was REQUESTED, not what was served — the served answer belongs to a turn and rides
+    // its `fast_mode` frame, while this is the composer's memory of the user's own choice.
     model: z.string().optional(),
     effort: z.string().optional(),
     thinking: z.boolean().optional(),
+    fast: z.boolean().optional(),
     account: z.string().optional(),
     // The worktree branch (agent/<id>); absent for a non-isolated (main-tree) conversation.
     branch: z.string().optional(),
@@ -778,6 +789,15 @@ export const RateLimitInfoSchema = z.object({
     utilization: z.number().optional(), // 0-100, how much of the window is used
 });
 export type RateLimitInfo = z.infer<typeof RateLimitInfoSchema>;
+
+// ---- fast mode ----
+// What speed a turn is actually being served at. `cooldown` is its own state rather than a flavour of `off`
+// because it is the only one that lifts by itself: fast mode draws on a rate-limit pool separate from the
+// model's, and a turn that exhausts it drops to standard speed and stays there until the pool reopens. The
+// distinction is what lets the client say "not right now" instead of "not available", which are different
+// answers to "why am I not getting what I asked for". Mirrors the harness's own vocabulary (SDK: FastModeState).
+export const FastModeStateSchema = z.enum(["off", "cooldown", "on"]);
+export type FastModeState = z.infer<typeof FastModeStateSchema>;
 
 // ---- provider oauth ----
 // Claude uses the PKCE authorize-URL + paste-back handshake (start → exchange). Codex uses OpenAI's device-code

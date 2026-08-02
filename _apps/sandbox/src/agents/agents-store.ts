@@ -69,6 +69,7 @@ export const PersistedAgentSchema = z.object({
     model: z.string().optional(),
     effort: z.string().optional(),
     thinking: z.boolean().optional(),
+    fast: z.boolean().optional(),
     account: z.string().optional(),
     sessionId: z.string().optional(),
     // Set when an automation opened this conversation for an outside message (a Discord mention, a web-chat

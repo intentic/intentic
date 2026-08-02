@@ -128,6 +128,7 @@ async function* runConversationTurn(
             ...(input.model !== undefined ? { model: input.model } : {}),
             ...(input.effort !== undefined ? { effort: input.effort } : {}),
             ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
+            ...(input.fast !== undefined ? { fast: input.fast } : {}),
             ...(input.account !== undefined ? { account: input.account } : {}),
             ...(input.origin !== undefined ? { origin: input.origin } : {}),
         },
@@ -518,6 +519,9 @@ async function* runTurn(
         ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
         ...(input.allowedTools !== undefined ? { allowedTools: input.allowedTools } : {}),
         ...(input.effort !== undefined ? { effort: input.effort } : {}),
+        // Rides the same path as `effort`: into the base, then through turn-plan's two gates (the runtime that
+        // can ask, the route that may) rather than straight to an adapter.
+        ...(input.fast !== undefined ? { fast: input.fast } : {}),
     };
     /* WHICH RUNTIME SERVES THIS TURN AND WHAT IT IS HANDED — resolved as a value (turn-plan.ts), so the four
      * providers' gates and request assembly live together instead of interleaved with the lifecycle below.

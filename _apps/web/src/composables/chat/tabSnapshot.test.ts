@@ -165,6 +165,7 @@ describe(`reading a tab snapshot`, () => {
                         model: `claude-sonnet-4-5-20250929`,
                         effort: `medium`,
                         thinking: false,
+                        fast: false,
                         attachments: [],
                         queued: [],
                     },

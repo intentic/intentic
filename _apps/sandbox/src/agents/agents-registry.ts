@@ -86,7 +86,7 @@ const freshRuntime = (): RuntimeState => ({
 // here rather than inferred from the provider: isolated conversations own a branch; workspace conversations do
 // not, while both share the same identity, status and transcript lifecycle.
 export type AgentTurnIdentity = Pick<AgentTurn, "prompt"> &
-    Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "account" | "origin">> & {
+    Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "fast" | "account" | "origin">> & {
         readonly conversationId: string;
         readonly isolated: boolean;
         readonly provider: NonNullable<AgentTurn["agent"]>;
@@ -249,6 +249,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.model !== undefined ? { model: entry.model } : {}),
             ...(entry.effort !== undefined ? { effort: entry.effort } : {}),
             ...(entry.thinking !== undefined ? { thinking: entry.thinking } : {}),
+            ...(entry.fast !== undefined ? { fast: entry.fast } : {}),
             ...(entry.account !== undefined ? { account: entry.account } : {}),
             ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
             ...(base !== undefined ? { base } : {}),
@@ -420,6 +421,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             const model = turn.model ?? existing?.model;
             const effort = turn.effort ?? existing?.effort;
             const thinking = turn.thinking ?? existing?.thinking;
+            const fast = turn.fast ?? existing?.fast;
             const account = turn.account ?? existing?.account;
             // Provenance belongs to the turn that CREATED the conversation and is never re-derived: the user's
             // own follow-up turns in a surfaced agent's tab carry no origin, and must not strip the Discord
@@ -448,6 +450,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 ...(model !== undefined ? { model } : {}),
                 ...(effort !== undefined ? { effort } : {}),
                 ...(thinking !== undefined ? { thinking } : {}),
+                ...(fast !== undefined ? { fast } : {}),
                 ...(account !== undefined ? { account } : {}),
                 ...(origin !== undefined ? { origin } : {}),
                 ...(existing?.sessionId !== undefined ? { sessionId: existing.sessionId } : {}),

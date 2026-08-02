@@ -437,6 +437,7 @@ describe(`per-tab turn settings`, () => {
                         provider: `claude`,
                         effort: `max`,
                         thinking: false,
+                        fast: false,
                         attachments: [],
                         queued: [],
                     },
@@ -816,6 +817,7 @@ describe(`opening a fleet agent`, () => {
             model: `claude-sonnet-4-5-20250929`,
             effort: `medium`,
             thinking: false,
+            fast: false,
         });
 
         expect(conversation.model.value).toBe(`claude-sonnet-4-5-20250929`);

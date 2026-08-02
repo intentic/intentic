@@ -7,6 +7,7 @@ import {
     effortAllowed,
     endpointIdOf,
     endpointProvider,
+    fastAllowed,
     HARNESSES,
     isEndpointProvider,
     limitationsOf,
@@ -113,14 +114,19 @@ test("every axis a record can lack has words for it", () => {
         questions: false,
         mcp: "none",
         effort: false,
+        fastMode: false,
         isolation: "cwd",
         commands: false,
         terminals: false,
         recovery: false,
     };
 
-    // Nine axes, nine sentences: an axis added to the interface without one would silently never be disclosed.
+    // Nine DISCLOSABLE axes, nine sentences: an axis added to the interface without one would silently never be
+    // disclosed. fastMode is the deliberate tenth — a record alone can't tell the truth about it (a translator-
+    // routed turn reads true here and still can't go fast), so it is answered by fastAllowed instead. Anything
+    // else added to the interface has to move this number.
     expect(limitationsOf(nothing)).toHaveLength(9);
+    expect(limitationsOf(nothing).join(" ")).not.toContain("fast");
 });
 
 // The mode vocabulary is the contract's own PermissionMode, so a mode added to the wire can't be quietly absent
@@ -180,5 +186,38 @@ describe("a configured model endpoint", () => {
         expect(endpointIdOf("claude")).toBeUndefined();
         // Its credential was configured with the endpoint, so there is nothing left for a connect gate to offer.
         expect(accessFor("endpoint/gpu-box")).toBeUndefined();
+    });
+});
+
+/* FAST SPEED IS OFFERED ON THREE CONDITIONS AT ONCE, and the interesting cases are the ones where two of them
+ * hold. A translator-routed provider runs the Claude Code loop — same record, same ceiling — and still cannot go
+ * fast, because the harness refuses a non-Anthropic endpoint; a Claude model that publishes no `fast` badge
+ * cannot either. Both would be silent failures if the composer offered the control anyway: the turn runs, the
+ * answer arrives, and only the bill says it was standard speed. */
+describe("offering fast speed", () => {
+    it("is offered for a Claude model that publishes the badge", () => {
+        expect(fastAllowed(capabilitiesOf("claude", "native"), "claude", ["reasoning", "fast"])).toBe(true);
+    });
+
+    it("is refused for a routed provider on the Claude Code loop, whose endpoint is not first-party", () => {
+        // Grok under the claude-code harness reads the FULL Claude Code record — the capability alone would say
+        // yes. It is served through the sandbox's translator, so the harness would report `not_first_party`.
+        expect(capabilitiesOf("grok", "claude-code").fastMode).toBe(true);
+        expect(fastAllowed(capabilitiesOf("grok", "claude-code"), "grok", ["fast"])).toBe(false);
+        // A user's own model endpoint is the same story for the same reason.
+        expect(fastAllowed(capabilitiesOf("endpoint/gpu-box", "native"), "endpoint/gpu-box", ["fast"])).toBe(false);
+    });
+
+    it("is refused for a Claude model whose catalog row doesn't publish it", () => {
+        expect(fastAllowed(capabilitiesOf("claude", "native"), "claude", ["reasoning"])).toBe(false);
+        // The seed floor and any provider that reports ids only — no capabilities published, nothing claimed.
+        expect(fastAllowed(capabilitiesOf("claude", "native"), "claude", undefined)).toBe(false);
+    });
+
+    it("is refused by every runtime that isn't the Claude Code loop", () => {
+        for (const provider of ["codex", "grok"] as const) {
+            expect(fastAllowed(capabilitiesOf(provider, "native"), provider, ["fast"])).toBe(false);
+        }
+        expect(fastAllowed(capabilitiesOf("some-installed-agent", "native"), "some-installed-agent", ["fast"])).toBe(false);
     });
 });

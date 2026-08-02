@@ -172,6 +172,9 @@ const restoreTab = (tab: StoredTab): Conversation => {
     if (tab.thinking !== undefined) {
         conversation.thinking.value = tab.thinking;
     }
+    if (tab.fast !== undefined) {
+        conversation.fast.value = tab.fast;
+    }
     if (tab.effort !== undefined) {
         conversation.effortPick.value = tab.effort;
     }
@@ -226,6 +229,7 @@ watch(
                 model: conversation.model.value,
                 effort: conversation.effortPick.value,
                 thinking: conversation.thinking.value,
+                fast: conversation.fast.value,
                 harness: conversation.harness.value,
                 session: conversation.session.value && {
                     id: conversation.session.value.id,
@@ -385,6 +389,15 @@ const thinking = computed<boolean>({
     get: () => active.value.thinking.value,
     set: (value) => active.value.setThinking(value),
 });
+// Fast speed: the pick, whether the control is offered at all for the current provider/model, and what the
+// last turn actually ran at. Three values rather than one because they answer different questions — what the
+// user asked for, whether asking is even possible here, and what came back.
+const fast = computed<boolean>({
+    get: () => active.value.fast.value,
+    set: (value) => active.value.setFast(value),
+});
+const fastOffered = computed<boolean>(() => active.value.fastOffered.value);
+const fastMode = computed(() => active.value.fastMode.value);
 // Account facades: the active conversation's account selection + its picker. `accounts` lists the active
 // provider's connected accounts for the composer switcher; `managedAccounts` the manage card's.
 const account = computed<string | undefined>(() => active.value.account.value);
@@ -1267,6 +1280,7 @@ export const openAgentConversation = (agent: {
     model?: string;
     effort?: string;
     thinking?: boolean;
+    fast?: boolean;
     // Whether the fleet actually knows this agent — true unless the caller knows better. The board's
     // client-only DRAFT card is the one that does: its conversation must stay a draft (carded, and taken by
     // the focus-leave sweep when abandoned) until a first turn registers it.
@@ -1309,6 +1323,9 @@ export const openAgentConversation = (agent: {
     conversation.model.value = agent.model ?? rememberedModelFor(agent.provider);
     if (agent.thinking !== undefined) {
         conversation.thinking.value = agent.thinking;
+    }
+    if (agent.fast !== undefined) {
+        conversation.fast.value = agent.fast;
     }
     if (agent.effort !== undefined) {
         conversation.effortPick.value = agent.effort;
@@ -1664,6 +1681,9 @@ export function useChat() {
         selectModel,
         effort,
         thinking,
+        fast,
+        fastOffered,
+        fastMode,
         draft,
         attachments,
         error,

@@ -274,6 +274,40 @@ test("effort reaches the runtimes that forward it and no others", async () => {
     expect((grok as { request: AgentRequest }).request.effort).toBeUndefined();
 });
 
+/* FAST SPEED PASSES TWO GATES, and the second one is the whole reason this test exists.
+ *
+ * The first is the runtime's declared record, like every other control here. The second is the ROUTE: a
+ * codex/grok/endpoint turn on the claude-code harness reads the FULL Claude Code record — same loop, same
+ * ceiling, `fastMode: true` — and is then pointed at the sandbox's translator, which the harness refuses fast
+ * mode for because it is not Anthropic's own endpoint. A capability check alone therefore says yes to a turn
+ * that cannot possibly go fast, and the user would be left reading `not_first_party` on a control the composer
+ * offered them. */
+test("fast speed reaches a native Claude turn", async () => {
+    const plan = await planTurn(harnessServices(), turn(), asking({ fast: true }));
+
+    expect((plan as { request: AgentRequest }).request.fast).toBe(true);
+});
+
+test("fast speed is withheld from a routed turn, whose endpoint the harness would refuse", async () => {
+    // What makes a turn routed is the credential resolver handing back an endpoint instead of an OAuth token —
+    // the same shape a codex/grok/kimi/gemini turn on this harness gets in production.
+    credentials.mockResolvedValue({
+        ok: true,
+        credentials: { endpoint: { baseUrl: "http://127.0.0.1:8788", authToken: "local", model: "gpt-5.6-codex" }, account: "sub" },
+    });
+    const routed = await planTurn(harnessServices(), turn({ agent: "codex", harness: "claude-code" }), asking({ fast: true }));
+    const request = (routed as { request: AgentRequest }).request;
+
+    // The turn really did take the harness arm and really is routed — otherwise this asserts nothing.
+    expect(request.baseUrl).toBe("http://127.0.0.1:8788");
+    expect(request.fast).toBeUndefined();
+});
+
+test("fast speed is withheld from every runtime that isn't the Claude Code loop", async () => {
+    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ fast: true }));
+    expect((codex as { request: AgentRequest }).request.fast).toBeUndefined();
+});
+
 /* A runtime that can't enter the turn's mount namespace is cwd'd into its worktree and nothing more, so an
  * absolute /work path from a memory or an AGENTS.md reaches the SHARED checkout. The note is the only layer
  * left that can keep it inside its own branch — see turn-preamble.ts on why it is second-best. */

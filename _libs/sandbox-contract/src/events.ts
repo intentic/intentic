@@ -3,6 +3,7 @@ import {
     AgentProviderSchema,
     AgentReplySchema,
     AgentSummarySchema,
+    FastModeStateSchema,
     LandConflictSchema,
     PermissionModeSchema,
     RateLimitInfoSchema,
@@ -323,6 +324,29 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // The live gate: the provider's answer to "may this turn run", pushed mid-turn. Drives the rate-limited
     // notice, not the headroom readouts — see RateLimitInfoSchema.
     RateLimitInfoSchema.extend({ kind: z.literal("rate_limit_info"), account: z.string().optional() }),
+    /* WHAT SPEED THIS TURN ACTUALLY RAN AT, and when it isn't the one asked for, why. Emitted only when the
+     * answer CHANGES within a turn, so the ordinary case is one frame at init and nothing after it; a turn that
+     * enters cooldown mid-flight (fast mode has its own rate-limit pool, separate from the model's) emits a
+     * second.
+     *
+     * This frame exists because fast mode fails SILENTLY and for a lot of different reasons — the plan is free,
+     * extra usage is off, the model doesn't offer it, the turn is routed through the translator and so isn't
+     * first-party, an env var disables it, the pool is in cooldown. Asking for it and getting standard speed is
+     * indistinguishable, from the outside, from asking for it and getting it: same frames, same text, a bill
+     * that differs by 2x. A toggle whose effect can't be observed is worse than no toggle, so the daemon
+     * reports the harness's own answer rather than the client's assumption.
+     *
+     * `reason` is forwarded VERBATIM as the string the harness reported (SDK: FastModeDisabledReason) rather
+     * than re-typed as an enum here: the set is the vendor's and grows on their schedule, and a reason this
+     * build hasn't heard of should reach the user as an unfamiliar word, not fail schema validation and take
+     * the whole frame with it. The client maps the ones it knows to sentences and shows the rest as-is. */
+    z.object({
+        kind: z.literal("fast_mode"),
+        state: FastModeStateSchema,
+        // Absent when nothing is blocking fast mode — including on `state: "on"`, and on an `off` that simply
+        // wasn't asked for.
+        reason: z.string().optional(),
+    }),
     /* The turn is alive but WAITING on the provider: a request failed transiently (5xx, 529, a dropped socket)
      * and the harness is retrying it inside this same turn. A status, not a failure — nothing has been lost and
      * the turn may still finish normally, so the client renders it where "thinking" goes rather than in the
