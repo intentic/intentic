@@ -156,6 +156,21 @@ const LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
     { key: `finished`, label: `Finished`, dot: `bg-line-strong` },
 ];
 
+/* WHICH LANES ARE DRAWN AT ALL — a projection, never a `v-show` on all three, and that is a correctness rule
+ * rather than a preference. `LANES` is a compile-time constant, so `v-for` over it compiles to a STABLE
+ * fragment whose <section>s carry no patch flag: Vue patches their CHILDREN through the block tree and never
+ * patches the sections themselves. A directive on one — `v-show`, which writes `display` from its `updated`
+ * hook — is therefore applied once at mount and never again, and the lane's visibility freezes in whatever
+ * shape it had then.
+ *
+ * That is invisible docked, where this list is a sheet that mounts on every open. The popped-out rail is
+ * mounted once and lives for hours, and it is where the bug landed: the lanes froze as they were when the
+ * window opened, so a chat opened from the fleet board arrived in a section that was still `display:none` and
+ * the rail sat there looking empty while the panel beside it had the conversation open — the "the popped-out
+ * chat stopped reacting to what I select" report. For the same reason a lane section must not grow a
+ * directive, a `ref` or a dynamic prop: it would be stale out there in exactly the same way. */
+const occupiedLanes = computed(() => LANES.filter((lane) => lanes.value[lane.key].length > 0));
+
 // A lane's visible chats, and how many of its own it is showing. Same `n of m` the board's lane headers carry,
 // for the same reason: a lane that silently shrinks is a lane that has stopped saying anything.
 const cardsIn = (lane: FleetLane): OpenChat[] => lanes.value[lane].filter(tabMatches);
@@ -457,9 +472,10 @@ const closeTab = (event: Event, id: string): void => {
             class="shrink-0"
         />
         <div ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
-            <!-- A lane with nothing in it is hidden; a lane the FILTER emptied keeps its header and says
-                 so, so the list doesn't reshuffle under the cursor mid-keystroke. -->
-            <section v-for="lane in LANES" v-show="lanes[lane.key].length > 0" :key="lane.key" class="lane flex min-w-0 flex-col rounded-xl p-1">
+            <!-- A lane with nothing in it is not drawn at all (occupiedLanes — and see the note there before
+                 reaching for `v-show` here); a lane the FILTER emptied keeps its header and says so, so the
+                 list doesn't reshuffle under the cursor mid-keystroke. -->
+            <section v-for="lane in occupiedLanes" :key="lane.key" class="lane flex min-w-0 flex-col rounded-xl p-1">
                 <!-- The board's lane header, at the board's weights — dot, label, and the count as a pill
                      rather than a loose number. It is the SLAB'S CAP (see .lane): full-bleed to the lane's
                      rounded top through the negative margins, painted in the lane's own fill so the two never

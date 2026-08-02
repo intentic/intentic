@@ -1,0 +1,174 @@
+// @vitest-environment jsdom
+//
+// THE RAIL IS MOUNTED ONCE AND LIVES FOR HOURS. Docked, the open-chat list is a sheet the header drops — built
+// and torn down on every open — so anything it only gets right at mount time still looks right. Popped out it
+// is the window's left edge for as long as that window is open, and every lane it draws has to follow the store
+// with no remount to fall back on. That is what this file holds it to, by mounting the list ONCE and then
+// opening chats the way the fleet board does.
+//
+// The bug it exists for: the lanes were hidden with `v-show` over the constant LANES list. A `v-for` over a
+// compile-time constant compiles to a STABLE fragment whose <section>s carry no patch flag, so Vue patched
+// their children through the block tree and never the sections themselves — `v-show` ran once at mount and
+// `display` froze there. A chat opened from the board arrived in a lane still set to `display:none`, and the
+// popped-out rail sat looking empty while the panel beside it had the conversation open ("I keep clicking cards
+// in /agents and the popped-out window doesn't react"). Every assertion here is about what is ON SCREEN rather
+// than what is rendered, because that was the whole gap: the section was in the DOM the entire time, with the
+// right cards in it, invisible.
+import type { AgentSummary } from "@intentic/sandbox-contract";
+import { VueQueryPlugin } from "@tanstack/vue-query";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { type App, createApp, h, nextTick } from "vue";
+import { resetAgents, setAgents } from "../composables/agents/useAgents";
+import { openAgentConversation, resetChat, useChat } from "../composables/chat/useChat";
+import { queryClient } from "../composables/queryPersistence";
+import { router } from "../router";
+import ChatTabList from "./ChatTabList.vue";
+
+// The import-time globals a mounted chat component needs (see chatTabsReveal.test.ts): useDevice reads
+// matchMedia at module scope, environment.ts reads window.env, and jsdom implements neither ResizeObserver nor
+// scrollIntoView (the list asks for one on every focus).
+vi.hoisted(() => {
+    globalThis.ResizeObserver ??= class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    };
+    globalThis.matchMedia ??= ((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+    })) as unknown as typeof globalThis.matchMedia;
+    globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
+    globalThis.window.env ??= {
+        production: false,
+        api: { url: `http://localhost` },
+        auth: { googleClientId: `` },
+        analytics: { posthogKey: ``, posthogHost: `` },
+    };
+});
+
+let app: App | undefined;
+
+// Mounted ONCE per test and never again — the pop-out window's own lifetime, and the condition every assertion
+// below is made under.
+const mountList = async (): Promise<HTMLElement> => {
+    const el = document.createElement(`div`);
+    document.body.appendChild(el);
+    app = createApp({ render: () => h(ChatTabList) });
+    app.component(`Icon`, { render: () => null });
+    app.directive(`tooltip`, {});
+    app.use(router);
+    app.use(VueQueryPlugin, { queryClient });
+    app.mount(el);
+    await settle();
+    return el;
+};
+
+beforeEach(async () => {
+    localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
+    resetChat();
+    resetAgents();
+    await nextTick();
+});
+
+afterEach(() => {
+    app?.unmount();
+    app = undefined;
+    document.body.replaceChildren();
+});
+
+const settle = async (): Promise<void> => {
+    await nextTick();
+    await nextTick();
+    await nextTick();
+};
+
+// Two agents the board could hand this list, one per lane it is not already showing: a question waiting on the
+// user (Attention) and a landed run (Finished). Seeded at a high revision so the list's own roster read — which
+// reaches a daemon that is not there — cannot be mistaken for a newer one.
+const seed = (): void =>
+    setAgents(
+        [
+            {
+                id: `waiting`,
+                title: `answer the question`,
+                status: `awaiting`,
+                provider: `claude`,
+                harness: `native`,
+                updatedAt: 2_000,
+                attention: { plan: false, question: true, permission: false, conflict: false },
+            },
+            {
+                id: `done`,
+                title: `landed the refactor`,
+                status: `landed`,
+                provider: `claude`,
+                harness: `native`,
+                updatedAt: 1_000,
+                attention: { plan: false, question: false, permission: false, conflict: false },
+            },
+        ] satisfies AgentSummary[],
+        100,
+    );
+
+// A card on /agents, which is the traffic this file is about — the same call the board's own click makes.
+const openFromBoard = (id: string): void => {
+    openAgentConversation({ id, provider: `claude`, harness: `native` });
+};
+
+// The lanes a user could actually read off the rail: rendered AND not hidden. A section left in the DOM under
+// `display:none` counts as absent here, which is the whole point.
+const lanesOnScreen = (el: HTMLElement): string[] =>
+    [...el.querySelectorAll(`section`)]
+        .filter((section) => section instanceof HTMLElement && section.style.display !== `none`)
+        .map((section) => section.querySelectorAll(`header span`)[1]?.textContent?.trim() ?? ``);
+
+// The chats on screen under those lanes — the answer to "did the card I just clicked turn up in the list".
+const cardsOnScreen = (el: HTMLElement): string[] =>
+    [...el.querySelectorAll(`section`)]
+        .filter((section) => section instanceof HTMLElement && section.style.display !== `none`)
+        .flatMap((section) => [...section.querySelectorAll(`[data-chat-tab]`)].map((card) => card.getAttribute(`data-chat-tab`) ?? ``));
+
+it(`shows a chat opened from the board in a lane the rail was not drawing`, async () => {
+    seed();
+    const el = await mountList();
+    // A fresh window: one untouched draft, which is an Active chat and the only lane with anything in it.
+    expect(lanesOnScreen(el)).toEqual([`Active`]);
+
+    openFromBoard(`waiting`); // the click on /agents — the draft it leaves behind is swept by the same write
+
+    await settle();
+    expect(lanesOnScreen(el)).toEqual([`Attention`]);
+    expect(cardsOnScreen(el)).toEqual([`waiting`]);
+});
+
+it(`grows a second lane as the board opens a second kind of agent`, async () => {
+    seed();
+    const el = await mountList();
+    openFromBoard(`waiting`);
+    await settle();
+
+    openFromBoard(`done`);
+
+    await settle();
+    expect(lanesOnScreen(el)).toEqual([`Attention`, `Finished`]);
+    expect(cardsOnScreen(el)).toEqual([`waiting`, `done`]);
+});
+
+it(`drops a lane the last chat left, so no empty header is left standing`, async () => {
+    seed();
+    const el = await mountList();
+    openFromBoard(`waiting`);
+    openFromBoard(`done`);
+    await settle();
+    expect(lanesOnScreen(el)).toEqual([`Attention`, `Finished`]);
+
+    useChat().closeTabs(new Set([`done`]));
+
+    await settle();
+    expect(lanesOnScreen(el)).toEqual([`Attention`]);
+    expect(cardsOnScreen(el)).toEqual([`waiting`]);
+});
