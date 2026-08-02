@@ -37,6 +37,13 @@ test("tools/list is the machine's whole surface — and there is no delete", asy
         "focus_window",
         "open",
         "clipboard",
+        "browser_open",
+        "browser_snapshot",
+        "browser_read",
+        "browser_click",
+        "browser_fill",
+        "browser_key",
+        "browser_tabs",
         "computer",
         "screenshot",
     ]);

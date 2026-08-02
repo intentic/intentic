@@ -7,7 +7,7 @@
 
 # npm-published packages, topological order (deps first) so a publish never references an unpublished dep.
 PUB=(_tools/constants _apps/sync _libs/graph _libs/resources _libs/engine _libs/need-resolver _libs/providers \
-     _libs/extension-api _libs/sandbox-contract _libs/desktop _apps/host _apps/acp-bridge _libs/scaffold _libs/state-resolver _apps/cli \
+     _libs/extension-api _libs/sandbox-contract _libs/desktop _libs/browser _apps/host _apps/acp-bridge _libs/scaffold _libs/state-resolver _apps/cli \
      _libs/workspace-ignore _libs/iq-engine _libs/iq-recall _apps/iq _libs/sdk)
 
 # Every dir that carries the release version = the published set plus the private sandbox image, which is not

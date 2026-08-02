@@ -34,6 +34,11 @@ you live and where the repository is; this is their own machine, reached over a 
 | \`mcp__${id}__focus_window\` | Bring a window to the front and give it the keyboard. |
 | \`mcp__${id}__open\` | Start an app, or open a URL or file with its default handler. |
 | \`mcp__${id}__clipboard\` | Read or replace the clipboard. |
+| \`mcp__${id}__browser_open\` | Open a page in a browser and get back everything on it, each with a \`[e…]\` ref. |
+| \`mcp__${id}__browser_snapshot\` | What the current page shows now, with fresh refs. |
+| \`mcp__${id}__browser_read\` | The page as readable text — for answering questions about it. |
+| \`mcp__${id}__browser_click\` / \`browser_fill\` / \`browser_key\` | Act on the page by ref. |
+| \`mcp__${id}__browser_tabs\` | List the browser's tabs, or switch to one. |
 | \`mcp__${id}__computer\` | Use the mouse and keyboard: click, type, press a chord, scroll, drag. |
 
 ## Rules that are not negotiable
@@ -53,11 +58,40 @@ you live and where the repository is; this is their own machine, reached over a 
 6. **If the machine is offline** the tool says so plainly. It means a closed lid or a dropped network — report it,
    do not retry in a loop.
 
+## Using a website — always the browser tools, never the pointer
+
+For anything on the web, use \`browser_*\`. Do NOT drive a browser with \`computer\`: coordinates move when the
+window moves, a scroll invalidates every one of them, and "the Submit button" becomes a guess about which grey
+rectangle is which. The browser will simply tell you what it is showing.
+
+\`\`\`
+browser_open  { url: "example.com/login" }
+              → Page: Sign in — https://example.com/login
+                [e0] textbox "Email"
+                [e1] textbox "Password"
+                [e2] button "Sign in"
+browser_fill  { ref: "e0", text: "someone@example.com" }
+browser_fill  { ref: "e1", text: "…", submit: true }
+              → the page as it stands after submitting
+\`\`\`
+
+- **Every action answers with the page afterwards**, so you rarely need a separate snapshot. Read what came back
+  before deciding the next step.
+- **Refs die with the page.** \`[e4]\` from an older snapshot is refused rather than clicking whatever now sits in
+  that slot — take a fresh \`browser_snapshot\` after anything that navigated or re-rendered.
+- **\`browser_read\` to answer, \`browser_snapshot\` to act.** One gives you the prose, the other the controls.
+- **This is a separate browser from the user's own**, with its own profile — their tabs and session are untouched.
+  The first time it opens somewhere that needs a login, say so and let the user sign in; do not go hunting for
+  their credentials on the machine.
+- If a site genuinely cannot be driven this way (a canvas app, a PDF viewer), fall back to \`computer\` — but say
+  why you are doing it.
+
 ## Driving the screen
 
-\`computer\` is for the things with no command-line way in: a dialog with an OK button, a native app with no API,
-a settings pane. It is the LAST resort, not the first — a command is exact and repeatable, a click is a guess
-about where something is. If the job can be done with \`run_command\`, do that instead.
+\`computer\` is for the things with no other way in: a dialog with an OK button, a native app with no API, a
+settings pane. It is the LAST resort — a command is exact and repeatable, a browser tool acts on named elements,
+and a click is a guess about where something is. If the job can be done with \`run_command\` or \`browser_*\`, do
+that instead.
 
 The loop is always the same:
 

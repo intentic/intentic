@@ -1,3 +1,4 @@
+import { browser } from "@intentic/browser";
 import { desktop, pngSize } from "@intentic/desktop";
 import { type HostScopes, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract";
 import { audit } from "./audit.js";
@@ -5,6 +6,7 @@ import { assertScope, ScopeError } from "./policy.js";
 import { describeText } from "./tools/describe.js";
 import { listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/files.js";
 import { focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./tools/apps.js";
+import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, selectTab, snapshotPage } from "./tools/browser.js";
 import { act, describeAction, settle, type ComputerInput } from "./tools/computer.js";
 import { describeResult, runCommand } from "./tools/shell.js";
 import { HOST_VERSION } from "./version.js";
@@ -117,6 +119,63 @@ const TOOLS: readonly ToolDefinition[] = [
         },
     },
     {
+        name: "browser_open",
+        description:
+            "Open a page in a browser on this computer and answer with what is on it: the page's title, its URL, and every element you can click or type into, each with a reference like [e12]. THIS IS THE RIGHT WAY TO USE A WEBSITE — act on elements by reference, never by clicking pixels, because references survive scrolling, resizing and re-rendering. The browser is a separate instance with its own profile, so the user's own tabs and session are untouched; the first time it opens they may need to sign in. Requires the 'Run commands' permission.",
+        inputSchema: {
+            type: "object",
+            properties: { url: { type: "string", description: "The page to open. A bare host like example.com is fine." } },
+            required: ["url"],
+        },
+    },
+    {
+        name: "browser_snapshot",
+        description:
+            "What the current page shows right now, with fresh [e…] references. Take one after anything that might have changed the page — references from an older snapshot are refused rather than clicking the wrong thing. Requires the 'See the screen' permission.",
+        inputSchema: { type: "object", properties: {} },
+    },
+    {
+        name: "browser_read",
+        description:
+            "The current page as readable text — what a person would get by selecting all of it. Use this to ANSWER QUESTIONS about a page; use browser_snapshot when you intend to act on it. Requires the 'See the screen' permission.",
+        inputSchema: { type: "object", properties: {} },
+    },
+    {
+        name: "browser_click",
+        description:
+            "Click an element by its [e…] reference from the last snapshot. Answers with the page as it stands afterwards, so you see the result without asking. Requires the 'Use the mouse and keyboard' permission.",
+        inputSchema: { type: "object", properties: { ref: { type: "string" } }, required: ["ref"] },
+    },
+    {
+        name: "browser_fill",
+        description:
+            "Type into a field by its [e…] reference — replaces what is there, and fires the events a page's own JavaScript listens for (setting a value without them is how a filled form submits empty). Set submit to press Enter afterwards. Requires the 'Use the mouse and keyboard' permission.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                ref: { type: "string" },
+                text: { type: "string" },
+                submit: { type: "boolean", description: "Submit the form after typing. Default false." },
+            },
+            required: ["ref", "text"],
+        },
+    },
+    {
+        name: "browser_key",
+        description:
+            'Press a key on the page as a whole — "Return", "Escape", "Tab". For typing into a field use browser_fill. Requires the \'Use the mouse and keyboard\' permission.',
+        inputSchema: { type: "object", properties: { key: { type: "string" } }, required: ["key"] },
+    },
+    {
+        name: "browser_tabs",
+        description:
+            "Every tab open in that browser, and which one these tools are acting on. Pass an id to `select` to switch. Reading the list needs 'See the screen'; switching needs 'Use the mouse and keyboard'.",
+        inputSchema: {
+            type: "object",
+            properties: { select: { type: "string", description: "The id of the tab to switch to. Omit to just list them." } },
+        },
+    },
+    {
         name: "computer",
         description:
             "Use this computer's mouse and keyboard: click what is on the screen, type into the focused window, press a key combination, scroll, drag. Coordinates are PIXELS IN THE LAST SCREENSHOT — take one first and read them off it. Every action answers with a fresh screenshot so you can see what happened. Requires the 'Use the mouse and keyboard' permission, which is OFF unless the user turned it on. Prefer a command over the GUI when both would work: a command is exact, and a click is a guess about where something is.",
@@ -185,10 +244,17 @@ const screenshotResult = async (scopes: HostScopes): Promise<Record<string, unkn
  * story a reader needs — "typed 24 characters into the focused window" — without becoming a second copy of the
  * secret. A key combination is not redacted: "ctrl+c" is the fact, and there is nothing in it to leak. */
 const auditDetail = (name: string, args: Record<string, unknown>): string => {
-    const redact = (name === "computer" && args["action"] === "type") || (name === "clipboard" && args["action"] === "write");
+    const redact =
+        (name === "computer" && args["action"] === "type") || (name === "clipboard" && args["action"] === "write") || name === "browser_fill";
     const safe = redact ? { ...args, text: `<${String(args["text"] ?? "").length} characters>` } : args;
     return JSON.stringify(safe).slice(0, 500);
 };
+
+/* ONE browser handle for the life of this process. The handle is cheap — it holds no socket until something is
+ * asked of it — but it remembers WHICH TAB the agent is working on, and that continuity is the whole reason a
+ * sequence of calls reads as one session rather than as several strangers arriving at the same browser. */
+let webHandle: ReturnType<typeof browser> | undefined;
+const web = (): ReturnType<typeof browser> => (webHandle ??= browser());
 
 const asString = (value: unknown, name: string): string => {
     if (typeof value !== "string" || value === "") {
@@ -223,6 +289,24 @@ const callTool = async (name: string, args: Record<string, unknown>, scopes: Hos
             return textResult(JSON.stringify(await listDirectory(asString(args["path"], "path"), scopes), undefined, 2));
         case "trash_file":
             return textResult(await trashFile(asString(args["path"], "path"), scopes));
+        case "browser_open":
+            return textResult(await openPage(web(), asString(args["url"], "url"), scopes));
+        case "browser_snapshot":
+            return textResult(await snapshotPage(web(), scopes));
+        case "browser_read":
+            return textResult(await readPage(web(), scopes));
+        case "browser_click":
+            return textResult(await clickElement(web(), asString(args["ref"], "ref"), scopes));
+        case "browser_fill":
+            return textResult(
+                await fillElement(web(), asString(args["ref"], "ref"), asString(args["text"], "text"), args["submit"] === true, scopes),
+            );
+        case "browser_key":
+            return textResult(await pressKey(web(), asString(args["key"], "key"), scopes));
+        case "browser_tabs":
+            return typeof args["select"] === "string" && args["select"] !== ""
+                ? textResult(await selectTab(web(), args["select"], scopes))
+                : textResult(await listTabs(web(), scopes));
         case "list_windows":
             return textResult(await listWindows(desktop(), scopes));
         case "focus_window":
