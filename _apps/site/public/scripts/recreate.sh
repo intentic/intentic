@@ -58,12 +58,15 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 if [ "$MODE" = "dev" ]; then
-    # Auto-detect the single running sandbox (exclude the tunnel sidecar); refuse to guess between several.
-    matches="$(docker ps --filter 'name=^intentic-sandbox-' --format '{{.Names}}' | grep -v -- '-tunnel-' || true)"
+    # Auto-detect the single sandbox container (exclude the tunnel sidecar); refuse to guess between several.
+    # `ps -a`, not `ps`: the dogfood loop's whole point is replacing a daemon that just broke, and a daemon that
+    # broke badly enough (a missing dependency, a bad overlay) left its container EXITED. Requiring it to be
+    # running made the one flow that could fix it the one flow you could not reach.
+    matches="$(docker ps -a --filter 'name=^intentic-sandbox-' --format '{{.Names}}' | grep -v -- '-tunnel-' || true)"
     count="$(printf '%s\n' "$matches" | grep -c . || true)"
     if [ "$count" -ne 1 ]; then
-        [ "$count" -eq 0 ] && echo "error: no running sandbox container found — run connect.sh first." >&2
-        [ "$count" -gt 1 ] && { echo "error: more than one running sandbox — refusing to guess:" >&2; printf '  %s\n' $matches >&2; }
+        [ "$count" -eq 0 ] && echo "error: no sandbox container found — run connect.sh first." >&2
+        [ "$count" -gt 1 ] && { echo "error: more than one sandbox — refusing to guess:" >&2; printf '  %s\n' $matches >&2; }
         exit 1
     fi
     CONTAINER="$matches"
@@ -71,10 +74,21 @@ if [ "$MODE" = "dev" ]; then
 else
     CONTAINER="intentic-sandbox-${SLUG}"
 fi
-if [ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER" 2>/dev/null || true)" != "true" ]; then
-    echo "error: sandbox container ${CONTAINER} is not running on this machine — start it (or re-run connect) first." >&2
+if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
+    echo "error: sandbox container ${CONTAINER} does not exist on this machine — re-run connect first." >&2
     exit 1
 fi
+
+# Everything this script reads off the OLD container is read WITHOUT `docker exec`, so a crashed sandbox is
+# still recreatable (see the ps -a note above): `docker cp` and `docker inspect` both work on a stopped
+# container. The env comes from .Config.Env — the values `docker run` was given plus the image's own ENV, which
+# is precisely what the run contract replays — NUL-framed via the template, because HOST_SSH_KEY is multi-line.
+container_env_dump() {
+    docker inspect --format "{{range .Config.Env}}{{.}}{{printf \"\x00\"}}{{end}}" "$CONTAINER"
+}
+container_env() {
+    container_env_dump | tr '\0' '\n' | sed -n "s/^$1=//p" | head -n 1
+}
 
 # Every recreate leaves a log on this machine (build/pull output, the replaced container's tail, launch
 # failures) — the rm below destroys the old container's `docker logs`, so its tail is captured here first.
@@ -148,7 +162,7 @@ case "$MODE" in
         # exclusive: this flow would hand you a fresh daemon missing the vpn/docker capability's packages,
         # while rebuild.sh would hand you the packages on the LAST RELEASE's daemon. The FROM is rewritten to
         # the dev tag; SANDBOX_BASE_IMAGE (below) tells the daemon to keep composing against it.
-        docker exec "$CONTAINER" cat "$APPROVED_FILE" >"$overlay" 2>/dev/null || : >"$overlay"
+        docker cp "${CONTAINER}:${APPROVED_FILE}" "$overlay" >/dev/null 2>&1 || : >"$overlay"
         if [ -s "$overlay" ]; then
             sed -E "1,/^[[:space:]]*FROM[[:space:]]/ s|^[[:space:]]*FROM[[:space:]].*|FROM ${DEV_TAG}|" "$overlay" >"${overlay}.dev"
             mv "${overlay}.dev" "$overlay"
@@ -163,7 +177,7 @@ esac
 BASE_IMAGE=""
 if [ -s "$overlay" ]; then
     BASE_IMAGE="$(awk 'NF && $1 !~ /^#/ { if ($1 == "FROM") print $2; exit }' "$overlay")"
-    CURRENT_BASE="$(docker exec "$CONTAINER" printenv SANDBOX_BASE_IMAGE 2>/dev/null || true)"
+    CURRENT_BASE="$(container_env SANDBOX_BASE_IMAGE || true)"
     if [ -z "$BASE_IMAGE" ]; then
         echo "error: the approved overlay has no FROM instruction." >&2
         exit 1
@@ -224,7 +238,7 @@ fi
 # The old container's env, NUL-framed, filtered against the replay allowlist inside the CLI — the same place
 # the rest of the shape lives. The /agent-auth mount is a mount+env pair: replaying AGENT_AUTH_DIR without its
 # volume would point the daemon at an empty container-local dir, stranding the shared credentials.
-docker exec "$CONTAINER" printenv -0 >"$envdump"
+container_env_dump >"$envdump"
 # A container's env is fixed for its life, so REPLAYING it means every value in the allowlist is immutable
 # until the owner re-runs the whole connect wizard — which is a heavy price for changing one string, and an
 # impossible one for a value that did not exist when the container was created (WEB_ORIGIN is the case that
