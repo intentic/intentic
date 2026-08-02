@@ -33,12 +33,16 @@ DOWNLOADS="https://github.com/radarsu/intentic/releases/download/v${VERSION}"
 echo "==> desktop release build v${VERSION}"
 
 # --- toolchain (idempotent; the release job's node:24 bookworm container runs as root) ---
-if ! command -v makensis >/dev/null 2>&1 || ! dpkg -s libwebkit2gtk-4.1-dev >/dev/null 2>&1; then
+# xdg-utils is not a compiler dep but a bundle INPUT: the `intentic://` deep-link scheme in tauri.conf.json makes
+# the AppImage bundler copy the host's /usr/bin/xdg-mime into the AppDir verbatim (it is what registers the scheme
+# on first run), and a host without it aborts the bundle — `failed to bundle project: xdg-mime binary not found`.
+if ! command -v makensis >/dev/null 2>&1 || ! command -v xdg-mime >/dev/null 2>&1 ||
+    ! dpkg -s libwebkit2gtk-4.1-dev >/dev/null 2>&1; then
     echo "==> installing system build deps"
     apt-get update -qq
     apt-get install -y -qq --no-install-recommends \
         libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
-        build-essential libssl-dev pkg-config nsis lld llvm clang
+        build-essential libssl-dev pkg-config nsis lld llvm clang xdg-utils
 fi
 if ! command -v cargo >/dev/null 2>&1; then
     echo "==> installing rust"
