@@ -8,7 +8,6 @@
         "dev": "bun --watch --env-file=../../.env ./src/main.ts",
         "start": "bun ./src/main.ts",
         "typecheck": "tsgo --noEmit",
-        "build": "tsgo --noEmit",
         "docker:release": "bash ../../_tools/scripts/docker-release.sh api --prune",
         "test": "vitest run"
     },

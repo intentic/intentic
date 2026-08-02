@@ -10,25 +10,28 @@
             "dependsOn": ["^build"],
             "outputs": []
         },
-        // The declarations every `typecheck` below resolves its workspace imports through, plus the guard that
-        // every test file sits in some type-check program (_tools/scripts/typecheck.mjs). A root task, run once
-        // for the whole repo rather than per package.
-        //
-        // This is the `^build` that `test` uses, done without pnpm in the path. `build` goes through pnpm, and
-        // pnpm's `syncInjectedDepsAfterScripts` hardlinks into `node_modules` after it — a different filesystem
-        // in an agent worktree, so a `^build` dependency died EXDEV (exit 238) for every agent in the fleet.
-        // The one check that catches a fake drifting out of shape with its seam was therefore runnable only in
-        // CI, on main, after the merge. `tsgo -b` emits the same declarations and works in both places.
-        // Uncached because it is already incremental against its own tsbuildinfo: a no-op pass measures ~0.1s,
-        // which is cheaper than hashing the inputs would be.
-        "//#typecheck:declarations": {
-            "cache": false
-        },
         // Type-checks each package INCLUDING its test files, which `build` cannot: an emitting package excludes
         // *.test.ts to keep test code out of dist, so without this task the tests are the one part of the repo
         // no type checker ever reads.
+        //
+        // The declarations these checks resolve their workspace imports through are emitted by the prepass that
+        // the root `typecheck` script runs FIRST (_tools/scripts/typecheck.mjs). It is `tsgo -b` rather than a
+        // `^build` dependency because `build` goes through pnpm, and pnpm's `syncInjectedDepsAfterScripts`
+        // hardlinks into `node_modules` after it — a different filesystem in an agent worktree, so a `^build`
+        // dependency died EXDEV (exit 238) for every agent in the fleet, leaving the check that catches a fake
+        // drifting out of shape with its seam runnable only in CI, on main, after the merge.
+        //
+        // The prepass is a plain step in that script rather than a `//#` root task in this graph, and that
+        // distinction is worth real minutes: a ROOT task's hash covers every file in the repository, so any
+        // commit anywhere changed it, and every task that depended on it missed. Measured across three CI
+        // pipelines: `Cached: 0 cached, 46 total` for typecheck (~2.5 min) while `build` and `test` hit 27/56
+        // and 19/42 from the same cache dir in the same job.
+        //
+        // `^typecheck` is what replaces that invalidation without going stale: a check reads its dependencies'
+        // emitted .d.ts, so a change in a dependency has to re-run it, and a dependency's task hash says
+        // exactly that. It propagates through packages that have no typecheck script of their own.
         "typecheck": {
-            "dependsOn": ["//#typecheck:declarations"],
+            "dependsOn": ["^typecheck"],
             "outputs": []
         },
         "check": {

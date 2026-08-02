@@ -64,6 +64,36 @@ result, and an S3/MinIO backend would not remove it; it would add an upload on t
 
 A bind mount has no archive step, no upload, no restore, and is shared by every slot from the first pipeline.
 
+## The install that stays slow, and the one check left
+
+With the store warm and nothing to download, `pnpm install --frozen-lockfile` still measured **2m21s-3m43s in
+every job** of pipeline 2725042409 — the largest uniform cost in the pipeline. Half of that is now addressed
+from the repo side: `.gitlab-ci.yml` sets `GIT_CLEAN_FLAGS: -ffdx -e node_modules`, so a slot keeps its
+installed tree between pipelines instead of deleting 69k files and re-linking them.
+
+What that cannot fix is the import method. pnpm hardlinks packages out of the store, and a hardlink cannot
+cross a filesystem — so if `/ci-cache` (a host bind mount) and `/builds` (the container's own filesystem) are
+different devices, pnpm silently falls back to **copying** every file, which is exactly the shape of a 2-3
+minute install. One line in any job settles it:
+
+```sh
+stat -c '%d %n' /builds /ci-cache      # same device id → hardlinks; different → copying
+```
+
+If they differ, put the builds directory on the same volume as the cache:
+
+```toml
+  [[runners]]
+    builds_dir = "/builds"
+    [runners.docker]
+      volumes = [
+        "/srv/gitlab-runner/ci-cache:/ci-cache",
+        "/srv/gitlab-runner/builds:/builds",
+      ]
+```
+
+Expect the install to drop to seconds — it becomes a link pass over a store that already holds every package.
+
 ## Optional: a distributed cache backend
 
 Two small GitLab caches remain — `iq-models` (~57 MB, in `images` and `release`) and `intentic-e2e-whisper`

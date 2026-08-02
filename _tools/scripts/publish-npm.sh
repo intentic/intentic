@@ -11,13 +11,29 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
 cd "$DIR/../.."
 
-# Versions are stamped by set-versions.sh (in the release's prepareCmd) before this runs; here we only publish.
+names=()
 for d in "${PUB[@]}"; do
-  name=$(grep -m1 '"name"' "$d/package.json" | sed -E 's/.*"name"[^"]*"([^"]+)".*/\1/')
-  if pnpm view "$name@$VERSION" version >/dev/null 2>&1; then
-    echo "  skip     $name@$VERSION (already on npm)"
+  names+=("$(grep -m1 '"name"' "$d/package.json" | sed -E 's/.*"name"[^"]*"([^"]+)".*/\1/')")
+done
+
+# The "already on npm?" probes run FIRST and all at once — 21 round trips to the registry, ~2.5s each, which
+# is 52s of the 2m03s this script took in pipeline 2725042409 and buys nothing to spend in series. The publish
+# loop below stays SERIAL on purpose: PUB is in topological order (packages.sh), and a dependent published
+# ahead of its dependency references a version npm cannot resolve yet. That window is short, and it is also
+# exactly the failure the ordering exists to prevent.
+probe_dir="$(mktemp -d)"
+trap 'rm -rf "$probe_dir"' EXIT
+for i in "${!names[@]}"; do
+  ( pnpm view "${names[$i]}@$VERSION" version >/dev/null 2>&1 && touch "$probe_dir/$i" ) &
+done
+wait
+
+# Versions are stamped by set-versions.sh (in the release's prepareCmd) before this runs; here we only publish.
+for i in "${!PUB[@]}"; do
+  if [ -e "$probe_dir/$i" ]; then
+    echo "  skip     ${names[$i]}@$VERSION (already on npm)"
   else
-    echo "  publish  $name@$VERSION"
-    pnpm --dir "$d" publish --access public --no-git-checks
+    echo "  publish  ${names[$i]}@$VERSION"
+    pnpm --dir "${PUB[$i]}" publish --access public --no-git-checks
   fi
 done

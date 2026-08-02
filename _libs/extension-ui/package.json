@@ -20,7 +20,7 @@
         "./names": "./names.mjs"
     },
     "scripts": {
-        "build": "vue-tsc --noEmit"
+        "typecheck": "vue-tsc --noEmit"
     },
     "dependencies": {
         "@intentic-app/ui": "workspace:*",

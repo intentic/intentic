@@ -14,13 +14,27 @@ pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli --filter=
 out=.image-out
 # Regenerate the deploy trees but PRESERVE the cached model dir (and its completeness marker).
 rm -rf "$out/sandbox" "$out/cli" "$out/iq" "$out/lsp" "$out/extensions"
-pnpm --filter @intentic/sandbox deploy --prod "$out/sandbox"
-pnpm --filter @intentic/cli deploy --prod "$out/cli"
-pnpm --filter @intentic/iq deploy --prod "$out/iq"
-pnpm --filter @intentic/lsp deploy --prod "$out/lsp"
-pnpm --filter @intentic/ext-discord deploy --prod "$out/extensions/discord"
-pnpm --filter @intentic/ext-imap deploy --prod "$out/extensions/imap"
-pnpm --filter @intentic/ext-slack deploy --prod "$out/extensions/slack"
+# Seven independent trees, each pruned out of the same content-addressed store into a directory of its own —
+# which is what a store is for, so they are pruned at once rather than one after another (1m26s in series,
+# measured in the images job of pipeline 2725042409, and paid again by the release).
+pids=()
+deploy() {
+    pnpm --filter "$1" deploy --prod "$2" &
+    pids+=("$!")
+}
+deploy @intentic/sandbox "$out/sandbox"
+deploy @intentic/cli "$out/cli"
+deploy @intentic/iq "$out/iq"
+deploy @intentic/lsp "$out/lsp"
+deploy @intentic/ext-discord "$out/extensions/discord"
+deploy @intentic/ext-imap "$out/extensions/imap"
+deploy @intentic/ext-slack "$out/extensions/slack"
+
+failed=0
+for pid in "${pids[@]}"; do
+    wait "$pid" || failed=1
+done
+[ "$failed" -eq 0 ] || { echo "one or more deploy trees failed to build" >&2; exit 1; }
 
 # The Dockerfile bakes Chromium from a layer that sits ABOVE the tree COPYs (so a source change can't evict a
 # ~180 MiB download), which means it cannot read the deployed tree's playwright to decide what to install.

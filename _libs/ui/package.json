@@ -29,7 +29,6 @@
         "./styles/*": "./src/styles/*"
     },
     "scripts": {
-        "build": "vue-tsc --noEmit",
         "generate:icons": "bun run scripts/generateIconData.ts",
         "typecheck": "vue-tsc --noEmit"
     },

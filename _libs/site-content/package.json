@@ -7,7 +7,7 @@
         "./*": "./src/*.ts"
     },
     "scripts": {
-        "build": "tsgo --noEmit",
+        "typecheck": "tsgo --noEmit",
         "check": "tsgo --noEmit"
     },
     "dependencies": {

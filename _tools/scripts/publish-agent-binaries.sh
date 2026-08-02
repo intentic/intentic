@@ -23,7 +23,12 @@ fi
 base="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${NAME}"
 auth=(--header "JOB-TOKEN: ${CI_JOB_TOKEN}")
 
-for f in "${PKG}"/dist-bin/*; do
+# One binary, both of its names. Every byte is uploaded twice — the generic registry has no server-side copy,
+# so `latest` is a second upload of the same file — and the registry answers in its own time: the 16 uploads a
+# release makes took 3m26s in series (pipeline 2725042409), against 25s to cross-compile all eight binaries.
+# They are independent of each other, so they go out at once and the wait below fails the script if ANY did.
+publish_one() {
+  local f="$1" name
   name="$(basename "$f")"
   # Exact version is immutable: a 1-byte ranged GET probes existence so a re-run doesn't re-upload.
   if curl --fail --silent --output /dev/null --range 0-0 "${auth[@]}" "${base}/${VERSION}/${name}"; then
@@ -35,4 +40,16 @@ for f in "${PKG}"/dist-bin/*; do
   # Moving pointer: always overwrite so `latest` tracks this release (what the install scripts fetch).
   echo "  publish  ${NAME}/latest/${name}"
   curl --fail --silent --show-error --upload-file "$f" "${auth[@]}" "${base}/latest/${name}"
+}
+
+pids=()
+for f in "${PKG}"/dist-bin/*; do
+  publish_one "$f" &
+  pids+=("$!")
 done
+
+failed=0
+for pid in "${pids[@]}"; do
+  wait "$pid" || failed=1
+done
+[ "$failed" -eq 0 ] || { echo "one or more ${NAME} binaries failed to publish" >&2; exit 1; }

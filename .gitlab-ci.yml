@@ -11,6 +11,13 @@ stages:
 
 variables:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  # get_sources cleans every ignored file before each job, node_modules included — 59 `Removing …/node_modules/`
+  # lines per job, and then the install rebuilds it from nothing: `pnpm install --frozen-lockfile` measured
+  # 2m21s-3m43s in EVERY job of pipeline 2725042409, with a fully warm store and ZERO downloads. Four jobs pay
+  # it, so ~12 minutes of runner time per pipeline goes into re-linking a tree that was already correct.
+  # Excluding it lets the install reconcile what is there instead. Everything else ignored still goes (dist,
+  # .turbo, .image-out), so no job can read a stale build output — turbo restores those from /ci-cache by hash.
+  GIT_CLEAN_FLAGS: -ffdx -e node_modules
   # The prebaked job image every job below runs in (built by the `ci-base` job from _tools/ci-base).
   CI_BASE_IMAGE: $CI_REGISTRY_IMAGE/ci-base:latest
   # CI builds the site but never deploys it, so IndexNow submission is pure waste here — it polls the LIVE
@@ -140,8 +147,8 @@ test:
   # is the exact command an agent runs on its branch before landing (AGENTS.md). It used to sit in the graph
   # depending on `^build` — and a pnpm `build` dies EXDEV in an agent worktree, so the check that decided
   # whether main was green was the one check nobody in the fleet could run. It now emits its own declarations
-  # (turbo.json, `//#typecheck:declarations`), needs nothing from the graph, and fails in seconds instead of
-  # after a full build + test.
+  # (the `tsgo -b` prepass the script runs before turbo), needs nothing from the graph, and fails in seconds
+  # instead of after a full build + test.
   #
   # Then one turbo invocation, not two: `build` then `test` as separate calls is a hard barrier — every package
   # must finish building before ANY test starts. A single `build test` graph lets each package's tests run the

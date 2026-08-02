@@ -14,7 +14,7 @@
         }
     },
     "scripts": {
-        "build": "vue-tsc --noEmit"
+        "typecheck": "vue-tsc --noEmit"
     },
     "dependencies": {
         "@intentic/extension-api": "workspace:*",
