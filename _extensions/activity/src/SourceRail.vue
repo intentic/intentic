@@ -74,11 +74,19 @@ const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) 
 <template>
     <Picker v-if="mobile" v-model="picked" :options="options" aria-label="Activity source" header="Source" class="w-full text-xs" />
 
-    <NavRail v-else :groups="groups" class="w-52 shrink-0">
+    <NavRail v-else :groups="groups">
         <!-- Not a member of any group, so it cannot be filtered or grouped away: "all" is the state the rail
              returns to, and a row you cannot get back to is a filter you cannot clear. -->
         <template #pinned>
-            <Row as="button" density="dense" icon="wave-pulse" title="All sources" :selected="selected === undefined" class="rounded-md" @click="selected = undefined">
+            <Row
+                as="button"
+                density="dense"
+                icon="wave-pulse"
+                title="All sources"
+                :selected="selected === undefined"
+                class="rounded-md"
+                @click="selected = undefined"
+            >
                 <template #meta>
                     <span>{{ total }}</span>
                     <span v-if="failed > 0" v-tooltip.bottom="`${failed} failed`" class="text-danger">{{ failed }}✕</span>

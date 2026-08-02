@@ -37,12 +37,10 @@ export { default as NavRail } from "./components/NavRail.vue";
 export { type NavGroup } from "./components/navRail.js";
 export { default as Page } from "./components/Page.vue";
 export { default as PageHeader } from "./components/PageHeader.vue";
-// The frame <PanelHeader> sits in — and the home of the min-h-0/overflow-hidden scroll contract that three
-// callers had each rediscovered, one of them incorrectly.
+// A bordered surface: its own header, its own interrupting strips, one scrolling body. Header and frame are one
+// component because every caller of the header wrapped it in the frame — and the min-h-0/overflow-hidden scroll
+// contract it owns is the failure three views had each rediscovered, one of them incorrectly.
 export { default as Panel } from "./components/Panel.vue";
-// The header row INSIDE a bordered surface. Sibling to PageHeader, which sits above a page — the distinction is
-// load-bearing, see the component's own note.
-export { default as PanelHeader } from "./components/PanelHeader.vue";
 export { default as Picker } from "./components/Picker.vue";
 export { type PickerGroup, type PickerOption, type PickerOptions } from "./components/picker.js";
 export { default as ProgressRing } from "./components/ProgressRing.vue";
@@ -54,6 +52,9 @@ export { default as Segmented } from "./components/Segmented.vue";
 // The accent → palette-slot resolver, exported for the same reason the figure types are: a view that holds
 // authored accents (a documentation map's components, say) has to paint them the way a figure would.
 export { seriesColor } from "./components/seriesAccent.js";
+// The index-and-body screen — five views were four implementations of it, and the one that had solved it
+// (HubLayout) lived in the web app where no extension could reach it.
+export { default as SplitView } from "./components/SplitView.vue";
 export { default as StatRow } from "./components/StatRow.vue";
 export { default as StatusBadge, type StatusVariant } from "./components/StatusBadge.vue";
 export { default as StepSection } from "./components/StepSection.vue";

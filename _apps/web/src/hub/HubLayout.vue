@@ -21,13 +21,18 @@
      scrolling row of pills is the idiom every mobile tab bar already uses; the failure above is a desktop
      failure, caused by a 48rem content cap that does not apply once the page is the whole screen. -->
 <script setup lang="ts">
-import { type IconName, type NavGroup, NavRail, Page, PageHeader, Row, Segmented, useDevice } from "@intentic-app/ui";
+import { type IconName, type NavGroup, NavRail, Row, Segmented, SplitView } from "@intentic-app/ui";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
 import type { HubTab } from "./hubNav";
 
-const { groups, routeName, defaultSlug, ready = true } = defineProps<{
+const {
+    groups,
+    routeName,
+    defaultSlug,
+    ready = true,
+} = defineProps<{
     title: string;
     description: string;
     /** The named route the sections live on — `/<path>/:tab?`. */
@@ -43,7 +48,6 @@ const { groups, routeName, defaultSlug, ready = true } = defineProps<{
 
 const route = useRoute();
 const router = useRouter();
-const { mobile } = useDevice();
 
 const tabs = computed<readonly HubTab[]>(() => groups.flatMap((group) => group.items));
 const slugs = computed<readonly string[]>(() => tabs.value.map((tab) => tab.slug));
@@ -84,31 +88,25 @@ watch(
 </script>
 
 <template>
-    <!-- Wide on desktop because the index now spends 14rem of it: at the 48rem default the body would be left
-         narrower than it was before the column arrived. One width for every section, as before — the header,
-         the description and the index are shared chrome, and a per-section width would reflow all of it on
-         every switch. -->
-    <Page :width="mobile ? `content` : `wide`">
-        <PageHeader :title="title" :description="description" />
+    <!-- Wide because the index spends 14rem of it: at the 48rem default the body would be left narrower than it
+         was before the column arrived. `scroll="page"` because a hub's body is a long FORM, not a document beside
+         an index — Usage and Secrets both run past a screen, and clamping them would put a scrollbar inside a
+         card inside a page. The rail sticks instead, which is how you leave the section you are in.
 
-        <div v-if="mobile" class="scrollbar-thin mb-5 overflow-x-auto border-b border-line pb-2">
-            <Segmented :model-value="activeSlug" :options="options" @update:model-value="select" />
-        </div>
+         Everything else — the shell, the header, the gap, the rail width, the phone behaviour — is <SplitView>'s
+         now. This component is what remains once the layout is shared: route ↔ slug, and nothing else. -->
+    <SplitView :title="title" :description="description" rail-width="sm" width="wide" scroll="page">
+        <!-- Mobile keeps the strip. At phone width there is no column to put beside anything, and a scrolling row
+             of pills is the idiom every mobile tab bar already uses; the width failure that killed the strip on
+             desktop is caused by a content cap that does not apply once the page is the whole screen. -->
+        <template #compact>
+            <div class="scrollbar-thin overflow-x-auto border-b border-line pb-2">
+                <Segmented :model-value="activeSlug" :options="options" @update:model-value="select" />
+            </div>
+        </template>
 
-        <div class="flex items-start gap-8">
-            <!-- Unframed, and sticky. Unframed is <NavRail>'s documented choice against a document rather than
-                 against another panel, and a tab body is a document. Sticky because the index is how you leave
-                 the section you are in, and a hub's sections are long — Usage and Secrets both scroll well past
-                 a screen, and an index you have to scroll back up to reach is one more thing between the reader
-                 and the tab they wanted. Its own max-height gives <NavRail>'s internal scroller something to
-                 bound against, so a hub that outgrows the viewport scrolls its index and not the page. -->
-            <NavRail
-                v-if="!mobile"
-                aria-label="Sections"
-                class="sticky w-56 shrink-0"
-                :style="{ top: `var(--ui-page-padding)`, maxHeight: `calc(100vh - var(--ui-page-padding) * 2)` }"
-                :groups="groups"
-            >
+        <template #rail>
+            <NavRail aria-label="Sections" :groups="groups">
                 <template #row="{ item: tab }">
                     <!-- <Row> is presentational by design and owns no router, so an internal-nav row wraps it —
                          which is what buys back the href the strip never had. -->
@@ -127,8 +125,8 @@ watch(
                     </RouterLink>
                 </template>
             </NavRail>
+        </template>
 
-            <div class="min-w-0 flex-1"><slot :slug="activeSlug" /></div>
-        </div>
-    </Page>
+        <template #detail><slot :slug="activeSlug" /></template>
+    </SplitView>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, Panel, PanelHeader, type TimeWindow, timeWindowWords } from "@intentic/extension-ui";
+import { cmp, Icon, Panel, type TimeWindow, timeWindowWords } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { byDay, type Episode, type Source } from "./episodes";
 import EpisodeRow from "./EpisodeRow.vue";
@@ -23,17 +23,13 @@ const days = computed(() => byDay(episodes, Date.now()));
 
 <template>
     <Panel grow>
-        <template #header>
-            <PanelHeader>
-                <template #title
-                    ><span :class="cmp.sectionLabel()">{{ source?.label ?? `All sources` }}</span></template
-                >
-                <template #actions>
-                    <span class="text-2xs text-subtle">
-                        {{ episodes.length }} {{ episodes.length === 1 ? `entry` : `entries` }} {{ timeWindowWords(window) }}
-                    </span>
-                </template>
-            </PanelHeader>
+        <template #title
+            ><span :class="cmp.sectionLabel()">{{ source?.label ?? `All sources` }}</span></template
+        >
+        <template #actions>
+            <span class="text-2xs text-subtle">
+                {{ episodes.length }} {{ episodes.length === 1 ? `entry` : `entries` }} {{ timeWindowWords(window) }}
+            </span>
         </template>
 
         <!-- A connection that should be up and isn't says so here, where the person who selected it is looking.

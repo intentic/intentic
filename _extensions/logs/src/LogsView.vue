@@ -6,7 +6,6 @@ import {
     formatBytes,
     InfoHint,
     Panel,
-    PanelHeader,
     Row,
     RowGroup,
     Segmented,
@@ -149,23 +148,19 @@ watch(tail, () => {
         <!-- `:scroll="false"` — the tail pane below drives its own scroll (it jumps to the newest lines on every
              refresh), and a panel scroller wrapped around a scroller gives you two scrollbars and neither works. -->
         <Panel v-if="selected" :scroll="false">
-            <template #header>
-                <PanelHeader>
-                    <template #title
-                        ><span class="font-mono text-xs">{{ selected }}</span></template
-                    >
-                    <template #actions>
-                        <span v-if="tail?.truncated" class="text-2xs text-subtle">tail of {{ formatBytes(tail.sizeBytes) }}</span>
-                        <Segmented
-                            v-model="bytesChoice"
-                            :options="[
-                                { label: `64 KB`, value: `65536` },
-                                { label: `256 KB`, value: `262144` },
-                                { label: `1 MB`, value: `1048576` },
-                            ]"
-                        />
-                    </template>
-                </PanelHeader>
+            <template #title
+                ><span class="font-mono text-xs">{{ selected }}</span></template
+            >
+            <template #actions>
+                <span v-if="tail?.truncated" class="text-2xs text-subtle">tail of {{ formatBytes(tail.sizeBytes) }}</span>
+                <Segmented
+                    v-model="bytesChoice"
+                    :options="[
+                        { label: `64 KB`, value: `65536` },
+                        { label: `256 KB`, value: `262144` },
+                        { label: `1 MB`, value: `1048576` },
+                    ]"
+                />
             </template>
 
             <template v-if="tailError" #strips>

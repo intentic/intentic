@@ -53,6 +53,15 @@ const TIERS = {
     compact: { pad: `px-4 py-2`, gap: `gap-2.5`, icon: `text-sm`, title: `text-sm font-medium leading-tight`, description: `text-2xs` },
     dense: { pad: `px-2 py-1.5`, gap: `gap-2`, icon: `text-xs`, title: `text-xs font-medium leading-tight`, description: `text-2xs` },
 } as const;
+
+/* A ROW YOU PICK FROM IS MUTED UNTIL YOU REACH FOR IT. All four selectable lists in the app had this rule and
+ * all four spelled it themselves — the source rail, the memory index, the documentation contents and the log
+ * file list — so a list of forty names reads as one quiet block with exactly one name lit, rather than forty
+ * equally loud ones distinguished by a background wash alone.
+ *
+ * It keys on `as="button"` because that is already the signal for "this row is PICKED": a settings row is
+ * interactive too, but its title is the thing you came to read, not one candidate among many. */
+const picked = as === `button`;
 </script>
 
 <template>
@@ -63,7 +72,7 @@ const TIERS = {
         :rel="href !== undefined ? `noopener` : undefined"
         :type="as === `button` && href === undefined ? `button` : undefined"
         :aria-current="selected ? `true` : undefined"
-        class="block w-full text-left"
+        class="group block w-full text-left"
         :class="[
             TIERS[density].pad,
             // The app's one hover tint and one selected tint (styles/shared/utilities.css). This used to carry
@@ -82,7 +91,11 @@ const TIERS = {
                     :class="[TIERS[density].icon, tone === `danger` ? `text-danger` : `text-subtle`]"
                 />
                 <div class="min-w-0">
-                    <div v-if="title !== undefined || $slots[`title`]" class="min-w-0 text-content" :class="TIERS[density].title">
+                    <div
+                        v-if="title !== undefined || $slots[`title`]"
+                        class="min-w-0"
+                        :class="[TIERS[density].title, picked && !selected ? `text-muted group-hover:text-content` : `text-content`]"
+                    >
                         <slot name="title">{{ title }}</slot>
                     </div>
                     <p v-if="description !== undefined || $slots[`description`]" class="min-w-0 text-muted" :class="TIERS[density].description">

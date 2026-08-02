@@ -130,7 +130,6 @@ watch(
     <NavRail
         v-model="query"
         aria-label="Documents"
-        class="w-64 shrink-0"
         :groups="visible"
         :filterable="total > 12"
         sticky-headings

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, FilterBar, Icon, InfoHint, PageHeader, Segmented, sinceOf, StatusBadge, TIME_WINDOWS, type TimeWindow } from "@intentic/extension-ui";
+import { cmp, FilterBar, Icon, InfoHint, Segmented, sinceOf, SplitView, StatusBadge, TIME_WINDOWS, type TimeWindow } from "@intentic/extension-ui";
 import { computed } from "vue";
 import ActivityTimeline from "./ActivityTimeline.vue";
 import { matches, toEpisodes, toSources } from "./episodes";
@@ -59,32 +59,23 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
 </script>
 
 <template>
-    <!-- FILLS THE AREA AND OWNS ITS SCROLLING. The shell's router-view wrapper is itself a scroll container, so a
-         view that merely grows makes the header and both panes scroll together as one tall column — which is the
-         failure this view had. `h-full` + `overflow-hidden` leaves the outer scroller nothing to scroll, and the
-         rail and the timeline each take their own. Same shape as the documentation extension's browser. -->
-    <div class="flex h-full min-h-0 flex-col overflow-hidden">
-        <!-- The head does not scroll: the title and the three filters stay put while you read the timeline. -->
-        <div class="shrink-0 px-6 pt-6">
-            <PageHeader title="Activity" description="What reached the agent, what it did about it, and how that went.">
-                <template #info>
-                    <InfoHint label="Activity">
-                        <span class="block text-sm font-medium text-content">Activity</span>
-                        <span class="mt-1 block text-xs text-muted">
-                            One entry per thing that happened, grouped by <b>who set it off</b>: a connected provider that woke the agent, a schedule,
-                            or you. A turn's whole lifecycle — start, plan, failure, completion, and every provider call it made — is one entry;
-                            expand it for the raw events the daemon recorded.
-                        </span>
-                    </InfoHint>
-                </template>
-            </PageHeader>
-        </div>
+    <SplitView title="Activity" description="What reached the agent, what it did about it, and how that went." rail-width="sm" width="full">
+        <template #info>
+            <InfoHint label="Activity">
+                <span class="block text-sm font-medium text-content">Activity</span>
+                <span class="mt-1 block text-xs text-muted">
+                    One entry per thing that happened, grouped by <b>who set it off</b>: a connected provider that woke the agent, a schedule, or you.
+                    A turn's whole lifecycle — start, plan, failure, completion, and every provider call it made — is one entry; expand it for the raw
+                    events the daemon recorded.
+                </span>
+            </InfoHint>
+        </template>
 
-        <div class="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-6">
+        <template #strips>
             <div v-if="error" :class="cmp.alertDanger('px-4 py-3 text-sm')">{{ error }}</div>
 
-            <!-- The daemon-held voice session, while one is live: sandbox-wide and transient, so it sits above both
-                 panes rather than inside whichever one happens to be selected. -->
+            <!-- The daemon-held voice session, while one is live: sandbox-wide and transient, so it sits above
+                 both panes rather than inside whichever one happens to be selected. -->
             <div v-if="status?.voice" class="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-card px-3 py-2">
                 <Icon name="microphone" class="text-info" />
                 <span class="text-sm font-medium text-content">#{{ status.voice.channelName }}</span>
@@ -97,11 +88,17 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
             <FilterBar v-model="search" placeholder="Filter by text, channel, session…" :count="visible.length">
                 <template #controls><Segmented v-model="window" size="xs" :options="TIME_WINDOWS" /></template>
             </FilterBar>
+        </template>
 
-            <div class="flex min-h-0 flex-1 flex-col gap-3 md:flex-row md:gap-4">
-                <SourceRail v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
-                <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
-            </div>
-        </div>
-    </div>
+        <!-- The rail NARROWS the timeline rather than selecting a document, so on a phone <SplitView> folds it
+             ABOVE the feed instead of covering it (mobile="collapse", the default). SourceRail already swaps
+             itself to a Picker at that width, so it needs no separate #compact form. -->
+        <template #rail>
+            <SourceRail v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
+        </template>
+
+        <template #detail>
+            <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
+        </template>
+    </SplitView>
 </template>

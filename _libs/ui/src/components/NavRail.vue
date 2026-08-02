@@ -50,7 +50,10 @@ const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 ${frame
 </script>
 
 <template>
-    <nav class="flex min-h-0 flex-col" :class="framed ? `overflow-hidden rounded-lg border border-line bg-card` : ``">
+    <!-- `flex-1` so the column fills the height its container gives it: in a <SplitView> whose panes scroll
+         that is the full pane, and a framed rail that stopped after its last row read as a half-drawn box. Where
+         the container is content-height instead (a hub's sticky rail) it changes nothing. -->
+    <nav class="flex min-h-0 flex-1 flex-col" :class="framed ? `overflow-hidden rounded-lg border border-line bg-card` : ``">
         <!-- Pinned: neither the filter nor a way back to the top is something a reader should have to scroll to
              find, and a pinned row is by definition not a member of any group a filter can empty. -->
         <div v-if="filterable || $slots[`pinned`]" class="flex shrink-0 flex-col gap-1.5" :class="framed ? `` : `pb-2`">

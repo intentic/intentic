@@ -6,6 +6,13 @@
  * land on the same instances. Export names are mirrored in ../names.mjs (shim generation + drift assertion).
  * Publishing a typed npm artifact for out-of-repo authors is a marketplace-phase task. */
 
+/* <Row> ships beside <RowGroup> because shipping the container WITHOUT the row is what made every extension
+ * write its own: five views imported the group, found nothing to put in it, and hand-rolled a row body each.
+ * The comment lives out here rather than beside the name because extensionUiNames.test.ts parses this brace
+ * block for names, and reads a comment inside it as exports that do not exist.
+ *
+ * <SplitView> is here for exactly the same reason one level up: five screens are an index beside a body, and the
+ * one implementation that had solved it (HubLayout) sat in the web app where no extension could import it. */
 export {
     Avatar,
     BarChart,
@@ -35,22 +42,18 @@ export {
     Page,
     PageHeader,
     Panel,
-    PanelHeader,
     Picker,
     type PickerGroup,
     type PickerOption,
     type PickerOptions,
     ProgressRing,
-    /* <Row> ships beside <RowGroup> because shipping the container WITHOUT the row is what made every extension
-     * write its own: five views imported the group, found nothing to put in it, and hand-rolled a row body each.
-     * The two are one component in two files and there is no reading of "curated slice" under which one belongs
-     * and the other does not. */
     Row,
     RowGroup,
     SearchBar,
     Segmented,
     seriesColor,
     sinceOf,
+    SplitView,
     StatRow,
     StatusBadge,
     type StatusVariant,

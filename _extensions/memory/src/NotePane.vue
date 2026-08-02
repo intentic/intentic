@@ -9,7 +9,6 @@ import {
     Icon,
     Markdown,
     Panel,
-    PanelHeader,
     Segmented,
     StatusBadge,
     type StatusVariant,
@@ -106,74 +105,64 @@ const onProseClick = (event: MouseEvent): void => {
 </script>
 
 <template>
-    <Panel grow>
-        <!-- The stacking rule this header needed — title on its own row until there is width for the control
-             cluster — is <PanelHeader>'s now: this pane is the narrowest real instance of it, and so the one
-             that found the failure. -->
-        <template #header>
-            <PanelHeader :title="title">
-                <template #lead>
-                    <button v-if="standalone" type="button" :class="cmp.iconButton(`-ml-1`)" aria-label="Back to all notes" @click="emit(`back`)">
-                        <Icon name="arrow-left" />
-                    </button>
-                    <Icon :name="isIndex ? `sparkles` : `file`" class="shrink-0 text-xs text-subtle" />
-                </template>
-                <template #badges>
-                    <StatusBadge v-if="parsed.type" :variant="typeVariant" size="xs" :label="parsed.type" />
-                    <StatusBadge v-if="draft !== undefined" variant="warning" size="xs" label="Unsaved" />
-                </template>
-                <template #description>
-                    <span v-if="isIndex">Loaded at the start of every session — every note below it hangs off this.</span>
-                    <span v-else-if="parsed.description">{{ parsed.description }}</span>
-                </template>
-                <template #meta>
-                    <span class="truncate font-mono">{{ name }}</span>
-                    <template v-if="entry">
-                        <span aria-hidden="true">·</span>
-                        <span>{{ formatBytes(entry.sizeBytes) }}</span>
-                        <span aria-hidden="true">·</span>
-                        <span :title="new Date(entry.modifiedAt).toLocaleString()">edited {{ freshness(entry.modifiedAt) }}</span>
-                    </template>
-                </template>
+    <!-- The stacking rule this header needed — title on its own row until there is width for the control
+         cluster — is <Panel>'s now: this pane is the narrowest real instance of it, and so the one that found
+         the failure. -->
+    <Panel grow :title="title">
+        <template #lead>
+            <button v-if="standalone" type="button" :class="cmp.iconButton(`-ml-1`)" aria-label="Back to all notes" @click="emit(`back`)">
+                <Icon name="arrow-left" />
+            </button>
+            <Icon :name="isIndex ? `sparkles` : `file`" class="shrink-0 text-xs text-subtle" />
+        </template>
+        <template #badges>
+            <StatusBadge v-if="parsed.type" :variant="typeVariant" size="xs" :label="parsed.type" />
+            <StatusBadge v-if="draft !== undefined" variant="warning" size="xs" label="Unsaved" />
+        </template>
+        <template #description>
+            <span v-if="isIndex">Loaded at the start of every session — every note below it hangs off this.</span>
+            <span v-else-if="parsed.description">{{ parsed.description }}</span>
+        </template>
+        <template #meta>
+            <span class="truncate font-mono">{{ name }}</span>
+            <template v-if="entry">
+                <span aria-hidden="true">·</span>
+                <span>{{ formatBytes(entry.sizeBytes) }}</span>
+                <span aria-hidden="true">·</span>
+                <span :title="new Date(entry.modifiedAt).toLocaleString()">edited {{ freshness(entry.modifiedAt) }}</span>
+            </template>
+        </template>
 
-                <template #actions>
-                    <template v-if="draft !== undefined">
-                        <Button label="Cancel" size="small" severity="secondary" @click="cancelEdit" />
-                        <Button label="Save" size="small" :loading="save.isPending.value" @click="saveDraft">
-                            <template #icon><Icon name="save" /></template>
-                        </Button>
-                    </template>
-                    <template v-else>
-                        <Segmented
-                            v-model="view"
-                            size="xs"
-                            :options="[
-                                { label: `Preview`, value: `preview` },
-                                { label: `Source`, value: `source`, title: `The raw markdown, frontmatter included` },
-                            ]"
-                        />
-                        <CopyButton :text="raw" v-tooltip.top="'Copy the raw note'" />
-                        <button
-                            type="button"
-                            :class="cmp.iconButton(`h-7 w-7`)"
-                            aria-label="Edit this note"
-                            v-tooltip.top="'Edit'"
-                            @click="startEdit"
-                        >
-                            <Icon name="pencil" />
-                        </button>
-                        <button
-                            type="button"
-                            :class="cmp.iconButton(`h-7 w-7 hover:bg-danger/10 hover:text-danger`)"
-                            aria-label="Forget this note"
-                            v-tooltip.top="'Forget'"
-                            @click="confirming = true"
-                        >
-                            <Icon name="trash" />
-                        </button>
-                    </template>
-                </template>
-            </PanelHeader>
+        <template #actions>
+            <template v-if="draft !== undefined">
+                <Button label="Cancel" size="small" severity="secondary" @click="cancelEdit" />
+                <Button label="Save" size="small" :loading="save.isPending.value" @click="saveDraft">
+                    <template #icon><Icon name="save" /></template>
+                </Button>
+            </template>
+            <template v-else>
+                <Segmented
+                    v-model="view"
+                    size="xs"
+                    :options="[
+                        { label: `Preview`, value: `preview` },
+                        { label: `Source`, value: `source`, title: `The raw markdown, frontmatter included` },
+                    ]"
+                />
+                <CopyButton :text="raw" v-tooltip.top="'Copy the raw note'" />
+                <button type="button" :class="cmp.iconButton(`h-7 w-7`)" aria-label="Edit this note" v-tooltip.top="'Edit'" @click="startEdit">
+                    <Icon name="pencil" />
+                </button>
+                <button
+                    type="button"
+                    :class="cmp.iconButton(`h-7 w-7 hover:bg-danger/10 hover:text-danger`)"
+                    aria-label="Forget this note"
+                    v-tooltip.top="'Forget'"
+                    @click="confirming = true"
+                >
+                    <Icon name="trash" />
+                </button>
+            </template>
         </template>
 
         <!-- Destructive and irreversible, so it is confirmed in place: the sentence names what is lost, and the

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MemoryFileEntry } from "@intentic/sandbox-contract";
-import { cmp, formatBytes, Icon, InfoHint, type NavGroup, NavRail, Page, PageHeader, Row, useDevice } from "@intentic/extension-ui";
+import { cmp, formatBytes, Icon, InfoHint, type NavGroup, NavRail, Row, SplitView, useDevice } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { INDEX_NAME, noteTitle, projectLabel } from "./memoryNote";
 import { freshness } from "./noteTime";
@@ -95,112 +95,114 @@ const openSibling = (name: string): void => {
     }
 };
 
-const showIndex = computed(() => !mobile.value || selected.value === undefined);
-const showReader = computed(() => !mobile.value || selected.value !== undefined);
+/* Which pane a phone shows is <SplitView mobile="swap">'s decision, not this view's — it just says whether a
+ * note is open. Desktop shows both regardless. */
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col">
-        <Page width="wide" class="flex min-h-0 flex-1 flex-col">
-            <PageHeader title="Memory" description="What the agent remembers across sessions — reviewable, editable, forgettable.">
-                <template #info>
-                    <InfoHint label="Memory">
-                        <span class="block text-sm font-medium text-content">Agent memory</span>
-                        <span class="mt-1 block text-xs text-muted">
-                            The agent keeps a persistent memory per project: <b>MEMORY.md</b> — the index it loads at the start of every session —
-                            plus one markdown note per fact (who you are, feedback it was given, project context, references). Edit a note to
-                            correct it, or forget it to take the fact back. References between notes are links: follow them to read the chain.
-                        </span>
-                    </InfoHint>
-                </template>
-                <template v-if="files.length > 0" #actions>
-                    <span class="text-2xs text-subtle">
-                        {{ files.length }} {{ files.length === 1 ? `note` : `notes` }} · {{ projectCount }}
-                        {{ projectCount === 1 ? `project` : `projects` }} · {{ formatBytes(totalBytes) }}
-                    </span>
-                </template>
-            </PageHeader>
+    <SplitView
+        title="Memory"
+        description="What the agent remembers across sessions — reviewable, editable, forgettable."
+        rail-width="lg"
+        mobile="swap"
+        :detail-open="selected !== undefined"
+    >
+        <template #info>
+            <InfoHint label="Memory">
+                <span class="block text-sm font-medium text-content">Agent memory</span>
+                <span class="mt-1 block text-xs text-muted">
+                    The agent keeps a persistent memory per project: <b>MEMORY.md</b> — the index it loads at the start of every session — plus one
+                    markdown note per fact (who you are, feedback it was given, project context, references). Edit a note to correct it, or forget it
+                    to take the fact back. References between notes are links: follow them to read the chain.
+                </span>
+            </InfoHint>
+        </template>
+        <template v-if="files.length > 0" #actions>
+            <span class="text-2xs text-subtle">
+                {{ files.length }} {{ files.length === 1 ? `note` : `notes` }} · {{ projectCount }}
+                {{ projectCount === 1 ? `project` : `projects` }} · {{ formatBytes(totalBytes) }}
+            </span>
+        </template>
 
-            <div v-if="error" :class="cmp.alertDanger('mb-4 px-4 py-3 text-sm')">{{ error }}</div>
+        <template v-if="error" #strips>
+            <div :class="cmp.alertDanger('px-4 py-3 text-sm')">{{ error }}</div>
+        </template>
 
+        <template #rail>
+            <!-- Framed, because it sits beside the reader rather than beside a document: two matching panels
+                 read as one split view, where a bare list beside a card reads as neither. -->
+            <NavRail v-model="query" :groups="groups" :count="visibleCount" framed filterable placeholder="Filter notes…">
+                <template #row="{ item: file }">
+                    <Row
+                        :key="`${file.project}/${file.name}`"
+                        as="button"
+                        density="dense"
+                        :icon="file.name === INDEX_NAME ? `sparkles` : `file`"
+                        :title="rowTitle(file.name)"
+                        :selected="isSelected(file)"
+                        class="rounded-md"
+                        @click="selected = { project: file.project, name: file.name }"
+                    >
+                        <template #title>
+                            <span class="flex items-center gap-1.5">
+                                <span class="min-w-0 truncate">{{ rowTitle(file.name) }}</span>
+                                <span
+                                    v-if="drafts.has(`${file.project}/${file.name}`)"
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+                                    v-tooltip.top="'Unsaved changes'"
+                                ></span>
+                            </span>
+                        </template>
+                        <template #description>
+                            <span class="flex items-center gap-1.5">
+                                <span class="min-w-0 truncate font-mono">{{ file.name }}</span>
+                                <span aria-hidden="true">·</span>
+                                <span class="shrink-0" :title="new Date(file.modifiedAt).toLocaleString()">{{ freshness(file.modifiedAt) }}</span>
+                            </span>
+                        </template>
+                    </Row>
+                </template>
+                <template #empty>
+                    <p class="px-2 py-6 text-center text-xs text-muted">No note matches “{{ query.trim() }}”.</p>
+                </template>
+            </NavRail>
+        </template>
+
+        <template #detail>
             <p v-if="files.length === 0 && isLoading" class="text-sm text-muted">Loading…</p>
 
-            <div
-                v-else-if="files.length === 0"
-                :class="cmp.emptyState('flex flex-col items-center gap-2 px-6 py-12 text-sm')"
-            >
+            <div v-else-if="files.length === 0" :class="cmp.emptyState('flex flex-col items-center gap-2 px-6 py-12 text-sm')">
                 <Icon name="sparkles" class="text-base text-subtle" />
                 <p class="text-content">Nothing remembered yet.</p>
                 <p class="max-w-sm text-xs text-muted">
-                    Notes appear here as the agent saves what it learns while working — how you like things done, how this repo is put together,
-                    what it was corrected on.
+                    Notes appear here as the agent saves what it learns while working — how you like things done, how this repo is put together, what
+                    it was corrected on.
                 </p>
             </div>
 
-            <div v-else class="grid min-h-0 flex-1 gap-4 md:grid-cols-[19rem_minmax(0,1fr)]">
-                <!-- The index. Framed, because it sits beside the reader rather than beside a document: two
-                     matching panels read as one split view, where a bare list beside a card reads as neither.
-                     Scrolls on its own so reading a long note never scrolls the list away. -->
-                <NavRail v-if="showIndex" v-model="query" :groups="groups" :count="visibleCount" framed filterable placeholder="Filter notes…">
-                    <template #row="{ item: file }">
-                        <Row
-                            :key="`${file.project}/${file.name}`"
-                            as="button"
-                            density="dense"
-                            :icon="file.name === INDEX_NAME ? `sparkles` : `file`"
-                            :title="rowTitle(file.name)"
-                            :selected="isSelected(file)"
-                            class="rounded-md"
-                            @click="selected = { project: file.project, name: file.name }"
-                        >
-                            <template #title>
-                                <span class="flex items-center gap-1.5">
-                                    <span class="min-w-0 truncate">{{ rowTitle(file.name) }}</span>
-                                    <span
-                                        v-if="drafts.has(`${file.project}/${file.name}`)"
-                                        class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-                                        v-tooltip.top="'Unsaved changes'"
-                                    ></span>
-                                </span>
-                            </template>
-                            <template #description>
-                                <span class="flex items-center gap-1.5">
-                                    <span class="min-w-0 truncate font-mono">{{ file.name }}</span>
-                                    <span aria-hidden="true">·</span>
-                                    <span class="shrink-0" :title="new Date(file.modifiedAt).toLocaleString()">{{ freshness(file.modifiedAt) }}</span>
-                                </span>
-                            </template>
-                        </Row>
-                    </template>
-                    <template #empty>
-                        <p class="px-2 py-6 text-center text-xs text-muted">No note matches “{{ query.trim() }}”.</p>
-                    </template>
-                </NavRail>
+            <!-- Keyed by note so a switch resets its scroll and view mode, but the draft above it is keyed by
+                 note too and so survives the remount. -->
+            <NotePane
+                v-else-if="selected"
+                :key="`${selected.project}/${selected.name}`"
+                v-model:draft="draft"
+                :project="selected.project"
+                :name="selected.name"
+                :entry="selectedEntry"
+                :standalone="mobile"
+                @open="openSibling"
+                @forgotten="selected = undefined"
+                @back="selected = undefined"
+            />
 
-                <!-- The reader. Keyed by note so a switch resets its scroll and view mode, but the draft above
-                     it is keyed by note too and so survives the remount. -->
-                <NotePane
-                    v-if="showReader && selected"
-                    :key="`${selected.project}/${selected.name}`"
-                    v-model:draft="draft"
-                    :project="selected.project"
-                    :name="selected.name"
-                    :entry="selectedEntry"
-                    :standalone="mobile"
-                    @open="openSibling"
-                    @forgotten="selected = undefined"
-                    @back="selected = undefined"
-                />
-
-                <section
-                    v-else-if="showReader"
-                    class="flex min-h-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line px-6 py-10 text-center"
-                >
-                    <Icon name="sparkles" class="text-base text-subtle" />
-                    <p class="text-sm text-muted">Pick a note to read it.</p>
-                    <p class="max-w-xs text-xs text-subtle">Start with <b>Index</b> — it's the map the agent itself opens first.</p>
-                </section>
-            </div>
-        </Page>
-    </div>
+            <section
+                v-else
+                class="flex min-h-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line px-6 py-10 text-center"
+            >
+                <Icon name="sparkles" class="text-base text-subtle" />
+                <p class="text-sm text-muted">Pick a note to read it.</p>
+                <p class="max-w-xs text-xs text-subtle">Start with <b>Index</b> — it's the map the agent itself opens first.</p>
+            </section>
+        </template>
+    </SplitView>
 </template>

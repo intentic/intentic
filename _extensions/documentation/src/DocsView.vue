@@ -5,7 +5,7 @@
      staleness counts, publishing — to a strip and a sidebar. Everything shown here is a file that exists; there is
      no documentation service and no server-side state to be out of step with. -->
 <script setup lang="ts">
-import { Button, cmp, Icon, PageHeader, Segmented, Select } from "@intentic/extension-ui";
+import { Button, cmp, Icon, Segmented, Select, SplitView } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
 import DocsNav from "./DocsNav.vue";
@@ -127,35 +127,34 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
 </script>
 
 <template>
-    <!-- FILLS THE AREA AND OWNS ITS SCROLLING. The shell's router-view wrapper is itself a scroll container, so a
-         view that just grows makes the header, the menu and the page scroll together as one tall column — which is
-         what happened here: reaching a package near the bottom of a 54-entry menu scrolled the document away too.
-         `h-full` + `overflow-hidden` stops the outer scroller from ever having anything to scroll, and the two
-         columns below each take their own. Same shape as the preview extension's full-bleed panel. -->
-    <div class="flex h-full min-h-0 flex-col overflow-hidden">
-        <!-- The head does not scroll: the title, the repo picker and the state of a run stay put while you read. -->
-        <div class="shrink-0 px-6 pt-6">
-            <PageHeader title="Documentation" :description="`Plain-language orientation for ${label}, written by agents and reviewed by you.`">
-                <template #actions>
-                    <Select
-                        v-if="pinned === undefined && repos.length > 1"
-                        :model-value="repo"
-                        :options="repos"
-                        size="small"
-                        :placeholder="`Repository`"
-                        @update:model-value="chooseRepo"
-                    />
-                    <Segmented v-if="hasStaged" v-model="source" :options="SOURCES" />
-                    <button type="button" :class="cmp.buttonPrimary()" @click="generateOpen = true">Generate</button>
-                </template>
-            </PageHeader>
+    <SplitView
+        title="Documentation"
+        :description="`Plain-language orientation for ${label}, written by agents and reviewed by you.`"
+        rail-width="md"
+        mobile="swap"
+        :detail-open="page !== undefined"
+        width="full"
+    >
+        <template #actions>
+            <Select
+                v-if="pinned === undefined && repos.length > 1"
+                :model-value="repo"
+                :options="repos"
+                size="small"
+                :placeholder="`Repository`"
+                @update:model-value="chooseRepo"
+            />
+            <Segmented v-if="hasStaged" v-model="source" :options="SOURCES" />
+            <button type="button" :class="cmp.buttonPrimary()" @click="generateOpen = true">Generate</button>
+        </template>
 
+        <template #strips>
             <!-- A live run is the one piece of machinery that earns space at the top: it is the answer to "why is
                  this page not here yet". Progress is read off the documents on disk, not from a counter.
 
                  Both strips here are a WASH, not an outlined box: they sit between a page title and a document,
                  and an outline at that position reads as a third panel competing with both. -->
-            <div v-if="activeRun !== undefined" class="mb-4 flex items-center gap-3 rounded-lg bg-content/[0.04] px-3 py-2 text-xs">
+            <div v-if="activeRun !== undefined" class="flex items-center gap-3 rounded-lg bg-content/[0.04] px-3 py-2 text-xs">
                 <Icon name="spinner" spin class="shrink-0 text-link" />
                 <span class="text-content">
                     {{ activeRun.mapDone ? `Documenting packages` : `Reading the repository and drawing its map` }}
@@ -177,10 +176,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
 
             <!-- The draft banner. Publishing is a deliberate act with a named consequence, so the button says what
                  it will do and the count of unrelated changes is on the confirmation, not hidden. -->
-            <div
-                v-if="source === `staged` && hasStaged"
-                class="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-primary-600/12 px-3 py-2 text-xs"
-            >
+            <div v-if="source === `staged` && hasStaged" class="flex flex-wrap items-center gap-3 rounded-lg bg-primary-600/12 px-3 py-2 text-xs">
                 <Icon name="file-edit" class="shrink-0 text-link" />
                 <span class="text-content">This is a draft. Nothing is in the repository until you publish it.</span>
                 <div class="ml-auto flex items-center gap-2">
@@ -188,34 +184,37 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                     <button type="button" :class="cmp.buttonPrimary()" @click="openPublish">Publish to {{ label }}</button>
                 </div>
             </div>
-        </div>
+        </template>
 
-        <div v-if="isLoading" class="flex min-h-0 flex-1 items-center justify-center text-muted"><Icon name="spinner" class="text-lg" spin /></div>
-
-        <!-- The empty state is an invitation, not an error: a repo with no documents is the ordinary starting point
-             and this view is where the first set gets made. -->
-        <div v-else-if="set?.repoDoc === undefined && set?.prose === undefined" class="min-h-0 flex-1 overflow-y-auto px-6 pb-6 scrollbar-thin">
-            <div :class="cmp.emptyState()">
-                <p class="text-sm">{{ label }} has no documentation yet.</p>
-                <p class="mt-1 text-xs text-muted">
-                    One agent will map the repository — its components, its vocabulary, what to read first — and then a further agent documents each
-                    package. You review the result before anything is committed.
-                </p>
-                <button type="button" :class="cmp.buttonPrimary(`mt-3`)" @click="generateOpen = true">Generate documentation</button>
-            </div>
-        </div>
-
-        <!-- Two scroll areas, side by side: a 54-entry contents list and a long document have no reason to share
-             one scrollbar, and sharing it means you cannot keep your place in either. Coverage, filtering and the
-             grouping all live inside <DocsNav>; this view only says which page is open. -->
-        <div v-else class="flex min-h-0 flex-1 gap-8 px-6 pb-6">
+        <!-- Coverage, filtering and the grouping all live inside <DocsNav>; this view only says which page is
+             open. The two scrollers — a 54-entry contents list and a long document — are <SplitView>'s doing. -->
+        <template #rail>
             <DocsNav :components="set?.repoDoc?.components ?? []" :index="index" :page="page" @open="openPage" />
+        </template>
+
+        <template #detail>
+            <div v-if="isLoading" class="flex min-h-0 flex-1 items-center justify-center text-muted">
+                <Icon name="spinner" class="text-lg" spin />
+            </div>
+
+            <!-- The empty state is an invitation, not an error: a repo with no documents is the ordinary starting
+                 point and this view is where the first set gets made. -->
+            <div v-else-if="set?.repoDoc === undefined && set?.prose === undefined" class="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+                <div :class="cmp.emptyState()">
+                    <p class="text-sm">{{ label }} has no documentation yet.</p>
+                    <p class="mt-1 text-xs text-muted">
+                        One agent will map the repository — its components, its vocabulary, what to read first — and then a further agent documents
+                        each package. You review the result before anything is committed.
+                    </p>
+                    <button type="button" :class="cmp.buttonPrimary(`mt-3`)" @click="generateOpen = true">Generate documentation</button>
+                </div>
+            </div>
 
             <!-- KEYED BY PAGE, so each document mounts fresh. Once the document has its own scrollbar, a reused
                  instance keeps the last page's scroll position and you arrive halfway down a page you have never
                  seen. Remounting also gives every figure a clean fit-on-init, which is what a new document wants. -->
             <DocPage
-                v-if="page === undefined"
+                v-else-if="page === undefined"
                 key="overview"
                 :prose="set?.prose"
                 :anchors="[]"
@@ -232,7 +231,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 :repo="repo"
                 :staleness="entries.find((entry) => entry.dir === page)"
             />
-        </div>
+        </template>
 
         <GenerateDialog
             v-model="generateOpen"
@@ -268,5 +267,5 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 </div>
             </div>
         </div>
-    </div>
+    </SplitView>
 </template>
