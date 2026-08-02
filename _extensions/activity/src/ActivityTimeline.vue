@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { cmp, Icon } from "@intentic/extension-ui";
+import { cmp, Icon, PanelHeader, type TimeWindow, timeWindowWords } from "@intentic/extension-ui";
 import { computed } from "vue";
-import { byDay, type Episode, type Source, type Window } from "./episodes";
+import { byDay, type Episode, type Source } from "./episodes";
 import EpisodeRow from "./EpisodeRow.vue";
 
 /* The selected source's story, newest first. Sectioned by day rather than run as one undifferentiated column:
@@ -13,29 +13,25 @@ const { episodes, source, window, truncated, isLoading } = defineProps<{
     episodes: readonly Episode[];
     // The rail's selection resolved to its live facts; absent when every source is shown.
     source: Source | undefined;
-    window: Window;
+    window: TimeWindow;
     truncated: boolean;
     isLoading: boolean;
 }>();
 
 const days = computed(() => byDay(episodes, Date.now()));
 
-const WINDOW_WORDS: Readonly<Record<Window, string>> = {
-    "1h": `in the last hour`,
-    "24h": `in the last 24 hours`,
-    "7d": `in the last 7 days`,
-    all: `on record`,
-};
 </script>
 
 <template>
     <section class="flex min-h-0 flex-1 flex-col rounded-lg border border-line bg-card">
-        <header class="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
-            <h3 :class="cmp.sectionLabel()">{{ source?.label ?? `All sources` }}</h3>
-            <span class="text-2xs text-subtle">
-                {{ episodes.length }} {{ episodes.length === 1 ? `entry` : `entries` }} {{ WINDOW_WORDS[window] }}
-            </span>
-        </header>
+        <PanelHeader>
+            <template #title><span :class="cmp.sectionLabel()">{{ source?.label ?? `All sources` }}</span></template>
+            <template #actions>
+                <span class="text-2xs text-subtle">
+                    {{ episodes.length }} {{ episodes.length === 1 ? `entry` : `entries` }} {{ timeWindowWords(window) }}
+                </span>
+            </template>
+        </PanelHeader>
 
         <!-- A connection that should be up and isn't says so here, where the person who selected it is looking. -->
         <p v-if="source?.lastError" :class="cmp.alertDanger('mx-4 mt-3 px-3 py-2 text-2xs')">{{ source.lastError }}</p>
@@ -55,7 +51,7 @@ const WINDOW_WORDS: Readonly<Record<Window, string>> = {
             </div>
 
             <p v-if="episodes.length === 0 && !isLoading" :class="cmp.emptyState('py-10')">
-                Nothing {{ WINDOW_WORDS[window] }}. Entries appear when a message wakes the agent, when it calls a connected provider, and on every
+                Nothing {{ timeWindowWords(window) }}. Entries appear when a message wakes the agent, when it calls a connected provider, and on every
                 turn it runs.
             </p>
 

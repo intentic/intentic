@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { cmp, Icon, InfoHint, PageHeader, Segmented, StatusBadge } from "@intentic/extension-ui";
+import { cmp, FilterBar, Icon, InfoHint, PageHeader, Segmented, sinceOf, StatusBadge, TIME_WINDOWS, type TimeWindow } from "@intentic/extension-ui";
 import { computed } from "vue";
 import ActivityTimeline from "./ActivityTimeline.vue";
-import { matches, sinceOf, toEpisodes, toSources, type Window } from "./episodes";
+import { matches, toEpisodes, toSources } from "./episodes";
 import { host } from "./host";
 import SourceRail from "./SourceRail.vue";
 import { useActivity } from "./useActivity";
@@ -24,7 +24,7 @@ const api = host();
 
 // Derived from the query rather than mirrored into refs — one direction of flow, and Back/Forward work for free.
 const query = computed(() => api.route.query());
-const window = computed<Window>({
+const window = computed<TimeWindow>({
     get: () => {
         const value = query.value[`window`];
         return value === `1h` || value === `7d` || value === `all` ? value : `24h`;
@@ -94,24 +94,9 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
                 </span>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2">
-                <input
-                    v-model="search"
-                    type="search"
-                    placeholder="Filter by text, channel, session…"
-                    :class="cmp.input(`h-7 w-56 px-2 py-0 text-2xs`)"
-                />
-                <Segmented
-                    v-model="window"
-                    size="xs"
-                    :options="[
-                        { label: `1h`, value: `1h` },
-                        { label: `24h`, value: `24h` },
-                        { label: `7d`, value: `7d` },
-                        { label: `All`, value: `all` },
-                    ]"
-                />
-            </div>
+            <FilterBar v-model="search" placeholder="Filter by text, channel, session…" :count="visible.length">
+                <template #controls><Segmented v-model="window" size="xs" :options="TIME_WINDOWS" /></template>
+            </FilterBar>
 
             <div class="flex min-h-0 flex-1 flex-col gap-3 md:flex-row md:gap-4">
                 <SourceRail v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />

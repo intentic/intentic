@@ -1,5 +1,19 @@
 <script setup lang="ts">
-import { cmp, Code, formatBytes, Icon, InfoHint, Segmented, timeAgo } from "@intentic/extension-ui";
+import {
+    cmp,
+    Code,
+    FilterBar,
+    formatBytes,
+    InfoHint,
+    PanelHeader,
+    Row,
+    RowGroup,
+    Segmented,
+    sinceOf,
+    TIME_WINDOWS,
+    type TimeWindow,
+    timeAgo,
+} from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { useLogs, useLogTail } from "./useLogs";
 
@@ -19,15 +33,11 @@ const bytesChoice = ref(`65536`);
 const bytes = computed(() => Number(bytesChoice.value));
 const { tail, error: tailError, isLoading: tailLoading } = useLogTail(selected, bytes);
 
-// Datetime filter over the FILE LIST (by mtime). Presets cover the common recent windows; an optional custom
-// range (native datetime-local, browser-local -> epoch ms) overrides the preset when a `from` is set. Only the
-// file-level modifiedAt is filterable — the log text carries no per-line timestamps.
-const PRESET_MS = new Map<string, number>([
-    [`1h`, 3_600_000],
-    [`24h`, 86_400_000],
-    [`7d`, 604_800_000],
-]);
-const windowChoice = ref(`all`);
+// Datetime filter over the FILE LIST (by mtime). The presets are the app's shared window vocabulary (Activity
+// asks the same question of its feed); an optional custom range (native datetime-local, browser-local -> epoch
+// ms) overrides the preset when a `from` is set. Only the file-level modifiedAt is filterable — the log text
+// carries no per-line timestamps.
+const windowChoice = ref<TimeWindow>(`all`);
 const customFrom = ref(``);
 const customTo = ref(``);
 const parseLocal = (value: string): number | undefined => {
@@ -39,8 +49,7 @@ const range = computed(() => {
     if (from !== undefined) {
         return { since: from, until: parseLocal(customTo.value) ?? Infinity };
     }
-    const span = PRESET_MS.get(windowChoice.value);
-    return { since: span === undefined ? -Infinity : Date.now() - span, until: Infinity };
+    return { since: sinceOf(windowChoice.value, Date.now()), until: Infinity };
 });
 const timeFiltered = computed(() => files.value.filter((file) => file.modifiedAt >= range.value.since && file.modifiedAt <= range.value.until));
 
@@ -88,72 +97,58 @@ watch(tail, () => {
     <div class="flex min-h-0 flex-col gap-4">
         <div v-if="error" :class="cmp.alertDanger('px-4 py-3 text-sm')">{{ error }}</div>
 
-        <section class="rounded-lg border border-line bg-card p-4">
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div class="flex items-center gap-2">
-                    <h3 :class="cmp.sectionLabel()">Files</h3>
-                    <InfoHint label="Logs">
-                        <span class="block text-sm font-medium text-content">Sandbox logs</span>
-                        <span class="mt-1 block text-xs text-muted">
-                            Everything the sandbox records for debugging: <b>terminals</b> — every tmux session's output (crashed ones included),
-                            <b>intentic-runs</b> — infra plan/apply runs, and the <b>daemon</b>'s own log. Stored outside the agent's workspace and
-                            survives rebuilds.
-                        </span>
-                    </InfoHint>
-                </div>
+        <FilterBar v-model="query" placeholder="Filter by name…" :count="visible.length">
+            <template #controls>
                 <Segmented v-model="groupChoice" size="xs" :options="groupTabs" />
-            </div>
-            <div class="mb-3 flex flex-wrap items-center gap-2">
-                <input v-model="query" type="search" placeholder="Filter by name…" :class="cmp.input(`h-7 w-44 px-2 py-0 text-2xs`)" />
-                <Segmented
-                    v-model="windowChoice"
-                    size="xs"
-                    :options="[
-                        { label: `1h`, value: `1h` },
-                        { label: `24h`, value: `24h` },
-                        { label: `7d`, value: `7d` },
-                        { label: `All`, value: `all` },
-                    ]"
-                />
-                <input v-model="customFrom" type="datetime-local" title="Modified after" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
-                <input v-model="customTo" type="datetime-local" title="Modified before" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
-            </div>
-            <!-- Fixed default height, natively resizable (drag the bottom-right grip) so the user can trade
-                 list height against the viewer below; only mounted when there are rows, so the empty state
-                 never sits under a tall empty box. Height is an inline style, not a Tailwind class: the app's
-                 tailwind @source globs don't scan _extensions, so a novel height utility would be dropped. -->
-            <div v-if="visible.length > 0" class="resize-y overflow-auto" style="height: 20rem; min-height: 8rem">
-                <div v-for="group in groups" :key="group.title" class="mb-2">
-                    <p v-if="groupChoice === `all`" class="mb-1 font-mono text-2xs uppercase text-subtle/70">{{ group.title }}</p>
-                    <div class="flex flex-col divide-y divide-line">
-                        <button
-                            v-for="file in group.entries"
-                            :key="file.name"
-                            type="button"
-                            class="flex items-center gap-3 py-1.5 text-left hover:bg-hover"
-                            :class="selected === file.name ? `text-content` : `text-muted`"
-                            @click="selected = file.name"
-                        >
-                            <Icon name="file" class="text-xs" :class="selected === file.name ? `text-link` : `text-subtle`" />
-                            <span class="min-w-0 flex-1 truncate font-mono text-xs" :title="file.name">{{ displayName(file.name) }}</span>
-                            <span class="shrink-0 text-2xs text-subtle">{{ formatBytes(file.sizeBytes) }}</span>
-                            <span class="shrink-0 text-2xs text-subtle" :title="new Date(file.modifiedAt).toLocaleString()">
-                                {{ timeAgo(file.modifiedAt) }}
-                            </span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <p v-else-if="files.length === 0 && !isLoading" class="py-6 text-center text-sm text-muted">
-                Nothing yet. Logs appear as terminals run, infra commands execute, and the daemon works.
-            </p>
-            <p v-else-if="files.length > 0" class="py-6 text-center text-sm text-muted">No files match the current filters.</p>
-        </section>
+                <span class="h-4 w-px bg-line" aria-hidden="true"></span>
+                <Segmented v-model="windowChoice" size="xs" :options="TIME_WINDOWS" />
+            </template>
+            <template #actions>
+                <input v-model="customFrom" type="datetime-local" title="Modified after" :class="cmp.input(`h-8 px-2 py-0 text-2xs`)" />
+                <input v-model="customTo" type="datetime-local" title="Modified before" :class="cmp.input(`h-8 px-2 py-0 text-2xs`)" />
+            </template>
+        </FilterBar>
 
-        <section v-if="selected" class="rounded-lg border border-line bg-card p-4">
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <h3 class="min-w-0 truncate font-mono text-xs text-content">{{ selected }}</h3>
-                <div class="flex items-center gap-2">
+        <RowGroup v-for="group in groups" :key="group.title" :label="groupChoice === `all` ? group.title : undefined" :count="group.entries.length">
+            <template v-if="group === groups[0]" #info>
+                <InfoHint label="Logs">
+                    <span class="block text-sm font-medium text-content">Sandbox logs</span>
+                    <span class="mt-1 block text-xs text-muted">
+                        Everything the sandbox records for debugging: <b>terminals</b> — every tmux session's output (crashed ones included),
+                        <b>intentic-runs</b> — infra plan/apply runs, and the <b>daemon</b>'s own log. Stored outside the agent's workspace and
+                        survives rebuilds.
+                    </span>
+                </InfoHint>
+            </template>
+
+            <Row
+                v-for="file in group.entries"
+                :key="file.name"
+                as="button"
+                density="dense"
+                icon="file"
+                :selected="selected === file.name"
+                @click="selected = file.name"
+            >
+                <template #title>
+                    <span class="block truncate font-mono" :title="file.name">{{ displayName(file.name) }}</span>
+                </template>
+                <template #meta>
+                    <span>{{ formatBytes(file.sizeBytes) }}</span>
+                    <span :title="new Date(file.modifiedAt).toLocaleString()">{{ timeAgo(file.modifiedAt) }}</span>
+                </template>
+            </Row>
+        </RowGroup>
+
+        <p v-if="files.length === 0 && !isLoading" :class="cmp.emptyState(`py-6`)">
+            Nothing yet. Logs appear as terminals run, infra commands execute, and the daemon works.
+        </p>
+        <p v-else-if="visible.length === 0" :class="cmp.emptyState(`py-6`)">No files match the current filters.</p>
+
+        <section v-if="selected" class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-card">
+            <PanelHeader>
+                <template #title><span class="font-mono text-xs">{{ selected }}</span></template>
+                <template #actions>
                     <span v-if="tail?.truncated" class="text-2xs text-subtle">tail of {{ formatBytes(tail.sizeBytes) }}</span>
                     <Segmented
                         v-model="bytesChoice"
@@ -163,12 +158,12 @@ watch(tail, () => {
                             { label: `1 MB`, value: `1048576` },
                         ]"
                     />
-                </div>
-            </div>
-            <div v-if="tailError" :class="cmp.alertDanger('mb-2')">
+                </template>
+            </PanelHeader>
+            <div v-if="tailError" :class="cmp.alertDanger('m-4 mb-0')">
                 {{ tailError }}
             </div>
-            <div ref="pane" class="max-h-128 overflow-auto">
+            <div ref="pane" class="max-h-128 overflow-auto p-4">
                 <Code :code="tail?.text ?? (tailLoading ? `Loading…` : ``)" lang="log" :wrap="true" :copyable="false" />
             </div>
         </section>

@@ -280,11 +280,6 @@ export const toSources = (episodes: readonly Episode[], connections: readonly Ac
     return sources.toSorted((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0) || a.label.localeCompare(b.label));
 };
 
-// The window presets, as milliseconds back from now. `all` is the absence of a bound, not a very large one.
-const WINDOW_MS: Readonly<Record<string, number>> = { "1h": 3_600_000, "24h": 86_400_000, "7d": 604_800_000 };
-export type Window = `1h` | `24h` | `7d` | `all`;
-export const sinceOf = (window: Window, now: number): number => (window === `all` ? -Infinity : now - (WINDOW_MS[window] as number));
-
 // Free-text match over what the row actually shows plus the ids it hides — someone pasting a session id from a
 // bug report should find the turn, and someone typing a channel name should find the conversation.
 export const matches = (episode: Episode, query: string): boolean => {

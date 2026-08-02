@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MemoryFileEntry } from "@intentic/sandbox-contract";
-import { cmp, formatBytes, Icon, InfoHint, Page, PageHeader, useDevice } from "@intentic/extension-ui";
+import { cmp, formatBytes, Icon, InfoHint, type NavGroup, NavRail, Page, PageHeader, Row, useDevice } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { INDEX_NAME, noteTitle, projectLabel } from "./memoryNote";
 import { freshness } from "./noteTime";
@@ -45,7 +45,7 @@ const draft = computed<string | undefined>({
 /* One section per project, MEMORY.md pinned first — it is the map to everything under it — and the rest left
  * in the daemon's newest-first order, so what the agent learned most recently leads. Projects keep that order
  * too: the one being worked in is the one that just wrote a note. */
-const groups = computed(() => {
+const groups = computed<NavGroup<MemoryFileEntry>[]>(() => {
     const needle = query.value.trim().toLowerCase();
     const matches = (file: MemoryFileEntry): boolean =>
         needle === `` || file.name.toLowerCase().includes(needle) || noteTitle(file.name).toLowerCase().includes(needle);
@@ -53,12 +53,16 @@ const groups = computed(() => {
     for (const file of files.value.filter(matches)) {
         byProject.set(file.project, [...(byProject.get(file.project) ?? []), file]);
     }
-    return [...byProject.entries()].map(([project, entries]) => ({
-        project,
-        entries: entries.toSorted((a, b) => Number(b.name === INDEX_NAME) - Number(a.name === INDEX_NAME)),
+    const projects = [...byProject.entries()];
+    return projects.map(([project, entries]) => ({
+        key: project,
+        // Only worth a heading when there is something to tell apart: with one project every row belongs to it,
+        // and the path is a line of chrome above the content.
+        label: projects.length > 1 ? projectLabel(project) : undefined,
+        items: entries.toSorted((a, b) => Number(b.name === INDEX_NAME) - Number(a.name === INDEX_NAME)),
     }));
 });
-const visibleCount = computed(() => groups.value.reduce((total, group) => total + group.entries.length, 0));
+const visibleCount = computed(() => groups.value.reduce((total, group) => total + group.items.length, 0));
 
 const projectCount = computed(() => new Set(files.value.map((file) => file.project)).size);
 const totalBytes = computed(() => files.value.reduce((total, file) => total + file.sizeBytes, 0));
@@ -75,7 +79,7 @@ watch(
     () => {
         if (selected.value === undefined && !mobile.value) {
             const first = groups.value[0];
-            const index = first?.entries.find((file) => file.name === INDEX_NAME) ?? first?.entries[0];
+            const index = first?.items.find((file) => file.name === INDEX_NAME) ?? first?.items[0];
             if (index !== undefined) {
                 selected.value = { project: index.project, name: index.name };
             }
@@ -134,65 +138,44 @@ const showReader = computed(() => !mobile.value || selected.value !== undefined)
             </div>
 
             <div v-else class="grid min-h-0 flex-1 gap-4 md:grid-cols-[19rem_minmax(0,1fr)]">
-                <!-- The index. Scrolls on its own so reading a long note never scrolls the list away. -->
-                <section v-if="showIndex" class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-card">
-                    <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
-                        <Icon name="search" class="shrink-0 text-2xs text-subtle" />
-                        <input
-                            v-model="query"
-                            type="search"
-                            placeholder="Filter notes…"
-                            aria-label="Filter notes"
-                            class="min-w-0 flex-1 bg-transparent text-xs text-content placeholder:text-subtle focus:outline-none"
-                        />
-                        <span v-if="query.trim() !== ``" class="shrink-0 text-2xs text-subtle">{{ visibleCount }}</span>
-                    </div>
-
-                    <div class="scrollbar-thin min-h-0 flex-1 overflow-auto p-1.5">
-                        <p v-if="visibleCount === 0" class="px-2 py-6 text-center text-xs text-muted">No note matches “{{ query.trim() }}”.</p>
-                        <div v-for="group in groups" :key="group.project" class="mb-3 last:mb-0">
-                            <!-- Only worth a heading when there is something to tell apart: with one project
-                                 every row belongs to it, and the path is a line of chrome above the content. -->
-                            <p v-if="groups.length > 1" class="truncate px-2 pb-1 font-mono text-2xs text-subtle/70" :title="group.project">
-                                {{ projectLabel(group.project) }}
-                            </p>
-                            <button
-                                v-for="file in group.entries"
-                                :key="`${file.project}/${file.name}`"
-                                type="button"
-                                class="group flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors"
-                                :class="isSelected(file) ? `bg-overlay` : `hover:bg-hover`"
-                                @click="selected = { project: file.project, name: file.name }"
-                            >
-                                <Icon
-                                    :name="file.name === INDEX_NAME ? `sparkles` : `file`"
-                                    class="mt-0.5 shrink-0 text-2xs"
-                                    :class="isSelected(file) ? `text-link` : `text-subtle`"
-                                />
-                                <span class="min-w-0 flex-1">
-                                    <span class="flex items-center gap-1.5">
-                                        <span
-                                            class="min-w-0 flex-1 truncate text-xs"
-                                            :class="isSelected(file) ? `font-medium text-content` : `text-muted group-hover:text-content`"
-                                        >
-                                            {{ rowTitle(file.name) }}
-                                        </span>
-                                        <span
-                                            v-if="drafts.has(`${file.project}/${file.name}`)"
-                                            class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-                                            v-tooltip.top="'Unsaved changes'"
-                                        ></span>
-                                    </span>
-                                    <span class="mt-0.5 flex items-center gap-1.5 text-2xs text-subtle">
-                                        <span class="min-w-0 truncate font-mono">{{ file.name }}</span>
-                                        <span aria-hidden="true">·</span>
-                                        <span class="shrink-0" :title="new Date(file.modifiedAt).toLocaleString()">{{ freshness(file.modifiedAt) }}</span>
-                                    </span>
+                <!-- The index. Framed, because it sits beside the reader rather than beside a document: two
+                     matching panels read as one split view, where a bare list beside a card reads as neither.
+                     Scrolls on its own so reading a long note never scrolls the list away. -->
+                <NavRail v-if="showIndex" v-model="query" :groups="groups" :count="visibleCount" framed filterable placeholder="Filter notes…">
+                    <template #row="{ item: file }">
+                        <Row
+                            :key="`${file.project}/${file.name}`"
+                            as="button"
+                            density="dense"
+                            :icon="file.name === INDEX_NAME ? `sparkles` : `file`"
+                            :title="rowTitle(file.name)"
+                            :selected="isSelected(file)"
+                            class="rounded-md"
+                            @click="selected = { project: file.project, name: file.name }"
+                        >
+                            <template #title>
+                                <span class="flex items-center gap-1.5">
+                                    <span class="min-w-0 truncate">{{ rowTitle(file.name) }}</span>
+                                    <span
+                                        v-if="drafts.has(`${file.project}/${file.name}`)"
+                                        class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+                                        v-tooltip.top="'Unsaved changes'"
+                                    ></span>
                                 </span>
-                            </button>
-                        </div>
-                    </div>
-                </section>
+                            </template>
+                            <template #description>
+                                <span class="flex items-center gap-1.5">
+                                    <span class="min-w-0 truncate font-mono">{{ file.name }}</span>
+                                    <span aria-hidden="true">·</span>
+                                    <span class="shrink-0" :title="new Date(file.modifiedAt).toLocaleString()">{{ freshness(file.modifiedAt) }}</span>
+                                </span>
+                            </template>
+                        </Row>
+                    </template>
+                    <template #empty>
+                        <p class="px-2 py-6 text-center text-xs text-muted">No note matches “{{ query.trim() }}”.</p>
+                    </template>
+                </NavRail>
 
                 <!-- The reader. Keyed by note so a switch resets its scroll and view mode, but the draft above
                      it is keyed by note too and so survives the remount. -->

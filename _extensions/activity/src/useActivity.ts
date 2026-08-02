@@ -1,8 +1,9 @@
 import { type ActivityEvent, ActivityListSchema, type ActivityStatus, ActivityStatusSchema } from "@intentic/sandbox-contract";
 import { useInfiniteQuery, useQuery } from "@tanstack/vue-query";
 import { computed, type Ref, watch } from "vue";
+import { sinceOf, type TimeWindow } from "@intentic/extension-ui";
 import { host } from "./host";
-import { sinceOf, type Window } from "./episodes";
+
 
 /* The activity audit feed, via the daemon's /activity routes: the durable event log (inbound wakes, sniffed
  * outbound provider calls, turn lifecycle, failures) plus the live connection/voice status probe. Plain polling —
@@ -22,7 +23,7 @@ const PAGE = 500;
 // can only bite on a log that has grown past what the daemon keeps.
 const MAX_PAGES = 4;
 
-export function useActivity(window: Ref<Window>) {
+export function useActivity(window: Ref<TimeWindow>) {
     const api = host();
     const enabled = computed(() => api.sandbox.reachable());
 

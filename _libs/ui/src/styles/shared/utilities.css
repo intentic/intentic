@@ -84,6 +84,25 @@
     }
 }
 
+/* A SCROLLBAR THAT IS ONLY THERE WHEN WANTED — for the narrow columns, where `.scrollbar-thin`'s permanently
+   `line-strong` thumb is a second vertical line running the full height of a 16rem index that is otherwise
+   drawing no lines at all. At rest this one is a whisper, enough to say the list continues past the fold; it
+   comes up to a real thumb when the pointer is anywhere in the column. The track stays transparent in both
+   states, which is also what suppresses the stepper arrows the platform scrollbar draws at each end.
+
+   Written for the documentation index and kept in its scoped <style> until three more columns wanted it. */
+@layer components {
+    .ui-softscroll {
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in srgb, var(--color-content) 10%, transparent) transparent;
+        transition: scrollbar-color 0.15s ease-out;
+    }
+
+    .ui-softscroll:hover {
+        scrollbar-color: color-mix(in srgb, var(--color-content) 26%, transparent) transparent;
+    }
+}
+
 @keyframes ui-skeleton-sweep {
     from {
         background-position: 150% 0;

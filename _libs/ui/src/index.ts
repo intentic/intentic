@@ -17,6 +17,9 @@ export { default as DagGraph } from "./components/DagGraph.vue";
 // does: they are plain TypeScript, and a unit test should not have to boot this barrel's component graph (and a
 // DOM with it) to call one. See the note above renderMarkdown's subpath.
 export { type DagEdge, type DagNode } from "./components/dagLayout.js";
+// The instrument above a list — free text, the controls that narrow it, and any bare action. In the kit rather
+// than in any one view because six views had written the row by hand and no two of them agreed.
+export { default as FilterBar } from "./components/FilterBar.vue";
 export { default as Icon } from "./components/Icon.vue";
 // THE surface that shows a picture — the workspace file viewer's images (through the viewers extension), the
 // SVG preview, and both sides of a binary diff. In the kit rather than in either caller so zoom, pan and the
@@ -28,8 +31,15 @@ export { default as InfoHint } from "./components/InfoHint.vue";
 export { default as InfoTable } from "./components/InfoTable.vue";
 export { default as Markdown } from "./components/Markdown.vue";
 export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
+// The index column: a filter, pinned rows, grouped selectable rows, a footnote. Owns the chrome; the row stays
+// the caller's, because a rail's rows differ for good reasons and its scrollbar never did.
+export { default as NavRail } from "./components/NavRail.vue";
+export { type NavGroup } from "./components/navRail.js";
 export { default as Page } from "./components/Page.vue";
 export { default as PageHeader } from "./components/PageHeader.vue";
+// The header row INSIDE a bordered surface. Sibling to PageHeader, which sits above a page — the distinction is
+// load-bearing, see the component's own note.
+export { default as PanelHeader } from "./components/PanelHeader.vue";
 export { default as Picker } from "./components/Picker.vue";
 export { type PickerGroup, type PickerOption, type PickerOptions } from "./components/picker.js";
 export { default as ProgressRing } from "./components/ProgressRing.vue";
@@ -51,6 +61,9 @@ export { installUi } from "./plugin.js";
 export { vTw } from "./composables/tw.js";
 export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js";
 export { formatBytes, formatTokens, timeAgo } from "./format.js";
+// The app's one "how far back" vocabulary — the 1h/24h/7d/All pills, the cutoff they mean, and the words a
+// caller says about them. Activity and Logs had each written all three.
+export { sinceOf, TIME_WINDOWS, type TimeWindow, timeWindowWords, withinWindow } from "./timeWindow.js";
 // Path splitting is NOT re-exported here — it ships as `@intentic-app/ui/path`, for the same reason the
 // markdown engine does: `fileType.ts` and `explorerPaste.ts` are unit-tested plain TypeScript, and neither
 // should have to boot this barrel's component graph (and a DOM with it) to split a string on "/".

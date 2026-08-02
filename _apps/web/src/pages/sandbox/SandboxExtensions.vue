@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-api";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { cmp, RowGroup, SearchBar, Segmented, StatusBadge } from "@intentic-app/ui";
+import { cmp, FilterBar, RowGroup, Segmented, StatusBadge } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import { type ExtensionSection, sectionsOf } from "../../composables/extensions/extensionCategories";
 import { useExtensionList } from "../../composables/extensions/useExtensionList";
@@ -135,24 +135,16 @@ const reload = async (): Promise<void> => {
         <p v-if="error" :class="cmp.alertDanger()">{{ error }}</p>
         <p v-if="toggleError" :class="cmp.alertDanger()">{{ toggleError }}</p>
 
-        <!-- The tab's instrument, not any one section's: two matched tracks and a bare action. The filter and
-             the state switcher are the same kind of thing (they narrow every section below) and read as one
-             instrument; reloading the host is not, so it stays chromeless beside them. No heading on the left —
-             the hub's own tab already says "Extensions", and the running total is on the "All" pill. -->
-        <div class="flex flex-wrap items-center justify-end gap-2">
-            <template v-if="filterable">
-                <!-- SearchBar rather than a `cmp.input`, even here: it is the one field in this tab a phone
-                     will focus, and its 16px-below-md rule is what stops iOS zooming the whole hub. The border
-                     it deliberately lacks (it is normally a panel's first row) is this wrapper's.
+        <!-- The tab's instrument, not any one section's. This row's layout reasoning became <FilterBar>'s: the
+             filter and the state switcher narrow every section below and read as one instrument, while reloading
+             the host does not and stays chromeless beside them. No heading on the left — the hub's own tab
+             already says "Extensions", and the running total is on the "All" pill.
 
-                     It takes the row's slack (`flex-1`) so the toolbar spans the same width as the sections
-                     under it — one left edge and one right edge down the whole tab, instead of a control
-                     cluster huddled in a corner. `justify-end` still earns its place: below the filterable
-                     threshold there is no field to grow, and the lone reload button belongs on the right. -->
-                <div class="h-8 min-w-40 flex-1 overflow-hidden rounded-md border border-line bg-canvas">
-                    <SearchBar v-model="query" placeholder="Name or contribution…" class="border-b-0" />
-                </div>
-                <div class="flex h-8 items-center rounded-md border border-line bg-canvas px-1">
+             Below the filterable threshold there is no field to grow, so the lone reload button sits alone on
+             the right rather than under an empty track. -->
+        <div class="flex flex-wrap items-center justify-end gap-2">
+            <FilterBar v-if="filterable" v-model="query" placeholder="Name or contribution…" class="flex-1">
+                <template #controls>
                     <Segmented
                         v-model="mode"
                         :options="[
@@ -161,8 +153,8 @@ const reload = async (): Promise<void> => {
                             { label: `Off`, value: `off`, badge: entries.length - enabledCount },
                         ]"
                     />
-                </div>
-            </template>
+                </template>
+            </FilterBar>
             <button type="button" :class="cmp.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" @click="reload">
                 <Icon name="refresh" :spin="reloading" />
             </button>

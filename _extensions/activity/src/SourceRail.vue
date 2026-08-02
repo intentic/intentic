@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, type IconName, Picker, type PickerOptions, useDevice } from "@intentic/extension-ui";
+import { Icon, type IconName, type NavGroup, NavRail, Picker, type PickerOptions, Row, useDevice } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { DIRECT, SCHEDULE, type Source } from "./episodes";
 
@@ -45,27 +45,27 @@ const GATEWAY_TITLES: Readonly<Record<NonNullable<Source["gateway"]>, string>> =
     idle: `Idle — no enabled listener automation to connect for`,
 };
 
-const groups = computed(() => [
-    { label: `Connections`, entries: sources.filter((source) => source.group === `connections`) },
-    { label: `Direct`, entries: sources.filter((source) => source.group === `direct`) },
-]);
+const groups = computed<NavGroup<Source>[]>(() =>
+    [
+        { key: `connections`, label: `Connections`, items: sources.filter((source) => source.group === `connections`) },
+        { key: `direct`, label: `Direct`, items: sources.filter((source) => source.group === `direct`) },
+    ].filter((group) => group.items.length > 0),
+);
 
 const { mobile } = useDevice();
 
 // The same model as options. `description` carries the counts the rail shows in its right column.
 const options = computed<PickerOptions<string>>(() => [
     { options: [{ value: ``, label: `All sources`, description: String(total), icon: `wave-pulse` }] },
-    ...groups.value
-        .filter((group) => group.entries.length > 0)
-        .map((group) => ({
-            label: group.label,
-            options: group.entries.map((source) => ({
-                value: source.key,
-                label: source.label,
-                description: source.failed > 0 ? `${source.episodes} · ${source.failed} failed` : String(source.episodes),
-                icon: iconOf(source.key),
-            })),
+    ...groups.value.map((group) => ({
+        label: group.label,
+        options: group.items.map((source) => ({
+            value: source.key,
+            label: source.label,
+            description: source.failed > 0 ? `${source.episodes} · ${source.failed} failed` : String(source.episodes),
+            icon: iconOf(source.key),
         })),
+    })),
 ]);
 // Picker models a string, and `` is its spelling of "no filter".
 const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) => (selected.value = value === `` ? undefined : value) });
@@ -74,41 +74,39 @@ const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) 
 <template>
     <Picker v-if="mobile" v-model="picked" :options="options" aria-label="Activity source" header="Source" class="w-full text-xs" />
 
-    <aside v-else class="flex w-52 shrink-0 flex-col gap-3 overflow-y-auto pr-1">
-        <button
-            type="button"
-            class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs"
-            :class="selected === undefined ? `bg-overlay text-content` : `text-muted hover:bg-hover hover:text-content`"
-            @click="selected = undefined"
-        >
-            <Icon name="wave-pulse" class="text-xs text-subtle" />
-            <span class="min-w-0 flex-1 truncate font-medium">All sources</span>
-            <span class="shrink-0 text-2xs text-subtle">{{ total }}</span>
-            <span v-if="failed > 0" v-tooltip.bottom="`${failed} failed`" class="shrink-0 text-2xs text-danger">{{ failed }}✕</span>
-        </button>
+    <NavRail v-else :groups="groups" class="w-52 shrink-0">
+        <!-- Not a member of any group, so it cannot be filtered or grouped away: "all" is the state the rail
+             returns to, and a row you cannot get back to is a filter you cannot clear. -->
+        <template #pinned>
+            <Row as="button" density="dense" icon="wave-pulse" title="All sources" :selected="selected === undefined" class="rounded-md" @click="selected = undefined">
+                <template #meta>
+                    <span>{{ total }}</span>
+                    <span v-if="failed > 0" v-tooltip.bottom="`${failed} failed`" class="text-danger">{{ failed }}✕</span>
+                </template>
+            </Row>
+        </template>
 
-        <div v-for="group in groups" :key="group.label" v-show="group.entries.length > 0" class="flex flex-col gap-0.5">
-            <h4 :class="cmp.sectionLabel('px-2')">{{ group.label }}</h4>
-            <button
-                v-for="source in group.entries"
+        <template #row="{ item: source }">
+            <Row
                 :key="source.key"
-                type="button"
-                class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs"
-                :class="selected === source.key ? `bg-overlay text-content` : `text-muted hover:bg-hover hover:text-content`"
+                as="button"
+                density="dense"
+                :icon="iconOf(source.key)"
+                :title="source.label"
+                :selected="selected === source.key"
+                class="rounded-md"
                 @click="selected = source.key"
             >
-                <Icon :name="iconOf(source.key)" class="shrink-0 text-xs text-subtle" />
-                <span class="min-w-0 flex-1 truncate font-medium">{{ source.label }}</span>
-                <!-- Live gateway state, only for a source the daemon actually holds a connection for. The span
-                     carries the tooltip because Icon forwards unknown attributes onto the svg. -->
-                <span v-if="source.gateway" v-tooltip.bottom="GATEWAY_TITLES[source.gateway]" class="shrink-0 leading-none">
-                    <Icon name="circle-fill" class="text-2xs" :class="DOT[source.gateway]" />
-                </span>
-                <span class="shrink-0 text-2xs text-subtle">{{ source.episodes }}</span>
-                <span v-if="source.failed > 0" v-tooltip.bottom="`${source.failed} failed`" class="shrink-0 text-2xs text-danger"
-                    >{{ source.failed }}✕</span
-                >
-            </button>
-        </div>
-    </aside>
+                <template #meta>
+                    <!-- Live gateway state, only for a source the daemon actually holds a connection for. The
+                         span carries the tooltip because Icon forwards unknown attributes onto the svg. -->
+                    <span v-if="source.gateway" v-tooltip.bottom="GATEWAY_TITLES[source.gateway]" class="leading-none">
+                        <Icon name="circle-fill" :class="DOT[source.gateway]" />
+                    </span>
+                    <span>{{ source.episodes }}</span>
+                    <span v-if="source.failed > 0" v-tooltip.bottom="`${source.failed} failed`" class="text-danger">{{ source.failed }}✕</span>
+                </template>
+            </Row>
+        </template>
+    </NavRail>
 </template>
