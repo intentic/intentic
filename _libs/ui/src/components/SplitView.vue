@@ -9,8 +9,8 @@
      DISAGREEMENT — every caller kept the treatment it happened to have, now spelled as `rail-width`, `framed`
      and `width`, and three adjacent screens still read as three designs. A shared component that is configurable
      in the places its callers disagree has not unified anything. So the rail is one width and never framed (see
-     RAIL and <NavRail>), and the page cap follows `scroll` (see pageWidth). What is left to pass is what the
-     screen IS, not how it should look.
+     RAIL and <NavRail>), and there is one page cap (see PAGE_WIDTH). What is left to pass is what the screen IS,
+     not how it should look.
 
      THE PAGE DOES NOT SCROLL; THE PANES DO. `h-full` + `overflow-hidden` leaves the outer router-view scroller
      nothing to take, so the rail and the body each keep their own scrollbar and their own place. Every one of
@@ -65,15 +65,17 @@ const { mobile: isPhone } = useDevice();
  * for. */
 const RAIL = `w-64`;
 
-/* THE PAGE CAP FOLLOWS `scroll`; it is not a prop. It was one, and the three pane-scrolling screens set it three
- * ways — which is how the same component still produced a Memory that sat in a 72rem column while Documentation
- * beside it used the whole window. There was never a choice there to make:
- *  · `panes` — the panes ARE the frame, and both bodies clamp their own reading measure (a note at 74ch, a
- *    document at 76ch) INSIDE that frame. A second cap outside it protects nothing and just parks dead canvas
- *    either side of a bordered panel.
- *  · `page` — nothing is framed and nothing clamps itself, so the cap is the only thing standing between a
- *    settings form and a 2560px line of text. */
-const pageWidth = computed(() => (scroll === `page` ? `wide` : `full`));
+/* ONE PAGE CAP, AND IT IS NOT A PROP. It was one, and the callers set it three ways. Removing it, the first
+ * attempt uncapped every pane-scrolling screen on the reasoning that the panes are the frame and each body
+ * already clamps its own reading measure inside it. That fact is true and the conclusion was backwards: a 74ch
+ * measure inside a 1280px pane wraps the text at the halfway mark and leaves the rest of the panel empty, which
+ * reads as a bug rather than as a margin. A cap outside the frame is what keeps the two in step — at 72rem the
+ * note fills ~80% of its pane instead of ~50%.
+ *
+ * The same number serves the scrolling hubs, where nothing is framed and nothing clamps itself and the cap is
+ * the only thing between a settings form and a 2560px line of text. So it is one constant for all five screens,
+ * not a fork and not a derivation. */
+const PAGE_WIDTH = `wide`;
 
 /* Three arrangements, and only three:
  *  · desktop        — rail beside detail, rail at its named width.
@@ -100,7 +102,7 @@ const railClass = computed(() => {
 <template>
     <div class="flex flex-col" :class="scroll === `panes` ? `h-full min-h-0 overflow-hidden` : ``">
         <!-- The head does not scroll: the title and anything pinned under it stay put while you read. -->
-        <Page :width="pageWidth" class="flex flex-col" :class="scroll === `panes` ? `min-h-0 flex-1` : ``">
+        <Page :width="PAGE_WIDTH" class="flex flex-col" :class="scroll === `panes` ? `min-h-0 flex-1` : ``">
             <PageHeader :title="title" :description="description">
                 <template v-if="$slots[`info`]" #info><slot name="info" /></template>
                 <template v-if="$slots[`actions`]" #actions><slot name="actions" /></template>

@@ -84,10 +84,6 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
                     {{ voiceMinutes }} min — {{ status.voice.participants.length > 0 ? status.voice.participants.join(`, `) : `no speakers yet` }}
                 </span>
             </div>
-
-            <FilterBar v-model="search" placeholder="Filter by text, channel, session…" :count="visible.length">
-                <template #controls><Segmented v-model="window" size="xs" :options="TIME_WINDOWS" /></template>
-            </FilterBar>
         </template>
 
         <!-- The rail NARROWS the timeline rather than selecting a document, so on a phone <SplitView> folds it
@@ -97,8 +93,20 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
             <SourceRail v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
         </template>
 
+        <!-- THE FILTER SITS ON THE THING IT FILTERS, which here is the FEED, not the rail — text and the time
+             window narrow the timeline, while picking a source is the rail's own job. It used to sit in #strips,
+             above both panes: a 1400px-wide field stretched across the index as well as the list, claiming to
+             narrow a column it has nothing to do with. <FilterBar>'s own rule is that the bar spans the list
+             under it, one left edge and one right edge down the view — inside the detail pane it finally does.
+             Memory and Documentation follow the same rule to the other answer: their filter narrows the INDEX,
+             so it rides the top of the rail. -->
         <template #detail>
-            <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
+            <div class="flex min-h-0 flex-1 flex-col gap-3">
+                <FilterBar v-model="search" placeholder="Filter by text, channel, session…" :count="visible.length">
+                    <template #controls><Segmented v-model="window" size="xs" :options="TIME_WINDOWS" /></template>
+                </FilterBar>
+                <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
+            </div>
         </template>
     </SplitView>
 </template>
