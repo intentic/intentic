@@ -16,6 +16,7 @@ import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
+import { openWorkTerminal, useWorkTerminals } from "../composables/terminal/useWorkTerminals";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolCard from "./ChatToolCard.vue";
@@ -77,6 +78,24 @@ const stopResumingOutages = (): void => {
         return;
     }
     void saveSandboxSettings.mutateAsync({ ...current, resumeAfterOutage: false }).catch(() => undefined);
+};
+
+/* The dependency reconcile's one press — a REVEAL, not a setting. The daemon started an install because the
+ * turn's landed delta needed one, and the only thing left to offer is the terminal it is running in.
+ *
+ * Gated on the install still RUNNING, on the same reasoning as the two offers above: a transcript replayed after
+ * it finished would otherwise open a dead pane, which is the row-of-corpses failure useWorkTerminals exists to
+ * avoid. `running` comes from the live terminals list, so the offer retires itself the moment the install ends
+ * and the notice settles into a plain sentence about something that happened. */
+const { rows: liveWork } = useWorkTerminals();
+// The install runs as a panel job keyed `<project>--install` (workspace-setup.ts installPanelKey), so the
+// suffix is what names it among the live work terminals without this file having to know the project's dir.
+const installSession = computed(() => liveWork.value.find((row) => row.session.endsWith(`--install`))?.session);
+const depsInstallOffer = computed(() => props.message.noticeAction === `depsInstall` && installSession.value !== undefined);
+const watchDepsInstall = (): void => {
+    if (installSession.value !== undefined) {
+        openWorkTerminal(installSession.value);
+    }
 };
 
 // Whimsical status words cycled while a turn is streaming (Claude Code style).
@@ -792,6 +811,9 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <template v-if="outageOptOutOffer">
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stopResumingOutages">Don't auto-resume</button>
                 <span class="shrink-0">— a turn the provider kills stops and waits for you.</span>
+            </template>
+            <template v-if="depsInstallOffer">
+                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="watchDepsInstall">Watch the install</button>
             </template>
         </div>
         <template v-else>

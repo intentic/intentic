@@ -115,6 +115,24 @@ export const appendMessage = (state: TurnState, message: Omit<ChatMessage, "id">
 export const appendNotice = (state: TurnState, text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): TurnState =>
     appendMessage(state, { role: `notice`, text, ...extra });
 
+/* What a landed delta did to the workspace's dependencies, as a clause the landed notice ends with — or nothing
+ * at all, which is what almost every turn produces and what the reader should therefore never have to skip past.
+ *
+ * Written as a REPORT of something already done, not a request. The daemon started the install the moment the
+ * tree changed (workspace/reconcile-deps.ts), so "installing" is the true tense and there is no decision left
+ * for the reader to make; the button beside it opens the terminal it is running in, for whoever wants to watch.
+ * The deferred wording is the one case that names a wait, because a workspace with other agents still running
+ * genuinely has not started yet and saying otherwise would be a lie the terminal would immediately expose. */
+const dependencyLine = (deps: { missing: number; started: string[]; deferred: boolean } | undefined): string => {
+    if (deps === undefined || deps.missing === 0) {
+        return ``;
+    }
+    const what = `${deps.missing} new ${deps.missing === 1 ? `dependency` : `dependencies`}`;
+    return deps.deferred
+        ? ` ${what} still need installing — that runs as soon as your other agents finish.`
+        : ` Installing ${what} it added.`;
+};
+
 /** A notice that belongs to the turn's OPENING rather than its running commentary — placed directly ABOVE the
  *  bubble this turn is writing into, which is to say directly under the message that asked for it.
  *
@@ -466,7 +484,9 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         case `landed`:
             // End of a clean isolated turn: the delta auto-landed into the main tree as uncommitted changes
             // (review = the Changes panel), was HELD on the branch because auto-land is off, or conflicted and
-            // stayed safely in the worktree.
+            // stayed safely in the worktree. A landed delta that changed what the workspace depends on carries
+            // its reconcile too (dependencyLine) — the one consequence of this turn the Changes panel cannot
+            // show, because it happened outside the diff.
             if (event.held === true) {
                 return step(appendNotice(state, `Finished — the work is on this agent's branch, ready to land from its review.`));
             }
@@ -474,7 +494,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 appendNotice(
                     state,
                     event.landed
-                        ? `Changes landed in your workspace — review them in the Changes panel.`
+                        ? `Changes landed in your workspace — review them in the Changes panel.${dependencyLine(event.deps)}`
                         : // Named, not explained: the cause is per-FILE (your edits, a moved main line, a binary),
                           // and the review is where each one is spelled out with the action that fits it. A
                           // notice that guesses one cause for all of them sends the user looking for an
@@ -487,7 +507,10 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                     // The moment-of-regret offer, on the LANDED notice only (the same pattern as ChatPanel's
                     // outage banner): the automatic behaviour just fired, and "stop doing that" is
                     // worth one press exactly now. The renderer hides it once the agent already holds.
-                    event.landed ? { noticeAction: `landHold` } : undefined,
+                    // An install that STARTED takes the slot instead: for as long as it runs, the one press
+                    // worth offering is the terminal it is running in — the land is already reviewable, the
+                    // install is the thing still happening.
+                    event.landed ? { noticeAction: (event.deps?.started.length ?? 0) > 0 ? `depsInstall` : `landHold` } : undefined,
                 ),
             );
         case `commands`:

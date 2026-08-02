@@ -1816,14 +1816,18 @@ export type WorkspaceHealth = z.infer<typeof WorkspaceHealthSchema>;
 // the agent's post-edit type-check, and the agent's turn context all gate on it.
 // `dir` is root-relative ("" = the workspace root itself); `manager` is the real binary (pnpm/npm/uv/…);
 // `evidence` is the file that decided it ("pnpm-lock.yaml"), so the UI can show WHY, not just what.
-// state: ready | installing | needs-setup | unsupported (manager absent from this sandbox — `manager` names it).
+// state: ready | installing | needs-setup | unsupported (manager absent from this sandbox — `manager` names it)
+//      | stale — installed ONCE and since outgrown: the manifests declare dependencies that are not on disk,
+//        which is what an agent leaves behind when it adds one and does not install it. Same command fixes it,
+//        so `missing` (how many names cannot resolve) is what separates the two in the UI's wording.
 export const ProjectSetupSchema = z.object({
     dir: z.string(),
     ecosystem: z.enum(["node", "python"]),
     manager: z.string(),
     command: z.string(),
     evidence: z.string(),
-    state: z.enum(["ready", "installing", "needs-setup", "unsupported"]),
+    state: z.enum(["ready", "installing", "needs-setup", "unsupported", "stale"]),
+    missing: z.number().optional(),
 });
 export type ProjectSetup = z.infer<typeof ProjectSetupSchema>;
 export const WorkspaceSetupSchema = z.object({ projects: z.array(ProjectSetupSchema) });

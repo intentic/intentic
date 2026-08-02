@@ -139,14 +139,19 @@ export interface ChatMessage {
     readonly role: ChatRole;
     readonly text: string;
     /* A one-press follow-up a notice line can carry (notices only): the landed notice's "keep future work on the
-     * branch" offer, and the outage notice's "stop resuming these by itself". A KIND, not a callback — the
-     * transcript is rebuilt from replayed frames, so the renderer owns what the press does and whether the offer
-     * is still standing (ChatMessageView reads the CURRENT posture and hides a stale offer).
+     * branch" offer, the outage notice's "stop resuming these by itself", and the terminal a dependency install
+     * the daemon just started is running in. A KIND, not a callback — the transcript is rebuilt from replayed
+     * frames, so the renderer owns what the press does and whether the offer is still standing (ChatMessageView
+     * reads the CURRENT posture and hides a stale offer).
      *
-     * Both are the same shape of affordance, and it is the one that earns an on-by-default automation the right to
-     * be on by default: the moment the automatic behaviour fires is the moment "don't do that" is worth exactly
-     * one press, so the opt-out is offered there rather than only in a settings page nobody is looking at. */
-    readonly noticeAction?: "landHold" | "outageOptOut";
+     * The first two are the same shape of affordance, and it is the one that earns an on-by-default automation the
+     * right to be on by default: the moment the automatic behaviour fires is the moment "don't do that" is worth
+     * exactly one press, so the opt-out is offered there rather than only in a settings page nobody is looking at.
+     *
+     * `depsInstall` is the other half of the same bargain — an automation that ran without asking owes the reader
+     * a way to SEE it, not just a way to stop it. The install is a real attachable tmux job, so the press is a
+     * reveal rather than a dialog: whoever wants the output gets the terminal it is already scrolling in. */
+    readonly noticeAction?: "landHold" | "outageOptOut" | "depsInstall";
     /* Set on a notice describing something that has not finished yet (notices only) — rendered with a spinner in
      * place of its info icon while the wait is on, and as an ordinary settled line once it is over.
      *

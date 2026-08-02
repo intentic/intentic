@@ -3,8 +3,10 @@ import { expect, test } from "vitest";
 import { syncHookOutput } from "../testing.js";
 import { type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";
 
-const RESOLVABLE: ModulesProbe = async () => true;
-const MISSING: ModulesProbe = async () => false;
+const RESOLVABLE: ModulesProbe = async () => ({ kind: "installed", missing: [] });
+const MISSING: ModulesProbe = async () => ({ kind: "absent" });
+// A tree that exists and is behind — the state an agent leaves when it adds a dependency and does not install it.
+const stale = (...missing: string[]): ModulesProbe => async () => ({ kind: "installed", missing });
 
 // Fire one edit at a hook set. Returned separately from runHook so a test can drive the SAME set twice and
 // observe the per-turn state (the missing-dependency notice is told once, not stapled to every edit).
@@ -88,4 +90,48 @@ test("the missing-dependency reason is told ONCE per turn, not stapled to every 
         "dependencies are not installed",
     );
     expect(second).toEqual({});
+});
+
+const contextOf = (result: unknown): string =>
+    (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext ?? "";
+
+/* A PARTIALLY installed tree is the case the old boolean gate could not see: node_modules exists, so it opened,
+ * and the one package the agent just added is still missing. The diagnostics are real and must survive — only
+ * the reading of the unresolved-import ones is wrong without this sentence. */
+test("a tree missing one package still type-checks, with the cause named alongside the errors", async () => {
+    let ran = false;
+    const result = await runHook(
+        async () => {
+            ran = true;
+            return ["src/app.ts:1:1: error TS2307: Cannot find module 'left-pad'."];
+        },
+        { file_path: "/work/src/app.ts" },
+        stale("left-pad"),
+    );
+    expect(ran).toBe(true);
+    const context = contextOf(result);
+    expect(context).toContain("error TS2307");
+    expect(context).toContain("1 dependency that is not installed (left-pad)");
+    expect(context).toContain("the install being behind");
+    expect(context).toContain("do not run an install");
+});
+
+test("a drifted tree is worth saying even when the edit itself type-checks clean — the next test will fail too", async () => {
+    const result = await runHook(async () => [], { file_path: "/work/src/app.ts" }, stale("vue", "zod"));
+    expect(contextOf(result)).toContain("2 dependencies that are not installed (vue, zod)");
+});
+
+test("the drift sentence is told once per package, and again when the set of missing names changes", async () => {
+    const missing = ["vue"];
+    const hooks = editDiagnosticsHooks("/work", undefined, withErrors, async () => ({ kind: "installed", missing: [...missing] }));
+    expect(contextOf(await fire(hooks, { file_path: "/work/src/a.ts" }))).toContain("(vue)");
+    // Same names, same package: the model has the reason already.
+    expect(contextOf(await fire(hooks, { file_path: "/work/src/b.ts" }))).not.toContain("not installed");
+    // A half-finished install changed the answer, so it is worth saying again.
+    missing.push("zod");
+    expect(contextOf(await fire(hooks, { file_path: "/work/src/c.ts" }))).toContain("(vue, zod)");
+});
+
+test("a fully installed tree says nothing extra — the diagnostics stand on their own", async () => {
+    expect(contextOf(await runHook(withErrors, { file_path: "/work/src/app.ts" }))).not.toContain("not installed");
 });

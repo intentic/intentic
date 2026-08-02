@@ -219,11 +219,17 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // can say whether the user's own copy is at risk or the main line simply moved on underneath the agent.
     // held ⇒ auto-land is off for this agent: nothing was applied and nothing failed — the delta is waiting
     // on the branch for a deliberate Land (landed is false, conflicts absent).
+    // `deps` rides along when the landed delta left the main tree declaring dependencies it does not have —
+    // the residue of an agent adding one without installing it, which every LATER turn would inherit through
+    // the overlay it mounts over the main checkout. The daemon reconciles it rather than asking anyone to
+    // (workspace/reconcile-deps.ts); this is the receipt, and `deferred` is the honest answer while other turns
+    // are still running, since an install cannot touch a tree they are mounted on.
     z.object({
         kind: z.literal("landed"),
         landed: z.boolean(),
         conflicts: z.array(LandConflictSchema).optional(),
         held: z.boolean().optional(),
+        deps: z.object({ missing: z.number(), started: z.array(z.string()), deferred: z.boolean() }).optional(),
     }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),

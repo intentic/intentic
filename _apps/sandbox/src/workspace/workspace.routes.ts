@@ -14,7 +14,7 @@ import { readModules } from "./modules.js";
 import { readPackageGraph } from "./package-graph.js";
 import { discoverRepos, isValidRepoId, isValidRepoName } from "./repo-discovery.js";
 import { resolveReference } from "./resolve-reference.js";
-import { startInstall, workspaceSetup } from "./workspace-setup.js";
+import { INSTALLABLE, missingCount, startInstall, workspaceSetup } from "./workspace-setup.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files.js";
@@ -204,24 +204,33 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // Dependency readiness per project. The wire shape flattens the recipe and drops its `marker` — the
         // browser renders manager/command/evidence and never needs to know which directory proves an install.
+        // A stale project carries HOW MANY names cannot resolve rather than which: the panel's sentence needs a
+        // number, and the list is long exactly when it is least worth sending.
         setup: i.setup.handler(async () => ({
-            projects: (await workspaceSetup(services.workspace.root, services.processes)).map(({ dir, recipe, state }) => ({
-                dir,
-                ecosystem: recipe.ecosystem,
-                manager: recipe.manager,
-                command: recipe.command,
-                evidence: recipe.evidence,
-                state,
-            })),
+            projects: (await workspaceSetup(services.workspace.root, services.processes)).map((project) =>
+                Object.assign(
+                    {
+                        dir: project.dir,
+                        ecosystem: project.recipe.ecosystem,
+                        manager: project.recipe.manager,
+                        command: project.recipe.command,
+                        evidence: project.recipe.evidence,
+                        state: project.state,
+                    },
+                    project.state === "stale" ? { missing: missingCount(project) } : {},
+                ),
+            ),
         })),
         // Install the named projects. The CLIENT's list is a request, not an instruction: it comes from a
         // pre-upload guess made in the browser (which cannot see what's already on disk), so every dir is
-        // re-resolved against the real workspace and only genuine `needs-setup` projects run. That is what
-        // makes a re-drop of an already-installed repo a silent no-op instead of a redundant reinstall.
+        // re-resolved against the real workspace and only projects an install would actually help run. That is
+        // what makes a re-drop of an already-installed repo a silent no-op instead of a redundant reinstall.
+        // `stale` is installable for the same reason `needs-setup` is — one command fixes both, and refusing
+        // here would leave the only surface that can repair a drifted tree unable to.
         install: i.install.handler(async ({ input }) => {
             const requested = new Set(input.dirs);
             const projects = (await workspaceSetup(services.workspace.root, services.processes)).filter(
-                (project) => requested.has(project.dir) && project.state === "needs-setup",
+                (project) => requested.has(project.dir) && INSTALLABLE.has(project.state),
             );
             await Promise.all(projects.map((project) => startInstall(services.workspace.root, project, services.processes)));
             return { started: projects.map((project) => project.dir) };

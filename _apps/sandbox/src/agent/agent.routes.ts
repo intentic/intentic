@@ -16,6 +16,7 @@ import { extensionEnvOf } from "../extensions/extension-env.js";
 import { extensionBinDirsOf } from "../extensions/installed-extensions.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { reconcileDependencies } from "../workspace/reconcile-deps.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
@@ -335,11 +336,19 @@ async function* runConversationTurn(
             if (landed.changed) {
                 await services.agents.recordLanded(conversationId, landed);
                 outcome = landed.held === true ? "ready" : landed.landed ? "landed" : "conflict";
+                /* The delta is in the main tree, which is where a package.json change starts costing everyone:
+                 * every later isolated turn overlays THIS node_modules, so a dependency that landed uninstalled
+                 * is inherited by every conversation after it. Reconciled here rather than left for someone to
+                 * notice — this is the moment the tree changed, and the only moment the cause is still obvious.
+                 * Awaited because the receipt rides the frame below; the install itself is a detached panel job,
+                 * so what is awaited is the decision, not the minutes. */
+                const deps = landed.landed ? await reconcileDependencies(services) : undefined;
                 yield {
                     kind: "landed",
                     landed: landed.landed,
                     ...(landed.conflicts !== undefined ? { conflicts: landed.conflicts } : {}),
                     ...(landed.held === true ? { held: true } : {}),
+                    ...(deps !== undefined ? { deps } : {}),
                 };
                 if (landed.landed) {
                     // The main tree just changed — give the History timeline its turn checkpoint, labeled with

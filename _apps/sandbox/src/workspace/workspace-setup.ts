@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { isManifest, managerFromPackageJson, recipeFor, type SetupRecipe } from "@intentic/workspace-setup";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
+import { unresolvedDependencies, unresolvedSummary, type UnresolvedPackage } from "./dependency-drift.js";
 
 // Workspace READINESS: whether the projects under /work actually have their dependencies installed, and the
 // one-shot install that gets them there. A drag-dropped project arrives without node_modules on purpose (the
@@ -25,15 +26,30 @@ export interface WorkspaceProject {
     readonly recipe: SetupRecipe;
 }
 
-// ready       — the marker (node_modules/.venv) is on disk; tooling can be trusted.
+// ready       — the marker (node_modules/.venv) is on disk AND satisfies the manifests; tooling can be trusted.
 // installing  — this project's install panel is running right now.
 // needs-setup — no marker, and the manager is available to fix it.
 // unsupported — no marker and the manager isn't in this sandbox, so offering an install would just fail in a
 //               terminal. The UI names the missing binary instead (it rides `manager`).
-export type SetupState = "ready" | "installing" | "needs-setup" | "unsupported";
+// stale       — the marker is there and the tree behind it is out of date: something declares a dependency that
+//               is not installed (dependency-drift.ts). A DISTINCT state rather than folding into needs-setup,
+//               because the two read completely differently to whoever sees them — "this project has never been
+//               set up" is a property of a fresh import, "your last change hasn't been installed yet" is an
+//               event that just happened — even though the same command resolves both.
+export type SetupState = "ready" | "installing" | "needs-setup" | "unsupported" | "stale";
+
+// The states an install would actually change something about. Named once, because three surfaces decide it and
+// they must not drift apart: the install route, the import flow behind it, and the post-land reconciler.
+// `installing` is excluded on purpose — a second install of a running one is what `processes.start` no-ops, and
+// asking for it is still a bug in the caller.
+export const INSTALLABLE: ReadonlySet<SetupState> = new Set<SetupState>(["needs-setup", "stale"]);
 
 export interface ProjectSetupStatus extends WorkspaceProject {
     readonly state: SetupState;
+    // What could not resolve, present only on `stale`. Carried rather than recomputed by every reader: the walk
+    // costs a stat per declared dependency, and the notice, the wire shape and the auto-install decision all
+    // need the same answer within milliseconds of each other.
+    readonly unresolved?: readonly UnresolvedPackage[];
 }
 
 // tmux session names carry `panel-<key>`, so a key must survive as one: a nested dir's separator and any
@@ -125,30 +141,46 @@ export const discoverProjects = async (root: string): Promise<WorkspaceProject[]
     return projects.toSorted((left, right) => left.dir.localeCompare(right.dir));
 };
 
-// One project's state. `installing` is checked FIRST: a running install has usually already created an empty
-// node_modules, so a marker-first order would flip the panel to "ready" seconds after it started. `available`
-// is injected by tests so a case can assert on a manager this machine happens to have (or lack).
+/* One project's state, and what is missing when it is `stale`. `installing` is checked FIRST: a running install
+ * has usually already created an empty node_modules, so a marker-first order would flip the panel to "ready"
+ * seconds after it started. `available` is injected by tests so a case can assert on a manager this machine
+ * happens to have (or lack).
+ *
+ * The drift walk runs only AFTER the marker is found, and only for node: it is the one ecosystem whose declared
+ * dependencies can be read off a manifest and looked for by name. A python project with a .venv is reported
+ * `ready` on the marker alone, exactly as before — claiming to have measured it would be the same conflation
+ * the chores probes refuse (unmeasured is not clean).
+ */
 export const setupStateOf = async (
     root: string,
     project: WorkspaceProject,
     processes: ManagedProcesses,
     available: (binary: string) => Promise<boolean> = onPath,
-): Promise<SetupState> => {
+): Promise<Pick<ProjectSetupStatus, "state" | "unresolved">> => {
     if (processes.running(installPanelKey(project.dir))) {
-        return "installing";
+        return { state: "installing" };
     }
     if (await exists(join(root, project.dir, project.recipe.marker))) {
-        return "ready";
+        if (project.recipe.ecosystem !== "node") {
+            return { state: "ready" };
+        }
+        const unresolved = await unresolvedDependencies(join(root, project.dir));
+        return unresolved.length === 0 ? { state: "ready" } : { state: "stale", unresolved };
     }
-    return (await available(project.recipe.manager)) ? "needs-setup" : "unsupported";
+    return { state: (await available(project.recipe.manager)) ? "needs-setup" : "unsupported" };
 };
 
 export const workspaceSetup = async (root: string, processes: ManagedProcesses): Promise<ProjectSetupStatus[]> => {
     const projects = await discoverProjects(root);
     return Promise.all(
-        projects.map(async (project) => ({ dir: project.dir, recipe: project.recipe, state: await setupStateOf(root, project, processes) })),
+        projects.map(async (project) => Object.assign({ dir: project.dir, recipe: project.recipe }, await setupStateOf(root, project, processes))),
     );
 };
+
+// How many names one project contributes to the notice, and how many the wire carries. Both bounded for the
+// same reason: a project mid-migration can be missing hundreds, and neither the model nor the panel is helped
+// by the tail.
+export const missingCount = (status: ProjectSetupStatus): number => (status.unresolved ?? []).reduce((total, entry) => total + entry.names.length, 0);
 
 // Start one project's install as a one-shot panel process — the same mechanism as a dev server or `add-app`,
 // deliberately: it runs in an attachable tmux session, so a minutes-long install survives a page reload, the
@@ -162,26 +194,51 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
     });
 };
 
-// The single line an agent turn is told when something under /work isn't installed. Naming the exact command
-// per project is what stops the model rediscovering it the expensive way — through a `not found` from a
-// package script, an `npx` that hits the registry for a binary that was never a package, and a file of
-// type-check errors that are all false.
+/* The single line an agent turn is told when something under /work isn't installed. Naming the exact command
+ * per project is what stops the model rediscovering it the expensive way — through a `not found` from a
+ * package script, an `npx` that hits the registry for a binary that was never a package, and a file of
+ * type-check errors that are all false.
+ *
+ * A STALE project is told about differently, and the difference is the point. It is not asked to install
+ * anything: the daemon reconciles a stale tree by itself once the workspace is idle (agent.routes.ts), and an
+ * install inside an isolated turn would write into an overlay that dies with the conversation anyway. What the
+ * turn is given is the one fact it cannot deduce and will otherwise be misled by — that an import failing to
+ * resolve right now is the install being behind, not the code being wrong. Without it the model reads a wall of
+ * true-looking errors and starts editing correct source to satisfy them.
+ */
 
 // The notice's fixed opening — what stripTurnPreamble anchors on to recognize an injected note in a stored
 // user message (turn-preamble.ts).
 export const SETUP_NOTICE_HEADER =
     "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet";
 
+// A project names itself by its directory; the root owns the manifest under a name rather than an empty string.
+const where = (status: ProjectSetupStatus): string => (status.dir === "" ? "the workspace root" : status.dir);
+
 export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string | undefined => {
     const pending = statuses.filter((status) => status.state === "needs-setup" || status.state === "unsupported");
-    if (pending.length === 0) {
+    const stale = statuses.filter((status) => status.state === "stale");
+    if (pending.length === 0 && stale.length === 0) {
         return undefined;
     }
-    const lines = pending.map((status) => {
-        const where = status.dir === "" ? "the workspace root" : status.dir;
-        return status.state === "unsupported"
-            ? `- ${where}: needs \`${status.recipe.manager}\`, which is not installed in this sandbox. Do not attempt the install; say so if it blocks the task.`
-            : `- ${where}: run \`${status.recipe.command}\` there first.`;
-    });
-    return [SETUP_NOTICE_HEADER, "(a dropped project arrives without them on purpose):", ...lines].join("\n");
+    const lines = pending.map((status) =>
+        status.state === "unsupported"
+            ? `- ${where(status)}: needs \`${status.recipe.manager}\`, which is not installed in this sandbox. Do not attempt the install; say so if it blocks the task.`
+            : `- ${where(status)}: run \`${status.recipe.command}\` there first.`,
+    );
+    const staleLines = stale.map(
+        (status) =>
+            `- ${where(status)}: ${missingCount(status)} declared dependencies are not installed (${unresolvedSummary(status.unresolved ?? [])}).`,
+    );
+    return [
+        ...(lines.length === 0 ? [] : [SETUP_NOTICE_HEADER, "(a dropped project arrives without them on purpose):", ...lines]),
+        ...(staleLines.length === 0
+            ? []
+            : [
+                  "Some dependencies declared under /work are not installed, so an unresolved import there is the install " +
+                      "being behind rather than a mistake in the code. Do not edit working source to satisfy one, and do not " +
+                      "run an install — the workspace reconciles itself once it is idle. Say so if it blocks the task:",
+                  ...staleLines,
+              ]),
+    ].join("\n");
 };
