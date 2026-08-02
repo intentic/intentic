@@ -10,6 +10,7 @@ import { probePort } from "../processes/managed-processes.js";
 import { shellQuote } from "../terminal/terminal-run.js";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
+import { readModules } from "./modules.js";
 import { readPackageGraph } from "./package-graph.js";
 import { discoverRepos, isValidRepoId, isValidRepoName } from "./repo-discovery.js";
 import { resolveReference } from "./resolve-reference.js";
@@ -226,6 +227,17 @@ export const createWorkspaceRoutes = (services: Services) => {
             return { started: projects.map((project) => project.dir) };
         }),
         repos: i.repos.handler(async () => ({ repos: await discoverRepos(services.workspace.root) })),
+        // Every repo's modules, in one read — "root" (the /work repo, whose dir IS the workspace root) plus each
+        // discovered repo, exactly the candidate set the Changes review scans.
+        modules: i.modules.handler(async () => {
+            const repoIds = await discoverRepos(services.workspace.root);
+            return {
+                repos: [
+                    { repo: "root", modules: readModules(services.workspace.root) },
+                    ...repoIds.map((repo) => ({ repo, modules: readModules(join(services.workspace.root, repo)) })),
+                ],
+            };
+        }),
         addRepo: i.addRepo.handler(async ({ input }) => {
             if (!isValidRepoName(input.name)) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid or reserved repo name" });

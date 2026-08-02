@@ -27,6 +27,9 @@ import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings
 import SuggestedSessionBox from "../../agents/SuggestedSessionBox.vue";
 import { fixPrompt, fixSummary } from "./prepushFix";
 import { type DiffTabPayload } from "./workspaceTabs";
+import { moduleGroups, rowName, type ModuleGroup } from "./changeModules";
+import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
+import { useModules } from "../../composables/workspace/useModules";
 import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
 
 /* The Changes review — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
@@ -264,6 +267,48 @@ const sidesOf = (repo: RepoChanges): readonly { side: GitDiffSide; label: string
 // the repo row's badge repeated verbatim one line below it — the same number twice, one line apart.
 const sidesSplit = (repo: RepoChanges): boolean => sidesOf(repo).length > 1;
 
+/* --- reading the list by module ------------------------------------------------------------------------------
+ * The one preference this panel takes about how it READS (useChangeGrouping, flipped from the mode-switch row
+ * above and mirrored in Settings ▸ Appearance). With it on, a side's rows are grouped under the package each
+ * path lives in and the row itself shrinks to the file — because the module prefix is the repeated half of a
+ * monorepo path, and in a 270px sidebar it is also the half that truncates away, so the list was spending its
+ * width restating what a header can say once. See changeModules.ts for why the module is the header and not
+ * the row.
+ *
+ * It changes nothing about what the panel DOES: the same rows, in the same order, staged and discarded by the
+ * same verbs. Which is why every section verb still reads `changesOn` — a side, not a module. */
+const { groupByModule } = useChangeGrouping();
+const { modulesOf } = useModules();
+
+interface SectionView {
+    // The rows as the list draws them: one unnamed bucket in path mode, one per module otherwise.
+    readonly buckets: readonly ModuleGroup<GitChange>[];
+    // Whether those buckets get headers. A lone bucket of files no module claims is the repo's name printed
+    // under the repo's own row, so it draws none — exactly like a lone side draws no count.
+    readonly named: boolean;
+}
+
+/* Every side's shape, built ONCE per change to the review rather than per call. Both the headers and the rows
+ * read it (a row's label switches on `named`), and a per-row grouping pass would be quadratic on a list this
+ * one is expressly built to survive — the daemon ships up to 500 rows a repo. */
+const sectionViews = computed<ReadonlyMap<string, SectionView>>(() => {
+    const views = new Map<string, SectionView>();
+    for (const repo of scannable.value) {
+        for (const section of sidesOf(repo)) {
+            const buckets = groupByModule.value
+                ? moduleGroups(section.changes, (change) => change.path, modulesOf(repo.repo), repo.repo)
+                : [{ key: `all`, name: ``, packaged: false, rows: section.changes }];
+            views.set(JSON.stringify([repo.repo, section.side]), {
+                buckets,
+                named: groupByModule.value && (buckets.length > 1 || buckets[0]?.packaged === true),
+            });
+        }
+    }
+    return views;
+});
+const EMPTY_VIEW: SectionView = { buckets: [], named: false };
+const viewOf = (repo: string, side: GitDiffSide): SectionView => sectionViews.value.get(JSON.stringify([repo, side])) ?? EMPTY_VIEW;
+
 // This panel lives in a ~270px sidebar, so labelled secondary buttons don't fit — four of them pushed the
 // primary Commit off the edge entirely. Everything secondary is a 24px icon with a tooltip and an aria-label;
 // only the primary action spends horizontal space on a word.
@@ -306,12 +351,19 @@ interface Row {
 const rowKey = (row: Row): string => JSON.stringify([row.repo, row.side, row.path]);
 
 // Every row in render order, so shift-click resolves a range the way a flat list does — across sections and
-// across repos. A collapsed repo contributes nothing: you cannot range through rows you cannot see.
+// across repos. A collapsed repo contributes nothing: you cannot range through rows you cannot see. Read
+// through `viewOf` rather than off the sections, because module grouping REORDERS a side (a loose file
+// between two of a package's) and a range that measured against the other order would select rows the user
+// never dragged over.
 const visibleRows = computed<readonly Row[]>(() =>
     scannable.value.flatMap((repo) =>
         collapsed.value.has(repo.repo)
             ? []
-            : sidesOf(repo).flatMap((section) => section.changes.map((change) => ({ repo: repo.repo, side: section.side, path: change.path }))),
+            : sidesOf(repo).flatMap((section) =>
+                  viewOf(repo.repo, section.side).buckets.flatMap((bucket) =>
+                      bucket.rows.map((change) => ({ repo: repo.repo, side: section.side, path: change.path })),
+                  ),
+              ),
     ),
 );
 
@@ -1335,97 +1387,128 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                             </button>
                         </div>
 
-                        <template v-for="change in section.changes" :key="`${group.repo}/${section.side}/${change.path}`">
-                            <!-- Selection is the explorer's own primary tint (WorkspaceTree's .treerow-on), NOT the
+                        <template v-for="bucket in viewOf(group.repo, section.side).buckets" :key="`${group.repo}/${section.side}/${bucket.key}`">
+                            <!-- The module a run of rows belongs to, said once. A label rather than a control:
+                                 the toggle behind it changes how the list READS, and staging stays the side's
+                                 verb above (and the row's own beside it), so nothing here can act on a scope
+                                 git has no word for. `box` is a package's own manifest; `folder` marks the
+                                 bucket of paths no module claims, named after the repo they sit loose in. -->
+                            <div v-if="viewOf(group.repo, section.side).named" class="flex items-center gap-1 pl-2 pt-1">
+                                <Icon :name="bucket.packaged ? 'box' : 'folder'" class="shrink-0 text-2xs text-subtle" />
+                                <span class="min-w-0 truncate text-2xs font-medium text-content" v-tooltip.right.overflow="bucket.name">{{
+                                    bucket.name
+                                }}</span>
+                                <span class="shrink-0 text-2xs text-subtle">{{ bucket.rows.length }}</span>
+                            </div>
+                            <template v-for="change in bucket.rows" :key="`${group.repo}/${section.side}/${change.path}`">
+                                <!-- Selection is the explorer's own primary tint (WorkspaceTree's .treerow-on), NOT the
                                  overlay: the overlay IS this list's hover colour, so a selected row was drawn
                                  exactly like whichever row the pointer happened to sit on — which made the click
                                  read as doing nothing, and a multi-selection invisible. Hover keeps its own step
                                  above the selected tint, so a selected row still answers the pointer. -->
-                            <div
-                                class="group/file flex items-center gap-1 rounded transition-colors"
-                                :class="
-                                    isSelected({ repo: group.repo, side: section.side, path: change.path })
-                                        ? 'bg-primary-500/15 hover:bg-primary-500/25'
-                                        : 'hover:bg-overlay'
-                                "
-                            >
-                                <!-- The origin rail: 2px of the landing agent's hue, always laid out (transparent
+                                <div
+                                    class="group/file flex items-center gap-1 rounded transition-colors"
+                                    :class="[
+                                        isSelected({ repo: group.repo, side: section.side, path: change.path })
+                                            ? 'bg-primary-500/15 hover:bg-primary-500/25'
+                                            : 'hover:bg-overlay',
+                                        // Under a header the rows step in, so the module reads as holding them
+                                        // rather than sitting beside them.
+                                        viewOf(group.repo, section.side).named ? 'pl-2' : '',
+                                    ]"
+                                >
+                                    <!-- The origin rail: 2px of the landing agent's hue, always laid out (transparent
                                      for a file nobody landed) so no row shifts when one appears. This is the part
                                      that works at a glance — an agent's batch reads as a colour block long before
                                      any of the names below are legible. -->
-                                <span
-                                    class="h-4 w-0.5 shrink-0 rounded-full"
-                                    :class="originsOf(group, change.path)[0] ? originHue(originsOf(group, change.path)[0]!).rail : 'bg-transparent'"
-                                ></span>
-                                <button
-                                    type="button"
-                                    class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-0.5 text-left max-md:min-h-11"
-                                    @click="clickRow({ repo: group.repo, side: section.side, path: change.path }, change, $event)"
-                                >
-                                    <ChangeStatusMark :status="change.status" />
-                                    <!-- dir="rtl" ellipsizes the head of the path so the filename survives truncation, but it
+                                    <span
+                                        class="h-4 w-0.5 shrink-0 rounded-full"
+                                        :class="
+                                            originsOf(group, change.path)[0] ? originHue(originsOf(group, change.path)[0]!).rail : 'bg-transparent'
+                                        "
+                                    ></span>
+                                    <button
+                                        type="button"
+                                        class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-0.5 text-left max-md:min-h-11"
+                                        @click="clickRow({ repo: group.repo, side: section.side, path: change.path }, change, $event)"
+                                    >
+                                        <ChangeStatusMark :status="change.status" />
+                                        <!-- Under a module header the row is the FILE — the header already carries
+                                         where it lives, and repeating the prefix on every row is what module
+                                         grouping exists to stop. The full path is always the tooltip here (not
+                                         only when cut off): a basename is ambiguous by construction, and this
+                                         is the one reading where looking harder cannot resolve it. -->
+                                        <span
+                                            v-if="viewOf(group.repo, section.side).named"
+                                            class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs"
+                                            v-tooltip.right="changeLabel(group.repo, change)"
+                                            >{{ rowName(change.path) }}</span
+                                        >
+                                        <!-- dir="rtl" ellipsizes the head of the path so the filename survives truncation, but it
                                          also lets bidi-neutral edge characters jump sides: a leading "_" in "_apps/…" renders
                                          at the far right. <bdi> isolates the path as one LTR run, keeping the glyphs in order.
                                          The tooltip is what that truncation costs — the full label, repo included, and only
                                          while the row is actually cut off. -->
-                                    <span
-                                        class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs"
-                                        dir="rtl"
-                                        v-tooltip.right.overflow="changeLabel(group.repo, change)"
-                                        ><bdi>{{ change.path }}</bdi></span
-                                    >
-                                    <!-- Who landed it: a provider chip per agent (two, then a count), and the name
+                                        <span
+                                            v-else
+                                            class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs"
+                                            dir="rtl"
+                                            v-tooltip.right.overflow="changeLabel(group.repo, change)"
+                                            ><bdi>{{ change.path }}</bdi></span
+                                        >
+                                        <!-- Who landed it: a provider chip per agent (two, then a count), and the name
                                          itself only once the panel is wide enough to hold it AND the file has a
                                          single owner — the path keeps first claim on the width. -->
-                                    <span
-                                        v-if="originsOf(group, change.path).length > 0"
-                                        class="flex shrink-0 items-center gap-0.5"
-                                        @mouseenter="showOrigins($event, originsOf(group, change.path))"
-                                        @mouseleave="hoverCard?.hide()"
+                                        <span
+                                            v-if="originsOf(group, change.path).length > 0"
+                                            class="flex shrink-0 items-center gap-0.5"
+                                            @mouseenter="showOrigins($event, originsOf(group, change.path))"
+                                            @mouseleave="hoverCard?.hide()"
+                                        >
+                                            <span
+                                                v-if="wide && originsOf(group, change.path).length === 1"
+                                                class="max-w-24 truncate text-2xs"
+                                                :class="originHue(originsOf(group, change.path)[0]!).text"
+                                            >
+                                                {{ originLabel(originsOf(group, change.path)[0]!) }}
+                                            </span>
+                                            <span
+                                                v-for="id in originsOf(group, change.path).slice(0, 2)"
+                                                :key="id"
+                                                class="flex h-3.5 w-3.5 items-center justify-center rounded-full"
+                                                :class="originHue(id).chip"
+                                            >
+                                                <ProviderLogo v-if="originProvider(id)" :provider="originProvider(id)!" class="text-[0.55rem]" />
+                                                <Icon v-else name="sparkles" class="text-[0.55rem]" />
+                                            </span>
+                                            <span v-if="originsOf(group, change.path).length > 2" class="text-2xs text-subtle">
+                                                +{{ originsOf(group, change.path).length - 2 }}
+                                            </span>
+                                        </span>
+                                        <DiffStat :additions="change.additions" :deletions="change.deletions" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
+                                        :disabled="changes.actionBusy.value"
+                                        @click="stageRow({ repo: group.repo, side: section.side, path: change.path })"
+                                        v-tooltip.top="INDEX_VERB[section.side].one"
+                                        :aria-label="`${INDEX_VERB[section.side].one}: ${change.path}`"
                                     >
-                                        <span
-                                            v-if="wide && originsOf(group, change.path).length === 1"
-                                            class="max-w-24 truncate text-2xs"
-                                            :class="originHue(originsOf(group, change.path)[0]!).text"
-                                        >
-                                            {{ originLabel(originsOf(group, change.path)[0]!) }}
-                                        </span>
-                                        <span
-                                            v-for="id in originsOf(group, change.path).slice(0, 2)"
-                                            :key="id"
-                                            class="flex h-3.5 w-3.5 items-center justify-center rounded-full"
-                                            :class="originHue(id).chip"
-                                        >
-                                            <ProviderLogo v-if="originProvider(id)" :provider="originProvider(id)!" class="text-[0.55rem]" />
-                                            <Icon v-else name="sparkles" class="text-[0.55rem]" />
-                                        </span>
-                                        <span v-if="originsOf(group, change.path).length > 2" class="text-2xs text-subtle">
-                                            +{{ originsOf(group, change.path).length - 2 }}
-                                        </span>
-                                    </span>
-                                    <DiffStat :additions="change.additions" :deletions="change.deletions" />
-                                </button>
-                                <button
-                                    type="button"
-                                    class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
-                                    :disabled="changes.actionBusy.value"
-                                    @click="stageRow({ repo: group.repo, side: section.side, path: change.path })"
-                                    v-tooltip.top="INDEX_VERB[section.side].one"
-                                    :aria-label="`${INDEX_VERB[section.side].one}: ${change.path}`"
-                                >
-                                    <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
-                                </button>
-                                <button
-                                    type="button"
-                                    class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
-                                    :disabled="changes.actionBusy.value"
-                                    @click="askDiscardRow({ repo: group.repo, side: section.side, path: change.path }, change)"
-                                    v-tooltip.top="'Discard'"
-                                    :aria-label="`Discard ${change.path}`"
-                                >
-                                    <Icon name="trash" class="text-2xs" />
-                                </button>
-                            </div>
+                                        <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
+                                        :disabled="changes.actionBusy.value"
+                                        @click="askDiscardRow({ repo: group.repo, side: section.side, path: change.path }, change)"
+                                        v-tooltip.top="'Discard'"
+                                        :aria-label="`Discard ${change.path}`"
+                                    >
+                                        <Icon name="trash" class="text-2xs" />
+                                    </button>
+                                </div>
+                            </template>
                         </template>
                     </template>
                     <!-- The daemon caps how many rows one repo ships (a cloned monorepo, a mass delete); the

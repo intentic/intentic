@@ -1618,6 +1618,16 @@ export const WorkspaceDepEdgeSchema = z.object({ from: z.string(), to: z.string(
 export type WorkspaceDepEdge = z.infer<typeof WorkspaceDepEdgeSchema>;
 export const WorkspaceGraphSchema = z.object({ packages: z.array(WorkspacePackageSchema), edges: z.array(WorkspaceDepEdgeSchema) });
 export type WorkspaceGraph = z.infer<typeof WorkspaceGraphSchema>;
+// One module a changed file can be grouped under in the review panels: a repo-relative dir ("_apps/web", or ""
+// for a repo that is itself one package) and the name its package.json declares. Distinct from
+// WorkspacePackage, which is the DEPENDENCY graph's node — that one is pnpm's view of the workspace and carries
+// the grouping axis its diagram colours by; this one is a filesystem fact about where a path lives.
+export const WorkspaceModuleSchema = z.object({ dir: z.string(), name: z.string() });
+export type WorkspaceModule = z.infer<typeof WorkspaceModuleSchema>;
+export const RepoModulesSchema = z.object({ repo: z.string(), modules: z.array(WorkspaceModuleSchema) });
+export type RepoModules = z.infer<typeof RepoModulesSchema>;
+export const WorkspaceModulesSchema = z.object({ repos: z.array(RepoModulesSchema) });
+export type WorkspaceModules = z.infer<typeof WorkspaceModulesSchema>;
 // Path params for the per-repo apps routes: the monorepo name (validated in the handler like PanelRepoParam)
 // and, for per-app preview control (start/stop), the app key (api/web/landing).
 export const RepoAppsParamSchema = z.object({ repo: z.string() });

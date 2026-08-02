@@ -5,6 +5,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { showWorkTerminals } from "../../composables/terminal/useWorkTerminals";
 import { useLayout } from "../../composables/useLayout";
+import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 import { useIconRailSize } from "../../composables/useIconRailSize";
@@ -21,6 +22,8 @@ const { iconSet, iconSets } = useIconSet();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
+// The review lists' reading — the same preference the Changes panel's own header toggle flips.
+const { groupByModule } = useChangeGrouping();
 // The explorer's ignored-entry switch — the same preference the workspace toolbar's Ignored chip flips, which is
 // where someone already staring at node_modules will reach for it; this is where they'll look for it afterwards.
 const { hideIgnored, toggleHideIgnored } = useLayout();
@@ -116,6 +119,20 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 <template #control>
                     <ToggleSwitch :model-value="hideIgnored" @update:model-value="toggleHideIgnored()" />
                 </template>
+            </Row>
+        </RowGroup>
+
+        <!-- Changes — how a review list reads. Here as well as on the panel itself (the Changes header's own
+             toggle writes the same preference), for the same reason the explorer's switches are in both places:
+             this is where someone looks for it once they know it exists. -->
+        <RowGroup label="Changes">
+            <Row
+                as="label"
+                icon="box"
+                title="Group by module"
+                description="Head each run of changed files with the package it lives in, and let the row be the file — instead of a repo-relative path per row. Applies to the workspace Changes panel and an agent's review."
+            >
+                <template #control><ToggleSwitch v-model="groupByModule" /></template>
             </Row>
         </RowGroup>
 

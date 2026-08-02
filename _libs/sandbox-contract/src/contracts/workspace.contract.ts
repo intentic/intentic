@@ -25,6 +25,7 @@ import {
     WorkspaceInstallResultSchema,
     WorkspaceInstallSchema,
     WorkspaceMediaTicketSchema,
+    WorkspaceModulesSchema,
     WorkspaceMoveSchema,
     WorkspaceResolveQuerySchema,
     WorkspaceResolveSchema,
@@ -95,6 +96,10 @@ export const workspaceContract = {
     // The monorepo's workspace package dependency graph (pnpm-workspace.yaml globs + per-package package.json
     // workspace deps) — drives the apps extension's Dependencies view.
     packageGraph: oc.route({ method: "GET", path: "/workspace/repos/{repo}/graph" }).input(RepoAppsParamSchema).output(WorkspaceGraphSchema),
+    // Every repo's modules (the dirs owning a named package.json) — what the review panels group changed files
+    // under when the reader has asked for modules instead of paths. Whole-workspace rather than per-repo: a
+    // review list spans repos, and one request per repo group would be a fan-out the panel pays on every open.
+    modules: oc.route({ method: "GET", path: "/workspace/modules" }).output(WorkspaceModulesSchema),
     startApp: oc.route({ method: "POST", path: "/workspace/repos/{repo}/apps/{app}/start" }).input(AppParamSchema).output(OkSchema),
     stopApp: oc.route({ method: "POST", path: "/workspace/repos/{repo}/apps/{app}/stop" }).input(AppParamSchema).output(OkSchema),
     // Run vitest for the given repo-relative project dirs in a one-shot tmux panel session

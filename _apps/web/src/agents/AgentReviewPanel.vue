@@ -15,6 +15,9 @@ import BinaryDiffView from "../pages/workspace/viewers/BinaryDiffView.vue";
 import DiffToolbar from "../pages/workspace/viewers/DiffToolbar.vue";
 import DiffView from "../pages/workspace/viewers/DiffView.vue";
 import { rendersAsBytes } from "../pages/workspace/fileType";
+import { moduleGroups, type ModuleGroup } from "../pages/workspace/changeModules";
+import { useChangeGrouping } from "../composables/workspace/useChangeGrouping";
+import { useModules } from "../composables/workspace/useModules";
 import AgentConflictReport from "./AgentConflictReport.vue";
 import { basename, parentDir } from "@intentic-app/ui/path";
 import ChangeStatusMark from "../components/ChangeStatusMark.vue";
@@ -149,9 +152,42 @@ const groups = computed(() => {
     }));
 });
 
+/* The same reading the workspace's Changes panel offers, from the same preference (useChangeGrouping): a repo's
+ * rows grouped under the package each path lives in, with the row itself shrunk to the file. One setting for
+ * both review surfaces, because "how do I read a change list" is not a thing anyone wants to answer twice —
+ * and because these two lists disagreeing about how a changed file is named is exactly the kind of seam that
+ * makes two panels feel like two products. */
+const { groupByModule } = useChangeGrouping();
+const { modulesOf } = useModules();
+
+interface RepoView {
+    // A repo's rows as the list draws them: one unnamed bucket in path mode, one per module otherwise.
+    readonly buckets: readonly ModuleGroup<AgentReviewFile>[];
+    // Whether those buckets get headers. A lone bucket of files no module claims is the repo's name printed
+    // under the repo's own header — nothing to say, so nothing said.
+    readonly named: boolean;
+}
+
+// Built once per change to the review, not per call: the rows read `named` too (a row's label switches on it),
+// and a grouping pass per row would be quadratic on a big landing.
+const repoViews = computed<ReadonlyMap<string, RepoView>>(() => {
+    const views = new Map<string, RepoView>();
+    for (const group of groups.value) {
+        const buckets = groupByModule.value
+            ? moduleGroups(group.files, (file) => file.change.path, modulesOf(group.repo), group.repo)
+            : [{ key: `all`, name: ``, packaged: false, rows: group.files as readonly AgentReviewFile[] }];
+        views.set(group.repo, { buckets, named: groupByModule.value && (buckets.length > 1 || buckets[0]?.packaged === true) });
+    }
+    return views;
+});
+const EMPTY_VIEW: RepoView = { buckets: [], named: false };
+const viewOf = (repo: string): RepoView => repoViews.value.get(repo) ?? EMPTY_VIEW;
+
 // What the keyboard walks: the rows actually on screen, in render order. A collapsed repo contributes nothing —
-// you cannot step onto a row you cannot see.
-const visibleRows = computed<readonly AgentReviewFile[]>(() => groups.value.flatMap((group) => (collapsed.value.has(group.repo) ? [] : group.files)));
+// you cannot step onto a row you cannot see. Read through the buckets, since grouping reorders a repo's rows.
+const visibleRows = computed<readonly AgentReviewFile[]>(() =>
+    groups.value.flatMap((group) => (collapsed.value.has(group.repo) ? [] : viewOf(group.repo).buckets.flatMap((bucket) => bucket.rows))),
+);
 
 const selectedKey = ref<string | undefined>(undefined);
 // Resolved against the FILTERED rows, not the visible ones: collapsing a repo group is "give me back some
@@ -499,72 +535,98 @@ const endResize = (event: PointerEvent): void => {
                         </button>
 
                         <template v-if="!collapsed.has(group.repo)">
-                            <div
-                                v-for="file in group.files"
-                                :key="file.key"
-                                :ref="(el) => setRowEl(file.key, el)"
-                                class="group/file flex items-center border-l-2 transition-colors"
-                                :class="
-                                    file.key === selectedKey
-                                        ? 'border-primary-500 bg-primary-600/10'
-                                        : file.blocked !== undefined
-                                          ? 'border-warning/70 bg-warning/5 hover:bg-overlay'
-                                          : 'border-transparent hover:border-line-strong hover:bg-overlay'
-                                "
-                            >
-                                <button
-                                    type="button"
-                                    class="flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-1.5 pr-1 text-left max-md:min-h-11"
-                                    :class="isViewed(file) ? 'opacity-50' : ''"
-                                    @click="select(file)"
+                            <template v-for="bucket in viewOf(group.repo).buckets" :key="`${group.repo}/${bucket.key}`">
+                                <!-- The module its run of rows belongs to, said once — a label, not a control: the
+                                 actions in this panel are the review's (viewed, land, open) and none of them
+                                 has a module-sized scope. -->
+                                <div
+                                    v-if="viewOf(group.repo).named"
+                                    class="flex items-center gap-1.5 border-b border-line/40 bg-canvas/60 px-2 py-0.5"
                                 >
-                                    <ChangeStatusMark :status="file.change.status" />
-                                    <Icon
-                                        :name="iconForEntry(basename(file.change.path), 'file', false)"
-                                        class="shrink-0 text-2xs"
-                                        :class="explorerColorClass(explorerStyle, basename(file.change.path), 'file', false)"
-                                    />
-                                    <!-- Basename first and legible, its directory trailing and dimmed: a review is
+                                    <Icon :name="bucket.packaged ? 'box' : 'folder'" class="shrink-0 text-2xs text-subtle" />
+                                    <span class="min-w-0 truncate text-2xs font-medium text-muted" v-tooltip.right.overflow="bucket.name">{{
+                                        bucket.name
+                                    }}</span>
+                                    <span class="shrink-0 text-2xs text-subtle">{{ bucket.rows.length }}</span>
+                                </div>
+                                <div
+                                    v-for="file in bucket.rows"
+                                    :key="file.key"
+                                    :ref="(el) => setRowEl(file.key, el)"
+                                    class="group/file flex items-center border-l-2 transition-colors"
+                                    :class="[
+                                        file.key === selectedKey
+                                            ? 'border-primary-500 bg-primary-600/10'
+                                            : file.blocked !== undefined
+                                              ? 'border-warning/70 bg-warning/5 hover:bg-overlay'
+                                              : 'border-transparent hover:border-line-strong hover:bg-overlay',
+                                        // Under a header the rows step in, so the module reads as holding them.
+                                        viewOf(group.repo).named ? 'pl-2' : '',
+                                    ]"
+                                >
+                                    <button
+                                        type="button"
+                                        class="flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-1.5 pr-1 text-left max-md:min-h-11"
+                                        :class="isViewed(file) ? 'opacity-50' : ''"
+                                        @click="select(file)"
+                                    >
+                                        <ChangeStatusMark :status="file.change.status" />
+                                        <Icon
+                                            :name="iconForEntry(basename(file.change.path), 'file', false)"
+                                            class="shrink-0 text-2xs"
+                                            :class="explorerColorClass(explorerStyle, basename(file.change.path), 'file', false)"
+                                        />
+                                        <!-- Under a module header the row is the file alone — the header carries where
+                                     it lives — and the full path is always the tooltip rather than only when
+                                     the row is cut off, because a basename is ambiguous by construction. -->
+                                        <span
+                                            v-if="viewOf(group.repo).named"
+                                            class="min-w-0 flex-1 truncate text-2xs font-medium text-content max-md:text-xs"
+                                            v-tooltip.right="file.label"
+                                            >{{ basename(file.change.path) }}</span
+                                        >
+                                        <!-- Basename first and legible, its directory trailing and dimmed: a review is
                                      read by file name, and the middle-truncated full paths this replaces made
                                      every row in a deep tree look the same. -->
-                                    <span class="min-w-0 flex-1 truncate text-2xs max-md:text-xs" v-tooltip.right.overflow="file.label">
-                                        <span class="font-medium text-content">{{ basename(file.change.path) }}</span>
-                                        <span class="ml-1 text-subtle">{{ parentDir(file.change.path) }}</span>
-                                    </span>
-                                    <!-- WHY THIS ROW REFUSED, on the row. A blocked file is unlanded by
+                                        <span v-else class="min-w-0 flex-1 truncate text-2xs max-md:text-xs" v-tooltip.right.overflow="file.label">
+                                            <span class="font-medium text-content">{{ basename(file.change.path) }}</span>
+                                            <span class="ml-1 text-subtle">{{ parentDir(file.change.path) }}</span>
+                                        </span>
+                                        <!-- WHY THIS ROW REFUSED, on the row. A blocked file is unlanded by
                                      definition, so the plain dot would only be repeating what the mark
                                      already says in a word — the mark REPLACES it rather than crowding in
                                      beside it. One word and the cause's own glyph, because this sits between
                                      a truncating path and a diffstat; the sentence is the tooltip. -->
-                                    <span
-                                        v-if="file.blocked !== undefined"
-                                        class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1 py-px text-2xs font-medium text-warning"
-                                        v-tooltip.right="REASON_COPY[file.blocked].row"
+                                        <span
+                                            v-if="file.blocked !== undefined"
+                                            class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1 py-px text-2xs font-medium text-warning"
+                                            v-tooltip.right="REASON_COPY[file.blocked].row"
+                                        >
+                                            <Icon :name="REASON_COPY[file.blocked].icon" class="text-2xs" />{{ REASON_COPY[file.blocked].mark }}
+                                        </span>
+                                        <span
+                                            v-else-if="!file.change.landed"
+                                            class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+                                            v-tooltip.right="'Not yet landed in your workspace'"
+                                        ></span>
+                                        <DiffStat :additions="file.change.additions" :deletions="file.change.deletions" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content max-md:h-9 max-md:w-9"
+                                        :class="
+                                            isViewed(file)
+                                                ? 'text-success'
+                                                : 'opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100'
+                                        "
+                                        @click="toggleViewed(file)"
+                                        v-tooltip.right="isViewed(file) ? 'Reviewed — click to unmark' : 'Mark as reviewed'"
+                                        :aria-label="`Mark ${file.label} as reviewed`"
                                     >
-                                        <Icon :name="REASON_COPY[file.blocked].icon" class="text-2xs" />{{ REASON_COPY[file.blocked].mark }}
-                                    </span>
-                                    <span
-                                        v-else-if="!file.change.landed"
-                                        class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-                                        v-tooltip.right="'Not yet landed in your workspace'"
-                                    ></span>
-                                    <DiffStat :additions="file.change.additions" :deletions="file.change.deletions" />
-                                </button>
-                                <button
-                                    type="button"
-                                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content max-md:h-9 max-md:w-9"
-                                    :class="
-                                        isViewed(file)
-                                            ? 'text-success'
-                                            : 'opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100'
-                                    "
-                                    @click="toggleViewed(file)"
-                                    v-tooltip.right="isViewed(file) ? 'Reviewed — click to unmark' : 'Mark as reviewed'"
-                                    :aria-label="`Mark ${file.label} as reviewed`"
-                                >
-                                    <Icon :name="isViewed(file) ? 'check-square' : 'check'" class="text-2xs" />
-                                </button>
-                            </div>
+                                        <Icon :name="isViewed(file) ? 'check-square' : 'check'" class="text-2xs" />
+                                    </button>
+                                </div>
+                            </template>
                         </template>
                     </div>
                 </div>

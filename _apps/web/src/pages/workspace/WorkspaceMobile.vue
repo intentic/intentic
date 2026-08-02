@@ -8,6 +8,7 @@ import { useRoute, useRouter } from "vue-router";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
 import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
+import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
 import { useChanges } from "../../composables/workspace/useChanges";
 import { useMonaco } from "../../composables/workspace/useMonaco";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
@@ -42,6 +43,8 @@ const route = useRoute();
 const router = useRouter();
 const layout = useLayout();
 const changes = useChanges();
+// The Changes list's one reading preference — see useChangeGrouping; Settings ▸ Appearance mirrors it.
+const { groupByModule } = useChangeGrouping();
 const {
     tree,
     rootHidden,
@@ -320,6 +323,21 @@ const onPick = (event: Event): void => {
                     @click="layout.toggleHideIgnored()"
                 >
                     <Icon :name="layout.hideIgnored.value ? `eye-slash` : `eye`" class="text-base" />
+                </button>
+                <!-- The Changes list's reading: paths, or a header per module with the file on the row. Beside
+                     the ignored-files chip because it is the same kind of control — a way of looking, flipped
+                     where you are looking. No tooltip on touch, so the icon's lit state carries it and the
+                     label spells it out. -->
+                <button
+                    v-if="segment === 'changes'"
+                    type="button"
+                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors active:bg-overlay"
+                    :class="groupByModule ? 'text-link' : 'text-muted'"
+                    :aria-pressed="groupByModule"
+                    :aria-label="groupByModule ? 'Show file paths' : 'Group changed files by module'"
+                    @click="groupByModule = !groupByModule"
+                >
+                    <Icon name="box" class="text-base" />
                 </button>
                 <!-- One refresh for the row, refetching whichever segment is showing — the Changes panel below
                      no longer carries a header row (and its own refresh) of its own. -->
