@@ -77,6 +77,18 @@ describe("bridgeRepo", () => {
         expect(calls).toContain(`git reset -q ${TIP}`);
     });
 
+    it("makes the local repo ignore the exec bit, the way every git command in the sandbox does", () => {
+        const { calls, exec } = scripted({ "git remote get-url": undefined, "git ls-remote": undefined }, [DIR, join(DIR, ".git")]);
+        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        expect(calls).toContain("git config core.fileMode false");
+    });
+
+    it("leaves a config that already reads modes the sandbox's way alone", () => {
+        const { calls, exec } = scripted({ "git config --get core.fileMode": "false\n", "git ls-remote": undefined }, [DIR, join(DIR, ".git")]);
+        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        expect(calls).not.toContain("git config core.fileMode false");
+    });
+
     it("URI-encodes a nested repo id in the remote url", () => {
         const { calls, exec } = scripted({ "git remote get-url": undefined, "git ls-remote": undefined }, [
             join(LOCAL, "references", "eve"),

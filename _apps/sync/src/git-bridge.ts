@@ -85,6 +85,17 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
         }
         log(`  ${repo}: initialized — this repo's history now follows the sandbox`);
     }
+    // Read the worktree the way the SANDBOX reads it. The daemon runs EVERY git command with
+    // core.fileMode=false (scaffold's GIT_GLOBAL_ARGS: workspace files arrive by browser upload, which cannot
+    // carry a Unix permission, so an exec bit there is noise) — local git defaults to true. One worktree, two
+    // verdicts: a hook or script whose exec bit had drifted showed up as a modification in the desktop's SCM
+    // view that the Changes panel does not list, that no local edit explains, and that neither end can clear —
+    // the sandbox's git will not even record a mode, so committing it there is not an option either.
+    // Converged on every pass rather than only at init: a machine paired before this shipped already has git's
+    // own default written into its config, and the read is local and free next to the ls-remote below.
+    if (exec.run("git", ["config", "--get", "core.fileMode"], dir)?.trim() !== "false") {
+        exec.run("git", ["config", "core.fileMode", "false"], dir);
+    }
     const current = exec.run("git", ["remote", "get-url", "sandbox"], dir)?.trim();
     if (current === undefined) {
         if (exec.run("git", ["remote", "add", "sandbox", url], dir) === undefined) {
