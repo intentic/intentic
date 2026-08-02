@@ -665,7 +665,7 @@ const submitLabel = computed(() =>
             </div>
 
             <!-- Precondition gate: a service/integration needs DevOps first. -->
-            <div v-if="!requiresMet" class="rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-xs text-info">
+            <div v-if="!requiresMet" :class="cmp.alertInfo()">
                 This needs <b>DevOps</b> active first. Go back and activate the DevOps capability, then add this.
             </div>
 
@@ -990,7 +990,7 @@ const submitLabel = computed(() =>
                 </label>
                 <CapabilityEffects :effects="liveEffects" />
                 <!-- Why the grid badged this one — named here too, so the rebuild the hint asks for has a reason attached. -->
-                <div v-if="recommendationFor(selected.kind)" class="rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-xs text-info">
+                <div v-if="recommendationFor(selected.kind)" :class="cmp.alertInfo()">
                     Recommended: your workspace has <b>{{ recommendationFor(selected.kind)?.evidence }}</b
                     >, which needs this capability to run.
                 </div>

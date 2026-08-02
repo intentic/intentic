@@ -343,6 +343,9 @@ catalogs:
     semantic-release:
       specifier: 25.0.8
       version: 25.0.8
+    sharp:
+      specifier: 0.34.5
+      version: 0.34.5
     shiki:
       specifier: 4.4.1
       version: 4.4.1
@@ -1082,6 +1085,9 @@ importers:
       astro-opengraph-images:
         specifier: 'catalog:'
         version: 1.17.4(@noble/hashes@2.2.0)(tw-to-css@0.0.12)
+      sharp:
+        specifier: 'catalog:'
+        version: 0.34.5
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.3

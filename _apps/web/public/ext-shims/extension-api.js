@@ -5,6 +5,7 @@ export const AgentContributionSchema = m["AgentContributionSchema"];
 export const CommandContributionSchema = m["CommandContributionSchema"];
 export const ConnectorContributionSchema = m["ConnectorContributionSchema"];
 export const ConnectorFieldSchema = m["ConnectorFieldSchema"];
+export const DocumentContributionSchema = m["DocumentContributionSchema"];
 export const EnvironmentContributionSchema = m["EnvironmentContributionSchema"];
 export const ExtensionManifestSchema = m["ExtensionManifestSchema"];
 export const FileContributionSchema = m["FileContributionSchema"];

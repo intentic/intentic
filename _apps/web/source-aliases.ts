@@ -43,6 +43,9 @@ export const sourceAliases = (): Record<string, string> => ({
     // Same again: the chart palette's slot→colour lookup is called by the usage/savings PROJECTIONS, which are
     // pure functions with their own unit tests — reaching it through the barrel boots Picker.vue and wants a DOM.
     "@intentic-app/ui/series": here("../../_libs/ui/src/components/seriesAccent.ts"),
+    // And once more: the 1h/24h/7d/All vocabulary is arithmetic over a timestamp, called by the feeds' pure
+    // projections and pinned by their unit tests — none of which should need a DOM to ask how far back "7d" is.
+    "@intentic-app/ui/time": here("../../_libs/ui/src/timeWindow.ts"),
     "@intentic-app/ui": here("../../_libs/ui/src/index.ts"),
     "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
     // The "+" grid's card and category data. It was the ONE first-party lib missing from this map, and the

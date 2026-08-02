@@ -417,7 +417,7 @@ onUnmounted(progress.stopWatching);
                     </div>
                 </div>
                 <form v-if="showGithub && !hasGithub" class="flex flex-col gap-2" @submit.prevent="submitGithub">
-                    <div class="rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-2xs text-info">
+                    <div :class="cmp.alertInfo('text-2xs')">
                         GitHub source control doesn't yet support managed databases/caches. Use the self-hosted default if your app needs one.
                     </div>
                     <label class="ui-field">
@@ -435,7 +435,7 @@ onUnmounted(progress.stopWatching);
                     </div>
                 </form>
                 <form v-if="showGitlab && !hasGitlab" class="flex flex-col gap-2" @submit.prevent="submitGitlab">
-                    <div class="rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-2xs text-info">
+                    <div :class="cmp.alertInfo('text-2xs')">
                         GitLab source control doesn't yet support managed databases/caches. Use the self-hosted default if your app needs one.
                     </div>
                     <label class="ui-field">

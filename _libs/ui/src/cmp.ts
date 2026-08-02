@@ -77,6 +77,9 @@ const alertDanger = (...twClasses: string[]) =>
 const alertWarning = (...twClasses: string[]) =>
     twMerge(`rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning`, ...twClasses);
 
+/** Inline informational alert banner — a notice the user does not have to act on. */
+const alertInfo = (...twClasses: string[]) => twMerge(`rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-xs text-info`, ...twClasses);
+
 /** Dashed-border "nothing here yet" empty state placeholder. */
 const emptyState = (...twClasses: string[]) =>
     twMerge(`rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-muted`, ...twClasses);
@@ -94,6 +97,7 @@ export const cmp = {
     input,
     alertDanger,
     alertWarning,
+    alertInfo,
     emptyState,
     sectionLabel,
 };

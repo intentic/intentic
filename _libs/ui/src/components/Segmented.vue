@@ -18,7 +18,9 @@ const {
     // the first (see tooltip.ts, rule 5). markTitle wins while there is a mark, on the same "one chip states one
     // thing" reasoning. Leave title out where the label already says it — a segmented control's whole point is
     // that its options are readable.
-    options: { label: string; value: T; title?: string; badge?: number; mark?: IconName; markTitle?: string }[];
+    // The array is `readonly` so a shared preset can be declared `as const` / `readonly` at its source and
+    // spread straight in (TIME_WINDOWS is, and every feed that shows it would otherwise need a copy).
+    options: readonly { label: string; value: T; title?: string; badge?: number; mark?: IconName; markTitle?: string }[];
     // sm: viewer toggles; xs: cramped rows (e.g. the workspace filter bar).
     size?: `sm` | `xs`;
     /* The control OWNS its row rather than trailing a toolbar: equal-width pills across the full width, in a

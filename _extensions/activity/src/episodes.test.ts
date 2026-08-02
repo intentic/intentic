@@ -1,5 +1,4 @@
 import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
-import { sinceOf, withinWindow } from "@intentic/extension-ui";
 import { expect, test } from "vitest";
 import { byDay, DIRECT, matches, SCHEDULE, sourceKeyOf, toEpisodes, toSources } from "./episodes.js";
 
@@ -185,20 +184,6 @@ test("search reaches the ids a row hides, not just the text it shows", () => {
     expect(matches(episode as never, `s1`)).toBe(true);
     expect(matches(episode as never, ``)).toBe(true);
     expect(matches(episode as never, `nothing here`)).toBe(false);
-});
-
-/* The window vocabulary itself now lives in the kit (@intentic-app/ui/timeWindow) — Logs asks the same question
- * of its file list. The assertion stays here because this is the package whose feed depends on the answer, and
- * because _libs/ui has no test runner of its own. `all` is the case worth holding onto: it is the only preset
- * whose answer is not arithmetic, and -Infinity is what makes it correct for an entry a clock skew has put in
- * the future, where `now - <a century>` is merely large enough to get away with it. */
-test("the window presets bound the feed and `all` does not", () => {
-    expect(sinceOf(`1h`, at(0))).toBe(at(-60));
-    expect(sinceOf(`24h`, at(0))).toBe(at(-60 * 24));
-    expect(sinceOf(`7d`, at(0))).toBe(at(-60 * 24 * 7));
-    expect(sinceOf(`all`, at(0))).toBe(-Infinity);
-    expect(withinWindow(at(5), `all`, at(0))).toBe(true);
-    expect(withinWindow(at(-90), `1h`, at(0))).toBe(false);
 });
 
 test("day dividers name the two days that carry the traffic and date the rest", () => {

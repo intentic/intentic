@@ -10,6 +10,7 @@
             "@intentic-app/ui/markdown": ["../../_libs/ui/src/markdown/index.ts"],
             "@intentic-app/ui/path": ["../../_libs/ui/src/path.ts"],
             "@intentic-app/ui/series": ["../../_libs/ui/src/components/seriesAccent.ts"],
+            "@intentic-app/ui/time": ["../../_libs/ui/src/timeWindow.ts"],
             "@intentic-app/api-contract": ["../../_libs/api-contract/src/index.ts"]
         }
     },
