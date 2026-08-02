@@ -38,6 +38,21 @@ test("a browser tool's server and session name are derived the same way everywhe
 const SESSION_ID = "e2e11111-2222";
 const SESSION = "browser-e2e11111";
 
+/* Wait for something Chromium does on its own timetable — a paint lands, a tab appears, a frame arrives —
+ * rather than sleeping a guess past it. Every wait below used to be a fixed sleep and the screencast's was the
+ * one that lost: the high-resolution still is DEBOUNCED 400ms off the LAST motion frame, and capturing it makes
+ * the page repaint, so the stream self-sustains on a ~550ms cycle with the first webp ~600ms in. That fits
+ * inside a 1500ms sleep on an idle machine and does not when sixteen vitest workers and a second Chromium are
+ * running, and the suite then reported a browser bug that was a stopwatch. The cap is generous and finite, so a
+ * REAL regression still fails on the assertion that follows instead of hanging to the test timeout. */
+const settle = async (until: () => boolean): Promise<void> => {
+    for (let attempt = 0; attempt < 200 && !until(); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+};
+
+const pagesOf = (): number => listBrowserSessions().find((session) => session.name === SESSION)?.pages.length ?? 0;
+
 test("the agent's browser is listed, watchable, and closable while the MCP drives it", { timeout: 120_000 }, async () => {
     const root = mkdtempSync(join(tmpdir(), "browser-sessions-"));
     const { servers, ports } = await browserServersOf([], root);
@@ -103,7 +118,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         const screencast = await startScreencast(context!, (frame) => {
             formats.push(frame.format);
         });
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await settle(() => formats.includes("jpeg") && formats.includes("webp"));
         await screencast.stop();
 
         const listed = listBrowserSessions().find((session) => session.name === SESSION);
@@ -128,7 +143,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         // relist even though they are the same url.
         const opened = await call("tools/call", { name: "browser_tabs", arguments: { action: "new" } });
         expect(opened.result?.isError ?? false).toBe(false);
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await settle(() => pagesOf() >= 2);
         const twoTabs = listBrowserSessions().find((session) => session.name === SESSION);
         expect(twoTabs?.pages.length).toBeGreaterThanOrEqual(2);
         expect(new Set(twoTabs?.pages.map((page) => page.id)).size).toBe(twoTabs?.pages.length);
@@ -152,7 +167,10 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
             const boundToFirst = pinnedCast.attached();
             const third = await call("tools/call", { name: "browser_tabs", arguments: { action: "new" } });
             expect(third.result?.isError ?? false).toBe(false);
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Wait for the tab to LAND rather than for a guess at how long that takes — the pin has proved
+            // nothing until there is a page the stream could have been stolen by.
+            await settle(() => pagesOf() >= 3);
+            expect(pagesOf()).toBeGreaterThanOrEqual(3);
             // Same CDP session as before the new tab: the stream never moved.
             expect(pinnedCast.attached()).toBe(boundToFirst);
         } finally {
@@ -171,11 +189,14 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
             whilePaused = 0;
             const repaint = await call("tools/call", { name: "browser_navigate", arguments: { url } });
             expect(repaint.result?.isError ?? false).toBe(false);
+            // The one wait here that stays a sleep, because "nothing arrived" has no arrival to wait for. It is
+            // also the one that cannot flake the way the others could: a slower machine sends FEWER frames, and
+            // fewer than none is not a thing.
             await new Promise((resolve) => setTimeout(resolve, 1000));
             expect(whilePaused).toBe(0);
             // And one frame away from coming back — no reconnect, no rebind.
             await pausedCast.setPaused(false);
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await settle(() => whilePaused > 0);
             expect(whilePaused).toBeGreaterThan(0);
         } finally {
             await pausedCast.stop();
