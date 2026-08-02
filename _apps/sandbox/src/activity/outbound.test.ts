@@ -15,6 +15,10 @@ const capture = (): { appended: Partial<ActivityEvent>[]; services: Services } =
     return { appended, services };
 };
 
+// The turn that owns the sniffer — stamped on every call it records, so the audit feed can fold a turn's sends
+// into that turn's own row.
+const TURN = "turn-1";
+
 const tool = (command: string, id = "t1"): AgentEvent => ({
     kind: "tool_call",
     id,
@@ -36,9 +40,9 @@ const REACT = `curl -s -X PUT -H "Authorization: Bot $DISCORD_BOT_TOKEN" "https:
 const READ = `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" "https://discord.com/api/v10/channels/123/messages?limit=20" | jq '.[] | {id, content}'`;
 const GUILDS = `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" https://discord.com/api/v10/users/@me/guilds | jq '.[] | {id, name}'`;
 
-test("the skill's send command records message.send with channel, content, session, and ok outcome", () => {
+test("the skill's send command records message.send with channel, content, turn, session, and ok outcome", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services);
+    const sniffer = createOutboundSniffer(services, TURN);
     sniffer.observe({ kind: "session", sessionId: "s1" });
     sniffer.observe(tool(SEND));
     sniffer.observe(result(`{"id":"999","content":"hello"}`));
@@ -51,6 +55,7 @@ test("the skill's send command records message.send with channel, content, sessi
             endpoint: "/channels/123/messages",
             channelId: "123",
             content: "hello",
+            turnId: TURN,
             sessionId: "s1",
             outcome: "ok",
         },
@@ -59,7 +64,7 @@ test("the skill's send command records message.send with channel, content, sessi
 
 test("react and read classify as reaction.add and messages.read; guild listing falls through to api.call", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services);
+    const sniffer = createOutboundSniffer(services, TURN);
     sniffer.observe(tool(REACT, "t1"));
     sniffer.observe(result("", "t1"));
     sniffer.observe(tool(READ, "t2"));
@@ -75,7 +80,7 @@ test("react and read classify as reaction.add and messages.read; guild listing f
 
 test("non-discord commands and non-Bash tools record nothing", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services);
+    const sniffer = createOutboundSniffer(services, TURN);
     sniffer.observe(tool(`curl -s https://api.github.com/user | jq .login`));
     sniffer.observe({
         kind: "tool_call",
@@ -92,7 +97,7 @@ test("non-discord commands and non-Bash tools record nothing", () => {
 
 test("a Discord error envelope and an isError result both record outcome error", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services);
+    const sniffer = createOutboundSniffer(services, TURN);
     sniffer.observe(tool(SEND, "t1"));
     sniffer.observe(result(`{"message": "Missing Access", "code": 50001}`, "t1"));
     sniffer.observe(tool(SEND, "t2"));
@@ -105,7 +110,7 @@ test("a Discord error envelope and an isError result both record outcome error",
 
 test("flush records calls whose results never arrived, without an outcome", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services);
+    const sniffer = createOutboundSniffer(services, TURN);
     sniffer.observe(tool(SEND));
     expect(appended).toEqual([]);
     sniffer.flush();
@@ -115,7 +120,7 @@ test("flush records calls whose results never arrived, without an outcome", () =
 
 test("an interim update (live output snapshot, no status) keeps the call pending", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services);
+    const sniffer = createOutboundSniffer(services, TURN);
     sniffer.observe(tool(SEND));
     sniffer.observe({ kind: "tool_call_update", id: "t1", content: [{ type: "text", text: "partial" }] });
     expect(appended).toEqual([]);

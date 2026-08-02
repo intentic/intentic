@@ -131,7 +131,9 @@ export interface OutboundSniffer {
 }
 
 // One per turn, teed into streamAgent. Appends are fire-and-forget — monitoring must never fail a turn.
-export const createOutboundSniffer = (services: Services): OutboundSniffer => {
+// `turnId` is the turn that owns this sniffer (agent.routes.ts mints it): stamped on every call so the audit
+// feed folds a turn's Discord sends into that turn's row rather than leaving them floating beside it.
+export const createOutboundSniffer = (services: Services, turnId: string): OutboundSniffer => {
     const pending = new Map<string, OutboundCall>();
     let sessionId: string | undefined;
     const record = (call: OutboundCall, result?: { outcome: "ok" | "error"; error?: string }): void => {
@@ -142,6 +144,7 @@ export const createOutboundSniffer = (services: Services): OutboundSniffer => {
                 type: call.type,
                 method: call.method,
                 endpoint: call.endpoint,
+                turnId,
                 ...(call.channelId !== undefined ? { channelId: call.channelId } : {}),
                 ...(call.content !== undefined ? { content: call.content } : {}),
                 ...(sessionId !== undefined ? { sessionId } : {}),

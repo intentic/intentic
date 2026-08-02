@@ -1,20 +1,28 @@
 {
-  "dir": "_extensions/activity",
-  "keyFiles": [
-    {
-      "path": "_extensions/activity/src/index.ts",
-      "what": "The entry point — what this package hands to everyone else."
-    },
-    {
-      "path": "_extensions/activity/src/ActivityView.vue",
-      "what": "The largest file here — usually where the real work happens."
+    "dir": "_extensions/activity",
+    "keyFiles": [
+        {
+            "path": "_extensions/activity/src/index.ts",
+            "what": "The entry point — what this package hands to everyone else."
+        },
+        {
+            "path": "_extensions/activity/src/episodes.ts",
+            "what": "All of the grouping, as pure functions: events become episodes (one per thing that happened) and sources (who set it off)."
+        },
+        {
+            "path": "_extensions/activity/src/ActivityView.vue",
+            "what": "The shell — the header, the three filters, and the two panes; every filter's state lives in the URL."
+        },
+        {
+            "path": "_extensions/activity/src/useActivity.ts",
+            "what": "The daemon reads: a polled status probe plus a cursor-paged feed that fetches until the selected window is covered."
+        }
+    ],
+    "name": "@intentic/ext-activity",
+    "oneLiner": "Who called the agent, what it did about it, and how that went.",
+    "provenance": {
+        "generatedAt": 1785675000000,
+        "model": "claude-opus-4-6",
+        "sourceRev": "947caf4fdc1136b2f627f6363746d4a8cb4b8d26"
     }
-  ],
-  "name": "@intentic/ext-activity",
-  "oneLiner": "A feed of what the agents actually did.",
-  "provenance": {
-    "generatedAt": 1785535377531,
-    "model": "claude-opus-4-6",
-    "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da"
-  }
 }

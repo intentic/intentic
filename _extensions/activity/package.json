@@ -14,7 +14,8 @@
         }
     },
     "scripts": {
-        "typecheck": "vue-tsc --noEmit"
+        "typecheck": "vue-tsc --noEmit",
+        "test": "vitest run"
     },
     "dependencies": {
         "@intentic/extension-api": "workspace:*",
@@ -25,6 +26,7 @@
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "typescript": "catalog:",
+        "vitest": "catalog:",
         "vue": "catalog:",
         "vue-tsc": "catalog:"
     },

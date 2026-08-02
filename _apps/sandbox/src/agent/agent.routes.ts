@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
     type ActivityEvent,
     type AgentEvent,
@@ -521,9 +522,15 @@ async function* runTurn(
         }
     }
     mark("snapshot");
+    /* This turn's identity in the activity log, minted here because here is the first moment it exists. Every
+     * event the turn writes — the four lifecycle marks below and one per sniffed outbound provider call — carries
+     * it, which is what lets the audit feed render a turn as ONE row instead of five. Deliberately not sessionId:
+     * the runtime does not report one until the stream's first frame, so turn.started (the event holding the
+     * prompt) would be the one row nothing could ever join. */
+    const turnId = randomUUID();
     // Tee every frame past the activity sniffer — outbound provider calls (discord curl) are only visible
     // here, and every turn origin (chat, automation wake, voice wake) flows through this generator.
-    const sniffer = createOutboundSniffer(services);
+    const sniffer = createOutboundSniffer(services, turnId);
     // Turn lifecycle into the activity log — the durable trail of every turn (start, plan artifacts, errors,
     // completion with usage) that survives rebuilds and the agent's own reach, while full content stays in
     // the SDK transcript. Fire-and-forget: logging must never delay or fail a turn.
@@ -565,12 +572,20 @@ async function* runTurn(
      * and nothing downstream of this loop still knows which bytes were which. */
     let proseChars = 0;
     const record = (event: Omit<ActivityEvent, "id" | "at" | "provider" | "direction">): void => {
+        // Read per event, never captured once: nameAgentTitle runs concurrently with this turn, so turn.started
+        // often writes before a fresh conversation has a name and turn.completed writes after. The feed takes the
+        // first title among a turn's events, which is why the late one is worth writing down at all.
+        const title = input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId)?.title;
         void services.activity
             .append({
                 provider,
                 direction: "system",
+                turnId,
                 ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
                 ...(sessionId !== undefined ? { sessionId } : {}),
+                ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+                ...(title !== undefined ? { title } : {}),
+                ...(input.origin !== undefined ? { origin: input.origin } : {}),
                 ...event,
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "activity: turn event append failed"));

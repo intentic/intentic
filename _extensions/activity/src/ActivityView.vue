@@ -1,171 +1,122 @@
 <script setup lang="ts">
-import type { ActivityEvent } from "@intentic/sandbox-contract";
-import {
-    Card,
-    cmp,
-    Icon,
-    type IconName,
-    InfoHint,
-    Page,
-    PageHeader,
-    Segmented,
-    StatusBadge,
-    type StatusVariant,
-    timeAgo,
-} from "@intentic/extension-ui";
-import { computed, ref } from "vue";
+import { cmp, Icon, InfoHint, PageHeader, Segmented, StatusBadge } from "@intentic/extension-ui";
+import { computed } from "vue";
+import ActivityTimeline from "./ActivityTimeline.vue";
+import { matches, sinceOf, toEpisodes, toSources, type Window } from "./episodes";
+import { host } from "./host";
+import SourceRail from "./SourceRail.vue";
 import { useActivity } from "./useActivity";
 
-/* The activity extension: the audit surface for what the agent does through its connected provider
- * capabilities (Discord first). TOP is connection health — per-bot gateway state plus the live voice session.
- * BELOW is the feed: inbound messages that woke automations, the agent's sniffed outbound API calls, and
- * system events (wake outcomes, failures), filterable by direction. Read-only — the log is daemon-written. */
+/* THE ACTIVITY SURFACE: what reached the agent, what it did about it, and how that went.
+ *
+ * Two panes. The rail is WHO — connections and you, bounded by how many things can call rather than by how often
+ * they do. The timeline is WHAT HAPPENED, one row per thing that happened rather than one per row the daemon
+ * appended: a turn's four lifecycle marks and every provider call it made are one entry (see episodes.ts, which
+ * owns all of that and is where the tests are).
+ *
+ * Three filters over that, and no more: WHO (the rail), WHEN (the window), and free text. The window is not
+ * cosmetic — it decides how far back the feed pages, so picking 7d fetches until 7 days are actually covered.
+ *
+ * Every one of those lives in the URL, so a view of a bad hour on one connection is a link somebody can be sent.
+ * Read-only throughout: the log is daemon-written, outside the agent's own reach. */
 
-type Direction = `all` | `in` | `out` | `system`;
+const api = host();
 
-const { events, status, error, isLoading } = useActivity();
+// Derived from the query rather than mirrored into refs — one direction of flow, and Back/Forward work for free.
+const query = computed(() => api.route.query());
+const window = computed<Window>({
+    get: () => {
+        const value = query.value[`window`];
+        return value === `1h` || value === `7d` || value === `all` ? value : `24h`;
+    },
+    set: (value) => api.route.setQuery({ window: value === `24h` ? undefined : value }),
+});
+const source = computed<string | undefined>({
+    get: () => query.value[`source`],
+    set: (value) => api.route.setQuery({ source: value }),
+});
+const search = computed<string>({
+    get: () => query.value[`q`] ?? ``,
+    set: (value) => api.route.setQuery({ q: value === `` ? undefined : value }),
+});
 
-const direction = ref<Direction>(`all`);
-const filtered = computed(() => (direction.value === `all` ? events.value : events.value.filter((event) => event.direction === direction.value)));
+const { events, status, error, isLoading, truncated } = useActivity(window);
 
-// Click-to-expand for long content; collapsed rows line-clamp.
-const expanded = ref(new Set<string>());
-const toggle = (id: string): void => {
-    expanded.value = new Set(expanded.value.has(id) ? [...expanded.value].filter((entry) => entry !== id) : [...expanded.value, id]);
-};
-
-const gatewayVariant = (gateway: string): StatusVariant =>
-    gateway === `ready` ? `success` : gateway === `connecting` ? `warning` : gateway === `disconnected` ? `warning` : `neutral`;
-const gatewayLabel = (gateway: string): string =>
-    gateway === `ready` ? `Connected` : gateway === `connecting` ? `Connecting` : gateway === `disconnected` ? `Not listening` : `Idle`;
-
-const directionIcon = (event: ActivityEvent): { name: IconName; class: string } =>
-    event.direction === `in`
-        ? { name: `arrow-down-left`, class: `text-info` }
-        : event.direction === `out`
-          ? { name: `arrow-up-right`, class: `text-link` }
-          : { name: `cog`, class: `text-subtle` };
-
-const TYPE_LABELS: Record<string, string> = {
-    "message.received": `Message received`,
-    "voice_transcript.received": `Voice transcript`,
-    "message.send": `Message sent`,
-    "messages.read": `Messages read`,
-    "reaction.add": `Reaction added`,
-    "api.call": `API call`,
-    "gateway.login_failed": `Gateway login failed`,
-    "dispatch.failed": `Dispatch failed`,
-    "voice.session_started": `Voice session started`,
-    "voice.session_ended": `Voice session ended`,
-    "automation.run": `Automation run`,
-    "turn.started": `Turn started`,
-    "turn.plan": `Plan proposed`,
-    "turn.error": `Turn error`,
-    "turn.completed": `Turn completed`,
-};
-const typeLabel = (event: ActivityEvent): string => TYPE_LABELS[event.type] ?? event.type;
+// The window bounds the feed; the rail and the search bound it further. Sources are tallied on the WINDOWED set,
+// so a rail count always agrees with the timeline it opens.
+const windowed = computed(() => {
+    const since = sinceOf(window.value, Date.now());
+    return toEpisodes(events.value).filter((episode) => episode.at >= since);
+});
+const sources = computed(() => toSources(windowed.value, status.value?.connections ?? []));
+const selected = computed(() => sources.value.find((entry) => entry.key === source.value));
+const visible = computed(() =>
+    windowed.value.filter((episode) => (source.value === undefined || episode.sourceKey === source.value) && matches(episode, search.value)),
+);
+const failed = computed(() => windowed.value.filter((episode) => episode.failed).length);
 
 const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Math.round((Date.now() - status.value.voice.startedAt) / 60_000)));
 </script>
 
 <template>
-    <div class="h-full min-h-0 overflow-auto">
-        <Page width="wide">
-            <PageHeader title="Activity" description="What the agent heard, said, and did through its connected capabilities.">
+    <!-- FILLS THE AREA AND OWNS ITS SCROLLING. The shell's router-view wrapper is itself a scroll container, so a
+         view that merely grows makes the header and both panes scroll together as one tall column — which is the
+         failure this view had. `h-full` + `overflow-hidden` leaves the outer scroller nothing to scroll, and the
+         rail and the timeline each take their own. Same shape as the documentation extension's browser. -->
+    <div class="flex h-full min-h-0 flex-col overflow-hidden">
+        <!-- The head does not scroll: the title and the three filters stay put while you read the timeline. -->
+        <div class="shrink-0 px-6 pt-6">
+            <PageHeader title="Activity" description="What reached the agent, what it did about it, and how that went.">
                 <template #info>
                     <InfoHint label="Activity">
                         <span class="block text-sm font-medium text-content">Activity</span>
                         <span class="mt-1 block text-xs text-muted">
-                            The audit trail of the agent's provider interactions: <b>inbound</b> messages that woke it, its <b>outbound</b> API calls,
-                            and <b>system</b> events (wake outcomes, connection failures, voice sessions).
+                            One entry per thing that happened, grouped by <b>who set it off</b>: a connected provider that woke the agent, a schedule,
+                            or you. A turn's whole lifecycle — start, plan, failure, completion, and every provider call it made — is one entry;
+                            expand it for the raw events the daemon recorded.
                         </span>
                     </InfoHint>
                 </template>
             </PageHeader>
+        </div>
 
-            <div v-if="error" :class="cmp.alertDanger('mb-4 px-4 py-3 text-sm')">{{ error }}</div>
+        <div class="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-6">
+            <div v-if="error" :class="cmp.alertDanger('px-4 py-3 text-sm')">{{ error }}</div>
 
-            <div class="flex flex-col gap-4">
-                <!-- Connection health: one card per provider bot, straight from the daemon's live probe. -->
-                <section class="rounded-lg border border-line bg-card p-4">
-                    <h3 :class="cmp.sectionLabel('mb-3')">Connections</h3>
-                    <div class="flex flex-col gap-2">
-                        <Card v-for="connection in status?.connections ?? []" :key="connection.capabilityId" class="flex flex-col gap-1">
-                            <div class="flex items-center gap-2">
-                                <span class="font-medium capitalize text-content">{{ connection.provider }}</span>
-                                <span class="truncate font-mono text-2xs text-subtle">{{ connection.capabilityId }}</span>
-                                <StatusBadge :variant="gatewayVariant(connection.gateway)" :label="gatewayLabel(connection.gateway)" size="xs" dot />
-                            </div>
-                            <p v-if="connection.gateway === `idle`" class="text-xs text-muted">
-                                No enabled Discord listener automation yet — add one to start listening.
-                            </p>
-                            <p v-else-if="connection.lastError" class="text-xs text-danger">{{ connection.lastError }}</p>
-                        </Card>
-                        <p v-if="(status?.connections ?? []).length === 0 && !isLoading" class="py-4 text-center text-sm text-muted">
-                            No monitored provider capabilities connected.
-                        </p>
-                    </div>
-
-                    <!-- The daemon-held voice session, while one is live. -->
-                    <Card v-if="status?.voice" class="mt-2 flex items-center gap-2">
-                        <Icon name="microphone" class="text-info" />
-                        <span class="font-medium text-content">#{{ status.voice.channelName }}</span>
-                        <StatusBadge variant="info" label="Transcribing" size="xs" dot />
-                        <span class="text-xs text-muted">
-                            {{ voiceMinutes }} min —
-                            {{ status.voice.participants.length > 0 ? status.voice.participants.join(`, `) : `no speakers yet` }}
-                        </span>
-                    </Card>
-                </section>
-
-                <!-- The feed: newest first, filterable by direction. -->
-                <section class="rounded-lg border border-line bg-card p-4">
-                    <div class="mb-3 flex items-center justify-between gap-3">
-                        <h3 :class="cmp.sectionLabel()">Feed</h3>
-                        <Segmented
-                            v-model="direction"
-                            :options="[
-                                { label: `All`, value: `all` },
-                                { label: `Inbound`, value: `in` },
-                                { label: `Outbound`, value: `out` },
-                                { label: `System`, value: `system` },
-                            ]"
-                        />
-                    </div>
-
-                    <div class="flex flex-col divide-y divide-line">
-                        <div v-for="event in filtered" :key="event.id" class="flex items-start gap-3 py-2.5">
-                            <Icon v-bind="directionIcon(event)" class="mt-0.5 text-xs" />
-                            <div class="min-w-0 flex-1">
-                                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                    <span class="text-sm font-medium text-content">{{ typeLabel(event) }}</span>
-                                    <StatusBadge v-if="event.outcome === `error`" variant="danger" label="Error" size="xs" dot />
-                                    <span v-if="event.author" class="text-xs text-muted">from {{ event.author }}</span>
-                                    <span v-if="event.channelId" class="font-mono text-2xs text-subtle">#{{ event.channelId }}</span>
-                                    <span v-if="event.method" class="font-mono text-2xs text-subtle">{{ event.method }} {{ event.endpoint }}</span>
-                                </div>
-                                <p
-                                    v-if="event.content"
-                                    class="mt-0.5 cursor-pointer whitespace-pre-wrap break-words text-xs text-muted"
-                                    :class="expanded.has(event.id) ? `` : `line-clamp-2`"
-                                    @click="toggle(event.id)"
-                                >
-                                    {{ event.content }}
-                                </p>
-                                <p v-if="event.error" class="mt-0.5 break-words text-xs text-danger">{{ event.error }}</p>
-                                <div class="mt-0.5 flex flex-wrap items-center gap-2 font-mono text-2xs text-subtle/70">
-                                    <span v-if="event.automationIds?.length">automations: {{ event.automationIds.join(`, `) }}</span>
-                                    <span v-if="event.sessionId">session: {{ event.sessionId }}</span>
-                                </div>
-                            </div>
-                            <span class="shrink-0 text-2xs text-subtle" :title="new Date(event.at).toLocaleString()">{{ timeAgo(event.at) }}</span>
-                        </div>
-                        <p v-if="filtered.length === 0 && !isLoading" class="py-6 text-center text-sm text-muted">
-                            Nothing yet. Events appear when a message wakes the agent, or when it calls a connected provider's API.
-                        </p>
-                    </div>
-                </section>
+            <!-- The daemon-held voice session, while one is live: sandbox-wide and transient, so it sits above both
+                 panes rather than inside whichever one happens to be selected. -->
+            <div v-if="status?.voice" class="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-card px-3 py-2">
+                <Icon name="microphone" class="text-info" />
+                <span class="text-sm font-medium text-content">#{{ status.voice.channelName }}</span>
+                <StatusBadge variant="info" label="Transcribing" size="xs" dot />
+                <span class="text-xs text-muted">
+                    {{ voiceMinutes }} min — {{ status.voice.participants.length > 0 ? status.voice.participants.join(`, `) : `no speakers yet` }}
+                </span>
             </div>
-        </Page>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <input
+                    v-model="search"
+                    type="search"
+                    placeholder="Filter by text, channel, session…"
+                    :class="cmp.input(`h-7 w-56 px-2 py-0 text-2xs`)"
+                />
+                <Segmented
+                    v-model="window"
+                    size="xs"
+                    :options="[
+                        { label: `1h`, value: `1h` },
+                        { label: `24h`, value: `24h` },
+                        { label: `7d`, value: `7d` },
+                        { label: `All`, value: `all` },
+                    ]"
+                />
+            </div>
+
+            <div class="flex min-h-0 flex-1 flex-col gap-3 md:flex-row md:gap-4">
+                <SourceRail v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
+                <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
+            </div>
+        </div>
     </div>
 </template>
