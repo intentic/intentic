@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
-import { shared } from "./vite.shared";
+import { shared } from "./vite.shared.ts";
 
 // Resolve a path relative to this config file (which lives at the app root, _apps/web/).
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
@@ -25,7 +25,7 @@ export default defineConfig({
         outDir: "dist",
         emptyOutDir: true,
         target: "es2024",
-        rollupOptions: {
+        rolldownOptions: {
             // Two HTML entries: the app, and the page a popped-out panel is teleported into (see
             // src/composables/usePopout.ts) — its own document so a pop-out window carries a real URL and icon
             // instead of about:blank.

@@ -1,6 +1,6 @@
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vitest/config";
-import { sourceAliases } from "./source-aliases";
+import { sourceAliases } from "./source-aliases.ts";
 
 export default defineConfig({
     // SFCs have to compile for a test to mount one. Most suites here test plain .ts (composables, pure

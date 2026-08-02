@@ -53,7 +53,7 @@ const RegistryFileEntrySchema = z.object({
     // trust state with no stated reason is an opinion the reader can't weigh.
     trustReason: z.string().optional(),
     category: z.string().optional(),
-    homepage: z.string().url().optional(),
+    homepage: z.url().optional(),
     source: z.unknown(),
 });
 

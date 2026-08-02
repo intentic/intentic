@@ -3,7 +3,7 @@ import { defineConfig, type Plugin } from "vite";
 // Relative, not through the package's exports: Vite bundles a config's RELATIVE imports (so the .ts sources
 // behind them are compiled with it) and leaves bare specifiers to Node, which cannot load TypeScript. The
 // package dependency in package.json is the real statement; this is how a build config reaches another one.
-import { shared } from "../web/vite.shared";
+import { shared } from "../web/vite.shared.ts";
 
 /* The demo builds the SAME source as the app — `shared` above is the app's own plugin/alias/prebundle setup,
  * imported through its package rather than copied — and differs only in where it enters (this package's
@@ -87,6 +87,6 @@ export default defineConfig({
         // Two documents, the same pair the app builds: the demo, and the page a popped-out panel is teleported
         // into. Naming inputs at all is what makes the second one ship — Vite's default is index.html alone, and
         // a pop-out whose page 404s is a window that can never report in.
-        rollupOptions: { input: { index: here(`./index.html`), popout: here(`./popout.html`) } },
+        rolldownOptions: { input: { index: here(`./index.html`), popout: here(`./popout.html`) } },
     },
 });

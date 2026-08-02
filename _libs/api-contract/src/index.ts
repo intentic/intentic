@@ -72,7 +72,7 @@ export const sandboxContract = {
 // side (token-facing): `preview` is the public read the accept page renders while logged out; `accept` (session
 // required, email-locked) flips the caller's pending invite to an active member. The daemon's own authorized list
 // is still pushed by the owner's browser at invite time — the server can't reach the daemon.
-const sandboxEmailInput = z.object({ sandboxId: z.string(), email: z.string().email() });
+const sandboxEmailInput = z.object({ sandboxId: z.string(), email: z.email() });
 const tokenInput = z.object({ token: z.string() });
 export const inviteContract = {
     list: oc.route({ method: "POST", path: "/invite/list" }).input(sandboxIdInput).output(InviteListSchema),

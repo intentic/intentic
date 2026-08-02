@@ -1,7 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
-import { shikiLangDeps } from "../../_libs/ui/src/composables/shikiLangs.js";
-import { sourceAliases } from "./source-aliases";
+import { shikiLangDeps } from "../../_libs/ui/src/composables/shikiLangs.ts";
+import { sourceAliases } from "./source-aliases.ts";
 
 /* Everything about building THIS SOURCE that holds whichever entry is being served — the app's own
  * (vite.config.ts), or the interactive demo's (`@intentic-dev/demo`, which reaches this through the package's

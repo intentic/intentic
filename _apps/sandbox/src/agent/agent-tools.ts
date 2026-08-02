@@ -8,7 +8,7 @@ import { z } from "zod";
 export const agentToolSchema = z.object({
     // The MCP server name; surfaces to the model as `mcp__<name>__<tool>`. Service id for internal tools.
     name: z.string().min(1),
-    url: z.string().url(),
+    url: z.url(),
     // The scoped bearer sent as `Authorization: Bearer <token>`. Absent for unauthenticated endpoints.
     token: z.string().optional(),
 });

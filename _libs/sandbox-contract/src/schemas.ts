@@ -2038,7 +2038,7 @@ const entryId = z
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
 
 // Per-kind config. Secrets (an mcp token) live here and are denylisted like tools.json.
-export const McpConfigSchema = z.object({ url: z.string().url(), token: z.string().optional() });
+export const McpConfigSchema = z.object({ url: z.url(), token: z.string().optional() });
 export const ServiceConfigSchema = z.object({
     service: ServiceKindSchema,
     domain: z.string().min(1),
@@ -2059,7 +2059,7 @@ export const CliConfigSchema = z.object({ provider: z.string().min(1) }).catchal
 // its internals (skills/agents/hooks/commands/.mcp.json). `path` = subdirectory for plugins that live inside a
 // marketplace/monorepo checkout. `token` = https auth for private repos (never echoed; becomes hasToken).
 export const PluginConfigSchema = z.object({
-    url: z.string().url(),
+    url: z.url(),
     // Branch / tag / commit sha to pin; absent = the default branch's HEAD.
     ref: z.string().min(1).optional(),
     path: z
@@ -2074,7 +2074,7 @@ export const PluginConfigSchema = z.object({
 // owner's browser, so the owner approves exactly the code that runs — pin by construction, updates are explicit
 // re-adds at a new sha. `path`/`token` as in PluginConfigSchema.
 export const ExtensionConfigSchema = z.object({
-    url: z.string().url(),
+    url: z.url(),
     ref: z.string().regex(/^[0-9a-f]{40}$/, "ref must be a full 40-character commit sha"),
     path: z
         .string()
@@ -2266,7 +2266,7 @@ export const EndpointConfigSchema = z.object({
     // The API root, INCLUDING the version segment the server publishes (…:11434/v1). Taken verbatim rather than
     // normalised: "which suffix does this server want" is the one thing that actually varies between them, and
     // guessing it is how a working URL becomes an unexplainable 404.
-    baseUrl: z.string().url(),
+    baseUrl: z.url(),
     protocol: EndpointProtocolSchema.default("openai"),
     apiKey: z.string().optional(),
     headers: z.string().optional(),
@@ -2466,7 +2466,7 @@ export const ForticlientImportSchema = z.object({ connections: z.array(Forticlie
 // Browse an extension/plugin registry (a git repo with .claude-plugin/marketplace.json — see
 // @intentic/registry for the format). POST so the optional token for a private registry never rides a URL or
 // an access log.
-export const MarketplaceRequestSchema = z.object({ url: z.string().url(), token: z.string().min(1).optional() });
+export const MarketplaceRequestSchema = z.object({ url: z.url(), token: z.string().min(1).optional() });
 // The rows are RegistryEntry — the curated decision joined to the resolved pointer and the scanner's upstream
 // facts, exactly as the site's gallery renders them, so browsing in the app and browsing the web show one list.
 export const MarketplaceSchema = z.object({ name: z.string(), plugins: z.array(RegistryEntrySchema) });
@@ -4098,7 +4098,7 @@ export type PresenceReport = z.infer<typeof PresenceReportSchema>;
 // A browser's PushSubscription, in the exact shape `web-push` consumes — the browser produces it via
 // PushManager.subscribe() and the client posts it back verbatim, so the daemon never reshapes it.
 export const PushSubscriptionSchema = z.object({
-    endpoint: z.string().url(),
+    endpoint: z.url(),
     keys: z.object({
         // The client's public key and auth secret for payload encryption (RFC 8291). Opaque base64url here.
         p256dh: z.string().min(1),
@@ -4128,10 +4128,10 @@ export type PushNotification = z.infer<typeof PushNotificationSchema>;
 // so the settings toggle can render its true state instead of trusting the browser's permission alone (a
 // granted permission with no server-side row would notify nothing).
 export const PushConfigSchema = z.object({ publicKey: z.string(), subscribed: z.boolean() });
-export const PushEndpointSchema = z.object({ endpoint: z.string().url() });
+export const PushEndpointSchema = z.object({ endpoint: z.url() });
 // The optional `endpoint` says WHICH browser is asking; without it `subscribed` could only speak for the
 // sandbox as a whole, which is never the question the settings toggle needs answered.
-export const PushConfigQuerySchema = z.object({ endpoint: z.string().url().optional() });
+export const PushConfigQuerySchema = z.object({ endpoint: z.url().optional() });
 
 // What a test send actually achieved. `{ ok: true }` would be a lie the one place it matters most: the button
 // exists to prove a chain the user cannot inspect, so "the daemon accepted the request" is not the answer to

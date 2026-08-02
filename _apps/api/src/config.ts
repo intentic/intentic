@@ -33,7 +33,7 @@ const configSchema = z.object({
     // Browser-facing origin of the API — where the SPA calls /rpc + /api/auth directly (no dev-server proxy).
     // In dev this is http://localhost:6480; the SPA's own origin is webOrigin. Also the base Better Auth uses
     // + the CORS allow-origin.
-    webOrigin: z.string().url(),
+    webOrigin: z.url(),
     google: z
         .object({
             clientId: z.string().default(``),
@@ -95,7 +95,7 @@ const configSchema = z.object({
         .prefault({}),
     api: z
         .object({
-            url: z.string().url().default(`http://localhost:6480`),
+            url: z.url().default(`http://localhost:6480`),
             port: z.coerce.number().int().positive().default(6480),
             // Bind address. Loopback in dev — localhost is the origin the dev cert, CORS, and Better Auth all
             // trust — so a container must set API_HOST=0.0.0.0 for the reverse proxy / tunnel (a separate

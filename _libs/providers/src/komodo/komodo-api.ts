@@ -29,11 +29,9 @@ export type KomodoPermissionLevel = "Read" | "Execute" | "Write";
 // ports); branch is a Build concept that a Deployment does not carry (GetDeployment never returns it). Komodo
 // stores `environment` as a multiline string ("K = V\n") but also accepts the array-of-{variable,value} form
 // we send, so read must tolerate both; other fields Komodo returns (server_id/image/ports/...) pass through.
-const deploymentConfigSchema = z
-    .object({
-        environment: z.union([z.string(), z.array(z.object({ variable: z.string(), value: z.string() }))]).default(""),
-    })
-    .passthrough();
+const deploymentConfigSchema = z.looseObject({
+    environment: z.union([z.string(), z.array(z.object({ variable: z.string(), value: z.string() }))]).default(""),
+});
 export type DeploymentConfig = z.infer<typeof deploymentConfigSchema>;
 
 const alerterEndpointSchema = z.object({ type: z.enum(["Discord", "Slack", "Custom"]), params: z.object({ url: z.string() }) });
