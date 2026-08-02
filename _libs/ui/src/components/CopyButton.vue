@@ -1,7 +1,11 @@
 <!-- Copy-to-clipboard button with built-in "Copied" feedback (green check for 1.5s). With `label` it
-     renders as a bordered chip ("Copy" → "Copied"), or as the view's call to action when `stretch` says
-     copying IS the step; without a label, a bare icon button — pass aria-label / v-tooltip at the call site
-     (they fall through to the button). -->
+     renders as a bordered chip ("Copy" → "Copied"); without a label, a bare icon button — pass aria-label /
+     v-tooltip at the call site (they fall through to the button).
+
+     EMPHASIS AND WIDTH ARE SEPARATE QUESTIONS, which is why there are two flags. `stretch` used to carry
+     both, so a caller who needed "this is the action to take" had no way to say it without also claiming the
+     whole row — and setup's stuck-wait banner, where copying the command again IS the way out, ended up
+     wearing the quiet chip meant for a copy-as-convenience beside content. -->
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { clipboardOf } from "../clipboard.js";
@@ -10,6 +14,7 @@ import { cmp } from "../cmp.js";
 const {
     text,
     label = ``,
+    cta = false,
     stretch = false,
 } = defineProps<{
     // Clipboard payload — a string, or a resolver fetched on click (e.g. an owner-only secret we
@@ -17,10 +22,14 @@ const {
     text: string | (() => string | Promise<string>);
     // Visible text (e.g. "Copy"); omit for a bare icon-only button.
     label?: string;
-    /* Same meaning as Segmented's `stretch`: the button owns its row — full width, touch-sized, and dressed
-     * as the view's call to action — for the screen where copying IS the step rather than a convenience
-     * beside content (setup's install command on a phone: the command cannot be run where it is read, so
-     * getting it onto the clipboard is the whole task). The default chip is a mouse target at ~20px tall. */
+    /* Dress it as the action to take rather than a convenience — for the moment where copying IS the next
+     * step and the user needs to see that at a glance (setup's "nothing has reached us" banner). Inline: it
+     * changes the button's weight, not its place in the row. */
+    cta?: boolean;
+    /* Same meaning as Segmented's `stretch`: the button owns its row — full width and touch-sized — for the
+     * screen where copying is the whole task (setup's install command on a phone: the command cannot be run
+     * where it is read, so getting it onto the clipboard is all there is to do). Implies `cta`; the default
+     * chip is a mouse target at ~20px tall. */
     stretch?: boolean;
 }>();
 
@@ -33,11 +42,15 @@ const copied = ref(false);
 // The pressed button, which is also the window the write must go through — see clipboardOf.
 const root = ref<HTMLButtonElement>();
 
-const chrome = computed(() =>
-    stretch
-        ? cmp.buttonPrimary(`min-h-10 w-full gap-1.5 px-3 text-sm`)
-        : `inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content`,
-);
+const chrome = computed(() => {
+    if (stretch) {
+        return cmp.buttonPrimary(`min-h-10 w-full gap-1.5 px-3 text-sm`);
+    }
+    if (cta) {
+        return cmp.buttonPrimary();
+    }
+    return `inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content`;
+});
 
 const copy = async (): Promise<void> => {
     try {

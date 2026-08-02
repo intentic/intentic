@@ -6,7 +6,6 @@ import { cmp, Code, commandLang, CopyButton, InfoHint, Segmented, StepSection, u
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import ToggleSwitch from "primevue/toggleswitch";
 import { track } from "../composables/analytics";
 import { apiClient } from "../composables/useApi";
 import { errorMessage } from "../composables/useAsyncAction";
@@ -271,7 +270,8 @@ const lockedReason = computed(() => {
  * in", shown from the moment the code was minted — so a person who had not opened a terminal and a person whose
  * Docker pull was four minutes deep saw the identical screen, forever. It read as "the platform is provisioning
  * something", which is the one thing it never means, and the only button-shaped thing left on the card was
- * "Check now". So people sat and pressed it.
+ * "Check now". So people sat and pressed it — which is also why that button is gone: the registry is polled
+ * every 3s either way, so it never bought a single second, and offering it made pressing it look like progress.
  *
  * `handoff` is that missing model, in the order it actually happens:
  *   • `locked`  — the chosen path isn't ready, so there is no command yet (lockedReason says what's missing)
@@ -378,7 +378,9 @@ watch(
 // Why we're still waiting (undefined while nothing informative to say) — step 4 shows it so a stuck wait names
 // its cause instead of spinning silently.
 const status = ref<string | undefined>(undefined);
-// True while a registry check is in flight — gives "Check now" a visible checking state.
+// A poll is in flight. Purely a re-entrancy guard — the 3s interval must not stack requests behind a slow
+// one. It is deliberately NOT rendered: it used to drive a "Check now" button's busy state, which meant the
+// automatic poll flipped that button's label and icon every third second for as long as the user sat there.
 const checking = ref(false);
 
 /* Poll the platform registry for the daemon's boot registration (POST /sandbox/announce writes daemonUrl +
@@ -1142,28 +1144,6 @@ watch(commandReady, (ready) => {
                             </span>
                         </p>
 
-                        <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
-                     the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name + the
-                     minted hostname, so it names the same id the sandbox's address does. It sits ABOVE the command
-                     because it changes it: every control that rewrites what you are about to copy comes first.
-                     One flowing line rather than a filled sub-card — a card inside a card inside a page of cards
-                     was three frames deep to carry one switch.
-                     Hidden on the compose tab: that path has no place to carry SYNC_DIR, so the toggle would do
-                     nothing there — the compose panel points at the workspace's Desktop sync card instead. -->
-                        <!-- items-start, not items-center: the sentence wraps to three lines on a phone, and a switch
-                     centred against three lines floats in the middle of a paragraph it is supposed to head. -->
-                        <label v-if="runTab !== `compose`" class="flex cursor-pointer items-start gap-2.5">
-                            <ToggleSwitch v-model="syncEnabled" class="shrink-0" aria-label="Also sync a local folder" />
-                            <!-- On, the folder IS the news; off, the reason is. Saying both at once was one clause of
-                         each, and the clause that mattered was never the one being read. -->
-                            <span class="min-w-0 pt-1 text-xs text-muted">
-                                <span class="font-medium text-content">Also sync a local folder</span>
-                                <template v-if="syncEnabled && syncDir !== ``">
-                                    — mirrors to <code class="break-words">{{ syncDir }}</code></template
-                                >
-                                <template v-else> — edit this sandbox's files in your own editor.</template>
-                            </span>
-                        </label>
                         <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready — a
                      command missing the token/zone/subdomain or the provisioned tunnel would just fail in the sandbox. -->
                         <div
@@ -1238,18 +1218,40 @@ watch(commandReady, (ready) => {
                                 </template>
                             </div>
 
-                            <!-- The two switches over the SHAPE of the command — the one thing here that does NOT belong
-                         in the reference panel, because a checkbox whose reason is a hover (or a column) away is
-                         a checkbox nobody ticks. Directly under the command, so the rewrite is visible one row up
-                         next to the Copy that picks it up. The undo used to sit under them and now lives in the
-                         panel with the rest of what running this means: it is the least-used row on the card and
-                         it was costing a full row of a step people already called overloaded.
-                         Script tabs only — compose declares itself. -->
-                            <div v-if="environment.production && runTab !== `compose`" class="flex flex-col gap-1.5">
+                            <!-- EVERY OPTION THAT REWRITES THE COMMAND, AS ONE GROUP OF CHIPS UNDER IT. These are the
+                                 one thing that does not belong in the reference panel — a checkbox whose reason is a
+                                 hover (or a column) away is a checkbox nobody ticks — and each chip's pressed state
+                                 is visibly answered by the command one row up.
+                                 Desktop sync joined them: as a ToggleSwitch above the command it was the loudest
+                                 control on a step whose subject is a command, and three lines tall for an option two
+                                 of its peers state in one. It is the same kind of thing they are — something that
+                                 changes what this command does — so it now reads as one, and the folder it mirrors
+                                 to is the caption rather than a sentence of its own.
+                                 Script tabs only — compose carries no SYNC_DIR and declares its own shape. -->
+                            <div v-if="runTab !== `compose`" class="flex flex-col gap-1.5 text-2xs text-muted">
+                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <button
+                                        type="button"
+                                        :aria-pressed="syncEnabled"
+                                        :class="chipClass(syncEnabled)"
+                                        @click="syncEnabled = !syncEnabled"
+                                    >
+                                        <Icon :name="syncEnabled ? `check-square` : `square`" />
+                                        Also sync a local folder
+                                    </button>
+                                    <!-- On, the folder IS the news; off, the reason is. Saying both at once was one
+                                         clause of each, and the clause that mattered was never the one being read. -->
+                                    <span class="min-w-0">
+                                        <template v-if="syncEnabled && syncDir !== ``"
+                                            >Mirrors to <code class="break-words">{{ syncDir }}</code></template
+                                        >
+                                        <template v-else>Edit this sandbox's files in your own editor.</template>
+                                    </span>
+                                </div>
                                 <!-- Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
                              there is no switch here and the Docker prerequisite is left to the panel, which
                              names the reboot a first Windows install may want. -->
-                                <div v-if="runTab === `unix`" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
+                                <div v-if="environment.production && runTab === `unix`" class="flex flex-wrap items-center gap-x-2 gap-y-1">
                                     <button type="button" :aria-pressed="hasDocker" :class="chipClass(hasDocker)" @click="hasDocker = !hasDocker">
                                         <Icon :name="hasDocker ? `check-square` : `square`" />
                                         I already have Docker
@@ -1259,7 +1261,7 @@ watch(commandReady, (ready) => {
                                         <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
                                     </span>
                                 </div>
-                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
+                                <div v-if="environment.production" class="flex flex-wrap items-center gap-x-2 gap-y-1">
                                     <button type="button" :aria-pressed="review" :class="chipClass(review)" @click="review = !review">
                                         <Icon :name="review ? `check-square` : `square`" />
                                         Download and read it first
@@ -1282,16 +1284,20 @@ watch(commandReady, (ready) => {
                      waits this is. A spinner from the moment a code was minted is what made a screen where the
                      user has done nothing look identical to one where Docker is four minutes into an image
                      pull, and "your workspace opens automatically" is a promise about the second that reads, in
-                     the first, as permission to sit still. So the icon leads: a hollow circle for a wait that is
-                     not running, a spinner only once something actually is. `Check now` lives here rather than
-                     in the header, because here it is beside the thing it re-checks and is plainly a courtesy
-                     next to the sentence carrying the real instruction — up there it was the most
-                     button-shaped thing on the card, and people pressed it instead of opening a terminal. -->
+                     the first, as permission to sit still.
+                     So the icon leads, and for the idle state it is a DOT rather than a ring: an unfilled
+                     circle beside a line of status text is read as a spinner that has stopped turning, which
+                     is a bug report, not a state. A small filled dot is a status light — it is not supposed to
+                     move, and nobody waits for it to.
+                     There is no "Check now" here any more. The registry is polled every 3s regardless, so the
+                     button re-asked a question already being asked and bought nothing but its own presence —
+                     and because the poll shares `checking`, it spent every third second flipping itself to
+                     "Checking…" and back, which is a card that looks broken while it works perfectly. -->
                         <div v-if="waiting" class="flex flex-col gap-2 border-t border-line pt-3">
                             <p class="flex items-start gap-2 text-xs" :class="handoff === `claimed` ? `text-content` : `text-muted`">
                                 <Icon v-if="handoff === `claimed`" name="spinner" spin class="mt-0.5 shrink-0 text-success" />
                                 <Icon v-else-if="handoff === `pasted`" name="spinner" spin class="mt-0.5 shrink-0 text-info" />
-                                <Icon v-else name="circle" class="mt-0.5 shrink-0 text-subtle" />
+                                <Icon v-else name="circle-fill" class="mt-1 shrink-0 text-[0.5rem] text-subtle" />
                                 <span class="min-w-0">
                                     <template v-if="handoff === `claimed`">
                                         <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker — the first run takes
@@ -1322,12 +1328,15 @@ watch(commandReady, (ready) => {
                                 <p v-if="stalled" class="pl-6 text-2xs opacity-90">
                                     Already ran it? Check that terminal — an error there stops the sandbox before it can report in. Safe to run again.
                                 </p>
-                                <!-- self-start, or the column flex stretches this chip across the whole banner. -->
+                                <!-- `cta`, because in this banner copying again IS the way out — the quiet chip
+                                     that suits a copy-beside-content read as the dimmest thing in the loudest
+                                     box on the card. self-start, or the column flex stretches it edge to edge. -->
                                 <CopyButton
                                     v-if="runTab !== `compose` && splitCommand === undefined"
                                     class="ml-6 self-start"
                                     :text="selectedCommand"
                                     label="Copy again"
+                                    :cta="true"
                                     @copied="onCopied"
                                 />
                             </div>
@@ -1341,17 +1350,6 @@ watch(commandReady, (ready) => {
                                     >Picked up a while ago, still no sandbox. Check that terminal for an error — it's safe to re-run.</span
                                 >
                             </p>
-
-                            <!-- The courtesy, sized like one. -->
-                            <button
-                                type="button"
-                                :class="cmp.linkButton(`gap-1 text-2xs text-subtle hover:text-content`)"
-                                :disabled="checking"
-                                @click="check"
-                            >
-                                <Icon name="refresh" :spin="checking" />
-                                {{ checking ? `Checking…` : `Check now` }}
-                            </button>
                         </div>
                         <p v-if="status" class="text-2xs text-warning">{{ status }}</p>
                     </StepSection>
