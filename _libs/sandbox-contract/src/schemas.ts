@@ -3532,6 +3532,40 @@ export const PortParamSchema = z.object({ port: z.number().int().min(1).max(6553
 export const PortForwardResultSchema = z.object({ previewUrl: z.string().optional() });
 export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 
+// ---- public: the workspace outbox ----
+// The mirror image of the reference shelf. Files under the workspace's `public/` directory are served as static
+// files at public-<slot>-<sandboxId>.<zone>, with no auth in front of them — the process-free half of preview
+// (a panel needs a running dev server; a file needs nothing). The directory's existence is the switch: it is
+// absent until something is published and removed again when the last file leaves, so "publishing is off" is
+// the resting state rather than a flag someone has to remember to set back.
+
+export const PublicFileSchema = z.object({
+    // Outbox-relative, forward-slash ("report.pdf", "site/index.html").
+    path: z.string(),
+    size: z.number(),
+    modifiedAt: z.number(),
+    // The file's public URL. Absent when the sandbox has no tunnel, or when a guard refuses this file.
+    url: z.string().optional(),
+    // Why a file sitting in the outbox is NOT served — a hidden name, a credential-shaped name, contents that
+    // match a known token format, or sheer size. The publisher reads it here; a stranger requesting the same
+    // file only ever gets the same 404 every other miss returns, so this list can't be probed from outside.
+    blocked: z.string().optional(),
+});
+export type PublicFile = z.infer<typeof PublicFileSchema>;
+
+// `url` is the outbox root — the base every file's URL hangs off, and what the view shows as "your public
+// address". Absent on a loopback/no-tunnel sandbox, which has nowhere to publish to.
+export const PublicListSchema = z.object({ url: z.string().optional(), files: z.array(PublicFileSchema) });
+export type PublicList = z.infer<typeof PublicListSchema>;
+
+// A WORKSPACE-relative path (the space the file tree speaks) to copy into the outbox. A copy, not a move: the
+// repo a build output came from must not lose it because someone shared it.
+export const PublishSchema = z.object({ path: z.string().min(1) });
+// An OUTBOX-relative path to withdraw — the path space PublicFile.path speaks, not the workspace's.
+export const UnpublishSchema = z.object({ path: z.string().min(1) });
+export const PublishResultSchema = z.object({ path: z.string(), url: z.string().optional() });
+export type PublishResult = z.infer<typeof PublishResultSchema>;
+
 // ---- terminal ----
 // EVERY live surface in the sandbox the web app's ONE global panel can show. Mostly tmux sessions (the
 // interactive I/O is the /system/terminal WebSocket, not oRPC), plus the agent's browser, which is not a

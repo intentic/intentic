@@ -57,6 +57,25 @@ const REFERENCE_GUIDANCE =
     "there, never edit it, and never treat its contents as workspace code. When asked to fetch an external " +
     "codebase for study, clone it into `refs/` rather than the workspace root.";
 
+/* The shelf's mirror image (PUBLIC_DIR in @intentic/workspace-ignore). Named for the same reason and one
+ * sharper one: this convention has a blast radius. An agent that does not know `public/` is served will
+ * eventually write a build output, a log dump or a credentials file into it because the name looked like an
+ * ordinary asset folder — and unlike a misfiled clone, that one is on the open internet. Stating what the
+ * directory IS turns the most likely accident into a deliberate act.
+ *
+ * The serve-time guards (public/public-files.ts) refuse the obvious mistakes whatever the agent believes, so
+ * this sentence is the second line of defence, not the only one. It is written to be usable rather than
+ * merely cautionary: publishing is the answer to "give me a link to this", and an agent that knows the
+ * mechanism can offer it. */
+const PUBLIC_GUIDANCE =
+    "The workspace's top-level `public/` directory is the outbox: every file in it is served on the public " +
+    "internet, to anyone with the link, with no sign-in. It is the way to hand someone a file — a report, a " +
+    "screenshot, a built site — without a running server. Put something there only when the user asked for it " +
+    "to be shared, never secrets, credentials, logs or customer data, and say plainly that the link is public " +
+    "when you give it out. The directory not existing means nothing is published; creating it starts, and " +
+    "deleting it stops. Everywhere else `public/` INSIDE a repo (a Vite or Next assets folder) is ordinary " +
+    "project content and none of this applies.";
+
 // The browser tools are deferred (see isolatedBrowserSpec — ~20 tools is too much to pin into every prompt),
 // and a model that does not know a browser exists never ToolSearches for one: it reaches for curl, gives up on
 // anything client-rendered, or installs its own. Naming the server is what makes the capability discoverable.
@@ -137,6 +156,7 @@ const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSyste
     ...(unattended ? [] : [INTERACTIVE_GUIDANCE]),
     CHECKLIST_GUIDANCE,
     REFERENCE_GUIDANCE,
+    PUBLIC_GUIDANCE,
     browserGuidance(browserOutputDir),
     ...(append === undefined ? [] : [append]),
 ];

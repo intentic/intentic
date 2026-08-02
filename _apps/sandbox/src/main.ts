@@ -3,7 +3,7 @@ import { createSecureServer } from "node:http2";
 import { join } from "node:path";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { observeGitCommands } from "@intentic/scaffold";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { WebSocketServer } from "ws";
@@ -43,6 +43,8 @@ import { INFRA_APPLY_KEY } from "./intentic/infra-apply.js";
 import { killStaleManagedSessions, panelSession } from "./processes/managed-processes.js";
 import { createPreviewProxy } from "./panels/preview-proxy.js";
 import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
+import { publicRoot } from "./public/public-files.js";
+import { createPublicHandler } from "./public/public-serve.js";
 import { linkClaudeState } from "./sessions/session-store.js";
 import { createAnnouncer } from "./platform/announce.js";
 import { claimBootMarker } from "./platform/boot-marker.js";
@@ -248,11 +250,24 @@ const main = async (): Promise<void> => {
     // Obtain/renew in the background. Never rejects: a sandbox with no certificate is a working sandbox.
     const localCertRenewal = startLocalCertificateRenewal(config, logger);
 
-    // The preview proxy: preview-<panel>-<id>.<zone> and port-<slot>-<id>.<zone> land here (the tunnel's
-    // fixed origin) and the Host header's first label routes to the panel's running port or the slot's
-    // forwarded port. Always listening — with nothing up it answers 502, not connection-refused. Every preview
-    // is public — no owner-gating.
-    const previewProxy = createPreviewProxy(services.processes.portOf, services.portForwards.targetOf, sandboxIdFromToken(config.connectToken));
+    // The preview proxy: preview-<panel>-<id>.<zone>, port-<slot>-<id>.<zone> and public-<slot>-<id>.<zone>
+    // land here (the tunnel's fixed origin) and the Host header's first label routes to the panel's running
+    // port, the slot's forwarded port, or the workspace's outbox. Always listening — with nothing up it answers
+    // 502, not connection-refused. Everything it serves is public — no owner-gating.
+    //
+    // The outbox needs the connect token for its salted slot, so a token-less daemon (tests, loopback) simply
+    // has no address to publish at. The handler is bound to public/ whether or not that directory exists: the
+    // dir's existence is the switch, and it is checked per request, so `mkdir public` starts publishing without
+    // a restart and `rm -rf public` stops it just as immediately.
+    const previewProxy = createPreviewProxy({
+        portOf: services.processes.portOf,
+        slotTargetOf: services.portForwards.targetOf,
+        sandboxId: sandboxIdFromToken(config.connectToken),
+        outbox:
+            config.connectToken === ""
+                ? undefined
+                : { slot: publicSlotFromToken(config.connectToken), serve: createPublicHandler(publicRoot(config.workspaceRoot)) },
+    });
     previewProxy.listen(config.preview.port, config.sandbox.host);
 
     // Phone home: announce this sandbox's URL + liveness to the platform registry (boot + every 30s), so the

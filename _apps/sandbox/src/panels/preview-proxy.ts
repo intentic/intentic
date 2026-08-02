@@ -1,26 +1,9 @@
 import http from "node:http";
 import https from "node:https";
-import { panelFromHost, portSlotFromHost } from "@intentic/sandbox-contract";
+import { panelFromHost, portSlotFromHost, publicSlotFromHost } from "@intentic/sandbox-contract";
 import type { PortTarget } from "../ports/port-forwards.js";
-
-// Where the interstitial's CTA sends a viewer who just opened someone's shared preview — the "invite" half of the
-// share loop (the "demo" half is the working preview itself). A shared preview is a live demo of an app built on
-// Intentic; these status pages are the ONLY surface Intentic controls end-to-end (they are served by this proxy,
-// never injected into the user's running app), so the attribution lives here and nowhere intrusive.
-const INTENTIC_URL = "https://intentic.dev";
-
-// Only the dynamic bits of a status message (a repo/slot name derived from the attacker-controllable Host) are
-// escaped before landing in HTML; the static sentence around them is author-controlled. DNS labels are already a
-// safe charset, so this is defense-in-depth.
-const escapeHtml = (value: string): string =>
-    value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
-
-// A small, self-contained branded page for the proxy's own status responses (panel not up, nothing forwarded, dead
-// upstream, stray host). Inline everything — this bare http server ships no assets. `message` is embedded as text
-// content (its only dynamic parts are pre-escaped at the call site; literal quotes stay literal, which the proxy
-// tests rely on). Shown at exactly the high-intent moment a viewer clicks a shared link before the server is up.
-const interstitial = (title: string, message: string): string =>
-    `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>:root{color-scheme:dark light}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d10;color:#e6e8eb;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}.card{max-width:26rem;padding:2rem;text-align:center}h1{margin:0 0 .5rem;font-size:1.05rem;font-weight:600}p{margin:0;color:#9aa0a6}a.cta{display:inline-block;margin-top:1.5rem;padding-top:1.2rem;border-top:1px solid #1e2227;color:#8ab4f8;text-decoration:none;font-size:.8rem}a.cta:hover{text-decoration:underline}</style></head><body><div class="card"><h1>${title}</h1><p>${message}</p><a class="cta" href="${INTENTIC_URL}" target="_blank" rel="noopener">Preview powered by <b>Intentic</b> — build &amp; share your own →</a></div></body></html>`;
+import type { PublicHandler } from "../public/public-serve.js";
+import { escapeHtml, interstitial, type Refusal } from "./interstitial.js";
 
 // Resolves a repo name to the local port its running panel was assigned (undefined when not running) — the
 // process manager's `portOf`, narrowed so the proxy needs nothing else.
@@ -28,35 +11,54 @@ export type PortResolver = (repo: string) => number | undefined;
 // Resolves a forward slot to its mapped port + upstream scheme — the port-forwards table's `targetOf`.
 export type SlotResolver = (slot: string) => PortTarget | undefined;
 
-// What one request resolves to: an upstream to dial, or a terminal status. Panels forward Host unchanged (the
-// scaffolded dev servers allow the preview hostname); forwarded ports rewrite Host AND Origin to
-// localhost:<port> — those are arbitrary user apps, and stock Vite/webpack host checks reject any hostname
-// they weren't configured for, so the rewrite is what makes an unmodified dev server just work. The target is
-// identified by the port, never the vhost, so the rewrite loses nothing. `dial` is the loopback address the
-// upstream actually answers at: panels bind the daemon-assigned PORT on 127.0.0.1, but a forwarded server that
-// bound `localhost` can sit on ::1 only (Vite) — the forward table records which.
-type Upstream =
-    { dial: string; port: number; scheme: "http" | "https"; headers: http.IncomingHttpHeaders } | { status: number; title: string; message: string };
+// What this proxy can answer for. `outbox` is absent on a sandbox with no connect token (tests, loopback), which
+// has no salted slot to serve one at — publishing is a tunnel feature.
+export interface PreviewProxyDeps {
+    readonly portOf: PortResolver;
+    readonly slotTargetOf: SlotResolver;
+    readonly sandboxId?: string | undefined;
+    readonly outbox?: { readonly slot: string; readonly serve: PublicHandler } | undefined;
+}
 
-const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTargetOf: SlotResolver, sandboxId: string | undefined): Upstream => {
-    const repo = panelFromHost(req.headers.host, sandboxId);
+// What one request resolves to: an upstream to dial, the outbox's static handler, or a terminal status. Panels
+// forward Host unchanged (the scaffolded dev servers allow the preview hostname); forwarded ports rewrite Host
+// AND Origin to localhost:<port> — those are arbitrary user apps, and stock Vite/webpack host checks reject any
+// hostname they weren't configured for, so the rewrite is what makes an unmodified dev server just work. The
+// target is identified by the port, never the vhost, so the rewrite loses nothing. `dial` is the loopback
+// address the upstream actually answers at: panels bind the daemon-assigned PORT on 127.0.0.1, but a forwarded
+// server that bound `localhost` can sit on ::1 only (Vite) — the forward table records which.
+type Resolved =
+    | {
+          readonly kind: "proxy";
+          readonly dial: string;
+          readonly port: number;
+          readonly scheme: "http" | "https";
+          readonly headers: http.IncomingHttpHeaders;
+      }
+    | { readonly kind: "outbox" }
+    | ({ readonly kind: "refused" } & Refusal);
+
+const resolveRequest = (req: http.IncomingMessage, deps: PreviewProxyDeps): Resolved => {
+    const repo = panelFromHost(req.headers.host, deps.sandboxId);
     if (repo !== undefined) {
-        const port = portOf(repo);
+        const port = deps.portOf(repo);
         if (port === undefined) {
             const name = escapeHtml(repo);
             return {
+                kind: "refused",
                 status: 502,
                 title: "Preview isn't running",
                 message: `panel "${name}" is not running — start it from the ${name} entry in the sidebar`,
             };
         }
-        return { dial: "127.0.0.1", port, scheme: "http", headers: req.headers };
+        return { kind: "proxy", dial: "127.0.0.1", port, scheme: "http", headers: req.headers };
     }
-    const slot = portSlotFromHost(req.headers.host, sandboxId);
+    const slot = portSlotFromHost(req.headers.host, deps.sandboxId);
     if (slot !== undefined) {
-        const target = slotTargetOf(slot);
+        const target = deps.slotTargetOf(slot);
         if (target === undefined) {
             return {
+                kind: "refused",
                 status: 502,
                 title: "Nothing forwarded here",
                 message: `nothing is forwarded here — re-open the preview from the Ports view or the terminal link`,
@@ -67,18 +69,20 @@ const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTa
         if (req.headers.origin !== undefined) {
             headers.origin = `${target.scheme}://${localhost}`;
         }
-        return { dial: target.host, port: target.port, scheme: target.scheme, headers };
+        return { kind: "proxy", dial: target.host, port: target.port, scheme: target.scheme, headers };
     }
-    return { status: 404, title: "No preview here", message: "This address isn't a live Intentic preview." };
+    // The outbox: one salted slot per sandbox, so a host carrying any OTHER public- slot is a stray subdomain
+    // the wildcard caught, not this sandbox's.
+    if (deps.outbox !== undefined && publicSlotFromHost(req.headers.host, deps.sandboxId) === deps.outbox.slot) {
+        return { kind: "outbox" };
+    }
+    return { kind: "refused", status: 404, title: "No preview here", message: "This address isn't a live Intentic preview." };
 };
 
 // Dial the upstream — plain http for panels, and for forwarded ports whatever scheme the forward probe
 // detected (a vite serving https on 47145 gets a TLS dial with verification off: the cert is self-signed and
 // the socket never leaves the sandbox's own netns).
-const dialUpstream = (
-    upstream: { dial: string; port: number; scheme: "http" | "https"; headers: http.IncomingHttpHeaders },
-    req: http.IncomingMessage,
-): http.ClientRequest =>
+const dialUpstream = (upstream: Extract<Resolved, { kind: "proxy" }>, req: http.IncomingMessage): http.ClientRequest =>
     (upstream.scheme === "https" ? https : http).request({
         host: upstream.dial,
         port: upstream.port,
@@ -90,18 +94,25 @@ const dialUpstream = (
 
 // The preview reverse proxy: the Cloudflare tunnel routes preview hostnames to this one port (per-label
 // ingress rules on the intentic-provided path, the whole `*.<zone>` wildcard on the own-Cloudflare path), and
-// the Host header's first DNS label picks the upstream — `preview-<panel>-<sandboxId>` → the panel's dev
-// server, `port-<slot>-<sandboxId>` → the slot's forwarded port (parsing in hostnames.ts). A non-preview host
-// (a stray subdomain the wildcard also catches) → 404. Every preview is public — no auth in front of the proxy.
-export const createPreviewProxy = (portOf: PortResolver, slotTargetOf: SlotResolver, sandboxId?: string): http.Server => {
+// the Host header's first DNS label picks what answers — `preview-<panel>-<sandboxId>` → the panel's dev
+// server, `port-<slot>-<sandboxId>` → the slot's forwarded port, `public-<slot>-<sandboxId>` → the workspace's
+// outbox as static files (public/public-serve.ts). A non-preview host (a stray subdomain the wildcard also
+// catches) → 404. Everything here is public — no auth in front of the proxy.
+export const createPreviewProxy = (deps: PreviewProxyDeps): http.Server => {
     const server = http.createServer((req, res) => {
-        const upstream = resolveUpstream(req, portOf, slotTargetOf, sandboxId);
-        if ("status" in upstream) {
-            res.writeHead(upstream.status, { "content-type": "text/html; charset=utf-8" });
-            res.end(interstitial(upstream.title, upstream.message));
+        const resolved = resolveRequest(req, deps);
+        if (resolved.kind === "refused") {
+            res.writeHead(resolved.status, { "content-type": "text/html; charset=utf-8" });
+            res.end(interstitial(resolved.title, resolved.message));
             return;
         }
-        const proxyReq = dialUpstream(upstream, req);
+        if (resolved.kind === "outbox") {
+            // The handler owns its own failures (a read error after the head destroys the socket); an unexpected
+            // one still must not take the daemon down with it.
+            void deps.outbox?.serve(req, res).catch(() => res.destroy());
+            return;
+        }
+        const proxyReq = dialUpstream(resolved, req);
         proxyReq.on("response", (proxyRes) => {
             res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
             proxyRes.pipe(res);
@@ -113,21 +124,25 @@ export const createPreviewProxy = (portOf: PortResolver, slotTargetOf: SlotResol
                 return;
             }
             res.writeHead(502, { "content-type": "text/html; charset=utf-8" });
-            res.end(interstitial("Preview unavailable", `nothing is answering on port ${upstream.port} — the server may have stopped`));
+            res.end(interstitial("Preview unavailable", `nothing is answering on port ${resolved.port} — the server may have stopped`));
         });
         req.pipe(proxyReq);
     });
 
     // WebSocket upgrades (Vite/Astro HMR): replay the handshake upstream, echo the 101 back, then pipe raw
-    // bytes both ways.
+    // bytes both ways. The outbox is files — there is nothing on the other side to upgrade to.
     server.on("upgrade", (req, socket, head) => {
         socket.on("error", () => socket.destroy());
-        const upstream = resolveUpstream(req, portOf, slotTargetOf, sandboxId);
-        if ("status" in upstream) {
-            socket.end(`HTTP/1.1 ${upstream.status} ${upstream.message}\r\n\r\n`);
+        const resolved = resolveRequest(req, deps);
+        if (resolved.kind === "refused") {
+            socket.end(`HTTP/1.1 ${resolved.status} ${resolved.message}\r\n\r\n`);
             return;
         }
-        const proxyReq = dialUpstream(upstream, req);
+        if (resolved.kind === "outbox") {
+            socket.end(`HTTP/1.1 404 Not Found\r\n\r\n`);
+            return;
+        }
+        const proxyReq = dialUpstream(resolved, req);
         proxyReq.on("error", () => socket.destroy());
         proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
             const headerLines: string[] = [];

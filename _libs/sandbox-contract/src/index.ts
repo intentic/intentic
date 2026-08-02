@@ -25,6 +25,7 @@ import { loopsContract } from "./contracts/loops.contract.js";
 import { memoryContract } from "./contracts/memory.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
+import { publicContract } from "./contracts/public.contract.js";
 import { prepushContract } from "./contracts/prepush.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
@@ -65,6 +66,7 @@ export { loopsContract } from "./contracts/loops.contract.js";
 export { memoryContract } from "./contracts/memory.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
+export { publicContract } from "./contracts/public.contract.js";
 export { prepushContract } from "./contracts/prepush.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";
@@ -125,6 +127,7 @@ export const sandboxContract = {
     memory: memoryContract,
     panels: panelsContract,
     ports: portsContract,
+    public: publicContract,
     prepush: prepushContract,
     push: pushContract,
     secrets: secretsContract,

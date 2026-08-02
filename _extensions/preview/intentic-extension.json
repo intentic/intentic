@@ -5,12 +5,23 @@
     "category": "workspace",
     "engines": { "intentic": "^0.4.0" },
     "permissions": {
-        "sandbox": ["GET /panels", "POST /panels/*/start", "POST /panels/*/stop", "GET /ports", "POST /ports/forward", "POST /ports/unforward"]
+        "sandbox": [
+            "GET /panels",
+            "POST /panels/*/start",
+            "POST /panels/*/stop",
+            "GET /ports",
+            "POST /ports/forward",
+            "POST /ports/unforward",
+            "GET /public",
+            "POST /public/publish",
+            "POST /public/unpublish"
+        ]
     },
     "contributes": {
         "views": [
             { "id": "preview", "label": "Preview", "surface": "directory" },
-            { "id": "ports", "label": "Ports", "surface": "sandbox" }
+            { "id": "ports", "label": "Ports", "surface": "sandbox" },
+            { "id": "public", "label": "Public", "surface": "sandbox" }
         ]
     }
 }

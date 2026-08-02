@@ -41,3 +41,17 @@ export const PORT_SLOT_COUNT = 8;
  * the digest it shares with sandboxIdFromToken. */
 export const portSlotsFromToken = (connectToken: string): readonly string[] =>
     Array.from({ length: PORT_SLOT_COUNT }, (_, index) => sha256Hex(`${connectToken}:port:${index}`).slice(0, 12));
+
+/* THE OUTBOX SLOT — the `public-<slot>` half of `public-<slot>-<sandboxId>.<zone>`, where the daemon serves the
+ * workspace's `public/` directory (PUBLIC_DIR in @intentic/workspace-ignore).
+ *
+ * Salted for the reason above, and it matters more here than it does for ports: a forwarded port is a live
+ * server the owner started minutes ago, whereas a published file sits there. One record per sandbox, stable
+ * across restarts so a link stays good for as long as the file does, and derivable only by parties holding the
+ * token — the daemon that serves and the platform that mints. Not the browser: it reads the URL off the /public
+ * response, exactly as it reads previewUrl off /ports.
+ *
+ * The unguessable hostname is also what carries the security story, because the files under it have no auth in
+ * front of them: with no directory listing (public-files.ts refuses one) an outsider must guess a 12-hex label
+ * AND a filename to reach anything at all. */
+export const publicSlotFromToken = (connectToken: string): string => sha256Hex(`${connectToken}:public`).slice(0, 12);

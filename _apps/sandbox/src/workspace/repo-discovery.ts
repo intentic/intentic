@@ -1,7 +1,7 @@
 import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { REPO_ROLES } from "@intentic/scaffold";
-import { IGNORED_DIRS, isReferencePath, REFERENCE_DIR } from "@intentic/workspace-ignore";
+import { IGNORED_DIRS, isPublicPath, isReferencePath, PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore";
 
 // VSCode-style repo discovery: a repo is any directory under /work owning a `.git` entry — dir OR pointer file
 // (the daemon's own --separate-git-dir repos keep a pointer FILE in the worktree, as do git worktrees and
@@ -13,8 +13,9 @@ import { IGNORED_DIRS, isReferencePath, REFERENCE_DIR } from "@intentic/workspac
 // "root" is the /work workspace repo's {repo} name (its git dir lives at /history/gits/root) — a clone must
 // never collide with it, and a top-level dir the agent names "root" is skipped by discovery for the same reason.
 // The reference shelf (REFERENCE_DIR, workspace-ignore) is reserved too: a clone dropped there is consulted by
-// path, never a workspace repo.
-const RESERVED = new Set<string>([...REPO_ROLES, "root", REFERENCE_DIR]);
+// path, never a workspace repo. So is the outbox (PUBLIC_DIR) at the other end of the same convention — a folder
+// of published artifacts is not a project, and discovering it would earn it a sidebar entry and a setup nag.
+const RESERVED = new Set<string>([...REPO_ROLES, "root", REFERENCE_DIR, PUBLIC_DIR]);
 // A safe path segment: starts alphanumeric, no separators or `..`.
 const SEGMENT = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 // Runaway guards for the recursive walk: repos deeper than this aren't discovered, and a pathological tree
@@ -32,7 +33,13 @@ export const isValidRepoName = (name: string): boolean => SEGMENT.test(name) && 
 // reference shelf is a workspace repo (discovery never returns those, so no wire id may name one either).
 export const isValidRepoId = (id: string): boolean => {
     const segments = id.split("/");
-    return segments.length <= MAX_DEPTH && segments.every((segment) => SEGMENT.test(segment)) && id !== "root" && !isReferencePath(id);
+    return (
+        segments.length <= MAX_DEPTH &&
+        segments.every((segment) => SEGMENT.test(segment)) &&
+        id !== "root" &&
+        !isReferencePath(id) &&
+        !isPublicPath(id)
+    );
 };
 
 export const hasGitEntry = async (dir: string): Promise<boolean> => {
@@ -60,7 +67,7 @@ export const discoverRepos = async (root: string): Promise<string[]> => {
                 continue;
             }
             const id = rel === "" ? entry.name : `${rel}/${entry.name}`;
-            if (id === "root" || id === REFERENCE_DIR || !SEGMENT.test(entry.name)) {
+            if (id === "root" || id === REFERENCE_DIR || id === PUBLIC_DIR || !SEGMENT.test(entry.name)) {
                 continue;
             }
             const child = join(dir, entry.name);

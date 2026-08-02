@@ -27,7 +27,7 @@ const setup = async (slots?: (appPort: number) => SlotResolver): Promise<{ proxy
         }),
     );
     const portOf: PortResolver = (repo) => (repo === "app" ? appPort : undefined);
-    const proxyPort = await listen(createPreviewProxy(portOf, slots === undefined ? noSlots : slots(appPort)));
+    const proxyPort = await listen(createPreviewProxy({ portOf, slotTargetOf: slots === undefined ? noSlots : slots(appPort) }));
     return { proxyPort, appPort };
 };
 
@@ -85,10 +85,10 @@ test("a ::1-only upstream (a `localhost`-bound dev server) is dialed at ::1, not
     await new Promise<void>((resolve) => v6Server.listen(0, "::1", resolve));
     const v6Port = (v6Server.address() as AddressInfo).port;
     const proxyPort = await listen(
-        createPreviewProxy(
-            () => undefined,
-            (slot) => (slot === "a" ? { port: v6Port, host: "::1", scheme: "http" } : undefined),
-        ),
+        createPreviewProxy({
+            portOf: () => undefined,
+            slotTargetOf: (slot) => (slot === "a" ? { port: v6Port, host: "::1", scheme: "http" } : undefined),
+        }),
     );
     const response = await get(proxyPort, "port-a.example.com");
     expect(response.status).toBe(200);
@@ -110,10 +110,10 @@ test("a port target rewrites Origin alongside Host", async () => {
         }),
     );
     const proxyPort = await listen(
-        createPreviewProxy(
-            () => undefined,
-            (slot) => (slot === "a" ? { port: echoPort, host: "127.0.0.1", scheme: "http" } : undefined),
-        ),
+        createPreviewProxy({
+            portOf: () => undefined,
+            slotTargetOf: (slot) => (slot === "a" ? { port: echoPort, host: "127.0.0.1", scheme: "http" } : undefined),
+        }),
     );
     const response = await get(proxyPort, "port-a.example.com", "/", { origin: "https://port-a.example.com" });
     expect(response.body).toBe(`origin=http://localhost:${echoPort}`);
@@ -177,12 +177,7 @@ test("an https-scheme slot target is dialed over TLS with verification off (self
         }),
     );
     const target: PortTarget = { port: tlsPort, host: "127.0.0.1", scheme: "https" };
-    const proxyPort = await listen(
-        createPreviewProxy(
-            () => undefined,
-            (slot) => (slot === "a" ? target : undefined),
-        ),
-    );
+    const proxyPort = await listen(createPreviewProxy({ portOf: () => undefined, slotTargetOf: (slot) => (slot === "a" ? target : undefined) }));
     const response = await get(proxyPort, "port-a.example.com");
     expect(response.status).toBe(200);
     expect(response.body).toBe(`secure hello from localhost:${tlsPort}`);
@@ -200,7 +195,7 @@ const idSetup = async (): Promise<{ proxyPort: number; appPort: number }> => {
     );
     const portOf: PortResolver = (repo) => (repo === "app" ? appPort : undefined);
     const slotTargetOf: SlotResolver = (slot) => (slot === "a" ? { port: appPort, host: "127.0.0.1", scheme: "http" } : undefined);
-    return { proxyPort: await listen(createPreviewProxy(portOf, slotTargetOf, ID)), appPort };
+    return { proxyPort: await listen(createPreviewProxy({ portOf, slotTargetOf, sandboxId: ID })), appPort };
 };
 
 test("with a sandbox id, the -<id> suffix is stripped to route and Host is forwarded unchanged", async () => {

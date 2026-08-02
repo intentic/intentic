@@ -35,9 +35,28 @@ export const IGNORED_DIRS = new Set([
 // boundary, not an access one — same philosophy as the rest of this package.
 export const REFERENCE_DIR = "refs";
 
-// Root-relative paths only: the predicate matches the FIRST segment, so a repo's own `refs/` subdir
-// ("myrepo/refs") stays ordinary content. Callers holding an absolute path must relativize first (toRelPath).
-export const isReferencePath = (relPath: string): boolean => relPath.split(/[\\/]/).find((segment) => segment.length > 0) === REFERENCE_DIR;
+/* The workspace's OUTBOX, and the reference shelf's mirror image: a reserved TOP-LEVEL directory whose files
+ * the sandbox serves on the public internet. Where `refs/` is what the world sends in, this is what the work
+ * sends out — the process-free half of preview (a panel needs a running dev server; a file needs nothing), and
+ * the file-shaped way an agent hands a result to someone who has no Intentic account.
+ *
+ * Unlike the shelf it is NOT ensured at boot, and that asymmetry is the whole safety story: its EXISTENCE is
+ * the switch. No directory, nothing served; `mkdir public` turns publishing on and deleting it turns publishing
+ * off, with no second piece of state to disagree with the first. An empty shelf is harmless furniture, so the
+ * daemon can leave one lying around; a directory that is public by definition is the one thing nobody should
+ * ever find by accident.
+ *
+ * In every OTHER respect it is ordinary workspace content — searched, watched, ungrayed in the tree — because
+ * what you published is precisely what you want to be able to find again. The one exception is repo discovery,
+ * which reserves the name: a folder of artifacts is not a project. */
+export const PUBLIC_DIR = "public";
+
+// Root-relative paths only: both predicates match the FIRST segment, so a repo's own `refs/` or `public/` subdir
+// ("myrepo/public" — Vite, Next and Laravel all ship one) stays ordinary content. Callers holding an absolute
+// path must relativize first (toRelPath).
+const firstSegment = (relPath: string): string | undefined => relPath.split(/[\\/]/).find((segment) => segment.length > 0);
+export const isReferencePath = (relPath: string): boolean => firstSegment(relPath) === REFERENCE_DIR;
+export const isPublicPath = (relPath: string): boolean => firstSegment(relPath) === PUBLIC_DIR;
 
 // The persisted browser-login profiles (.intentic/browser/<platform>) are a Chromium user-data dir: thousands of
 // constantly-rewritten files (Cookies, Login Data, …). Treated as ignored so the tree grays + lazy-loads the

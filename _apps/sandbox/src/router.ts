@@ -26,6 +26,7 @@ import { createWorkflowsRoutes } from "./workflows/workflows.routes.js";
 import { createMemoryRoutes } from "./memory/memory.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
 import { createPortsRoutes } from "./ports/ports.routes.js";
+import { createPublicRoutes } from "./public/public.routes.js";
 import { createPrepushRoutes } from "./prepush/prepush.routes.js";
 import { createPushRoutes } from "./push/push.routes.js";
 import { createSecretsRoutes } from "./secrets/secrets.routes.js";
@@ -68,6 +69,7 @@ export const createRouter = (services: Services) => ({
     memory: createMemoryRoutes(services),
     panels: createPanelsRoutes(services),
     ports: createPortsRoutes(services),
+    public: createPublicRoutes(services),
     prepush: createPrepushRoutes(services),
     push: createPushRoutes(services),
     translator: createTranslatorRoutes(services),

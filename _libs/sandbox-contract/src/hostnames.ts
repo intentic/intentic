@@ -48,22 +48,34 @@ export const CATCH_ALL = { service: "http_status:404" } as const;
 // ports. The slot labels are salted with the connect token rather than being the letters a…h, so a forwarded
 // port's hostname is not derivable from the (public) sandbox id alone — see tunnel-ids for why that matters.
 //
-// A *label* is the first-DNS-label prefix before `-<sandboxId>` (`preview-<panel>` / `port-<slot>`) — the unit
-// the platform's /sandbox/preview-route mints, so one endpoint serves both schemes.
+// Outbox scheme: `public-<slot>-<sandboxId>.<zone>` — the same shape again, serving the workspace's `public/`
+// directory as static files. <slot> is publicSlotFromToken (./tunnel-ids), salted for the same reason the port
+// slots are, and one record per sandbox rather than a pool: there is one outbox, and its link has to stay good
+// for as long as the file does.
+//
+// A *label* is the first-DNS-label prefix before `-<sandboxId>` (`preview-<panel>` / `port-<slot>` /
+// `public-<slot>`) — the unit the platform's /sandbox/preview-route mints, so one endpoint serves all three.
 export const previewLabel = (panel: string): string => `preview-${panel}`;
 export const portLabel = (slot: string): string => `port-${slot}`;
+export const publicLabel = (slot: string): string => `public-${slot}`;
 
 // The hostname a label resolves to — what the platform's /sandbox/preview-route mints from the label alone.
 export const labelHostname = (label: string, id: string, zone: string): string => `${label}-${id}.${zone}`;
 export const previewHostname = (panel: string, id: string, zone: string): string => labelHostname(previewLabel(panel), id, zone);
 export const portHostname = (slot: string, id: string, zone: string): string => labelHostname(portLabel(slot), id, zone);
+export const publicHostname = (slot: string, id: string, zone: string): string => labelHostname(publicLabel(slot), id, zone);
 
-// A panel's / forwarded port's preview URL — undefined unless the sandbox has both a zone and an id
-// (headless/loopback sandboxes have neither and advertise no preview).
+// A label's public URL — undefined unless the sandbox has both a zone and an id (headless/loopback sandboxes
+// have neither and advertise nothing). One builder, three vocabularies: a panel's preview, a forwarded port's,
+// and the outbox's.
+const labelUrl = (label: string, zone: string | undefined, sandboxId: string | undefined): string | undefined =>
+    zone !== undefined && zone !== "" && sandboxId !== undefined ? `https://${labelHostname(label, sandboxId, zone)}` : undefined;
 export const previewUrl = (panel: string, zone: string | undefined, sandboxId: string | undefined): string | undefined =>
-    zone !== undefined && zone !== "" && sandboxId !== undefined ? `https://${previewHostname(panel, sandboxId, zone)}` : undefined;
+    labelUrl(previewLabel(panel), zone, sandboxId);
 export const portUrl = (slot: string, zone: string | undefined, sandboxId: string | undefined): string | undefined =>
-    zone !== undefined && zone !== "" && sandboxId !== undefined ? `https://${portHostname(slot, sandboxId, zone)}` : undefined;
+    labelUrl(portLabel(slot), zone, sandboxId);
+export const publicUrl = (slot: string, zone: string | undefined, sandboxId: string | undefined): string | undefined =>
+    labelUrl(publicLabel(slot), zone, sandboxId);
 
 // The key after `<prefix>` from a request's Host header. The first DNS label must carry the prefix (the
 // own-Cloudflare wildcard also catches stray subdomains → undefined → the caller's 404) and, when the sandbox
@@ -87,6 +99,8 @@ export const panelFromHost = (hostHeader: string | undefined, sandboxId: string 
     keyFromHost("preview-", hostHeader, sandboxId);
 export const portSlotFromHost = (hostHeader: string | undefined, sandboxId: string | undefined): string | undefined =>
     keyFromHost("port-", hostHeader, sandboxId);
+export const publicSlotFromHost = (hostHeader: string | undefined, sandboxId: string | undefined): string | undefined =>
+    keyFromHost("public-", hostHeader, sandboxId);
 
 // The sandbox's identity AS THE USER SEES IT: the leading DNS label of its public URL, minus the `sandbox-`
 // prefix — `https://sandbox-0f310c3c4db4.intentic.dev` → `0f310c3c4db4`, i.e. sandboxIdFromToken's digest read

@@ -12,7 +12,7 @@ import { isRecentlyChanged } from "../../composables/workspace/useWorkspaceLive"
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import PresenceAvatars from "../../presence/PresenceAvatars.vue";
 import { explorerTreatment, iconForEntry } from "@intentic-app/ui";
-import { REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
+import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { filesToEntries } from "./dropEntries";
 import { movableInto, pastePairs } from "./explorerPaste";
 import { nestSiblings, type NestedEntry } from "./fileNesting";
@@ -932,6 +932,13 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                          can reach; the workspace README owns that. -->
                     <span v-if="row.entry.path === REFERENCE_DIR" class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
                         >reference</span
+                    >
+                    <!-- The outbox, and the one badge here that is a WARNING rather than a label: everything
+                         under this directory is on the open internet. Colored, not dimmed — the shelf is out of
+                         focus, this is the opposite of out of focus. The Public tab in the sandbox hub owns the
+                         detail (which files, at what address, which ones the guards refused). -->
+                    <span v-if="row.entry.path === PUBLIC_DIR" class="shrink-0 rounded-full bg-warning/10 px-1.5 text-2xs font-medium text-warning"
+                        >public</span
                     >
                     <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
                     <Icon

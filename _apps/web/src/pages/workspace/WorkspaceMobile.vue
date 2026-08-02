@@ -22,7 +22,7 @@ import DiffToolbar from "./viewers/DiffToolbar.vue";
 import DiffView from "./viewers/DiffView.vue";
 import { rendersAsBytes } from "./fileType";
 import type { DiffTabPayload } from "./workspaceTabs";
-import { REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
+import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { filesToEntries } from "./dropEntries";
 import { iconForEntry } from "@intentic-app/ui";
 import FileViewer from "./viewers/FileViewer.vue";
@@ -476,6 +476,12 @@ const onPick = (event: Event): void => {
                                     v-if="node.path === REFERENCE_DIR"
                                     class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
                                     >reference</span
+                                >
+                                <!-- The outbox: a warning, not a label — everything under it is on the internet. -->
+                                <span
+                                    v-if="node.path === PUBLIC_DIR"
+                                    class="shrink-0 rounded-full bg-warning/10 px-1.5 text-2xs font-medium text-warning"
+                                    >public</span
                                 >
                                 <Icon v-if="node.type === 'dir'" name="chevron-right" class="shrink-0 text-xs text-subtle" />
                             </button>
