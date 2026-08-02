@@ -32,7 +32,7 @@ const { conversation } = defineProps<{ conversation: Conversation }>();
  * teleports behind a `v-if="open"` and BottomSheet does the same, in both ChatPanel and SuggestedSessionBox.
  * These are the refs of the conversation as it was at mount, so a host that swapped the prop in place would go
  * on editing the previous one. Remount, don't rebind. */
-const { provider, harness, model, thinking, fast, fastOffered, fastMode, streaming, messages, account, capabilities } = conversation;
+const { provider, harness, model, thinking, fast, fastOffered, fastMode, streaming, account, capabilities } = conversation;
 // The active provider's connected accounts. Module state rather than the conversation's, because an account
 // list belongs to the sandbox — the conversation only picks WHICH of them its next turn runs on.
 const accounts = computed(() => accountsOf(provider.value));
@@ -141,8 +141,7 @@ const footerVisible = computed(
         routedRows.value.length > 0 ||
         provider.value === `claude` ||
         harnessChoosable.value ||
-        limitations.value.length > 0 ||
-        messages.value.length > 0,
+        limitations.value.length > 0,
 );
 
 // Names shared by more than one connected account — the rows a name alone cannot tell apart.
@@ -192,7 +191,8 @@ const accountRows = computed(() =>
     <ModelPicker :provider="provider" :model="model" :unpickable="unpickable" @pick="pick" @close="emit(`selected`)">
         <template #footer>
             <!-- Session controls that have no place in the shared list: which connected account serves the next
-                 turn, the harness axis (codex/grok), Claude's extended-thinking knob, and the switch hint. -->
+                 turn, the harness axis (codex/grok), Claude's extended-thinking knob, fast speed, and what this
+                 runtime cannot do. Controls and the state of them — no standing prose. -->
             <div v-if="footerVisible" class="flex shrink-0 flex-col gap-2 border-t border-line p-2">
                 <!-- WHOSE SETTINGS THESE ARE. The list above is a BROWSE surface — the rail filters it across
                      every provider without touching the conversation — while everything below configures the
@@ -214,13 +214,23 @@ const accountRows = computed(() =>
                 <template v-if="accounts.length > 1">
                     <!-- Labelled as a group: the header above names the PROVIDER, which is what a sighted reader
                          needs beside a screen of another provider's models, and these rows still have to announce
-                         what they are. -->
-                    <div class="flex flex-col gap-1" role="group" aria-label="Account">
+                         what they are.
+
+                         NO FRAME PER ROW. Boxing each account drew three hard rectangles into a panel that already
+                         has a border, a header rule and a model list above it, and the frames carried no meaning —
+                         every row had one, chosen or not. What actually needs marking is the one row in effect, and
+                         the tint does that alone (the same borderless list ChatModeMenu uses for the same job).
+                         Hover is what says the rest are choosable.
+
+                         The group is pulled out by its own padding so the names sit on the footer's left edge with
+                         every section label, and only the tint bleeds past them. A box can carry an indent; a bare
+                         name at the same indent just looks misaligned against the label above it. -->
+                    <div class="-mx-1 flex flex-col gap-0.5" role="group" aria-label="Account">
                         <button
                             v-for="a in accountRows"
                             :key="a.id"
                             type="button"
-                            class="qopt flex min-h-8 min-w-0 items-center gap-2 rounded-lg border px-2 py-1 text-xs max-md:min-h-11"
+                            class="qopt flex min-h-8 min-w-0 items-center gap-2 rounded-lg p-1 text-xs transition-colors max-md:min-h-11"
                             :class="{ 'qopt-on': activeAccountId === a.id }"
                             :disabled="streaming"
                             @click="conversation.selectAccount(a.id)"
@@ -249,12 +259,11 @@ const accountRows = computed(() =>
 
                 <!-- The connections behind a routed provider: shown, not offered. See routedRows. -->
                 <template v-if="routedRows.length > 0">
-                    <div class="flex flex-col gap-1" role="group" aria-label="Subscription">
-                        <div
-                            v-for="a in routedRows"
-                            :key="a.name"
-                            class="flex min-h-8 min-w-0 items-center gap-2 rounded-lg border border-line px-2 py-1 text-xs"
-                        >
+                    <!-- Unframed like the account rows above, and for a second reason on top of the weight: these
+                         are not controls. A box that looks exactly like the one you can click, but doesn't, is
+                         worse than no box. -->
+                    <div class="flex flex-col gap-0.5" role="group" aria-label="Subscription">
+                        <div v-for="a in routedRows" :key="a.name" class="flex min-h-8 min-w-0 items-center gap-2 py-1 text-xs">
                             <span class="min-w-0 truncate text-content">{{ a.label }}</span>
                             <UsageRing v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
                         </div>
@@ -303,8 +312,9 @@ const accountRows = computed(() =>
                 <!-- FAST SPEED. Offered only where all three conditions hold (fastAllowed: the Claude Code loop, a
                      first-party route, a model whose catalog row publishes the `fast` badge) — so it appears and
                      disappears with the model rather than sitting greyed out with an explanation nobody reads. The
-                     price is stated on the control itself: it is the one composer toggle that changes what a turn
-                     costs per token, and a user who flips it should not have to go looking for that. -->
+                     toggle stands on its own: a standing caption under a switch is read once and skipped from then
+                     on, and the only line worth the space is the conditional one below it, which reports what the
+                     harness actually did rather than restating what the switch is. -->
                 <div v-if="fastOffered" class="flex flex-col gap-1">
                     <div class="flex items-center justify-between gap-2">
                         <span class="text-2xs font-medium uppercase tracking-wide text-muted">Fast speed</span>
@@ -320,7 +330,6 @@ const accountRows = computed(() =>
                             <span>{{ fast ? "On" : "Off" }}</span>
                         </button>
                     </div>
-                    <span class="text-2xs text-subtle">Same model, up to ~2.5x faster output, at roughly double the per-token price.</span>
                     <!-- What the harness actually did with the ask. Only ever shown when it DIFFERS from what was
                          asked for: agreeing with the toggle is what the toggle already says, and a notice under a
                          working control trains people to ignore notices. -->
@@ -338,10 +347,6 @@ const accountRows = computed(() =>
                         }}</span>
                     </div>
                 </div>
-
-                <!-- A session resumes only on its own runtime, so a mid-chat switch starts a fresh one seeded
-                     with the transcript so far (see Conversation.send). -->
-                <p v-if="messages.length > 0" class="text-2xs text-subtle">switching starts a fresh session — context carries over</p>
             </div>
         </template>
     </ModelPicker>
