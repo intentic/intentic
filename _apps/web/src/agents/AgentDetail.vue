@@ -29,7 +29,7 @@ import AgentSessionMenu from "./AgentSessionMenu.vue";
 const route = useRoute();
 const router = useRouter();
 const { mobile } = useDevice();
-const { fleet, open, agentById, archived, loadArchived } = useAgents();
+const { fleet, refresh, open, agentById, archived, loadArchived } = useAgents();
 const { conversations, setActive } = useChat();
 
 const agentId = computed(() => (typeof route.params[`id`] === `string` ? route.params[`id`] : ``));
@@ -37,11 +37,30 @@ const agentId = computed(() => (typeof route.params[`id`] === `string` ? route.p
 // transcript, so this page is still its destination — from the board's archive, from a bookmarked URL, and
 // from the moment the review panel's own Archive button fires under the user's cursor.
 const fleetAgent = computed(() => agentById(agentId.value));
-// A deep link can land here before the archive has ever been asked for (the board's mount is what usually
-// loads it), which would read as an unknown id and bounce. One request settles it.
-if (archived.value.length === 0) {
-    void loadArchived();
-}
+
+/* AN ID THIS TAB HAS NOT BEEN TOLD ABOUT IS NOT AN ID THAT DOESN'T EXIST, and the difference is the whole of
+ * this block. Neither half of the fleet is guaranteed to be here when the page opens: the live roster arrives
+ * on the events stream, so a reconnect, a restarted daemon or an agent created in another window can leave
+ * this tab a roster behind, and the archive is not read at all until something asks for it.
+ *
+ * Read as absence, that produced two failures a reload "fixed" — which is exactly how it was reported. With no
+ * tab open for the id the page bounced back to the board. With one open (the usual case: the chat was just
+ * pointed at this agent) it stayed and went HOLLOW: no fleet entry means not registered, not registered means
+ * not reviewable, and the review query is keyed on that — so the header rendered over a review area that was
+ * empty for good, fetching nothing, explaining nothing.
+ *
+ * So both halves are asked, once per id, and the decisions below wait for the answer. Then the page either
+ * fills in or bounces on something the daemon actually said. */
+const settling = ref(false);
+let askedFor: string | undefined;
+const settleLookup = (id: string): void => {
+    if (askedFor === id) {
+        return;
+    }
+    askedFor = id;
+    settling.value = true;
+    void Promise.all([refresh(), loadArchived()]).finally(() => (settling.value = false));
+};
 // Registered = has run a turn. Only a branch-backed registered conversation has a Changes review.
 const registered = computed(() => fleetAgent.value !== undefined && fleetAgent.value.status !== `draft`);
 const reviewable = computed(() => registered.value && fleetAgent.value?.branch !== undefined);
@@ -55,8 +74,8 @@ const conversation = computed(() => conversations.value.find((candidate) => cand
 // shrinks the roster by one and grows the archive by one, and only watching the first would bounce the user
 // off the page they are reading.
 watch(
-    [agentId, () => fleet.value.length + archived.value.length],
-    ([id], [previousId] = [undefined, 0]) => {
+    [agentId, () => fleet.value.length + archived.value.length, settling],
+    ([id], [previousId] = [undefined, 0, false]) => {
         if (id === `` || (id === previousId && conversation.value !== undefined && (mobile.value || reviewable.value))) {
             return;
         }
@@ -67,9 +86,15 @@ watch(
             }
             return;
         }
+        // Unknown so far — ask both halves for it (once), and let the reads land before reading anything into
+        // the silence. Either they name it, and this watch runs again on a roster that has it, or they don't.
+        settleLookup(id);
         // No fleet entry means no registry entry, so there is no read marker to stamp — just focus the tab.
         if (conversation.value !== undefined) {
             setActive(conversation.value.conversationId);
+            return;
+        }
+        if (settling.value) {
             return;
         }
         void router.replace(`/agents`);
@@ -159,13 +184,7 @@ const confirmDiscard = (): void => {
             />
             <template v-else>
                 <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
-                <button
-                    type="button"
-                    aria-label="Rename agent"
-                    v-tooltip.bottom="'Rename'"
-                    :class="cmp.iconButton()"
-                    @click="edit.begin()"
-                >
+                <button type="button" aria-label="Rename agent" v-tooltip.bottom="'Rename'" :class="cmp.iconButton()" @click="edit.begin()">
                     <Icon name="pencil" class="text-xs" />
                 </button>
             </template>
