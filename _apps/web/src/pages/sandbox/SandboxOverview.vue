@@ -64,8 +64,8 @@ const subline = computed<{ text: string; tone: string }>(() => {
     if (error.value !== undefined) return { text: error.value, tone: `text-danger` };
     if (editing.value && nameTouched.value && nameError.value !== undefined) return { text: nameError.value, tone: `text-danger` };
     if (editing.value) return { text: `Click the logo to change it (cropped to a square) · Enter saves · Esc cancels.`, tone: `text-muted` };
-    if (sandbox.reachable.value) return { text: `Online — the workspace Claude Code and your tools operate from.`, tone: `text-muted` };
-    return { text: `Offline — reconnecting to the workspace.`, tone: `text-muted` };
+    if (sandbox.reachable.value) return { text: `The workspace Claude Code and your tools operate from.`, tone: `text-muted` };
+    return { text: `Reconnecting to the workspace…`, tone: `text-muted` };
 });
 
 const startEdit = async (): Promise<void> => {
@@ -149,43 +149,54 @@ const save = async (): Promise<void> => {
                     </button>
                     <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="pickFile" />
 
-                    <!-- Title and field share one box — same height, padding and type scale — so switching modes
-                         only paints a border; the glyphs never move. The subline below is always rendered. -->
                     <div class="-ml-2 min-w-0 flex-1 sm:max-w-md">
-                        <div class="grid grid-cols-1 grid-rows-1">
-                            <input
-                                v-if="editing"
-                                ref="nameInput"
-                                v-model="name"
-                                type="text"
-                                aria-label="Sandbox name"
-                                autocomplete="off"
-                                maxlength="60"
-                                class="col-start-1 row-start-1 h-8 w-full min-w-0 rounded-md border border-line-strong bg-canvas px-2 text-lg font-semibold text-content outline-none"
-                                :class="nameTouched && nameError ? 'ui-field-input-error' : ''"
-                                @blur="nameTouched = true"
-                                @keydown.enter.prevent="save"
-                                @keydown.esc.prevent="cancelEdit"
+                        <div class="flex items-center gap-2">
+                            <!-- Title and field share one box — same height, padding and type scale — so switching
+                                 modes only paints a border; the glyphs never move. In edit mode a hidden sizer
+                                 span mirrors the name in the same cell, so the input is as wide as the text it
+                                 holds instead of claiming the whole row. -->
+                            <div class="grid w-fit min-w-0 max-w-full grid-cols-1 grid-rows-1">
+                                <template v-if="editing">
+                                    <span
+                                        aria-hidden="true"
+                                        class="invisible col-start-1 row-start-1 flex h-8 min-w-0 items-center truncate rounded-md border border-transparent px-2 text-lg font-semibold"
+                                        >{{ name === `` ? ` ` : name }}</span
+                                    >
+                                    <input
+                                        ref="nameInput"
+                                        v-model="name"
+                                        type="text"
+                                        aria-label="Sandbox name"
+                                        autocomplete="off"
+                                        maxlength="60"
+                                        class="col-start-1 row-start-1 h-8 w-full min-w-0 rounded-md border border-line-strong bg-canvas px-2 text-lg font-semibold text-content outline-none"
+                                        :class="nameTouched && nameError ? 'ui-field-input-error' : ''"
+                                        @blur="nameTouched = true"
+                                        @keydown.enter.prevent="save"
+                                        @keydown.esc.prevent="cancelEdit"
+                                    />
+                                </template>
+                                <h2
+                                    v-else
+                                    class="col-start-1 row-start-1 flex h-8 items-center rounded-md border border-transparent px-2 text-lg font-semibold"
+                                >
+                                    <span class="truncate">{{ sandbox.active.value?.name ?? `Sandbox` }}</span>
+                                </h2>
+                            </div>
+                            <StatusBadge
+                                class="shrink-0"
+                                :variant="sandbox.reachable.value ? 'success' : 'neutral'"
+                                :label="sandbox.reachable.value ? 'Online' : 'Offline'"
+                                dot
                             />
-                            <h2
-                                v-else
-                                class="col-start-1 row-start-1 flex h-8 items-center rounded-md border border-transparent px-2 text-lg font-semibold"
-                            >
-                                <span class="truncate">{{ sandbox.active.value?.name ?? `Sandbox` }}</span>
-                            </h2>
                         </div>
                         <p class="h-4 truncate px-2 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                     </div>
                 </div>
                 <div class="flex shrink-0 items-center gap-2">
-                    <StatusBadge
-                        :variant="sandbox.reachable.value ? 'success' : 'neutral'"
-                        :label="sandbox.reachable.value ? 'Online' : 'Offline'"
-                        dot
-                    />
                     <!-- Edit and Cancel/Save are stacked in one grid cell: the cell is as wide as the widest
-                         state, so revealing Save can never shove the status badge sideways. The inactive layer
-                         is `invisible`, which keeps its size while dropping out of the tab order and the a11y
+                         state, so revealing Save can never reflow the header. The inactive layer is
+                         `invisible`, which keeps its size while dropping out of the tab order and the a11y
                          tree. Save sits where Edit sat — the same corner keeps meaning "commit". -->
                     <div v-if="isOwner" class="grid grid-cols-1 grid-rows-1 items-center">
                         <div class="col-start-1 row-start-1 flex items-center justify-end" :class="editing ? 'invisible' : ''">
