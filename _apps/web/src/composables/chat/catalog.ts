@@ -1,4 +1,5 @@
 import type { IconName } from "@intentic/ui";
+import { formatDate } from "@intentic/ui/format";
 import { type AgentCapabilities, type ModelBadge, modesFor, type PermissionMode } from "@intentic/sandbox-contract";
 import type { ConversationStatus } from "./conversation";
 
@@ -115,5 +116,5 @@ export const relativeTime = (ms: number): string => {
     if (days < 7) {
         return `${days}d`;
     }
-    return new Date(ms).toLocaleDateString();
+    return formatDate(ms);
 };

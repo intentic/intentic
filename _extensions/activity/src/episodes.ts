@@ -1,4 +1,5 @@
 import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
+import { formatDayMonth } from "@intentic/extension-ui/format";
 
 /* THE AUDIT LOG READ AS THINGS THAT HAPPENED, not as rows that were appended.
  *
@@ -309,7 +310,7 @@ export const dayLabel = (at: number, now: number): string => {
     if (at >= midnight) {
         return `Today`;
     }
-    return at >= midnight - 86_400_000 ? `Yesterday` : new Date(at).toLocaleDateString(undefined, { month: `short`, day: `numeric` });
+    return at >= midnight - 86_400_000 ? `Yesterday` : formatDayMonth(at);
 };
 
 // Episodes grouped into consecutive day runs, order preserved — the timeline renders these as its sections.

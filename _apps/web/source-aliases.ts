@@ -46,6 +46,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // And once more: the 1h/24h/7d/All vocabulary is arithmetic over a timestamp, called by the feeds' pure
     // projections and pinned by their unit tests — none of which should need a DOM to ask how far back "7d" is.
     "@intentic/ui/time": here("../../_libs/ui/src/timeWindow.ts"),
+    // And again, for the app's date/byte/token formatting: the history list's day label, the usage window's
+    // reset and an extension's day dividers are all pure functions over a number, reached from composables and
+    // pure projections whose unit tests run without a DOM.
+    "@intentic/ui/format": here("../../_libs/ui/src/format.ts"),
     "@intentic/ui": here("../../_libs/ui/src/index.ts"),
     "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
     // The "+" grid's card and category data. It was the ONE first-party lib missing from this map, and the

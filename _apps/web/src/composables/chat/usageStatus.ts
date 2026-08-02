@@ -7,6 +7,7 @@ import {
     type TranslatorAccounts,
     type UsageWindow,
 } from "@intentic/sandbox-contract";
+import { formatWeekdayTime } from "@intentic/ui/format";
 import { ref } from "vue";
 import { providerAccounts, translatorAccounts } from "./providerAccounts";
 
@@ -183,10 +184,9 @@ export const planHeadroom = (usage: AccountUsage | undefined): PlanHeadroom | un
     return { percent, tone: usageTone(percent), stale: isStale(usage), measuredAt: usage.measuredAt, pools, binding };
 };
 
-// Format an epoch-seconds reset instant as a short local weekday + time (e.g. "Mon 3:20 PM") — unambiguous for
+// Format an epoch-seconds reset instant as a short local weekday + time (e.g. "Mon 15:20") — unambiguous for
 // both the 5-hour and weekly windows without a ticking relative clock.
-export const formatReset = (epochSeconds: number): string =>
-    new Date(epochSeconds * 1000).toLocaleString([], { weekday: `short`, hour: `numeric`, minute: `2-digit` });
+export const formatReset = (epochSeconds: number): string => formatWeekdayTime(epochSeconds * 1000);
 
 /* The same instant as a RELATIVE wait, for the outage retry — where a wall-clock time would be the wrong answer
  * to the right question. A limit reset is hours out, so naming the hour lets someone decide whether to wait; an

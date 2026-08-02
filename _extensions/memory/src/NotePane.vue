@@ -6,6 +6,7 @@ import {
     cmp,
     CopyButton,
     formatBytes,
+    formatTimestamp,
     Icon,
     Markdown,
     Panel,
@@ -129,7 +130,7 @@ const onProseClick = (event: MouseEvent): void => {
                 <span aria-hidden="true">·</span>
                 <span>{{ formatBytes(entry.sizeBytes) }}</span>
                 <span aria-hidden="true">·</span>
-                <span :title="new Date(entry.modifiedAt).toLocaleString()">edited {{ freshness(entry.modifiedAt) }}</span>
+                <span :title="formatTimestamp(entry.modifiedAt)">edited {{ freshness(entry.modifiedAt) }}</span>
             </template>
         </template>
 

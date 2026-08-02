@@ -1,4 +1,5 @@
 import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
+import { formatDayMonth } from "@intentic/extension-ui/format";
 import { expect, test } from "vitest";
 import { byDay, DIRECT, matches, SCHEDULE, sourceKeyOf, toEpisodes, toSources } from "./episodes.js";
 
@@ -200,6 +201,6 @@ test("day dividers name the two days that carry the traffic and date the rest", 
     expect(days.map(({ label, episodes }) => [label, episodes.length])).toEqual([
         [`Today`, 1],
         [`Yesterday`, 2],
-        [new Date(now - 86_400_000 * 5).toLocaleDateString(undefined, { month: `short`, day: `numeric` }), 1],
+        [formatDayMonth(now - 86_400_000 * 5), 1],
     ]);
 });

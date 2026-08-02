@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { AutomationRun, AutomationSummary, Trigger } from "@intentic/sandbox-contract";
-import { Button, cmp, CopyButton, Icon, type IconName, ToggleSwitch } from "@intentic/extension-ui";
+import { Button, cmp, CopyButton, formatDateTime, Icon, type IconName, ToggleSwitch } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import { formatAt, nextIn, scheduleLabel, since } from "./cronSchedule";
+import { nextIn, scheduleLabel, since } from "./cronSchedule";
 import { host } from "./host";
 import { LISTENER_SOURCES } from "./listenerSources";
 import AutomationFields from "./AutomationFields.vue";
@@ -86,7 +86,7 @@ const OUTCOME_CLASS: Record<AutomationRun[`outcome`], string> = {
     skipped: `text-subtle`,
     interrupted: `text-subtle`,
 };
-const runTooltip = (run: AutomationRun): string => `${formatAt(run.at)}${run.detail !== undefined ? ` — ${run.detail}` : ``}`;
+const runTooltip = (run: AutomationRun): string => `${formatDateTime(run.at)}${run.detail !== undefined ? ` — ${run.detail}` : ``}`;
 
 // A run's transcript, on the host's one chat surface. Runs that reached a turn carry the stable conversation;
 // a guard-skip never needed one.
@@ -210,7 +210,7 @@ const doorbell = computed(() => {
 
             <span
                 class="hidden w-12 shrink-0 truncate text-right text-2xs text-subtle sm:block"
-                v-tooltip.top="automation.nextRun !== undefined ? `Next: ${formatAt(automation.nextRun)}` : undefined"
+                v-tooltip.top="automation.nextRun !== undefined ? `Next: ${formatDateTime(automation.nextRun)}` : undefined"
             >
                 {{ nextLabel }}
             </span>
@@ -344,10 +344,10 @@ const doorbell = computed(() => {
                         :type="run.conversationId ? `button` : undefined"
                         class="flex items-baseline gap-2 rounded text-left text-2xs"
                         :class="run.conversationId ? `cursor-pointer hover:bg-content/5` : undefined"
-                        :aria-label="run.conversationId ? `Open the transcript of the run from ${formatAt(run.at)}` : undefined"
+                        :aria-label="run.conversationId ? `Open the transcript of the run from ${formatDateTime(run.at)}` : undefined"
                         @click="openRun(run)"
                     >
-                        <span class="w-20 shrink-0 text-subtle" v-tooltip.top="formatAt(run.at)">{{ since(run.at) }}</span>
+                        <span class="w-20 shrink-0 text-subtle" v-tooltip.top="formatDateTime(run.at)">{{ since(run.at) }}</span>
                         <span class="w-14 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ OUTCOME_VERB[run.outcome] }}</span>
                         <span v-if="run.detail" class="min-w-0 truncate text-subtle" v-tooltip.top="run.detail">{{ run.detail }}</span>
                         <Icon v-if="run.conversationId" name="chevron-right" class="shrink-0 text-2xs text-subtle" />

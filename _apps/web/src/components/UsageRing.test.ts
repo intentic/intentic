@@ -6,7 +6,7 @@
 // surface that draws one is a column of rows, so a box over or under the ring covers the rows being compared.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
-import type { PlanHeadroom } from "../composables/chat/usageStatus";
+import { formatReset, type PlanHeadroom } from "../composables/chat/usageStatus";
 import UsageRing from "./UsageRing.vue";
 
 // The @intentic/ui barrel this component reaches for (the ring, the placement) calls window.matchMedia at
@@ -93,8 +93,9 @@ it(`lists every pool with its own figure and reset, and says how old the reading
 
 it(`speaks the whole breakdown beside the arc, since a card raised by a pointer never reaches a screen reader`, async () => {
     const anchor = await mount();
-    // formatReset renders in the runner's locale/zone, so the expectation reuses that formatting.
-    const reset = new Date(RESETS_AT * 1000).toLocaleString([], { weekday: `short`, hour: `numeric`, minute: `2-digit` });
+    // The weekday and clock are fixed, but they still land in the runner's timezone — so the expectation goes
+    // through the same formatter rather than hardcoding an hour.
+    const reset = formatReset(RESETS_AT);
     expect(anchor.querySelector(`.sr-only`)?.textContent).toBe(`5-hour session 56% (resets ${reset}) · Weekly · all models 91% · measured just now`);
 });
 

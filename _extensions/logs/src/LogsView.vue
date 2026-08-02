@@ -4,6 +4,7 @@ import {
     Code,
     FilterBar,
     formatBytes,
+    formatTimestamp,
     InfoHint,
     Panel,
     Row,
@@ -135,7 +136,7 @@ watch(tail, () => {
                 </template>
                 <template #meta>
                     <span>{{ formatBytes(file.sizeBytes) }}</span>
-                    <span :title="new Date(file.modifiedAt).toLocaleString()">{{ timeAgo(file.modifiedAt) }}</span>
+                    <span :title="formatTimestamp(file.modifiedAt)">{{ timeAgo(file.modifiedAt) }}</span>
                 </template>
             </Row>
         </RowGroup>

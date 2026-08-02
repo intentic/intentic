@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { Avatar, Button, Icon, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { Avatar, Button, formatTimestamp, Icon, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import PipelineDagGraph from "./PipelineDagGraph.vue";
 import PipelineGraph from "./PipelineGraph.vue";
@@ -143,7 +143,7 @@ const fixHint = computed<string | undefined>(() => {
 
             <!-- Time + actions -->
             <div class="flex shrink-0 items-center gap-2">
-                <span class="text-2xs text-subtle" :title="new Date(run.createdAt).toLocaleString()">
+                <span class="text-2xs text-subtle" :title="formatTimestamp(run.createdAt)">
                     {{ timeAgo(run.createdAt) }}
                 </span>
                 <div class="flex items-center gap-1">

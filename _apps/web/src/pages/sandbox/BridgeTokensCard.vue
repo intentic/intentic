@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Code, CopyButton } from "@intentic/ui";
+import { Card, Code, CopyButton, formatDate } from "@intentic/ui";
 import Button from "primevue/button";
 import { useBridgeTokens } from "../../composables/sandbox/useBridgeTokens";
 
@@ -51,7 +51,7 @@ const { tokens, minted, minting, error, label, mint, revoke, zedSnippet } = useB
             <li v-for="token in tokens" :key="token.id" class="flex items-center gap-2 text-xs">
                 <Icon name="key" class="text-2xs text-subtle" />
                 <span class="text-content">{{ token.label }}</span>
-                <span class="text-2xs text-subtle">{{ new Date(token.createdAt).toLocaleDateString() }}</span>
+                <span class="text-2xs text-subtle">{{ formatDate(token.createdAt) }}</span>
                 <Button label="Revoke" size="small" severity="danger" :text="true" class="ml-auto" @click="revoke(token.id)" />
             </li>
         </ul>

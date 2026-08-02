@@ -17,6 +17,10 @@
             "types": "./src/index.ts",
             "default": "./src/index.ts"
         },
+        "./format": {
+            "types": "./src/format.ts",
+            "default": "./src/format.ts"
+        },
         "./names": "./names.mjs"
     },
     "scripts": {

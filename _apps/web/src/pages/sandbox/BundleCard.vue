@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ImportReportSchema, type BundleExport, type ImportReport } from "@intentic-app/api-contract";
-import { Card, StatusBadge } from "@intentic/ui";
+import { Card, formatDateTime, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
@@ -57,7 +57,6 @@ const sizeLabel = (bytes: number): string => {
     const index = Math.min(units.length - 1, bytes === 0 ? 0 : Math.floor(Math.log(bytes) / Math.log(1024)));
     return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 };
-const whenLabel = (ms: number): string => new Date(ms).toLocaleString(undefined, { dateStyle: `medium`, timeStyle: `short` });
 </script>
 
 <template>
@@ -115,7 +114,7 @@ const whenLabel = (ms: number): string => new Date(ms).toLocaleString(undefined,
                     <p class="text-2xs text-subtle">
                         <template v-if="entry.status === 'packing'">Packing… {{ sizeLabel(entry.bytes) }} so far</template>
                         <template v-else-if="entry.status === 'failed'">{{ entry.error ?? `The export failed.` }}</template>
-                        <template v-else>{{ sizeLabel(entry.bytes) }} · {{ whenLabel(entry.createdAt) }}</template>
+                        <template v-else>{{ sizeLabel(entry.bytes) }} · {{ formatDateTime(entry.createdAt) }}</template>
                     </p>
                 </div>
                 <StatusBadge v-if="entry.secrets && entry.status === 'ready'" variant="warning" label="Secrets" />

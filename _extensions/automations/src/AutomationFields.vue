@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { type CatalogOption, HARNESSES, ModelsSchema, modelsFor, PROVIDERS, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
-import { cmp, Icon, ToggleSwitch } from "@intentic/extension-ui";
+import { cmp, formatDateTime, Icon, ToggleSwitch } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
-import { formatAt } from "./cronSchedule";
 import { host } from "./host";
 import { LISTENER_SOURCES } from "./listenerSources";
 import { useCiDelivery } from "./useCiDelivery";
@@ -459,7 +458,7 @@ const setKind = (kind: TriggerKind): void => {
             <p v-if="schedule.freq === 'custom'" class="text-2xs text-subtle">Standard 5-field cron: minute hour day month weekday.</p>
             <p v-if="schedule.freq === 'weekly' && schedule.days.length === 0" class="text-xs text-danger">Pick at least one day.</p>
             <p v-if="cronPreview" class="text-xs" :class="'error' in cronPreview ? 'text-danger' : 'text-muted'">
-                <template v-if="'runs' in cronPreview">Next runs: {{ cronPreview.runs.map(formatAt).join(" · ") }}</template>
+                <template v-if="'runs' in cronPreview">Next runs: {{ cronPreview.runs.map(formatDateTime).join(" · ") }}</template>
                 <template v-else>{{ cronPreview.error }}</template>
             </p>
         </div>

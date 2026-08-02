@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DraftStatus, DraftSummary } from "@intentic-app/api-contract";
-import { cmp, Page, PageHeader, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { cmp, formatDateTime, Page, PageHeader, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
 import Button from "primevue/button";
 import { useAsyncAction } from "../composables/useAsyncAction";
 import { useDrafts } from "../composables/extensions/useDrafts";
@@ -34,7 +34,6 @@ const toLocalInput = (ms?: number): string => {
     const d = new Date(ms);
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
-const formatAt = (ms: number): string => new Date(ms).toLocaleString();
 
 // Approve / retry / reschedule are all a re-post of the whole file with one field changed (the daemon upserts
 // by id). Errors surface in the top strip; the query refetch reconciles the row.
@@ -106,7 +105,7 @@ const removeDraft = (id: string): Promise<void> =>
                         />
                         <div class="flex items-center gap-2">
                             <span v-if="draft.status === 'posted' && draft.postedAt" class="text-2xs text-subtle"
-                                >posted {{ formatAt(draft.postedAt) }}</span
+                                >posted {{ formatDateTime(draft.postedAt) }}</span
                             >
                             <Button
                                 v-if="draft.status === 'proposed'"

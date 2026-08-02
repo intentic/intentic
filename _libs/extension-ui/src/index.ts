@@ -29,7 +29,6 @@ export {
     type DagEdge,
     type DagNode,
     FilterBar,
-    formatBytes,
     Icon,
     type IconName,
     ImageView,
@@ -58,13 +57,15 @@ export {
     StatusBadge,
     type StatusVariant,
     StepSection,
-    timeAgo,
     TIME_WINDOWS,
     type TimeWindow,
     timeWindowWords,
     useDevice,
     useTheme,
 } from "@intentic/ui";
+// Also reachable as `@intentic/extension-ui/format` — see the note there for why an extension's pure logic
+// wants them without the components attached.
+export { formatBytes, formatDate, formatDateTime, formatDayMonth, formatTime, formatTimestamp, formatTokens, timeAgo } from "./format.js";
 /* The figure vocabulary that <Markdown> renders from prose and <MarkdownFigure> renders from data. Types only —
  * an extension needs them to BUILD a figure out of facts it already holds (a dependency graph, a staleness
  * tally) rather than round-tripping through markdown to draw one. The parser and the document splitter stay out

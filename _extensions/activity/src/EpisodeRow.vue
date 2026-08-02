@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, type IconName, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { cmp, formatTime, formatTimestamp, Icon, type IconName, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { type Episode, sourceLabel, typeLabel } from "./episodes";
 import { host } from "./host";
@@ -59,7 +59,7 @@ const cost = computed(() => (episode.costUsd === undefined ? undefined : episode
                         {{ episode.label }}
                     </button>
                     <span v-else class="min-w-0 flex-1 truncate text-sm font-medium text-content" :title="episode.label">{{ episode.label }}</span>
-                    <span class="shrink-0 text-2xs text-subtle" :title="new Date(episode.at).toLocaleString()">{{ timeAgo(episode.at) }}</span>
+                    <span class="shrink-0 text-2xs text-subtle" :title="formatTimestamp(episode.at)">{{ timeAgo(episode.at) }}</span>
                 </div>
 
                 <!-- The facts line: who called, what served it, what it cost, what it did. Every part conditional —
@@ -85,7 +85,7 @@ const cost = computed(() => (episode.costUsd === undefined ? undefined : episode
                 <div v-if="open" class="mt-1.5 flex flex-col gap-1 border-l border-line pl-3">
                     <p v-if="episode.detail" class="whitespace-pre-wrap break-words text-2xs text-muted">{{ episode.detail }}</p>
                     <div v-for="entry in episode.events" :key="entry.id" class="flex flex-wrap items-baseline gap-x-2 text-2xs">
-                        <span class="font-mono text-subtle">{{ new Date(entry.at).toLocaleTimeString() }}</span>
+                        <span class="font-mono text-subtle">{{ formatTime(entry.at) }}</span>
                         <span class="text-muted">{{ typeLabel(entry.type) }}</span>
                         <span v-if="entry.method" class="font-mono text-subtle">{{ entry.method }} {{ entry.endpoint }}</span>
                         <span v-if="entry.outcome === `error`" class="text-danger">{{ entry.error ?? `error` }}</span>

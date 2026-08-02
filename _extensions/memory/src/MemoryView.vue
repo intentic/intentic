@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MemoryFileEntry } from "@intentic/sandbox-contract";
-import { cmp, formatBytes, Icon, InfoHint, type NavGroup, NavRail, Row, SplitView, useDevice } from "@intentic/extension-ui";
+import { cmp, formatBytes, formatTimestamp, Icon, InfoHint, type NavGroup, NavRail, Row, SplitView, useDevice } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { INDEX_NAME, noteTitle, projectLabel } from "./memoryNote";
 import { freshness } from "./noteTime";
@@ -156,7 +156,7 @@ const openSibling = (name: string): void => {
                             <span class="flex items-center gap-1.5">
                                 <span class="min-w-0 truncate font-mono">{{ file.name }}</span>
                                 <span aria-hidden="true">·</span>
-                                <span class="shrink-0" :title="new Date(file.modifiedAt).toLocaleString()">{{ freshness(file.modifiedAt) }}</span>
+                                <span class="shrink-0" :title="formatTimestamp(file.modifiedAt)">{{ freshness(file.modifiedAt) }}</span>
                             </span>
                         </template>
                     </Row>

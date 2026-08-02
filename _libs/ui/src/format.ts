@@ -25,6 +25,57 @@ export const formatBytes = (bytes: number | undefined): string => {
 export const formatTokens = (tokens: number): string =>
     tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : String(tokens);
 
+/* Every absolute date the app shows, in one shape: "Jul 28, 2026" — a spelled-out month, because the browser
+ * default is numeric and order-ambiguous ("7/28/2026" to one reader, the 7th of August to the next), and no
+ * row anywhere carries enough context to disambiguate it.
+ *
+ * The locale is pinned rather than followed for the same reason the clock is fixed at 24-hour: a screenshot, a
+ * bug report, a test fixture and the person reading them should all quote the same string. The *timezone*
+ * still isn't pinned — these render the viewer's own wall clock, which is the one thing they do want local.
+ * `hour12: false` is the h23 cycle per ECMA-402, so midnight reads 00:05 and never 24:05.
+ *
+ * Formatters are built once here: constructing an Intl.DateTimeFormat is the expensive half of formatting, and
+ * keeping them private is what stops a surface from quietly growing a seventh variant. */
+const DATE = new Intl.DateTimeFormat(`en-US`, { year: `numeric`, month: `short`, day: `numeric` });
+const DAY_MONTH = new Intl.DateTimeFormat(`en-US`, { month: `short`, day: `numeric` });
+const DATE_TIME = new Intl.DateTimeFormat(`en-US`, {
+    year: `numeric`,
+    month: `short`,
+    day: `numeric`,
+    hour: `2-digit`,
+    minute: `2-digit`,
+    hour12: false,
+});
+const TIMESTAMP = new Intl.DateTimeFormat(`en-US`, {
+    year: `numeric`,
+    month: `short`,
+    day: `numeric`,
+    hour: `2-digit`,
+    minute: `2-digit`,
+    second: `2-digit`,
+    hour12: false,
+});
+const TIME = new Intl.DateTimeFormat(`en-US`, { hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false });
+const WEEKDAY_TIME = new Intl.DateTimeFormat(`en-US`, { weekday: `short`, hour: `2-digit`, minute: `2-digit`, hour12: false });
+
+/** A calendar day on its own: "Jul 28, 2026". */
+export const formatDate = (at: number): string => DATE.format(at);
+
+/** A day where the year is already implied by its surroundings: "Jul 28". */
+export const formatDayMonth = (at: number): string => DAY_MONTH.format(at);
+
+/** Day and wall-clock minute: "Jul 28, 2026, 15:45". The default for a visible "when" label. */
+export const formatDateTime = (at: number): string => DATE_TIME.format(at);
+
+/** The exact moment, seconds included: "Jul 28, 2026, 15:45:12". For `title` tooltips behind a coarser label. */
+export const formatTimestamp = (at: number): string => TIMESTAMP.format(at);
+
+/** Clock time alone, for rows already grouped under a day: "15:45:12". */
+export const formatTime = (at: number): string => TIME.format(at);
+
+/** A weekday and time, for instants within the coming week: "Tue 15:45". */
+export const formatWeekdayTime = (at: number): string => WEEKDAY_TIME.format(at);
+
 // Coarse "time since" for activity/log/history rows: "just now" under a minute, "Nm ago"/"Nh ago" within a
 // day, else the absolute local timestamp. Distinct on purpose from chat's compact `relativeTime` (no "ago",
 // adds a day tier) — different surfaces want different formats.
@@ -39,5 +90,5 @@ export const timeAgo = (at: number): string => {
     if (minutes < 60 * 24) {
         return `${Math.round(minutes / 60)}h ago`;
     }
-    return new Date(at).toLocaleString();
+    return formatDateTime(at);
 };

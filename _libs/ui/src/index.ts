@@ -64,7 +64,17 @@ export { installUi } from "./plugin.js";
 // and unit tests can use it without dragging in this barrel's component graph. See markdown/index.ts.
 export { vTw } from "./composables/tw.js";
 export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js";
-export { formatBytes, formatTokens, timeAgo } from "./format.js";
+export {
+    formatBytes,
+    formatDate,
+    formatDateTime,
+    formatDayMonth,
+    formatTime,
+    formatTimestamp,
+    formatTokens,
+    formatWeekdayTime,
+    timeAgo,
+} from "./format.js";
 // The app's one "how far back" vocabulary — the 1h/24h/7d/All pills, the cutoff they mean, and the words a
 // caller says about them. Activity and Logs had each written all three.
 export { sinceOf, TIME_WINDOWS, type TimeWindow, timeWindowWords, withinWindow } from "./timeWindow.js";

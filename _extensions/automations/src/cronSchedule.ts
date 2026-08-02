@@ -144,12 +144,8 @@ const ordinal = (day: number): string => {
     return `${day}th`;
 };
 
-// Locale timestamp for run/next-run readouts (the dialog's cron preview, and the exact time behind a list
-// row's tooltip).
-export const formatAt = (at: number): string => new Date(at).toLocaleString();
-
 // The list's two time COLUMNS. Both stay narrow enough to align down the page — the exact timestamp rides the
-// tooltip — which is why neither is the kit's `timeAgo`: that one falls back to a full locale string past a
+// tooltip — which is why neither is the kit's `timeAgo`: that one falls back to a full date and time past a
 // day, and three of those in a column is the end of scanning it.
 const MINUTES_PER_DAY = 60 * 24;
 
