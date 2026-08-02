@@ -1,6 +1,6 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { failureStreaks, streakTooltip, unseenStreaks } from "./ciStreaks";
+import { failureStreaks, openFailures, streakTooltip, supersededBy, unseenStreaks } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
 
 /* The rail badge's two derivations. Both exist to answer "is this news?", and both are worth pinning down
@@ -54,6 +54,49 @@ test("the tooltip names the branch while there is only one", () => {
     const streaks = failureStreaks([run(1, "failed", 50), run(2, "failed", 40)]);
     expect(streakTooltip(streaks)).toBe("intentic main is failing — 2 runs in a row");
     expect(streakTooltip([...streaks, ...failureStreaks([run(3, "failed", 50, "feat")])])).toBe("2 branches are failing");
+});
+
+/* The row tiering's two derivations. Same "green at the head" rule as the badge, read per run: which failure
+ * still asks to be fixed, and which one a later green closed. */
+
+test("only the head of a red branch is an open failure — the ones behind it are the same breakage", () => {
+    const head = run(1, "failed", 50);
+    const behind = run(2, "failed", 40);
+    const open = openFailures([head, behind, run(3, "success", 30)]);
+    expect(open.has(head)).toBe(true);
+    // Unfixed, but not a second thing to fix — flagging it too is how one breakage becomes three demands.
+    expect(open.has(behind)).toBe(false);
+});
+
+test("a branch that recovered has no open failure", () => {
+    expect(openFailures([run(1, "success", 50), run(2, "failed", 40)]).size).toBe(0);
+    // Per branch: main is red while feat is green.
+    expect(openFailures([run(1, "failed", 50, "main"), run(2, "success", 40, "feat"), run(3, "failed", 30, "feat")]).size).toBe(1);
+});
+
+test("a failure is superseded by the run that recovered the branch, not by the newest green", () => {
+    const failure = run(1, "failed", 10);
+    const recovery = run(2, "success", 20);
+    const later = run(3, "success", 30);
+    const superseded = supersededBy([later, recovery, failure]);
+    expect(superseded.get(failure)).toBe(recovery);
+    // A success supersedes nothing, and the green rows carry no chip.
+    expect(superseded.get(recovery)).toBeUndefined();
+});
+
+test("a failure with nothing green after it is not superseded", () => {
+    const head = run(1, "failed", 50);
+    const behind = run(2, "failed", 40);
+    const superseded = supersededBy([head, behind]);
+    expect(superseded.size).toBe(0);
+    // And a green on ANOTHER branch cannot close it.
+    expect(supersededBy([head, run(3, "success", 60, "feat")]).size).toBe(0);
+});
+
+test("canceled and running runs after a failure do not supersede it", () => {
+    const failure = run(1, "failed", 10);
+    // Neither is a verdict, so neither is evidence the branch recovered — the same rule the streaks follow.
+    expect(supersededBy([run(2, "canceled", 30), run(3, "running", 20), failure]).size).toBe(0);
 });
 
 const entry = (createdAt: number, failed: readonly string[] | undefined, branch = "main"): JobFailureRun => ({

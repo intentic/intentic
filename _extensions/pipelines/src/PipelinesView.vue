@@ -3,6 +3,7 @@ import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import { cmp, Icon, InfoHint, Page, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markPipelinesSeen } from "./ciAttention";
+import { openFailures, supersededBy } from "./ciStreaks";
 import { useFailureHistory } from "./useFailureHistory";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
@@ -34,6 +35,13 @@ const recurringByBranch = computed(() => {
     return map;
 });
 const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurringByBranch.value.get(`${run.repo}\n${run.branch}`) ?? new Map();
+
+/* Which red rows still carry an open problem. The list is chronological, so without this every failure ever
+ * recorded keeps a primary "Fix with agent" — one branch breakage becomes six identical demands, and the run
+ * that broke main an hour ago looks exactly like the one a green run closed yesterday. Same rule the rail badge
+ * runs on (ciStreaks), applied to the rows instead of the tile. */
+const open = computed(() => openFailures(runs.value));
+const superseded = computed(() => supersededBy(runs.value));
 
 /* The "open the thing this view is about" link, matching Deployments' Open Komodo. Pipelines needs a list
  * rather than one link, because a workspace can span both vendors — and the GitLab entry has to be DERIVED
@@ -128,8 +136,9 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                         <span class="mt-1 block text-xs text-muted">
                             Every workspace repo whose remote lands on a connected GitHub/GitLab account is watched: completed pipelines arrive over a
                             webhook, can wake <b>CI automations</b> (see Automations), and land here. <b>Fix with agent</b> starts an isolated agent
-                            seeded with the failed jobs' logs and takes you to its card on the Agents board. Each row's circles are its stages — click
-                            one for that stage's jobs, or expand the row for the full job graph.
+                            seeded with that run's failed jobs' logs and takes you to its card on the Agents board — it stands out on the failure a
+                            branch is actually stuck on, and stays quiet on older failures a later green run has already left behind. Each row's
+                            circles are its stages — click one for that stage's jobs, or expand the row for the full job graph.
                         </span>
                     </InfoHint>
                 </template>
@@ -233,6 +242,8 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                             :run="run"
                             :busy="busy"
                             :recurring="recurringFor(run)"
+                            :open="open.has(run)"
+                            :superseded="superseded.get(run)"
                             @rerun="act($event, rerun)"
                             @cancel="act($event, cancel)"
                             @fix="fixRun($event)"

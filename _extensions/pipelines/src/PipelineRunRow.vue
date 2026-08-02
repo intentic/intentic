@@ -18,6 +18,10 @@ const props = defineProps<{
     // Job name → consecutive runs it has been failing on this branch. Lifted to the view because it is a fact
     // ACROSS runs, which no single row can see.
     recurring: ReadonlyMap<string, number>;
+    // Whether this failure is the branch's open problem, and — if a later run went green — which one closed it.
+    // Both are cross-run facts too, and together they set how loudly the row asks to be fixed.
+    open: boolean;
+    superseded: PipelineRun | undefined;
 }>();
 const emit = defineEmits<{
     rerun: [run: PipelineRun];
@@ -43,6 +47,19 @@ const duration = computed(() => formatDuration(props.run.durationSeconds));
 const headline = computed(() => props.run.title ?? `#${props.run.runId}`);
 const trigger = computed(() => triggerLabel(props.run.trigger));
 const jobCount = computed(() => stages.value.reduce((total, stage) => total + stage.jobs.length, 0));
+
+/* A demoted Fix button has to say WHY it is quiet, or it reads as a broken one. The two reasons are different
+ * enough to be worth different words: a superseded failure is over, while a failure behind the head of an open
+ * breakage is very much alive — just not the run to start from. */
+const fixHint = computed(() => {
+    if (props.open) {
+        return undefined;
+    }
+    if (props.superseded !== undefined) {
+        return `${props.run.branch} has passed since — this failure is history, but you can still start an agent on it`;
+    }
+    return `Behind a newer failure on ${props.run.branch} — that one is the run to fix`;
+});
 </script>
 
 <template>
@@ -69,6 +86,21 @@ const jobCount = computed(() => stages.value.reduce((total, stage) => total + st
                         {{ headline }}
                     </a>
                     <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" class="shrink-0" />
+                    <!-- Qualifies the verdict, so it sits with it: the run failed, and the branch has recovered
+                         since. Links to the green rather than just naming it — checking whether the job that
+                         failed here even ran there is the one way to catch a "pass" that only skipped it. -->
+                    <a
+                        v-if="superseded"
+                        :href="superseded.url"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle hover:text-link"
+                        v-tooltip.top="`${run.branch} went green again in this run — open it to check the job that failed here even ran`"
+                    >
+                        <Icon name="check-circle" class="text-2xs text-success" />
+                        superseded by
+                        <span class="font-mono">{{ superseded.sha.slice(0, 7) }}</span>
+                    </a>
                     <!-- Only unusual origins earn a chip; a plain push is every repo's default. -->
                     <span
                         v-if="trigger"
@@ -110,12 +142,18 @@ const jobCount = computed(() => stages.value.reduce((total, stage) => total + st
                     {{ timeAgo(run.createdAt) }}
                 </span>
                 <div class="flex items-center gap-1">
+                    <!-- Primary only on the branch's open failure. Every other red row keeps the same action at
+                         Re-run's weight: a log entry, not a demand — while the vendor's own re-runs and skipped
+                         jobs mean a green above is evidence, not proof, so the action stays one click away. -->
                     <Button
                         v-if="run.status === `failed`"
                         label="Fix with agent"
                         size="small"
+                        :severity="open ? undefined : `secondary`"
+                        :text="!open"
                         :loading="busy === actionKey"
                         :disabled="busy !== undefined"
+                        v-tooltip.top="fixHint"
                         @click="emit(`fix`, run)"
                     />
                     <Button
