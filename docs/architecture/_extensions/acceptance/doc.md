@@ -17,6 +17,8 @@ A test suite proves the code does what the code says. It cannot tell you the sig
 
 A story is one markdown file in a repository's `docs/user-stories/`, and a subdirectory of that is a **group** — the unit this package organises everything by. A group is a heading in the list, the place a new story is authored into, and the thing a run picks an address for: one address per group rather than per repository, so a monorepo whose marketing site and web app are two dev servers on two ports can have both walked in a single run.
 
+Everything happens in that one list. A story is written by expanding its row; a run is composed by ticking rows and pressing the button in the bar docked under them, with nothing ticked meaning every story. Whether each repository's dev server is actually up — the precondition a run is refused without, since a story pointed at nothing costs an agent session to discover the app is down — is stated on the repository's own heading, beside the stories it gates.
+
 ```dag
 { "title": "Its neighbours",
   "direction": "LR",
@@ -57,4 +59,4 @@ Dashed arrows are development-only — needed to build or test, not to run.
 
 ## Where it is used
 
-One tile in the sidebar; one agent session per story, with screenshots and a report. Nothing is stored for a run beyond files: the manifest under `.intentic/acceptance/` records which address each group was walked against, and that record is also what the run dialog offers back the next time.
+One tile in the sidebar; one agent session per story, with screenshots and a report. Nothing is stored for a run beyond files: the manifest under `.intentic/acceptance/` records which address each group was walked against, and that record is also what a group aimed away from its repo's dev server is offered back the next time — so a marketing site on its own port is typed once rather than once per run.

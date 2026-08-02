@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { Button, Checkbox, cmp, Icon, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { criteriaOf, narrativeOf, type Story, storyMarkdown } from "./stories";
 
@@ -39,7 +39,7 @@ import { criteriaOf, narrativeOf, type Story, storyMarkdown } from "./stories";
  * The title still never moves the file. Editing renames the heading and leaves `docs/user-stories/01-sign-in.md`
  * exactly where git, the ordering prefix and every link to it expect it. */
 
-const { story, content, expanded, status, autofocus, save, remove } = defineProps<{
+const { story, content, expanded, status, autofocus, selected, save, remove } = defineProps<{
     story: Story;
     // The file's text as last read. Loaded into the draft when the row opens, and never afterwards: a refetch
     // triggered by this row's own save must not yank the text out from under the cursor.
@@ -49,10 +49,13 @@ const { story, content, expanded, status, autofocus, save, remove } = defineProp
     status?: { readonly label: string; readonly variant: StatusVariant } | undefined;
     // Just created by the composer: open on the first empty criterion so the author keeps typing.
     autofocus?: boolean;
+    // Ticked for the next run. Note that an untouched list runs ALL of its stories — see RunBar — so an unticked
+    // row is not an excluded one until something else in the list is ticked.
+    selected: boolean;
     save: (input: { readonly path: string; readonly markdown: string }) => Promise<void>;
     remove: (path: string) => Promise<void>;
 }>();
-const emit = defineEmits<{ toggle: []; run: [] }>();
+const emit = defineEmits<{ toggle: []; select: [boolean]; run: [] }>();
 
 // Long enough that a sentence is written as one save rather than as fifteen, short enough that leaving the row is
 // never a race with the timer.
@@ -223,23 +226,29 @@ onBeforeUnmount(() => void flush());
 
 <template>
     <div>
-        <button
-            type="button"
-            class="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-overlay"
-            :class="expanded && `bg-overlay`"
-            :aria-expanded="expanded"
-            @click="emit(`toggle`)"
-        >
-            <Icon :name="expanded ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
-            <!-- Open, the heading below is the title, so the row identifies the FILE instead of repeating it. -->
-            <span v-if="expanded" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ story.path }}</span>
-            <span v-else class="min-w-0 flex-1 truncate text-sm text-content">{{ story.title }}</span>
-            <!-- Criteria are the story's readiness, not its correctness: a story with none still runs, nobody has
-                 just said yet what "done" means for it. Stated quietly for that reason — a fresh workspace that
-                 shouted a warning on every row would be teaching people to ignore the colour. -->
-            <span class="shrink-0 text-2xs text-subtle">{{ authored === 0 ? `no criteria` : `${authored} criteria` }}</span>
-            <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" />
-        </button>
+        <!-- The tick sits OUTSIDE the row's button rather than inside it: a checkbox nested in a button is both
+             invalid and unusable (every attempt to tick would expand the row instead), and the two gestures are
+             genuinely different — one narrows the next run, the other opens the story to write. The hover tint
+             rides the wrapper so the whole line still lights up as one row. -->
+        <div class="flex w-full items-center gap-3 pl-4 hover:bg-overlay" :class="expanded && `bg-overlay`">
+            <Checkbox :model-value="selected" binary :aria-label="`Run ${story.title}`" @update:model-value="emit(`select`, $event === true)" />
+            <button
+                type="button"
+                class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-2.5 pr-4 text-left"
+                :aria-expanded="expanded"
+                @click="emit(`toggle`)"
+            >
+                <Icon :name="expanded ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
+                <!-- Open, the heading below is the title, so the row identifies the FILE instead of repeating it. -->
+                <span v-if="expanded" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ story.path }}</span>
+                <span v-else class="min-w-0 flex-1 truncate text-sm text-content">{{ story.title }}</span>
+                <!-- Criteria are the story's readiness, not its correctness: a story with none still runs, nobody
+                     has just said yet what "done" means for it. Stated quietly for that reason — a fresh workspace
+                     that shouted a warning on every row would be teaching people to ignore the colour. -->
+                <span class="shrink-0 text-2xs text-subtle">{{ authored === 0 ? `no criteria` : `${authored} criteria` }}</span>
+                <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" />
+            </button>
+        </div>
 
         <!-- THE DOCUMENT. Its own generous margins rather than the list's row padding, a measured column, and
              `cursor-text` over the whole of it: the page under the words is what says "write here", now that no
@@ -331,7 +340,9 @@ onBeforeUnmount(() => void flush());
                     state === `saving` ? `Saving…` : state === `dirty` ? `Unsaved` : state === `saved` ? `Saved` : ``
                 }}</span>
                 <div class="ml-auto flex items-center gap-2">
-                    <Button label="Run this story" size="small" severity="secondary" @click="emit(`run`)">
+                    <!-- Narrows the run to this story; the bar below then says what it will do and does it. Not a
+                         second way to start a run — one gate, one button, and this is how you aim at it. -->
+                    <Button label="Run only this" size="small" severity="secondary" @click="emit(`run`)">
                         <template #icon><Icon name="play" /></template>
                     </Button>
                     <!-- Delete asks once, in place: a story is a file in the repo, and the ask costs less than
