@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
 import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract";
-import { computed, ref } from "vue";
+import { computed, ref, shallowRef } from "vue";
 import WorkflowDesigner from "./WorkflowDesigner.vue";
 import WorkflowRunPanel from "./WorkflowRunPanel.vue";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "./templates";
@@ -23,7 +23,10 @@ import { useWorkflows } from "./useWorkflows";
 
 const { workflows, runs, error: listError, remove, start } = useWorkflows();
 
-const designing = ref<Workflow | undefined>();
+// shallowRef, not ref: this holds a document that is only ever read and handed to the designer, which takes
+// its own copy. Deep reactivity would buy nothing and would wrap it in a proxy on the way out — see
+// workflowDraft.ts for what that used to cost.
+const designing = shallowRef<Workflow | undefined>();
 const designerOpen = ref(false);
 const watchingId = ref<string | undefined>();
 const confirmRemoveId = ref<string | undefined>();
@@ -43,7 +46,8 @@ const design = (workflow: Workflow): void => {
 
 // A template opens the designer PREFILLED rather than creating the workflow: a graph that costs money to run
 // is not something to create by accident, and looking at the picture before saving is the whole point.
-const fromTemplate = (template: WorkflowTemplate): void => design(structuredClone(template.workflow));
+// Handed over uncloned — the designer copies whatever it is given, so the module constant is only ever read.
+const fromTemplate = (template: WorkflowTemplate): void => design(template.workflow);
 
 const blank = (): void =>
     design({

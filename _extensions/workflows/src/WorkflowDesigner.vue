@@ -4,6 +4,7 @@ import { type Workflow, type WorkflowStep, workflowFaults } from "@intentic/sand
 import { computed, ref, watch } from "vue";
 import StepFields from "./StepFields.vue";
 import WorkflowGraph from "./WorkflowGraph.vue";
+import { editableCopy } from "./workflowDraft";
 import { useWorkflows } from "./useWorkflows";
 
 /* THE DESIGNER — the graph on the left, the step you are editing on the right.
@@ -25,7 +26,9 @@ const { initial } = defineProps<{ initial: Workflow }>();
 const open = defineModel<boolean>({ required: true });
 
 const { save } = useWorkflows();
-const draft = ref<Workflow>(structuredClone(initial));
+// `editableCopy`, not structuredClone — `initial` is always a reactive proxy here, and structuredClone throws
+// on one rather than cloning through it. See workflowDraft.ts; this line is where that crash landed.
+const draft = ref<Workflow>(editableCopy(initial));
 const selectedId = ref<string | undefined>(initial.steps[0]?.id);
 const failure = ref<string>();
 
@@ -34,7 +37,7 @@ const failure = ref<string>();
 watch(
     () => initial,
     (next) => {
-        draft.value = structuredClone(next);
+        draft.value = editableCopy(next);
         selectedId.value = next.steps[0]?.id;
         failure.value = undefined;
     },
