@@ -4,25 +4,35 @@ import { Button, cmp, Icon } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
 
-/* THE RUN CONTROL — the page's primary action, in the page's own header, where every other view in this app
- * puts one.
+/* THE RUN CONTROL — a pill that floats over the list it acts on, inside the page's own column.
  *
- * IT USED TO BE A BAR docked under the list: full-bleed, bordered, permanently present, ignoring the page column
- * everything above it obeyed and lining up with the shell's own account avatar so the two read as one status
- * bar. It was there to never be scrolled away from, and it bought that with a second layer of chrome in a view
- * that is otherwise an ordinary page. Header actions are what this app means by "the thing this page does" —
- * Refresh already sat there — so the run says it there too, and the area has no chrome of its own again.
+ * IT HAS BEEN TWO WRONG THINGS FIRST, and each was wrong in a way worth writing down.
  *
- * WHAT THE CLUSTER SAYS, left to right, is the sentence "N stories, on this model, are about to cost N
- * sessions — except this is in the way". The scope is on the button (`Run 21 stories`), because a button that
- * states its own scope needs no separate readout and can never disagree with one. The model sits immediately
- * beside it, so the two operands of the multiplication are read together. What is left — the product, or the
- * reason there won't be one — is the one line to their left, and it is either/or: once something is blocking the
- * run, the price is not what the user has to act on.
+ * A DOCKED BAR: full-bleed, bordered, permanently present, ignoring the page column everything above it obeyed
+ * and lining up with the shell's own account avatar, so the two read as one status bar. It was there to never be
+ * scrolled away from — the right instinct — and it paid for that with a second layer of app chrome in a view that
+ * is otherwise an ordinary page.
+ *
+ * THE HEADER'S ACTION CLUSTER: no chrome, consistent with every other view — and it put four controls in the row
+ * beside the h1, so a warning long enough to be worth reading squashed the title, and Run left the screen the
+ * moment you scrolled into the twenty-one stories it was about to run.
+ *
+ * So: STICKY, `bottom-4`, INSIDE the page. Sticky rather than docked is the whole difference — the pill's flow
+ * position is the end of the page, so it is a normal element that happens to stay reachable, it inherits the
+ * page's width constraint and centring (which is what makes it read as belonging to the list rather than to the
+ * window), and it reserves its own space at the bottom of the scroll instead of covering the last row forever.
+ * Rounded and shadowed because it floats: a hairline rectangle at the foot of a scroller reads as a docked bar
+ * again, and the point is that this is over the content, not under it.
+ *
+ * WHAT THE PILL SAYS, left to right, is the sentence "N stories, on this model, are about to cost N sessions —
+ * except this is in the way". The scope is on the button (`Run all 21 stories`), because a button that states its
+ * own scope needs no separate readout and can never disagree with one. The model sits immediately beside it, so
+ * the two operands of the multiplication are read together. What is left — the product, or the reason there
+ * won't be one — is the one line to their left, and it is either/or: once something is blocking the run, the
+ * price is not what the user has to act on.
  *
  * NOTHING TICKED MEANS EVERYTHING, which is what the run dialog's preselect-them-all default meant. So there is
- * no mode to enter, no empty state, and the button is always live and always says exactly what pressing it will
- * do.
+ * no mode to enter, no empty state, and the button always says exactly what pressing it will do.
  *
  * THE GATE is the reason any of this is stated: a run costs one agent session per story, and a story pointed at
  * nothing produces a session that spends minutes discovering the app is down and then writes a blocked report.
@@ -70,42 +80,52 @@ const spend = computed<string>(() => `${chosen} ${chosen === 1 ? `session` : `se
 </script>
 
 <template>
-    <!-- Wraps rather than truncates the cluster: on a narrow area the note drops to its own line and the button
-         stays whole. A control that clips its own verb is the failure the old bar was rebuilt out of. -->
-    <div class="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
-        <!-- Capped and truncating, because this is the one part with no fixed length and the h1 beside it must
-             not pay for a long repository name. The whole sentence stays one hover away. -->
-        <span v-if="blocked" class="flex min-w-0 items-center gap-1.5 text-2xs text-warning" v-tooltip.bottom="blocked">
-            <Icon name="exclamation-triangle" class="shrink-0" />
-            <span class="max-w-[15rem] truncate">{{ blocked }}</span>
-        </span>
-        <span v-else-if="chosen > 0" class="text-2xs text-muted">{{ spend }}</span>
-
-        <button v-if="narrowed" type="button" :class="cmp.linkButton(`text-2xs text-muted hover:text-content`)" @click="emit(`clear`)">Clear</button>
-
-        <!-- A chip, not a button: it names a setting the run carries rather than doing anything. Quiet border,
-             the app's own chip language (see TargetChip), so the one filled button in the header stays the one
-             that spends money. -->
-        <button
-            ref="chip"
-            type="button"
-            class="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-muted transition-colors hover:border-line-strong hover:text-content"
-            v-tooltip.bottom="`Every test session runs on this model — one session per story`"
-            :aria-label="`Model for this run: ${model.label}`"
-            @click="choose"
+    <!-- `sticky bottom-4` in the page's flow, centred and only as wide as it needs to be. The wrapper is what
+         sticks; the pill inside it is what is seen, so the floating element never spans the column and never
+         intercepts a click on a row beside it. -->
+    <div class="pointer-events-none sticky bottom-4 z-10 mt-4 flex justify-center">
+        <!-- Translucent with a blur behind it, because rows scroll UNDER this: opaque would be a moving hole in
+             the list, and fully transparent would leave the text unreadable over a story title. -->
+        <div
+            class="pointer-events-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-full border border-line bg-card/95 py-1.5 pl-4 pr-1.5 shadow-lg backdrop-blur"
         >
-            <Icon name="sparkles" class="shrink-0 text-subtle" />
-            <span class="max-w-[12rem] truncate">{{ model.label }}</span>
-            <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
-        </button>
+            <!-- Capped and truncating, because this is the one part with no fixed length. The whole sentence
+                 stays one hover away. -->
+            <span v-if="blocked" class="flex min-w-0 items-center gap-1.5 text-2xs text-warning" v-tooltip.top="blocked">
+                <Icon name="exclamation-triangle" class="shrink-0" />
+                <span class="max-w-[18rem] truncate">{{ blocked }}</span>
+            </span>
+            <span v-else-if="chosen > 0" class="text-2xs text-muted">{{ spend }}</span>
 
-        <Button
-            :label="`Run ${narrowed ? storyCount(chosen) : `all ${storyCount(total)}`}`"
-            size="small"
-            :disabled="!canRun"
-            @click="emit(`submit`, model)"
-        >
-            <template #icon><Icon name="play" /></template>
-        </Button>
+            <button v-if="narrowed" type="button" :class="cmp.linkButton(`text-2xs text-muted hover:text-content`)" @click="emit(`clear`)">
+                Clear
+            </button>
+
+            <!-- A chip, not a button: it names a setting the run carries rather than doing anything. Quiet
+                 border, the app's own chip language (see TargetChip), so the one filled control in the pill stays
+                 the one that spends money. -->
+            <button
+                ref="chip"
+                type="button"
+                class="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                v-tooltip.top="`Every test session runs on this model — one session per story`"
+                :aria-label="`Model for this run: ${model.label}`"
+                @click="choose"
+            >
+                <Icon name="sparkles" class="shrink-0 text-subtle" />
+                <span class="max-w-[12rem] truncate">{{ model.label }}</span>
+                <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
+            </button>
+
+            <Button
+                :label="`Run ${narrowed ? storyCount(chosen) : `all ${storyCount(total)}`}`"
+                size="small"
+                rounded
+                :disabled="!canRun"
+                @click="emit(`submit`, model)"
+            >
+                <template #icon><Icon name="play" /></template>
+            </Button>
+        </div>
     </div>
 </template>

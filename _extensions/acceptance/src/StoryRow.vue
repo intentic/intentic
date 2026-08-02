@@ -340,7 +340,7 @@ onBeforeUnmount(() => void flush());
                     state === `saving` ? `Saving…` : state === `dirty` ? `Unsaved` : state === `saved` ? `Saved` : ``
                 }}</span>
                 <div class="ml-auto flex items-center gap-2">
-                    <!-- Narrows the run to this story; the header's Run then says what it will do and does it.
+                    <!-- Narrows the run to this story; the run pill then says what it will do and does it.
                          Not a second way to start a run — one gate, one button, and this is how you aim at it. -->
                     <Button label="Run only this" size="small" severity="secondary" @click="emit(`run`)">
                         <template #icon><Icon name="play" /></template>

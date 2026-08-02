@@ -10,8 +10,14 @@ import ModelPicker from "./ModelPicker.vue";
  * shell, because the two shells would otherwise each need their own copy and neither is the natural owner: the
  * picker belongs to nothing on screen, it belongs to whoever asked.
  *
- * Same body as the composer's, in the same two hosts: an anchored popover on desktop, a sheet on mobile. Absent
- * entirely while nothing is pending, which is also what gives the body its per-open remount. */
+ * Same body as the composer's, in the same two hosts: an anchored popover on desktop, a sheet on mobile.
+ *
+ * THE HOSTS STAY MOUNTED and `open` drives them — the arrangement ChatPanel already uses, and not an incidental
+ * one. AnchoredOverlay measures and places its box in a watcher on `open` that is deliberately NOT immediate
+ * (there is nothing to measure until the box has rendered), so a host mounted with `open` already true never
+ * places at all: the panel stays parked at its off-screen measuring position, open and invisible. Only the BODY
+ * is conditional, which is what still gives it a per-open remount — the reset query and the catalog refresh
+ * ModelPicker relies on. */
 
 const { mobile } = useDevice();
 
@@ -30,14 +36,18 @@ const choose = (entry: PickerEntry): void => settleModelPick({ provider: entry.p
 </script>
 
 <template>
-    <template v-if="modelRequest">
-        <BottomSheet v-if="mobile" v-model="open" header="Model">
-            <ModelPicker :provider="modelRequest.provider" :model="modelRequest.model" @pick="choose" @close="settleModelPick()" />
-        </BottomSheet>
-        <AnchoredOverlay v-else v-model="open" :anchor="modelRequest.anchor">
-            <div class="flex min-h-0 w-[26rem] flex-col">
-                <ModelPicker :provider="modelRequest.provider" :model="modelRequest.model" @pick="choose" @close="settleModelPick()" />
-            </div>
-        </AnchoredOverlay>
-    </template>
+    <BottomSheet v-if="mobile" v-model="open" header="Model">
+        <ModelPicker v-if="modelRequest" :provider="modelRequest.provider" :model="modelRequest.model" @pick="choose" @close="settleModelPick()" />
+    </BottomSheet>
+    <AnchoredOverlay v-else v-model="open" :anchor="modelRequest?.anchor">
+        <div class="flex min-h-0 w-[26rem] flex-col">
+            <ModelPicker
+                v-if="modelRequest"
+                :provider="modelRequest.provider"
+                :model="modelRequest.model"
+                @pick="choose"
+                @close="settleModelPick()"
+            />
+        </div>
+    </AnchoredOverlay>
 </template>

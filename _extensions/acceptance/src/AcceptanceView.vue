@@ -39,7 +39,7 @@ import { useTargets } from "./useTargets";
  * monorepo showed six cards agreeing that one dev server was down, two scrollbars fought, and the button you
  * could not yet press was the only thing pinned. All three of its questions were already answerable here: WHICH
  * is ticked in the list, WHERE is stated on the heading the stories sit under (one dev server per repository, so
- * one line per repository), and WHO is the model chip in the header (RunControls). Nothing ticked runs
+ * one line per repository), and WHO is the model chip on the run pill (RunControls). Nothing ticked runs
  * everything, which is what the dialog's preselect-them-all default meant — so there is no mode to enter.
  *
  * THE GATE LIVES HERE, once. A run in scope is waiting on an address or on a stopped server, and that same
@@ -333,8 +333,9 @@ const run = async (model: PickedModel): Promise<void> =>
 
 <template>
     <!-- An ordinary page: the shell's router-view wrapper is the scroll container, so this view owns no
-         scrolling and no chrome of its own. What used to be a docked bar under the list is the header's action
-         cluster (RunControls) — one place for what this page does, the same place every other view keeps it. -->
+         scrolling and no chrome of its own. The run composer is the last element in it — a pill that sticks to
+         the bottom of the viewport while the list scrolls under it (RunControls), so it stays reachable without
+         a docked bar and without crowding the header. -->
     <Page width="wide">
         <PageHeader
             title="Acceptance"
@@ -381,18 +382,6 @@ const run = async (model: PickedModel): Promise<void> =>
                 >
                     <template #icon><Icon name="refresh" /></template>
                 </Button>
-                <!-- Withheld while a report is open: you are reading what a run FOUND, and a composer for the
-                     next one beside it would be answering a question nobody is asking yet. -->
-                <RunControls
-                    v-if="!openRun && stories.length > 0"
-                    :chosen="chosen.length"
-                    :total="stories.length"
-                    :narrowed="selected.size > 0"
-                    :blocked="blockedNote"
-                    :can-run="canRun"
-                    @clear="selected = new Set()"
-                    @submit="run"
-                />
             </template>
         </PageHeader>
 
@@ -506,7 +495,7 @@ const run = async (model: PickedModel): Promise<void> =>
                     </div>
                 </template>
                 <div v-else-if="runs.length === 0" :class="cmp.emptyState('m-3')">
-                    Nothing has been tested yet. Press Run at the top of the page — reports land in
+                    Nothing has been tested yet. Press Run below — reports land in
                     <span class="font-mono">{{ RUNS_DIR }}/</span>, outside every repository.
                 </div>
                 <button
@@ -536,6 +525,21 @@ const run = async (model: PickedModel): Promise<void> =>
             <p v-if="runs.length > SCAN_RUNS" class="mt-2 text-2xs text-subtle">
                 Verdicts are read for the newest {{ SCAN_RUNS }} runs. Older ones show theirs when opened.
             </p>
+
+            <!-- LAST IN THE PAGE, AND STICKY — so it floats over the list while there is list left to scroll and
+                 settles under it at the end. Inside <Page>, so it is centred on the column the stories are in
+                 rather than on the window. Withheld while a report is open: you are reading what a run FOUND,
+                 and a composer for the next one over it would be answering a question nobody is asking yet. -->
+            <RunControls
+                v-if="stories.length > 0"
+                :chosen="chosen.length"
+                :total="stories.length"
+                :narrowed="selected.size > 0"
+                :blocked="blockedNote"
+                :can-run="canRun"
+                @clear="selected = new Set()"
+                @submit="run"
+            />
         </template>
     </Page>
 </template>
