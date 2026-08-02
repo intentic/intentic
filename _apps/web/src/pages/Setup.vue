@@ -18,6 +18,7 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
 import { environment } from "../environments/environment";
 import { bashCommand, bashDownloadCommand, psCommand, psDownloadCommand, scriptUrl, type SplitCommand } from "../environments/scriptCommand";
 import SetupCompose from "./SetupCompose.vue";
+import SetupRunDetails from "./SetupRunDetails.vue";
 import type { ComposeArgs } from "./setupCompose";
 import { type AttachOutcome, daemonUrlProblem, nameFromDaemonUrl, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
 
@@ -754,8 +755,11 @@ watch(commandReady, (ready) => {
     <!-- dvh, not vh: a phone's collapsing browser chrome makes 100vh taller than the screen, which parks the
          last step under the address bar on first paint. -->
     <div class="min-h-dvh w-full overflow-auto bg-canvas text-content">
+        <!-- The page widens at xl to make room for a second column — see the aside below the steps. Below that
+             it is the single centred column it has always been, and max-w-3xl still governs the steps
+             themselves, so the command never gets narrower than it is today at any width. -->
         <div
-            class="animate-fade-in mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 md:gap-4 md:px-6 md:py-8"
+            class="animate-fade-in mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 md:gap-4 md:px-6 md:py-8 xl:max-w-[70rem]"
         >
             <!-- Wraps rather than shrinks: the three items share one line at desktop widths, and on a phone the
                  escape hatch takes the first line on its own (`order-first w-full`) so the title keeps the full
@@ -800,368 +804,345 @@ watch(commandReady, (ready) => {
                 </div>
             </header>
 
-            <!-- Step 1: name + create the sandbox (collapses to a summary once created), or — in the attach
+            <!-- Two columns from xl: the steps, and a docked reference panel that stops covering them. Below xl
+                 this is the same single column as before and the panel folds back into step 3's (i) hint.
+                 `items-start` is what lets the panel stick while the steps scroll past it. -->
+            <div class="flex flex-col gap-3 md:gap-4 xl:flex-row xl:items-start xl:gap-6">
+                <div class="flex min-w-0 flex-1 flex-col gap-3 md:gap-4 xl:max-w-3xl">
+                    <!-- Step 1: name + create the sandbox (collapses to a summary once created), or — in the attach
                  lane — the entire setup: one address for a sandbox that is already running and reachable.
                  The attach lane drops the "1" badge: it is the whole flow, not the first of four. -->
-            <StepSection
-                :step="lane === `provision` ? 1 : undefined"
-                :icon="lane === `attach` ? `link` : undefined"
-                :done="lane === `provision` && created !== null"
-                :title="step1Title"
-            >
-                <template v-if="lane === `attach`">
-                    <p class="text-xs text-muted">
-                        Already running the sandbox container behind a domain of your own? Give us the address it answers on — we'll check it, then
-                        open your workspace. Nothing to install, nothing to provision.
-                    </p>
-                    <label class="ui-field">
-                        <span class="ui-field-label">Domain</span>
-                        <!-- Stacked on a phone: side by side, the field loses half its width to the button and
+                    <StepSection
+                        :step="lane === `provision` ? 1 : undefined"
+                        :icon="lane === `attach` ? `link` : undefined"
+                        :done="lane === `provision` && created !== null"
+                        :title="step1Title"
+                    >
+                        <template v-if="lane === `attach`">
+                            <p class="text-xs text-muted">
+                                Already running the sandbox container behind a domain of your own? Give us the address it answers on — we'll check it,
+                                then open your workspace. Nothing to install, nothing to provision.
+                            </p>
+                            <label class="ui-field">
+                                <span class="ui-field-label">Domain</span>
+                                <!-- Stacked on a phone: side by side, the field loses half its width to the button and
                              the address the user is checking scrolls out of view as they type it. -->
-                        <div class="flex flex-col gap-2 md:flex-row md:items-center">
-                            <input
-                                v-model="domain"
-                                autocomplete="off"
-                                autocapitalize="off"
-                                spellcheck="false"
-                                placeholder="sandbox.example.com"
-                                :class="cmp.input('w-full font-mono text-base md:text-sm')"
-                                @keydown.enter="connectDomain"
-                            />
-                            <!-- `attaching` is in the disabled expression, not left to the loading prop: the
+                                <div class="flex flex-col gap-2 md:flex-row md:items-center">
+                                    <input
+                                        v-model="domain"
+                                        autocomplete="off"
+                                        autocapitalize="off"
+                                        spellcheck="false"
+                                        placeholder="sandbox.example.com"
+                                        :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                        @keydown.enter="connectDomain"
+                                    />
+                                    <!-- `attaching` is in the disabled expression, not left to the loading prop: the
                                  theme defines no disabled tokens, so a busy button would otherwise look and
                                  feel live while a probe is in flight. -->
-                            <Button
-                                label="Connect"
-                                class="w-full justify-center md:w-auto"
-                                :loading="attaching"
-                                :disabled="attaching || normalizedDomain === undefined"
-                                @click="connectDomain"
-                            >
-                                <template #icon><Icon name="link" /></template>
-                            </Button>
-                        </div>
-                        <span v-if="domainProblem" class="text-xs text-warning">{{ domainProblem }}</span>
-                        <span v-else-if="normalizedDomain" class="text-xs text-muted"
-                            >We'll connect to <span class="font-mono">{{ normalizedDomain }}</span
-                            >.</span
-                        >
-                        <span v-else class="text-xs text-muted">The https address your sandbox already answers on — https:// is optional.</span>
-                    </label>
+                                    <Button
+                                        label="Connect"
+                                        class="w-full justify-center md:w-auto"
+                                        :loading="attaching"
+                                        :disabled="attaching || normalizedDomain === undefined"
+                                        @click="connectDomain"
+                                    >
+                                        <template #icon><Icon name="link" /></template>
+                                    </Button>
+                                </div>
+                                <span v-if="domainProblem" class="text-xs text-warning">{{ domainProblem }}</span>
+                                <span v-else-if="normalizedDomain" class="text-xs text-muted"
+                                    >We'll connect to <span class="font-mono">{{ normalizedDomain }}</span
+                                    >.</span
+                                >
+                                <span v-else class="text-xs text-muted"
+                                    >The https address your sandbox already answers on — https:// is optional.</span
+                                >
+                            </label>
 
-                    <!-- The SAME `name` the create form binds, so switching lanes never loses what was typed.
+                            <!-- The SAME `name` the create form binds, so switching lanes never loses what was typed.
                          Only a switcher label here, so the domain fills the placeholder rather than blocking the
                          paste. Hidden once the row exists (resumed, or created by an earlier attempt) — that
                          sandbox is already named, and the step title says so. -->
-                    <label v-if="created === null" class="ui-field">
-                        <span class="ui-field-label">Name</span>
-                        <input
-                            v-model="name"
-                            autocomplete="off"
-                            spellcheck="false"
-                            :placeholder="derivedName === `` ? `e.g. work, staging, my-laptop` : derivedName"
-                            :class="cmp.input('w-full font-mono text-base md:text-sm')"
-                            @keydown.enter="connectDomain"
-                        />
-                        <span class="text-xs text-muted">
-                            Just so you can tell it apart in the switcher<template v-if="derivedName !== ``">
-                                — defaults to <span class="font-mono">{{ derivedName }}</span></template
-                            >.
-                        </span>
-                    </label>
+                            <label v-if="created === null" class="ui-field">
+                                <span class="ui-field-label">Name</span>
+                                <input
+                                    v-model="name"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                    :placeholder="derivedName === `` ? `e.g. work, staging, my-laptop` : derivedName"
+                                    :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                    @keydown.enter="connectDomain"
+                                />
+                                <span class="text-xs text-muted">
+                                    Just so you can tell it apart in the switcher<template v-if="derivedName !== ``">
+                                        — defaults to <span class="font-mono">{{ derivedName }}</span></template
+                                    >.
+                                </span>
+                            </label>
 
-                    <!-- Each probe failure names the one thing the user can do about it. -->
-                    <div v-if="attachOutcome?.kind === `unreachable`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                        <span>Nothing answered at that address.</span>
-                        <span class="text-2xs opacity-80">
-                            Check the sandbox is running and the domain points at it. The daemon's <code>WEB_ORIGIN</code> also has to name
-                            <span class="font-mono">{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span> — otherwise your browser blocks the call before
-                            it's sent.
-                        </span>
-                    </div>
-                    <div v-else-if="attachOutcome?.kind === `timeout`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                        <span>That address accepted the connection but never answered.</span>
-                        <span class="text-2xs opacity-80">
-                            Something is listening, but it isn't replying — a sandbox still starting up, or a proxy pointed at the wrong port. Give it
-                            a moment and try again.
-                        </span>
-                    </div>
-                    <!-- The tunnel/proxy is alive but has no sandbox behind it — overwhelmingly the case when a
+                            <!-- Each probe failure names the one thing the user can do about it. -->
+                            <div v-if="attachOutcome?.kind === `unreachable`" :class="cmp.alertDanger('flex flex-col gap-1')">
+                                <span>Nothing answered at that address.</span>
+                                <span class="text-2xs opacity-80">
+                                    Check the sandbox is running and the domain points at it. The daemon's <code>WEB_ORIGIN</code> also has to name
+                                    <span class="font-mono">{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span> — otherwise your browser blocks the call
+                                    before it's sent.
+                                </span>
+                            </div>
+                            <div v-else-if="attachOutcome?.kind === `timeout`" :class="cmp.alertDanger('flex flex-col gap-1')">
+                                <span>That address accepted the connection but never answered.</span>
+                                <span class="text-2xs opacity-80">
+                                    Something is listening, but it isn't replying — a sandbox still starting up, or a proxy pointed at the wrong port.
+                                    Give it a moment and try again.
+                                </span>
+                            </div>
+                            <!-- The tunnel/proxy is alive but has no sandbox behind it — overwhelmingly the case when a
                          resumed sandbox's container is gone, so name that instead of quoting a 530. -->
-                    <div v-else-if="attachOutcome?.kind === `no-origin`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                        <span>That domain is live, but no sandbox is running behind it.</span>
-                        <span class="text-2xs opacity-80">
-                            Its tunnel or reverse proxy answered {{ attachOutcome.status }} with nothing to forward to. Start the sandbox
-                            container<template v-if="created !== null">, or get a domain from intentic and run the install command instead</template>.
-                        </span>
-                    </div>
-                    <template v-else-if="attachOutcome?.kind === `needs-token`">
-                        <div :class="cmp.alertWarning('flex flex-col gap-1')">
-                            <span>Your sandbox is up, but it wouldn't let us in yet.</span>
-                            <span class="text-2xs opacity-80"
-                                >It's waiting to be claimed with the connection token it was started with. Paste that <code>CONNECT_TOKEN</code> to
-                                claim it as yours.</span
-                            >
-                        </div>
-                        <label class="ui-field">
-                            <span class="ui-field-label">Connection token</span>
-                            <input
-                                v-model="attachToken"
-                                type="password"
-                                autocomplete="off"
-                                autocapitalize="off"
-                                spellcheck="false"
-                                placeholder="The CONNECT_TOKEN your sandbox runs with"
-                                :class="cmp.input('w-full font-mono text-base md:text-sm')"
-                                @keydown.enter="connectDomain"
-                            />
-                            <span class="text-xs text-muted">
-                                Used once to claim the sandbox — the daemon stops asking once you're bound, so intentic never stores it.
-                            </span>
-                        </label>
-                    </template>
-                    <div v-else-if="attachOutcome?.kind === `denied`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                        <span>{{ attachOutcome.message }}</span>
-                        <span class="text-2xs opacity-80">Ask its owner to invite {{ user?.email }}, then connect it again.</span>
-                    </div>
-                    <div v-else-if="attachOutcome?.kind === `rejected`" :class="cmp.alertDanger()">{{ attachOutcome.message }}</div>
+                            <div v-else-if="attachOutcome?.kind === `no-origin`" :class="cmp.alertDanger('flex flex-col gap-1')">
+                                <span>That domain is live, but no sandbox is running behind it.</span>
+                                <span class="text-2xs opacity-80">
+                                    Its tunnel or reverse proxy answered {{ attachOutcome.status }} with nothing to forward to. Start the sandbox
+                                    container<template v-if="created !== null"
+                                        >, or get a domain from intentic and run the install command instead</template
+                                    >.
+                                </span>
+                            </div>
+                            <template v-else-if="attachOutcome?.kind === `needs-token`">
+                                <div :class="cmp.alertWarning('flex flex-col gap-1')">
+                                    <span>Your sandbox is up, but it wouldn't let us in yet.</span>
+                                    <span class="text-2xs opacity-80"
+                                        >It's waiting to be claimed with the connection token it was started with. Paste that
+                                        <code>CONNECT_TOKEN</code> to claim it as yours.</span
+                                    >
+                                </div>
+                                <label class="ui-field">
+                                    <span class="ui-field-label">Connection token</span>
+                                    <input
+                                        v-model="attachToken"
+                                        type="password"
+                                        autocomplete="off"
+                                        autocapitalize="off"
+                                        spellcheck="false"
+                                        placeholder="The CONNECT_TOKEN your sandbox runs with"
+                                        :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                        @keydown.enter="connectDomain"
+                                    />
+                                    <span class="text-xs text-muted">
+                                        Used once to claim the sandbox — the daemon stops asking once you're bound, so intentic never stores it.
+                                    </span>
+                                </label>
+                            </template>
+                            <div v-else-if="attachOutcome?.kind === `denied`" :class="cmp.alertDanger('flex flex-col gap-1')">
+                                <span>{{ attachOutcome.message }}</span>
+                                <span class="text-2xs opacity-80">Ask its owner to invite {{ user?.email }}, then connect it again.</span>
+                            </div>
+                            <div v-else-if="attachOutcome?.kind === `rejected`" :class="cmp.alertDanger()">{{ attachOutcome.message }}</div>
 
-                    <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
-                    <!-- With a row already in hand, going back CONTINUES that sandbox through steps 2-4 rather
+                            <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+                            <!-- With a row already in hand, going back CONTINUES that sandbox through steps 2-4 rather
                          than setting a new one up — the label has to say which of the two it is. -->
-                    <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="setLane(`provision`)">
-                        {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
-                    </button>
-                </template>
-                <template v-else-if="created === null">
-                    <!-- At the plan cap: say so plainly instead of offering a name form whose Create can only
+                            <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="setLane(`provision`)">
+                                {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
+                            </button>
+                        </template>
+                        <template v-else-if="created === null">
+                            <!-- At the plan cap: say so plainly instead of offering a name form whose Create can only
                          402. No upgrade pitch — this screen's job is to get a machine connected, and someone
                          who came here to do that is the worst possible audience for a plan sell; upgrading
                          lives in the account panel, where a person goes when that is the thing they want. -->
-                    <p v-if="atLimit" class="text-xs text-muted">
-                        Every sandbox your plan includes is already in use, so there's none spare to set up here. Reconnect one from the switcher, or
-                        remove one you've finished with.
-                    </p>
-                    <template v-else>
-                        <p class="text-xs text-muted">Give this sandbox a name so you can tell it apart in the switcher — you can run several.</p>
-                        <div class="flex flex-col gap-2 md:flex-row md:items-center">
-                            <input
-                                v-model="name"
-                                autocomplete="off"
-                                spellcheck="false"
-                                placeholder="e.g. work, staging, my-laptop"
-                                :class="cmp.input('w-full font-mono text-base md:text-sm')"
-                                @keydown.enter="createSandbox"
-                            />
-                            <Button
-                                label="Create"
-                                class="w-full justify-center md:w-auto"
-                                :loading="creating"
-                                :disabled="name.trim().length === 0"
-                                @click="createSandbox"
-                            >
-                                <template #icon><Icon name="plus" /></template>
-                            </Button>
-                        </div>
-                        <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
-                        <!-- The one-step lane, kept to a single line: it costs the common path nothing and the
+                            <p v-if="atLimit" class="text-xs text-muted">
+                                Every sandbox your plan includes is already in use, so there's none spare to set up here. Reconnect one from the
+                                switcher, or remove one you've finished with.
+                            </p>
+                            <template v-else>
+                                <p class="text-xs text-muted">
+                                    Give this sandbox a name so you can tell it apart in the switcher — you can run several.
+                                </p>
+                                <div class="flex flex-col gap-2 md:flex-row md:items-center">
+                                    <input
+                                        v-model="name"
+                                        autocomplete="off"
+                                        spellcheck="false"
+                                        placeholder="e.g. work, staging, my-laptop"
+                                        :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                        @keydown.enter="createSandbox"
+                                    />
+                                    <Button
+                                        label="Create"
+                                        class="w-full justify-center md:w-auto"
+                                        :loading="creating"
+                                        :disabled="name.trim().length === 0"
+                                        @click="createSandbox"
+                                    >
+                                        <template #icon><Icon name="plus" /></template>
+                                    </Button>
+                                </div>
+                                <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+                                <!-- The one-step lane, kept to a single line: it costs the common path nothing and the
                              user who needs it is looking for exactly these words. -->
-                        <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">
-                            Already running a sandbox somewhere? Connect it by domain →
-                        </button>
-                    </template>
-                </template>
-                <template v-else>
-                    <template v-if="resuming">
-                        <p class="text-xs text-muted">
-                            This sandbox still exists on the platform — the CLI cleanup only cleared its local container. Reconnect it below to start
-                            a fresh daemon<template v-if="!atLimit">, or create a new sandbox instead</template>.
-                        </p>
-                        <!-- At the cap there is no second sandbox to offer, and the paragraph above already
+                                <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">
+                                    Already running a sandbox somewhere? Connect it by domain →
+                                </button>
+                            </template>
+                        </template>
+                        <template v-else>
+                            <template v-if="resuming">
+                                <p class="text-xs text-muted">
+                                    This sandbox still exists on the platform — the CLI cleanup only cleared its local container. Reconnect it below
+                                    to start a fresh daemon<template v-if="!atLimit">, or create a new sandbox instead</template>.
+                                </p>
+                                <!-- At the cap there is no second sandbox to offer, and the paragraph above already
                              said so — so the alternative simply isn't there, rather than becoming a sales
                              pitch aimed at someone in the middle of reconnecting a machine. -->
-                        <button v-if="!atLimit" type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="startFresh">
-                            Not this one? Create a new sandbox instead
-                        </button>
-                    </template>
-                    <!-- Offered from EVERY created state, not just a resumed one: the realisation that this
+                                <button
+                                    v-if="!atLimit"
+                                    type="button"
+                                    :class="cmp.linkButton(`text-muted underline hover:text-content`)"
+                                    @click="startFresh"
+                                >
+                                    Not this one? Create a new sandbox instead
+                                </button>
+                            </template>
+                            <!-- Offered from EVERY created state, not just a resumed one: the realisation that this
                          sandbox is already running somewhere the platform never heard from (a daemon with no
                          PLATFORM_URL) arrives just as often while staring at step 3's install command. Attaching
                          points THIS row at the domain — it never mints a second sandbox. -->
-                    <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">Already reachable at a domain? Connect it →</button>
-                </template>
-            </StepSection>
+                            <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">
+                                Already reachable at a domain? Connect it →
+                            </button>
+                        </template>
+                    </StepSection>
 
-            <!-- Step 2: how to reach the sandbox (intentic domain collapses to a summary; own-CF form on demand). -->
-            <StepSection v-if="created && lane === `provision`" :step="2" :done="setup !== null" title="How should we reach your sandbox?">
-                <!-- The "why a token?" hint rides the step header, the one place this page puts hints (step 3's
+                    <!-- Step 2: how to reach the sandbox (intentic domain collapses to a summary; own-CF form on demand). -->
+                    <StepSection v-if="created && lane === `provision`" :step="2" :done="setup !== null" title="How should we reach your sandbox?">
+                        <!-- The "why a token?" hint rides the step header, the one place this page puts hints (step 3's
                      "What this does"), instead of a second heading inside the body: "Cloudflare API token"
                      above a field labelled "API token" said the same thing twice and cost a phone a whole row. -->
-                <template #actions>
-                    <InfoHint v-if="mode === `own`" label="Why the Cloudflare API token is required" text="Why this token">
-                        <p class="mb-1 text-sm font-semibold text-content">Why this token?</p>
-                        <p class="mb-3 text-2xs leading-relaxed text-muted">
-                            intentic reaches your sandbox over a private Cloudflare tunnel — no open inbound ports.
-                        </p>
-                        <ul class="flex flex-col gap-2 text-2xs text-muted">
-                            <li class="flex items-start gap-2">
-                                <Icon name="bolt" class="mt-0.5 text-link" />
-                                <span>Lets the install command <span class="text-content">create the tunnel</span></span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="lock" class="mt-0.5 text-success" />
-                                <span
-                                    ><span class="text-content">Never stored by intentic</span> — used once to list zones, then rides the
-                                    command</span
-                                >
-                            </li>
-                        </ul>
-                    </InfoHint>
-                </template>
+                        <template #actions>
+                            <InfoHint v-if="mode === `own`" label="Why the Cloudflare API token is required" text="Why this token">
+                                <p class="mb-1 text-sm font-semibold text-content">Why this token?</p>
+                                <p class="mb-3 text-2xs leading-relaxed text-muted">
+                                    intentic reaches your sandbox over a private Cloudflare tunnel — no open inbound ports.
+                                </p>
+                                <ul class="flex flex-col gap-2 text-2xs text-muted">
+                                    <li class="flex items-start gap-2">
+                                        <Icon name="bolt" class="mt-0.5 text-link" />
+                                        <span>Lets the install command <span class="text-content">create the tunnel</span></span>
+                                    </li>
+                                    <li class="flex items-start gap-2">
+                                        <Icon name="lock" class="mt-0.5 text-success" />
+                                        <span
+                                            ><span class="text-content">Never stored by intentic</span> — used once to list zones, then rides the
+                                            command</span
+                                        >
+                                    </li>
+                                </ul>
+                            </InfoHint>
+                        </template>
 
-                <!-- Intentic-provided: fixed, read-only domain. -->
-                <template v-if="mode === `intentic`">
-                    <div v-if="setupError" :class="cmp.alertDanger('text-2xs')">
-                        {{ setupError }}
-                    </div>
-                    <!-- One row, not a bordered box inside the card: the hostname is a fact this step reports,
+                        <!-- Intentic-provided: fixed, read-only domain. -->
+                        <template v-if="mode === `intentic`">
+                            <div v-if="setupError" :class="cmp.alertDanger('text-2xs')">
+                                {{ setupError }}
+                            </div>
+                            <!-- One row, not a bordered box inside the card: the hostname is a fact this step reports,
                          and framing it bought a second border and 24px to say nothing. The escape hatch shares
                          the line at desktop widths and wraps under it on a phone, where the hostname fills it.
                          The link names the CLOUDFLARE ZONE, not "my own domain": step 1's attach lane is the
                          literal own-domain path, and two links reading the same would send people to the wrong
                          one. This path still provisions a tunnel and still needs the run step. -->
-                    <div v-else-if="setup" class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span class="flex min-w-0 items-start gap-2 font-mono text-sm text-content">
-                            <Icon name="lock" class="mt-0.5 shrink-0 text-success" />
-                            <span class="min-w-0 break-words">{{ setup.hostname }}</span>
-                        </span>
-                        <button type="button" :class="cmp.linkButton(`text-2xs`)" @click="mode = `own`">Use my own Cloudflare zone instead</button>
-                    </div>
-                    <p v-else class="text-xs text-muted"><Icon name="spinner" spin /> Preparing your intentic domain…</p>
-                </template>
+                            <div v-else-if="setup" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <span class="flex min-w-0 items-start gap-2 font-mono text-sm text-content">
+                                    <Icon name="lock" class="mt-0.5 shrink-0 text-success" />
+                                    <span class="min-w-0 break-words">{{ setup.hostname }}</span>
+                                </span>
+                                <button type="button" :class="cmp.linkButton(`text-2xs`)" @click="mode = `own`">
+                                    Use my own Cloudflare zone instead
+                                </button>
+                            </div>
+                            <p v-else class="text-xs text-muted"><Icon name="spinner" spin /> Preparing your intentic domain…</p>
+                        </template>
 
-                <!-- Own Cloudflare: token + zone + editable subdomain. -->
-                <template v-else>
-                    <button v-if="intenticAvailable" type="button" :class="cmp.linkButton()" @click="mode = `intentic`">
-                        ← Use intentic's domain
-                    </button>
-                    <CloudflareTokenField
-                        :cf="cf"
-                        storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox — intentic never stores it."
-                    />
+                        <!-- Own Cloudflare: token + zone + editable subdomain. -->
+                        <template v-else>
+                            <button v-if="intenticAvailable" type="button" :class="cmp.linkButton()" @click="mode = `intentic`">
+                                ← Use intentic's domain
+                            </button>
+                            <CloudflareTokenField
+                                :cf="cf"
+                                storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox — intentic never stores it."
+                            />
 
-                    <!-- Editable domain: the subdomain prefix under the chosen zone. The zone suffix wraps to
+                            <!-- Editable domain: the subdomain prefix under the chosen zone. The zone suffix wraps to
                          its own line rather than stealing width from the one part that is editable — an
                          account's zone can be long, and on a phone the two together left no field to type in. -->
-                    <label v-if="selectedZone" class="ui-field">
-                        <span class="ui-field-label">Domain</span>
-                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <input
-                                :value="subdomain"
-                                @input="subdomain = ($event.target as HTMLInputElement).value"
-                                autocomplete="off"
-                                autocapitalize="off"
-                                spellcheck="false"
-                                placeholder="sandbox"
-                                :class="cmp.input('w-full font-mono text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
-                            />
-                            <span class="font-mono text-sm break-words text-subtle">.{{ selectedZone }}</span>
-                        </div>
-                        <span v-if="!subdomainValid" class="text-xs text-warning">Use letters, numbers and hyphens only.</span>
-                        <span v-else class="text-xs text-success"
-                            >✓ Your sandbox will be reachable at <span class="font-mono break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
-                            >.</span
-                        >
-                    </label>
-                </template>
-            </StepSection>
+                            <label v-if="selectedZone" class="ui-field">
+                                <span class="ui-field-label">Domain</span>
+                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <input
+                                        :value="subdomain"
+                                        @input="subdomain = ($event.target as HTMLInputElement).value"
+                                        autocomplete="off"
+                                        autocapitalize="off"
+                                        spellcheck="false"
+                                        placeholder="sandbox"
+                                        :class="cmp.input('w-full font-mono text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
+                                    />
+                                    <span class="font-mono text-sm break-words text-subtle">.{{ selectedZone }}</span>
+                                </div>
+                                <span v-if="!subdomainValid" class="text-xs text-warning">Use letters, numbers and hyphens only.</span>
+                                <span v-else class="text-xs text-success"
+                                    >✓ Your sandbox will be reachable at
+                                    <span class="font-mono break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
+                                    >.</span
+                                >
+                            </label>
+                        </template>
+                    </StepSection>
 
-            <!-- Step 3: run the sandbox — and the whole reason this page loses people. A copy-paste command is
+                    <!-- Step 3: run the sandbox — and the whole reason this page loses people. A copy-paste command is
                  no more dangerous than an .msi, but it arrives without any of an installer's affordances: no
                  publisher, no preview of what will happen, no list of what it changes, no uninstaller.
-                 What it does and what it leaves behind is in the hint, where a reader who wants it can pull it
-                 up and a reader who doesn't never pays for it in card height. Three things stay ON the card,
-                 because each is something to ACT on rather than something to know: the two switches that
-                 reshape the command, and the uninstaller — an install you can see the undo for is a far
-                 smaller decision than one you can't, and a hover is not where you look for that reassurance.
                  Step 4 folded in here too: waiting for the daemon asked nothing of the user, so a card of its
                  own was chrome around one sentence — and that sentence belongs under the command that causes it.
 
                  EVERY VISIBLE ACTOR ON THIS CARD IS THE USER. The title used to read "Run your sandbox", which
                  names no one — people read it as something the platform was doing for them, sat through a
                  spinner that started before they had done anything, and pressed the only button on the card
-                 ("Check now") until they gave up. The one sentence that explained the handoff lived inside the
-                 hint. So: the title gives the instruction and names the machine, the lead says outright that
-                 this step does not happen in the browser, and the wait at the bottom is a state machine over
-                 the handoff (see `handoff`) rather than one perpetual "waiting…". -->
-            <StepSection v-if="created && lane === `provision`" :step="3" title="Run this on your computer">
-                <template #actions>
-                    <InfoHint label="What running your sandbox does" text="What this does">
-                        <p class="mb-1 text-sm font-semibold text-content">What this does</p>
-                        <p class="mb-3 text-2xs leading-relaxed text-muted">One command on the machine that will host your sandbox. It:</p>
-                        <ul class="flex flex-col gap-2 text-2xs text-muted">
-                            <li class="flex items-start gap-2">
-                                <Icon name="box" class="mt-0.5 text-link" />
-                                <span
-                                    >Starts your sandbox in <span class="text-content">Docker</span> — 2 containers, 3 volumes and 1 network, every
-                                    one named <code>intentic-*</code></span
-                                >
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="cloud" class="mt-0.5 text-link" />
-                                <span>Opens a <span class="text-content">private Cloudflare tunnel</span> so your browser can reach it</span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="lock" class="mt-0.5 text-success" />
-                                <span>No inbound ports, <span class="text-content">nothing deployed</span> — just a reachable workspace</span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="file" class="mt-0.5 text-link" />
-                                <span
-                                    >Outside Docker it writes <code>~/.intentic/logs</code
-                                    ><template v-if="syncEnabled"
-                                        >, plus the sync agent in <code>~/.intentic/sync</code> — which runs as you, no root</template
-                                    ></span
-                                >
-                            </li>
-                        </ul>
-                        <div class="mt-3 border-t border-line pt-2 text-2xs text-subtle">
-                            <p>
-                                Missing Docker is installed for you — you'll be asked first. Docker Engine on Linux, Docker Desktop on macOS/Windows;
-                                a first Windows install may need a reboot.
-                            </p>
-                            <a
-                                href="https://docs.docker.com/get-docker/"
-                                target="_blank"
-                                rel="noreferrer"
-                                class="mt-1 inline-flex items-center gap-1 text-link hover:underline"
-                            >
-                                Or install Docker yourself <Icon name="external-link" />
-                            </a>
-                        </div>
-                    </InfoHint>
-                </template>
+                 ("Check now") until they gave up. So the title gives the instruction and names the machine, and
+                 the wait at the bottom is a state machine over the handoff (see `handoff`) rather than one
+                 perpetual "waiting…".
 
-                <!-- The instruction the whole card was missing, in the first thing read after the title and
-                     never behind a disclosure. It has to carry three facts, because each one is separately a
-                     reason people stall: that this step is not in the browser, WHICH machine it is on, and that
-                     the page cannot do it for them. On a phone the third fact is the pressing one — the device
-                     reading this cannot be the device running it — so it leads there instead. -->
-                <p class="flex items-start gap-2.5 text-xs leading-relaxed text-content">
-                    <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
-                    <span class="min-w-0">
-                        <template v-if="mobile">
-                            <span class="font-medium">This step needs a computer.</span> Copy the command below, then open a terminal on the machine
-                            that should host your sandbox — your laptop, or a server you have a shell on — and paste it there.
+                 WHAT IS ON THE CARD IS WHAT YOU DO; WHAT IS IN THE PANEL IS WHAT IT MEANS. The card carries the
+                 command, the two switches that reshape it, and one line of state — and nothing else, because a
+                 step people are trying to get through is not where prose belongs. Everything that is worth
+                 knowing but not worth reading right now (what gets created, what is written outside Docker, how
+                 to remove all of it) moved to SetupRunDetails, which is docked in a column of its own from xl
+                 and folded into the (i) below it. That is also what fixed the hint landing ON the command it
+                 described, on exactly the screens with room to put it beside instead. -->
+                    <StepSection v-if="created && lane === `provision`" :step="3" title="Run this on your computer">
+                        <template #actions>
+                            <!-- Below xl only: from there up the same content is docked in its own column (see the
+                         aside at the foot of this template), where it never lands on the command. -->
+                            <InfoHint class="xl:hidden" label="What running your sandbox does" text="What this does">
+                                <SetupRunDetails :sync-enabled="syncEnabled" :cleanup="cleanupCommand" />
+                            </InfoHint>
                         </template>
-                        <template v-else>
-                            <span class="font-medium">This is the one step that doesn't happen in the browser.</span> Open a terminal on the machine
-                            that should host your sandbox — this computer, or a server you have a shell on — paste the command below, and press Enter.
-                        </template>
-                    </span>
-                </p>
 
-                <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
+                        <!-- One line, because the title already gave the instruction and nobody reads the second
+                     sentence of a step they are trying to get through. All this adds is the bit the title
+                     can't: WHICH machine. On a phone it says the other thing instead — the device reading
+                     this cannot be the device running it. -->
+                        <p class="flex items-start gap-2.5 text-xs text-muted">
+                            <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
+                            <span class="min-w-0">
+                                <template v-if="mobile">Copy it, then paste it into a terminal on the machine that will host your sandbox.</template>
+                                <template v-else>Paste it into a terminal — this computer, or any server you have a shell on.</template>
+                            </span>
+                        </p>
+
+                        <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
                      the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name + the
                      minted hostname, so it names the same id the sandbox's address does. It sits ABOVE the command
                      because it changes it: every control that rewrites what you are about to copy comes first.
@@ -1169,149 +1150,135 @@ watch(commandReady, (ready) => {
                      was three frames deep to carry one switch.
                      Hidden on the compose tab: that path has no place to carry SYNC_DIR, so the toggle would do
                      nothing there — the compose panel points at the workspace's Desktop sync card instead. -->
-                <!-- items-start, not items-center: the sentence wraps to three lines on a phone, and a switch
+                        <!-- items-start, not items-center: the sentence wraps to three lines on a phone, and a switch
                      centred against three lines floats in the middle of a paragraph it is supposed to head. -->
-                <label v-if="runTab !== `compose`" class="flex cursor-pointer items-start gap-2.5">
-                    <ToggleSwitch v-model="syncEnabled" class="shrink-0" aria-label="Also sync a local folder" />
-                    <span class="min-w-0 pt-1 text-xs text-muted">
-                        <span class="font-medium text-content">Also sync a local folder</span>
-                        <template v-if="syncEnabled && syncDir !== ``">
-                            — mirrors to <code class="break-words">{{ syncDir }}</code
-                            >, editable in your own editor.</template
-                        >
-                        <template v-else> — mirror this sandbox to a folder you can open in your own editor.</template>
-                    </span>
-                </label>
-                <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready — a
+                        <label v-if="runTab !== `compose`" class="flex cursor-pointer items-start gap-2.5">
+                            <ToggleSwitch v-model="syncEnabled" class="shrink-0" aria-label="Also sync a local folder" />
+                            <!-- On, the folder IS the news; off, the reason is. Saying both at once was one clause of
+                         each, and the clause that mattered was never the one being read. -->
+                            <span class="min-w-0 pt-1 text-xs text-muted">
+                                <span class="font-medium text-content">Also sync a local folder</span>
+                                <template v-if="syncEnabled && syncDir !== ``">
+                                    — mirrors to <code class="break-words">{{ syncDir }}</code></template
+                                >
+                                <template v-else> — edit this sandbox's files in your own editor.</template>
+                            </span>
+                        </label>
+                        <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready — a
                      command missing the token/zone/subdomain or the provisioned tunnel would just fail in the sandbox. -->
-                <div v-if="!commandReady" class="flex items-start gap-2 rounded-lg border border-dashed border-line px-3 py-4 text-xs text-muted">
-                    <Icon name="lock" class="mt-0.5 shrink-0" />
-                    <span>{{ lockedReason }}</span>
-                </div>
-                <template v-else>
-                    <div class="flex flex-col gap-2">
-                        <!-- On a phone the picker and the copy button each take a full row: three pill tabs
+                        <div
+                            v-if="!commandReady"
+                            class="flex items-start gap-2 rounded-lg border border-dashed border-line px-3 py-4 text-xs text-muted"
+                        >
+                            <Icon name="lock" class="mt-0.5 shrink-0" />
+                            <span>{{ lockedReason }}</span>
+                        </div>
+                        <template v-else>
+                            <div class="flex flex-col gap-2">
+                                <!-- On a phone the picker and the copy button each take a full row: three pill tabs
                              sharing a 340px line wrapped every label to two lines, and the copy chip that
                              trailed them is the one control this step exists for. The single Copy belongs to
                              the single command — the review path's two blocks each carry their own, because
                              the point of splitting them is that they are run one at a time. -->
-                        <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
-                            <Segmented v-model="runTab" :options="runTabOptions" :stretch="mobile" />
-                            <CopyButton
-                                v-if="runTab !== `compose` && splitCommand === undefined"
-                                :text="selectedCommand"
-                                :label="mobile ? `Copy command` : `Copy`"
-                                :stretch="mobile"
-                                @copied="onCopied"
-                            />
-                        </div>
-                        <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
-                        <template v-else-if="splitCommand">
-                            <!-- The RUN half is the copy that means the handoff has started; copying the fetch
+                                <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
+                                    <Segmented v-model="runTab" :options="runTabOptions" :stretch="mobile" />
+                                    <CopyButton
+                                        v-if="runTab !== `compose` && splitCommand === undefined"
+                                        :text="selectedCommand"
+                                        :label="mobile ? `Copy command` : `Copy`"
+                                        :stretch="mobile"
+                                        @copied="onCopied"
+                                    />
+                                </div>
+                                <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
+                                <template v-else-if="splitCommand">
+                                    <!-- The RUN half is the copy that means the handoff has started; copying the fetch
                                  half is halfway through reading the script, not halfway to a sandbox. -->
-                            <Code :code="splitCommand.fetch" :lang="selectedCommandLang" :wrap="true" label="1. Download it, and read it" />
-                            <Code
-                                :code="splitCommand.run"
-                                :lang="selectedCommandLang"
-                                :wrap="true"
-                                label="2. Run the file you just read"
-                                @copied="onCopied"
-                            />
-                        </template>
-                        <template v-else>
-                            <!-- Clamped on a phone: the command is a thing to COPY, and wrapped in full it is
+                                    <Code :code="splitCommand.fetch" :lang="selectedCommandLang" :wrap="true" label="1. Download it, and read it" />
+                                    <Code
+                                        :code="splitCommand.run"
+                                        :lang="selectedCommandLang"
+                                        :wrap="true"
+                                        label="2. Run the file you just read"
+                                        @copied="onCopied"
+                                    />
+                                </template>
+                                <template v-else>
+                                    <!-- Clamped on a phone: the command is a thing to COPY, and wrapped in full it is
                                  nine lines of env vars between the button that copies it and the step that
                                  comes next. The dev command is the long one, but even the hosted one-liner
                                  wraps to four lines at 390px.
-                                 The label is the block's title bar, and it says TERMINAL — a dark monospace box
-                                 in a page of cards otherwise reads as a documentation snippet, which is a thing
-                                 to look at rather than a thing to run somewhere else. -->
-                            <Code
-                                :code="selectedCommand"
-                                :lang="selectedCommandLang"
-                                :wrap="true"
-                                :copyable="false"
-                                :label="mobile ? `Terminal — on your computer` : `Terminal — on the machine that will run your sandbox`"
-                                :clamp-lines="mobile ? 4 : undefined"
-                            />
-                            <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
+                                 The label is the block's title bar, and one word is all it needs: a dark
+                                 monospace box in a page of cards reads as a documentation snippet, and
+                                 "Terminal" is what stops it. Which machine is the line above's job. -->
+                                    <Code
+                                        :code="selectedCommand"
+                                        :lang="selectedCommandLang"
+                                        :wrap="true"
+                                        :copyable="false"
+                                        label="Terminal"
+                                        :clamp-lines="mobile ? 4 : undefined"
+                                    />
+                                    <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
                                  rebuilds it from this checkout on every run (layer-cached), so the pasted command is
                                  self-sufficient and never runs a stale image after sandbox edits. Folded shut: it is a
                                  note to whoever is developing intentic itself, not a step in setting a sandbox up. -->
-                            <details v-if="platformUrlOverride" class="text-xs text-warning">
-                                <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
-                                    <Icon name="box" class="shrink-0" />
-                                    <span class="min-w-0">Local dev: builds from your checkout</span>
-                                    <Icon name="chevron-down" class="shrink-0 text-subtle" />
-                                </summary>
-                                <p class="mt-1 pl-6 text-2xs">
-                                    This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that — every run rebuilds, so
-                                    sandbox edits are always picked up (cached when unchanged; the first build takes a few minutes). For a live edit
-                                    loop, keep <code>pnpm dev:sandbox</code> running.
-                                </p>
-                            </details>
-                        </template>
-                    </div>
+                                    <details v-if="platformUrlOverride" class="text-xs text-warning">
+                                        <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+                                            <Icon name="box" class="shrink-0" />
+                                            <span class="min-w-0">Local dev: builds from your checkout</span>
+                                            <Icon name="chevron-down" class="shrink-0 text-subtle" />
+                                        </summary>
+                                        <p class="mt-1 pl-6 text-2xs">
+                                            This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that — every run
+                                            rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few
+                                            minutes). For a live edit loop, keep <code>pnpm dev:sandbox</code> running.
+                                        </p>
+                                    </details>
+                                </template>
+                            </div>
 
-                    <!-- What you can DO about the command, as one block on the card's rhythm rather than three
-                         rows each taking a full step-sized gap: the two switches over its shape, then the undo.
+                            <!-- The two switches over the SHAPE of the command — the one thing here that does NOT belong
+                         in the reference panel, because a checkbox whose reason is a hover (or a column) away is
+                         a checkbox nobody ticks. Directly under the command, so the rewrite is visible one row up
+                         next to the Copy that picks it up. The undo used to sit under them and now lives in the
+                         panel with the rest of what running this means: it is the least-used row on the card and
+                         it was costing a full row of a step people already called overloaded.
                          Script tabs only — compose declares itself. -->
-                    <div v-if="runTab !== `compose`" class="flex flex-col gap-2">
-                        <!-- The two switches over the SHAPE of the command, each beside the sentence that justifies
-                         it — these are the one thing that does NOT belong in the hint, because a checkbox whose
-                         reason is a hover away is a checkbox nobody ticks. They sit directly under the command so
-                         the rewrite is visible one row up, next to the Copy that picks it up. -->
-                        <div v-if="environment.production" class="flex flex-col gap-1.5">
-                            <!-- Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
-                                 there is no switch here and the Docker prerequisite is left to the hint, which
-                                 names the engine per platform and the reboot a first Windows install may want. -->
-                            <div v-if="runTab === `unix`" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
-                                <button type="button" :aria-pressed="hasDocker" :class="chipClass(hasDocker)" @click="hasDocker = !hasDocker">
-                                    <Icon :name="hasDocker ? `check-square` : `square`" />
-                                    I already have Docker
-                                </button>
-                                <span class="min-w-0">
-                                    <template v-if="hasDocker"
-                                        >No <code>sudo</code> — runs as you. Docker has to be installed and running already.</template
-                                    >
-                                    <template v-else><code>sudo</code> is in there for one job: installing Docker if it's missing.</template>
-                                </span>
+                            <div v-if="environment.production && runTab !== `compose`" class="flex flex-col gap-1.5">
+                                <!-- Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
+                             there is no switch here and the Docker prerequisite is left to the panel, which
+                             names the reboot a first Windows install may want. -->
+                                <div v-if="runTab === `unix`" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
+                                    <button type="button" :aria-pressed="hasDocker" :class="chipClass(hasDocker)" @click="hasDocker = !hasDocker">
+                                        <Icon :name="hasDocker ? `check-square` : `square`" />
+                                        I already have Docker
+                                    </button>
+                                    <span class="min-w-0">
+                                        <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
+                                        <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
+                                    <button type="button" :aria-pressed="review" :class="chipClass(review)" @click="review = !review">
+                                        <Icon :name="review ? `check-square` : `square`" />
+                                        Download and read it first
+                                    </button>
+                                    <span class="min-w-0">
+                                        <a
+                                            :href="sourceUrl"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            class="inline-flex items-center gap-1 text-link hover:underline"
+                                        >
+                                            Or read it here <Icon name="external-link" />
+                                        </a>
+                                    </span>
+                                </div>
                             </div>
-                            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
-                                <button type="button" :aria-pressed="review" :class="chipClass(review)" @click="review = !review">
-                                    <Icon :name="review ? `check-square` : `square`" />
-                                    Download and read it first
-                                </button>
-                                <span class="min-w-0">
-                                    Nothing runs until you've read it.
-                                    <a
-                                        :href="sourceUrl"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        class="inline-flex items-center gap-1 text-link hover:underline"
-                                    >
-                                        Read it in your browser <Icon name="external-link" />
-                                    </a>
-                                </span>
-                            </div>
-                        </div>
+                        </template>
 
-                        <!-- The uninstaller, shown BEFORE the install rather than after it, and the one piece of
-                             this that stays out of the hint: everything else here is something to know, and
-                             this is something to run. -->
-                        <p class="flex items-start gap-2 text-2xs leading-relaxed text-muted">
-                            <Icon name="undo" class="mt-0.5 shrink-0 text-subtle" />
-                            <span class="min-w-0">
-                                <!-- break-words, not break-all: a phone splits this mid-URL otherwise
-                                     ("https://intentic.de / v/cleanup"), when breaking at its spaces fits. -->
-                                Removes all of it, whenever: <code class="break-words text-content">{{ cleanupCommand }}</code>
-                                <CopyButton :text="cleanupCommand" />
-                            </span>
-                        </p>
-                    </div>
-                </template>
-
-                <!-- Step 4's whole job, as the footer of the step it reports on — now saying WHICH of the two
+                        <!-- Step 4's whole job, as the footer of the step it reports on — now saying WHICH of the two
                      waits this is. A spinner from the moment a code was minted is what made a screen where the
                      user has done nothing look identical to one where Docker is four minutes into an image
                      pull, and "your workspace opens automatically" is a promise about the second that reads, in
@@ -1320,87 +1287,87 @@ watch(commandReady, (ready) => {
                      in the header, because here it is beside the thing it re-checks and is plainly a courtesy
                      next to the sentence carrying the real instruction — up there it was the most
                      button-shaped thing on the card, and people pressed it instead of opening a terminal. -->
-                <div v-if="waiting" class="flex flex-col gap-2 border-t border-line pt-3">
-                    <p class="flex items-start gap-2 text-xs" :class="handoff === `claimed` ? `text-content` : `text-muted`">
-                        <Icon v-if="handoff === `claimed`" name="spinner" spin class="mt-0.5 shrink-0 text-success" />
-                        <Icon v-else-if="handoff === `pasted`" name="spinner" spin class="mt-0.5 shrink-0 text-info" />
-                        <Icon v-else name="circle" class="mt-0.5 shrink-0 text-subtle" />
-                        <span class="min-w-0">
-                            <template v-if="handoff === `claimed`">
-                                <span class="font-medium text-success">Your machine picked it up.</span> Docker is starting your sandbox now — the
-                                first run pulls the image, so a few minutes is normal. Your workspace opens by itself.
-                            </template>
-                            <template v-else-if="handoff === `pasted`">
-                                <span class="font-medium text-content">Copied.</span> Now paste it into that terminal and press Enter — we're watching
-                                for your sandbox and will open the workspace the moment it starts.
-                            </template>
-                            <template v-else>
-                                <span class="font-medium text-content">Nothing is running yet.</span> The moment you run the command on that machine,
-                                this page notices on its own and opens your workspace — there's nothing to refresh here.
-                            </template>
-                        </span>
-                    </p>
+                        <div v-if="waiting" class="flex flex-col gap-2 border-t border-line pt-3">
+                            <p class="flex items-start gap-2 text-xs" :class="handoff === `claimed` ? `text-content` : `text-muted`">
+                                <Icon v-if="handoff === `claimed`" name="spinner" spin class="mt-0.5 shrink-0 text-success" />
+                                <Icon v-else-if="handoff === `pasted`" name="spinner" spin class="mt-0.5 shrink-0 text-info" />
+                                <Icon v-else name="circle" class="mt-0.5 shrink-0 text-subtle" />
+                                <span class="min-w-0">
+                                    <template v-if="handoff === `claimed`">
+                                        <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker — the first run takes
+                                        a few minutes.
+                                    </template>
+                                    <template v-else-if="handoff === `pasted`">
+                                        <span class="font-medium text-content">Copied.</span> Paste it into that terminal and press Enter.
+                                    </template>
+                                    <template v-else>
+                                        <span class="font-medium text-content">Nothing is running yet.</span> We'll notice the moment it starts.
+                                    </template>
+                                </span>
+                            </p>
 
-                    <!-- The correction, on a timer, because the mistake this card exists to prevent is SILENT:
+                            <!-- The correction, on a timer, because the mistake this card exists to prevent is SILENT:
                          somebody who has not understood that the command runs elsewhere never does anything the
                          page can react to, so elapsed time is the only trigger there is. -->
-                    <div v-if="nudging" :class="cmp.alertWarning('flex flex-col gap-2')">
-                        <p class="flex items-start gap-2">
-                            <Icon name="clock" class="mt-0.5 shrink-0" />
-                            <span class="min-w-0">
-                                <span class="font-medium">Still nothing here.</span> This command has to be pasted into a terminal on the machine that
-                                will run your sandbox — nothing happens on this page until you do.
-                            </span>
-                        </p>
-                        <!-- After three minutes, stop assuming it was never run and start helping the person
+                            <div v-if="nudging" :class="cmp.alertWarning('flex flex-col gap-2')">
+                                <p class="flex items-start gap-2">
+                                    <Icon name="clock" class="mt-0.5 shrink-0" />
+                                    <span class="min-w-0">
+                                        <span class="font-medium">Still nothing.</span> This has to be pasted into a terminal on the machine that will
+                                        run your sandbox.
+                                    </span>
+                                </p>
+                                <!-- After three minutes, stop assuming it was never run and start helping the person
                              whose terminal answered back. Both readings get an action they can take. -->
-                        <p v-if="stalled" class="pl-6 text-2xs opacity-90">
-                            Already ran it? Look at that terminal — a failure there (no Docker, no permission, a network it can't reach) stops the
-                            sandbox before it can report in. The command is safe to run again as-is.
-                        </p>
-                        <div class="flex flex-wrap items-center gap-2 pl-6">
-                            <CopyButton
-                                v-if="runTab !== `compose` && splitCommand === undefined"
-                                :text="selectedCommand"
-                                label="Copy the command again"
-                                @copied="onCopied"
-                            />
-                            <a
-                                v-if="environment.production"
-                                :href="sourceUrl"
-                                target="_blank"
-                                rel="noreferrer"
-                                class="inline-flex items-center gap-1 text-2xs hover:underline"
-                            >
-                                See what it runs <Icon name="external-link" />
-                            </a>
-                        </div>
-                    </div>
+                                <p v-if="stalled" class="pl-6 text-2xs opacity-90">
+                                    Already ran it? Check that terminal — an error there stops the sandbox before it can report in. Safe to run again.
+                                </p>
+                                <!-- self-start, or the column flex stretches this chip across the whole banner. -->
+                                <CopyButton
+                                    v-if="runTab !== `compose` && splitCommand === undefined"
+                                    class="ml-6 self-start"
+                                    :text="selectedCommand"
+                                    label="Copy again"
+                                    @copied="onCopied"
+                                />
+                            </div>
 
-                    <!-- A claim with no daemon behind it is a genuinely different failure from silence: the
+                            <!-- A claim with no daemon behind it is a genuinely different failure from silence: the
                          command ran, so the terminal is where the answer is. Much longer fuse — the first image
                          pull legitimately takes minutes. -->
-                    <p v-if="slowBuild" class="flex items-start gap-2 text-2xs text-warning">
-                        <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
-                        <span class="min-w-0">
-                            Your machine picked this up a while ago but the sandbox still hasn't reported in. Check that terminal for an error — it is
-                            the only place the reason shows up. The command is safe to re-run.
-                        </span>
-                    </p>
+                            <p v-if="slowBuild" class="flex items-start gap-2 text-2xs text-warning">
+                                <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
+                                <span class="min-w-0"
+                                    >Picked up a while ago, still no sandbox. Check that terminal for an error — it's safe to re-run.</span
+                                >
+                            </p>
 
-                    <!-- The courtesy, sized like one. -->
-                    <button
-                        type="button"
-                        :class="cmp.linkButton(`gap-1 text-2xs text-subtle hover:text-content`)"
-                        :disabled="checking"
-                        @click="check"
-                    >
-                        <Icon name="refresh" :spin="checking" />
-                        {{ checking ? `Checking…` : `Check now` }}
-                    </button>
+                            <!-- The courtesy, sized like one. -->
+                            <button
+                                type="button"
+                                :class="cmp.linkButton(`gap-1 text-2xs text-subtle hover:text-content`)"
+                                :disabled="checking"
+                                @click="check"
+                            >
+                                <Icon name="refresh" :spin="checking" />
+                                {{ checking ? `Checking…` : `Check now` }}
+                            </button>
+                        </div>
+                        <p v-if="status" class="text-2xs text-warning">{{ status }}</p>
+                    </StepSection>
                 </div>
-                <p v-if="status" class="text-2xs text-warning">{{ status }}</p>
-            </StepSection>
+
+                <!-- The docked half of step 3's reference material (SetupRunDetails carries the reasoning).
+                     Present only while step 3 is, because it is that step's material and nothing else's — the
+                     attach lane runs no command and has nothing to explain here. `hidden` below xl: the same
+                     content is on step 3's (i) hint there, and the hint's trigger is `xl:hidden` in turn, so
+                     exactly one of the two is reachable at any width. -->
+                <aside v-if="created && lane === `provision`" class="hidden xl:sticky xl:top-8 xl:block xl:w-72 xl:shrink-0">
+                    <div class="rounded-2xl border border-line bg-card p-4">
+                        <SetupRunDetails :sync-enabled="syncEnabled" :cleanup="cleanupCommand" />
+                    </div>
+                </aside>
+            </div>
         </div>
     </div>
 </template>
