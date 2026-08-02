@@ -1,65 +1,54 @@
 <script setup lang="ts">
-import { Page, PageHeader, Segmented } from "@intentic-app/ui";
-import { computed, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import type { NavGroup } from "@intentic-app/ui";
+import HubLayout from "../hub/HubLayout.vue";
+import type { HubTab } from "../hub/hubNav";
 import SettingsAppearance from "./settings/SettingsAppearance.vue";
 import SettingsData from "./settings/SettingsData.vue";
 import SettingsKeybindings from "./settings/SettingsKeybindings.vue";
 import SettingsNotifications from "./settings/SettingsNotifications.vue";
 import SettingsProfile from "./settings/SettingsProfile.vue";
 
-/* Personal preferences for the signed-in account (cross-sandbox). Reached from the account avatar. Tabbed like
- * the sandbox hub for symmetry; the selected tab lives in the URL (/settings/<tab>), default profile omits the
- * param. Sandbox-scoped settings (search past chats, import memory) live on the Sandbox ▸ Agent tab, not here. */
+/* Personal preferences for the signed-in account (cross-sandbox). Reached from the account avatar. Built on the
+ * same <HubLayout> as the sandbox hub — the symmetry was the point when both were tab strips, and it is more of
+ * one now that the layout is shared code rather than two copies of the same forty lines.
+ *
+ * ONE UNLABELLED GROUP. Five rows is not a set that needs sorting into piles, and <NavRail> omits the heading
+ * for a single run precisely so a short index does not wear a line of chrome that says nothing. It still earns
+ * the column over the strip it replaced: these five fit a row today, but the reason the sandbox hub's did not
+ * is that a hub's sections accumulate, and having the two answer differently is what put a scrollbar on one of
+ * them without anyone deciding to.
+ *
+ * Sandbox-scoped settings (search past chats, import memory) live on the Sandbox ▸ Agent tab, not here. */
 
-const TABS = [`profile`, `appearance`, `notifications`, `keybindings`, `data`] as const;
-type Tab = (typeof TABS)[number];
-const DEFAULT: Tab = `profile`;
-
-const route = useRoute();
-const router = useRouter();
-
-const activeTab = computed<Tab>(() => {
-    const tab = route.params[`tab`];
-    return typeof tab === `string` && TABS.includes(tab as Tab) ? (tab as Tab) : DEFAULT;
-});
-
-const options = [
-    { label: `Profile`, value: `profile` as Tab },
-    { label: `Appearance`, value: `appearance` as Tab },
-    { label: `Notifications`, value: `notifications` as Tab },
-    { label: `Keybindings`, value: `keybindings` as Tab },
-    { label: `Data`, value: `data` as Tab },
-];
-
-const selectTab = (tab: Tab): void => {
-    void router.push({ name: `settings`, params: { tab: tab === DEFAULT ? undefined : tab } });
-};
-
-// An unknown slug (/settings/nonsense) resolves to the default — clean the URL back to the canonical /settings.
-watch(
-    () => route.params[`tab`],
-    (tab) => {
-        if (typeof tab === `string` && tab.length > 0 && !TABS.includes(tab as Tab)) {
-            void router.replace({ name: `settings` });
-        }
+const GROUPS: readonly NavGroup<HubTab>[] = [
+    {
+        key: `settings`,
+        items: [
+            { slug: `profile`, label: `Profile`, icon: `user` },
+            { slug: `appearance`, label: `Appearance`, icon: `palette` },
+            { slug: `notifications`, label: `Notifications`, icon: `volume-up` },
+            { slug: `keybindings`, label: `Keybindings`, icon: `bolt` },
+            { slug: `data`, label: `Data`, icon: `database` },
+        ],
     },
-    { immediate: true },
-);
+];
+const DEFAULT = `profile`;
 </script>
 
 <template>
-    <Page>
-        <PageHeader title="Settings" description="Your personal preferences on this platform." />
-
-        <div class="scrollbar-thin mb-5 overflow-x-auto border-b border-line pb-2">
-            <Segmented :model-value="activeTab" :options="options" @update:model-value="selectTab" />
-        </div>
-
-        <SettingsProfile v-if="activeTab === `profile`" />
-        <SettingsAppearance v-else-if="activeTab === `appearance`" />
-        <SettingsNotifications v-else-if="activeTab === `notifications`" />
-        <SettingsKeybindings v-else-if="activeTab === `keybindings`" />
-        <SettingsData v-else-if="activeTab === `data`" />
-    </Page>
+    <HubLayout
+        title="Settings"
+        description="Your personal preferences on this platform."
+        route-name="settings"
+        :default-slug="DEFAULT"
+        :groups="GROUPS"
+    >
+        <template #default="{ slug }">
+            <SettingsProfile v-if="slug === `profile`" />
+            <SettingsAppearance v-else-if="slug === `appearance`" />
+            <SettingsNotifications v-else-if="slug === `notifications`" />
+            <SettingsKeybindings v-else-if="slug === `keybindings`" />
+            <SettingsData v-else-if="slug === `data`" />
+        </template>
+    </HubLayout>
 </template>

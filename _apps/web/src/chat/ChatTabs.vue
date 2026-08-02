@@ -408,7 +408,7 @@ const openHistory = (event: Event): void => {
         ref="bar"
         class="relative flex gap-1 border-line"
         :class="[
-            vertical ? 'h-full shrink-0 flex-col items-stretch border-r p-1.5' : 'view-header items-center border-b px-1.5',
+            vertical ? 'h-full shrink-0 flex-col items-stretch p-1.5' : 'view-header items-center border-b px-1.5',
             { 'rail-resizing': railResizing },
         ]"
         :style="vertical ? { width: `${railWidth}px` } : undefined"

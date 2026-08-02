@@ -13,7 +13,7 @@ import { useTerminalActivity } from "../composables/terminal/useTerminalActivity
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 import { commandShortcut } from "../composables/commands/useCommands";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
-import { badgeClass } from "../core-views/viewBadge";
+import { badgeClass, badgeText } from "../core-views/viewBadge";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
@@ -49,7 +49,6 @@ interface AreaTile {
     readonly badge?: ViewBadge;
 }
 
-const badgeText = ({ count = 0 }: ViewBadge): string => (count > 99 ? `99+` : String(count));
 // ONE label per tile, badge included. The badge used to carry a tooltip of its own, nested inside the tile's —
 // and `mouseenter` fires on an element AND every ancestor it entered, so hovering the count opened both boxes,
 // one over the other ("Browsers" behind "1 agent browser open"). What the badge says is a fact ABOUT the tile,

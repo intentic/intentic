@@ -31,3 +31,7 @@ const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
 
 // Absent tone means the resting count — the tone every core surface has always left unset.
 export const badgeClass = (badge: ViewBadge): string => BADGE_TONE[badge.tone ?? `info`];
+
+// What the chip SAYS, on the same terms and for the same reason: the rail, the mobile menu and the hub index
+// all render one, and "99+" is a product decision (the API documents it), not each surface's own rounding.
+export const badgeText = ({ count = 0 }: ViewBadge): string => (count > 99 ? `99+` : String(count));
