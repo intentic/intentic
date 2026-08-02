@@ -8,7 +8,7 @@ export const DEMO_PATH = "/demo/";
 export const ORG_NAME = "intentic";
 export const ORG_TAGLINE = "An IDE for your agents. A window for you.";
 export const ORG_DESCRIPTION =
-    "An IDE for your agents. A window for you. intentic gives each coding agent — Claude Code, Codex, Grok, Kimi Code or Gemini — a sandbox of its own on hardware you own, with the job's dev-tools really installed, wired to your systems, and its own git branch. Run one, or ten in parallel: you watch the board, answer the ones that stop, and read every diff before it lands. Free to start.";
+    "An IDE for your agents. A window for you. intentic gives each coding agent — Claude Code, Codex, Grok, Kimi Code or Gemini — a sandbox of its own on hardware you own, with the job's dev-tools really installed, wired to your systems, and its own git worktree. Run ten at once: you watch the board, answer the ones that stop, and read every diff before it lands. Free to start.";
 export const LOGO_URL = `${SITE_URL}/assets/intentic-logo-sized.png`;
 export const FOUNDER_NAME = "Artur Kurowski";
 export const FOUNDER_URL = "https://gitlab.com/radarsu";

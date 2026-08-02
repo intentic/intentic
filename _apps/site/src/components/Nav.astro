@@ -257,9 +257,11 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         gap: 4px;
         width: max-content;
         max-width: min(94vw, 78rem);
-        background: color-mix(in srgb, var(--color-canvas) 97%, transparent);
-        backdrop-filter: blur(24px);
-        -webkit-backdrop-filter: blur(24px);
+        /* Opaque, not "nearly": the panel sits over the hero's white 3xl heading, and on a canvas this dark
+           even 3% bleed lifts that text ~8/255 — which the blur then spreads into a legible ghost across the
+           menu. The translucency belongs to the nav BAR, which content is meant to scroll under; a menu has
+           to be readable. Nothing behind it means backdrop-filter buys only a compositing layer. */
+        background: var(--color-canvas);
         border: 1px solid var(--color-line);
         border-top: 2px solid var(--color-link);
         border-radius: 14px;

@@ -147,9 +147,9 @@ import { APP_URL, gitlabUrl } from "@intentic-dev/site-content/site";
         inset: 0;
         top: 4rem;
         z-index: 99;
-        background: color-mix(in srgb, var(--color-canvas) 98%, transparent);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
+        /* Opaque for the same reason the desktop menu is: the page behind ghosts through an almost-opaque
+           layer once the blur spreads it, and this overlay covers the whole viewport. */
+        background: var(--color-canvas);
         opacity: 0;
         visibility: hidden;
         transform: translateY(-12px);

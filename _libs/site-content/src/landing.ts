@@ -104,12 +104,15 @@ export const landingContent: LandingContent = {
         // the cut with the claim and the price still in it.
         title: "intentic — An IDE for your agents. A window for you.",
         description:
-            "An IDE for your agents. Each gets its own sandbox and git branch on hardware you own — run ten in parallel, read every diff before it lands. Free.",
+            "An IDE for your agents. Each gets its own sandbox and git worktree on hardware you own — run ten in parallel, read every diff before it lands. Free.",
     },
     hero: {
         headlineLines: ["An IDE for your agents.", "A window for you."],
+        // Short on purpose: the hero states the claim, and #loop is where each half of it gets proved.
+        // "Worktree", not "branch" — a branch is a name, and what keeps ten agents off each other is that
+        // each has a checkout of its own (`_apps/sandbox/src/agents/worktrees.ts`).
         subhead:
-            "Every agent gets a sandbox of its own on hardware you own — the job's dev-tools really installed, wired to your systems — and its own git branch. Run one, or ten in parallel. The window is yours: watch the board, answer the ones that stop, read every diff before it lands.",
+            "Each agent works in its own sandbox and its own git worktree, on hardware you own. Run ten at once; nothing lands in your tree until you have read the diff.",
         chips: ["Free plan", "Bring your own agent", "Runs on your hardware"],
         shot: {
             src: "/assets/product/fleet-board.png",
@@ -127,7 +130,7 @@ export const landingContent: LandingContent = {
     loop: {
         eyebrow: "The loop",
         heading: "Run several at once. Land them one at a time.",
-        sub: "Autonomy still needs a human in it. So the parallel half is safe by construction — one sandbox and one branch each — and the deciding half stays yours. Works with Claude Code, Codex, Grok, Kimi Code and Gemini.",
+        sub: "Autonomy still needs a human in it. So the parallel half is safe by construction — one sandbox and one git worktree each — and the deciding half stays yours. Works with Claude Code, Codex, Grok, Kimi Code and Gemini.",
         beats: [
             {
                 step: "01",
