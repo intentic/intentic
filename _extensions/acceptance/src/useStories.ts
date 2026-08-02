@@ -1,4 +1,4 @@
-import { WorkspaceChildrenSchema, WorkspaceFileSchema, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { WorkspaceChildrenSchema, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
@@ -58,7 +58,7 @@ export function useStories() {
     };
     const text = async (path: string): Promise<string | undefined> => {
         try {
-            return WorkspaceFileSchema.parse(await api.sandbox.json(`/workspace/file?path=${encodeURIComponent(path)}`)).content;
+            return await api.workspace.file(path);
         } catch {
             return undefined;
         }
@@ -107,7 +107,7 @@ export function useStories() {
     // exactly where it is (a title edit must not move a file out from under git) and names only a new one after
     // its title, and that decision belongs where the user can see the filename it produces.
     const save = async (input: { readonly path: string; readonly markdown: string }): Promise<void> => {
-        await api.sandbox.request(`/workspace/upload?path=${encodeURIComponent(input.path)}`, { method: `POST`, body: input.markdown });
+        await api.workspace.write(input.path, input.markdown);
         await invalidate();
     };
 

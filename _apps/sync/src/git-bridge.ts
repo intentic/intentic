@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Log, SyncConfig } from "./config.js";
+import type { Log } from "@intentic/local-agent";
+import type { SyncConfig } from "./config.js";
 import { sshAlias } from "./ssh.js";
 
 /* THE GIT BRIDGE: how commits reach the desktop now that no .git file-syncs (ssh.ts IGNORES). File sync owns

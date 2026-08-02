@@ -4,6 +4,7 @@ import type { Environment } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
 import { capabilityFragments } from "./fragment-sources.js";
+import { statePath } from "../workspace/state-paths.js";
 
 // The overlay Dockerfile extending the sandbox image. The approved file is DAEMON-COMPOSED from three parts:
 // the pinned FROM, the enabled capabilities' code-versioned fragments (see CapabilityHandler.fragment), and the
@@ -13,9 +14,9 @@ import { capabilityFragments } from "./fragment-sources.js";
 // served at intentic.dev/rebuild, or the workspace provider) verifies the approved content against the hash pinned in the rebuild
 // command, builds, and recreates with SANDBOX_ENVIRONMENT_HASH stamped. Status is derived, never stored.
 
-export const proposalPath = (services: Services): string => join(services.workspace.root, ".intentic", "environment.Dockerfile");
-export const approvedPath = (services: Services): string => join(services.workspace.root, ".intentic", "environment.approved.Dockerfile");
-export const customPath = (services: Services): string => join(services.workspace.root, ".intentic", "environment.custom.Dockerfile");
+export const proposalPath = (services: Services): string => statePath(services.workspace.root, ".intentic/environment.Dockerfile");
+export const approvedPath = (services: Services): string => statePath(services.workspace.root, ".intentic/environment.approved.Dockerfile");
+export const customPath = (services: Services): string => statePath(services.workspace.root, ".intentic/environment.custom.Dockerfile");
 
 // The overlay extends the image this sandbox is actually on, not a fixed tag. Hardcoding `:stable` meant every
 // environment rebuild silently rolled the daemon back to the last release: a sandbox started on `:latest` or a
@@ -124,7 +125,7 @@ export const composeEnvironment = async (services: Services): Promise<string | u
 // proposal file makes concurrent drafts a last-writer-wins race in which one agent's request silently vanishes.
 // And naming the file after the tool means two agents that both need ffmpeg converge on one entry instead of
 // appending a near-duplicate each. The owner still reviews exactly one composed proposal.
-export const draftsDir = (services: Services): string => join(services.workspace.root, ".intentic", "environment.d");
+export const draftsDir = (services: Services): string => statePath(services.workspace.root, ".intentic/environment.d/");
 
 const readDrafts = async (services: Services): Promise<string> => {
     const dir = draftsDir(services);

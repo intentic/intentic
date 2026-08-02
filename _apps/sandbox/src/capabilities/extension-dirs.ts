@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-api";
+import { statePath } from "../workspace/state-paths.js";
 
 // Where GIT-INSTALLED extension checkouts live: .intentic/extensions/<id> — daemon-owned state beside
 // capabilities.json (outside the three repos, outside .claude/). Baked extensions live at EXTENSIONS_DIR
 // instead. Both are daemon-owned dirs read with a RAW fs read (extensionRead) — never the agent-facing
 // workspace-scoped read, which refuses paths outside /work (where the baked dir lives).
-export const extensionsRoot = (root: string): string => join(root, ".intentic", "extensions");
+export const extensionsRoot = (root: string): string => statePath(root, ".intentic/extensions/");
 export const extensionDir = (root: string, id: string): string => join(extensionsRoot(root), id);
 
 // The manifest's directory inside a checkout — `config.path` for extensions hosted in a marketplace/monorepo.

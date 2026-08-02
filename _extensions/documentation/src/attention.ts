@@ -1,5 +1,4 @@
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { host } from "./host.js";
 import { SEEN_PATH, stagingKey } from "./paths.js";
@@ -28,16 +27,9 @@ const POLL_MS = 60_000;
 // Repos whose staged set is present and unacknowledged.
 const pending = ref<readonly string[]>([]);
 
-const readSeen = async (): Promise<Record<string, number>> => {
-    try {
-        const body = await host().sandbox.json(`/workspace/file?path=${encodeURIComponent(SEEN_PATH)}`);
-        const parsed = JSON.parse(WorkspaceFileSchema.parse(body).content) as unknown;
-        return typeof parsed === `object` && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, number>) : {};
-    } catch {
-        // No file yet is the ordinary first state: nothing has been reviewed because nothing has been generated.
-        return {};
-    }
-};
+// No file yet is the ordinary first state: nothing has been reviewed because nothing has been generated — which
+// is what api.workspace.readJson answers undefined for.
+const readSeen = async (): Promise<Record<string, number>> => (await host().workspace.readJson<Record<string, number>>(SEEN_PATH)) ?? {};
 
 /* Never throws, and never rejects. This runs on a timer that nothing awaits, so a failure here has no caller to
  * report to — it would surface as an unhandled rejection in the console of an app that is otherwise fine. It also
@@ -94,9 +86,6 @@ export const acknowledgeStaged = async (repo: string): Promise<void> => {
     const api = host();
     const seen = await readSeen();
     const next = { ...seen, [stagingKey(repo)]: Date.now() };
-    await api.sandbox.request(`/workspace/upload?path=${encodeURIComponent(SEEN_PATH)}`, {
-        method: `POST`,
-        body: `${JSON.stringify(next, undefined, 2)}\n`,
-    });
+    await api.workspace.write(SEEN_PATH, `${JSON.stringify(next, undefined, 2)}\n`);
     pending.value = pending.value.filter((entry) => entry !== repo);
 };

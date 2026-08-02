@@ -3,12 +3,13 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildCommand, type CommandContext } from "@stricli/core";
+import { cliLauncher, type Log, registerAutostart, unregisterAutostart } from "@intentic/local-agent";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
-import { registerAutostart, unregisterAutostart } from "./autostart.js";
-import { knownHostsPath, type Log, readConfig, type SyncConfig, type SyncMode, sshKeyPath, writeConfig } from "./config.js";
+import { buildCommand, type CommandContext } from "@stricli/core";
+import { MIRROR_AUTOSTART } from "./autostart.js";
+import { knownHostsPath, readConfig, type SyncConfig, type SyncMode, sshKeyPath, writeConfig } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
-import { type CliLauncher, retireMirror, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
+import { retireMirror, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
 import { ensureCloudflared, ensureMutagen, ensureSyncSession, runMutagen, sessionName } from "./mutagen.js";
 import {
     assertSshConfigVisible,
@@ -218,33 +219,11 @@ const setup = buildCommand<SetupFlags>({
     },
 });
 
-// Bun's compiled-binary virtual filesystem. `bun build --compile` reports process.argv[1] as a path INSIDE the
-// executable ("/$bunfs/root/<name>" on posix, a "~BUN" path on Windows) — matched on the distinctive marker
-// rather than an exact prefix, since only the marker is stable across bun versions and platforms.
-const isBunVirtualEntry = (entry: string): boolean => entry.includes("$bunfs") || entry.includes("~BUN");
-
-// How to re-launch this CLI: the executable, plus any leading argument that must precede the command. Re-exec'd
-// (with `mirror --watch`) to spawn the detached watcher, and written verbatim into the OS autostart entries.
-//
-// `node dist/cli.js` needs the script path, so its launcher is [node, cli.js]. A compiled binary — what the
-// install script actually ships — IS the CLI, and its runtime re-injects that virtual argv[1] on every launch.
-// Passing the entry explicitly therefore pushed it to argv[2], which is where stricli starts reading the command
-// name: every detached watcher died on the spot with "No command registered for `/$bunfs/root/intentic-sync-
-// linux-amd64`", and the autostart entry was persisted with the same broken argv, so port mirroring never ran on
-// a released build at all (`status` reported "No forwarding sessions found" with nothing else to go on).
-export const cliLauncher = (): CliLauncher => {
-    const entry = process.argv[1];
-    if (entry === undefined) {
-        throw new Error("cannot locate the intentic-sync entry to start the mirror watcher");
-    }
-    return isBunVirtualEntry(entry) ? [process.execPath] : [process.execPath, entry];
-};
-
 // Turn mirroring on: register it to resume at every login AND run it now. registerAutostart returns true when
 // the OS mechanism (macOS launchd) already launched this session's watcher, so we don't spawn a second one.
 const enableMirroring = async (log: Log): Promise<void> => {
-    const launcher = cliLauncher();
-    const startedNow = await registerAutostart(launcher, log);
+    const launcher = cliLauncher("intentic-sync");
+    const startedNow = await registerAutostart(MIRROR_AUTOSTART, launcher, log);
     if (!startedNow) {
         await startMirrorWatcher(launcher, log);
     }
@@ -270,7 +249,7 @@ const mirror = buildCommand<MirrorFlags>({
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
         if (flags.stop) {
             // Unregister login-autostart first, so mirroring stays stopped across the next reboot too.
-            await unregisterAutostart(out);
+            await unregisterAutostart(MIRROR_AUTOSTART, out);
             await stopMirror(out);
             return;
         }
@@ -325,7 +304,7 @@ const uninstall = buildCommand<Record<string, never>>({
         // Stop mirroring first: unregister login-autostart, kill the watcher, and tear down its port forwards
         // before the SSH transport goes.
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        await unregisterAutostart(out);
+        await unregisterAutostart(MIRROR_AUTOSTART, out);
         await stopMirror(out);
         const config = await readConfig();
         const mutagen = await ensureMutagen();

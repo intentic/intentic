@@ -1,6 +1,7 @@
+import type { Log } from "@intentic/local-agent";
 import { hostConnectUrl, type HostScopes } from "@intentic/sandbox-contract";
 import { RPCHandler } from "@orpc/server/websocket";
-import type { HostConfigFile, Log } from "./config.js";
+import type { HostConfigFile } from "./config.js";
 import { createHostRouter } from "./router.js";
 
 /* The one socket. This computer dials the sandbox and keeps the connection open; everything the agent asks for

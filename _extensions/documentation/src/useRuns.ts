@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { type AgentSummary, AgentsListSchema, WorkspaceChildrenSchema, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import { type AgentSummary, AgentsListSchema, WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, type Ref } from "vue";
 import { mapBrief, packageBrief } from "./brief.js";
 import { componentOfPackage, parseRepoDoc, type RepoDoc } from "./docModel.js";
@@ -113,13 +113,6 @@ export function useRuns(repo: Ref<string>) {
             return undefined;
         }
     };
-    const file = async (path: string): Promise<string | undefined> => {
-        const body = await json<unknown>(`/workspace/file?path=${encodeURIComponent(path)}`);
-        return body === undefined ? undefined : WorkspaceFileSchema.parse(body).content;
-    };
-    const write = async (path: string, body: string): Promise<void> => {
-        await api.sandbox.request(`/workspace/upload?path=${encodeURIComponent(path)}`, { method: `POST`, body });
-    };
 
     const runsQuery = useQuery({
         queryKey: runsKey,
@@ -135,7 +128,7 @@ export function useRuns(repo: Ref<string>) {
                 .toSorted((left, right) => left.name.localeCompare(right.name))
                 .slice(-SCAN_RUNS)
                 .toReversed();
-            const texts = await Promise.all(dirs.map((entry) => file(runManifestPath(entry.name))));
+            const texts = await Promise.all(dirs.map((entry) => api.workspace.file(runManifestPath(entry.name))));
             return texts.flatMap((text) => (text === undefined ? [] : (parseManifest(text) ?? [])));
         },
     });
@@ -217,7 +210,7 @@ export function useRuns(repo: Ref<string>) {
         };
         // The manifest is written BEFORE the first turn starts, so a run that dies mid-launch is still a run the
         // view can show and advance rather than an invisible half-thing.
-        await write(runManifestPath(runId), `${JSON.stringify(manifest, undefined, 2)}\n`);
+        await api.workspace.write(runManifestPath(runId), `${JSON.stringify(manifest, undefined, 2)}\n`);
         await startAgent(mapConversationId(runId), mapBrief({ repo: input.repo, label: input.label }));
         void queryClient.invalidateQueries({ queryKey: api.sandbox.key(`documentation-runs`) });
         return runId;
@@ -232,7 +225,7 @@ export function useRuns(repo: Ref<string>) {
             if (!row.mapDone) {
                 continue;
             }
-            const text = await file(stagingPath(row.manifest.repo, REPO_DOC_TAIL));
+            const text = await api.workspace.file(stagingPath(row.manifest.repo, REPO_DOC_TAIL));
             const repoDoc: RepoDoc | undefined = text === undefined ? undefined : parseRepoDoc(text);
             // No map means the map agent finished without producing one (it errored, or it was stopped). Starting
             // 40 package agents with no shared vocabulary is worse than leaving the run visibly unfinished.
@@ -269,13 +262,13 @@ export function useRuns(repo: Ref<string>) {
     const stop = async (runId: string): Promise<void> => {
         const row = rows.value.find((entry) => entry.manifest.runId === runId);
         await Promise.all(
-            (row?.agents ?? [])
-                .filter(isLive)
-                .map((agent) => api.sandbox.request(`/agent/stop`, {
+            (row?.agents ?? []).filter(isLive).map((agent) =>
+                api.sandbox.request(`/agent/stop`, {
                     method: `POST`,
                     headers: { "content-type": `application/json` },
                     body: JSON.stringify({ conversationId: agent.id }),
-                })),
+                }),
+            ),
         );
         void queryClient.invalidateQueries({ queryKey: agentsKey.value });
     };

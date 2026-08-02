@@ -71,3 +71,8 @@ scopes), `audit.jsonl` (every call, kept even across an uninstall — it is the 
   the user which switch to flip instead of reporting a broken sandbox and retrying.
 - **The binary is compiled with `bun build --compile`**, so `process.argv[1]` is a path *inside* the executable.
   `cliLauncher()` handles that; passing the entry explicitly to a compiled binary breaks the autostart entry.
+- **The install and lifecycle plumbing is not in this package.** The `~/.intentic/host` home and its 0600 floor,
+  self-relaunch, login autostart and the detached connection loop all come from
+  [`@intentic/local-agent`](../../_libs/local-agent), shared with `@intentic/sync` and `@intentic/acp-bridge`.
+  `src/autostart.ts` here is only this agent's spec — and it declares no macOS `launchAgent`, because the
+  connection loop has never been run on a Mac. Opting in is three lines once someone has.

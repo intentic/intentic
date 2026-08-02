@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { baseDir, type Log, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
+import type { Log } from "@intentic/local-agent";
+import { baseDir, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
 
 // Paths Mutagen must NOT two-way-sync. Its OWN purpose-built list (not the daemon's search-ignore set): it must
 // also exclude secret files + the daemon's .intentic state, which the search-ignore set deliberately keeps visible.

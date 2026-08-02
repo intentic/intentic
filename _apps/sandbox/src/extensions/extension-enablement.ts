@@ -1,6 +1,6 @@
-import { join } from "node:path";
 import { z } from "zod";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
+import { statePath } from "../workspace/state-paths.js";
 
 // The owner's per-extension on/off switch (<workspace>/.intentic/extension-enablement.json), keyed by the
 // manifest-derived extension id (publisher.name) — the same key extension-settings.json uses, so the choice
@@ -16,7 +16,7 @@ type EnablementFile = z.infer<typeof FileSchema>;
 const files = new Map<string, JsonFile<EnablementFile>>();
 
 const enablementFile = (root: string): JsonFile<EnablementFile> => {
-    const path = join(root, ".intentic", "extension-enablement.json");
+    const path = statePath(root, ".intentic/extension-enablement.json");
     const existing = files.get(path);
     if (existing !== undefined) {
         return existing;

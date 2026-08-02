@@ -1,10 +1,11 @@
 import { basename, join, relative, resolve, sep } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { ToolCallContent } from "@intentic/sandbox-contract";
+import { statePath } from "../workspace/state-paths.js";
 
 // The one directory every browser artifact belongs in. It sits outside every repo of the workspace (the root
 // repo excludes `/.intentic/`), so nothing written here can reach the user's Changes panel or a commit.
-export const browserOutputDir = (root: string): string => join(root, ".intentic", "browser", "output");
+export const browserOutputDir = (root: string): string => statePath(root, ".intentic/browser/", "output");
 
 // Its inverse, so the two can't drift. A screenshot has to be named in the WORKSPACE-ROOT-relative route space
 // for the web to fetch it (/workspace/raw), and the output dir is the only thing the turn carries that knows

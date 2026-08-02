@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { WorkspaceChildrenSchema, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import { WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
 import { type DocIndex, type PackageDoc, type RepoDoc, parseDocIndex, parsePackageDoc, parseRepoDoc } from "./docModel.js";
 import { host } from "./host.js";
@@ -39,10 +39,6 @@ export function useDocs(repo: Ref<string>, source: Ref<DocSource>) {
             return undefined;
         }
     };
-    const file = async (path: string): Promise<string | undefined> => {
-        const body = await json<unknown>(`/workspace/file?path=${encodeURIComponent(path)}`);
-        return body === undefined ? undefined : WorkspaceFileSchema.parse(body).content;
-    };
 
     /* The set's three top-level files in one query. A missing set is the ordinary first state for every repo that
      * has never been documented, not an error — so each read answers undefined rather than throwing, and the view
@@ -52,9 +48,9 @@ export function useDocs(repo: Ref<string>, source: Ref<DocSource>) {
         enabled: computed(() => api.sandbox.reachable()),
         queryFn: async (): Promise<DocSetState> => {
             const [repoText, prose, indexText] = await Promise.all([
-                file(pathFor(source.value, repo.value, REPO_DOC_TAIL)),
-                file(pathFor(source.value, repo.value, REPO_PROSE_TAIL)),
-                file(pathFor(source.value, repo.value, INDEX_TAIL)),
+                api.workspace.file(pathFor(source.value, repo.value, REPO_DOC_TAIL)),
+                api.workspace.file(pathFor(source.value, repo.value, REPO_PROSE_TAIL)),
+                api.workspace.file(pathFor(source.value, repo.value, INDEX_TAIL)),
             ]);
             return {
                 repoDoc: repoText === undefined ? undefined : parseRepoDoc(repoText),
@@ -76,8 +72,8 @@ export function useDocs(repo: Ref<string>, source: Ref<DocSource>) {
                     return { doc: undefined, prose: undefined };
                 }
                 const [docText, prose] = await Promise.all([
-                    file(pathFor(source.value, repo.value, packageDocTail(at))),
-                    file(pathFor(source.value, repo.value, packageProseTail(at))),
+                    api.workspace.file(pathFor(source.value, repo.value, packageDocTail(at))),
+                    api.workspace.file(pathFor(source.value, repo.value, packageProseTail(at))),
                 ]);
                 return { doc: docText === undefined ? undefined : parsePackageDoc(docText), prose };
             },

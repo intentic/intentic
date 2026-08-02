@@ -1,7 +1,7 @@
 import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, ProcessStatus, RepoFacts } from "@intentic/extension-api";
 import { extensionApiVersion, extensionIdOf, flattenQuery, mergeQuery, sandboxRouteAllowed } from "@intentic/extension-api";
 import { useTheme } from "@intentic-app/ui";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import { type ExtensionSummary, WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { useChat } from "../composables/chat/useChat";
 import { useAgents } from "../composables/agents/useAgents";
@@ -230,6 +230,38 @@ export const createExtensionApi = (
             onDidChange: (listener) => {
                 const stop = watch([() => host.repos(), () => host.capabilities()], () => listener());
                 return track({ dispose: () => stop() });
+            },
+            // Through guardSandbox and the daemon's own schema, so the manifest grant still applies and the
+            // envelope is validated once here instead of in every extension that reads a file.
+            file: async (path) => {
+                const route = `/workspace/file?path=${encodeURIComponent(path)}`;
+                guardSandbox(route);
+                try {
+                    return WorkspaceFileSchema.parse(await sandboxJson(route)).content;
+                } catch {
+                    // Absent is the ordinary first state, not an error — see IntenticApi.workspace.file.
+                    return undefined;
+                }
+            },
+            readJson: async <T>(path: string): Promise<T | undefined> => {
+                const text = await api.workspace.file(path);
+                if (text === undefined) {
+                    return undefined;
+                }
+                try {
+                    const parsed: unknown = JSON.parse(text);
+                    // Asserted, not validated — same contract as `sandbox.json<T>`: the caller names the shape it
+                    // expects. What IS checked is that it is a record at all, since a bare array or scalar would
+                    // make every property read on it undefined rather than obviously wrong.
+                    return typeof parsed === `object` && parsed !== null && !Array.isArray(parsed) ? (parsed as T) : undefined;
+                } catch {
+                    return undefined;
+                }
+            },
+            write: async (path, body) => {
+                const route = `/workspace/upload?path=${encodeURIComponent(path)}`;
+                guardSandbox(route, { method: `POST` });
+                await sandboxRequest(route, { method: `POST`, body });
             },
         },
         processes: {

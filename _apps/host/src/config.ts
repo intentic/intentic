@@ -1,19 +1,18 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { agentHome, writeSecretFile } from "@intentic/local-agent";
 import type { HostScopes } from "@intentic/sandbox-contract";
 
 // Everything this agent persists lives under ~/.intentic/host: the sandbox it is enrolled with, its enrollment
-// token, the last scopes the sandbox pushed, and the audit log of everything the agent did here.
-export const baseDir = join(homedir(), ".intentic", "host");
-export const configPath = join(baseDir, "config.json");
+// token, the last scopes the sandbox pushed, and the audit log of everything the agent did here. The directory
+// and the 0600 floor on what lands in it belong to @intentic/local-agent — every agent on a user's machine
+// keeps a credential in the same shape, and the one that kept its own copy of this wrote it world-readable.
+const home = agentHome("host");
+export const baseDir = home.dir;
+export const configPath = home.configPath;
 export const auditPath = join(baseDir, "audit.jsonl");
 export const runLogPath = join(baseDir, "host.log");
 export const runPidPath = join(baseDir, "host.pid");
-
-// Where a command writes its user-facing progress: stdout for an interactive command, the timestamped host.log
-// for the detached connection loop. Every entry point owns its sink (the sync agent's convention).
-export type Log = (message: string) => void;
 
 /* What `intentic-host setup` writes and every other command reads back.
  *
@@ -36,10 +35,8 @@ export interface HostConfigFile {
 
 export const readHostConfig = async (): Promise<HostConfigFile> => JSON.parse(await readFile(configPath, "utf8")) as HostConfigFile;
 
-export const writeHostConfig = async (config: HostConfigFile): Promise<void> => {
-    await mkdir(baseDir, { recursive: true, mode: 0o700 });
-    await writeFile(configPath, JSON.stringify(config, undefined, 2), { encoding: "utf8", mode: 0o600 });
-};
+export const writeHostConfig = async (config: HostConfigFile): Promise<void> =>
+    await writeSecretFile(configPath, baseDir, JSON.stringify(config, undefined, 2));
 
 // Persist the scopes the sandbox just pushed, leaving the rest of the config alone. Best-effort by design: the
 // live grant is already in memory and enforcing, so failing to write the cache must never drop the connection.

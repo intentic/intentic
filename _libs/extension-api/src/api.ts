@@ -188,6 +188,32 @@ export interface IntenticApi {
         repos(): readonly RepoFacts[];
         capabilities(): readonly CapabilityFacts[];
         onDidChange(listener: () => void): Disposable;
+        /* READING AND WRITING WORKSPACE FILES — the daemon's file routes, without the encoding.
+         *
+         * Extensions keep their durable state in the workspace rather than in settings: an acceptance run's
+         * reports, a documentation set's staging tree, the "what has the rail badge already shown" file each of
+         * them keeps. That is the right home — it survives a reload, it is shared across the owner's browsers,
+         * and the agent writing into it out-of-band is the whole point — but it left every extension spelling
+         * `sandbox.json(\`/workspace/file?path=${encodeURIComponent(path)}\`)` and then parsing the envelope out
+         * of the answer. Three extensions had five byte-identical copies of that one function.
+         *
+         * Gated exactly as `sandbox.request`/`sandbox.json` are: these go through the same permission check, so
+         * an extension still declares `GET /workspace/file` and `POST /workspace/upload` in its manifest and one
+         * that doesn't is still refused. This removes the encoding, not the grant. */
+        // The file's text, or undefined when it is not there. Absent is the ordinary FIRST state for most of what
+        // extensions keep — nothing has been acknowledged because nothing has been seen — so it is a value here,
+        // not a throw every caller would have to wrap.
+        file(path: string): Promise<string | undefined>;
+        /* The file parsed as a JSON object, or undefined when it is absent, truncated, or not an object at all.
+         *
+         * One tolerant reader rather than one per caller. These files are written by agents and editable by
+         * hand, so a half-written or hand-mangled one is a case that WILL happen, and "skip it" is the right
+         * answer everywhere: one bad file must never blank the surface that reads it. Arrays answer undefined
+         * too — every caller of this wants a record. */
+        readJson<T>(path: string): Promise<T | undefined>;
+        // Create or replace a workspace file. Throws on failure, unlike the reads: a write that silently did
+        // nothing would lose the thing the caller was told was saved.
+        write(path: string, body: string): Promise<void>;
     };
     // The extension's OWN declared background processes — names outside the manifest are refused.
     readonly processes: {

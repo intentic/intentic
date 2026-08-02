@@ -1,9 +1,8 @@
-import { openSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { rm } from "node:fs/promises";
+import { cliLauncher, livePid, type Log, registerAutostart, spawnDetached, unregisterAutostart, writeSecretFile } from "@intentic/local-agent";
 import { buildCommand, type CommandContext } from "@stricli/core";
-import { cliLauncher, registerAutostart, unregisterAutostart } from "./autostart.js";
-import { auditPath, configPath, type HostConfigFile, type Log, readHostConfig, runLogPath, runPidPath, writeHostConfig } from "./config.js";
+import { HOST_AUTOSTART } from "./autostart.js";
+import { auditPath, baseDir, configPath, type HostConfigFile, readHostConfig, runLogPath, runPidPath, writeHostConfig } from "./config.js";
 import { connect } from "./connection.js";
 import { HOST_VERSION } from "./version.js";
 
@@ -53,50 +52,19 @@ export const enroll = async (
     }
 };
 
-const alive = (pid: number): boolean => {
-    try {
-        // Signal 0 tests for the process without touching it — EPERM means it exists and is somebody else's.
-        process.kill(pid, 0);
-        return true;
-    } catch (error) {
-        return (error as NodeJS.ErrnoException).code === "EPERM";
-    }
-};
-
-const livePid = async (): Promise<number | undefined> => {
-    const pid = Number((await readFile(runPidPath, "utf8").catch(() => "")).trim());
-    if (!Number.isInteger(pid) || pid <= 0) {
-        return undefined;
-    }
-    return alive(pid) ? pid : undefined;
-};
-
-/* Windows gets `windowsHide`, NOT `detached`. DETACHED_PROCESS leaves the child with no console, and Windows
- * then gives every console grandchild one of its own — so each command the agent runs would flash a black
- * window on the user's desktop. Windows keeps a child alive after its parent exits anyway, so what is needed
- * here is a console with no window, which every descendant inherits. (The sync agent learned this the hard way,
- * with three windows popping up every five seconds.) */
-const detachedOptions = (platform: NodeJS.Platform): { readonly detached: true } | { readonly windowsHide: true } =>
-    platform === "win32" ? { windowsHide: true } : { detached: true };
-
+// Idempotent: a live connection already covers this machine, so a second start is a no-op.
 const startDetached = async (log: Log): Promise<void> => {
-    const existing = await livePid();
+    const existing = await livePid(runPidPath);
     if (existing !== undefined) {
         log(`already connected (pid ${existing}).`);
         return;
     }
-    const logFd = openSync(runLogPath, "a");
-    const [command, ...leading] = cliLauncher();
-    const child = spawn(command, [...leading, "run", "--foreground"], {
-        ...detachedOptions(process.platform),
-        stdio: ["ignore", logFd, logFd],
-    });
-    child.unref();
-    log(`connected in the background (pid ${child.pid}). Details: ${runLogPath}`);
+    const pid = spawnDetached(runLogPath, cliLauncher("intentic-host"), HOST_AUTOSTART.foregroundArgs);
+    log(`connected in the background (pid ${pid}). Details: ${runLogPath}`);
 };
 
 const stopDetached = async (log: Log): Promise<void> => {
-    const pid = await livePid();
+    const pid = await livePid(runPidPath);
     if (pid === undefined) {
         log("not running.");
         return;
@@ -136,8 +104,11 @@ const setup = buildCommand<SetupFlags>({
         // Stop whatever the previous pairing left resident before the new config replaces it — otherwise a
         // process started from an older binary quietly adopts this pairing and every fix since stays inert.
         await stopDetached(() => {});
-        await registerAutostart(cliLauncher(), out);
-        await startDetached(out);
+        // registerAutostart answers true when the OS mechanism also started this session (macOS launchd does);
+        // host declares no LaunchAgent yet, so it always covers the session itself.
+        if (!(await registerAutostart(HOST_AUTOSTART, cliLauncher("intentic-host"), out))) {
+            await startDetached(out);
+        }
         out(`This computer is connected as "${id}". Its permissions are set in the sandbox, on the same card you got this command from.`);
     },
 });
@@ -166,7 +137,7 @@ const run = buildCommand<RunFlags>({
             return;
         }
         const config = await readHostConfig();
-        await writeFile(runPidPath, String(process.pid), { mode: 0o600 });
+        await writeSecretFile(runPidPath, baseDir, String(process.pid));
         // host.log is long-lived, so bare lines in it are useless — every line is stamped.
         const log: Log = (message) => void this.process.stdout.write(`[${new Date().toISOString()}] ${message}\n`);
         const connection = connect(config, HOST_VERSION, log);
@@ -191,7 +162,7 @@ const status = buildCommand<Record<string, never>>({
             out("This computer is not connected to a sandbox. Run the connect command from a computer card in your sandbox.");
             return;
         }
-        const pid = await livePid();
+        const pid = await livePid(runPidPath);
         out(`Connected as: ${config.id}`);
         out(`Sandbox:      ${config.sandboxUrl}`);
         out(`Agent:        v${HOST_VERSION} — ${pid === undefined ? "NOT running (start it with `intentic-host run`)" : `running (pid ${pid})`}`);
@@ -212,7 +183,7 @@ const uninstall = buildCommand<Record<string, never>>({
     async func(this: CommandContext) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
         await stopDetached(out);
-        await unregisterAutostart(out);
+        await unregisterAutostart(HOST_AUTOSTART, out);
         // The credential goes; the audit log stays. It is the user's record of what was done to their machine,
         // and deleting it as part of "uninstall" would erase the evidence at exactly the moment somebody might
         // be uninstalling BECAUSE they want to know what happened.

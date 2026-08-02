@@ -1,13 +1,13 @@
 {
-    "name": "@intentic/acp-bridge",
+    "name": "@intentic/local-agent",
     "version": "0.0.0",
-    "description": "ACP agent bridge for intentic \u2014 drive the agents in your intentic sandbox (Claude, Codex, Grok, any ACP agent) from Zed, JetBrains, or any ACP editor",
+    "description": "The plumbing every intentic CLI that lives on a user's own computer needs — state home, login autostart, self-relaunch, detached background loop",
     "license": "MIT",
     "type": "module",
     "repository": {
         "type": "git",
         "url": "git+https://gitlab.com/radarsu/intentic.git",
-        "directory": "_apps/acp-bridge"
+        "directory": "_libs/local-agent"
     },
     "files": [
         "dist"
@@ -16,8 +16,18 @@
         "access": "public",
         "registry": "https://registry.npmjs.org/"
     },
-    "bin": {
-        "intentic-acp": "./dist/cli.js"
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        }
     },
     "scripts": {
         "build": "tsgo",
@@ -27,14 +37,9 @@
         "test:watch": "vitest"
     },
     "dependencies": {
-        "@agentclientprotocol/sdk": "catalog:",
-        "@intentic/local-agent": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*",
-        "tslib": "catalog:",
-        "zod": "catalog:"
+        "tslib": "catalog:"
     },
     "devDependencies": {
-        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",

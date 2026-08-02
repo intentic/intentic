@@ -563,10 +563,15 @@ const openHistory = (event: Event): void => {
         </div>
 
         <!-- THE SHEET. Pinned to the column's width under the header, capped so the transcript is never
-             completely covered by the list of things it is one of. -->
+             completely covered by the list of things it is one of.
+             ON CANVAS, not on the panel's card colour: the list's cards are opaque and one step lighter than
+             the ground they lie on (see ChatTabList's .rail-card), which only holds if both of its hosts hand
+             it the same ground. The rail out in the pop-out window is a canvas body; this paints one. The
+             strong edge and the shadow are what make it a sheet floating over the transcript — the fill was
+             never carrying that. -->
         <div
             v-if="listOpen && !vertical"
-            class="absolute inset-x-1.5 top-full z-30 mt-1 flex max-h-[60vh] flex-col overflow-hidden rounded-xl border border-line-strong bg-card p-1.5 shadow-lg"
+            class="absolute inset-x-1.5 top-full z-30 mt-1 flex max-h-[60vh] flex-col overflow-hidden rounded-xl border border-line-strong bg-canvas p-1.5 shadow-lg"
         >
             <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen" />
         </div>

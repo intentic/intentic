@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
+import { statePath } from "../workspace/state-paths.js";
 
 // A minimal anti-detection init script, run in every page before its own scripts. Headed full Chromium under
 // Xvfb already looks like a real browser (real window.chrome, plugins, normal UA); this patches the residual
@@ -26,7 +27,7 @@ export const STEALTH_INIT = `(() => {
 })();
 `;
 
-const stealthScriptPath = (root: string): string => join(root, ".intentic", "browser", "stealth.js");
+const stealthScriptPath = (root: string): string => statePath(root, ".intentic/browser/", "stealth.js");
 
 // Write the stealth script to disk (idempotent) so @playwright/mcp can load it via --init-script; returns the path.
 export const ensureStealthScript = async (root: string): Promise<string> => {

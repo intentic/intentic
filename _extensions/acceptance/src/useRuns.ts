@@ -1,11 +1,4 @@
-import {
-    type AgentSummary,
-    AgentsListSchema,
-    StartedTurnSchema,
-    BrowsersListSchema,
-    WorkspaceChildrenSchema,
-    WorkspaceFileSchema,
-} from "@intentic/sandbox-contract";
+import { type AgentSummary, AgentsListSchema, StartedTurnSchema, BrowsersListSchema, WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
@@ -90,10 +83,6 @@ export function useRuns() {
             return undefined;
         }
     };
-    const file = async (path: string): Promise<string | undefined> => {
-        const parsed = await json<unknown>(`/workspace/file?path=${encodeURIComponent(path)}`);
-        return parsed === undefined ? undefined : WorkspaceFileSchema.parse(parsed).content;
-    };
 
     const runsQuery = useQuery({
         queryKey: runsKey,
@@ -105,7 +94,7 @@ export function useRuns() {
                 return [];
             }
             const dirs = WorkspaceChildrenSchema.parse(listing).entries.filter((entry) => entry.type === `dir`);
-            const manifests = await Promise.all(dirs.map(async (entry) => await file(`${entry.path}/run.json`)));
+            const manifests = await Promise.all(dirs.map(async (entry) => await api.workspace.file(`${entry.path}/run.json`)));
             return manifests
                 .flatMap((text) => (text === undefined ? [] : [parseManifest(text)]))
                 .flatMap((manifest) => (manifest === undefined ? [] : [manifest]))
@@ -195,7 +184,8 @@ export function useRuns() {
                     scanned.value.map(async (run) => {
                         const results = await Promise.all(
                             run.stories.map(
-                                async (story) => [story.slug, parseResult((await file(resultPath(run.runId, story.slug))) ?? ``)?.verdict] as const,
+                                async (story) =>
+                                    [story.slug, parseResult((await api.workspace.file(resultPath(run.runId, story.slug))) ?? ``)?.verdict] as const,
                             ),
                         );
                         // The run's own key exists even when every story is still walking: "scanned, nothing
@@ -225,7 +215,10 @@ export function useRuns() {
                 }
                 const outcomes = await Promise.all(
                     manifest.stories.map(async (story) => {
-                        const [result, report] = await Promise.all([file(resultPath(id, story.slug)), file(reportPath(id, story.slug))]);
+                        const [result, report] = await Promise.all([
+                            api.workspace.file(resultPath(id, story.slug)),
+                            api.workspace.file(reportPath(id, story.slug)),
+                        ]);
                         const parsed = result === undefined ? undefined : parseResult(result);
                         return [
                             story.slug,
@@ -253,10 +246,7 @@ export function useRuns() {
             model: input.model,
             stories: input.stories,
         });
-        await api.sandbox.request(`/workspace/upload?path=${encodeURIComponent(runManifestPath(runId))}`, {
-            method: `POST`,
-            body: JSON.stringify(manifest, null, 2),
-        });
+        await api.workspace.write(runManifestPath(runId), JSON.stringify(manifest, null, 2));
         // Fired together rather than in sequence: the fleet runs them in parallel anyway, and awaiting each ack
         // in turn would make the last story's card appear seconds after the first's for no reason. The manifest's
         // own story entries are what the turns are built from, so the conversation id on disk is the one started.

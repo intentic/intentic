@@ -1,5 +1,4 @@
 import type { Disposable } from "@intentic/extension-api";
-import { WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { parseDocIndex } from "./docModel.js";
 import { host } from "./host.js";
@@ -43,10 +42,9 @@ const documents = ref<ReadonlyMap<string, DocumentPresence>>(new Map());
  * the view's own package list has, and the same fix. */
 const publishedEntries = async (repo: string): Promise<ReadonlyMap<string, string>> => {
     try {
-        const body = await host().sandbox.json(`/workspace/file?path=${encodeURIComponent(publishedPath(repo, INDEX_TAIL))}`);
         // An index that does not parse is an index that says nothing — the same answer as a missing one, and not
         // this module's business to complain about: the view renders the set, and the tool regenerates it.
-        const index = parseDocIndex(WorkspaceFileSchema.parse(body).content);
+        const index = parseDocIndex((await host().workspace.file(publishedPath(repo, INDEX_TAIL))) ?? ``);
         return new Map((index?.entries ?? []).map((entry) => [entry.dir, entry.oneLiner] as const));
     } catch {
         // No index is the ordinary state of a repository nobody has documented yet.

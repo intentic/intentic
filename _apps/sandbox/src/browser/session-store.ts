@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import type { BrowserPlatform } from "@intentic/sandbox-contract";
+import { statePath } from "../workspace/state-paths.js";
 
 // A logged-in browser session for one social platform. The session IS a persistent Chromium profile: the
 // guided-login flow (system/browser-login.ts) writes it, the agent's @playwright/mcp reads it via
@@ -9,12 +10,12 @@ import type { BrowserPlatform } from "@intentic/sandbox-contract";
 // gitignored, never committed) on the /work volume, so it survives a sandbox rebuild like claude.json does.
 
 // The Chromium `--user-data-dir` for a platform.
-export const sessionDir = (root: string, platform: BrowserPlatform): string => join(root, ".intentic", "browser", platform);
+export const sessionDir = (root: string, platform: BrowserPlatform): string => statePath(root, ".intentic/browser/", platform);
 
 // A completed-login marker, kept OUTSIDE the profile dir so Chromium never rewrites it. A bare profile dir
 // exists the moment Chromium launches (before any login), so its presence can't mean "connected" — the marker,
 // written only when the owner finishes the guided login, is the real "connected" probe.
-const markerPath = (root: string, platform: BrowserPlatform): string => join(root, ".intentic", "browser", `${platform}.connected`);
+const markerPath = (root: string, platform: BrowserPlatform): string => statePath(root, ".intentic/browser/", `${platform}.connected`);
 
 export const hasSession = (root: string, platform: BrowserPlatform): boolean => existsSync(markerPath(root, platform));
 

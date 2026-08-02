@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/vue-query";
-import { GitStatusSchema, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import { GitStatusSchema } from "@intentic/sandbox-contract";
 import { refreshDocumentPresence } from "./docPresence.js";
 import { host } from "./host.js";
 import { DOCS_DIR, stagingDir, stagingPath } from "./paths.js";
@@ -39,14 +39,7 @@ export function usePublish() {
     const api = host();
     const queryClient = useQueryClient();
 
-    const readStaged = async (repo: string, tail: string): Promise<string | undefined> => {
-        try {
-            const body = await api.sandbox.json(`/workspace/file?path=${encodeURIComponent(stagingPath(repo, tail))}`);
-            return WorkspaceFileSchema.parse(body).content;
-        } catch {
-            return undefined;
-        }
-    };
+    const readStaged = async (repo: string, tail: string): Promise<string | undefined> => await api.workspace.file(stagingPath(repo, tail));
 
     const preflight = async (repo: string): Promise<Preflight> => {
         const tails = await listStagedTails(api, repo);

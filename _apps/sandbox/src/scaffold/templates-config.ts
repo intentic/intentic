@@ -1,7 +1,7 @@
-import { join } from "node:path";
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE, fetchTemplateManifest, type TemplateManifest } from "@intentic/scaffold";
 import type { TemplateSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import { statePath } from "../workspace/state-paths.js";
 
 export interface TemplatesConfig {
     readonly source: string;
@@ -12,7 +12,7 @@ export interface TemplatesConfig {
 // common case) → the baked-in canonical default. Malformed JSON propagates so a broken override surfaces rather
 // than silently reverting to the default.
 export const readTemplatesConfig = async (services: Services): Promise<TemplatesConfig> => {
-    const raw = await services.files.read(join(services.workspace.root, ".intentic", "templates.json"));
+    const raw = await services.files.read(statePath(services.workspace.root, ".intentic/templates.json"));
     if (raw === undefined) {
         return { source: DEFAULT_TEMPLATE_SOURCE, ref: DEFAULT_TEMPLATE_REF };
     }

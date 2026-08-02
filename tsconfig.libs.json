@@ -10,6 +10,7 @@
         { "path": "_libs/providers" },
         { "path": "_libs/sandbox-contract" },
         { "path": "_libs/desktop" },
+        { "path": "_libs/local-agent" },
         { "path": "_libs/browser" },
         { "path": "_libs/workspace-ignore" },
         { "path": "_libs/workspace-setup" },

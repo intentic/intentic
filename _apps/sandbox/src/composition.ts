@@ -150,6 +150,7 @@ import {
     writeWorkspaceFileStream,
 } from "./workspace/workspace-files.js";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/workspace-tree.js";
+import { statePath } from "./workspace/state-paths.js";
 
 /* The daemon's collaborators, wired once at boot and handed to the route factories — the injection seam the
  * route tests build fakes against (the equivalent of the old createDaemon `deps` object). Stateful members
@@ -502,7 +503,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const openCode = createOpenCodeService(authRoot);
     const info =
         config.sandbox.name !== "" && config.sandbox.image !== "" ? { name: config.sandbox.name, image: config.sandbox.image, version } : undefined;
-    const members = fileMembersStore(join(workspace.root, ".intentic", "members.json"));
+    const members = fileMembersStore(statePath(workspace.root, ".intentic/members.json"));
     // The session secret lives under historyRoot (like the activity/usage ledgers) — daemon-private, outside
     // the workspace, and persistent, so a daemon restart doesn't sign every browser out.
     const sessions = createSessions(join(config.historyRoot, "session-secret"));
@@ -511,7 +512,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             ? createAuthorizer({
                   verify: createGoogleVerifier(config.google.clientId),
                   session: sessions.verify,
-                  owner: fileOwnerStore(join(workspace.root, ".intentic", "owner.json")),
+                  owner: fileOwnerStore(statePath(workspace.root, ".intentic/owner.json")),
                   members,
                   ...(config.connectToken !== "" ? { connectToken: config.connectToken } : {}),
                   ...(config.owner.email !== "" ? { expectedOwner: config.owner.email } : {}),
@@ -567,10 +568,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // second instance would answer from a stale agents.json.
     const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")), createLandStandings(agentWorktrees));
     // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
-    const capabilities = fileCapabilitiesStore(join(workspace.root, ".intentic", "capabilities.json"), (id, reason) =>
+    const capabilities = fileCapabilitiesStore(statePath(workspace.root, ".intentic/capabilities.json"), (id, reason) =>
         logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
     );
-    const ciStore = fileCiStore(join(workspace.root, ".intentic", "ci.json"));
+    const ciStore = fileCiStore(statePath(workspace.root, ".intentic/ci.json"));
     // Hoisted: the background probe runner writes the same cache the /chores route reads, and a second store
     // instance would answer a poll from a file the runner had already moved past.
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
@@ -611,19 +612,19 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ciStore,
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
-        komodoStore: fileKomodoStore(join(workspace.root, ".intentic", "komodo.json")),
-        bridgeTokens: fileBridgeTokens(join(workspace.root, ".intentic", "bridge-tokens.json")),
-        automations: fileAutomationsStore(join(workspace.root, ".intentic", "automations.json")),
-        loops: fileLoopsStore(join(workspace.root, ".intentic", "loops.json")),
+        komodoStore: fileKomodoStore(statePath(workspace.root, ".intentic/komodo.json")),
+        bridgeTokens: fileBridgeTokens(statePath(workspace.root, ".intentic/bridge-tokens.json")),
+        automations: fileAutomationsStore(statePath(workspace.root, ".intentic/automations.json")),
+        loops: fileLoopsStore(statePath(workspace.root, ".intentic/loops.json")),
         chores,
         probeRunner: createProbeRunner({ workspace, chores, agents, logger }),
-        approvals: fileApprovalsStore(join(workspace.root, ".intentic", "approvals")),
-        threadSessions: fileThreadSessionsStore(join(workspace.root, ".intentic", "thread-sessions.json")),
-        drafts: fileDraftsStore(join(workspace.root, ".intentic", "drafts")),
+        approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/approvals/")),
+        threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/thread-sessions.json")),
+        drafts: fileDraftsStore(statePath(workspace.root, ".intentic/drafts/")),
         turnJournal: fileTurnJournal(join(config.historyRoot, "turns")),
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
-        sandboxSettings: fileSandboxSettingsStore(join(workspace.root, ".intentic", "settings.json")),
+        sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/settings.json")),
         push: pushStore,
         pushSender: createPushSender(pushStore, logger),
         claudeStore,

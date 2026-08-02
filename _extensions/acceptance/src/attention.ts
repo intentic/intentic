@@ -1,4 +1,4 @@
-import { WorkspaceChildrenSchema, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import { WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { ref } from "vue";
 import { host } from "./host";
@@ -40,10 +40,7 @@ const refresh = async (): Promise<void> => {
                 return undefined;
             }
         };
-        const text = async (path: string): Promise<string | undefined> => {
-            const parsed = await json<unknown>(`/workspace/file?path=${encodeURIComponent(path)}`);
-            return parsed === undefined ? undefined : WorkspaceFileSchema.parse(parsed).content;
-        };
+        const text = api.workspace.file;
 
         const listing = await json<unknown>(`/workspace/children?path=${encodeURIComponent(RUNS_DIR)}`);
         if (listing === undefined) {
@@ -124,10 +121,7 @@ export const markAcceptanceSeen = async (): Promise<void> => {
             return;
         }
         unseen.value = [];
-        await api.sandbox.request(`/workspace/upload?path=${encodeURIComponent(SEEN_PATH)}`, {
-            method: `POST`,
-            body: JSON.stringify({ at: Date.now() }),
-        });
+        await api.workspace.write(SEEN_PATH, JSON.stringify({ at: Date.now() }));
     } catch {
         // See above.
     }

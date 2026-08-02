@@ -1,11 +1,11 @@
-import { spawn, spawnSync } from "node:child_process";
-import { openSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { rm } from "node:fs/promises";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
+import { type CliLauncher, isProcessAlive, livePid, type Log, spawnDetached, unregisterAutostart, writeSecretFile } from "@intentic/local-agent";
 import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
-import { unregisterAutostart } from "./autostart.js";
-import { type Log, type MirroredPort, mirrorLogPath, mirrorPidPath, readConfig, type SyncConfig, writeConfig } from "./config.js";
+import { MIRROR_AUTOSTART } from "./autostart.js";
+import { baseDir, type MirroredPort, mirrorLogPath, mirrorPidPath, readConfig, type SyncConfig, writeConfig } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { ensureMutagen, ensureSyncSession, forwardSessionName, mutagenForwardArgs, ourForwardSessions, runMutagen } from "./mutagen.js";
 import { sshAlias } from "./ssh.js";
@@ -15,10 +15,6 @@ import { sshAlias } from "./ssh.js";
 // development feel local — a frontend baked with `https://localhost:6480` just works (cookies + CORS included)
 // because localhost IS serving it. A resident watcher polls the daemon's /ports so a dev server started later
 // (Vite grabbing a fresh random port) is mirrored within a poll, with no user action.
-
-// How to re-invoke this CLI: the executable followed by any leading args the command must come after. Non-empty
-// by construction — see cliLauncher in commands.ts, which is the only thing that builds one.
-export type CliLauncher = readonly [string, ...string[]];
 
 // How often the watcher re-reads the sandbox's ports. Fast enough that a just-started dev server is reachable
 // before the user finishes alt-tabbing to the browser; slow enough to be free.
@@ -159,26 +155,8 @@ const sameMirrorSet = (a: readonly MirroredPort[], b: readonly MirroredPort[]): 
     return b.every((mirrored) => seen.has(mirrorKey(mirrored)));
 };
 
-// Whether a pid is a live process: `process.kill(pid, 0)` throws ESRCH for a dead one, while EPERM means it
-// exists but belongs to another user — which still counts as alive.
-const alive = (pid: number): boolean => {
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (error) {
-        return (error as NodeJS.ErrnoException).code === "EPERM";
-    }
-};
-
-// The pidfile is how `mirror`/`--stop`/`uninstall`/`setup` find the resident watcher across processes. A stale
-// pidfile (the watcher crashed) reads as "not running".
-export const readLiveWatcherPid = async (): Promise<number | undefined> => {
-    const pid = Number((await readFile(mirrorPidPath, "utf8").catch(() => "")).trim());
-    if (!Number.isInteger(pid) || pid <= 0) {
-        return undefined;
-    }
-    return alive(pid) ? pid : undefined;
-};
+// The pidfile is how `mirror`/`--stop`/`uninstall`/`setup` find the resident watcher across processes.
+export const readLiveWatcherPid = async (): Promise<number | undefined> => await livePid(mirrorPidPath);
 
 // On SIGTERM/SIGINT the watcher drops its pidfile and exits, leaving the forwards up (Mutagen's daemon holds
 // them) so a restart never breaks live connections.
@@ -187,7 +165,7 @@ const watcherShutdown = (): void => void rm(mirrorPidPath, { force: true }).fina
 // The watcher loop — one resident process per machine (sync is single-holder, so one is always enough). Started
 // detached by `startMirrorWatcher`; also runnable in the foreground (`mirror --watch`) to watch it live.
 export const runMirrorWatch = async (log: Log): Promise<void> => {
-    await writeFile(mirrorPidPath, String(process.pid), { mode: 0o600 });
+    await writeSecretFile(mirrorPidPath, baseDir, String(process.pid));
     // Stop polling on signal, but leave the forwards up — Mutagen's daemon holds them, so a watcher restart
     // never drops the user's connections. Only `--stop`/`uninstall` tear the forwards down.
     process.on("SIGTERM", watcherShutdown);
@@ -229,7 +207,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                 // (and resurrecting at every login).
                 if (error instanceof SyncAuthError && ++rejectedPolls >= REVOKED_POLLS) {
                     log(`the sandbox rejected the sync token ${REVOKED_POLLS} polls in a row — this machine's enrollment was revoked.`);
-                    await unregisterAutostart(log);
+                    await unregisterAutostart(MIRROR_AUTOSTART, log);
                     log(stopped(await teardownForwards(mutagen)));
                     await rm(mirrorPidPath, { force: true });
                     log("re-enable from the Desktop sync card, or run `intentic-sync uninstall` to remove the agent entirely.");
@@ -253,25 +231,8 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     }
 };
 
-// How the watcher outlives the command that started it — and the two platforms want OPPOSITE flags.
-//
-// POSIX: `detached` gives it its own session, so the terminal that launched it can't take it down.
-//
-// Windows: `detached` is DETACHED_PROCESS, which leaves the watcher with NO CONSOLE. Windows then gives every
-// console child of a console-less process a console of its own, and "creating a new console results in a new
-// console window" — so the git → ssh → cloudflared the git bridge runs on EVERY tick became three black
-// windows popping up and closing every five seconds, forever, on a machine that was otherwise idle. Windows
-// keeps the process alive after its parent exits by itself, so what it needs here is not detachment but a
-// console with no window: CREATE_NO_WINDOW, which every descendant inherits and stays invisible in.
-//
-// The two cannot be combined — CREATE_NO_WINDOW "is ignored ... if it is used with either CREATE_NEW_CONSOLE
-// or DETACHED_PROCESS" — so passing both, as this used to, is exactly passing neither. Mutagen meets the same
-// rule from the other side: its daemon IS detached, so it has to spawn every ssh with CREATE_NEW_CONSOLE plus
-// a hidden window (pkg/agent/transport/process_windows.go) to keep them off the screen.
-export const detachedSpawnOptions = (platform: NodeJS.Platform): { readonly detached: true } | { readonly windowsHide: true } =>
-    platform === "win32" ? { windowsHide: true } : { detached: true };
-
-// Start the watcher so it outlives the terminal that launched it, its stdout appended to mirror.log.
+// Start the watcher so it outlives the terminal that launched it, its stdout appended to mirror.log — including
+// the Windows console rule that decides which spawn flags it gets (see @intentic/local-agent's detached.ts).
 // Idempotent: a live watcher already covers this machine, so a second start is a no-op (the single-holder
 // invariant means one watcher is always enough). `launcher` is how to re-invoke this CLI (see cliLauncher).
 export const startMirrorWatcher = async (launcher: CliLauncher, log: Log): Promise<void> => {
@@ -280,14 +241,8 @@ export const startMirrorWatcher = async (launcher: CliLauncher, log: Log): Promi
         log(`port mirroring is already running (pid ${existing}).`);
         return;
     }
-    const logFd = openSync(mirrorLogPath, "a");
-    const [command, ...leading] = launcher;
-    const child = spawn(command, [...leading, "mirror", "--watch"], {
-        ...detachedSpawnOptions(process.platform),
-        stdio: ["ignore", logFd, logFd],
-    });
-    child.unref();
-    log(`mirroring the sandbox's workspace ports onto localhost (pid ${child.pid}). Details: ${mirrorLogPath}`);
+    const pid = spawnDetached(mirrorLogPath, launcher, MIRROR_AUTOSTART.foregroundArgs);
+    log(`mirroring the sandbox's workspace ports onto localhost (pid ${pid}). Details: ${mirrorLogPath}`);
 };
 
 // Tear down every forward session this agent owns — read from the DAEMON, not from the config's baseline. A
@@ -333,7 +288,7 @@ export const retireMirror = async (mutagen: string): Promise<RetiredMirror> => {
         } catch {
             // already gone between the read and the kill — nothing to stop
         }
-        for (let waited = 0; waited < WATCHER_EXIT_TIMEOUT_MS && alive(pid); waited += WATCHER_EXIT_POLL_MS) {
+        for (let waited = 0; waited < WATCHER_EXIT_TIMEOUT_MS && isProcessAlive(pid); waited += WATCHER_EXIT_POLL_MS) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded wait for one pid, by definition serial
             await sleep(WATCHER_EXIT_POLL_MS);
         }

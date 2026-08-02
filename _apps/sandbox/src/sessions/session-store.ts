@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { statePath } from "../workspace/state-paths.js";
 
 // The Claude Agent SDK keeps its per-conversation state under ~/.claude — the container's ephemeral fs, wiped
 // on every rebuild while /work survives. Point every conversation-owned store at the workspace volume before
@@ -42,7 +43,7 @@ const persistRetention = async (claudeHome: string): Promise<void> => {
 };
 
 export const linkClaudeState = async (workspaceRoot: string, home = homedir()): Promise<void> => {
-    const store = join(workspaceRoot, ".intentic", "claude");
+    const store = statePath(workspaceRoot, ".intentic/claude/");
     const claudeHome = join(home, ".claude");
     await mkdir(claudeHome, { recursive: true });
     // A real (non-symlink) entry only happens outside the container (a dev-host run) — never clobber real

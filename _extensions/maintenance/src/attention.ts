@@ -1,6 +1,6 @@
 import { assessReport, type ChoreVerdict, ledgerKey, unseenVerdicts } from "@intentic/sandbox-contract/chores";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { ChoresReportSchema, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import { ChoresReportSchema } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { host } from "./host";
 
@@ -44,18 +44,11 @@ export const SEEN_PATH = `.intentic/chores/seen.json`;
 
 const unseen = ref<readonly ChoreVerdict[]>([]);
 
+// No file yet — and a hand-mangled one — read as "nothing acknowledged", which api.workspace.readJson already
+// answers with undefined. Non-string values are dropped: a digest is a string, and anything else is not one.
 const readSeen = async (): Promise<Record<string, string>> => {
-    try {
-        const body = await host().sandbox.json(`/workspace/file?path=${encodeURIComponent(SEEN_PATH)}`);
-        const parsed = JSON.parse(WorkspaceFileSchema.parse(body).content) as unknown;
-        if (typeof parsed !== `object` || parsed === null || Array.isArray(parsed)) {
-            return {};
-        }
-        return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === `string`));
-    } catch {
-        // No file yet is the ordinary first state: nothing has been acknowledged because nothing has been seen.
-        return {};
-    }
+    const parsed = await host().workspace.readJson<Record<string, unknown>>(SEEN_PATH);
+    return Object.fromEntries(Object.entries(parsed ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === `string`));
 };
 
 /* Never throws, and never rejects. This runs on a timer that nothing awaits, so a failure here has no caller to
@@ -118,9 +111,6 @@ export const acknowledge = async (verdicts: readonly ChoreVerdict[]): Promise<vo
     if (Object.entries(next).every(([key, digest]) => seen[key] === digest) && Object.keys(next).length === Object.keys(seen).length) {
         return;
     }
-    await api.sandbox.request(`/workspace/upload?path=${encodeURIComponent(SEEN_PATH)}`, {
-        method: `POST`,
-        body: `${JSON.stringify(next, undefined, 2)}\n`,
-    });
+    await api.workspace.write(SEEN_PATH, `${JSON.stringify(next, undefined, 2)}\n`);
     unseen.value = unseen.value.filter((verdict) => !due.includes(verdict));
 };

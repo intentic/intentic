@@ -1,7 +1,8 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { binDir, type Log, type SyncConfig } from "./config.js";
+import type { Log } from "@intentic/local-agent";
+import { binDir, type SyncConfig } from "./config.js";
 import { IGNORES, sanitizeId, sshAlias } from "./ssh.js";
 
 // Pinned tool versions. cloudflared matches the sandbox image's pin so both ends speak the same tunnel protocol.

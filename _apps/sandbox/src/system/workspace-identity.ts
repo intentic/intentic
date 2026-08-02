@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
 import type { Services } from "../composition.js";
+import { statePath } from "../workspace/state-paths.js";
 
 // The workspace's stable identity at <workspace>/.intentic/workspace.json, minted at the first boot of an
 // empty /work and surviving with the volume. Streamed as the /events hello frame so the browser can tell a
@@ -9,7 +9,7 @@ import type { Services } from "../composition.js";
 // ponytail: two racing first connections may each mint an id; last write wins and the loser only costs one
 // extra browser cache purge.
 export const workspaceIdentity = async (services: Services): Promise<string> => {
-    const path = join(services.workspace.root, ".intentic", "workspace.json");
+    const path = statePath(services.workspace.root, ".intentic/workspace.json");
     const raw = await services.files.read(path);
     if (raw !== undefined) {
         try {

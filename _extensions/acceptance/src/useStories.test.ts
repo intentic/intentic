@@ -43,6 +43,13 @@ const routes = (json: Readonly<Record<string, unknown>>): IntenticApi =>
             ],
             capabilities: () => [],
             onDidChange: () => ({ dispose: () => {} }),
+            // The host's own file reader, faked over the same route map: it resolves the route, validates the
+            // daemon's envelope and hands back the content, exactly as apiImpl does. Absent reads as undefined
+            // rather than throwing — which is the behaviour every caller of it depends on.
+            file: async (path: string) => {
+                const hit = json[`/workspace/file?path=${encodeURIComponent(path)}`];
+                return hit === undefined ? undefined : WorkspaceFileSchema.parse(hit).content;
+            },
         },
     }) as unknown as IntenticApi;
 

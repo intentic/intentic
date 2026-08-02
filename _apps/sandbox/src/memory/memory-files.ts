@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { dirname, join, relative, sep } from "node:path";
 import type { MemoryFileEntry } from "@intentic/sandbox-contract";
 import { resolveWithin } from "../workspace/workspace-files.js";
+import { statePath } from "../workspace/state-paths.js";
 
 /* The agent's persistent memory notes: <workspace>/.intentic/claude/projects/<project>/memory/*.md — MEMORY.md
  * (the index) plus one markdown file per fact, written by the agent across sessions (~/.claude/projects is a
@@ -9,7 +10,7 @@ import { resolveWithin } from "../workspace/workspace-files.js";
  * control-plane (workspace-files.ts denies them to the generic file API), so everything here is scoped hard:
  * only `<project>/memory/**` is ever listed, read, written, or deleted, and only .md files can be written. */
 
-export const memoryRoot = (workspaceRoot: string): string => join(workspaceRoot, ".intentic", "claude", "projects");
+export const memoryRoot = (workspaceRoot: string): string => statePath(workspaceRoot, ".intentic/claude/projects/");
 
 // A project slug is a single path segment (the agent's cwd with separators dashed, e.g. "-history-gits-root").
 const isValidProject = (project: string): boolean => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(project) || /^-[A-Za-z0-9._-]+$/.test(project);

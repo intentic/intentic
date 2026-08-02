@@ -36,13 +36,30 @@ import { providerLabel } from "@intentic/sandbox-contract";
  * ~28 characters of a title, in rows that reflowed on every open and close) built out of a second set of
  * components. One list, two frames.
  *
- * Each card is the chat it always was — click selects, double-click renames, right-click menus, × closes —
- * wearing the crucial slice of its /agents card: status glyph on the title row, two lines of title, cost /
- * diff / elapsed, and the live activity line. Cards carry the BOARD's skin (a bordered surface, AgentCard's)
- * rather than a transparent pill: a pill disappears into a column of pills, and "which sessions do I have"
- * is this list's first job. Colour is spent the way the board spends it — status lives in the glyph and the
- * semantic chips; the title, the numbers and the activity line stay neutral, so the accent colour means
- * something when it does appear (the attention chip, a diff, an error).
+ * IT IS THE BOARD'S CARD IN A COLUMN ONE CARD WIDE, and that is a design rule rather than a resemblance —
+ * /agents and this list are read minutes apart by the same eye, so anything they draw differently reads as
+ * two different products. What "in miniature" costs is the facts that need width (the branch, the model, the
+ * live command); it does not license a second visual grammar. So the three things a card is scanned BY are
+ * laid out exactly as AgentCard lays them out:
+ *
+ *   · the LEADING glyph is the provider, always present, so every title in the column starts at one x. It
+ *     used to be the status glyph, which changes shape per card and had the origin/archive marks stacked
+ *     behind it — a left edge that jittered from row to row, and the one thing a scan needs to be still.
+ *   · the TRAILING glyph is the status, in a fixed slot at the end of the title row, with the × taking the
+ *     slot beside it on hover (AgentCard's hover-action pattern).
+ *   · the title is the card's one piece of CONTENT and takes the content tier (text-xs, semibold) over a
+ *     card of text-2xs meta — the board's own hierarchy. A card set entirely in one size is a card with no
+ *     first line to land on, which is what made a column of these read as a wall.
+ *
+ * Cards sit on the LIST's own ground rather than their host's: an opaque card surface over canvas, the board's
+ * lane exactly. The old skin was a translucent wash of the canvas colour, which in the pop-out (a canvas body)
+ * mixed to precisely the background it was drawn on — cards with a 1px border and no surface, which is the
+ * whole of why the rail read flatter than the board. Both hosts hand this list a canvas ground now, so one
+ * rule holds in both.
+ *
+ * Colour is spent the way the board spends it: status in the glyph, the reason in a chip, the live readout in
+ * link (a running card's elapsed and tool glyph), diffs in success/danger — and everything else neutral, so an
+ * accent on screen always means something.
  *
  * The list reads the stores and emits verbs rather than writing them: the panel that hosts it is what hands
  * each verb to useChat, exactly as the strip always did. */
@@ -135,18 +152,40 @@ const cardsIn = (lane: FleetLane): OpenChat[] => lanes.value[lane].filter(tabMat
 const countIn = (lane: FleetLane): string =>
     filtering.value ? `${cardsIn(lane).length} of ${lanes.value[lane].length}` : String(lanes.value[lane].length);
 
-// The card's status glyph, worn ON THE TITLE ROW — status is the first question this list answers, so it
-// doesn't belong buried in the numbers line. Fleet-carded chats read the agent's own status (the richer
-// machine: landed, conflict…); a plain chat degrades to what its conversation is doing right now, through the
-// same statusIcon the panel's header draws.
-const statusOf = (entry: OpenChat): { icon: IconName; spin?: boolean; label: string; class: string } => {
+/* The card's status glyph, in the trailing slot of the title row — AgentCard's slot for it, at AgentCard's
+ * size. Fleet-carded chats read the agent's own status (the richer machine: landed, conflict…); a plain chat
+ * degrades to what its conversation is doing right now, through the same statusIcon the panel's header draws.
+ *
+ * Returned ready to `v-bind` onto the Icon, because the template needs the whole of it at once and a card that
+ * asked for its status four times (name, spin, class, label) recomputed it four times. */
+const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: string; "aria-label": string } => {
     if (entry.agent !== undefined) {
         const meta = agentStatusMeta(entry.agent.status);
-        return { ...meta, class: `text-2xs ${meta.class}` };
+        return { name: meta.icon, spin: meta.spin, class: `text-xs ${meta.class}`, "aria-label": meta.label };
     }
     const status = entry.conversation.status.value;
     const icon = statusIcon(status);
-    return { icon: icon.name, spin: icon.spin, label: statusLabel(status), class: icon.class };
+    return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
+};
+
+/* HAS THE CARD'S SECOND LINE ANYTHING TO SAY? A fresh draft has no numbers, no age, no marks and nothing in
+ * flight, so the row would render as an empty strip under its title — which is exactly what the old card did,
+ * leaving a lone provider glyph floating on a line of its own. Asked per card rather than assumed from
+ * `agent !== undefined`. */
+const hasMeta = (entry: OpenChat): boolean => {
+    const agent = entry.agent;
+    if (agent === undefined) {
+        return false;
+    }
+    return (
+        attentionReason(agent) !== undefined ||
+        originOf(entry.conversation) !== undefined ||
+        isArchived(entry.conversation) ||
+        agent.costUsd !== undefined ||
+        (agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)) ||
+        turnInFlight(agent) ||
+        agent.updatedAt > 0
+    );
 };
 
 /* TWO FACTS THE CARD SHOWS AS A MARK RATHER THAN A LINE — their words ride the card's hover preview.
@@ -331,17 +370,24 @@ const closeTab = (event: Event, id: string): void => {
             placeholder="Filter by your messages…"
             class="shrink-0"
         />
-        <div ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-1.5 overflow-y-auto">
-            <template v-for="lane in LANES" :key="lane.key">
-                <!-- A lane with nothing in it is hidden; a lane the FILTER emptied keeps its header and says
-                     so, so the list doesn't reshuffle under the cursor mid-keystroke. -->
-                <template v-if="lanes[lane.key].length > 0">
-                    <div class="mt-2.5 flex items-center gap-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle first:mt-0">
-                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="lane.dot"></span>
-                        <span>{{ lane.label }}</span>
-                        <span class="font-normal">{{ countIn(lane.key) }}</span>
-                    </div>
-                    <p v-if="cardsIn(lane.key).length === 0" class="px-1 pb-1 text-2xs text-subtle">No matches</p>
+        <div ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
+            <!-- A lane with nothing in it is hidden; a lane the FILTER emptied keeps its header and says
+                 so, so the list doesn't reshuffle under the cursor mid-keystroke. -->
+            <section v-for="lane in LANES" v-show="lanes[lane.key].length > 0" :key="lane.key" class="flex min-w-0 flex-col">
+                <!-- The board's lane header, at the board's weights — dot, label, and the count as a pill
+                     rather than a loose number. It PINS while its own lane scrolls (the stacked board's
+                     behaviour, and the same argument: a column this tall is read a screen at a time, and a
+                     card only means "finished" while the lane it belongs to is still on screen). Opaque on
+                     the list's own ground, which is why both hosts hand it a canvas one — and it carries the
+                     gap under it as padding rather than leaving it to the section, so a card scrolling away
+                     passes under an unbroken band instead of flickering through a transparent strip. -->
+                <header class="sticky top-0 z-10 flex items-center gap-2 bg-canvas px-1 pb-2 pt-1">
+                    <span class="h-2 w-2 shrink-0 rounded-full" :class="lane.dot"></span>
+                    <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
+                    <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ countIn(lane.key) }}</span>
+                </header>
+                <p v-if="cardsIn(lane.key).length === 0" class="px-1 pb-1 text-2xs text-subtle">No matches</p>
+                <div v-else class="flex min-w-0 flex-col gap-2">
                     <template v-for="{ conversation: c, agent } in cardsIn(lane.key)" :key="c.conversationId">
                         <!-- Renaming REPLACES the card rather than nesting a field inside it: an input in a
                              button is neither valid markup nor a usable caret. Enter commits, Esc cancels, blur
@@ -354,7 +400,7 @@ const closeTab = (event: Event, id: string): void => {
                             maxlength="80"
                             aria-label="Chat title"
                             :placeholder="c.isolated.value ? 'New agent' : 'New chat'"
-                            class="w-full shrink-0 select-text rounded-md bg-overlay px-2 py-1 text-2xs text-content outline-none ring-1 ring-primary-500/50 placeholder:text-subtle"
+                            class="w-full shrink-0 select-text rounded-lg bg-overlay px-2.5 py-2 text-xs font-semibold text-content outline-none ring-1 ring-primary-500/50 placeholder:font-normal placeholder:text-subtle"
                             @keydown.enter.stop.prevent="edit.commit()"
                             @keydown.esc.stop.prevent="edit.cancel()"
                             @blur="edit.blurCommit()"
@@ -364,7 +410,7 @@ const closeTab = (event: Event, id: string): void => {
                             v-else
                             type="button"
                             :data-chat-tab="c.conversationId"
-                            class="chat-tab rail-card group flex w-full min-w-0 shrink-0 flex-col gap-1 rounded-lg px-2.5 py-2 text-left text-2xs"
+                            class="chat-tab rail-card group flex w-full min-w-0 shrink-0 scroll-mt-8 flex-col gap-1.5 rounded-lg p-2.5 text-left text-2xs"
                             :class="{ 'chat-tab-on': activeId === c.conversationId, 'rail-card-attention': lane.key === 'attention' }"
                             @click="emit('select', c.conversationId)"
                             @dblclick.prevent.stop="beginRename(c.conversationId)"
@@ -373,24 +419,18 @@ const closeTab = (event: Event, id: string): void => {
                             @mouseleave="hidePreview"
                         >
                             <span class="flex w-full min-w-0 items-start gap-1.5">
-                                <!-- Status leads the TITLE row — it is the first thing a glance asks. Sideways
-                                     for the same reason the title below is: under a card is the next card. -->
+                                <!-- The provider LEADS, as it does on the board: the one glyph every card has,
+                                     so the titles beside it line up down the whole column. It also carries the
+                                     model — the name itself would be a quarter of this line repeating what a
+                                     fleet run on one model says on every card, so it stays on the hover. -->
                                 <span class="flex h-4 shrink-0 items-center">
-                                    <Icon
-                                        :name="statusOf({ conversation: c, agent }).icon"
-                                        :spin="statusOf({ conversation: c, agent }).spin"
-                                        :class="statusOf({ conversation: c, agent }).class"
-                                        :aria-label="statusOf({ conversation: c, agent }).label"
-                                    />
-                                </span>
-                                <OriginMark :origin="originOf(c)" compact />
-                                <span v-if="isArchived(c)" class="mt-px flex shrink-0 items-center" aria-label="Archived">
-                                    <Icon name="box" class="text-2xs text-subtle" />
+                                    <ProviderLogo :provider="agent?.provider ?? c.provider.value" class="text-xs text-muted" />
                                 </span>
                                 <!-- Two lines before the clamp — a card has the width for most titles whole.
+                                     The content tier over a card of meta: this is the one line being READ.
                                      Neutral, always: the status colour lives in the glyph beside it, and a
                                      column of orange titles is one where nothing stands out. -->
-                                <span class="line-clamp-2 min-w-0 flex-1 font-medium leading-4 text-content">
+                                <span class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-4 text-content">
                                     <span
                                         v-for="(run, at) in markSegments(tabLabel(c), needle)"
                                         :key="at"
@@ -406,33 +446,49 @@ const closeTab = (event: Event, id: string): void => {
                                 <!-- The × is a HIT TARGET carrying the glyph, not the glyph itself: at text-2xs
                                      the svg is an 11px square, and a click that misses it lands on the card —
                                      which, on the card it is closing, selects an already-selected chat and so
-                                     reads as a close that did nothing. -->
+                                     reads as a close that did nothing. It takes the slot BESIDE the status
+                                     glyph on hover — AgentCard's rename/archive pattern — rather than the
+                                     status glyph's own, so nothing about the card moves as the pointer
+                                     crosses it. -->
                                 <span
                                     v-if="conversations.length > 1"
                                     role="button"
                                     aria-label="Close chat"
-                                    class="-mr-2 -mt-1 flex shrink-0 items-center px-2 py-1 opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
+                                    class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                                     @click="closeTab($event, c.conversationId)"
                                 >
-                                    <Icon name="times" class="mt-px text-2xs" />
+                                    <Icon name="times" class="text-2xs" />
+                                </span>
+                                <!-- Status closes the row, in the board's own slot for it. The REASON an agent
+                                     is in Attention rides the line below instead of replacing this glyph (the
+                                     board's chip does replace it): a chip is a hundred pixels of words, and
+                                     spending them here would leave the title of the one card that most needs
+                                     reading with sixty pixels to be read in. -->
+                                <span class="flex h-4 shrink-0 items-center">
+                                    <Icon v-bind="statusOf({ conversation: c, agent })" />
                                 </span>
                             </span>
                             <template v-if="agent !== undefined">
-                                <!-- The crucial numbers, one wrapping line: cost, diff, and — right-aligned —
-                                     the running elapsed (ticking) or the last-activity age. All quiet: these
-                                     are reference numbers, not events.
-                                     The MODEL is a mark, not a word: in a column this narrow "Claude Opus 5"
-                                     costs a quarter of the line to repeat what the provider glyph beside it
-                                     already says, and it is the same on every card in a fleet run on one
-                                     model. The name stays one hover away, on the glyph that stands for it. -->
-                                <span class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
+                                <!-- The crucial numbers, one wrapping line: why it needs you, where it came
+                                     from, cost, diff, and — right-aligned — the running elapsed (ticking) or
+                                     the last-activity age. Quiet by default: these are reference numbers, not
+                                     events, so the only colour on the line is the one that means something. -->
+                                <span
+                                    v-if="hasMeta({ conversation: c, agent })"
+                                    class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
+                                >
                                     <span
                                         v-if="attentionReason(agent) !== undefined"
                                         class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
                                         >{{ attentionReason(agent) }}</span
                                     >
-                                    <span class="flex shrink-0 items-center">
-                                        <ProviderLogo :provider="agent.provider" class="text-2xs" />
+                                    <!-- Came in from outside (a Discord mention, a visitor, a webhook), and
+                                         off the board, still open — both are marks about the card's PROVENANCE
+                                         rather than its name, so they ride the meta line the way the board
+                                         puts its OriginMark in the card body. -->
+                                    <OriginMark :origin="originOf(c)" compact />
+                                    <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
+                                        <Icon name="box" class="text-2xs text-subtle" />
                                     </span>
                                     <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
                                     <span
@@ -448,12 +504,20 @@ const closeTab = (event: Event, id: string): void => {
                                          there, the elapsed keeps its meaning, and the glyph freezes on what it
                                          was doing when the user stopped it. Blinking the whole column off a beat
                                          before the card settles is the same flicker the stopping state exists
-                                         to remove. -->
-                                    <span class="ml-auto flex shrink-0 items-center gap-1.5">
+                                         to remove.
+                                         IN LINK WHILE THE TURN IS LIVE, the one accent on an otherwise neutral
+                                         card and the board's own (AgentCard's ticking elapsed is link too). A
+                                         running card has to be findable in a column of stopped ones, and this
+                                         readout — a clock that visibly moves — is the fact that says so. It
+                                         settles back to subtle as a plain age the moment the turn ends. -->
+                                    <span
+                                        class="ml-auto flex shrink-0 items-center gap-1.5"
+                                        :class="turnInFlight(agent) ? 'font-medium text-link' : ''"
+                                    >
                                         <Icon
                                             v-if="turnInFlight(agent) && agent.activity !== undefined"
                                             :name="activityIcon(agent.activity.tool)"
-                                            class="text-2xs text-subtle"
+                                            class="text-2xs"
                                         />
                                         <span v-if="turnInFlight(agent) && agent.startedAt !== undefined">{{
                                             formatElapsed(agent.startedAt, now)
@@ -479,69 +543,86 @@ const closeTab = (event: Event, id: string): void => {
                             </template>
                         </button>
                     </template>
-                </template>
-            </template>
+                </div>
+            </section>
 
             <!-- WHAT THE QUERY FOUND THAT ISN'T OPEN HERE. This list holds the chats of this window, which is
                  almost never the set the question "where did I say X" is about — so the filter reaches the
                  whole fleet (live agents, the archive) and the conversations no agent owns, and puts them here.
                  A row opens the conversation, which is exactly the act the History menu performs; the
-                 difference is that this list was found rather than browsed. -->
-            <template v-if="filtering && notOpenCount > 0">
-                <div class="mt-2 flex items-center gap-1.5 border-t border-line px-1 pt-2 text-2xs font-semibold uppercase tracking-wide text-subtle">
-                    <Icon name="search" class="shrink-0 text-2xs" />
-                    <span>Not open</span>
-                    <span class="font-normal">{{ notOpenCount }}</span>
-                </div>
-                <button
-                    v-for="agent in notOpen"
-                    :key="agent.id"
-                    type="button"
-                    class="chat-tab flex w-full min-w-0 shrink-0 flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-2xs"
-                    @click="emit('open', agent.id)"
-                >
-                    <span class="flex w-full min-w-0 items-start gap-1.5">
-                        <ProviderLogo :provider="agent.provider" class="mt-px shrink-0 text-2xs text-muted" />
-                        <!-- Off the board but not gone: the branch, the diff and the transcript all survive an
-                             archive, so a hit here is a real destination rather than a tombstone. -->
-                        <Icon v-if="agent.archivedAt !== undefined" name="box" class="mt-px shrink-0 text-2xs text-subtle" aria-label="Archived" />
-                        <span class="line-clamp-2 min-w-0 flex-1 leading-4 text-muted">
-                            <span
-                                v-for="(run, at) in markSegments(agent.title ?? 'Untitled agent', needle)"
-                                :key="at"
-                                :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''"
-                                >{{ run.text }}</span
-                            >
+                 difference is that this list was found rather than browsed.
+                 A lane of the same shape as the three above it, down to the card skin: these are destinations,
+                 not footnotes, and the board makes the same call with its own off-board hits (real cards, in a
+                 group with a header). Only the ink is dropped a step — a muted title, no status glyph — since
+                 nothing here is a session you are currently in. -->
+            <section v-if="filtering && notOpenCount > 0" class="flex min-w-0 flex-col">
+                <header class="sticky top-0 z-10 flex items-center gap-2 bg-canvas px-1 pb-2 pt-1">
+                    <Icon name="search" class="shrink-0 text-2xs text-subtle" />
+                    <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Not open</span>
+                    <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ notOpenCount }}</span>
+                </header>
+                <div class="flex min-w-0 flex-col gap-2">
+                    <button
+                        v-for="agent in notOpen"
+                        :key="agent.id"
+                        type="button"
+                        class="chat-tab rail-card flex w-full min-w-0 shrink-0 flex-col gap-1.5 rounded-lg p-2.5 text-left text-2xs"
+                        @click="emit('open', agent.id)"
+                    >
+                        <span class="flex w-full min-w-0 items-start gap-1.5">
+                            <span class="flex h-4 shrink-0 items-center">
+                                <ProviderLogo :provider="agent.provider" class="text-xs text-muted" />
+                            </span>
+                            <span class="line-clamp-2 min-w-0 flex-1 text-xs font-medium leading-4 text-muted">
+                                <span
+                                    v-for="(run, at) in markSegments(agent.title ?? 'Untitled agent', needle)"
+                                    :key="at"
+                                    :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''"
+                                    >{{ run.text }}</span
+                                >
+                            </span>
                         </span>
-                        <span v-if="agent.updatedAt > 0" class="mt-px shrink-0 text-subtle">{{ relativeTime(agent.updatedAt) }}</span>
-                    </span>
-                    <span v-if="snippetOf(agent) !== undefined" class="line-clamp-2 pl-4 italic leading-4 text-subtle">
-                        <span
-                            v-for="(run, at) in markSegments(snippetOf(agent) ?? '', needle)"
-                            :key="at"
-                            :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
-                            >{{ run.text }}</span
-                        >
-                    </span>
-                </button>
-                <!-- Conversations no agent entry owns — a plain chat, or one whose entry is long gone. Nothing
+                        <span class="flex w-full min-w-0 items-center gap-x-2 text-2xs text-subtle">
+                            <!-- Off the board but not gone: the branch, the diff and the transcript all survive an
+                             archive, so a hit here is a real destination rather than a tombstone. -->
+                            <Icon v-if="agent.archivedAt !== undefined" name="box" class="shrink-0 text-2xs" aria-label="Archived" />
+                            <span v-if="agent.updatedAt > 0" class="ml-auto shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
+                        </span>
+                        <span v-if="snippetOf(agent) !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
+                            <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
+                            <span class="line-clamp-2 min-w-0 flex-1 italic leading-4">
+                                <span
+                                    v-for="(run, at) in markSegments(snippetOf(agent) ?? '', needle)"
+                                    :key="at"
+                                    :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
+                                    >{{ run.text }}</span
+                                >
+                            </span>
+                        </span>
+                    </button>
+                    <!-- Conversations no agent entry owns — a plain chat, or one whose entry is long gone. Nothing
                      to draw a provider mark or a status for; the title and the matched line are the whole of
                      what is known about them. -->
-                <button
-                    v-for="session in sessionMatches"
-                    :key="session.id"
-                    type="button"
-                    class="chat-tab flex w-full min-w-0 shrink-0 flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-2xs"
-                    @click="emit('open', session.id)"
-                >
-                    <span class="flex w-full min-w-0 items-start gap-1.5">
-                        <Icon name="comments" class="mt-px shrink-0 text-2xs text-subtle" />
-                        <span class="line-clamp-2 min-w-0 flex-1 leading-4 text-muted">{{ session.title }}</span>
-                        <span class="mt-px shrink-0 text-subtle">{{ relativeTime(session.updatedAt) }}</span>
-                    </span>
-                    <span v-if="session.snippet !== undefined" class="line-clamp-2 pl-4 italic leading-4 text-subtle">{{ session.snippet }}</span>
-                </button>
-            </template>
+                    <button
+                        v-for="session in sessionMatches"
+                        :key="session.id"
+                        type="button"
+                        class="chat-tab rail-card flex w-full min-w-0 shrink-0 flex-col gap-1.5 rounded-lg p-2.5 text-left text-2xs"
+                        @click="emit('open', session.id)"
+                    >
+                        <span class="flex w-full min-w-0 items-start gap-1.5">
+                            <span class="flex h-4 shrink-0 items-center">
+                                <Icon name="comments" class="text-xs text-subtle" />
+                            </span>
+                            <span class="line-clamp-2 min-w-0 flex-1 text-xs font-medium leading-4 text-muted">{{ session.title }}</span>
+                            <span class="shrink-0 text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
+                        </span>
+                        <span v-if="session.snippet !== undefined" class="line-clamp-2 pl-5 text-2xs italic leading-4 text-subtle">{{
+                            session.snippet
+                        }}</span>
+                    </button>
+                </div>
+            </section>
         </div>
         <!-- A failed rename already reverted the title; this says why. Cleared by the next rename. -->
         <span v-if="edit.error !== undefined" class="shrink-0 truncate px-1 text-2xs text-danger" v-tooltip.bottom.overflow="edit.error">{{
@@ -557,12 +638,18 @@ const closeTab = (event: Event, id: string): void => {
 </template>
 
 <style scoped>
-/* The card's surface — AgentCard's skin (visible border, distinct fill) over .chat-tab's behaviour. A
+/* The card's surface — AgentCard's skin (visible border, OPAQUE fill) over .chat-tab's behaviour. A
  * transparent pill blends into a column of pills; a bordered card is what makes each session a countable
- * thing. Scoped selectors outweigh chat.css's single-class rules, so these win without !important. */
+ * thing. Scoped selectors outweigh chat.css's single-class rules, so these win without !important.
+ *
+ * `--color-card` on the list's canvas ground, exactly as the board's cards sit on their lanes: a card has to
+ * be LIGHTER than what it lies on to read as an object rather than as an outline. The fill this replaced was
+ * a 45% wash of the canvas colour, which in the pop-out — whose body IS canvas — composited to the ground it
+ * was drawn on, leaving nothing but the 1px border. Both hosts hand this list a canvas ground (the rail is
+ * the window's body, the docked sheet paints one), so one value is right in both. */
 .rail-card {
     border-color: var(--color-line);
-    background: color-mix(in srgb, var(--color-canvas) 45%, transparent);
+    background: var(--color-card);
     /* Two independent marks on one box-shadow: the attention bar (inset, left edge) and the active ring
        (outset, all round). Held as variables because a second box-shadow rule would REPLACE the first, which
        is what forced the old either/or below. */
@@ -570,8 +657,12 @@ const closeTab = (event: Event, id: string): void => {
     --rail-ring: 0 0 #0000;
     box-shadow: var(--rail-accent), var(--rail-ring);
 }
+/* AgentCard's hover, to the letter: the surface lifts a step and the edge sharpens. .chat-tab's own hover is
+ * a wash of the CONTENT colour, which over an opaque card reads as the text bleeding rather than as the box
+ * responding — so the card overrides both halves of it. */
 .rail-card:hover {
     border-color: var(--color-line-strong);
+    background: var(--color-overlay);
 }
 /* THE SAME TWO CHANNELS THE BOARD USES (see AgentCard): the card the transcript beside it is showing gets a
  * ring and a lifted fill, an agent that needs the user gets a bar down its left edge. Drawn in different

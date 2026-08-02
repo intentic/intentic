@@ -1,6 +1,6 @@
-import { join } from "node:path";
 import { jsonFile } from "../store/json-file.js";
 import { z } from "zod";
+import { statePath } from "../workspace/state-paths.js";
 
 /* Did the snippet actually land on the site?
  *
@@ -47,7 +47,7 @@ export interface WebchatInstallsStore {
 }
 
 export const fileWebchatInstallsStore = (root: string): WebchatInstallsStore => {
-    const file = jsonFile<InstallsFile>(join(root, ".intentic", "webchat-installs.json"), {
+    const file = jsonFile<InstallsFile>(statePath(root, ".intentic/webchat-installs.json"), {
         parse: (raw) => FileSchema.safeParse(raw).data,
         fallback: () => ({}),
     });

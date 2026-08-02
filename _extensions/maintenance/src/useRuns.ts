@@ -1,5 +1,5 @@
 import type { ChoreVerdict } from "@intentic/sandbox-contract/chores";
-import { type AgentSummary, AgentsListSchema, StartedTurnSchema, WorkspaceChildrenSchema, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import { type AgentSummary, AgentsListSchema, StartedTurnSchema, WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
@@ -56,10 +56,6 @@ export function useRuns() {
             return undefined;
         }
     };
-    const file = async (path: string): Promise<string | undefined> => {
-        const parsed = await json<unknown>(`/workspace/file?path=${encodeURIComponent(path)}`);
-        return parsed === undefined ? undefined : WorkspaceFileSchema.parse(parsed).content;
-    };
 
     // The manifests and whatever results exist beside them, newest first. Both files are read in the same pass:
     // a run's result is a few hundred bytes, the walk is capped at SCAN_RUNS, and needing a second query to know
@@ -81,16 +77,18 @@ export function useRuns() {
                 .slice(0, SCAN_RUNS);
             const runs = await Promise.all(
                 dirs.map(async (entry) => {
-                    const text = await file(`${entry.path}/run.json`);
+                    const text = await api.workspace.file(`${entry.path}/run.json`);
                     const manifest = text === undefined ? undefined : parseManifest(text);
                     if (manifest === undefined) {
                         return undefined;
                     }
-                    const resultText = await file(resultPath(manifest.runId));
+                    const resultText = await api.workspace.file(resultPath(manifest.runId));
                     return { manifest, result: resultText === undefined ? undefined : parseResult(resultText) };
                 }),
             );
-            return runs.flatMap((run) => (run === undefined ? [] : [run])).toSorted((left, right) => right.manifest.createdAt - left.manifest.createdAt);
+            return runs
+                .flatMap((run) => (run === undefined ? [] : [run]))
+                .toSorted((left, right) => right.manifest.createdAt - left.manifest.createdAt);
         },
     });
 
@@ -101,7 +99,8 @@ export function useRuns() {
         enabled: computed(() => api.sandbox.reachable() && (runsQuery.data.value ?? []).length > 0),
         queryFn: async (): Promise<AgentSummary[]> =>
             AgentsListSchema.parse(await api.sandbox.json(`/agents`)).agents.filter((agent) => agent.id.startsWith(ANY_RUN_PREFIX)),
-        refetchInterval: (state) => ((state.state.data ?? []).some((agent) => agent.status === `running` || agent.status === `awaiting`) ? POLL_MS : false),
+        refetchInterval: (state) =>
+            (state.state.data ?? []).some((agent) => agent.status === `running` || agent.status === `awaiting`) ? POLL_MS : false,
     });
 
     const agentsById = computed(() => new Map((agentsQuery.data.value ?? []).map((agent) => [agent.id, agent])));
@@ -181,10 +180,7 @@ export function useRuns() {
             conversationId: conversationIdOf(runId),
             headline: verdict.headline,
         };
-        await api.sandbox.request(`/workspace/upload?path=${encodeURIComponent(runManifestPath(runId))}`, {
-            method: `POST`,
-            body: JSON.stringify(manifest, null, 2),
-        });
+        await api.workspace.write(runManifestPath(runId), JSON.stringify(manifest, null, 2));
         StartedTurnSchema.parse(
             await api.sandbox.json(`/agent`, {
                 method: `POST`,

@@ -1,14 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { agentHome } from "@intentic/local-agent";
 import { z } from "zod";
 
 /* Bridge configuration: where the sandbox is and which credential/agent to use. Environment wins (the
  * editor's agent_servers env block / the ACP env_var auth method); the config file written by
- * `intentic-acp login` is the fallback — the ~/.intentic home the sync agent also uses. The session map
- * persists ACP-session → daemon-conversation identities so editors can resume across bridge restarts. */
+ * `intentic-acp login` is the fallback — under the same ~/.intentic/<agent> home every local agent uses. The
+ * session map persists ACP-session → daemon-conversation identities so editors can resume across bridge restarts. */
 
-const CONFIG_DIR = join(homedir(), ".intentic", "acp");
+const CONFIG_DIR = agentHome("acp").dir;
 
 const StoredConfigSchema = z.object({ url: z.string(), token: z.string(), agent: z.string().optional() });
 

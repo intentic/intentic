@@ -51,7 +51,12 @@ export interface WorkspaceStateFile extends StateFile {
     readonly why?: string;
 }
 
-export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
+/* Declared `as const` so the paths survive as literal types (see WorkspaceStatePath below), then published under
+ * the interface. Both bindings are needed and neither is redundant: the const is the only thing that can produce
+ * the path union, and every consumer reads entries as `WorkspaceStateFile` — an exact-literal tuple loses the
+ * optional members (`note`, `why`) on the entries that omit them, which is a worse type for reading than the
+ * interface it satisfies. One list, two views of it. */
+const STATE_FILES = [
     /* A capability add/remove recomposes the environment overlay and can add or drop a repo's panel.
      *
      * Each entry's `config` carries that capability's credential (an mcp server's token, a Komodo key, an ssh
@@ -99,6 +104,12 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
         path: ".intentic/approvals/",
         invalidates: [],
         why: "Declared by the intentic.automations extension's contributes.files — `automation-approvals` is its query key, not core's.",
+        portability: "carry",
+    },
+    {
+        path: ".intentic/loops.json",
+        invalidates: [],
+        why: "Ralph loops and their iteration history. Nothing observes it: where a RUNNING loop stands rides on the fleet roster (AgentSummary.loop), which the /events stream already pushes about once a second, and a second source invalidating on this file could only ever disagree with the card beside it. The iteration list of an ENDED loop is an on-demand read — nothing renders it until someone opens it (web's useLoops, which holds no query for exactly this reason).",
         portability: "carry",
     },
 
@@ -228,7 +239,22 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = [
         note: "Extensions re-clone from the capability manifest on the target's next reconcile.",
     },
     { path: ".intentic/plugins/", invalidates: [], why: "Agent plugin dirs, read by the SDK's loader each turn.", portability: "carry" },
-];
+] as const satisfies readonly WorkspaceStateFile[];
+
+export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
+
+/* Every path this table declares, as a type. `as const` above is what makes it one, and it is what finally makes
+ * the first sentence of this file's header TRUE rather than aspirational.
+ *
+ * "The daemon builds its store paths from `path`" was the design; the code did not. `composition.ts` and twenty
+ * files beside it spelled the same layout a SECOND way — `join(root, ".intentic", "settings.json")` — with
+ * nothing tying the two spellings together. Rename a store's file and this table keeps declaring the old name:
+ * no error, no failing test, just a view that quietly stops refreshing, which is the exact failure the table was
+ * written to end and the exact way drafts went missing.
+ *
+ * So the daemon joins through `statePath` (workspace/state-paths.ts), which takes one of THESE and nothing else.
+ * A rename is now a compile error at every site that names the file, in both packages, or it is not a rename. */
+export type WorkspaceStatePath = (typeof STATE_FILES)[number]["path"];
 
 /* The query keys a batch of changed paths makes stale, deduped and stable. The browser's `/events` handler calls
  * this; keeping it here rather than in the web means the rule is unit-testable without a query client, and the
