@@ -1,5 +1,6 @@
 import { LEGAL_CONTACT_EMAIL } from "@intentic/constants";
-import { APP_URL, FOUNDER_NAME, FOUNDER_URL, LOGO_URL, ORG_DESCRIPTION, ORG_NAME, SAME_AS, SITE_URL } from "./site";
+import { creatorRole } from "./about";
+import { APP_URL, FOUNDER_NAME, FOUNDER_SAME_AS, FOUNDER_URL, LOGO_URL, ORG_DESCRIPTION, ORG_NAME, SAME_AS, SITE_URL } from "./site";
 
 // One JSON-LD graph per page instead of a pile of standalone documents: every entity is declared once,
 // under a stable @id, and everything else points at it. Consumers (Google, and any LLM reading the page)
@@ -61,8 +62,19 @@ function organizationNode() {
     };
 }
 
+/* The founder, with the profiles that make him checkable. `sameAs` is the part that matters: it is how a
+ * search or answer engine resolves this Person to one it already has a file on, which is the whole point
+ * of a trust section — the claim is not "trust me", it is "here is who I am, go look". */
 function founderNode() {
-    return { "@type": "Person", "@id": FOUNDER_ID, name: FOUNDER_NAME, url: FOUNDER_URL };
+    return {
+        "@type": "Person",
+        "@id": FOUNDER_ID,
+        name: FOUNDER_NAME,
+        url: FOUNDER_URL,
+        jobTitle: "Founder & engineer",
+        description: creatorRole,
+        sameAs: [...FOUNDER_SAME_AS],
+    };
 }
 
 function websiteNode() {
@@ -150,6 +162,21 @@ export function buildPageGraph(opts: PageGraphOptions) {
             ...(article ? [article] : []),
             ...(opts.extra ?? []),
         ],
+    };
+}
+
+/**
+ * `/about/` as a ProfilePage about the founder. It is a distinct type from WebPage because the page's
+ * subject is a person rather than the product — which is what tells an answer engine that the entity
+ * behind this domain is the one already described at those `sameAs` URLs.
+ */
+export function buildProfilePageSchema(path: string) {
+    return {
+        "@type": "ProfilePage",
+        "@id": `${SITE_URL}${path}#profile`,
+        mainEntity: founderRef,
+        about: founderRef,
+        isPartOf: { "@id": WEBSITE_ID },
     };
 }
 

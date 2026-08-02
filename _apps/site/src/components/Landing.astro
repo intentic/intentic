@@ -1,11 +1,14 @@
 ---
+import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic-dev/site-content/about";
 import { faqGroups } from "@intentic-dev/site-content/faq";
 import type { LandingContent } from "@intentic-dev/site-content/landing";
 import { APP_URL, DEMO_PATH, gitlabIssuesUrl, gitlabUrl } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import CreatorLinks from "./CreatorLinks.astro";
 import Footer from "./Footer.astro";
 import Nav from "./Nav.astro";
+import TrustCards from "./TrustCards.astro";
 
 interface Props {
     content: LandingContent;
@@ -425,7 +428,31 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 6 · Get connected — ghost-numeral steps, no boxes -->
+        <!-- 6 · About the creator — the last objection before the command.
+             The page has just asked a visitor to run a container on their own machine and hand it a
+             GitHub token and a database password. `#ownership` answers the architectural half of "can I
+             trust this"; this answers the human half, which until now existed only in the page's JSON-LD
+             — told to Google and never to the reader.
+             Verifiability, not popularity: no logos, no testimonials, no counter that could render a
+             zero. The name, bio and cards come from about.ts so this band and /about/ cannot drift. -->
+        <section class="border-t border-line" id="trust">
+            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
+                <div class="grid gap-10 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-14">
+                    <div>
+                        <div class="eyebrow">{content.trust.eyebrow}</div>
+                        <h2 class="mt-3 text-3xl font-semibold tracking-tight">{CREATOR_NAME}</h2>
+                        <p class="mt-3 text-base leading-relaxed text-muted">{creatorRole}</p>
+                        <p class="mt-3 text-sm leading-relaxed text-subtle">{creatorBio}</p>
+                        <CreatorLinks class="mt-6" />
+                        <a href="/about/" class="mt-6 inline-block text-sm font-medium text-link hover:underline">{content.trust.cta} →</a>
+                    </div>
+
+                    <TrustCards />
+                </div>
+            </div>
+        </section>
+
+        <!-- 7 · Get connected — ghost-numeral steps, no boxes -->
         <section class="border-t border-line" id="connect">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.connect.eyebrow}</div>
@@ -456,7 +483,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 7 · FAQ — every answer open, in topic bands with a jump nav.
+        <!-- 8 · FAQ — every answer open, in topic bands with a jump nav.
              Nothing here is a disclosure widget: thirteen collapsed rows made a visitor click to find out
              whether the answer was even the one they wanted, and hid the answers from in-page search. The
              grouping is what keeps a fully open FAQ scannable — bands are short, and the nav jumps to one. -->
@@ -520,7 +547,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 8 · Final CTA -->
+        <!-- 9 · Final CTA -->
         <section class="relative overflow-hidden border-t border-line">
             <div class="absolute inset-0 bg-linear-to-br from-primary-600/15 via-canvas to-canvas" aria-hidden="true"></div>
             <div class="fade-in relative mx-auto max-w-7xl px-6 py-20 text-center lg:py-28">

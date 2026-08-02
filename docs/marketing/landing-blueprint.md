@@ -22,7 +22,7 @@ So the page now makes one claim and proves it, and the flexibility is **stated o
 near the bottom instead of demonstrated nine times. That band is also the honest framing —
 `_extensions/README.md` calls the app *"a lean core + an extension system (the VSCode bet)"*, and
 automations, Discord, Slack, IMAP, memory, pipelines and the Doorbell webchat really are things you
-bolt on. Result: **9,592 px, five arguments and one index**.
+bolt on. Result: **9,592 px, five arguments and one index** — 10,298 px once `#trust` joined it.
 
 **The environment argument did not die — it was demoted.** It rides in the hero subhead ("the job's
 dev-tools really installed, wired to your systems"), in loop beat 02's sandbox figure, in the FAQ's
@@ -80,8 +80,9 @@ this page.
 
 ## Page architecture
 
-One page, one continuous scroll — **five arguments and one index**, down from fourteen bands. Section
-ids in parens; copy per section in `landing.ts`.
+One page, one continuous scroll — **five arguments, one index and one trust band**, down from fourteen.
+Section ids in parens; copy per section in `landing.ts`, except `#trust`, whose copy is in `about.ts`
+because `/about/` shares it.
 
 1. **Hero (`#hero`)** — the brand line, kept verbatim ("An IDE for your agents. A window for you.") +
    a subhead that carries the whole claim: a sandbox of its own on hardware you own, the job's
@@ -110,10 +111,33 @@ ids in parens; copy per section in `landing.ts`.
    page** — no screenshots, no figures, no argument. Its job is to be findable, not persuasive; every
    row here used to be a band of its own, and together they were what made a visitor lose the thread.
    Keep it to one screen. (P5, P6, Pro)
-6. **Get connected (`#connect`)** — the speed proof: ① Sign in with Google ② Name your sandbox
+6. **About the creator (`#trust`)** — the last objection before the command. The page has just asked a
+   visitor to run a container on their own machine and hand it a GitHub token and a database password;
+   `#ownership` answers the architectural half of *"can I trust this"*, and this answers the human half.
+   Creator-forward: the name, the role, three profile chips, then four cards — *why trust intentic ·
+   open source first · it builds itself · honest about its age*. Copy in `about.ts`, shared with
+   `/about/` so the two cannot drift. (P1, P4)
+7. **Get connected (`#connect`)** — the speed proof: ① Sign in with Google ② Name your sandbox
    ③ Paste one command, with the real command block. (P3)
-7. **FAQ (`#faq`)** — see below.
-8. **Final CTA** — restate the claim + `Get started free` · `See the source`. (close)
+8. **FAQ (`#faq`)** — see below.
+9. **Final CTA** — restate the claim + `Get started free` · `See the source`. (close)
+
+### The trust band's rules (they are what keep it from backfiring)
+
+- **Verifiability, not popularity.** No logo wall, no testimonials, no "trusted by N developers". The
+  product is weeks old; the honest version of that is a *position*, and card four says so outright. A
+  trust section that concedes nothing reads as marketing and takes the other three cards down with it.
+- **No slot that can render a zero.** An empty social-proof counter costs more trust than it buys —
+  `atlas-protocol.com/about/`, which this band's shape is adapted from, demonstrates it at its own foot
+  with "0 TOTAL POPULATION · 0 RECENTLY ACTIVE". Do not add a metric that could be zero or one.
+- **The commit numbers are measured, never typed.** `gitStats()` in `_libs/astro-integrations` counts
+  `agent@intentic.dev`-authored commits at build time — the number changes with every land, and it is
+  the strongest asset on the site precisely because it is checkable: *the fleet on this page shipped
+  the page*. It refuses shallow clones and falls back to the sentence without a figure rather than
+  reporting "1 of 1".
+- **Nothing that is not already public** on github.com/radarsu, linkedin.com/in/radarsu or radarsu.com.
+- The contact address lives on `/about/` only, split into spans and assembled by script on first
+  interaction, so no `\S+@\S+` exists in the served markup.
 
 The objection bank from messaging.md renders as FAQ with FAQPage JSON-LD (kept in sync with
 messaging.md, deployment kept out of it) — not a numbered marketing band above. It is rendered OPEN, in
@@ -185,11 +209,19 @@ recorded decisions, not omissions.
 
 ### No new bands (deliberate — the 2026-08-02 cut)
 
-The third recorded no, and the easiest one to undo by accident. A capability that deserves attention
-gets a **row in `#extend`** and a page of its own; it does not get a band. The page is allowed five
-arguments — the loop, ownership, economics, the extend index, and the setup proof — because fourteen
-is what cost it its meaning. Before adding a section, check whether the thing already has a
-`/product/*` or `/docs/*` page: if it does, the honest move is a link.
+The third recorded no, and the easiest one to undo by accident. **A capability that deserves attention
+gets a row in `#extend` and a page of its own; it does not get a band.** Before adding a section, check
+whether the thing already has a `/product/*` or `/docs/*` page: if it does, the honest move is a link.
+Fourteen bands is what cost this page its meaning.
+
+**The one carve-out, and its boundary.** `#trust` was added later the same day and is not a breach of
+the rule above — the rule governs *capability* creep, and trust is not a capability. A visitor who does
+not believe you never reaches the curl command at all, so the band is conversion-critical rather than a
+nice-to-have, and it answers a question the page provably was not answering: the founder existed only
+in the JSON-LD, told to Google and never to the reader. That is the shape of a legitimate exception —
+**an unanswered objection on the path to the CTA, not a feature that wants more room.** A feature never
+qualifies. If a future band cannot be described as "the reader will not act until this is answered",
+it is a row in `#extend`.
 
 ## Conversion checklist
 
@@ -197,6 +229,8 @@ is what cost it its meaning. Before adding a section, check whether the thing al
 - [ ] `See the source` resolves to gitlab.com/radarsu/intentic.
 - [ ] Every section ends within one viewport of a CTA.
 - [ ] The page is still one claim. Read it cold and answer "what is this product?" in one sentence.
+- [ ] `#trust` still concedes something, and still shows no number that could be zero.
+- [ ] The `#trust` commit figures came from git, not from a paste — check a real `astro build`, not dev.
 - [ ] Full-page height at 1440 has not crept back over ~10,000 px (it was 16,254; it is 9,592).
 - [ ] Entitlement copy matches `_apps/api/src/billing/entitlements.ts` at build time; no dollar amounts on the page.
 - [ ] Every screenshot is real product UI (`_apps/site/public/assets/product/`); re-shoot on UI shifts.

@@ -164,3 +164,26 @@ Rules that keep the shelf credible — it is the easiest page on the site to tur
   never hardcode stale numbers.
 - No testimonials yet — do not fabricate; lead with verifiable architecture and open source
   (see landing-blueprint.md).
+
+## The trust posture
+
+This product asks for more trust than a SaaS signup does: the visitor runs a container on their own
+hardware and hands it a GitHub token, a database password and write access to a repo. So "who are
+you?" is a real objection on the path to the CTA, and the answer is **verifiability, not popularity**
+— the landing page's `#trust` band and `/about/`, authored in `_libs/site-content/src/about.ts`.
+
+Four legs, and the fourth is what makes the first three land:
+
+1. **A named, checkable person** — Artur Kurowski, with GitHub, LinkedIn and radarsu.com as real
+   outbound `rel="me"` links and as `sameAs` on the Person schema. An anonymous "our team" reads worse
+   than a solo founder, not better.
+2. **Code you can read before you run it** — MIT on GitLab, the parts that touch your machine.
+3. **The dogfooding proof, which nobody else has** — most of this repository's commits are authored by
+   `agent@intentic.dev`, in public. It is a trust signal *and* a proof of the core claim: the fleet on
+   the page shipped the page. Counted from git at build time (`gitStats()`), never authored.
+4. **The admission** — weeks old, no case studies, no testimonials. A trust section that concedes
+   nothing reads as marketing and takes the other three down with it.
+
+Hard nos, for the same reason the comparison shelf has hard nos: no logo wall, no testimonial slot, no
+"trusted by N developers", and **no metric that could render as zero or one**. An empty counter costs
+more trust than it buys.

@@ -17,4 +17,13 @@ export const gitlabUrl = "https://gitlab.com/radarsu/intentic";
 export const gitlabProfileUrl = "https://gitlab.com/radarsu";
 export const gitlabIssuesUrl = "https://gitlab.com/radarsu/intentic/-/issues";
 
+/* The founder's public profiles. They are here rather than in about.ts because two consumers need them
+ * and neither owns them: the visible link chips on /about/ and the landing band, and `sameAs` in the
+ * Organization and Person schemas — which is how a search engine or an answer engine resolves "who is
+ * behind this domain" to a person it already knows about. */
+export const githubProfileUrl = "https://github.com/radarsu";
+export const linkedinProfileUrl = "https://www.linkedin.com/in/radarsu/";
+export const personalSiteUrl = "https://radarsu.com/";
+
 export const SAME_AS: readonly string[] = [gitlabUrl, gitlabProfileUrl];
+export const FOUNDER_SAME_AS: readonly string[] = [githubProfileUrl, linkedinProfileUrl, personalSiteUrl, gitlabProfileUrl];

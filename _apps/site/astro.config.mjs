@@ -103,7 +103,9 @@ export default defineConfig({
             details:
                 "intentic runs each coding agent in its own Docker sandbox on hardware you own — the dev-tools its job needs really installed, the systems it operates wired in as capabilities, and its context curated for one job. The platform stores only your identity and the sandbox's URL; your code and credentials never leave your machine. Every page below is also served as Markdown at the same URL with a .md suffix.",
             sections: [
-                { label: "Overview", paths: ["/"] },
+                // /about/ sits under Overview rather than Optional: "who is behind this" is the question an
+                // answer engine most often has to resolve about a young domain, and the page is the answer.
+                { label: "Overview", paths: ["/", "/about/"] },
                 { label: "Product", paths: ["/product/", ...productPages.map((page) => productHref(page.slug))] },
                 { label: "Compare", paths: [compareHref(""), ...comparePages.map((page) => compareHref(page.slug))] },
                 { label: "Docs", paths: docsPages.map((page) => docsHref(page.id)) },

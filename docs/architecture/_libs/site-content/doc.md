@@ -4,8 +4,8 @@ The website's words and page structure, as data.
 
 ```stats
 { "items": [
-    {"label": "Lines", "value": "2216"},
-    {"label": "Files", "value": "10"},
+    {"label": "Lines", "value": "2397"},
+    {"label": "Files", "value": "11"},
     {"label": "Used by", "value": "1 packages"},
     {"label": "Tests", "value": "no"}
   ] }
@@ -20,6 +20,12 @@ its `LandingContent` interface is the list of bands the homepage is allowed to h
 page from fourteen sections to six was a change to a type, and `Landing.astro` could not compile until
 it agreed. `product.ts` works the same way — a page's `group` drives which mega-menu column it appears
 in and where the footer lists it, so moving Doorbell out of the core surfaces was one field.
+
+`about.ts` is the file two surfaces share: the landing page's trust band and `/about/` both read the
+creator, the profile links and the four trust cards from it, so the two cannot drift into telling
+slightly different stories about who is behind the product. The one number those cards carry is
+deliberately *not* here — commit counts come from `gitStats()` in `_libs/astro-integrations`, measured
+during the build, because a figure that changes on every land is the fastest thing on the site to rot.
 
 ```dag
 { "title": "Its neighbours",

@@ -20,3 +20,17 @@ export function llmsText(options: LlmsTextOptions): AstroIntegration;
 
 /** ISO `lastmod` for a sitemap URL from git history, or null if unavailable. */
 export function lastModForUrl(url: string): string | null;
+
+export interface GitStats {
+    /** Commits reachable from HEAD. */
+    total: number;
+    /** How many of them an agent authored. */
+    agent: number;
+    /** The agent share as a whole percentage. */
+    share: number;
+    /** First commit date, YYYY-MM-DD. */
+    since: string;
+}
+
+/** Commit counts from git at build time, or null when the clone is shallow or git is unavailable. */
+export function gitStats(): GitStats | null;

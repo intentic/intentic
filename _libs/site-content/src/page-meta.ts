@@ -1,3 +1,4 @@
+import { aboutMeta } from "./about";
 import { compareHref, compareIndex, comparePages } from "./compare";
 import { docsHref, docsPages } from "./docs";
 import { landingContent } from "./landing";
@@ -26,6 +27,7 @@ export const pageMeta: Record<string, PageMeta> = {
         description: "The terms governing use of the intentic platform: accounts, billing, acceptable use, and liability.",
         datePublished: "2026-07-03",
     },
+    "/about/": aboutMeta,
     // The gallery's ROWS come from the registry repo at build time; only its framing is authored here.
     "/extensions/": {
         title: "Extensions — intentic",

@@ -90,6 +90,15 @@ export interface LandingContent {
      * lose the thread, and the honest framing is the one in _extensions/README.md — a lean core plus
      * extensions. Nothing in this band argues; each row hands the reader to the page that owns it. */
     extend: LandingSectionIntro & { rows: ExtendRow[]; note: string; cta: string };
+    /* Who is behind the promises the page just made. It sits here, last before `#connect`, because the
+     * conversion order is claim → proof → objection → action: `#ownership` answers the architectural
+     * half of "can I trust this", and the human half is the objection still standing when `#connect`
+     * says "paste this command on your machine".
+     *
+     * The cards come from `about.ts`, shared with /about/, and the commit numbers are measured from git
+     * at build time — never authored. The band has no slot that can render a zero: an empty social-proof
+     * counter is the one thing here that would cost more trust than it buys. */
+    trust: { eyebrow: string; cta: string };
     connect: LandingSectionIntro & { steps: LandingFact[]; commandNote: string };
     finalCta: { heading: string; sub: string };
 }
@@ -247,6 +256,12 @@ export const landingContent: LandingContent = {
         ],
         note: "An extension extends the agent as well as the UI — new tools, new skills, new layers in the image. Yours stays in your repo; a registry is just a list of sha-pinned pointers.",
         cta: "Browse every extension",
+    },
+    // The name, bio, links and cards all live in about.ts — shared with /about/, so the two surfaces
+    // cannot drift. Only the band's own framing is here.
+    trust: {
+        eyebrow: "About the creator",
+        cta: "More about who builds this",
     },
     connect: {
         eyebrow: "Get connected",
