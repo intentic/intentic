@@ -1,16 +1,17 @@
 <script setup lang="ts">
+import type { PickedModel } from "@intentic/extension-api";
 import { Button, Checkbox, cmp, Icon, InfoHint, Page, PageHeader, RowGroup, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markAcceptanceSeen } from "./attention";
 import DevServerChip from "./DevServerChip.vue";
 import { reposOf, RUNS_DIR, SCAN_RUNS, type Verdict, verdictTone } from "./runs";
-import RunBar from "./RunBar.vue";
+import RunControls from "./RunControls.vue";
 import RunReport from "./RunReport.vue";
-import { type Story, storyMarkdown } from "./stories";
+import { type Story, storyMarkdown, targetKeyOf } from "./stories";
 import StoryComposer from "./StoryComposer.vue";
 import StoryRow from "./StoryRow.vue";
 import TargetChip from "./TargetChip.vue";
-import type { RunRow, StartRunInput } from "./useRuns";
+import type { RunRow } from "./useRuns";
 import { useRuns } from "./useRuns";
 import { useStories } from "./useStories";
 import { useTargets } from "./useTargets";
@@ -38,9 +39,13 @@ import { useTargets } from "./useTargets";
  * monorepo showed six cards agreeing that one dev server was down, two scrollbars fought, and the button you
  * could not yet press was the only thing pinned. All three of its questions were already answerable here: WHICH
  * is ticked in the list, WHERE is stated on the heading the stories sit under (one dev server per repository, so
- * one line per repository), and WHO is two pickers in the bar docked below. Nothing ticked runs everything, which
- * is what the dialog's preselect-them-all default meant — so there is no mode, and no run is ever more than the
- * bar's own button away.
+ * one line per repository), and WHO is the model chip in the header (RunControls). Nothing ticked runs
+ * everything, which is what the dialog's preselect-them-all default meant — so there is no mode to enter.
+ *
+ * THE GATE LIVES HERE, once. A run in scope is waiting on an address or on a stopped server, and that same
+ * answer is needed in three places — the button that must refuse, the note that must say why, and the repository
+ * heading that carries the remedy. Deriving it here rather than in each of them is what keeps them from
+ * disagreeing.
  *
  * A test session is an ordinary isolated fleet agent, which is why there is no session UI here: the card, the
  * live status, the cost, the transcript and the stop button already exist on the Agents board, and every story
@@ -137,16 +142,53 @@ const chosen = computed<readonly Story[]>(() =>
     selected.value.size === 0 ? stories.value : stories.value.filter((story) => selected.value.has(story.path)),
 );
 
-/* THE REPOS A RUN IN SCOPE IS WAITING ON — the same gate the bar states in words, projected onto repositories so
- * that the heading carrying the remedy is the thing that lights up. Repos with no dev server at all are excluded:
- * those are blocked on an ADDRESS, which is the group chip's business, and Start would be no answer there. */
+// First-appearance order of the (repo, group) pairs the scope touches — the keys the run's `targets` map is
+// built from, and the things the gate is asked about. One representative story stands for each pair.
+const groups = computed<readonly Story[]>(() => {
+    const seen = new Map<string, Story>();
+    for (const story of chosen.value) {
+        const key = targetKeyOf(story);
+        if (!seen.has(key)) {
+            seen.set(key, story);
+        }
+    }
+    return [...seen.values()];
+});
+
+// A group pointed at nothing. The gate, and the only reason a run can be refused. Named for the groups it
+// holds rather than as a bare `blocked`, which this file also uses for a story's VERDICT (see tally).
+const blockedGroups = computed<readonly Story[]>(() => groups.value.filter((story) => targets.addressOf(story.repo, story.group) === undefined));
+const canRun = computed(() => chosen.value.length > 0 && blockedGroups.value.length === 0);
+
+/* WHAT IS ACTUALLY WRONG, counted in problems rather than in blocked groups. A monorepo's six groups blocked by
+ * one stopped dev server are ONE problem with one remedy, and reporting "(+5 more)" for them reads as six things
+ * to go and fix. So a stopped or starting server keys on its REPO (the daemon runs one, and Start is per repo)
+ * and a missing address keys on its GROUP (each is typed separately). Named for the reason too: "is still
+ * starting" and "needs an address" call for different moves, and a note that gave only a name made the user work
+ * out which of the two it was. */
+const problems = computed<readonly string[]>(() => {
+    const found = new Map<string, string>();
+    for (const story of blockedGroups.value) {
+        const state = targets.stateOf(story.repo);
+        if (state === `none`) {
+            found.set(targetKeyOf(story), `${targetKeyOf(story)} needs an address`);
+            continue;
+        }
+        found.set(story.repo, `${story.repo}'s dev server ${state === `starting` ? `is still starting` : `isn't running`}`);
+    }
+    return [...found.values()];
+});
+
+const blockedNote = computed<string | undefined>(() => {
+    const first = problems.value[0];
+    return first === undefined ? undefined : `${first}${problems.value.length > 1 ? ` (+${problems.value.length - 1} more)` : ``}`;
+});
+
+/* THE REPOS A RUN IN SCOPE IS WAITING ON — the same gate, projected onto repositories so that the heading
+ * carrying the remedy is the thing that lights up. Repos with no dev server at all are excluded: those are
+ * blocked on an ADDRESS, which is the group chip's business, and Start would be no answer there. */
 const stalled = computed<ReadonlySet<string>>(
-    () =>
-        new Set(
-            chosen.value
-                .filter((story) => targets.stateOf(story.repo) !== `none` && targets.addressOf(story.repo, story.group) === undefined)
-                .map((story) => story.repo),
-        ),
+    () => new Set(blockedGroups.value.filter((story) => targets.stateOf(story.repo) !== `none`).map((story) => story.repo)),
 );
 
 const setSelected = (group: readonly string[], on: boolean): void => {
@@ -271,234 +313,229 @@ const toggle = (path: string): void => {
     created.value = undefined;
 };
 
-/* The run itself: the bar decided WHAT and WHO, this adds the text those stories are made of. Kept here because
- * the contents, criteria and repo notes are this view's own reads — threading three dictionaries through the bar
- * so it could hand them straight back would be plumbing, not composition. */
-const run = async (input: Pick<StartRunInput, "stories" | "targets" | "provider" | "model">): Promise<void> =>
+/* The run itself: the header decided WHO, the ticks decided WHAT, this adds the addresses and the text those
+ * stories are made of. Kept here because the contents, criteria, repo notes and addresses are all this view's own
+ * reads — threading them through the control so it could hand them straight back would be plumbing, not
+ * composition. */
+const run = async (model: PickedModel): Promise<void> =>
     attempt(async () => {
-        openRunId.value = await start({ ...input, contents: contents.value, criteria: criteria.value, notes: notes.value });
+        openRunId.value = await start({
+            stories: chosen.value,
+            targets: Object.fromEntries(groups.value.map((story) => [targetKeyOf(story), targets.addressOf(story.repo, story.group) ?? ``])),
+            provider: model.provider,
+            model: model.model,
+            contents: contents.value,
+            criteria: criteria.value,
+            notes: notes.value,
+        });
     });
 </script>
 
 <template>
-    <!-- A REAL DOCK, not a sticky child: the list scrolls in its own box and the run bar sits outside it. The bar
-         is the one thing here that must never be scrolled away from — it states what a run will do and is the only
-         way to start one — and a `sticky` element inside the scroller would have inherited the page's width
-         constraint and its bottom padding to sit in. -->
-    <div class="flex h-full min-h-0 flex-col">
-        <div class="min-h-0 flex-1 overflow-auto scrollbar-thin">
-            <Page width="wide">
-                <PageHeader
-                    title="Acceptance"
-                    description="User stories and their acceptance criteria, walked through the running app by agents driving browsers."
+    <!-- An ordinary page: the shell's router-view wrapper is the scroll container, so this view owns no
+         scrolling and no chrome of its own. What used to be a docked bar under the list is the header's action
+         cluster (RunControls) — one place for what this page does, the same place every other view keeps it. -->
+    <Page width="wide">
+        <PageHeader
+            title="Acceptance"
+            description="User stories and their acceptance criteria, walked through the running app by agents driving browsers."
+        >
+            <template #info>
+                <InfoHint label="How a run works">
+                    <p class="text-xs text-muted">
+                        Every story in scope starts its own isolated agent session, and they run in parallel. Each opens the app in a real Chromium,
+                        walks every acceptance criterion, screenshots each step, then writes a verdict and a report.
+                    </p>
+                    <p class="mt-2 text-xs text-muted">
+                        Sessions run unattended in their own worktree with tool permissions bypassed, so nothing stops mid-test to ask. The brief
+                        forbids changing the application's source — defects get reported, not fixed.
+                    </p>
+                    <p class="mt-2 text-xs text-muted">
+                        You can watch any session's browser live — and take control of it — from the report. Sessions also appear on the Agents board
+                        like any other. Reports and screenshots land in <span class="font-mono">{{ RUNS_DIR }}/</span>, outside every repository, so a
+                        run never shows up in your changes.
+                    </p>
+                    <p class="mt-2 text-xs text-muted">
+                        Stories themselves are markdown in each repo's <span class="font-mono">docs/user-stories/</span> — product documentation,
+                        versioned with the code it describes. Editing one here writes that file; there is no separate copy.
+                    </p>
+                    <p class="mt-2 text-xs text-muted">
+                        A subdirectory of that is a group, and a run walks one address per group — so a repository serving both a marketing site and
+                        an app can test each of them, against its own server, in the same run. The agents reach these from inside the sandbox, so a
+                        localhost address is the direct route.
+                    </p>
+                </InfoHint>
+            </template>
+            <template #actions>
+                <!-- One Refresh for the whole page. The dev-server states are as re-readable as the stories
+                     are, and a panel started from Preview while this was open is exactly the staleness someone
+                     presses this to clear. -->
+                <Button
+                    label="Refresh"
+                    size="small"
+                    severity="secondary"
+                    @click="
+                        refreshStories();
+                        targets.refresh();
+                    "
                 >
-                    <template #info>
-                        <InfoHint label="How a run works">
-                            <p class="text-xs text-muted">
-                                Every story in scope starts its own isolated agent session, and they run in parallel. Each opens the app in a real
-                                Chromium, walks every acceptance criterion, screenshots each step, then writes a verdict and a report.
-                            </p>
-                            <p class="mt-2 text-xs text-muted">
-                                Sessions run unattended in their own worktree with tool permissions bypassed, so nothing stops mid-test to ask. The
-                                brief forbids changing the application's source — defects get reported, not fixed.
-                            </p>
-                            <p class="mt-2 text-xs text-muted">
-                                You can watch any session's browser live — and take control of it — from the report. Sessions also appear on the
-                                Agents board like any other. Reports and screenshots land in <span class="font-mono">{{ RUNS_DIR }}/</span>, outside
-                                every repository, so a run never shows up in your changes.
-                            </p>
-                            <p class="mt-2 text-xs text-muted">
-                                Stories themselves are markdown in each repo's <span class="font-mono">docs/user-stories/</span> — product
-                                documentation, versioned with the code it describes. Editing one here writes that file; there is no separate copy.
-                            </p>
-                            <p class="mt-2 text-xs text-muted">
-                                A subdirectory of that is a group, and a run walks one address per group — so a repository serving both a marketing
-                                site and an app can test each of them, against its own server, in the same run. The agents reach these from inside the
-                                sandbox, so a localhost address is the direct route.
-                            </p>
-                        </InfoHint>
-                    </template>
-                    <template #actions>
-                        <!-- One Refresh for the whole page. The dev-server states are as re-readable as the
-                             stories are, and a panel started from Preview while this was open is exactly the
-                             staleness someone presses this to clear. -->
-                        <Button
-                            label="Refresh"
-                            size="small"
-                            severity="secondary"
-                            @click="
-                                refreshStories();
-                                targets.refresh();
-                            "
-                        >
-                            <template #icon><Icon name="refresh" /></template>
-                        </Button>
-                    </template>
-                </PageHeader>
+                    <template #icon><Icon name="refresh" /></template>
+                </Button>
+                <!-- Withheld while a report is open: you are reading what a run FOUND, and a composer for the
+                     next one beside it would be answering a question nobody is asking yet. -->
+                <RunControls
+                    v-if="!openRun && stories.length > 0"
+                    :chosen="chosen.length"
+                    :total="stories.length"
+                    :narrowed="selected.size > 0"
+                    :blocked="blockedNote"
+                    :can-run="canRun"
+                    @clear="selected = new Set()"
+                    @submit="run"
+                />
+            </template>
+        </PageHeader>
 
-                <div v-if="topError" :class="cmp.alertDanger('mb-4')">{{ topError }}</div>
+        <div v-if="topError" :class="cmp.alertDanger('mb-4')">{{ topError }}</div>
 
-                <!-- ONE run's report, in place of the two lists. A back link rather than a tab: you are looking at
+        <!-- ONE run's report, in place of the two lists. A back link rather than a tab: you are looking at
                      a thing, not filtering a list. -->
-                <template v-if="openRun">
-                    <button
-                        type="button"
-                        class="mb-4 flex cursor-pointer items-center gap-1.5 text-xs text-muted hover:text-content"
-                        @click="openRunId = undefined"
-                    >
-                        <Icon name="arrow-left" />
-                        All runs
-                    </button>
-                    <RunReport
-                        :run="openRun"
-                        :outcomes="outcomes.data.value ?? {}"
-                        :browsers="browsers"
-                        :loading="outcomes.isLoading.value"
-                        :stop="stop"
-                    />
-                </template>
+        <template v-if="openRun">
+            <button
+                type="button"
+                class="mb-4 flex cursor-pointer items-center gap-1.5 text-xs text-muted hover:text-content"
+                @click="openRunId = undefined"
+            >
+                <Icon name="arrow-left" />
+                All runs
+            </button>
+            <RunReport :run="openRun" :outcomes="outcomes.data.value ?? {}" :browsers="browsers" :loading="outcomes.isLoading.value" :stop="stop" />
+        </template>
 
-                <template v-else>
-                    <section class="mb-8 flex flex-col gap-4">
-                        <div v-if="repos.length === 0 && !storiesLoading" :class="cmp.emptyState()">
-                            No repository here runs an app yet. Give one a panel (an <span class="font-mono">operator/</span> directory it can serve)
-                            and its stories become testable.
-                        </div>
-                        <!-- The count is withheld while the stories are still being read: "0" beside a loading
+        <template v-else>
+            <section class="mb-8 flex flex-col gap-4">
+                <div v-if="repos.length === 0 && !storiesLoading" :class="cmp.emptyState()">
+                    No repository here runs an app yet. Give one a panel (an <span class="font-mono">operator/</span> directory it can serve) and its
+                    stories become testable.
+                </div>
+                <!-- The count is withheld while the stories are still being read: "0" beside a loading
                              group is a wrong answer, not a pending one. -->
-                        <RowGroup v-for="entry in byRepo" :key="entry.repo" :label="entry.repo" :count="storiesLoading ? undefined : entry.count">
-                            <!-- THE REPOSITORY'S DEV SERVER, beside the name of the repository it belongs to. The
+                <RowGroup v-for="entry in byRepo" :key="entry.repo" :label="entry.repo" :count="storiesLoading ? undefined : entry.count">
+                    <!-- THE REPOSITORY'S DEV SERVER, beside the name of the repository it belongs to. The
                                  daemon runs one per repo, so this is where its state, its address and its Start
                                  belong — stated once, rather than once per story group in a dialog. The address a
                                  repo's UNGROUPED stories are walked at rides here too, for want of a `group/` row
                                  of their own; grouped stories carry theirs on that row. -->
-                            <template #actions>
-                                <TargetChip v-if="entry.rooted" :repo="entry.repo" group="" :targets="targets" />
-                                <DevServerChip :repo="entry.repo" :targets="targets" :blocked="stalled.has(entry.repo)" />
-                            </template>
+                    <template #actions>
+                        <TargetChip v-if="entry.rooted" :repo="entry.repo" group="" :targets="targets" />
+                        <DevServerChip :repo="entry.repo" :targets="targets" :blocked="stalled.has(entry.repo)" />
+                    </template>
 
-                            <!-- `py-2.5` and the `h-5` line box are StoryRow's own geometry, so the rows that
+                    <!-- `py-2.5` and the `h-5` line box are StoryRow's own geometry, so the rows that
                                  arrive land exactly where their placeholders were. -->
-                            <template v-if="storiesLoading">
-                                <div v-for="row in 3" :key="row" class="flex w-full items-center gap-3 px-4 py-2.5">
-                                    <span :class="[skeletonBar, `h-3.5 w-3.5 shrink-0`]" />
-                                    <span :class="[skeletonBar, `h-3.5 w-3.5 shrink-0`]" />
-                                    <span class="flex h-5 min-w-0 flex-1 items-center">
-                                        <span :class="[skeletonBar, `block h-3`, skeletonTitles[row - 1]]" />
-                                    </span>
-                                    <span :class="[skeletonBar, `h-2.5 w-14 shrink-0`]" />
-                                </div>
-                            </template>
-                            <template v-for="section in entry.groups" :key="section.group || 'root'">
-                                <!-- The group's own row: its tick takes the whole group in one gesture (the
+                    <template v-if="storiesLoading">
+                        <div v-for="row in 3" :key="row" class="flex w-full items-center gap-3 px-4 py-2.5">
+                            <span :class="[skeletonBar, `h-3.5 w-3.5 shrink-0`]" />
+                            <span :class="[skeletonBar, `h-3.5 w-3.5 shrink-0`]" />
+                            <span class="flex h-5 min-w-0 flex-1 items-center">
+                                <span :class="[skeletonBar, `block h-3`, skeletonTitles[row - 1]]" />
+                            </span>
+                            <span :class="[skeletonBar, `h-2.5 w-14 shrink-0`]" />
+                        </div>
+                    </template>
+                    <template v-for="section in entry.groups" :key="section.group || 'root'">
+                        <!-- The group's own row: its tick takes the whole group in one gesture (the
                                      granularity people mean by "re-run setup"), and its address appears here only
                                      when it is not simply the dev server named above. -->
-                                <div v-if="section.group !== ``" class="group flex items-center gap-3 bg-canvas px-4 py-1">
-                                    <Checkbox
-                                        :model-value="section.paths.every((path) => selected.has(path))"
-                                        :indeterminate="
-                                            section.paths.some((path) => selected.has(path)) && !section.paths.every((path) => selected.has(path))
-                                        "
-                                        binary
-                                        :aria-label="`Run every story in ${section.group}`"
-                                        @update:model-value="setSelected(section.paths, $event === true)"
-                                    />
-                                    <span class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ section.group }}/</span>
-                                    <TargetChip :repo="entry.repo" :group="section.group" :targets="targets" />
-                                </div>
-                                <StoryRow
-                                    v-for="story in section.entries"
-                                    :key="story.path"
-                                    :story="story"
-                                    :content="contents[story.path]"
-                                    :expanded="editing === story.path"
-                                    :status="statuses[story.path]"
-                                    :autofocus="created === story.path"
-                                    :selected="selected.has(story.path)"
-                                    :save="save"
-                                    :remove="remove"
-                                    @toggle="toggle(story.path)"
-                                    @select="setSelected([story.path], $event)"
-                                    @run="selected = new Set([story.path])"
-                                />
-                                <!-- One composer per group, so the next story lands beside the ones it belongs
+                        <div v-if="section.group !== ``" class="group flex items-center gap-3 bg-canvas px-4 py-1">
+                            <Checkbox
+                                :model-value="section.paths.every((path) => selected.has(path))"
+                                :indeterminate="
+                                    section.paths.some((path) => selected.has(path)) && !section.paths.every((path) => selected.has(path))
+                                "
+                                binary
+                                :aria-label="`Run every story in ${section.group}`"
+                                @update:model-value="setSelected(section.paths, $event === true)"
+                            />
+                            <span class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ section.group }}/</span>
+                            <TargetChip :repo="entry.repo" :group="section.group" :targets="targets" />
+                        </div>
+                        <StoryRow
+                            v-for="story in section.entries"
+                            :key="story.path"
+                            :story="story"
+                            :content="contents[story.path]"
+                            :expanded="editing === story.path"
+                            :status="statuses[story.path]"
+                            :autofocus="created === story.path"
+                            :selected="selected.has(story.path)"
+                            :save="save"
+                            :remove="remove"
+                            @toggle="toggle(story.path)"
+                            @select="setSelected([story.path], $event)"
+                            @run="selected = new Set([story.path])"
+                        />
+                        <!-- One composer per group, so the next story lands beside the ones it belongs
                                      with. -->
-                                <StoryComposer :repo="entry.repo" :group="section.group" :taken="paths" @create="create" />
-                            </template>
-                            <!-- The top level's own composer, when the loop above did not already render it: a
+                        <StoryComposer :repo="entry.repo" :group="section.group" :taken="paths" @create="create" />
+                    </template>
+                    <!-- The top level's own composer, when the loop above did not already render it: a
                                  repo with no stories yet has no groups at all, and one whose stories all sit in
                                  subdirectories has no top-level row to type in. Writing the next story is the
                                  thing this list is for, so the last row is always a place to start one. -->
-                            <StoryComposer v-if="!entry.rooted" :repo="entry.repo" group="" :taken="paths" @create="create" />
-                        </RowGroup>
-                        <p v-if="unread > 0" class="text-2xs text-subtle">
-                            {{ unread }} further story files are listed by filename only — titles, criteria and text are read for the first 200.
-                        </p>
-                    </section>
+                    <StoryComposer v-if="!entry.rooted" :repo="entry.repo" group="" :taken="paths" @create="create" />
+                </RowGroup>
+                <p v-if="unread > 0" class="text-2xs text-subtle">
+                    {{ unread }} further story files are listed by filename only — titles, criteria and text are read for the first 200.
+                </p>
+            </section>
 
-                    <!-- The count is withheld while the list is unknown: "0" next to a loading list is a wrong
+            <!-- The count is withheld while the list is unknown: "0" next to a loading list is a wrong
                          answer, not a pending one. -->
-                    <RowGroup label="Runs" :count="runsLoading ? undefined : runs.length">
-                        <template v-if="runsLoading">
-                            <div v-for="row in 2" :key="row" class="flex w-full items-center gap-3 px-4 py-2.5">
-                                <span :class="[skeletonBar, `h-3.5 w-3.5 shrink-0`]" />
-                                <!-- The two line boxes a run row stacks: text-sm over text-2xs. -->
-                                <span class="min-w-0 flex-1">
-                                    <span class="flex h-5 items-center"><span :class="[skeletonBar, `block h-3 w-24`]" /></span>
-                                    <span class="flex h-4 items-center"><span :class="[skeletonBar, `block h-2.5 w-40`]" /></span>
-                                </span>
-                                <span :class="[skeletonBar, `h-4 w-16 shrink-0 rounded-full`]" />
-                                <span :class="[skeletonBar, `h-2.5 w-20 shrink-0`]" />
-                            </div>
-                        </template>
-                        <div v-else-if="runs.length === 0" :class="cmp.emptyState('m-3')">
-                            Nothing has been tested yet. Press Run below — reports land in
-                            <span class="font-mono">{{ RUNS_DIR }}/</span>, outside every repository.
-                        </div>
-                        <button
-                            v-for="entry in runRows"
-                            :key="entry.row.manifest.runId"
-                            type="button"
-                            class="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-overlay"
-                            @click="openRunId = entry.row.manifest.runId"
-                        >
-                            <Icon
-                                :name="entry.row.running ? `spinner` : `history`"
-                                :class="['shrink-0 text-subtle', entry.row.running && `animate-spin`]"
-                            />
-                            <span class="min-w-0 flex-1">
-                                <!-- What it TESTED, not how many. "3 stories" makes every run in the list look
+            <RowGroup label="Runs" :count="runsLoading ? undefined : runs.length">
+                <template v-if="runsLoading">
+                    <div v-for="row in 2" :key="row" class="flex w-full items-center gap-3 px-4 py-2.5">
+                        <span :class="[skeletonBar, `h-3.5 w-3.5 shrink-0`]" />
+                        <!-- The two line boxes a run row stacks: text-sm over text-2xs. -->
+                        <span class="min-w-0 flex-1">
+                            <span class="flex h-5 items-center"><span :class="[skeletonBar, `block h-3 w-24`]" /></span>
+                            <span class="flex h-4 items-center"><span :class="[skeletonBar, `block h-2.5 w-40`]" /></span>
+                        </span>
+                        <span :class="[skeletonBar, `h-4 w-16 shrink-0 rounded-full`]" />
+                        <span :class="[skeletonBar, `h-2.5 w-20 shrink-0`]" />
+                    </div>
+                </template>
+                <div v-else-if="runs.length === 0" :class="cmp.emptyState('m-3')">
+                    Nothing has been tested yet. Press Run at the top of the page — reports land in
+                    <span class="font-mono">{{ RUNS_DIR }}/</span>, outside every repository.
+                </div>
+                <button
+                    v-for="entry in runRows"
+                    :key="entry.row.manifest.runId"
+                    type="button"
+                    class="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-overlay"
+                    @click="openRunId = entry.row.manifest.runId"
+                >
+                    <Icon :name="entry.row.running ? `spinner` : `history`" :class="['shrink-0 text-subtle', entry.row.running && `animate-spin`]" />
+                    <span class="min-w-0 flex-1">
+                        <!-- What it TESTED, not how many. "3 stories" makes every run in the list look
                                      like every other one; the titles are how someone finds the run they
                                      remember. -->
-                                <span class="block truncate text-sm text-content">
-                                    {{ entry.row.manifest.stories.map((story) => story.title).join(` · `) }}
-                                </span>
-                                <span class="block truncate font-mono text-2xs text-subtle">
-                                    {{ reposOf(entry.row.manifest).join(`, `) }} · {{ entry.row.manifest.provider
-                                    }}{{ entry.row.manifest.model ? ` ${entry.row.manifest.model}` : `` }}
-                                </span>
-                            </span>
-                            <StatusBadge v-if="entry.status" :variant="entry.status.variant" :label="entry.status.label" size="xs" />
-                            <span class="w-20 shrink-0 text-right text-2xs text-subtle">{{ timeAgo(entry.row.manifest.createdAt) }}</span>
-                        </button>
-                    </RowGroup>
-                    <p v-if="runs.length > SCAN_RUNS" class="mt-2 text-2xs text-subtle">
-                        Verdicts are read for the newest {{ SCAN_RUNS }} runs. Older ones show theirs when opened.
-                    </p>
-                </template>
-            </Page>
-        </div>
-
-        <!-- Hidden while a report is open: you are reading what a run FOUND, and a composer for the next one under
-             it would be answering a question nobody is asking yet. -->
-        <RunBar
-            v-if="!openRun && stories.length > 0"
-            :chosen="chosen"
-            :total="stories.length"
-            :narrowed="selected.size > 0"
-            :targets="targets"
-            @clear="selected = new Set()"
-            @submit="run"
-        />
-    </div>
+                        <span class="block truncate text-sm text-content">
+                            {{ entry.row.manifest.stories.map((story) => story.title).join(` · `) }}
+                        </span>
+                        <span class="block truncate font-mono text-2xs text-subtle">
+                            {{ reposOf(entry.row.manifest).join(`, `) }} · {{ entry.row.manifest.provider
+                            }}{{ entry.row.manifest.model ? ` ${entry.row.manifest.model}` : `` }}
+                        </span>
+                    </span>
+                    <StatusBadge v-if="entry.status" :variant="entry.status.variant" :label="entry.status.label" size="xs" />
+                    <span class="w-20 shrink-0 text-right text-2xs text-subtle">{{ timeAgo(entry.row.manifest.createdAt) }}</span>
+                </button>
+            </RowGroup>
+            <p v-if="runs.length > SCAN_RUNS" class="mt-2 text-2xs text-subtle">
+                Verdicts are read for the newest {{ SCAN_RUNS }} runs. Older ones show theirs when opened.
+            </p>
+        </template>
+    </Page>
 </template>

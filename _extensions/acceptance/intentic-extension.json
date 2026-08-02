@@ -13,7 +13,6 @@
             "DELETE /workspace/entry",
             "GET /panels",
             "POST /panels/*/start",
-            "GET /*/models",
             "POST /agent",
             "POST /agent/stop",
             "GET /agents",

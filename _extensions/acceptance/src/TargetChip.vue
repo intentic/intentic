@@ -66,7 +66,7 @@ const stated = (): boolean => targets.isElsewhere(repo, group) || targets.stateO
             <p class="text-sm font-medium text-content">Where does this group's app answer?</p>
             <!-- Typed straight into the aiming state, so the chip, the gate and the run's manifest all read one
                  value. Clearing it is meaningful: on a repo with a dev server it hands the group back, and on one
-                 without it leaves the group with nowhere to point, which the run bar then says out loud. -->
+                 without it leaves the group with nowhere to point, which the header then says out loud. -->
             <InputText
                 :model-value="targets.addressOf(repo, group) ?? ``"
                 placeholder="http://localhost:5173"

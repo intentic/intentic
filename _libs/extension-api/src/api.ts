@@ -131,6 +131,17 @@ export interface DocumentProviderRegistration {
     readonly view: () => Promise<Component>;
 }
 
+// A provider + model pair, and what the shell calls it. The label is here because a view that shows a chosen
+// model without showing the list would otherwise have to keep a catalog of its own — which is exactly the
+// duplication `api.models` exists to end.
+export interface PickedModel {
+    // An `AgentProvider` — `claude`, `codex`, a configured model endpoint's id, an installed ACP agent's id.
+    // Open on purpose: the set grows with what the sandbox has connected, and an extension only carries it.
+    readonly provider: string;
+    readonly model: string;
+    readonly label: string;
+}
+
 export type SettingValue = string | number | boolean;
 
 export interface ProcessStatus {
@@ -236,6 +247,23 @@ export interface IntenticApi {
         // Open (or focus) the tab for a stored runtime session id — the same path the History menu and the fleet
         // board take. A session the daemon no longer holds opens an empty tab rather than failing.
         openSession(sessionId: string): void;
+    };
+    /* WHICH MODEL A RUN THIS EXTENSION STARTS WILL SPEND, the way `terminal` is the shell's one terminal panel:
+     * the extension names the choice it is holding, the host owns the picker.
+     *
+     * It is an API rather than a kit component because the picker is not a widget — it is a live read of every
+     * connected provider's catalog, which credentials the sandbox actually holds, and what each model can do.
+     * An extension that rendered its own control could only ever offer a worse list: the acceptance view's did,
+     * fetching one provider's models behind a second dropdown for the provider itself, and so it happily
+     * offered models the sandbox had no credential for — a run that fails on a credential error minutes later. */
+    readonly models: {
+        // What a run opens on when nobody has chosen: the sandbox's Agent-runs model (Sandbox ▸ Agent ▸ Models),
+        // falling back to whatever the owner's own chat is set to. Reactive when read inside a computed.
+        agentRun(): PickedModel;
+        // Open the picker over `anchor` — a popover on desktop, a sheet on mobile — starting on the pair the
+        // caller is holding. Resolves with the pick, or undefined if it was dismissed. A second call supersedes
+        // the first, resolving it as a dismissal.
+        pick(options: { readonly anchor: HTMLElement; readonly provider: string; readonly model: string }): Promise<PickedModel | undefined>;
     };
     // Navigate the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").
     readonly navigate: (path: string) => void;

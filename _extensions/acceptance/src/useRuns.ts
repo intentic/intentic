@@ -66,8 +66,11 @@ export interface StartRunInput {
     readonly criteria: Readonly<Record<string, readonly string[]>>;
     // Each repo's docs/user-stories/.acceptance.md, keyed by repo name.
     readonly notes: Readonly<Record<string, string>>;
+    // The pair the header's chip resolved — the host names both, because a model id is only meaningful under the
+    // provider that vends it. An empty model is a real answer (an ACP agent owns its own): the daemon then falls
+    // to the provider's catalog default, exactly as an unpinned composer turn does.
     readonly provider: string;
-    readonly model?: string | undefined;
+    readonly model: string;
 }
 
 export function useRuns() {

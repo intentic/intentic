@@ -46,6 +46,12 @@ export const pickerEntries = computed<readonly PickerEntry[]>(() => [
     ...acpProviders.value.map((agent) => entryFor(agent.id, { label: agent.label, value: `` })),
 ]);
 
+// What the app CALLS a (provider, model) pair — the catalog's own published label, falling back to the raw id
+// for a model no catalog offers (a custom id the user typed, a row that has aged out). Every surface that shows
+// a chosen model without showing the list reads it from here, so the chip and the row it came from agree.
+export const modelLabelFor = (provider: AgentProvider, model: string): string =>
+    pickerEntries.value.find((entry) => entry.provider === provider && entry.value === model)?.label ?? model;
+
 // Lowercase and strip separators on both sides, so "gpt5" matches "GPT-5" and "45" matches "4.5".
 const normalize = (text: string): string => text.toLowerCase().replace(/[\s.\-_]/g, ``);
 

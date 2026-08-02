@@ -22,7 +22,7 @@ import type { useTargets } from "./useTargets";
 const { repo, targets, blocked } = defineProps<{
     repo: string;
     targets: ReturnType<typeof useTargets>;
-    // A selected group is stuck waiting on this server. Tints the chip so the run bar's note points at something
+    // A selected group is stuck waiting on this server. Tints the chip so the header's note points at something
     // findable instead of naming a repo and leaving you to hunt for it.
     blocked?: boolean;
 }>();

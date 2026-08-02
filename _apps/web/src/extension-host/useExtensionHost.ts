@@ -2,6 +2,7 @@ import { watch } from "vue";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import type { HostBindings } from "./apiImpl";
 import { loadExtensions } from "./loader";
 
@@ -36,7 +37,12 @@ export function useExtensionHost(): void {
     const { reachable } = useSandbox();
     const { panels } = usePanels();
     const { capabilities } = useCapabilities();
-    bindings = { repos: () => panels.value, capabilities: () => capabilities.value };
+    const { settings } = useSandboxSettings();
+    bindings = {
+        repos: () => panels.value,
+        capabilities: () => capabilities.value,
+        agentRunModel: () => settings.value?.agentRunModel ?? ``,
+    };
     let loading = false;
     watch(
         reachable,

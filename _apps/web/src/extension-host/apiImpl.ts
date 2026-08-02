@@ -1,8 +1,10 @@
 import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, ProcessStatus, RepoFacts } from "@intentic/extension-api";
 import { extensionApiVersion, extensionIdOf, flattenQuery, mergeQuery, sandboxRouteAllowed } from "@intentic/extension-api";
 import { useTheme } from "@intentic-app/ui";
-import { type ExtensionSummary, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import { type AgentProvider, type ExtensionSummary, parsePinned, WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
+import { requestModelPick } from "../composables/chat/hostModelPicker";
+import { modelLabelFor } from "../composables/chat/modelPicker";
 import { useChat } from "../composables/chat/useChat";
 import { useAgents } from "../composables/agents/useAgents";
 import { registerCommand, executeCommand } from "../composables/commands/useCommands";
@@ -26,6 +28,9 @@ import { registerFileBindings } from "./fileBindings";
 export interface HostBindings {
     readonly repos: () => readonly RepoFacts[];
     readonly capabilities: () => readonly CapabilityFacts[];
+    // The sandbox's pinned agent-run model as `${provider}:${model}`, "" when nothing is pinned — the floor
+    // `api.models.agentRun()` answers from.
+    readonly agentRunModel: () => string;
 }
 
 // The live activation of each extension id. An extension is activated ONCE per app load; a second
@@ -293,6 +298,22 @@ export const createExtensionApi = (
                         await useChat().openConversation(id);
                     }
                 })(),
+        },
+        /* The shell's own model picker and the default it opens on. Nothing here is gated on a manifest
+         * permission: the extension never learns a credential, never reaches a provider route, and cannot
+         * observe a catalog it wasn't shown — all it gets back is the pair the user pointed at. */
+        models: {
+            agentRun: () => {
+                // The pin carries the provider with the model, because a model id means nothing without the
+                // provider that vends it. Unpinned falls to the owner's own composer, which is what Sandbox ▸
+                // Agent ▸ Models calls this row's floor.
+                const pinned = parsePinned(host.agentRunModel());
+                const chat = useChat();
+                const provider = pinned?.provider ?? chat.provider.value;
+                const model = pinned?.model ?? chat.model.value;
+                return { provider, model, label: modelLabelFor(provider, model) };
+            },
+            pick: (options) => requestModelPick({ anchor: options.anchor, provider: options.provider as AgentProvider, model: options.model }),
         },
         navigate: (path) => {
             void router.push(path);

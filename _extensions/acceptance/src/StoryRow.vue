@@ -49,7 +49,7 @@ const { story, content, expanded, status, autofocus, selected, save, remove } = 
     status?: { readonly label: string; readonly variant: StatusVariant } | undefined;
     // Just created by the composer: open on the first empty criterion so the author keeps typing.
     autofocus?: boolean;
-    // Ticked for the next run. Note that an untouched list runs ALL of its stories — see RunBar — so an unticked
+    // Ticked for the next run. Note that an untouched list runs ALL of its stories — see RunControls — so an unticked
     // row is not an excluded one until something else in the list is ticked.
     selected: boolean;
     save: (input: { readonly path: string; readonly markdown: string }) => Promise<void>;
@@ -340,8 +340,8 @@ onBeforeUnmount(() => void flush());
                     state === `saving` ? `Saving…` : state === `dirty` ? `Unsaved` : state === `saved` ? `Saved` : ``
                 }}</span>
                 <div class="ml-auto flex items-center gap-2">
-                    <!-- Narrows the run to this story; the bar below then says what it will do and does it. Not a
-                         second way to start a run — one gate, one button, and this is how you aim at it. -->
+                    <!-- Narrows the run to this story; the header's Run then says what it will do and does it.
+                         Not a second way to start a run — one gate, one button, and this is how you aim at it. -->
                     <Button label="Run only this" size="small" severity="secondary" @click="emit(`run`)">
                         <template #icon><Icon name="play" /></template>
                     </Button>
