@@ -535,30 +535,30 @@ const openHistory = (event: Event): void => {
             </button>
         </div>
 
-        <!-- FOOT OF THE RAIL: the two ways out of the list — one more session, or an older one. Both stay where
-             the ✚ / history pair has always been, at the bottom of the rail, because that is where the pointer
-             already is: the composer it is about to type into sits directly to the right, and the window's
-             bottom-left CORNER is an infinite-height target (Fitts) that a row at the top can never be. What
-             was wrong was never the position, it was the weight — two unlabelled 28px glyphs of equal rank,
-             reading as leftover toolbar rather than as "start a session".
-             So the foot keeps the slot and spends the rail's width on saying what the controls do, ranked:
-             browsing the archive is the quiet ghost row, and the primary act is a full-width filled button
-             wearing the fleet board's own fill, glyph and wording — one "New agent" across the product. It
-             takes the last row on purpose, hard against the corner, closest to the hand.
-             Note the division of labour with the filter at the top of the list: typing SEARCHES past the open
-             chats already (the "Not open" group), so History is for BROWSING — recent chats, newest first. -->
-        <div v-else class="flex shrink-0 flex-col gap-1 border-t border-line pt-1">
-            <button
-                type="button"
-                class="composer-ghost w-full justify-start gap-2 px-2 py-1.5 text-2xs"
-                @click="openHistory"
-                aria-label="Chat history"
-            >
+        <!-- FOOT OF THE RAIL: the two ways out of the list — one more session, or an older one — as ONE
+             toolbar row in the window's bottom-left corner. The corner has never been in question: the
+             composer the hand is about to type into sits directly to the right, and a corner is an
+             infinite-height target (Fitts) that a row at the top can never be. Both controls stay LABELLED
+             there, which is what the two 28px glyphs this replaced never were.
+             The WEIGHT was what went wrong. Stacked full-width rows under a divider made a footer slab, and
+             at the rail's width the primary was exactly a card — wearing a tinted border in the same colour
+             as the ring on the active card above it, so the loudest pair of rectangles in a window whose job
+             is to be read were both chrome. Sized to their labels instead, the two sit in one row and the
+             rank is carried by the fill alone: the primary keeps the fleet board's fill, glyph and wording
+             (one "New agent" across the product), the archive is the quiet ghost beside it. Only a rail
+             dragged near its 176px floor wraps them back onto two lines.
+             The divider went with the border down the rail's right edge — with no edge to end against, a
+             hairline over a half-empty column is a line to nowhere. The filter at the top of the list is
+             held off by a gap alone, and now so is this.
+             Note the division of labour with that filter: typing SEARCHES past the open chats already (the
+             "Not open" group), so History is for BROWSING — recent chats, newest first. -->
+        <div v-else class="flex shrink-0 flex-wrap items-center gap-2 pt-3">
+            <button type="button" :class="cmp.buttonPrimary('h-7 text-2xs')" @click="startAgent()">
+                <Icon name="plus" class="text-2xs" />New agent
+            </button>
+            <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
                 <Icon name="history" class="text-2xs" />
                 <span>Past chats…</span>
-            </button>
-            <button type="button" :class="cmp.buttonPrimary('w-full justify-center gap-1.5 px-2.5 py-1.5 text-2xs')" @click="startAgent()">
-                <Icon name="plus" class="text-2xs" />New agent
             </button>
         </div>
 
