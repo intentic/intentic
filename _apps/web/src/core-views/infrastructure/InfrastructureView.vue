@@ -9,7 +9,7 @@ import InfraDeclare from "./InfraDeclare.vue";
 </script>
 
 <template>
-    <div class="h-full min-h-0 overflow-auto">
+    <div class="scrollbar-thin h-full min-h-0 overflow-auto">
         <Page width="wide">
             <PageHeader title="Infrastructure" description="Run your own services on your own server." />
             <InfraDeclare />

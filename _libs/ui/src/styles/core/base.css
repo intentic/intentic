@@ -15,6 +15,10 @@
         min-height: 100%;
         font-family: var(--font-sans);
         color-scheme: light dark;
+        /* Reserve the scrollbar's strip whether or not the page is long enough to scroll, so a view
+         * doesn't jump sideways the moment its scrollbar appears (or a scroll-lock removes it). No-op
+         * where scrollbars overlay content (macOS, mobile); unsupported engines ignore it outright. */
+        scrollbar-gutter: stable;
     }
 
     body {

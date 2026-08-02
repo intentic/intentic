@@ -225,7 +225,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
 </script>
 
 <template>
-    <div class="h-full min-h-0 overflow-auto">
+    <div class="scrollbar-thin h-full min-h-0 overflow-auto">
         <Page width="wide">
             <PageHeader title="Deployments" description="Container health, incidents and one-click redeploys across your Komodo.">
                 <template #info>

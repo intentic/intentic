@@ -134,7 +134,7 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
 </script>
 
 <template>
-    <div class="h-full min-h-0 overflow-auto">
+    <div class="scrollbar-thin h-full min-h-0 overflow-auto">
         <Page width="wide">
             <PageHeader title="Pipelines" description="CI runs on your workspace repos' GitHub and GitLab remotes.">
                 <template #info>

@@ -1,8 +1,13 @@
 /* Custom utilities — thin scrollbars, loading placeholders and entrance animations, themed via role tokens. */
 @layer utilities {
+    /* `scrollbar-gutter: stable` reserves the (thin) scrollbar's strip even when the box isn't
+     * overflowing, so content doesn't reflow sideways when the scrollbar appears — the gutter
+     * tracks the drawn scrollbar's width exactly, and inline-only per spec, so `overflow: auto`
+     * boxes that scroll horizontally get no dead strip at the bottom. */
     .scrollbar-thin {
         scrollbar-width: thin;
         scrollbar-color: var(--color-line-strong) transparent;
+        scrollbar-gutter: stable;
     }
 
     .scrollbar-thin::-webkit-scrollbar {
@@ -95,6 +100,9 @@
     .ui-softscroll {
         scrollbar-width: thin;
         scrollbar-color: color-mix(in srgb, var(--color-content) 10%, transparent) transparent;
+        /* Same anti-jank gutter as .scrollbar-thin — here it is what lets the whisper stay a
+         * whisper: the column keeps its width whether or not a scrollbar is showing. */
+        scrollbar-gutter: stable;
         transition: scrollbar-color 0.15s ease-out;
     }
 

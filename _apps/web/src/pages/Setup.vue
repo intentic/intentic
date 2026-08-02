@@ -835,7 +835,7 @@ watch(commandReady, (ready) => {
 <template>
     <!-- dvh, not vh: a phone's collapsing browser chrome makes 100vh taller than the screen, which parks the
          last step under the address bar on first paint. -->
-    <div class="min-h-dvh w-full overflow-auto bg-canvas text-content">
+    <div class="scrollbar-thin min-h-dvh w-full overflow-auto bg-canvas text-content">
         <!-- The page widens at xl to make room for a second column — see the aside below the steps. Below that
              it is the single centred column it has always been, and max-w-3xl still governs the steps
              themselves, so the command never gets narrower than it is today at any width. -->

@@ -116,7 +116,7 @@ const panes = computed(() =>
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col overflow-auto" :class="split ? 'md:flex-row' : ''">
+    <div class="scrollbar-thin flex h-full min-h-0 flex-col overflow-auto" :class="split ? 'md:flex-row' : ''">
         <div
             v-for="(pane, index) in panes"
             :key="pane.key"
