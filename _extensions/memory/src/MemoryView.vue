@@ -103,7 +103,6 @@ const openSibling = (name: string): void => {
     <SplitView
         title="Memory"
         description="What the agent remembers across sessions — reviewable, editable, forgettable."
-        rail-width="lg"
         mobile="swap"
         :detail-open="selected !== undefined"
     >
@@ -129,9 +128,9 @@ const openSibling = (name: string): void => {
         </template>
 
         <template #rail>
-            <!-- Framed, because it sits beside the reader rather than beside a document: two matching panels
-                 read as one split view, where a bare list beside a card reads as neither. -->
-            <NavRail v-model="query" :groups="groups" :count="visibleCount" framed filterable placeholder="Filter notes…">
+            <!-- Bare, like every other index in the app: the frame it used to draw was the last thing making
+                 this screen look unlike Documentation and Activity. -->
+            <NavRail v-model="query" :groups="groups" :count="visibleCount" filterable placeholder="Filter notes…">
                 <template #row="{ item: file }">
                     <Row
                         :key="`${file.project}/${file.name}`"

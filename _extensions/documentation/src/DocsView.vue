@@ -130,10 +130,8 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
     <SplitView
         title="Documentation"
         :description="`Plain-language orientation for ${label}, written by agents and reviewed by you.`"
-        rail-width="md"
         mobile="swap"
         :detail-open="page !== undefined"
-        width="full"
     >
         <template #actions>
             <Select

@@ -5,6 +5,13 @@
      the web app where no extension could import it — the same fault that had every extension hand-rolling a row
      before <Row> was exported.
 
+     IT TAKES NO STYLE PROPS. Collapsing four shells into one component removed the duplication and left the
+     DISAGREEMENT — every caller kept the treatment it happened to have, now spelled as `rail-width`, `framed`
+     and `width`, and three adjacent screens still read as three designs. A shared component that is configurable
+     in the places its callers disagree has not unified anything. So the rail is one width and never framed (see
+     RAIL and <NavRail>), and the page cap follows `scroll` (see pageWidth). What is left to pass is what the
+     screen IS, not how it should look.
+
      THE PAGE DOES NOT SCROLL; THE PANES DO. `h-full` + `overflow-hidden` leaves the outer router-view scroller
      nothing to take, so the rail and the body each keep their own scrollbar and their own place. Every one of
      the four copies carried a paragraph about the day it got this wrong, and they still did not all agree.
@@ -20,7 +27,7 @@
         the phone shows the list, then the document, with a way back. `detailOpen` says which, and #detail is
         responsible for offering the way back (it is the pane's own header that has room for it).
 
-     Desktop is one layout for all five: one gap, one rail-width scale, both panes bounded. -->
+     Desktop is one layout for all five: one gap, one rail width, both panes bounded. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import Page from "./Page.vue";
@@ -28,22 +35,16 @@ import PageHeader from "./PageHeader.vue";
 import { useDevice } from "../composables/useDevice.js";
 
 const {
-    railWidth = `md`,
     mobile: mobileMode = `collapse`,
     detailOpen = false,
-    width = `wide`,
     scroll = `panes`,
 } = defineProps<{
     title: string;
     description?: string;
-    /** sm: a short list of short names · md: paths · lg: titles with a filename under them. */
-    railWidth?: `sm` | `md` | `lg`;
     /** collapse: the rail narrows the body · swap: the rail selects a document. See the note above. */
     mobile?: `collapse` | `swap`;
     /** `swap` only — whether the phone is showing the document rather than the list. */
     detailOpen?: boolean;
-    /** wide caps the page for reading; full is for a screen that wants every pixel (a 54-entry index). */
-    width?: `wide` | `full`;
     /* WHAT SCROLLS, and it is a real fork rather than a preference.
      *  · `panes` — the page is clamped and each pane scrolls itself. Right when the body is a DOCUMENT beside an
      *    index: you keep your place in both, and reaching row 50 does not scroll the document away.
@@ -57,8 +58,22 @@ const {
 // Vue collides them in the template if both are called `mobile`.
 const { mobile: isPhone } = useDevice();
 
-// One scale, so four ad-hoc widths become three named ones a reader can tell apart at a glance.
-const RAIL = { sm: `w-52`, md: `w-64`, lg: `w-76` } as const;
+/* ONE WIDTH, not a scale. It was three named tiers, which was already better than the four ad-hoc numbers it
+ * replaced — and still wrong: three adjacent screens with three different column widths read as three designs,
+ * and no reader ever benefits from an index being 3rem narrower here than there. 16rem fits the longest thing
+ * any of them actually shows (a `_libs/sandbox-contract` path); the rest truncate, which is what truncation is
+ * for. */
+const RAIL = `w-64`;
+
+/* THE PAGE CAP FOLLOWS `scroll`; it is not a prop. It was one, and the three pane-scrolling screens set it three
+ * ways — which is how the same component still produced a Memory that sat in a 72rem column while Documentation
+ * beside it used the whole window. There was never a choice there to make:
+ *  · `panes` — the panes ARE the frame, and both bodies clamp their own reading measure (a note at 74ch, a
+ *    document at 76ch) INSIDE that frame. A second cap outside it protects nothing and just parks dead canvas
+ *    either side of a bordered panel.
+ *  · `page` — nothing is framed and nothing clamps itself, so the cap is the only thing standing between a
+ *    settings form and a 2560px line of text. */
+const pageWidth = computed(() => (scroll === `page` ? `wide` : `full`));
 
 /* Three arrangements, and only three:
  *  · desktop        — rail beside detail, rail at its named width.
@@ -78,14 +93,14 @@ const railClass = computed(() => {
         return `shrink-0`;
     }
     // Sticky only in `page` mode: it is what keeps the index reachable once the body has scrolled past a screen.
-    return scroll === `page` ? `sticky top-0 shrink-0 self-start ${RAIL[railWidth]}` : `shrink-0 ${RAIL[railWidth]}`;
+    return scroll === `page` ? `sticky top-0 shrink-0 self-start ${RAIL}` : `shrink-0 ${RAIL}`;
 });
 </script>
 
 <template>
     <div class="flex flex-col" :class="scroll === `panes` ? `h-full min-h-0 overflow-hidden` : ``">
         <!-- The head does not scroll: the title and anything pinned under it stay put while you read. -->
-        <Page :width="width" class="flex flex-col" :class="scroll === `panes` ? `min-h-0 flex-1` : ``">
+        <Page :width="pageWidth" class="flex flex-col" :class="scroll === `panes` ? `min-h-0 flex-1` : ``">
             <PageHeader :title="title" :description="description">
                 <template v-if="$slots[`info`]" #info><slot name="info" /></template>
                 <template v-if="$slots[`actions`]" #actions><slot name="actions" /></template>
@@ -96,7 +111,7 @@ const railClass = computed(() => {
             <div v-if="$slots[`strips`]" class="mb-4 flex shrink-0 flex-col gap-3"><slot name="strips" /></div>
 
             <div class="flex gap-4" :class="[railAside ? `flex-row` : `flex-col`, scroll === `panes` ? `min-h-0 flex-1` : `items-start`]">
-                <!-- Beside the body on desktop at its named width; above it and full-width on a phone. -->
+                <!-- Beside the body on desktop; above it and full-width on a phone. -->
                 <div v-if="showRail" class="flex flex-col" :class="[railClass, scroll === `panes` ? `min-h-0` : ``]">
                     <slot v-if="!railAside && $slots[`compact`]" name="compact" />
                     <slot v-else name="rail" />

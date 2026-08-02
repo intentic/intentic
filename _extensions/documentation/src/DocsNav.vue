@@ -1,8 +1,8 @@
 <!-- The contents column — the index to a document set, and for a 50-package monorepo the only thing standing
      between a reader and a wall of paths.
 
-     IT DRAWS NO LINES AT ALL — hence unframed <NavRail>. An index that outlines itself competes with the
-     document it exists to reach, and in a 16rem column every stroke counts double. Everything separates by
+     IT DRAWS NO LINES AT ALL, which is now <NavRail>'s rule rather than this column's choice. An index that
+     outlines itself competes with the document it exists to reach. Everything separates by
      space, by weight and by a wash of the text colour: the column ends where the page's margin begins, the
      groups are spaced apart rather than boxed apart, and the only saturated things in it are the seven
      component accents and the amber of a page that has drifted.

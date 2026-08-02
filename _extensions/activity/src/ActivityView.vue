@@ -59,7 +59,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
 </script>
 
 <template>
-    <SplitView title="Activity" description="What reached the agent, what it did about it, and how that went." rail-width="sm" width="full">
+    <SplitView title="Activity" description="What reached the agent, what it did about it, and how that went.">
         <template #info>
             <InfoHint label="Activity">
                 <span class="block text-sm font-medium text-content">Activity</span>

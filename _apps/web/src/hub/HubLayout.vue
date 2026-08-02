@@ -93,9 +93,9 @@ watch(
          an index — Usage and Secrets both run past a screen, and clamping them would put a scrollbar inside a
          card inside a page. The rail sticks instead, which is how you leave the section you are in.
 
-         Everything else — the shell, the header, the gap, the rail width, the phone behaviour — is <SplitView>'s
+         Everything else — the shell, the header, the gap, the rail width, the page cap, the phone behaviour — is <SplitView>'s
          now. This component is what remains once the layout is shared: route ↔ slug, and nothing else. -->
-    <SplitView :title="title" :description="description" rail-width="sm" width="wide" scroll="page">
+    <SplitView :title="title" :description="description" scroll="page">
         <!-- Mobile keeps the strip. At phone width there is no column to put beside anything, and a scrolling row
              of pills is the idiom every mobile tab bar already uses; the width failure that killed the strip on
              desktop is caused by a content cap that does not apply once the page is the whole screen. -->
