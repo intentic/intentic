@@ -113,8 +113,15 @@ const railClass = computed(() => {
             <div v-if="$slots[`strips`]" class="mb-4 flex shrink-0 flex-col gap-3"><slot name="strips" /></div>
 
             <div class="flex gap-4" :class="[railAside ? `flex-row` : `flex-col`, scroll === `panes` ? `min-h-0 flex-1` : `items-start`]">
-                <!-- Beside the body on desktop; above it and full-width on a phone. -->
-                <div v-if="showRail" class="flex flex-col" :class="[railClass, scroll === `panes` ? `min-h-0` : ``]">
+                <!-- Beside the body on desktop; above it and full-width on a phone. A caller with nothing to index
+                     gets no column at all: the same screen serves a workspace-wide area and a panel the host
+                     pinned to one repo, and the pinned one has exactly one thing in view, so an index over it is
+                     16rem of chrome pointing at the only thing on screen. -->
+                <div
+                    v-if="showRail && ($slots[`rail`] !== undefined || $slots[`compact`] !== undefined)"
+                    class="flex flex-col"
+                    :class="[railClass, scroll === `panes` ? `min-h-0` : ``]"
+                >
                     <slot v-if="!railAside && $slots[`compact`]" name="compact" />
                     <slot v-else name="rail" />
                 </div>

@@ -37,6 +37,11 @@ import { componentStem, frameworksOf, idiomRule, normalizePath, UI_FRAMEWORKS, u
 
 export type ChoreStance = "act" | "report";
 
+/* WHAT KIND OF CLAIM A CHORE MAKES ON SOMEONE'S ATTENTION. Four of them, ordered from "this is a risk you are
+ * carrying right now" to "this is worth thinking about this quarter" — see CHORE_KINDS at the foot of this file,
+ * which carries the argument and the words the panel groups under. */
+export type ChoreKind = "carrying" | "accruing" | "drifting" | "surveying";
+
 export interface ChoreContext {
     // Root-relative repo dir; the empty string is the workspace's own root repo.
     readonly repo: string;
@@ -71,6 +76,11 @@ export interface Chore {
     readonly icon: string;
     // The one-line standing description, shown whether or not the chore is currently due.
     readonly description: string;
+    /* WHICH OF THE FOUR KINDS OF CLAIM THIS IS (CHORE_KINDS, at the foot of this file). It decides the book's
+     * order and the panel's grouping, and it is a FIELD rather than a comment above the array for exactly that
+     * reason: the reading order is the one editorial claim this surface makes, and a claim spelled as a comment
+     * beside a hand-maintained list is one nobody can check and the compiler cannot keep. */
+    readonly kind: ChoreKind;
     /* THE RULE, in words — what has to be true for this chore to be due, stated so a reader can check it against
      * the evidence below it and disagree.
      *
@@ -153,6 +163,11 @@ const JSCPD_REPORT = `${JSCPD_DIR}/jscpd-report.json`;
 // called "root" — so it is spelled out here, once, rather than at every call site that builds a prompt.
 export const repoLabel = (repo: string): string => (repo === `root` || repo === `` ? `the workspace root repository` : repo);
 
+// The same repository, named for a surface that has a 16rem column or a chip to say it in. `repoLabel` is prose
+// and reads as prose inside a sentence ("update dependencies in the workspace root repository"); a rail row wants
+// the name on its own, and "the workspace root repository" truncates to "the workspace root reposi…" there.
+export const repoName = (repo: string): string => (repo === `root` || repo === `` ? `workspace root` : repo);
+
 const plural = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`;
 
 // One outdated dependency, as the panel lists it. The semver step leads, because it is what decides whether the
@@ -183,6 +198,7 @@ const security: Chore = {
     title: `Patch security advisories`,
     icon: `shield`,
     description: `Published advisories against this dependency tree, and the ones whose fix is a version bump.`,
+    kind: `carrying`,
     criterion: `pnpm audit reports an advisory of high or critical severity against the resolved tree.`,
     applies: (signals) => (signals.shape.lockfile ? undefined : `there is no lockfile here, so nothing resolves to a tree that could be audited`),
     stance: `act`,
@@ -246,6 +262,7 @@ const dependencies: Chore = {
     title: `Update dependencies`,
     icon: `arrow-circle-up`,
     description: `How far behind the registry this tree has drifted, and which majors are waiting.`,
+    kind: `accruing`,
     criterion: `A dependency is a major version behind, or more than 20 are behind by any amount.`,
     applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository has no package.json, so there is no npm dependency tree to be behind`),
     stance: `act`,
@@ -295,6 +312,7 @@ const deadCode: Chore = {
     title: `Clear out dead code`,
     icon: `trash`,
     description: `Files, exports and dependencies nothing in this repository references any more.`,
+    kind: `accruing`,
     criterion: `knip reports at least one unreferenced file, export or dependency.`,
     applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository is not a Node project, and knip only reads those`),
     stance: `act`,
@@ -359,6 +377,7 @@ const duplication: Chore = {
     title: `Find duplication worth collapsing`,
     icon: `clone`,
     description: `Copy-paste that has grown past a fifth of a percent of the tree. Reports only — extracting is a design call.`,
+    kind: `drifting`,
     criterion: `jscpd reports more than 5% of the scanned tree duplicated.`,
     stance: `report`,
     needs: [`jscpd`],
@@ -410,6 +429,7 @@ const documentation: Chore = {
     title: `Document what nothing explains`,
     icon: `file-edit`,
     description: `Packages in this repository with no architecture document — new ones first.`,
+    kind: `drifting`,
     criterion: `A workspace package has no docs/architecture document.`,
     applies: (signals) => (signals.packages.length > 0 ? undefined : `this repository is not a workspace, so it has no packages to document one by one`),
     stance: `act`,
@@ -465,6 +485,7 @@ const complexity: Chore = {
     title: `Simplify what everything waits on`,
     icon: `wave-pulse`,
     description: `Files that both churn and carry the repository — where edits are slow and ripple outward.`,
+    kind: `accruing`,
     criterion: `A file in the hotspot ranking is also a key module, or its branching is three times the median of that ranking.`,
     stance: `act`,
     needs: [],
@@ -525,6 +546,7 @@ const runtime: Chore = {
     title: `Move off an end-of-life runtime`,
     icon: `bolt`,
     description: `Whether the Node this sandbox runs still receives security patches.`,
+    kind: `carrying`,
     criterion: `The Node release this sandbox runs is past its end-of-life date, or within 90 days of it.`,
     applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository is not a Node project, so the sandbox's runtime is not its concern`),
     stance: `act`,
@@ -587,6 +609,7 @@ const libraries: Chore = {
     title: `Settle on one library per job`,
     icon: `box`,
     description: `Two dependencies solving the same problem — both shipped, both maintained, one picked at random.`,
+    kind: `drifting`,
     criterion: `Two or more installed dependencies do the same job.`,
     applies: (signals) => (signals.packages.length > 0 ? undefined : `this repository is not a workspace, so there are no package manifests to compare`),
     stance: `report`,
@@ -681,6 +704,7 @@ const bundleWeight: Chore = {
     title: `Split what the browser downloads first`,
     icon: `download`,
     description: `What the last build put on disk, and whether it arrives as one download or several.`,
+    kind: `accruing`,
     criterion: `A single asset is more than half of the build's total transfer size.`,
     applies: needsFramework,
     stance: `report`,
@@ -743,6 +767,7 @@ const frameworkIdiom: Chore = {
     title: `Finish the framework migrations`,
     icon: `history`,
     description: `Code still written the way the framework used to recommend, long after it stopped.`,
+    kind: `accruing`,
     criterion: `A file uses a framework idiom that framework's own maintainers have replaced.`,
     applies: needsFramework,
     stance: `act`,
@@ -816,6 +841,7 @@ const componentOverlap: Chore = {
     title: `Settle on one component per job`,
     icon: `copy`,
     description: `Components built twice — the same name in two places, or the same logic under two names.`,
+    kind: `drifting`,
     criterion: `Two component files reduce to the same name, or a duplicated block spans two components.`,
     applies: needsFramework,
     stance: `report`,
@@ -894,6 +920,7 @@ const tailwindBypass: Chore = {
     title: `Put hard-coded styles back on the scale`,
     icon: `palette`,
     description: `Colours and sizes written inline in the markup, around the theme that already defines them.`,
+    kind: `drifting`,
     criterion: `A Tailwind class hard-codes a colour or a pixel size instead of using the theme's scale.`,
     applies: (signals) => (usesTailwind(signals.shape.deps) ? undefined : `this repository does not use Tailwind, so there is no theme scale to bypass`),
     stance: `act`,
@@ -971,6 +998,10 @@ const survey = ({ id, title, icon, description, diagnosis, goal, done, cadenceDa
     title,
     icon,
     description,
+    // Not a parameter of SurveySpec, and it never will be: a survey has no measurement, so "due because it has
+    // been that long" IS the surveying kind. The two are the same claim spelled twice, and the test below holds
+    // them to it in both directions.
+    kind: `surveying`,
     criterion: `${cadenceDays} days have passed since this review was last run.`,
     applies,
     stance: `report`,
@@ -1093,19 +1124,41 @@ const images = survey({
 
 /* THE BOOK'S ORDER, which is the panel's reading order and therefore a product decision rather than whatever
  * order these were written in. It narrows from "this is a risk you are carrying right now" to "this is worth
- * thinking about this quarter":
- *   carrying   security, runtime — someone else decides when these become urgent
- *   accruing   dependencies, dead code, complexity, bundle, framework idioms — cheap now, expensive later, and
- *              always getting later
- *   drifting   documentation, duplication, libraries, components, hard-coded styles — the shape of the thing is
- *              diverging from the idea of it
- *   surveying  the periodic reads, which have no urgency by construction
+ * thinking about this quarter".
+ *
+ * This used to be a comment above a hand-sorted array — the four kinds named in prose, the order maintained by
+ * whoever added the last chore, and nothing anywhere that could check the two agreed. It was also thrown away at
+ * render: the panel listed every chore in one flat column, so the single editorial claim this surface makes
+ * ("a live advisory and a quarterly re-read are not the same kind of thing") was invisible and therefore
+ * unarguable — on a page whose whole design is that every claim shows its working.
+ *
+ * So the kinds are data. They order the book here, they group the rows in the panel, and `caption` is the
+ * sentence the panel puts beside each group so the grouping argues for itself.
  *
  * Ordering is by KIND, not by whether a given repository will see them: a chore that does not apply is dropped
- * from that repository's list entirely (verdict.ts), so the reading order never has holes in it. That is also why
- * the front-end chores are interleaved here rather than kept in the block they are written in — a Vue repository
- * should read its bundle row next to its dependency row, not in a "front-end" section at the bottom. */
-export const CHORES: readonly Chore[] = [
+ * from that repository's list entirely (verdict.ts), so the reading order never has holes in it. It is also why
+ * a block of chores written together does not READ together: the front-end four are one paragraph in this file
+ * because they share a gate and a probe, and `kind` is what puts a Vue repository's bundle row next to its
+ * dependency row rather than in a "front-end" section at the bottom. Where a chore is written and where it is
+ * ranked are two separate facts, and only one of them is a product decision. */
+export interface ChoreKindSpec {
+    readonly kind: ChoreKind;
+    // Title case, because the panel renders it as a group heading rather than as a sentence.
+    readonly label: string;
+    // Why these belong together, in the reader's terms — what the group is CLAIMING about the rows under it.
+    readonly caption: string;
+}
+
+export const CHORE_KINDS: readonly ChoreKindSpec[] = [
+    { kind: `carrying`, label: `Carrying`, caption: `a risk this repository is running today — someone else decides when it becomes urgent` },
+    { kind: `accruing`, label: `Accruing`, caption: `cheap now, expensive later, and always getting later` },
+    { kind: `drifting`, label: `Drifting`, caption: `the shape of the thing is diverging from the idea of it` },
+    { kind: `surveying`, label: `Surveying`, caption: `periodic reads with nothing measuring them — due because it has been that long` },
+];
+
+// Declaration order, which decides nothing but the order WITHIN a kind — the sort below is stable, so the two
+// facts stay separable: this list is where a chore is written down, CHORE_KINDS is where it is ranked.
+const BOOK: readonly Chore[] = [
     security,
     runtime,
     dependencies,
@@ -1124,6 +1177,12 @@ export const CHORES: readonly Chore[] = [
     pipelines,
     images,
 ];
+
+const KIND_ORDER: readonly ChoreKind[] = CHORE_KINDS.map(({ kind }) => kind);
+
+// Sorted rather than filtered into groups, so no chore can ever be dropped out of the book by a kind the list
+// above forgot — a missing kind sorts to the front, where it is visible, instead of vanishing.
+export const CHORES: readonly Chore[] = BOOK.toSorted((left, right) => KIND_ORDER.indexOf(left.kind) - KIND_ORDER.indexOf(right.kind));
 
 export const choreById = (id: string): Chore | undefined => CHORES.find((chore) => chore.id === id);
 

@@ -21,7 +21,10 @@
         ]
     },
     "contributes": {
-        "views": [{ "id": "maintenance", "label": "Maintenance", "surface": "rail", "badge": true }],
+        "views": [
+            { "id": "maintenance", "label": "Maintenance", "surface": "rail", "badge": true },
+            { "id": "maintenance-repo", "label": "Maintenance", "surface": "directory" }
+        ],
         "files": [{ "path": ".intentic/chores/", "invalidates": ["maintenance-report", "maintenance-runs"] }]
     }
 }

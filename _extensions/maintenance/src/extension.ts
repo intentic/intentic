@@ -2,8 +2,8 @@ import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { maintenanceBadge, startMaintenanceAttention } from "./attention.js";
 import { bindHost } from "./host.js";
 
-/* ext-maintenance activation: bind the host handle, start the badge's background poll, then register the one
- * surface maintenance legitimately has.
+/* ext-maintenance activation: bind the host handle, start the badge's background poll, then register the two
+ * surfaces maintenance legitimately has.
  *
  * ONE RAIL TILE, WORKSPACE-WIDE, ALWAYS PRESENT. Three decisions, each of which could have gone the other way:
  *
@@ -38,6 +38,28 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
              * glyph a reader already has a fixed meaning for is the one it must not borrow. */
             detect: (repos) => (repos.length === 0 ? [] : [{ key: `maintenance`, title: `Maintenance`, icon: `wrench` }]),
             badge: maintenanceBadge,
+            view: async () => (await import(`./MaintenanceView.vue`)).default,
+        }),
+    );
+
+    /* THE PER-REPO SURFACE, opened from the Workspace tree beside whatever else serves that repository. The rail
+     * tile answers "what is this WORKSPACE owed" and is read across repos; this answers the same question about
+     * the repository whose files you are already looking at, which is where it is actually asked — and it is the
+     * same component, with `repo` bound by the host, because the two are one list under two scopes.
+     *
+     * AUXILIARY, so it adds a surface rather than claiming the repo: maintenance renders no preview, and dropping
+     * the dev-server tile beside it would cost the user something for nothing. Same call, and the same reasoning,
+     * as the documentation extension's docs browser.
+     *
+     * No badge here. The rail's badge means "evidence you have not seen anywhere in this workspace", and a second
+     * copy of it per repository in the tree would be the same claim said five times. */
+    context.subscriptions.push(
+        api.views.register({
+            id: `maintenance-repo`,
+            label: `Maintenance`,
+            surface: `directory`,
+            auxiliary: true,
+            detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: `Maintenance`, icon: `wrench`, repo: repo.repo })),
             view: async () => (await import(`./MaintenanceView.vue`)).default,
         }),
     );

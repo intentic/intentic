@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ChoreVerdict } from "@intentic/sandbox-contract/chores";
+import { type ChoreVerdict, repoName } from "@intentic/sandbox-contract/chores";
 import { Button, Icon, type IconName, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
 import { computed } from "vue";
 import type { ChoreRun } from "./useRuns";
@@ -13,7 +13,11 @@ import type { ChoreRun } from "./useRuns";
  * behind it — and a CLEAR chore expands too, into what was measured and when, because "there is nothing to do
  * here" is only reassuring if you can see what was checked. */
 
-const { verdict, run } = defineProps<{ verdict: ChoreVerdict; run: ChoreRun | undefined; expanded: boolean; busy: boolean }>();
+/* `showRepo` rather than a repo string, because the row already knows which repository it belongs to — what it
+ * cannot know is whether the list around it spans more than one. On a list scoped to a single repository the mark
+ * is the same word on every row, which is noise; across repositories it is the only thing telling two otherwise
+ * identical rows apart. */
+const { verdict, run } = defineProps<{ verdict: ChoreVerdict; run: ChoreRun | undefined; expanded: boolean; showRepo: boolean; busy: boolean }>();
 const emit = defineEmits<{ toggle: []; start: []; snooze: []; unsnooze: []; open: [conversationId: string] }>();
 
 // The state, as one badge. `unavailable` is deliberately NOT a warning colour: nothing is wrong, we simply have
@@ -52,13 +56,22 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
         >
             <Icon :name="expanded ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
             <Icon :name="verdict.chore.icon as IconName" class="shrink-0 text-subtle" />
-            <span class="min-w-0 shrink-0 text-sm text-content">{{ verdict.chore.title }}</span>
-            <!-- The headline is the row's whole point, so it takes the flexible column and the title does not:
-                 truncating "4 majors waiting, 61 behind in total" to fit a chore name nobody needed re-reading
-                 would lose the only part that changes. -->
-            <span class="min-w-0 flex-1 truncate text-xs text-subtle">{{ verdict.headline }}</span>
+            <!-- ONE LINE WITH ROOM FOR IT, TWO WITHOUT. On a wide row the title keeps its full width and the
+                 headline takes the flexible column: truncating "4 majors waiting, 61 behind in total" to fit a
+                 chore name nobody needed re-reading would lose the only part that changes. At phone width there is
+                 no column wide enough for both, and the row that tried spilled its state badge off the card — so
+                 the two stack, each truncating on its own line, and the badge stays where it can be read. -->
+            <span class="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+                <span class="flex min-w-0 items-center gap-2 sm:shrink-0">
+                    <span class="min-w-0 truncate text-sm text-content">{{ verdict.chore.title }}</span>
+                    <span v-if="showRepo" class="shrink-0 rounded bg-content/[0.06] px-1.5 py-0.5 text-2xs text-subtle">
+                        {{ repoName(verdict.repo) }}
+                    </span>
+                </span>
+                <span class="min-w-0 flex-1 truncate text-xs text-subtle">{{ verdict.headline }}</span>
+            </span>
             <Icon v-if="liveAgent" name="spinner" spin class="shrink-0 text-subtle" />
-            <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" />
+            <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" class="shrink-0" />
         </button>
 
         <div v-if="expanded" class="border-t border-line/60 bg-canvas px-4 py-4 sm:px-6">
