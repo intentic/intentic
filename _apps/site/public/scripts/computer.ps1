@@ -54,5 +54,8 @@ if (-not [string]::IsNullOrEmpty($env:AGENT_BIN)) {
     # A whitespace-separated command: first token is the executable, the rest are leading args before setup.
     $parts = $env:AGENT_BIN -split '\s+'
     $lead = if ($parts.Length -gt 1) { $parts[1..($parts.Length - 1)] } else { @() }
-    & $parts[0] @($lead + $hostArgs)
+    # Named, then splatted: `@(...)` is the array subexpression operator and would pass the whole argument
+    # list as one space-joined string (connect.ps1 has the long version). Only `@name` splats.
+    $agentArgs = $lead + $hostArgs
+    & $parts[0] @agentArgs
 } elseif ($bin -eq 'npx') { & npx -y '@intentic/host@latest' @hostArgs } else { & $bin @hostArgs }

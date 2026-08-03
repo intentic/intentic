@@ -234,7 +234,10 @@ try {
     # Two attempts, because exactly one part of the run may fail without the sandbox being broken: docker
     # refuses the WHOLE launch when something already holds the loopback shortcut's port, so the retry drops
     # just the shortcut. The failed attempt leaves a created-but-stopped container holding the name.
-    docker @($ArgvJson | ConvertFrom-Json) | Out-Null
+    # Named first, because only `@name` splats: `docker @($json | ConvertFrom-Json)` is the array SUBEXPRESSION
+    # operator and hands docker the whole argv as one space-joined argument (see connect.ps1).
+    $RunArgs = @($ArgvJson | ConvertFrom-Json)
+    docker @RunArgs | Out-Null
     if ($LASTEXITCODE -ne 0) {
         docker rm -f $Container *> $null
         $ArgvJson = $EnvStdin | docker run -i --rm --entrypoint intentic $TargetImage @VerbArgs --no-local-publish
@@ -242,7 +245,8 @@ try {
             Write-Error "starting the recreated sandbox failed (a runtime flag the host rejects?). Log: $Log. Re-run your connect one-liner to restore the stock sandbox."
             exit 1
         }
-        docker @($ArgvJson | ConvertFrom-Json) | Out-Null
+        $RunArgs = @($ArgvJson | ConvertFrom-Json)
+        docker @RunArgs | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Error "starting the recreated sandbox failed (see the docker output above). Log: $Log. Re-run your connect one-liner to restore the stock sandbox."
             exit 1

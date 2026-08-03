@@ -375,7 +375,48 @@ mod tests {
         }
     }
 
-    /// Every shipped `.ps1`, as (path, contents). Both checks above are properties of the FILE that no Linux
+    /* SPLATTING TAKES A VARIABLE, AND `@(...)` IS NOT ONE.
+     *
+     * `docker @($json | ConvertFrom-Json)` reads exactly like the splat it was meant to be, and PowerShell
+     * accepts it silently — `@(...)` is the array SUBEXPRESSION operator, so the argv array is stringified
+     * into ONE space-joined argument. The sandbox launched with `docker: unknown command: docker run -d
+     * --init ...`, docker quoting the entire run line back, after the image had already pulled. Only `@name`
+     * splats.
+     *
+     * There is no runtime that catches this on a Linux CI box, and the .sh twin cannot: it takes the shell
+     * form of the run contract and executes the file, so the whole splat question is PowerShell's alone. */
+    #[test]
+    fn no_powershell_script_fakes_a_splat_with_an_array_subexpression() {
+        // The native commands these scripts hand argv to. A cmdlet taking `@(...)` as one array argument is
+        // ordinary and correct, which is why this is a list rather than a bare search for `@(`.
+        // The native commands these scripts hand argv to, plus the call operator on an expression
+        // (`& $parts[0] @(…)`, how the local-dev AGENT_BIN paths invoke a downloaded agent). A CMDLET taking
+        // `@(...)` as one array argument is ordinary and correct, which is why this is a list of invocation
+        // shapes rather than a bare search for `@(`.
+        const NATIVE: [&str; 4] = ["docker", "winget", "bash", "cloudflared"];
+        for (path, text) in powershell_scripts() {
+            for (index, line) in text.lines().enumerate() {
+                // Code only. These scripts explain their own footguns by quoting them, and a comment that
+                // names the mistake it is warning about must not BE the mistake.
+                let line = line.split('#').next().unwrap_or(line);
+                let by_name = NATIVE
+                    .iter()
+                    .find(|command| line.contains(&format!("{command} @(")));
+                let called = line.contains("& $") && line.contains(" @(");
+                assert!(
+                    by_name.is_none() && !called,
+                    "{}:{} passes `@(...)` where a splat was meant — that is the array SUBEXPRESSION \
+                     operator, so PowerShell hands the callee the whole array as ONE space-joined argument \
+                     (docker answers `unknown command: docker run -d …`). Name the array first, then splat \
+                     the name: `$RunArgs = @(…); docker @RunArgs` — and not `$Args`, which is automatic.",
+                    path.display(),
+                    index + 1,
+                );
+            }
+        }
+    }
+
+    /// Every shipped `.ps1`, as (path, contents). The checks above are properties of the FILE that no Linux
     /// runner can reach any other way — the Windows installer is cross-built here and these scripts first
     /// execute on a user's machine.
     fn powershell_scripts() -> Vec<(std::path::PathBuf, String)> {

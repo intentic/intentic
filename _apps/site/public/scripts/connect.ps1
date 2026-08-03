@@ -465,7 +465,12 @@ if ($LASTEXITCODE -ne 0 -or -not $ArgvJson) {
 # this machine reaches the daemon directly instead of going out to Cloudflare and back. docker refuses the
 # WHOLE launch when something already holds that port, so the retry drops just the shortcut. Any other failure
 # fails both attempts. The failed attempt leaves a created-but-stopped container holding the name.
-docker @($ArgvJson | ConvertFrom-Json) | Out-Null
+# SPLATTING NEEDS A VARIABLE. `docker @($json | ConvertFrom-Json)` reads like a splat and is not one: `@(...)`
+# is the array SUBEXPRESSION operator, so the argv array reaches docker as a single argument, space-joined -
+# `docker: unknown command: docker run -d --init ...`, with the whole run line quoted back. Only `@name`
+# splats, so the array is named first.
+$RunArgs = @($ArgvJson | ConvertFrom-Json)
+docker @RunArgs | Out-Null
 if ($LASTEXITCODE -ne 0) {
     docker rm -f $Container *> $null
     $ArgvJson = ($EnvPairs -join "`0") + "`0" | docker run -i --rm --entrypoint intentic $SandboxImage @VerbArgs --no-local-publish
@@ -473,7 +478,8 @@ if ($LASTEXITCODE -ne 0) {
         Write-Error "$SandboxImage could not produce its run command (see the docker output above)."
         exit 1
     }
-    docker @($ArgvJson | ConvertFrom-Json) | Out-Null
+    $RunArgs = @($ArgvJson | ConvertFrom-Json)
+    docker @RunArgs | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Error 'failed to start the sandbox container (see the docker output above).'
         exit 1
