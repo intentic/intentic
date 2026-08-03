@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { Button, Checkbox, cmp, Icon, ProseField, Segmented, Select } from "@intentic/extension-ui";
-import type { OutputField, WorkflowStep } from "@intentic/sandbox-contract";
+import {
+    type CatalogOption,
+    HARNESSES,
+    ModelsSchema,
+    modelsFor,
+    type OutputField,
+    providerLabel,
+    PROVIDERS,
+    type WorkflowStep,
+} from "@intentic/sandbox-contract";
+import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
+import { host } from "./host";
 
 /* THE SELECTED STEP — two questions, and everything else folded away.
  *
@@ -109,12 +120,52 @@ const rubric = computed({
     set: (value: string) => setCheck(`judge`, value),
 });
 
+/* WHICH MODEL RUNS THIS STEP — the one thing on a step that is about the agent rather than about the work.
+ *
+ * Unpinned by default, and that default is the honest one: a step naming no provider runs on whatever the user
+ * normally uses, so a workflow does not quietly stop working when they change providers or when one is not
+ * connected. Pinning is for the graphs where the model IS the design — two attempts at one brief on two
+ * different models, a judge from a family that wrote neither — and there the pin has to be READABLE without
+ * opening this fold, which is why it reaches the summary line below and the node card (workflowDag).
+ */
+const UNPINNED = ``;
+const providerOptions: CatalogOption[] = [{ value: UNPINNED, label: `Whatever you normally use` }, ...PROVIDERS];
+
+// Only codex/grok have both a native runtime and a routed one to switch between. Claude IS the Claude Code
+// loop, and kimi/gemini only ever run on it — so none of the three has a harness to choose.
+const harnessChoosable = computed(() => step.value.agent === `codex` || step.value.agent === `grok`);
+
+// The pinned provider's live model list, fetched only while a provider is pinned: with none, there is no
+// catalog to pick from and the row is not drawn at all. Keyed by provider alone — the ids are the same under
+// either harness, since codex/grok route the same subscription models through the translator.
+const liveModels = useQuery({
+    queryKey: computed(() => host().sandbox.key(`agent-models`, step.value.agent ?? UNPINNED)),
+    queryFn: async (): Promise<CatalogOption[]> =>
+        ModelsSchema.parse(await host().sandbox.json(`/${step.value.agent}/models`)).models.map((model) => ({ value: model.id, label: model.label })),
+    enabled: computed(() => host().sandbox.reachable() && step.value.agent !== undefined),
+});
+const modelOptions = computed<CatalogOption[]>(() => [
+    { value: UNPINNED, label: `The provider's own default` },
+    ...(liveModels.data.value ?? modelsFor(step.value.agent ?? UNPINNED)).filter((option) => option.value !== UNPINNED),
+]);
+
+// A provider switch invalidates both choices under it: a model id belongs to one provider's catalog, and a
+// harness only means anything on the two providers that have two of them.
+const setAgent = (agent: string): void => patch({ agent: agent === UNPINNED ? undefined : agent, model: undefined, harness: undefined });
+
 /* What the folded section is currently hiding, in the fewest words that name it. Empty ⇒ everything inside is
  * still at its default and the fold is costing the reader nothing. This is what makes hiding safe: you can see
  * that a step has a test gate without opening anything, and the disclosure stops being somewhere things go to
  * be forgotten. */
 const advancedSummary = computed(() => {
     const parts: string[] = [];
+    // The model leads, because it is the one thing in here that changes WHO does the step rather than how.
+    if (step.value.agent !== undefined) {
+        parts.push(providerLabel(step.value.agent));
+    }
+    if (step.value.model !== undefined) {
+        parts.push(step.value.model);
+    }
     if (step.value.output.kind === `json`) {
         parts.push(`${step.value.output.fields.length} data field${step.value.output.fields.length === 1 ? `` : `s`}`);
     }
@@ -288,6 +339,39 @@ const advancedSummary = computed(() => {
                 <div class="flex flex-col gap-1.5">
                     <span :class="cmp.sectionLabel()">Memory between rounds</span>
                     <Segmented :model-value="step.context" :options="CONTEXT_OPTIONS" @update:model-value="patch({ context: $event })" />
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                    <span :class="cmp.sectionLabel()">Runs on</span>
+                    <Select
+                        :model-value="step.agent ?? UNPINNED"
+                        :options="providerOptions"
+                        option-label="label"
+                        option-value="value"
+                        size="small"
+                        @update:model-value="setAgent($event)"
+                    />
+                    <!-- The harness (the agentic loop), orthogonal to the provider — same semantics as the
+                         chat's own picker, and shown only where there is genuinely a choice. -->
+                    <Segmented
+                        v-if="harnessChoosable"
+                        :model-value="step.harness ?? `native`"
+                        :options="HARNESSES"
+                        @update:model-value="patch({ harness: $event })"
+                    />
+                    <Select
+                        v-if="step.agent !== undefined"
+                        :model-value="step.model ?? UNPINNED"
+                        :options="modelOptions"
+                        option-label="label"
+                        option-value="value"
+                        size="small"
+                        @update:model-value="patch({ model: $event === UNPINNED ? undefined : $event })"
+                    />
+                    <span class="text-2xs text-subtle">
+                        Pin one where the model is part of the design — two steps on two providers is how you compare them. Left alone, this step runs
+                        on whatever you normally use.
+                    </span>
                 </div>
             </div>
         </div>

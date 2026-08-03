@@ -1,5 +1,12 @@
 import type { DagEdge, DagNode, IconName } from "@intentic/extension-ui";
-import type { Workflow, WorkflowRun, WorkflowStep, WorkflowStepRun, WorkflowStepState } from "@intentic/sandbox-contract";
+import {
+    providerLabel,
+    type Workflow,
+    type WorkflowRun,
+    type WorkflowStep,
+    type WorkflowStepRun,
+    type WorkflowStepState,
+} from "@intentic/sandbox-contract";
 
 /* THE GRAPH, as both the designer and the run view draw it — one derivation, two consumers, so what you author
  * and what you watch can never be different pictures of the same workflow. That is the whole reason this is a
@@ -97,7 +104,14 @@ export const workflowDag = (workflow: Pick<Workflow, "steps">, run?: WorkflowRun
     return { nodes, edges };
 };
 
-// One line under a node's title: what it produces and what gates it, in the fewest words that still say which.
+/* One line under a node's title: who runs it, what it produces, and what gates it — in the fewest words that
+ * still say which.
+ *
+ * THE PROVIDER LEADS when a step pins one, and it is the only part of this line that is about the AGENT rather
+ * than the work. It has to be on the card because there is one design where the model is the whole point — the
+ * same brief built by two of them, side by side — and a graph that draws those two steps identically would be
+ * hiding the only thing that differs between them. Absent for the ordinary step, which pins nothing.
+ */
 export const stepSubtitle = (step: WorkflowStep): string => {
     const output =
         step.output.kind === `json`
@@ -106,5 +120,5 @@ export const stepSubtitle = (step: WorkflowStep): string => {
               ? `a claim`
               : `no output`;
     const checks = step.checks.map((check) => (check.kind === `command` ? `a command` : `a reviewer`));
-    return [output, ...checks].join(` · `);
+    return [...(step.agent === undefined ? [] : [providerLabel(step.agent)]), output, ...checks].join(` · `);
 };

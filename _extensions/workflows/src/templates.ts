@@ -1,18 +1,24 @@
 import type { IconName } from "@intentic/extension-ui";
 import type { OutputField, Workflow, WorkflowStep } from "@intentic/sandbox-contract";
 
-/* "START FROM" — ready-made workflows, the same idea as the automations recipes and for the same reason: this
- * is a feature nobody designs well on a blank canvas, because the interesting decisions (where to break the
- * session, what each step must produce, what checks the work) are not obvious until you have seen a few.
+/* "START FROM" — the ready-made workflow, the same idea as the automations recipes and for the same reason:
+ * this is a feature nobody designs well on a blank canvas, because the interesting decisions (where to break
+ * the session, what each step must produce, what checks the work) are not obvious until you have seen one.
  *
  * PURE PREFILL. The daemon knows nothing about templates; picking one opens the designer with a real workflow
- * in it, which you then edit and save. Never "create it silently and hope" — a workflow costs money to run
- * and the whole point of the designer is that you look at the graph before you press go.
+ * in it, which you then edit and save. Never "create it silently and hope" — a workflow costs money to run and
+ * the whole point of the designer is that you look at the graph before you press go.
  *
- * THE FIVE ARE CHOSEN BY SHAPE, not by topic. Each one demonstrates a structure that is hard to discover and
- * easy to reuse — a continued chain, a lone convergence loop, a fan-out with a fan-in, a producer feeding a
- * consumer structured data, and an independent reviewer. A gallery of five variations on "do a task" would
- * teach nothing, and the topics are the easy part to change.
+ * ONE TEMPLATE, because there is one thing a workflow does that nothing else in the product can. A chain, a
+ * convergence loop, a checklist — you can get all of those by talking to a single agent for long enough. What
+ * you cannot get that way is two DIFFERENT models building the same brief at the same time in separate
+ * worktrees, and a third session that reads both diffs and writes the version worth keeping. By hand that is
+ * two chats, two branches, and a comparison you hold in your head from two transcripts you cannot read at once.
+ *
+ * AND IT TEACHES EVERY SHAPE AT ONCE, which is why one card does the work five did: a producer handing
+ * structured data to its consumers, a fan-out, a fan-in, a session judging work it did not do, and a continued
+ * chain finishing the job under a command gate. templates.test.ts asserts exactly that, so the claim cannot
+ * quietly stop being true.
  */
 
 export interface WorkflowTemplate {
@@ -23,9 +29,9 @@ export interface WorkflowTemplate {
     readonly workflow: Workflow;
 }
 
-// Defaults every template's steps share unless they say otherwise. A step is mostly prose; these are the knobs
-// that would otherwise be repeated forty times, and their values are the safe ones — eight iterations is a
-// real convergence budget, two idle rounds catches a stall before it is expensive.
+// Defaults every step shares unless it says otherwise. A step is mostly prose; these are the knobs that would
+// otherwise be repeated forty times, and their values are the safe ones — eight iterations is a real
+// convergence budget, two idle rounds catches a stall before it is expensive.
 const step = (id: string, title: string, over: Partial<WorkflowStep> & Pick<WorkflowStep, "goal" | "prompt">): WorkflowStep => ({
     id,
     title,
@@ -40,249 +46,154 @@ const step = (id: string, title: string, over: Partial<WorkflowStep> & Pick<Work
     ...over,
 });
 
-// The audit steps all report the same shape, and they must: the merge step downstream reads three documents
-// and can only dedupe them if they are the same shape. A function rather than a shared constant because each
-// step holds its own copy — a template is prefill, and the user editing one auditor's fields must not silently
-// edit the others'.
-const findingsFields = (): OutputField[] => [
-    { name: `findings`, type: `string[]`, description: `One line per finding: what, where (file:line), and why it matters`, required: true },
-    { name: `worst`, type: `string`, description: `The single finding you would fix first, or "none"`, required: true },
-    { name: `checked`, type: `string`, description: `What you actually looked at, so the merge step knows the coverage`, required: true },
+// Both attempts report the same shape, and they must: the comparison downstream reads two documents and can
+// only weigh them against each other if they answered the same questions. A function rather than a shared
+// constant because each step holds its own copy — a template is prefill, and the user editing one attempt's
+// fields must not silently edit the other's.
+const attemptFields = (): OutputField[] => [
+    { name: `approach`, type: `string`, description: `Two or three sentences: how your version works`, required: true },
+    { name: `files`, type: `string[]`, description: `Workspace-relative paths you changed`, required: true },
+    { name: `tradeoffs`, type: `string`, description: `What you deliberately did not do, and why`, required: true },
+    { name: `risk`, type: `string`, description: `The part of your change most likely to be wrong`, required: true },
 ];
 
 export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
     {
-        icon: `sparkles`,
-        summary: `Plan it, build it, test it — one agent on one branch — then hand the diff to a reviewer who did none of the work.`,
+        icon: `clone`,
+        summary: `Claude and GPT get one identical brief and build it on branches of their own. A third session reads both diffs, keeps what each got right, and writes the merged version against your suite.`,
         workflow: {
-            id: `ship-a-change`,
-            name: `Ship a change`,
-            description: `A continued chain that builds on itself, closed by an independent review of the branch.`,
+            id: `two-models-one-task`,
+            name: `Two models, one task`,
+            description: `One brief, built twice by different models in their own worktrees, then read side by side and merged into the version worth keeping.`,
+            // NOT NEGOTIABLE for this shape. Isolated is what gives each attempt its own worktree and its own
+            // branch — without it the two would write over each other in /work, and there would be no two diffs
+            // left to compare.
             isolated: true,
+            // Two, which is the width of the fan-out. Raising it buys nothing here and costs a third provider
+            // session; adding a third attempt is what would earn a 3.
             maxParallel: 2,
-            maxSpendUsd: 20,
+            maxSpendUsd: 30,
             steps: [
-                step(`plan`, `Plan the change`, {
-                    goal: `There is a concrete plan naming the files to change and how the change will be verified.`,
-                    prompt: `Read the code this change touches and write a plan. Name the specific files, say what each one needs, and say how you will know it works. Do not write any code in this step.`,
-                    output: {
-                        kind: `json`,
-                        fields: [
-                            { name: `files`, type: `string[]`, description: `Workspace-relative paths this change will touch`, required: true },
-                            { name: `approach`, type: `string`, description: `Two or three sentences: how the change works`, required: true },
-                            { name: `verification`, type: `string`, description: `The command or observation that proves it works`, required: true },
-                        ],
-                    },
-                }),
-                // Continued, so it inherits the plan's session AND its worktree — the two things "build on the
-                // last step" actually means.
-                step(`build`, `Make the change`, {
-                    needs: [`plan`],
-                    handoff: `continue`,
-                    context: `continue`,
-                    goal: `The change from the plan is implemented, and it compiles.`,
-                    prompt: `Implement the plan you just wrote. Follow the repo's own conventions rather than importing new ones.`,
-                    output: { kind: `none` },
-                    checks: [{ kind: `command`, command: `pnpm -w typecheck` }],
-                    maxSpendUsd: 10,
-                }),
-                step(`test`, `Prove it works`, {
-                    needs: [`build`],
-                    handoff: `continue`,
-                    context: `continue`,
-                    goal: `The change is covered by a test that fails without it, and the suite is green.`,
-                    prompt: `Add the test the plan named as verification, then run the suite. If it fails, fix the code — not the test.`,
-                    output: { kind: `none` },
-                    checks: [{ kind: `command`, command: `pnpm -w test` }],
-                    maxSpendUsd: 10,
-                }),
-                /* FRESH, deliberately, and this is the step the whole template exists to demonstrate. A session
-                 * that spent three phases arguing for an approach is the worst available judge of it. This one
-                 * has never seen the reasoning — only the diff on the branch, which the run hands it. */
-                step(`review`, `Review the diff`, {
-                    needs: [`test`],
-                    goal: `Someone who did not write this change has read the whole diff and said whether it is sound.`,
-                    prompt: `Review the branch named above, in full. You did not write this and have no stake in it being good. Report what is wrong, or say plainly that nothing is.`,
-                    output: {
-                        kind: `json`,
-                        fields: [
-                            { name: `verdict`, type: `string`, description: `ship | fix-first | rework`, required: true },
-                            { name: `problems`, type: `string[]`, description: `One line per real problem, worst first`, required: false },
-                        ],
-                    },
-                    maxIterations: 3,
-                }),
-            ],
-        },
-    },
-    {
-        icon: `check-circle`,
-        summary: `One step, looping: run the suite, fix the top failure, repeat until it is green or it stops making progress.`,
-        workflow: {
-            id: `make-it-green`,
-            name: `Make the suite green`,
-            description: `The plain Ralph loop, as a workflow — the shape everything else here is built out of.`,
-            isolated: true,
-            maxParallel: 1,
-            maxSpendUsd: 15,
-            steps: [
-                step(`fix`, `Fix the failures`, {
-                    goal: `The whole test suite passes.`,
-                    prompt: `Run the suite. Take the single most-blocking failure, understand it, fix the code. Do not weaken a test to make it pass, and do not skip one.`,
-                    output: { kind: `none` },
-                    checks: [{ kind: `command`, command: `pnpm -w test` }],
-                    maxIterations: 15,
-                    stallLimit: 3,
-                    maxSpendUsd: 15,
-                }),
-            ],
-        },
-    },
-    {
-        icon: `shield`,
-        summary: `Three independent auditors read the same code at the same time, then a fourth session merges what they found into one list.`,
-        workflow: {
-            id: `release-audit`,
-            name: `Audit before release`,
-            description: `A fan-out of independent reviewers, closed by a fan-in that dedupes and ranks.`,
-            // Shared tree: every auditor is READING, so there is nothing to collide over and each one sees the
-            // workspace exactly as it is rather than a checkout of main.
-            isolated: false,
-            maxParallel: 3,
-            maxSpendUsd: 15,
-            steps: [
-                step(`security`, `Security pass`, {
-                    goal: `Every place this codebase handles a secret, an input from outside, or a permission has been looked at.`,
-                    prompt: `Audit for security problems: unvalidated external input, secrets that could be logged or served, permission checks that can be bypassed. Report only what you can point at a line for.`,
-                    output: { kind: `json`, fields: findingsFields() },
-                    maxIterations: 4,
-                }),
-                step(`deps`, `Dependency pass`, {
-                    goal: `The dependency tree has been checked for advisories, abandonment and duplication.`,
-                    prompt: `Audit the dependencies: known advisories, packages that are unmaintained, and duplicate copies of one library at different versions.`,
-                    output: { kind: `json`, fields: findingsFields() },
-                    maxIterations: 4,
-                }),
-                step(`dead`, `Dead code pass`, {
-                    goal: `Exports, files and flags nothing reaches have been identified.`,
-                    prompt: `Find code nothing reaches: unexported-but-unused symbols, files nothing imports, feature flags that are permanently on. Verify each one is genuinely unreferenced before reporting it.`,
-                    output: { kind: `json`, fields: findingsFields() },
-                    maxIterations: 4,
-                }),
-                /* The fan-in is what makes a fan-out worth having. Three auditors produce three lists that
-                 * overlap, disagree about severity and use different words for the same thing; a human merging
-                 * them by hand is most of the work the audit was supposed to save. */
-                step(`merge`, `One list`, {
-                    needs: [`security`, `deps`, `dead`],
-                    goal: `The three audits are one ranked list with no duplicates.`,
-                    prompt: `You have three audits above. Merge them: drop duplicates, resolve disagreements about severity by looking at the code yourself, and rank what is left by what would actually hurt.`,
-                    output: {
-                        kind: `json`,
-                        fields: [
-                            { name: `blocking`, type: `string[]`, description: `Findings that should stop a release, worst first`, required: true },
-                            { name: `later`, type: `string[]`, description: `Real but not blocking`, required: false },
-                            { name: `summary`, type: `string`, description: `Two sentences: is this releasable?`, required: true },
-                        ],
-                    },
-                    maxIterations: 3,
-                }),
-            ],
-        },
-    },
-    {
-        icon: `search`,
-        summary: `Reproduce the bug and write down exactly what fails, then fix it against that description and lock it in with a test.`,
-        workflow: {
-            id: `triage-a-bug`,
-            name: `Triage and fix a bug`,
-            description: `A producer that must hand over structured facts before anyone is allowed to start fixing.`,
-            isolated: true,
-            maxParallel: 1,
-            maxSpendUsd: 15,
-            steps: [
-                /* The structured output is the point of this template. "Reproduce it" as prose gets you a
-                 * paragraph; as declared fields it gets you a failing command the next step can run, which is
-                 * the difference between a fix aimed at the bug and a fix aimed at a description of it. */
-                step(`reproduce`, `Reproduce it`, {
-                    goal: `There is a command that fails, and the failure is understood.`,
-                    prompt: `Reproduce the reported problem. Do not fix anything. Find the smallest command that shows it failing and the line where it goes wrong.`,
-                    output: {
-                        kind: `json`,
-                        fields: [
-                            { name: `command`, type: `string`, description: `The smallest command that shows the failure`, required: true },
-                            { name: `location`, type: `string`, description: `file:line where it actually goes wrong`, required: true },
-                            { name: `cause`, type: `string`, description: `One or two sentences: why it fails`, required: true },
-                        ],
-                    },
-                    maxIterations: 6,
-                }),
-                step(`fix`, `Fix the cause`, {
-                    needs: [`reproduce`],
-                    handoff: `continue`,
-                    context: `continue`,
-                    goal: `The command from the previous step passes, and the cause named there is gone.`,
-                    prompt: `Fix the cause you identified — not the symptom. Then run the command you found until it passes.`,
-                    output: { kind: `claim` },
-                    maxIterations: 8,
-                }),
-                step(`regress`, `Lock it in`, {
-                    needs: [`fix`],
-                    handoff: `continue`,
-                    context: `continue`,
-                    goal: `A test exists that fails on the old code and passes on the new, and the whole suite is green.`,
-                    prompt: `Write the regression test for this bug. Prove it fails without your fix (revert it briefly if you need to), then run the whole suite.`,
-                    output: { kind: `none` },
-                    checks: [{ kind: `command`, command: `pnpm -w test` }],
-                }),
-            ],
-        },
-    },
-    {
-        icon: `file`,
-        summary: `Survey what is undocumented and pick what is worth writing, then write only those — reviewed against the code, not against itself.`,
-        workflow: {
-            id: `document-a-repo`,
-            name: `Document a repository`,
-            description: `A survey that decides the work, a writer that does it, and a judge that has to be convinced.`,
-            isolated: true,
-            maxParallel: 1,
-            maxSpendUsd: 15,
-            steps: [
-                step(`survey`, `Find what is missing`, {
-                    goal: `The packages worth documenting are named, in the order they should be written.`,
-                    prompt: `Survey this repository. Which packages have no document, or one that no longer matches the code? Rank by how much a newcomer would need it. Write nothing but the survey.`,
+                /* THE BRIEF, and the step that makes the comparison mean anything. Two models handed the same
+                 * paragraph of yours will each read it slightly differently, and then the diffs differ because
+                 * they built different things — which measures the prompt, not the models. So one session
+                 * settles the task first and both attempts are handed its document verbatim.
+                 *
+                 * It is also the ONE step you have to edit: everything below is written to work whatever the
+                 * task is. */
+                step(`brief`, `Pin the brief`, {
+                    goal: `The task is written down precisely enough that two different models would build the same thing from it.`,
+                    prompt:
+                        `THE TASK — replace this line with what you want built.\n\n` +
+                        `Now read the code it touches and turn it into a brief. Say what has to be true when it is done, name the files ` +
+                        `that are in scope, and leave nothing important to interpretation: what you leave vague here is what the two ` +
+                        `attempts below will differ on for the wrong reason. Write no code in this step.`,
                     output: {
                         kind: `json`,
                         fields: [
                             {
-                                name: `packages`,
-                                type: `string[]`,
-                                description: `Paths of the packages worth documenting, most valuable first`,
+                                name: `task`,
+                                type: `string`,
+                                description: `What is to be built, in the words both attempts will be handed`,
                                 required: true,
                             },
-                            { name: `reason`, type: `string`, description: `Why these and not the others`, required: true },
+                            {
+                                name: `done`,
+                                type: `string`,
+                                description: `The condition that makes it finished — the bar both attempts are held to`,
+                                required: true,
+                            },
+                            {
+                                name: `scope`,
+                                type: `string[]`,
+                                description: `Workspace-relative paths that are in scope; anything else is out`,
+                                required: true,
+                            },
                         ],
                     },
                     maxIterations: 3,
+                    maxSpendUsd: 3,
                 }),
-                /* A judge rather than a command, because there is no command that can check prose. It reads the
-                 * writer's own account and rules against a rubric, having written none of it — the same rule the
-                 * reviewer in "Ship a change" follows, applied where no test could. */
-                step(`write`, `Write them`, {
-                    needs: [`survey`],
-                    handoff: `continue`,
-                    context: `fresh`,
-                    goal: `Each package named in the survey has a document that explains what it is for and how it fits together.`,
-                    prompt: `Write the documents the survey asked for, one at a time, following this workspace's documentation conventions. Read the code first — a document that restates the file names is worse than none.`,
-                    output: { kind: `claim` },
-                    checks: [
-                        {
-                            kind: `judge`,
-                            rubric: `Every package the survey named has a document that explains what the package is FOR and why it is shaped the way it is — not a list of its files, and not a paraphrase of its exports.`,
-                        },
-                    ],
+                /* THE TWO ATTEMPTS. Same brief, same output contract, different model, and neither is told the
+                 * other exists — a session that knows it is being raced writes for the judge, and what you
+                 * wanted to measure was how it writes code. Each gets its own worktree off HEAD and its own
+                 * branch, which is what the comparison below actually reads.
+                 *
+                 * THE MODEL IS PINNED HERE AND IS THE ONLY DIFFERENCE BETWEEN THEM. Change either one in the
+                 * designer (Advanced ▸ Runs on) — Grok against Claude, or the same provider twice on two
+                 * different models — and the rest of the graph runs unchanged. The model VERSION is left unset
+                 * on purpose: each provider's own default is the one your subscription actually serves, and a
+                 * pinned id here would go stale and refuse to run.
+                 */
+                step(`attempt-a`, `Claude's attempt`, {
+                    needs: [`brief`],
+                    agent: `claude`,
+                    goal: `The brief is implemented, on this session's own branch.`,
+                    prompt: `Build what the brief above asks for. You are in a worktree of your own and nothing else is working in it. Follow the repo's own conventions rather than importing new ones, and stay inside the scope the brief named.`,
+                    output: { kind: `json`, fields: attemptFields() },
                     maxIterations: 10,
-                    maxSpendUsd: 12,
+                    maxSpendUsd: 10,
+                }),
+                step(`attempt-b`, `GPT's attempt`, {
+                    needs: [`brief`],
+                    agent: `codex`,
+                    goal: `The brief is implemented, on this session's own branch.`,
+                    prompt: `Build what the brief above asks for. You are in a worktree of your own and nothing else is working in it. Follow the repo's own conventions rather than importing new ones, and stay inside the scope the brief named.`,
+                    output: { kind: `json`, fields: attemptFields() },
+                    maxIterations: 10,
+                    maxSpendUsd: 10,
+                }),
+                /* THE FAN-IN. Fresh, so it wrote neither attempt and has no stake in either — the same reason a
+                 * reviewer is a different session, and the reason this reading is worth more than asking either
+                 * author which one won. It is handed two documents and two BRANCH NAMES (the run supplies those
+                 * on an isolated workflow), so `git diff main...<branch>` is the whole of its reading.
+                 *
+                 * Unpinned, so it runs on whatever you normally use. If you have a third provider connected,
+                 * pinning it here is the upgrade: a judge from neither family has no house style to reward. */
+                step(`compare`, `Read both diffs`, {
+                    needs: [`attempt-a`, `attempt-b`],
+                    goal: `Both diffs have been read in full, and there is a specific account of what each one got right and wrong.`,
+                    prompt: `Two sessions were given the brief above and each built it, on the branches named above. Read both diffs in full — the diffs, not the summaries of them. Judge them against the brief and against the code they had to live in, not against your own taste in style. Be specific enough that someone could act on this without reading the diffs again.`,
+                    output: {
+                        kind: `json`,
+                        fields: [
+                            {
+                                name: `stronger`,
+                                type: `string`,
+                                description: `Which attempt is the better base to build on, and why, in one sentence`,
+                                required: true,
+                            },
+                            {
+                                name: `keep`,
+                                type: `string[]`,
+                                description: `Each decision worth keeping, naming the attempt it came from`,
+                                required: true,
+                            },
+                            {
+                                name: `drop`,
+                                type: `string[]`,
+                                description: `What either attempt got wrong, so the merge does not inherit it`,
+                                required: true,
+                            },
+                        ],
+                    },
+                    maxIterations: 4,
+                }),
+                /* THE SYNTHESIS, CONTINUED — the one place in this graph where sharing a session is plainly
+                 * right. It has just read both diffs; a fresh session here would be handed a summary of a
+                 * reading it would have to do again. Continuing also means it writes in the comparison's own
+                 * worktree — a clean checkout that is neither attempt, which is exactly the tree a merge of the
+                 * two wants to start from. What comes out is a third branch, and that is the one you land. */
+                step(`merge`, `Write the better version`, {
+                    needs: [`compare`],
+                    handoff: `continue`,
+                    context: `continue`,
+                    goal: `One coherent implementation exists that keeps everything you said to keep, and the suite is green.`,
+                    prompt: `Now write the version you just argued for, here in your own worktree. Start from the stronger attempt rather than retyping it: the two are on branches ending \`-attempt-a\` and \`-attempt-b\` (\`git branch --list 'agent/wf-*'\` finds them), so bring the better one in with \`git merge --squash\` and apply your keep and drop list on top of it. What lands must read as one change somebody made on purpose, not as two stitched together.`,
+                    output: { kind: `none` },
+                    checks: [{ kind: `command`, command: `pnpm -w test` }],
+                    maxIterations: 10,
+                    maxSpendUsd: 10,
                 }),
             ],
         },

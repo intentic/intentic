@@ -15,11 +15,12 @@ import { useWorkflows } from "./useWorkflows";
  * it is history. A workflow has neither: it is a DESIGN you keep, edit and run — so this page is a list of
  * designs with a Run button, and everything about watching one lives behind that button.
  *
- * THE TEMPLATE GALLERY IS UNDER THE LIST, not in the create dialog, and that is the one deliberate difference
- * from the automations page. Automation recipes are prefill for a form whose shape you already understand;
- * workflow templates are the only way most people will learn what shapes are POSSIBLE — that a reviewer should
- * be a different session, that a step can be made to produce data the next one consumes. So they stay visible
- * on the page rather than hiding one level in, and each card sells its SHAPE rather than its topic.
+ * THE TEMPLATE IS UNDER THE LIST, not in the create dialog, and that is the one deliberate difference from the
+ * automations page. Automation recipes are prefill for a form whose shape you already understand; a workflow
+ * template is the only way most people will learn what shapes are POSSIBLE — that a reviewer should be a
+ * different session, that two steps can run on two different models, that a step can be made to produce data
+ * the next one consumes. So it stays visible on the page rather than hiding one level in, and it sells its
+ * SHAPE rather than its topic.
  */
 
 const { workflows, runs, runsLoaded, error: listError, remove, start } = useWorkflows();
@@ -256,9 +257,12 @@ const shapeOf = (workflow: Workflow): string => {
                 </div>
             </RowGroup>
 
-            <div v-else :class="cmp.emptyState('py-5')">No workflows yet — start from one of the shapes below.</div>
+            <div v-else :class="cmp.emptyState('py-5')">No workflows yet — start from the shape below.</div>
 
-            <!-- The gallery. Each card sells a SHAPE, because the shapes are the part nobody invents unprompted. -->
+            <!-- The gallery, which is one card wide on purpose (templates.ts says why). So it is laid out as a
+                 full-width row rather than as a lonely cell in a grid of three: a card sized for a set it is
+                 not part of reads as a gallery that failed to load, and the summary it has to sell its SHAPE
+                 with is a sentence that wants the measure. -->
             <section v-if="available.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
                     <span :class="cmp.sectionLabel()">Start from</span>
@@ -266,22 +270,20 @@ const shapeOf = (workflow: Workflow): string => {
                         >Opens the designer with a real workflow in it — nothing runs until you save and press Run.</span
                     >
                 </div>
-                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    <button
-                        v-for="template in available"
-                        :key="template.workflow.id"
-                        type="button"
-                        class="flex cursor-pointer flex-col gap-1 rounded-lg border border-line bg-card p-3 text-left hover:border-line-strong"
-                        @click="fromTemplate(template)"
-                    >
-                        <span class="flex items-center gap-2">
-                            <Icon :name="template.icon" class="shrink-0 text-xs text-subtle" />
-                            <span class="text-xs font-medium text-content">{{ template.workflow.name }}</span>
-                            <span class="ml-auto shrink-0 text-2xs text-subtle">{{ shapeOf(template.workflow) }}</span>
-                        </span>
-                        <span class="text-2xs leading-snug text-subtle">{{ template.summary }}</span>
-                    </button>
-                </div>
+                <button
+                    v-for="template in available"
+                    :key="template.workflow.id"
+                    type="button"
+                    class="flex w-full cursor-pointer flex-col gap-1 rounded-lg border border-line bg-card p-3 text-left hover:border-line-strong"
+                    @click="fromTemplate(template)"
+                >
+                    <span class="flex items-center gap-2">
+                        <Icon :name="template.icon" class="shrink-0 text-xs text-subtle" />
+                        <span class="text-xs font-medium text-content">{{ template.workflow.name }}</span>
+                        <span class="ml-auto shrink-0 text-2xs text-subtle">{{ shapeOf(template.workflow) }}</span>
+                    </span>
+                    <span class="text-2xs leading-snug text-subtle">{{ template.summary }}</span>
+                </button>
             </section>
 
             <RowGroup v-if="past.length > 0" label="Earlier runs" :count="past.length">
