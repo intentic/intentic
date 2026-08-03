@@ -5,6 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { type AgentCommand, providerLabel, type Workflow } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
+import { openRunInChat } from "../composables/chat/openRun";
 import { modeMeta } from "../composables/chat/catalog";
 import type { Conversation, PendingAttachment } from "../composables/chat/conversation";
 import { effortsFor } from "../composables/chat/effortScale";
@@ -644,41 +645,59 @@ const composerHint = computed(() => {
 const snapshotAttachments = (): ChatAttachment[] =>
     attachments.value.map(({ name, path, previewUrl }): ChatAttachment => ({ name, path, ...(previewUrl !== undefined ? { previewUrl } : {}) }));
 
-/* --- Running the draft through a workflow ---------------------------------------------------------
- * The other thing this composer can do with what has been typed: hand it to a saved design as the RUN'S
- * REQUEST rather than send it as a turn on this conversation. Nothing about this chat changes — the run opens
- * sessions of its own, which arrive on the agents board under one run card, and this pane keeps its transcript
- * and its place.
+/* --- The workflow this composer is aimed at ------------------------------------------------------
+ * A pick, held on the conversation (Conversation.workflowId) beside the model and the effort, because that is
+ * what it is: one more answer to "what happens when I press send". Set it and the next message is not a turn
+ * on this chat at all — it is the REQUEST of a run, handed to every step of a saved design.
  *
- * A workflow whose steps already say everything they want runs fine with an empty composer, so this is not
- * gated on `canSend`: the request is an addition to a design, not the whole of it.
+ * IT IS A BADGE AND NOT A ONE-SHOT PICKER, which is the correction. It used to be a pill that opened a list
+ * and started a run the moment you chose from it, so the choice and the send were the same press and there
+ * was nothing on screen, before or after, saying which design your words had gone to. Now the badge names the
+ * pick and stays named until the message goes.
  *
- * The draft is cleared on success for the reason a send clears it — the text has gone somewhere, and a box
- * still holding it invites sending it again — and KEPT on failure, because the message is all the user has and
- * a picker that eats it is one nobody presses twice.
+ * The pick CLEARS on a successful send. A workflow fans one message into several paid sessions, and a badge
+ * that survived its own run would make the next message do it again silently.
  */
-const { start: startWorkflow } = useWorkflowRuns();
-const workflowReceipt = ref<string>();
+const { start: startWorkflow, designs: workflowDesigns } = useWorkflowRuns();
 const workflowFailure = ref<string>();
+const pickedWorkflow = computed(() => workflowDesigns.value.find((workflow) => workflow.id === props.conversation.workflowId.value));
 
-const runThroughWorkflow = async (workflow: Workflow): Promise<void> => {
+const pickWorkflow = (workflow: Workflow | undefined): void => {
     workflowOpen.value = false;
     workflowSheetOpen.value = false;
+    workflowFailure.value = undefined;
+    props.conversation.workflowId.value = workflow?.id;
+};
+
+/* Send the draft as a run's request. The draft is cleared on success for the reason an ordinary send clears it
+ * — the text has gone somewhere — and KEPT on failure, because the message is all the user has and a control
+ * that eats it is one nobody presses twice. Then the run takes the screen (openRunInChat), which is the same
+ * landing the board's card gives it.
+ */
+const sendThroughWorkflow = async (workflow: Workflow): Promise<void> => {
     workflowFailure.value = undefined;
     const request = draft.value.trim();
     try {
         const run = await startWorkflow.mutateAsync({ id: workflow.id, ...(request === `` ? {} : { request }) });
         draft.value = ``;
-        workflowReceipt.value = `“${workflow.name}” is running — ${run.steps.length} steps. Watch it on the agents board.`;
+        props.conversation.workflowId.value = undefined;
+        await openRunInChat(run);
     } catch (error) {
         workflowFailure.value = error instanceof Error ? error.message : `The workflow could not be started.`;
     }
 };
 
 const submit = (): void => {
-    // A send is the user moving on from whatever the last workflow press said.
-    workflowReceipt.value = undefined;
     workflowFailure.value = undefined;
+    /* THE BADGE INTERCEPTS THE SEND, ahead of every gate below it — those are about a TURN on this
+     * conversation (a pending plan, a running turn to steer, staged attachments), and this message is not one.
+     * It goes to a graph of sessions that are not this chat, so none of the machinery for putting words into
+     * this chat applies. `connected` still does: with no daemon there is nothing to start. */
+    const workflow = pickedWorkflow.value;
+    if (workflow !== undefined && connected.value) {
+        void sendThroughWorkflow(workflow);
+        return;
+    }
     // canSend covers the gates that are left: an empty composer and an attachment that isn't on disk yet.
     if (!connected.value || !canSend.value) {
         return;
@@ -1376,23 +1395,29 @@ watch(
                                     <!-- WORKFLOW. Loop's neighbour because it answers the same question about
                                          the next message — what is it run THROUGH — and a different answer:
                                          loop runs it here, over and over; this hands it to a graph of sessions
-                                         that are not this one. Not gated on there being text: a design whose
-                                         steps already say what they want runs on its own, and the message is
-                                         an addition to it rather than the whole of it. -->
+                                         that are not this one.
+
+                                         A BADGE, not a one-shot picker: while a design is picked it NAMES it,
+                                         in the composer's active tint, and the message goes there when you
+                                         press send like any other. Unpicked it is a bare glyph, which is all
+                                         the room a control most chats never use deserves. -->
                                     <button
                                         ref="workflowPill"
                                         type="button"
                                         class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        :class="{ 'composer-active': pickedWorkflow !== undefined }"
                                         @click="mobile ? (workflowSheetOpen = true) : (workflowOpen = !workflowOpen)"
                                         v-tooltip.top="
-                                            draft.trim().length > 0
-                                                ? `Run this message through a workflow instead of sending it`
-                                                : `Run a saved workflow — type first to point it at something`
+                                            pickedWorkflow !== undefined
+                                                ? `Send runs “${pickedWorkflow.name}” with this message as its request`
+                                                : `Run this message through a workflow instead of sending it here`
                                         "
                                         :aria-expanded="workflowOpen"
-                                        aria-label="Run through a workflow"
+                                        :aria-label="pickedWorkflow !== undefined ? `Workflow: ${pickedWorkflow.name}` : `Run through a workflow`"
                                     >
-                                        <Icon name="sitemap" class="text-2xs" />
+                                        <Icon name="sitemap" class="text-2xs" :class="pickedWorkflow !== undefined ? 'text-link' : ''" />
+                                        <span v-if="pickedWorkflow" class="max-w-32 truncate @max-md:hidden">{{ pickedWorkflow.name }}</span>
+                                        <Icon v-if="pickedWorkflow" name="chevron-down" class="text-2xs text-subtle" />
                                     </button>
 
                                     <button
@@ -1439,12 +1464,12 @@ watch(
                             </form>
 
                             <p v-if="speechErrorMessage" class="px-1 text-2xs text-danger">{{ speechErrorMessage }}</p>
-                            <!-- What the workflow pill did. A receipt rather than a redirect: the run is not
-                                 this conversation, so taking the user somewhere would be taking them out of
-                                 the chat they were in the middle of. It clears on the next send. -->
                             <p v-if="workflowFailure" class="px-1 text-2xs text-danger">{{ workflowFailure }}</p>
-                            <p v-else-if="workflowReceipt" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
-                                <Icon name="sitemap" class="shrink-0 text-2xs text-link" />{{ workflowReceipt }}
+                            <!-- What the badge changes about the press, said under the box that is about to do
+                                 it: the message is going to a design, not to this chat. -->
+                            <p v-else-if="pickedWorkflow" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
+                                <Icon name="sitemap" class="shrink-0 text-2xs text-link" />Send starts “{{ pickedWorkflow.name }}” — this message is
+                                what every step is asked to do.
                             </p>
                         </template>
                     </template>
@@ -1514,7 +1539,7 @@ watch(
                 <ChatModeMenu @selected="modeSheetOpen = false" />
             </BottomSheet>
             <BottomSheet v-model="workflowSheetOpen" header="Run through a workflow">
-                <ChatWorkflowMenu @picked="runThroughWorkflow($event)" />
+                <ChatWorkflowMenu :picked="conversation.workflowId.value" @picked="pickWorkflow($event)" />
             </BottomSheet>
             <!-- Mounted here rather than app-wide: a loop belongs to the conversation whose composer opened it,
                  and the dialog takes that conversation's id as a prop precisely so it can never be started
@@ -1538,7 +1563,7 @@ watch(
             </AnchoredOverlay>
             <AnchoredOverlay v-model="workflowOpen" :anchor="workflowPill" cross="end">
                 <div class="w-80 p-1">
-                    <ChatWorkflowMenu @picked="runThroughWorkflow($event)" />
+                    <ChatWorkflowMenu :picked="conversation.workflowId.value" @picked="pickWorkflow($event)" />
                 </div>
             </AnchoredOverlay>
         </template>

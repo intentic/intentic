@@ -17,7 +17,8 @@ import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
  * next message IS. Loop runs it over and over; this runs it through a graph of sessions that are not this one.
  */
 
-const emit = defineEmits<{ picked: [workflow: Workflow] }>();
+const { picked } = defineProps<{ picked?: string }>();
+const emit = defineEmits<{ picked: [workflow: Workflow | undefined] }>();
 
 const { designs } = useWorkflowRuns();
 
@@ -47,11 +48,26 @@ const empty = computed(() => designs.value.length === 0);
         <p v-if="empty" class="px-2.5 py-3 text-2xs text-subtle">
             No workflows saved yet. Design one on the Workflows page — then whatever you type here runs through it.
         </p>
+        <!-- The way back to an ordinary message, and it has to be a row rather than a second gesture: the badge
+             is a pick like the model pill's, so unpicking belongs in the same list the pick was made in. -->
+        <button
+            v-if="picked !== undefined"
+            type="button"
+            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+            @click="emit(`picked`, undefined)"
+        >
+            <Icon name="times" class="mt-0.5 shrink-0 text-xs text-subtle" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">No workflow</span>
+                <span class="text-2xs text-subtle">Send as an ordinary message to this chat.</span>
+            </span>
+        </button>
         <button
             v-for="workflow in designs"
             :key="workflow.id"
             type="button"
             class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+            :class="{ 'ui-row-select-on': workflow.id === picked }"
             @click="emit(`picked`, workflow)"
         >
             <Icon name="sitemap" class="mt-0.5 shrink-0 text-xs text-subtle" />

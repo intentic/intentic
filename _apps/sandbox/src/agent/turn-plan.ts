@@ -308,7 +308,15 @@ export const planHarnessTurn = async (services: Services, input: AgentTurn, cont
      * gates below — the dependency probe, the delegation lookup, the browser servers — instead of on top of
      * them. `input.prompt` is the user's own words: `context.base.prompt` may already carry a switched
      * conversation's history preamble, whose opening lines would then be what got searched. */
-    const contextNote = (contextArm ?? iqContext) ? retrieveTurnContext({ iq: services.iq, logger: services.logger }, input.prompt) : undefined;
+    /* NOT FOR AN UNATTENDED TURN, whose prompt is not a question — it is a brief some surface composed (a loop
+     * iteration, a chore, an acceptance story). Retrieval reads the opening 400 characters as its query, and
+     * for those the opening is scaffolding: a loop's iteration heading and its "you are one iteration of a
+     * loop" preamble were being searched against the index, and the ranked answer to THAT was pasted on top of
+     * the step's real instructions. Every workflow step opened with a page of it. */
+    const contextNote =
+        (contextArm ?? iqContext) && input.unattended !== true
+            ? retrieveTurnContext({ iq: services.iq, logger: services.logger }, input.prompt)
+            : undefined;
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
     // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle (opt-in,
     // default off). Empty dir outside the container ⇒ skipped regardless. Extension checkouts with a

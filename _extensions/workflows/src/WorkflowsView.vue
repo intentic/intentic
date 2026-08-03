@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, ConfirmDialog, Dialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
+import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
 import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef } from "vue";
 import WorkflowDesigner from "./WorkflowDesigner.vue";
@@ -68,8 +68,17 @@ const designing = computed<Workflow | undefined>(() => {
 });
 const live = computed(() => runs.value.filter((run) => run.state === `running`));
 const past = computed(() => runs.value.filter((run) => run.state !== `running`).slice(0, 12));
-// A template already saved under its own id is not offered again — the gallery is for shapes you do not have.
-const available = computed(() => WORKFLOW_TEMPLATES.filter((template) => !workflows.value.some((workflow) => workflow.id === template.workflow.id)));
+/* THE GALLERY OFFERS EVERY TEMPLATE, INCLUDING ONE ALREADY SAVED under its own id — which it used to hide, on
+ * the reasoning that the gallery is for shapes you do not have.
+ *
+ * That reasoning had a hole, and it is the one people fall down: a template is PREFILL, so a saved copy is a
+ * fork taken at the moment it was picked. When the template moves on — a step removed, a prompt rewritten —
+ * the saved workflow does not, and hiding the card left no way to take the new version short of deleting the
+ * old one first. Somebody watching the template change and their own run not change has no way to connect the
+ * two. Picking it still costs nothing: it opens the DESIGNER prefilled, and nothing is written until Save.
+ */
+const available = computed(() => WORKFLOW_TEMPLATES);
+const savedAlready = (template: WorkflowTemplate): boolean => workflows.value.some((workflow) => workflow.id === template.workflow.id);
 
 // A saved workflow opens by id; anything unsaved is parked in `drafted` first and opens as `new`.
 const openSaved = (id: string): void => host().route.setQuery({ edit: id, run: undefined }, { push: true });
@@ -110,39 +119,17 @@ const blank = (): void =>
         maxSpendUsd: 15,
     });
 
-/* --- Starting a run ------------------------------------------------------------------------------
- * RUN ASKS WHAT FOR, AND THEN GETS OUT OF THE WAY. Pressing it used to start the run and open this page's own
- * graph view — which answered a question nobody had. Starting a workflow is starting agent work, and starting
- * agent work in this product means typing what you want and landing in the chat with it; a page showing a
- * picture of five boxes is the opposite of that.
+/* RUN HANDS THE START OVER RATHER THAN PERFORMING IT. Pressing it opens a new agent session with this design
+ * named on the composer's workflow badge — and that is where the run begins, when the user types what they
+ * want and presses send.
  *
- * So it is the composer's shape, in a dialog: a box for the request, one button, and then the host puts the
- * user in front of the sessions (api.chat.openWorkflowRun — the same act the fleet board's run card performs).
- * The request is optional, because a design whose steps already say what they want is complete on its own.
+ * It used to start the run here, behind a dialog with its own prompt box, and that was two ways to begin agent
+ * work: the one everybody knows (a composer) and this one, which looked like nothing else in the product and
+ * put a text box inside a modal on a list page. Starting a workflow is starting agent work; the difference is
+ * only that the message fans out. So the composer is the place, and this button's job is to get you there
+ * with the design already picked. Nothing is spent until the send.
  */
-const runTarget = ref<WorkflowSummary | undefined>();
-const runRequest = ref(``);
-const askToRun = (workflow: WorkflowSummary): void => {
-    actionError.value = undefined;
-    runRequest.value = ``;
-    runTarget.value = workflow;
-};
-
-const runNow = async (): Promise<void> => {
-    const workflow = runTarget.value;
-    if (workflow === undefined) {
-        return;
-    }
-    actionError.value = undefined;
-    const request = runRequest.value.trim();
-    try {
-        const run = await start.mutateAsync({ id: workflow.id, ...(request === `` ? {} : { request }) });
-        runTarget.value = undefined;
-        host().chat.openWorkflowRun(run.runId);
-    } catch (error) {
-        actionError.value = error instanceof Error ? error.message : `The workflow could not be started.`;
-    }
-};
+const runNow = (workflow: WorkflowSummary): void => host().chat.composeWorkflow(workflow.id);
 
 const removeWorkflow = async (): Promise<void> => {
     const id = confirmRemoveId.value;
@@ -268,7 +255,7 @@ const shapeOf = (workflow: Workflow): string => {
                     >
                         {{ workflow.runs[0].state }} {{ timeAgo(workflow.runs[0].startedAt) }}
                     </button>
-                    <Button label="Run" size="small" :disabled="start.isPending.value" @click="askToRun(workflow)">
+                    <Button label="Run" size="small" :disabled="start.isPending.value" @click="runNow(workflow)">
                         <template #icon><Icon name="play" /></template>
                     </Button>
                     <button type="button" :class="cmp.iconButton()" aria-label="Edit" @click="openSaved(workflow.id)"><Icon name="pencil" /></button>
@@ -301,9 +288,16 @@ const shapeOf = (workflow: Workflow): string => {
                     <span class="flex items-center gap-2">
                         <Icon :name="template.icon" class="shrink-0 text-xs text-subtle" />
                         <span class="text-xs font-medium text-content">{{ template.workflow.name }}</span>
+                        <!-- You already have one of these. Said plainly, because a card that looks like "add a
+                             new thing" while it is really "take the current version of a thing you forked" is
+                             the difference between a save you meant and one you did not. -->
+                        <span v-if="savedAlready(template)" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">saved</span>
                         <span class="ml-auto shrink-0 text-2xs text-subtle">{{ shapeOf(template.workflow) }}</span>
                     </span>
                     <span class="text-2xs leading-snug text-subtle">{{ template.summary }}</span>
+                    <span v-if="savedAlready(template)" class="text-2xs leading-snug text-muted">
+                        Your saved copy was forked from an older version of this. Opening it here shows the current one — saving replaces yours.
+                    </span>
                 </button>
             </section>
 
@@ -322,42 +316,6 @@ const shapeOf = (workflow: Workflow): string => {
                 </button>
             </RowGroup>
         </div>
-
-        <!-- THE RUN COMPOSER. One box and one button, because that is what starting agent work looks like
-             everywhere else in this product — and the moment it is sent, the chat takes over. Deliberately not
-             a form: the design already carries every setting, and the only thing missing is what to point it
-             at this time. -->
-        <Dialog
-            :visible="runTarget !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '36rem' }"
-            :header="runTarget?.name ?? 'Run'"
-            @update:visible="runTarget = undefined"
-        >
-            <div class="flex flex-col gap-2">
-                <textarea
-                    v-model="runRequest"
-                    rows="4"
-                    autofocus
-                    :class="[cmp.input(), `resize-y`]"
-                    placeholder="What should this run do? Every step is handed these words."
-                    @keydown.enter.meta.prevent="runNow()"
-                    @keydown.enter.ctrl.prevent="runNow()"
-                ></textarea>
-                <p class="text-2xs text-subtle">
-                    {{ runTarget?.steps.filter((step) => step.needs.length === 0).length ?? 0 }} step(s) start immediately, each in a worktree of its
-                    own. Leave this empty to run the design exactly as it is written.
-                </p>
-            </div>
-            <template #footer>
-                <button type="button" :class="cmp.linkButton()" @click="runTarget = undefined">Cancel</button>
-                <Button size="small" :label="start.isPending.value ? `Starting…` : `Run`" :disabled="start.isPending.value" @click="runNow()">
-                    <template #icon><Icon name="play" /></template>
-                </Button>
-            </template>
-        </Dialog>
 
         <ConfirmDialog
             :open="confirmRemoveId !== undefined"

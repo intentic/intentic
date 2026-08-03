@@ -279,19 +279,20 @@ export interface IntenticApi {
         // Open (or focus) the tab for a stored runtime session id — the same path the History menu and the fleet
         // board take. A session the daemon no longer holds opens an empty tab rather than failing.
         openSession(sessionId: string): void;
-        /* Show a WORKFLOW RUN in the chat: the host pops the panel out and fills its columns with the run's
-         * sessions — the ones already going, or, for a run just started, the ones about to. A run whose steps
-         * are over opens on its diagram instead.
+        /* AIM A NEW CHAT AT A WORKFLOW: the host opens a session exactly as "New agent" does, with the
+         * composer's workflow badge set to this design — so the next message the user types becomes that run's
+         * request instead of a turn on the chat.
          *
-         * It takes an id and not the run, and that is the contract's own dependency direction rather than a
-         * simplification: sandbox-contract imports THIS package, so this one cannot import `WorkflowRun` back.
-         * The host reads the run itself, which it would have to do anyway to know what is live.
+         * It hands over the START of the work rather than performing it, and that is the point. An extension
+         * with a Run button used to have two bad options: start the run itself behind its own dialog (a second
+         * way to begin agent work, with its own box that looks like nothing else in the product), or navigate
+         * to a page about the run. This is the third: the extension names the design, and the user starts it
+         * where they start everything else.
          *
-         * Here for the reason `openSession` is: an extension that starts agent work should be able to put the
-         * user in front of it, and the alternative is a navigation to a page ABOUT the work — which is what
-         * pressing Run used to do, and the thing it most obviously should not.
+         * A workflow id, not a run id, and the id is all it can be: sandbox-contract imports THIS package, so
+         * nothing here can name a `Workflow` type.
          */
-        openWorkflowRun(runId: string): void;
+        composeWorkflow(workflowId: string): void;
     };
     /* WHICH MODEL A RUN THIS EXTENSION STARTS WILL SPEND, the way `terminal` is the shell's one terminal panel:
      * the extension names the choice it is holding, the host owns the picker.

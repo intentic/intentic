@@ -6,8 +6,8 @@ import { watch } from "vue";
 import { requestModelPick } from "../composables/chat/hostModelPicker";
 import { modelLabelFor } from "../composables/chat/modelPicker";
 import { useChat } from "../composables/chat/useChat";
-import { openRunInChat } from "../composables/chat/openRun";
 import { useAgents } from "../composables/agents/useAgents";
+import { startAgent } from "../composables/agents/agentActions";
 import { registerCommand, executeCommand } from "../composables/commands/useCommands";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
 import { sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
@@ -326,9 +326,13 @@ export const createExtensionApi = (
                         await useChat().openConversation(id);
                     }
                 })(),
-            // The whole of it is openRunInChat — the same act the fleet board's run card and the chat rail's
-            // run row perform, so an extension's Run lands the user exactly where pressing the card would.
-            openWorkflowRun: (runId) => void openRunInChat(runId),
+            /* A new chat with the workflow badge already set — `startAgent` is the same call "New agent" makes,
+             * so the user lands in the one session-starting surface this product has, with the composer's
+             * caret in it and the design named beside the effort control. Nothing is spent until they send. */
+            composeWorkflow: (workflowId) => {
+                startAgent();
+                useChat().active.value.workflowId.value = workflowId;
+            },
         },
         /* The shell's own model picker and the default it opens on. Nothing here is gated on a manifest
          * permission: the extension never learns a credential, never reaches a provider route, and cannot

@@ -178,6 +178,14 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
             const turn: AgentTurn & { conversationId: string } = {
                 prompt: briefForIteration(record, iteration),
                 conversationId,
+                /* NOBODY IS AT A COMPOSER, which is what this flag means and what a loop is. It was missing,
+                 * and the cost was not only the model defaults it selects (see AgentTurn.unattended): every
+                 * iteration was also treated as a person's question by the turn's own prompt decorations. The
+                 * pre-injected workspace retrieval ran with THIS BRIEF as its query — "# Iteration 1 of at most
+                 * 3 / You are one iteration of a loop that repeats until a goal is met…" — and pasted a
+                 * `## Retrieved workspace context` block, searched for that, on top of the step's real
+                 * instructions. The first message of every workflow step opened with a page of it. */
+                unattended: true,
                 ...(record.isolated ? { isolated: true } : {}),
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 ...(record.agent !== undefined ? { agent: record.agent } : {}),

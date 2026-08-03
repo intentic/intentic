@@ -220,6 +220,18 @@ export class Conversation {
      * from off, every time, and says so per conversation. (The daemon takes the same position for the same
      * reason — see the fastModePerSessionOptIn note in agent.ts.) */
     readonly fast = ref<boolean>(false);
+    /* THE WORKFLOW THIS COMPOSER'S NEXT MESSAGE RUNS THROUGH, if any — the id of a saved design, or undefined
+     * for the ordinary thing where the message is a turn on this chat.
+     *
+     * It sits with the other per-conversation picks because that is exactly what it is: one more answer to
+     * "what happens when I press send", alongside which model and how hard it thinks. A workflow used to be
+     * started from its own page behind its own dialog, which made starting agent work two different acts
+     * depending on which of them you wanted — and the one behind the dialog was the one nobody could find.
+     *
+     * Deliberately NOT seeded from turnDefaults and never sticky: a workflow fans a message out into several
+     * paid sessions, and carrying that pick silently into the next chat is the one default nobody would want.
+     * It clears on send, for the same reason. */
+    readonly workflowId = ref<string | undefined>();
     // The reasoning effort the user ASKED for — which is not always runnable, because the tier scale belongs to
     // the MODEL: a pick made on Claude ('max', 'xhigh') is off Kimi K3's scale, and 'max' leaves Claude's own the
     // moment thinking is switched off. Everything that selects an effort writes this; everything that renders or
