@@ -24,7 +24,7 @@ test("streamTurn posts the turn with the bridge header and yields parsed frames,
     let seenToken: string | undefined;
     let seenBody = "";
     const url = await serve((request, response) => {
-        seenToken = request.headers["x-intentic-bridge"] as string;
+        seenToken = request.headers["x-intentic-control"] as string;
         request.on("data", (chunk: Buffer) => (seenBody += chunk.toString()));
         request.on("end", () => {
             response.writeHead(200, { "content-type": "text/event-stream" });
@@ -35,10 +35,10 @@ test("streamTurn posts the turn with the bridge header and yields parsed frames,
         });
     });
     const events: AgentEvent[] = [];
-    for await (const event of createDaemonClient(url, "ibt_x").streamTurn({ prompt: "hi" }, new AbortController().signal)) {
+    for await (const event of createDaemonClient(url, "ict_x").streamTurn({ prompt: "hi" }, new AbortController().signal)) {
         events.push(event);
     }
-    expect(seenToken).toBe("ibt_x");
+    expect(seenToken).toBe("ict_x");
     expect(JSON.parse(seenBody)).toEqual({ prompt: "hi" });
     expect(events).toEqual([{ kind: "delta", text: "hi" }, { kind: "done" }]);
 });
@@ -48,6 +48,6 @@ test("a 401 surfaces as ACP auth_required; other failures name the status", asyn
         response.writeHead(401);
         response.end("nope");
     });
-    const client = createDaemonClient(url, "ibt_revoked");
+    const client = createDaemonClient(url, "ict_revoked");
     await expect(client.listSessions()).rejects.toSatisfy((error) => error instanceof RequestError && error.code === -32000);
 });

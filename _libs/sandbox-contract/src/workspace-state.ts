@@ -213,11 +213,11 @@ const STATE_FILES = [
         portability: "carry",
     },
     {
-        path: ".intentic/bridge-tokens.json",
+        path: ".intentic/control-tokens.json",
         invalidates: [],
-        why: "Hashed ACP bridge tokens, listed on demand by the owner.",
+        why: "Hashed control tokens (the ACP editor bridge, and anything else driving this sandbox from outside), listed on demand by the owner.",
         portability: "identity",
-        note: "Mint fresh ACP bridge tokens — the old ones authenticate against the source sandbox.",
+        note: "Mint fresh control tokens — the old ones authenticate against the source sandbox.",
     },
     {
         path: ".intentic/owner.json",

@@ -12,7 +12,7 @@ export const runLogin = async (): Promise<number> => {
         console.log("Connect this machine's editor to your intentic sandbox.");
         console.log("Mint a bridge token in the sandbox app under Sandbox → Sync → Editor bridge (ACP).\n");
         const url = (await rl.question("Sandbox URL (https://sandbox-…): ")).trim().replace(/\/$/, "");
-        const token = (await rl.question("Bridge token (ibt_…): ")).trim();
+        const token = (await rl.question("Control token (ict_…): ")).trim();
         const agent = (await rl.question("Agent [claude]: ")).trim();
         if (url === "" || token === "") {
             console.error("Both the URL and the token are required.");

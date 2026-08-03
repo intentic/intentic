@@ -154,7 +154,7 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
         if (config === undefined) {
             throw RequestError.authRequired({
                 details:
-                    "Set INTENTIC_SANDBOX_URL and INTENTIC_BRIDGE_TOKEN (mint a token in the sandbox's Sync settings), or run `intentic-acp login`.",
+                    "Set INTENTIC_SANDBOX_URL and INTENTIC_CONTROL_TOKEN (mint a token in the sandbox's Sync settings), or run `intentic-acp login`.",
             });
         }
         return config;
@@ -178,7 +178,7 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                     description: "Mint a bridge token in the sandbox's Sync settings and provide it via environment variables.",
                     vars: [
                         { name: "INTENTIC_SANDBOX_URL", label: "Sandbox URL", secret: false },
-                        { name: "INTENTIC_BRIDGE_TOKEN", label: "Bridge token", secret: true },
+                        { name: "INTENTIC_CONTROL_TOKEN", label: "Control token", secret: true },
                         { name: "INTENTIC_AGENT", label: "Agent (claude | codex | grok | ACP capability id)", secret: false, optional: true },
                     ],
                     link: "https://intentic.dev/docs/editor-bridge",

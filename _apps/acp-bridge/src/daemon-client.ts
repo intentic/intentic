@@ -10,10 +10,11 @@ import {
 } from "@intentic/sandbox-contract";
 
 /* The bridge's view of the sandbox daemon: the /agent SSE stream plus the decision/answer side channels and
- * the session store, every call carrying the bridge token (x-intentic-bridge — see the daemon's
- * bridge-tokens middleware). A 401 surfaces as ACP auth_required so the editor re-runs the auth flow; a 403
- * names the scope violation. Unknown frame kinds are skipped (forward compatibility: a newer daemon must not
- * break an older bridge). */
+ * the session store, every call carrying an `editor`-scoped control token (x-intentic-control — see the
+ * daemon's auth/grants.ts). A 401 surfaces as ACP auth_required so the editor re-runs the auth flow; a 403
+ * names the scope violation, which for this bridge means the daemon's editor scope and this client have
+ * drifted apart. Unknown frame kinds are skipped (forward compatibility: a newer daemon must not break an
+ * older bridge). */
 
 export interface DaemonClient {
     readonly streamTurn: (turn: AgentTurn, signal: AbortSignal) => AsyncGenerator<AgentEvent>;
@@ -32,7 +33,7 @@ const raise = (status: number, body: string): never => {
 };
 
 export const createDaemonClient = (url: string, token: string): DaemonClient => {
-    const headers = { "x-intentic-bridge": token };
+    const headers = { "x-intentic-control": token };
     const request = async (path: string, init?: RequestInit): Promise<Response> => {
         const response = await fetch(`${url}${path}`, { ...init, headers: { ...headers, ...init?.headers } });
         if (!response.ok) {

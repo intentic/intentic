@@ -163,8 +163,8 @@ test("POST /system/sessions/revoke re-keys the session signer, and only the owne
     expect(rotations).toBe(1);
 });
 
-test("a bridge token reaches the agent-conversation surface and NOTHING else", async () => {
-    // Auth rejects every bearer, so any 2xx below proves the x-intentic-bridge path admitted the call.
+test("an editor-scoped control token reaches the agent-conversation surface and NOTHING else", async () => {
+    // Auth rejects every bearer, so any 2xx below proves the x-intentic-control path admitted the call.
     const app = createApp(
         services({
             auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
@@ -177,14 +177,41 @@ test("a bridge token reaches the agent-conversation surface and NOTHING else", a
             },
         }),
     );
-    const bridge = { "x-intentic-bridge": "ibt_valid" };
-    expect((await app.request("/sessions", { headers: bridge })).status).toBe(200);
-    // In scope, bad token → 401; out of scope, even a VALID token → an explicit 403 (clear DX, not a
-    // baffling missing-bearer 401).
-    expect((await app.request("/sessions", { headers: { "x-intentic-bridge": "ibt_wrong" } })).status).toBe(401);
-    expect((await app.request("/capabilities", { headers: bridge })).status).toBe(403);
-    expect((await app.request("/history/restore", { method: "POST", headers: bridge })).status).toBe(403);
-    expect((await app.request("/panels", { headers: bridge })).status).toBe(403);
+    const editor = { "x-intentic-control": "ict_valid" };
+    expect((await app.request("/sessions", { headers: editor })).status).toBe(200);
+    // An unknown token is 401 on every route — it has no stored scope to check, so the daemon cannot say
+    // anything about reach without first telling a stranger which routes exist.
+    expect((await app.request("/sessions", { headers: { "x-intentic-control": "ict_wrong" } })).status).toBe(401);
+    // A REAL token out of its scope is an explicit 403 (clear DX, not a baffling missing-bearer 401).
+    expect((await app.request("/capabilities", { headers: editor })).status).toBe(403);
+    expect((await app.request("/history/restore", { method: "POST", headers: editor })).status).toBe(403);
+    expect((await app.request("/panels", { headers: editor })).status).toBe(403);
+});
+
+test("control-token scopes widen: read observes, drive works, only land merges", async () => {
+    const app = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
+    const as = (token: string, path: string, method = "GET") => app.request(path, { method, headers: { "x-intentic-control": token } });
+    const forbidden = async (token: string, path: string, method = "GET") => (await as(token, path, method)).status === 403;
+
+    // `read` sees the board and refuses every mutation on it.
+    expect((await as("ict_read-token", "/agents")).status).toBe(200);
+    expect(await forbidden("ict_read-token", "/agent", "POST")).toBe(true);
+    expect(await forbidden("ict_read-token", "/agents/abc/land", "POST")).toBe(true);
+
+    // `drive` works the agent but stops at the main tree — the whole reason the rung exists.
+    expect((await as("ict_drive-token", "/agents")).status).toBe(200);
+    expect(await forbidden("ict_drive-token", "/agents/abc/land", "POST")).toBe(true);
+    expect(await forbidden("ict_drive-token", "/agents/abc/discard", "POST")).toBe(true);
+
+    // `land` is the only scope the merge is open to. NOT_FOUND (the agent is fictional) proves it got past
+    // the gate and reached the route, which is what this asserts — the handler's own answer is its business.
+    expect((await as("ict_land-token", "/agents/abc/land", "POST")).status).not.toBe(403);
+
+    // The floor holds for all three.
+    for (const token of ["ict_read-token", "ict_drive-token", "ict_land-token"]) {
+        expect(await forbidden(token, "/capabilities")).toBe(true);
+        expect(await forbidden(token, "/vpn")).toBe(true);
+    }
 });
 
 test("system.hostTunnel returns the platform's tunnel and translates its failure statuses", async () => {

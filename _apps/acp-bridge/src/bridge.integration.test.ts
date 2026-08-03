@@ -11,7 +11,7 @@ import type { BridgeConfig } from "./config.js";
 /* The bridge under test is the real agent() app driven through the SDK's in-process composition — real
  * JSON-RPC routing, a fake daemon behind it (the reverse of the sandbox's fake-acp-agent fixture). */
 
-const CONFIG: BridgeConfig = { url: "https://sandbox.example", token: "ibt_test", agent: "claude", model: undefined };
+const CONFIG: BridgeConfig = { url: "https://sandbox.example", token: "ict_test", agent: "claude", model: undefined };
 
 interface Harness {
     readonly updates: SessionNotification[];

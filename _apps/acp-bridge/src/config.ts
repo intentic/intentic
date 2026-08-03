@@ -34,7 +34,7 @@ const readStored = (path: string): z.infer<typeof StoredConfigSchema> | undefine
 export const resolveConfig = (env: Record<string, string | undefined> = process.env, dir: string = CONFIG_DIR): BridgeConfig | undefined => {
     const stored = readStored(join(dir, "config.json"));
     const url = env["INTENTIC_SANDBOX_URL"] ?? stored?.url;
-    const token = env["INTENTIC_BRIDGE_TOKEN"] ?? stored?.token;
+    const token = env["INTENTIC_CONTROL_TOKEN"] ?? stored?.token;
     if (url === undefined || url === "" || token === undefined || token === "") {
         return undefined;
     }

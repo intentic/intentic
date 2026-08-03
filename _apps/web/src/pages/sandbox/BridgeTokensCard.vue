@@ -1,13 +1,39 @@
 <script setup lang="ts">
 import { Card, Code, CopyButton, formatDate } from "@intentic/ui";
 import Button from "primevue/button";
-import { useBridgeTokens } from "../../composables/sandbox/useBridgeTokens";
+import { computed } from "vue";
+import { useControlTokens } from "../../composables/sandbox/useControlTokens";
+import { useSandbox } from "../../composables/sandbox/useSandbox";
 
-/* The Editor bridge (ACP) card: drive this sandbox's agents from Zed / JetBrains / any ACP editor. Mint a
- * bridge token (shown once), paste the generated agent_servers snippet into the editor, open your synced
- * folder as the project. Sits beside Desktop sync — the two halves of "work from your own machine". */
+/* The Editor bridge (ACP) card: drive this sandbox's agents from Zed / JetBrains / any ACP editor. Mint an
+ * `editor`-scoped control token (shown once), paste the generated agent_servers snippet into the editor, open
+ * your synced folder as the project. Sits beside Desktop sync — the two halves of "work from your own
+ * machine".
+ *
+ * The snippet lives HERE rather than in the composable: it is Zed's settings shape, and the composable is
+ * about tokens. The next card that mints one (a CLI, an MCP server) wants its own paste-ready thing. */
 
-const { tokens, minted, minting, error, label, mint, revoke, zedSnippet } = useBridgeTokens();
+const { daemonUrl } = useSandbox();
+const { tokens, minted, minting, error, label, mint, revoke } = useControlTokens(`editor`, `editor bridge`);
+
+const zedSnippet = computed(() =>
+    minted.value === undefined
+        ? ``
+        : JSON.stringify(
+              {
+                  agent_servers: {
+                      intentic: {
+                          type: `custom`,
+                          command: `npx`,
+                          args: [`@intentic/acp-bridge`],
+                          env: { INTENTIC_SANDBOX_URL: daemonUrl.value ?? ``, INTENTIC_CONTROL_TOKEN: minted.value.token },
+                      },
+                  },
+              },
+              undefined,
+              2,
+          ),
+);
 </script>
 
 <template>
@@ -21,7 +47,7 @@ const { tokens, minted, minting, error, label, mint, revoke, zedSnippet } = useB
             open your synced folder as the project so edits and diffs line up.
         </p>
         <p class="text-2xs text-warning">
-            A bridge token lets its holder run the agent — which edits files and runs commands in this sandbox. Treat it like a password; revoke it
+            An editor token lets its holder run the agent — which edits files and runs commands in this sandbox. Treat it like a password; revoke it
             here if it leaks.
         </p>
 
@@ -47,10 +73,13 @@ const { tokens, minted, minting, error, label, mint, revoke, zedSnippet } = useB
             <Code :code="zedSnippet" lang="json" label="Zed → settings.json (JetBrains takes the same command + env)" />
         </div>
 
+        <!-- Every control token against this sandbox, not just the editor ones this card mints: a revoke
+             surface that hides the token somebody minted elsewhere is how a leaked one stays live. -->
         <ul v-if="tokens.length > 0" class="flex flex-col gap-1">
             <li v-for="token in tokens" :key="token.id" class="flex items-center gap-2 text-xs">
                 <Icon name="key" class="text-2xs text-subtle" />
                 <span class="text-content">{{ token.label }}</span>
+                <span class="rounded bg-canvas px-1 py-0.5 font-mono text-2xs text-subtle">{{ token.scope }}</span>
                 <span class="text-2xs text-subtle">{{ formatDate(token.createdAt) }}</span>
                 <Button label="Revoke" size="small" severity="danger" :text="true" class="ml-auto" @click="revoke(token.id)" />
             </li>

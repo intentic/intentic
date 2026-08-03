@@ -122,36 +122,50 @@ test("system.session exchanges the verified bearer for a daemon-minted session",
     expect(await client.system.session()).toEqual({ token: "sess-o@x.com", expiresAt: 42, email: "o@x.com" });
 });
 
-test("bridge-token mint/list/revoke are owner-gated plain routes; mint returns the raw token once", async () => {
-    const minted: string[] = [];
+test("control-token mint/list/revoke are owner-gated plain routes; mint returns the raw token once", async () => {
+    const minted: { label: string; scope: string }[] = [];
     const app = createApp(
         services({
             auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: async () => {} },
-            bridgeTokens: {
-                mint: async (label) => {
-                    minted.push(label);
-                    return { id: "bt-9", token: "ibt_raw-once" };
+            controlTokens: {
+                mint: async (label, scope) => {
+                    minted.push({ label, scope });
+                    return { id: "ct-9", token: "ict_raw-once" };
                 },
-                verify: async () => false,
-                list: async () => [{ id: "bt-9", label: "zed", createdAt: 1 }],
-                revoke: async (id) => id === "bt-9",
+                scopeOf: async () => undefined,
+                list: async () => [{ id: "ct-9", label: "zed", scope: "editor", createdAt: 1 }],
+                revoke: async (id) => id === "ct-9",
             },
         }),
     );
-    const mint = await app.request("/system/bridge/tokens", {
+    const mint = await app.request("/system/control/tokens", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ label: "zed" }),
+        body: JSON.stringify({ label: "zed", scope: "editor" }),
     });
     expect(mint.status).toBe(200);
-    expect(await mint.json()).toEqual({ id: "bt-9", token: "ibt_raw-once" });
-    expect(minted).toEqual(["zed"]);
-    expect(await (await app.request("/system/bridge/tokens")).json()).toEqual({ tokens: [{ id: "bt-9", label: "zed", createdAt: 1 }] });
-    expect((await app.request("/system/bridge/tokens/bt-9", { method: "DELETE" })).status).toBe(200);
-    expect((await app.request("/system/bridge/tokens/nope", { method: "DELETE" })).status).toBe(404);
+    expect(await mint.json()).toEqual({ id: "ct-9", token: "ict_raw-once" });
+    expect(minted).toEqual([{ label: "zed", scope: "editor" }]);
+    expect(await (await app.request("/system/control/tokens")).json()).toEqual({
+        tokens: [{ id: "ct-9", label: "zed", scope: "editor", createdAt: 1 }],
+    });
+    expect((await app.request("/system/control/tokens/ct-9", { method: "DELETE" })).status).toBe(200);
+    expect((await app.request("/system/control/tokens/nope", { method: "DELETE" })).status).toBe(404);
     // Not the owner → the gate closes the whole surface.
     const denied = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
-    expect((await denied.request("/system/bridge/tokens", { method: "POST" })).status).toBe(401);
+    expect((await denied.request("/system/control/tokens", { method: "POST" })).status).toBe(401);
+});
+
+test("minting without a usable scope is refused rather than defaulted", async () => {
+    const app = createApp(services({ auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: async () => {} } }));
+    const mintWith = (body: unknown) =>
+        app.request("/system/control/tokens", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    // Absent, misspelled, and not-a-string all land the same way: a 400 naming the scopes that exist. No
+    // default, because every default here is wrong for somebody (see the route).
+    expect((await mintWith({ label: "zed" })).status).toBe(400);
+    expect((await mintWith({ label: "zed", scope: "editorr" })).status).toBe(400);
+    expect((await mintWith({ label: "zed", scope: 7 })).status).toBe(400);
+    expect((await mintWith({ scope: "drive" })).status).toBe(200);
 });
 
 test("system.info reports the sandbox image tag and exact bundled version", async () => {

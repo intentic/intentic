@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
 import { capabilitiesOf, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import type { ControlScope } from "./auth/control-tokens.js";
 import { createMediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets } from "./auth/ws-tickets.js";
 
@@ -253,11 +254,16 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // The /vpn-scoped secret the in-container CLI presents. A fixed value here so a route test can present
         // it; production mints one per boot.
         agentToken: "agent-secret",
-        // In-memory bridge-token fake: one fixed valid token, so middleware tests need no store file.
-        bridgeTokens: {
-            mint: async (label) => ({ id: "bt-1", token: `ibt_minted-${label}` }),
-            verify: async (presented) => presented === "ibt_valid",
-            list: async () => [{ id: "bt-1", label: "test", createdAt: 0 }],
+        /* In-memory control-token fake: one fixed token per scope, named for it, so a middleware test can
+         * present the exact reach it means to exercise without a store file. `ict_valid` is the editor scope
+         * because that is the grant that existed first and the one most tests are about. */
+        controlTokens: {
+            mint: async (label, scope) => ({ id: "ct-1", token: `ict_minted-${scope}-${label}` }),
+            scopeOf: async (presented) =>
+                ({ ict_valid: "editor", "ict_read-token": "read", "ict_drive-token": "drive", "ict_land-token": "land" })[presented] as
+                    | ControlScope
+                    | undefined,
+            list: async () => [{ id: "ct-1", label: "test", scope: "editor", createdAt: 0 }],
             revoke: async () => true,
         },
         info: undefined,

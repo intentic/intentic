@@ -32,7 +32,7 @@ import { createResidentEngine, type ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
 import { createAcpAgent } from "./acp/acp-agent.js";
 import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.js";
-import { type BridgeTokens, fileBridgeTokens } from "./auth/bridge-tokens.js";
+import { type ControlTokens, fileControlTokens } from "./auth/control-tokens.js";
 import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
@@ -215,9 +215,10 @@ export interface Services {
     readonly hosts: HostsStore;
     // … and who is actually holding a socket right now, with the JSON-RPC correlation over it.
     readonly hostHub: HostHub;
-    // Owner-minted, hashed, revocable tokens for the ACP editor bridge (x-intentic-bridge header) — scoped to
-    // the agent-conversation routes by bridgeScoped. Persisted in /work/.intentic like owner/members.
-    readonly bridgeTokens: BridgeTokens;
+    // Owner-minted, hashed, revocable tokens for anything driving this sandbox from outside the browser — the
+    // ACP editor bridge today (x-intentic-control header). Each carries the scope it was minted with; what a
+    // scope reaches is auth/control-tokens.ts. Persisted in /work/.intentic like owner/members.
+    readonly controlTokens: ControlTokens;
     // This sandbox's identity for the platform's Connections card; undefined ⇒ /info returns {} (loopback/test).
     readonly info: { readonly name: string; readonly image: string; readonly version: string } | undefined;
     // Intent-declared internal MCP tools (constant for the sandbox), merged with mcp-kind capabilities each turn.
@@ -629,7 +630,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
         komodoStore: fileKomodoStore(statePath(workspace.root, ".intentic/komodo.json")),
-        bridgeTokens: fileBridgeTokens(statePath(workspace.root, ".intentic/bridge-tokens.json")),
+        controlTokens: fileControlTokens(statePath(workspace.root, ".intentic/control-tokens.json")),
         automations: fileAutomationsStore(statePath(workspace.root, ".intentic/automations.json")),
         loops: fileLoopsStore(statePath(workspace.root, ".intentic/loops.json")),
         workflows: fileWorkflowsStore(statePath(workspace.root, ".intentic/workflows.json")),

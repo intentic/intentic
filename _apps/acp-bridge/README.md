@@ -22,7 +22,7 @@ line up in the editor.
             "args": ["@intentic/acp-bridge"],
             "env": {
                 "INTENTIC_SANDBOX_URL": "https://sandbox-….intentic.dev",
-                "INTENTIC_BRIDGE_TOKEN": "ibt_…"
+                "INTENTIC_CONTROL_TOKEN": "ict_…"
             }
         }
     }

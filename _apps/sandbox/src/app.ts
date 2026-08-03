@@ -7,7 +7,8 @@ import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { bearerFrom, ForbiddenError, tokenEquals } from "./auth/auth.js";
-import { bridgeScoped } from "./auth/bridge-tokens.js";
+import { CONTROL_SCOPES } from "./auth/control-tokens.js";
+import { grantsOf } from "./auth/grants.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { fireAutomation, PAYLOAD_MAX } from "./automations/scheduler.js";
 import { extensionDir, extensionRootOf, readExtensionManifest } from "./capabilities/extension-dirs.js";
@@ -94,11 +95,6 @@ const ciWebhookPath = /^\/ci\/webhook\/[^/]+$/;
  * Anchored per segment so neither admits a route that merely starts the same way. */
 const hostPublicPath = (path: string): boolean => path === "/system/hosts/connect" || path === "/system/hosts/enroll";
 const hostMcpPath = /^\/mcp\/hosts\/[^/]+$/;
-
-// The only routes the in-container agent token opens: the live VPN surface the `vpn` CLI drives. Anchored and
-// path-segment aware so it admits /vpn and /vpn/<id>/connect but never a route that merely starts with those
-// characters — the token must not become a general-purpose daemon key.
-const vpnScoped = (path: string): boolean => path === "/vpn" || path.startsWith("/vpn/");
 
 // The lowercased email in a member-management request body, or undefined when absent/malformed.
 const memberEmail = async (c: Context): Promise<string | undefined> => {
@@ -221,6 +217,13 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     if (services.auth !== undefined) {
         const authorize = services.auth.authorize;
         const allowOrigins = services.auth.allowOrigins;
+        // Built once: the secrets are per-boot and the stores are already live, so nothing here is per-request.
+        const grants = grantsOf({
+            panelToken: services.panelToken,
+            agentToken: services.agentToken,
+            controlTokens: services.controlTokens,
+            verifySync: (presented) => verifySyncToken(services.config.historyRoot, presented),
+        });
         app.use(
             "*",
             cors({
@@ -275,56 +278,25 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             ) {
                 return next();
             }
-            // An operator panel's own backend (running inside this sandbox) calls the daemon with the per-boot
-            // panel token instead of a Google bearer — the token never leaves the container (it's injected into
-            // panel processes as INTENTIC_PANEL_TOKEN), so it's server-side only and not a browser-exposed path.
-            // Guarded on a NON-EMPTY header like the three branches below it: tokenEquals("", "") is true, so a
-            // composition that ever produced an empty panelToken would turn every unauthenticated request into
-            // a panel call. randomBytes makes that unreachable today; the guard makes it unreachable by shape.
-            const panel = c.req.header("x-intentic-panel");
-            if (panel !== undefined && panel !== "" && tokenEquals(panel, services.panelToken)) {
-                return next();
-            }
-            // The `vpn` CLI on the agent's PATH (and in the owner's own terminals) reaches the daemon over
-            // loopback with the per-boot agent token, read from a 0600 file inside the container. Scoped HARD to
-            // /vpn: the agent gets to dial and drop the tunnels the owner configured, and nothing else — in
-            // particular not /secrets or /capabilities, which would hand it the credentials themselves.
-            const agentToken = c.req.header("x-intentic-agent");
-            if (agentToken !== undefined && agentToken !== "") {
-                if (!vpnScoped(c.req.path)) {
-                    return c.json({ error: "agent token not valid for this route" }, 403);
+            /* The non-bearer credentials — a panel's backend, the in-container `vpn` CLI, a control token
+             * (the ACP bridge, and whatever drives this sandbox from outside), the desktop-sync agent. One
+             * table in auth/grants.ts says what each reaches; this loop is the only place any of them is
+             * admitted. Identity stays unset for all four (documented-legal, the panel-token precedent):
+             * each acts as the owner's tool rather than as a member. */
+            for (const grant of grants) {
+                const presented = c.req.header(grant.header);
+                if (presented === undefined || presented === "") {
+                    continue;
                 }
-                if (!tokenEquals(agentToken, services.agentToken)) {
-                    return c.json({ error: "unauthorized" }, 401);
+                const verdict = await grant.authorize(presented, c.req.method, c.req.path);
+                if (verdict === "ok") {
+                    return next();
                 }
-                return next();
-            }
-            // The ACP editor bridge (Zed/JetBrains spawn it on the user's machine) presents an owner-minted
-            // bridge token instead of a Google bearer. Scope check FIRST and explicit — a bridge hitting an
-            // out-of-scope route gets a clear 403, not a baffling missing-bearer 401. Identity stays unset
-            // (documented-legal, the panel-token precedent): the bridge acts as the owner's tool, not a member.
-            const bridge = c.req.header("x-intentic-bridge");
-            if (bridge !== undefined && bridge !== "") {
-                if (!bridgeScoped(c.req.method, c.req.path)) {
-                    return c.json({ error: "bridge token not valid for this route" }, 403);
-                }
-                if (!(await services.bridgeTokens.verify(bridge))) {
-                    return c.json({ error: "unauthorized" }, 401);
-                }
-                return next();
-            }
-            // The desktop-sync agent presents its enrollment-minted token to read the listening-ports list —
-            // the ONE route port mirroring needs (`intentic-sync mirror` drives Mutagen forwards from it).
-            // Scope check first and explicit, like the bridge: an out-of-scope route is a clear 403.
-            const sync = c.req.header("x-intentic-sync");
-            if (sync !== undefined && sync !== "") {
-                if (c.req.method !== "GET" || c.req.path !== "/ports") {
-                    return c.json({ error: "sync token not valid for this route" }, 403);
-                }
-                if (!(await verifySyncToken(services.config.historyRoot, sync))) {
-                    return c.json({ error: "unauthorized" }, 401);
-                }
-                return next();
+                // Out of scope is its own answer on purpose: a holder of the RIGHT credential on the wrong
+                // route should read "this may not go there", not a baffling missing-bearer 401.
+                return verdict === "out-of-scope"
+                    ? c.json({ error: `${grant.name} not valid for this route` }, 403)
+                    : c.json({ error: "unauthorized" }, 401);
             }
             try {
                 c.set("identity", await authorize(bearerFrom(c.req.header("authorization")), c.req.header("x-intentic-connect") ?? undefined));
@@ -964,30 +936,40 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/mcp/hosts/:id", hostMcp);
     app.get("/mcp/hosts/:id", hostMcp);
     app.delete("/mcp/hosts/:id", hostMcp);
-    // Bridge tokens for the ACP editor bridge — owner-minted (the sync-pair trust model, made durable +
-    // revocable), raw value returned exactly once. Plain routes before the oRPC catch-all, like the pair block.
-    app.post("/system/bridge/tokens", async (c) => {
+    /* Control tokens — owner-minted (the sync-pair trust model, made durable + revocable), raw value returned
+     * exactly once. What each scope reaches is auth/control-tokens.ts. Plain routes before the oRPC catch-all,
+     * like the pair block.
+     *
+     * The scope is REQUIRED rather than defaulted: every default here is wrong for somebody, and a mint that
+     * quietly picks the narrowest one produces a token that 403s on the caller's first real call, while a
+     * mint that picks a generous one hands out more reach than was asked for. Making the caller say it is one
+     * extra field and no ambiguity. */
+    app.post("/system/control/tokens", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        const body = (await c.req.json().catch(() => undefined)) as { label?: unknown } | undefined;
-        const label = typeof body?.label === "string" && body.label.trim() !== "" ? body.label.trim().slice(0, 60) : "editor bridge";
-        return c.json(await services.bridgeTokens.mint(label));
+        const body = (await c.req.json().catch(() => undefined)) as { label?: unknown; scope?: unknown } | undefined;
+        const scope = CONTROL_SCOPES.find((candidate) => candidate === body?.scope);
+        if (scope === undefined) {
+            return c.json({ error: `scope must be one of: ${CONTROL_SCOPES.join(", ")}` }, 400);
+        }
+        const label = typeof body?.label === "string" && body.label.trim() !== "" ? body.label.trim().slice(0, 60) : scope;
+        return c.json(await services.controlTokens.mint(label, scope));
     });
-    app.get("/system/bridge/tokens", async (c) => {
+    app.get("/system/control/tokens", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        return c.json({ tokens: await services.bridgeTokens.list() });
+        return c.json({ tokens: await services.controlTokens.list() });
     });
-    app.delete("/system/bridge/tokens/:id", async (c) => {
+    app.delete("/system/control/tokens/:id", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        return (await services.bridgeTokens.revoke(c.req.param("id"))) ? c.json({ ok: true }) : c.json({ error: "no such token" }, 404);
+        return (await services.controlTokens.revoke(c.req.param("id"))) ? c.json({ ok: true }) : c.json({ error: "no such token" }, 404);
     });
     /* Sign out every browser: re-key the session signer, so all sessions minted for this sandbox stop
      * verifying at once (auth/session.ts). Owner-only, and the owner's OWN browser is included — it 401s on its
