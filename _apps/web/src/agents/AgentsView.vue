@@ -147,7 +147,7 @@ const filterField = ref<InstanceType<typeof FilterField> | undefined>(undefined)
 const showAllFinished = ref(false);
 const archiveOpen = ref(false);
 
-const { runs: workflowRuns, stop: stopWorkflowRun } = useWorkflowRuns();
+const { runs: workflowRuns, stop: stopWorkflowRun, forget: forgetWorkflowRun } = useWorkflowRuns();
 // Which runs have a step waiting on the user. Read from the fleet, because "blocked" is a live fact about a
 // conversation and the run ledger only knows what the scheduler wrote.
 const needingYou = computed(() => runsNeedingYou(fleet.value));
@@ -653,6 +653,12 @@ const stopRun = async (run: WorkflowRun): Promise<void> => {
         forgetStopping(run.runId);
     }
 };
+// Take an ended run off the board. No confirmation and no undo row, on the archive's own argument: the record
+// is a scheduling artifact and everything the run actually produced — the branches, the transcripts, the
+// chats — is untouched and still on the board in its own right.
+const forgetRun = async (run: WorkflowRun): Promise<void> => {
+    await forgetWorkflowRun.mutateAsync(run.runId).catch(() => undefined);
+};
 // The mark is held until the LEDGER says the run is no longer going, not until the request returns: the
 // request acks the ask, and steps in flight are still finishing the round they are on for minutes after it.
 watch(workflowRuns, (list) => {
@@ -872,6 +878,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             @open="openRun(run)"
                             @graph="openRunGraph(run)"
                             @stop="stopRun(run)"
+                            @forget="forgetRun(run)"
                         />
                     </div>
                     <p v-if="lane.key === 'finished' && archiveOpen && archived.length === 0" class="px-3 pb-3 text-2xs text-subtle">

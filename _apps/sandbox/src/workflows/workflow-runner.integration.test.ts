@@ -9,7 +9,7 @@ import type { Services } from "../composition.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
 import type { TurnFn } from "../loops/loop-runner.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
-import { openRun, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
+import { abandonRun, openRun, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
 
 /* The scheduler's graph behaviour, end to end. Every test here is about the SEAM between steps, because that
  * is the only thing this module owns — a step's own execution is a loop, and loops are tested next door.
@@ -255,4 +255,36 @@ test("workflowFaults refuses the graphs the scheduler could not run", () => {
             workflow([step("a"), step("b", { needs: ["a"], handoff: "continue" }), step("c", { needs: ["a"], handoff: "continue" })]),
         ).join(" "),
     ).toContain("only one step can");
+});
+
+/* THE STUCK RUN, and the only way out of it.
+ *
+ * A record left `running` by a daemon that is gone — replaced by a sandbox update, or dead between a step
+ * settling and the run being settled — has no abort handle for `stopWorkflowRun` to find. Stop used to refuse
+ * such a run outright ("that run is not going"), which made it permanent: a card with a button that could not
+ * work, a step count frozen where the daemon died, and no way off the board. Both halves are asserted because
+ * both were wrong on screen: the RUN has to end, and so do the steps it left mid-flight — "1 live" is counted
+ * off the steps, so settling only the run leaves the card still claiming a session is working.
+ */
+test("a run nothing is driving can still be stopped, steps and all", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const design = workflow([step("cut-off"), step("never-reached", { needs: ["cut-off"] })]);
+    const opened = openRun(design, 1);
+    await services.workflowRuns.start({
+        ...opened,
+        steps: opened.steps.map((entry) => (entry.stepId === "cut-off" ? { ...entry, state: "running" as const, iterations: 1 } : entry)),
+    });
+
+    // Nothing is in flight — this is the state the scheduler is NOT in.
+    expect(workflowRunning(opened.runId)).toBe(false);
+    expect(stopWorkflowRun(opened.runId)).toBe(false);
+
+    await abandonRun(services, (await services.workflowRuns.get(opened.runId)) ?? opened, 2);
+
+    const settled = await services.workflowRuns.get(opened.runId);
+    expect(settled?.state).toBe("stopped");
+    expect(settled?.endedAt).toBe(2);
+    // Neither the step that was mid-turn nor the one still waiting is left claiming it might yet run.
+    expect(settled?.steps.map((entry) => entry.state)).toEqual(["stopped", "stopped"]);
 });

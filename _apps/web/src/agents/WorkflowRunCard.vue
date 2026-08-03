@@ -22,7 +22,7 @@ import { liveSessions } from "../composables/chat/chatRun";
  */
 
 const { run } = defineProps<{ run: WorkflowRun; selected?: boolean; needsYou?: boolean; stopping?: boolean }>();
-const emit = defineEmits<{ open: []; stop: []; graph: [] }>();
+const emit = defineEmits<{ open: []; stop: []; graph: []; forget: [] }>();
 
 const lane = computed(() => laneOfRun(run));
 const live = computed(() => liveSessions(run));
@@ -90,6 +90,20 @@ const TONE: Record<WorkflowRun["state"], string> = {
             >
                 <Icon name="external-link" class="text-2xs" />
             </button>
+            <!-- The ENDED run's exit, in the slot Stop occupies while it is going and on the agent card's own
+                 hover-action terms. The lane needs one: nothing about a run transitions once it is over, so a
+                 failed run sits in Attention until fifty more roll it off the ledger. Only the record goes —
+                 the steps' chats, branches and transcripts stay — which is what earns the missing dialog. -->
+            <button
+                v-if="run.state !== `running`"
+                type="button"
+                aria-label="Dismiss this run"
+                v-tooltip.top="`Dismiss — takes the run off the board. Its sessions, branches and transcripts stay.`"
+                class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                @click.stop="emit(`forget`)"
+            >
+                <Icon name="times" class="text-2xs" />
+            </button>
             <!-- Stop is on the card and not behind a hover, unlike the agent card's Archive: it is the one
                  thing a person opens this board to do to a run that is going wrong, and a control you have to
                  discover by hovering is one that is not there at 2am. -->
@@ -97,7 +111,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 v-if="run.state === `running`"
                 type="button"
                 aria-label="Stop this workflow run"
-                v-tooltip.top="`Stop the run. Steps in flight finish the round they are on; nothing new starts.`"
+                v-tooltip.top="`Stop the run — its steps are cut off where they are and nothing new starts.`"
                 :disabled="stopping"
                 class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-40"
                 @click.stop="emit(`stop`)"

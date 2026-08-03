@@ -73,6 +73,14 @@ export interface WorkflowRunsStore {
     // one write rather than one per node.
     readonly markSteps: (runId: string, stepIds: readonly string[], state: WorkflowStepState, detail?: string) => Promise<void>;
     readonly settle: (runId: string, state: WorkflowRunState, now: number, detail?: string) => Promise<void>;
+    /* Drop a run from the ledger outright — the board's way of clearing a finished one it has done with.
+     *
+     * Nothing durable goes with it: a run record is a SCHEDULING artifact (which step ran where, and how it
+     * ended), while the work itself is the steps' conversations, their branches and their transcripts, none of
+     * which this touches. The ledger is already transient by design — it keeps the last RUNS_KEPT and rolls
+     * the rest off — so forgetting one early is the same event happening on purpose.
+     */
+    readonly forget: (runId: string) => Promise<void>;
     // Count one boot-time resume against the run, so a workflow whose step reliably kills the daemon cannot be
     // resurrected forever. Returns the run as it now stands, or undefined when it went away underneath.
     readonly countResume: (runId: string) => Promise<WorkflowRun | undefined>;
@@ -107,6 +115,9 @@ export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
             return amendSteps(runId, (step) => (wanted.has(step.stepId) ? { ...step, state, ...(detail !== undefined ? { detail } : {}) } : step));
         },
         settle: (runId, state, now, detail) => amend(runId, (run) => ({ ...run, state, endedAt: now, ...(detail !== undefined ? { detail } : {}) })),
+        forget: async (runId) => {
+            await file.update((runs) => runs.filter((run) => run.runId !== runId));
+        },
         countResume: async (runId) => {
             await amend(runId, (run) => ({ ...run, resumed: run.resumed + 1 }));
             return (await file.read()).find((run) => run.runId === runId);

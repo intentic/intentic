@@ -65,6 +65,27 @@ export const stopWorkflowRun = (runId: string): boolean => {
     return live !== undefined;
 };
 
+/* CLOSE A RUN NOTHING IS DRIVING — the exit from a record that says `running` while no scheduler is behind it.
+ *
+ * It happens, and when it does the run is unkillable: `stopWorkflowRun` finds nothing to abort, the route it
+ * serves answers "that run is not going", and the ledger goes on reporting a live workflow with a step still
+ * marked `running` forever. The board then shows a card with a Stop that cannot work and a step count that
+ * will never move. Two ways in, both ordinary: the daemon was replaced mid-run (a sandbox update, an
+ * environment approval, a dev swap) and the boot resume had already spent this run's RESUME_MAX; or the
+ * process died between a step settling and the run being settled.
+ *
+ * Marking the steps matters as much as the run. "1 live" on the card is counted off the STEPS, so a run
+ * settled with a step left `running` still reads as working — and the diagram would still offer to open a
+ * session that ended with the daemon that was running it.
+ */
+export const abandonRun = async (services: Services, run: WorkflowRun, now: number): Promise<void> => {
+    const unfinished = run.steps.filter((step) => step.state === "running" || step.state === "pending").map((step) => step.stepId);
+    if (unfinished.length > 0) {
+        await services.workflowRuns.markSteps(run.runId, unfinished, "stopped", "Nothing was driving this run when it was stopped.");
+    }
+    await services.workflowRuns.settle(run.runId, "stopped", now, "Stopped. Nothing was driving this run — the daemon it started under is gone.");
+};
+
 /* Open a run record: every step `pending`, every conversation already named. Written before anything starts,
  * so the graph is complete from the first frame the UI sees — a node that only appears once it runs makes
  * "waiting" and "not part of this run" the same picture.

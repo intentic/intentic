@@ -51,6 +51,16 @@ export const workflowsContract = {
      * unit: a loop's iteration is a round somebody is watching, a workflow step's is an entire agent turn.
      * Waiting for one meant a stopped run kept working, kept spending and kept asking questions for minutes
      * after the press, which is indistinguishable from a button that does nothing.
+     *
+     * IT ALWAYS ENDS THE RUN, including one no scheduler is behind — a record left `running` by a daemon that
+     * was replaced mid-flight. That case used to be refused, which made the stuck run permanent: a Stop that
+     * could not work, a step count that would never move, and no way off the board.
      */
     stopRun: oc.route({ method: "POST", path: "/workflows/runs/{runId}/stop" }).input(WorkflowRunIdParamSchema).output(OkSchema),
+    /* Drop an ENDED run from the ledger — the board's exit for one it has finished with, since nothing about
+     * a run transitions once it is over and a failed one would otherwise sit in Attention until fifty more
+     * had rolled it off. Nothing durable goes: the record is a scheduling artifact, while the work is the
+     * steps' conversations, branches and transcripts, which it does not touch. Refused while the run is going.
+     */
+    forgetRun: oc.route({ method: "DELETE", path: "/workflows/runs/{runId}" }).input(WorkflowRunIdParamSchema).output(OkSchema),
 };

@@ -3,7 +3,7 @@ import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { openRun, runWorkflow, stopWorkflowRun } from "./workflow-runner.js";
+import { abandonRun, openRun, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
 
 /* The workflow routes. The manifest half is an ordinary CRUD store; the run half acks and walks away, because
  * a run outlives its request by minutes or hours and there is nothing useful for a handler to await.
@@ -53,12 +53,40 @@ export const createWorkflowsRoutes = (services: Services) => {
             return run;
         }),
         runs: i.runs.handler(async () => ({ runs: await services.workflowRuns.list() })),
+        /* Stop a run, and END it whatever state it is in — the one thing this route used to refuse to do.
+         *
+         * It answered "that run is not going" whenever the scheduler had no abort handle, which is exactly the
+         * case where the user needs it most: a record still marked `running` that nothing is driving, because
+         * the daemon it started under was replaced. The run then had a Stop that could not work, a step count
+         * frozen at 0/5 and no way off the board at all. So a missing handle is not an error, it is the signal
+         * to close the record instead (abandonRun).
+         *
+         * NOT_FOUND is kept for a run id that names nothing — that one really is a bad request.
+         */
         stopRun: i.stopRun.handler(async ({ input }) => {
-            if (!stopWorkflowRun(input.runId)) {
-                // Saying so beats an `ok` that means nothing: the usual cause is that it already ended, which
-                // the run now shows.
-                throw new ORPCError("NOT_FOUND", { message: "That run is not going." });
+            const run = await services.workflowRuns.get(input.runId);
+            if (run === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "No run with that id." });
             }
+            // In flight: abort it and let the scheduler write the outcome, which it is in the middle of doing.
+            if (stopWorkflowRun(input.runId)) {
+                return { ok: true as const };
+            }
+            // Already over: pressing Stop on it is a no-op rather than a complaint about timing.
+            if (run.state === "running") {
+                await abandonRun(services, run, Date.now());
+            }
+            return { ok: true as const };
+        }),
+        /* Drop a run from the ledger. The board's exit for a run it has finished with — an `attention` lane
+         * holding a failed run from two hours ago has no other way to empty, since nothing about a run ever
+         * transitions once it has ended. Refuses while the run is going: that is what Stop is for, and
+         * forgetting a live run would leave the scheduler writing to a record nobody can see. */
+        forgetRun: i.forgetRun.handler(async ({ input }) => {
+            if (workflowRunning(input.runId)) {
+                throw new ORPCError("BAD_REQUEST", { message: "That run is still going — stop it first." });
+            }
+            await services.workflowRuns.forget(input.runId);
             return { ok: true as const };
         }),
     };

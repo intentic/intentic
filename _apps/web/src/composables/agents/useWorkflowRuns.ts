@@ -120,11 +120,22 @@ export function useWorkflowRuns() {
         onSuccess: invalidate,
     });
 
+    /* Take an ended run off the board. The lane's own exit, and the reason it needs one: nothing about a run
+     * transitions once it is over, so a failed run sits in Attention until fifty more have rolled it off the
+     * ledger. Only the RECORD goes — the steps' chats, branches and transcripts are untouched, which is what
+     * makes this a dismissal rather than a delete and why it does not stop to ask.
+     */
+    const forget = useMutation({
+        mutationFn: (runId: string) => sandboxJson(`/workflows/runs/${encodeURIComponent(runId)}`, { method: `DELETE` }),
+        onSuccess: invalidate,
+    });
+
     return {
         // Every run the ledger holds, newest first — the caller decides which of them its surface draws.
         runs: computed<WorkflowRun[]>(() => runsQuery.data.value ?? []),
         designs: computed<Workflow[]>(() => designsQuery.data.value ?? []),
         start,
         stop,
+        forget,
     };
 }
