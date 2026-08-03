@@ -31,8 +31,10 @@ param(
     [string]$ConnectToken,
     [string]$HostName
 )
-$ErrorActionPreference = 'Stop'
-# docker probes below are expected to exit non-zero; we branch on $LASTEXITCODE ourselves (see connect.ps1).
+# docker probes below are expected to exit non-zero; we branch on $LASTEXITCODE ourselves. NOT 'Stop', because
+# Windows PowerShell 5.1 turns a redirected native stderr into a terminating error and every quiet probe here
+# would end the run on the outcome it exists to detect (see connect.ps1 for the whole story).
+$ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
 # Explicit params (direct file invocation) win; else the env vars the `irm | iex` one-liner carries.

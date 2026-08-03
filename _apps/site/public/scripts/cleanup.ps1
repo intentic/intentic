@@ -36,7 +36,10 @@ param(
     [switch]$Yes,
     [switch]$Help
 )
-$ErrorActionPreference = 'Stop'
+# Removal is a long list of docker calls that are ALLOWED to fail (the container/volume/network may already be
+# gone), each silenced with `*> $null`. Not 'Stop': Windows PowerShell 5.1 promotes a redirected native stderr
+# to a terminating error, which would end the cleanup at the first thing that was already clean. See connect.ps1.
+$ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
 if ($Help) {

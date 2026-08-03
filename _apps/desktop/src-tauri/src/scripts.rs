@@ -320,15 +320,7 @@ mod tests {
      * ASCII fixes both, because there is no decoder anywhere that reads an ASCII byte as anything else. */
     #[test]
     fn every_bundled_powershell_script_is_ascii() {
-        let dir =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../site/public/scripts");
-        let mut checked = 0;
-        for entry in std::fs::read_dir(&dir).expect("the bundled scripts directory is readable") {
-            let path = entry.expect("readable directory entry").path();
-            if path.extension().is_none_or(|ext| ext != "ps1") {
-                continue;
-            }
-            let text = std::fs::read_to_string(&path).expect("script is readable");
+        for (path, text) in powershell_scripts() {
             let offenders: Vec<char> = {
                 let mut found: Vec<char> = text.chars().filter(|c| !c.is_ascii()).collect();
                 found.sort_unstable();
@@ -342,8 +334,68 @@ mod tests {
                  parsing. Write `-`, `->`, `=>`, `...` instead.",
                 path.display(),
             );
-            checked += 1;
         }
-        assert!(checked > 0, "no .ps1 scripts found in {}", dir.display());
+    }
+
+    /* THE SECOND 5.1 LANDMINE IN THE SAME FILES, and the one that outlived the first fix.
+     *
+     * These scripts ask docker questions and branch on `$LASTEXITCODE` themselves: `docker network inspect X
+     * *> $null` is a probe whose "no" arrives as a non-zero exit and a line on stderr, and the redirection is
+     * only there to keep that line off the user's screen. PowerShell 7.4+ has a switch for exactly this
+     * (`$PSNativeCommandUseErrorActionPreference = $false`) and every script sets it.
+     *
+     * 5.1 does not have that switch, and its rule is a different one: a native command's stderr becomes a
+     * NativeCommandError record the moment the stream is REDIRECTED, which `$ErrorActionPreference = 'Stop'`
+     * then promotes to terminating. Paired, they end the run ON the silenced probe — a first Windows install
+     * died at `docker network inspect` for a network that did not exist yet, one statement before the line
+     * that would have created it, having already pulled the image.
+     *
+     * So a script may set 'Stop', and a script may silence a probe. Not both. */
+    #[test]
+    fn no_powershell_script_silences_a_probe_while_stop_is_in_force() {
+        const REDIRECTIONS: [&str; 4] = ["*>", "2>&1", "2>$null", "2> $null"];
+        for (path, text) in powershell_scripts() {
+            if !text.contains("$ErrorActionPreference = 'Stop'") {
+                continue;
+            }
+            let silenced: Vec<&str> = REDIRECTIONS
+                .iter()
+                .copied()
+                .filter(|redirection| text.contains(redirection))
+                .collect();
+            assert!(
+                silenced.is_empty(),
+                "{} sets $ErrorActionPreference = 'Stop' AND redirects a native command's output \
+                 ({silenced:?}). On Windows PowerShell 5.1 that pair is fatal: the redirection turns docker's \
+                 stderr into a terminating NativeCommandError, so a probe kills the run on the very outcome it \
+                 exists to detect. Use 'Continue' — these scripts branch on $LASTEXITCODE themselves, and \
+                 every error they raise is a `Write-Error` followed by `exit 1`.",
+                path.display(),
+            );
+        }
+    }
+
+    /// Every shipped `.ps1`, as (path, contents). Both checks above are properties of the FILE that no Linux
+    /// runner can reach any other way — the Windows installer is cross-built here and these scripts first
+    /// execute on a user's machine.
+    fn powershell_scripts() -> Vec<(std::path::PathBuf, String)> {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../site/public/scripts");
+        let mut scripts: Vec<(std::path::PathBuf, String)> = std::fs::read_dir(&dir)
+            .expect("the bundled scripts directory is readable")
+            .map(|entry| entry.expect("readable directory entry").path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "ps1"))
+            .map(|path| {
+                let text = std::fs::read_to_string(&path).expect("script is readable");
+                (path, text)
+            })
+            .collect();
+        scripts.sort();
+        assert!(
+            !scripts.is_empty(),
+            "no .ps1 scripts found in {}",
+            dir.display()
+        );
+        scripts
     }
 }

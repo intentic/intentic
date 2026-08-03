@@ -34,9 +34,22 @@ param(
     # Start without prompting even if other sandboxes are already running (the old always-proceed behavior).
     [switch]$Yes
 )
-$ErrorActionPreference = 'Stop'
-# Native commands (docker) are expected to exit non-zero on the probes below; we branch on $LASTEXITCODE
-# ourselves. Disable the PS 7.4+ default that turns those non-zero exits into terminating errors.
+# NOT 'Stop', and the reason is Windows PowerShell 5.1 - which is what `powershell.exe` still is on every
+# Windows box, and what the desktop app spawns.
+#
+# This script probes with docker constantly and branches on $LASTEXITCODE itself: a probe exiting non-zero is
+# the ANSWER, not a failure. Two host rules get in the way of that, and they are different rules:
+#   * PS 7.4+ makes a native command's non-zero EXIT honour $ErrorActionPreference. Switched off on the line
+#     below, which is the only host that has that switch.
+#   * PS 5.1 has no such switch. What it does instead is wrap a native command's STDERR in a terminating
+#     NativeCommandError the moment that stream is REDIRECTED - so under 'Stop' the `*> $null` that makes a
+#     probe quiet is precisely what kills the run. `docker network inspect` on a network that does not exist
+#     yet took down every first install on Windows, one statement before the line that would have created it.
+# Nothing here leans on 'Stop': every error this script raises is a `Write-Error` followed by `exit 1`, which
+# reads identically either way, and the Invoke-RestMethod calls throw terminating errors into their own
+# try/catch whatever this is set to. The redirections still keep the probes silent - the error records are
+# written and discarded as intended, rather than promoted to something that ends the script.
+$ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
 # Prefer explicit params (direct file invocation); fall back to env vars (the `irm | iex` one-liner path).

@@ -44,8 +44,10 @@ param(
     # Present => rebuild (the approved overlay, pinned to this digest); absent => update (the fresh :stable base).
     [string]$Hash
 )
-$ErrorActionPreference = 'Stop'
-# docker's probes are expected to exit non-zero; we branch on $LASTEXITCODE ourselves.
+# docker's probes are expected to exit non-zero; we branch on $LASTEXITCODE ourselves. NOT 'Stop', because on
+# Windows PowerShell 5.1 that turns a redirected native stderr into a terminating error and every quiet probe
+# below becomes a script-killer - connect.ps1's header has the long version.
+$ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
 $RegistryImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'registry.gitlab.com/radarsu/intentic/sandbox:stable' }
