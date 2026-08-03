@@ -107,7 +107,7 @@ const blank = (): void =>
                 title: `First step`,
                 needs: [],
                 handoff: `fresh`,
-                output: { kind: `claim` },
+                output: { kind: `none` },
                 checks: [],
                 context: `fresh`,
             },
@@ -190,10 +190,14 @@ const shapeOf = (workflow: Workflow): string => {
         <PageHeader title="Workflows" description="A designed run of agent sessions, each one handing a declared result to the next.">
             <template #info>
                 <InfoHint label="How a workflow runs">
-                    <span class="block text-sm font-medium text-content">Every step is a loop</span>
+                    <span class="block text-sm font-medium text-content">Every step is an agent session</span>
                     <span class="mt-1 block text-xs text-muted">
-                        A step repeats until it meets its goal — its own iteration, spend and idle-round ceilings apply, exactly as a Ralph loop's do.
-                        When it is done, whatever it declared as output is handed to the steps that wait on it.
+                        A step is one session with one job, and it is finished when that session is. What it was told is exactly what you typed,
+                        unless the step was given instructions of its own — and what it concluded is handed to the steps waiting on it.
+                    </span>
+                    <span class="mt-2 block text-xs text-muted">
+                        Ask a step for a declared output or a check and it becomes a loop instead: it repeats until that holds, or until a runaway
+                        backstop stops it. That is worth having when a step has a bar you can state; it is a cost when it does not.
                     </span>
                     <span class="mt-2 block text-xs text-muted">
                         A step can carry on the previous session or start a new one. New is what makes a review worth having; carrying on is what lets

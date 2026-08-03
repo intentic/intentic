@@ -117,7 +117,25 @@ const progressNote = (loop: Loop): string =>
             `That last one is what stops a loop going round in circles.`,
     ].join(`\n`);
 
+/* A LOOP THAT IS NOT A LOOP — nothing to produce and nothing to check, so it ends when its first turn ends.
+ *
+ * That is not a guess about the configuration, it is what loop-stop.ts does: `readDocument` answers `done` for
+ * a `none` output without reading anything, and with no checks to AND against it `evaluateStop` returns done on
+ * iteration 1. There is never a second iteration.
+ *
+ * Which makes every sentence below furniture for it, and expensive furniture. "Iteration 1 of at most 20" is a
+ * number that will not move, the goal restated is the prompt restated, the progress file is memory for a
+ * successor that does not exist, and "do not stop early to check in" is advice to a session that has one turn
+ * to live. A workflow step written as "do what I asked" is exactly this shape, and it was arriving under a page
+ * of loop scaffolding that described a loop it was not in.
+ */
+const singleTurn = (loop: Loop): boolean => loop.output.kind === `none` && loop.checks.length === 0;
+
 export const briefForIteration = (loop: Loop, iteration: number): string => {
+    // The prompt, and nothing else. Whatever the caller composed is the whole message.
+    if (singleTurn(loop)) {
+        return loop.prompt;
+    }
     const checks = checkNote(loop);
     const output = outputNote(loop, iteration);
     const sections = [

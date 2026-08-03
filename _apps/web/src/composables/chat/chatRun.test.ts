@@ -156,21 +156,36 @@ test("steps that never started contribute no session", () => {
  * got a picture, and watched two nodes go green on it while the transcripts they wanted stayed one unprompted
  * click away. So the reading is per-POLL rather than per-press, and these are the polls it has to act on.
  */
-test("a run whose steps have not started yet has nothing to follow", () => {
+/* THE PRESS ITSELF, which is the case the whole thing exists for. The daemon acks with every step `pending`, so
+ * "what is running" is empty at exactly the moment the reader is looking hardest — and answering that with the
+ * diagram is what put a picture of two sessions on screen instead of the two sessions.
+ */
+test("a run that has only just been acked opens on its first steps", () => {
     const design = run(
-        [step(`a`), step(`b`)],
+        [step(`a`), step(`b`), step(`after`, { needs: [`a`, `b`] })],
         [
+            { state: `pending`, iterations: 0 },
             { state: `pending`, iterations: 0 },
             { state: `pending`, iterations: 0 },
         ],
     );
-    expect(runToFollow(design, [])).toBeUndefined();
+    // The roots, and only the roots: `after` is pending too, but it is waiting on both of them and putting it
+    // on screen would show the merge beside the attempts it has not been handed yet.
+    expect(runToFollow(design, [`the-composer-they-typed-into`])?.map((session) => session.conversationId)).toEqual([`wf-r1-a`, `wf-r1-b`]);
 });
 
-// The poll that turns the diagram into the attempts — the moment the whole mode exists for.
-test("the first poll with something live hands over the live sessions", () => {
+// Once the turns actually begin, the same sessions are what is live — so the set does not change and the panes
+// are not disturbed. The press and the first poll must agree, or the panel would reshuffle a second later.
+test("the first poll after the turns begin changes nothing", () => {
     const design = run([step(`a`), step(`b`)], [{}, {}]);
-    expect(runToFollow(design, [`some-other-chat`])?.map((session) => session.conversationId)).toEqual([`wf-r1-a`, `wf-r1-b`]);
+    expect(runToFollow(design, [`wf-r1-a`, `wf-r1-b`])).toBeUndefined();
+});
+
+// A run that ENDED without starting a step has pending steps that will never open. Offering them would be
+// offering chats that do not exist and never will.
+test("a run that ended before starting anything offers nothing", () => {
+    const design = run([step(`a`)], [{ state: `pending`, iterations: 0 }]);
+    expect(runToFollow({ ...design, state: `stopped` }, [])).toBeUndefined();
 });
 
 // The poll on the far side of a band: both attempts have settled and the merge is up, so the panes move on

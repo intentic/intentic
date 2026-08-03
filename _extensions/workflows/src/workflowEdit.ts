@@ -31,7 +31,12 @@ import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
  * refuses and which nobody means. */
 const DEFAULTS = {
     handoff: `fresh`,
-    output: { kind: `claim` },
+    /* `none`, and this is the field where the default did the most damage. A `claim` reads like a harmless
+     * "have it say what it did" and is a COMPLETION GATE: the step is not finished until it writes a valid
+     * verdict file, so a step that did the work and described it in the wrong shape fails and takes everything
+     * downstream with it — and the contract for that file lands in the prompt on top of the user's own words.
+     * A step is finished when its turn is finished. Anyone who wants convergence asks for it in Advanced. */
+    output: { kind: `none` },
     checks: [],
     context: `fresh`,
 } as const satisfies Omit<WorkflowStep, "id" | "title" | "needs">;

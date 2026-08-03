@@ -165,6 +165,12 @@ const STEP_IDLE_ROUNDS = 3;
  * `goal` is passed in because a step may not have one: absent, the run's own request is what the step is
  * measured against (WorkflowStepSchema), which is the ordinary case for a design written as a shape. Resolving
  * it at the call site keeps the fallback in one place with the prompt's.
+ *
+ * THE ORDINARY STEP IS ONE TURN, and the ceiling says so rather than implying twenty. A step with nothing to
+ * produce and nothing to check is finished when its turn is finished — loop-stop's `readDocument` answers
+ * `done` for a `none` output, so iteration 1 was always the only one. Recording 20 anyway put "Iteration 1 of
+ * at most 20" in the prompt and a ceiling on the loops manifest that no step could ever approach: a number
+ * describing machinery rather than the job.
  */
 const loopForStep = (step: WorkflowStep, conversationId: string, prompt: string, goal: string): Loop => ({
     conversationId,
@@ -173,7 +179,7 @@ const loopForStep = (step: WorkflowStep, conversationId: string, prompt: string,
     context: step.context,
     output: step.output,
     checks: step.checks,
-    maxIterations: STEP_ROUNDS_MAX,
+    maxIterations: step.output.kind === "none" && step.checks.length === 0 ? 1 : STEP_ROUNDS_MAX,
     stallLimit: STEP_IDLE_ROUNDS,
     // Always. A workflow step is an isolated agent session, and there is no longer a way to ask for anything
     // else (see WorkflowSchema).

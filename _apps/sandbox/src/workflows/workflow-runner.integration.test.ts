@@ -94,6 +94,61 @@ test("steps run in dependency order and each is handed what the one before it pr
     expect(prompts[0]).not.toContain("What the steps before you concluded");
 });
 
+/* WHAT THE MODEL ACTUALLY RECEIVES — asserted end to end, through the step brief, the loop brief and the turn,
+ * because every one of those layers has at some point added a heading of its own and the reader sees the sum.
+ *
+ * The complaint this exists for: a step meant to do what the user asked opened with "# Iteration 1 of at most
+ * 20 / You are one iteration of a loop that repeats until a goal is met", then the goal, then a memory rule for
+ * a successor that would never exist, then a JSON file contract, then a paragraph telling it not to check in.
+ * A page of machinery describing machinery, on top of one sentence.
+ *
+ * `toEqual` rather than a set of `not.toContain`s, deliberately. The property is not "no loop scaffolding" but
+ * "nothing at all", and only an exact match keeps it that way — every helpful line anybody adds in future to
+ * any of the three layers fails this.
+ */
+test("an ordinary step's turn prompt is the request, byte for byte", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+    // The ordinary step: no prompt, no goal, nothing to produce and nothing to check.
+    const design = workflow([step("only", { prompt: undefined, goal: undefined, output: { kind: "none" }, checks: [] })]);
+    const run = await services.workflowRuns.start(openRun(design, 1, "make the importer handle empty files"));
+    const capture: TurnFn = async function* turn(_services, input: AgentTurn) {
+        prompts.push(input.prompt);
+        yield { kind: "done" } as AgentEvent;
+    };
+    await runWorkflow(services, run, capture);
+
+    expect(prompts).toEqual(["make the importer handle empty files"]);
+    // And it is DONE after that one turn — nothing was declared, so the turn ending is the whole of finishing.
+    const settled = await services.workflowRuns.get(run.runId);
+    expect(settled?.state).toBe("done");
+    expect(settled?.steps[0]?.iterations).toBe(1);
+});
+
+// A step that declares its own job still gets the brief, because for that one the request is context rather
+// than the instruction — the framing is what an ORDINARY step drops, not something the feature lost.
+test("a step with a job of its own still gets told what the run is for", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+    const design = workflow([
+        step("review", { prompt: "read the diff and say what is wrong", goal: undefined, output: { kind: "none" }, checks: [] }),
+    ]);
+    const run = await services.workflowRuns.start(openRun(design, 1, "make the importer handle empty files"));
+    const capture: TurnFn = async function* turn(_services, input: AgentTurn) {
+        prompts.push(input.prompt);
+        yield { kind: "done" } as AgentEvent;
+    };
+    await runWorkflow(services, run, capture);
+
+    expect(prompts[0]).toContain("read the diff and say what is wrong");
+    expect(prompts[0]).toContain("make the importer handle empty files");
+    // Still no loop scaffolding: it declared nothing to produce and nothing to check, so it is one turn.
+    expect(prompts[0]).not.toContain("Iteration 1 of");
+    expect(prompts[0]).not.toContain("the output file");
+});
+
 test("a failed step skips everything downstream of it and leaves the branch beside it alone", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -257,8 +312,13 @@ test("workflowFaults refuses the graphs the scheduler could not run", () => {
     expect(workflowFaults(workflow([step("a", { needs: ["b"] }), step("b", { needs: ["a"] })])).join(" ")).toContain("in a circle");
     // A dangling dependency.
     expect(workflowFaults(workflow([step("a", { needs: ["ghost"] })])).join(" ")).toContain("not a step");
-    // Nothing to produce and nothing to check — it could only ever run out of iterations.
-    expect(workflowFaults(workflow([step("a", { output: { kind: "none" }, checks: [] })])).join(" ")).toContain("nothing can tell it");
+    /* Nothing to produce and nothing to check is the ORDINARY step and no fault at all — it is one session with
+     * one job, finished when the session is. This was refused, on a rule borrowed from loops where it is right
+     * (a loop with no bar has no reason to run twice) and wrong here (a step was never started in order to
+     * repeat). The cost of the rule was that every step had to declare something before the graph would save,
+     * and the cheapest something was a `claim` — a verdict file nobody reads, a page of contract in the prompt,
+     * and a way for a step that did the work to fail for not describing it. */
+    expect(workflowFaults(workflow([step("a", { output: { kind: "none" }, checks: [] })]))).toEqual([]);
     // A root that continues a session that does not exist.
     expect(workflowFaults(workflow([step("a", { handoff: "continue" })])).join(" ")).toContain("nothing to continue");
     // Two steps continuing one session would run in parallel on one conversation and one worktree.

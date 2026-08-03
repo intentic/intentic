@@ -72,6 +72,13 @@ const RUBRIC_HINT = `A rubric for a reviewer that did none of this work.`;
  * two boxes can be left alone. Storing `` instead would mean "this step declares an empty instruction": the
  * schema refuses it on save, and it is not what clearing a box means to anyone who does it. */
 const declared = (value: string): string | undefined => (value.trim() === `` ? undefined : value);
+
+/* Whether this step is a LOOP or a single session, which is the one fact that changes what half this panel
+ * means. A step with nothing to produce and nothing to check ends when its turn ends (loop-stop answers `done`
+ * for a `none` output), so for it there is no round to restate a goal every, no iteration to number, and no
+ * ceiling to approach. Declaring either is what buys the repetition — and its cost, which is that the step can
+ * now fail for not satisfying what it declared. */
+const repeats = computed(() => step.value.output.kind !== `none` || step.value.checks.length > 0);
 const title = computed({ get: () => step.value.title, set: (value: string) => patch({ title: value }) });
 const prompt = computed({ get: () => step.value.prompt ?? ``, set: (value: string) => patch({ prompt: declared(value) }) });
 const goal = computed({ get: () => step.value.goal ?? ``, set: (value: string) => patch({ goal: declared(value) }) });
@@ -218,10 +225,20 @@ const advancedSummary = computed(() => {
 
             <div class="mt-5 flex items-baseline justify-between border-t border-line/60 pt-4">
                 <h3 class="text-sm font-semibold text-content">Done when</h3>
-                <span class="text-2xs text-subtle">restated every round</span>
+                <span v-if="repeats" class="text-2xs text-subtle">restated every round</span>
             </div>
             <ProseField v-model="goal" :placeholder="GOAL_HINT" class="-mx-2 mt-1 min-h-12" />
-            <p class="px-0.5 text-2xs text-subtle">It repeats until this is true.</p>
+            <!-- What this line says depends on whether the step REPEATS, because for most steps it does not and
+                 "it repeats until this is true" was simply false. A step is one session finished when the
+                 session is; asking it for an output or a check is what turns it into a loop, and only then is
+                 the goal a bar it is measured against over and over. -->
+            <p class="px-0.5 text-2xs text-subtle">
+                {{
+                    repeats
+                        ? `It repeats until this is true.`
+                        : `One session, finished when it finishes. Ask for an output or a check below to make it repeat until this is true.`
+                }}
+            </p>
 
             <!-- Everything else. Shut by default, and it says what it is holding so shutting it is safe. The
                  rule above it is the seam between the two tiers: prose above, values below. -->

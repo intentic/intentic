@@ -94,36 +94,23 @@ const handoverFrom = ({ title, document, report, branch }: Handover): string => 
     ].join(`\n`);
 };
 
-/* WHERE THE SESSION IS STANDING, on every step, and it is here rather than in any step's prose for a reason
- * that cost the one template we ship.
+/* The prompt a step's loop is given. Becomes `Loop.prompt` — and for the ordinary step that is the WHOLE turn
+ * prompt, because a step with nothing to produce and nothing to check gets no loop framing either (loop-brief's
+ * `singleTurn`).
  *
- * Every workflow step runs in a worktree of its own — always, no toggle (WorkflowSchema) — and NOTHING ELSE
- * SAYS SO. The sandbox's system prompt is silent about isolation, so a step knew only if its author had
- * remembered to write it down, and the two-models template was the thing carrying that sentence. What it
- * guards against fails silently and completely: the step downstream reads its predecessors with
- * `git diff main...<branch>`, so an attempt that did the work and left it uncommitted hands the merge an empty
- * diff, and the merge truthfully reports that one attempt did nothing. One line, on every step, so no design
- * can omit it and no design has to remember it.
- */
-const WHERE_YOU_ARE = [
-    `## Where you are working`,
-    ``,
-    `You are in a git worktree of your own and nothing else is working in it. The steps after you read what you ` +
-        `did with \`git diff main...<your branch>\` — so COMMIT AS YOU GO. Anything you leave uncommitted is ` +
-        `invisible to the rest of this run.`,
-].join(`\n`);
-
-/* The prompt a step's loop is given. Becomes `Loop.prompt`, so the loop wraps it with the iteration heading,
- * the goal and the output contract — this is only the task half.
+ * A STEP THAT DECLARES NO PROMPT IS HANDED THE REQUEST AND NOTHING ELSE. Not "almost nothing" — nothing. A root
+ * step of a design written as a shape receives the sentence the person typed, byte for byte, exactly as if they
+ * had sent it to one agent. Every heading is a thing standing between the reader and the model, and a model
+ * handed a page about workflows spends some of its attention on workflows; a step whose entire job is "do what
+ * was asked" has nothing to add to the asking.
  *
- * A STEP THAT DECLARES NO PROMPT GETS THE REQUEST AND ALMOST NOTHING ELSE, and that default is the whole point.
- * The headings below are not free: each one stands between the sentence the reader typed and the model that has
- * to act on it, and a model handed a five-section brief about a workflow will spend some of its attention on
- * the workflow. A step whose entire job is "do what was asked" has nothing to add to the asking, so it adds
- * nothing — the request, whatever its predecessors settled, and where it is standing. That is what makes a
- * saved workflow a SHAPE you point at today's job rather than a document you edit in order to ask a question.
+ * NOTHING NEEDS TO BE SAID ABOUT THE WORKTREE, which is worth writing down because it is not obvious and it was
+ * got wrong here. A step does run isolated, and the step after it does read `git diff main...<branch>` — but
+ * the daemon commits the worktree onto that branch itself at clean turn completion (agents/land.ts, in both
+ * `check` and `measure` modes). Telling the model to commit was instructing it to do something already done for
+ * it, at the cost of the one thing this default exists to protect.
  *
- * A STEP THAT DECLARES ONE IS SAYING IT HAS A JOB OF ITS OWN — review this, merge those — and gets the full
+ * A STEP THAT DECLARES A PROMPT IS SAYING IT HAS A JOB OF ITS OWN — review this, merge those — and gets the full
  * brief, because for that step the request genuinely is context rather than the instruction.
  *
  * THE REQUEST GOES TO EVERY STEP EITHER WAY, not only to the roots, and above the handovers. A workflow is a
@@ -147,11 +134,16 @@ export const briefForStep = (workflow: Workflow, step: WorkflowStep, position: n
                       ...handovers.map(handoverFrom),
                   ].join(`\n`),
               ];
-    /* Inheriting: the request IS the instruction, so it leads and wears no heading — a heading over the only
-     * thing in the brief is furniture. A run that would arrive here with no request at all is refused before it
-     * starts (workflowRunFaults), which is what lets this be the plain string rather than a third case. */
+    /* Inheriting: the request IS the instruction. A root step therefore gets the request and NOTHING — not a
+     * heading over it, since a heading over the only thing in a message is furniture. A run that would arrive
+     * here with no request at all is refused before it starts (workflowRunFaults), which is what lets this be
+     * the plain string rather than a third case.
+     *
+     * A step further down still gets its predecessors' conclusions, and that is the line between "no wrapper"
+     * and "no context": dropping the framing is the point, dropping the facts would just make the step
+     * re-derive them and disagree. */
     if (step.prompt === undefined) {
-        return [request ?? ``, ...settled, WHERE_YOU_ARE].join(`\n\n`);
+        return [request ?? ``, ...settled].join(`\n\n`);
     }
     return [
         [
@@ -174,6 +166,5 @@ export const briefForStep = (workflow: Workflow, step: WorkflowStep, position: n
               ]),
         ...settled,
         [`## Your task`, ``, step.prompt].join(`\n`),
-        WHERE_YOU_ARE,
     ].join(`\n\n`);
 };

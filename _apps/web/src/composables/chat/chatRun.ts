@@ -162,6 +162,41 @@ export const liveSessions = (run: WorkflowRun): RunSession[] => {
     });
 };
 
+/* THE RUN'S FRONT — what is going, or when nothing is going yet, what is ABOUT to. This is what the panel
+ * follows, and the difference from `liveSessions` is the whole of "I pressed send and got a diagram".
+ *
+ * The daemon acks a run with every step still `pending` — the scheduler has not run a line by the time the
+ * press returns — so "what is running" is empty at exactly the moment the reader is looking hardest. Answering
+ * with the diagram there was defensible and wrong: it is a picture of two sessions, shown instead of the two
+ * sessions, and it makes starting a workflow feel like filing a request rather than starting an agent. The
+ * conversation ids are DERIVED (`wf-<run>-<step>`) and written into the record before anything starts, so the
+ * chats can be opened the instant the run exists; they fill a second later when the turns begin.
+ *
+ * READY, not merely pending: a step whose dependencies are still working is not about to do anything, and
+ * opening it would put the merge on screen beside the attempts it is waiting for. At ack that leaves exactly
+ * the roots, which is what "the first steps" means.
+ *
+ * Only while the run is GOING. A finished run's pending steps are pending forever — they were skipped or the
+ * run was stopped — and offering them would be offering chats that will never exist.
+ */
+export const frontSessions = (run: WorkflowRun): RunSession[] => {
+    const live = liveSessions(run);
+    if (live.length > 0 || run.state !== `running`) {
+        return live;
+    }
+    const stateOf = new Map(run.steps.map((step) => [step.stepId, step.state]));
+    const needsOf = new Map(run.workflow.steps.map((step) => [step.id, step.needs]));
+    const seen = new Set<string>();
+    return run.steps.flatMap((step) => {
+        const ready = (needsOf.get(step.stepId) ?? []).every((need) => stateOf.get(need) === `done`);
+        if (step.state !== `pending` || !ready || seen.has(step.conversationId)) {
+            return [];
+        }
+        seen.add(step.conversationId);
+        return [sessionOf(run, step.stepId, step.conversationId)];
+    });
+};
+
 // Two pane sets naming the same chats, order-insensitive. Both rules below ask this, and neither of them has
 // any business caring which order dagre happened to put a band in.
 const sameChats = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((id) => b.includes(id));
@@ -169,28 +204,29 @@ const sameChats = (a: readonly string[], b: readonly string[]): boolean => a.len
 /* WHAT A FOLLOWING PANEL SHOULD BE SHOWING — the rule behind `live`, and the one that makes starting a workflow
  * feel like starting an agent instead of like filing a request.
  *
- * `undefined` ⇒ leave the panes alone, and it is the answer in the two cases that look like they want action.
- * Nothing live is one of them: a run between bands (both attempts settled, the merge not yet started) and a run
- * that has ENDED both report an empty set, and in both the last thing on screen is the work the reader wants to
- * read. Clearing the panes there would take the finished transcripts away at the exact moment they became worth
- * looking at. The other is a set that is already up, which is most polls — this runs on every one of them.
+ * IT FOLLOWS THE FRONT, NOT THE RUNNING SET (frontSessions), and that is what puts the first steps on screen at
+ * the moment of the press. Following "what is running" meant following nothing at all for the first seconds of
+ * every run — the daemon acks with every step `pending` — so the panel drew the diagram and the reader watched
+ * a picture of two sessions instead of the two sessions.
  *
- * The panel calls this rather than the route: the daemon acks a run with every step still `pending`, so there
- * is no moment at start time when the answer is anything but "nothing yet". The first poll that reports a live
- * session is what puts the panes on screen, and the same poll on the far side of a band moves them on.
+ * `undefined` ⇒ leave the panes alone, and it is the answer in the two cases that look like they want action. A
+ * run between bands is one: the front is empty for as long as it takes the next step to be picked up, and the
+ * panes still hold the work that just finished. A run that has ENDED is the other, and there the last band is
+ * exactly what the reader came to read — clearing it would take the transcripts away at the moment they finally
+ * have the answer in them. The third is a set already on screen, which is most polls; this runs on all of them.
  */
 export const runToFollow = (run: WorkflowRun, showing: readonly string[]): RunSession[] | undefined => {
-    const live = liveSessions(run);
+    const front = frontSessions(run);
     if (
-        live.length === 0 ||
+        front.length === 0 ||
         sameChats(
-            live.map((session) => session.conversationId),
+            front.map((session) => session.conversationId),
             showing,
         )
     ) {
         return undefined;
     }
-    return live;
+    return front;
 };
 
 /* Whether putting these chats on screen is still FOLLOWING the run or is the reader going to look at something
@@ -205,7 +241,7 @@ export const runToFollow = (run: WorkflowRun, showing: readonly string[]): RunSe
 export const modeForSessions = (run: WorkflowRun, conversationIds: readonly string[]): ChatRunMode =>
     sameChats(
         conversationIds,
-        liveSessions(run).map((session) => session.conversationId),
+        frontSessions(run).map((session) => session.conversationId),
     )
         ? `live`
         : `pinned`;

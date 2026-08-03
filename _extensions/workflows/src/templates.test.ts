@@ -44,14 +44,48 @@ test("the template teaches every shape", () => {
             steps.some((step) => step.needs.length > 1),
             `${workflow.id}: nothing fans back in`,
         ).toBe(true);
+        // Two steps on two different providers, which is the one thing a workflow does that talking to a single
+        // agent for longer cannot get you. Without it this template is a chain with extra steps.
         expect(
-            steps.some((step) => step.output.kind === `json`),
-            `${workflow.id}: nothing hands over structured data`,
+            new Set(steps.flatMap((step) => (step.agent === undefined ? [] : [step.agent]))).size > 1,
+            `${workflow.id}: nothing runs on a second model`,
         ).toBe(true);
-        expect(
-            steps.some((step) => step.checks.some((check) => check.kind === `command`)),
-            `${workflow.id}: nothing is checked by a command`,
-        ).toBe(true);
+    }
+});
+
+/* WHAT THE TEMPLATE MUST NOT TEACH, which is the assertion that replaced two of the ones above.
+ *
+ * It used to be required to declare a `json` output and a `command` check, on the reasoning that one gallery
+ * card carries the whole teaching load. Both turned out to teach the wrong lesson at the user's expense. A
+ * declared output is a COMPLETION GATE — the step fails unless it writes a valid document, so an attempt that
+ * built the thing and described it imperfectly takes the rest of the graph down with it — and it drags the
+ * whole output contract into a prompt that is meant to be the user's own sentence. A command check in a
+ * template is a guess about a stranger's repo: this one ran `pnpm -w test`, which cannot pass anywhere that is
+ * not a pnpm monorepo, so the step looped to its ceiling and failed a run that had actually succeeded.
+ *
+ * Both remain available in the designer for someone who wants them against a tree they know. Neither belongs in
+ * the thing a person clicks before they understand what either does.
+ */
+test("the shipped template declares no completion scaffolding", () => {
+    for (const { workflow } of WORKFLOW_TEMPLATES) {
+        for (const step of workflow.steps) {
+            expect(step.output.kind, `${workflow.id}/${step.id} declares an output, which gates its completion`).toBe(`none`);
+            expect(step.checks, `${workflow.id}/${step.id} declares a check against a tree the template cannot see`).toEqual([]);
+        }
+    }
+});
+
+/* THE ROOTS ARE HANDED THE USER'S SENTENCE AND NOTHING ELSE — the property the whole default rests on, and the
+ * one that silently rots. Every step that starts the run must declare no prompt and no goal, so what reaches
+ * the model is the request verbatim (workflow-brief). Writing "build what the request above asks for" into one
+ * of them would look like helpful prefill and would be the wrapper, retyped by hand.
+ */
+test("the steps that start a run add nothing to what the user typed", () => {
+    for (const { workflow } of WORKFLOW_TEMPLATES) {
+        for (const root of workflow.steps.filter((step) => step.needs.length === 0)) {
+            expect(root.prompt, `${workflow.id}/${root.id} paraphrases the request instead of taking it`).toBeUndefined();
+            expect(root.goal, `${workflow.id}/${root.id} declares a goal the request should be`).toBeUndefined();
+        }
     }
 });
 

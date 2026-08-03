@@ -6,7 +6,7 @@
  * then what is wrong BETWEEN steps.
  */
 
-import { loopCanConverge, type Workflow, type WorkflowStep } from "./schemas.js";
+import type { Workflow, WorkflowStep } from "./schemas.js";
 
 // One id, one node: the scheduler keys needs, runs and the drawn graph by it, so a repeat makes the same node
 // mean two things.
@@ -41,11 +41,19 @@ const stepFaults = (step: WorkflowStep, ids: ReadonlySet<string>): string[] => {
                 : `"${step.title}" continues a session but waits for ${step.needs.length} steps; it can only continue one.`,
         );
     }
-    // A step with nothing to produce and nothing to check cannot end except by running out of iterations — the
-    // same bar a loop has to clear, and the same predicate.
-    if (!loopCanConverge(step)) {
-        faults.push(`"${step.title}" has no output and no check, so nothing can tell it it is finished.`);
-    }
+    /* A STEP THAT DECLARES NOTHING IS NOT A FAULT — it is the ordinary step, and this used to refuse it.
+     *
+     * The rule was borrowed from loops (`loopCanConverge`), where it is right: a LOOP is started to repeat
+     * until something is true, so one with nothing to produce and nothing to check has no reason to run twice
+     * and the dialog is correct to grey out its button. A STEP is not started to repeat. It is one agent
+     * session with a job, and the job being done is the turn ending — which is exactly what the loop machinery
+     * already does with it (loop-stop's `readDocument` answers `done` for a `none` output, so iteration 1 is
+     * the only iteration).
+     *
+     * Keeping the rule here forced every step to declare an output or a check before the graph would save, and
+     * the cheapest way to satisfy it was a `claim` — which buys a verdict file nobody reads, a page of contract
+     * in the prompt, and a way for a step that did the work to fail for not having described it.
+     */
     return faults;
 };
 

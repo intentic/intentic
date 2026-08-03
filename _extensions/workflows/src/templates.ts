@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/extension-ui";
-import type { OutputField, Workflow, WorkflowStep } from "@intentic/sandbox-contract";
+import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
 
 /* "START FROM" — the ready-made workflow, the same idea as the automations recipes and for the same reason:
  * this is a feature nobody designs well on a blank canvas, because the interesting decisions (where to break
@@ -40,23 +40,31 @@ const step = (id: string, title: string, over: Partial<WorkflowStep> = {}): Work
     title,
     needs: [],
     handoff: `fresh`,
-    output: { kind: `claim` },
+    // `none`, not `claim`. A `claim` is not a free "tell me what you did" — it is a completion gate that fails
+    // the step unless it writes a verdict file, and it pulls the whole output contract into the prompt. A step
+    // is finished when its turn is finished, and that is what this now says.
+    output: { kind: `none` },
     checks: [],
     context: `fresh`,
     ...over,
 });
 
-// Both attempts report the same shape, and they must: the comparison downstream reads two documents and can
-// only weigh them against each other if they answered the same questions. A function rather than a shared
-// constant because each step holds its own copy — a template is prefill, and the user editing one attempt's
-// fields must not silently edit the other's.
-const attemptFields = (): OutputField[] => [
-    { name: `approach`, type: `string`, description: `Two or three sentences: how your version works`, required: true },
-    { name: `files`, type: `string[]`, description: `Workspace-relative paths you changed`, required: true },
-    { name: `tradeoffs`, type: `string`, description: `What you deliberately did not do, and why`, required: true },
-    { name: `risk`, type: `string`, description: `The part of your change most likely to be wrong`, required: true },
-];
-
+/* THE ATTEMPTS USED TO DECLARE FOUR REQUIRED FIELDS — approach, files, tradeoffs, risk — and both the fields
+ * and the check below them are gone. They were sold as the comparison's evidence and were, in fact, its two
+ * most expensive failure modes.
+ *
+ * A DECLARED OUTPUT IS A COMPLETION GATE, not a report. The step is not finished until it writes a valid
+ * `iteration-N.json`, so an attempt that built the thing correctly and then failed to describe it in the right
+ * shape is a FAILED step — and everything downstream of it is skipped. It also drags the whole output contract
+ * into the prompt, which is the page of scaffolding that used to sit on top of the request.
+ *
+ * AND NOTHING READ THEM. The merge step is told to read the diffs — "the diffs, not the summaries of them" —
+ * and it is handed both branch names to do it with. Four fields of prose about a change, written by the session
+ * that made it, is the summary the merge is explicitly instructed not to trust.
+ *
+ * The comparison did not need them and the run is cheaper, shorter and more likely to finish without them. A
+ * user who wants structured hand-off can still add it in the designer; it is no longer what you get by default.
+ */
 export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
     {
         icon: `clone`,
@@ -96,14 +104,8 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                  * on purpose: each provider's own default is the one your subscription actually serves, and a
                  * pinned id here would go stale and refuse to run.
                  */
-                step(`attempt-a`, `Claude's attempt`, {
-                    agent: `claude`,
-                    output: { kind: `json`, fields: attemptFields() },
-                }),
-                step(`attempt-b`, `GPT's attempt`, {
-                    agent: `codex`,
-                    output: { kind: `json`, fields: attemptFields() },
-                }),
+                step(`attempt-a`, `Claude's attempt`, { agent: `claude` }),
+                step(`attempt-b`, `GPT's attempt`, { agent: `codex` }),
                 /* THE SYNTHESIS — one step, and it both reads and writes.
                  *
                  * It was two: a session that read the diffs and reported a verdict, then a continued session
@@ -120,19 +122,27 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                  * What comes out is a third branch, and that is the one you land.
                  *
                  * Unpinned, so it runs on whatever you normally use. If you have a third provider connected,
-                 * pinning it here is the upgrade: a judge from neither family has no house style to reward. */
+                 * pinning it here is the upgrade: a judge from neither family has no house style to reward.
+                 *
+                 * IT DECLARES NO CHECK, and the one it used to declare is why the rule is worth stating. It ran
+                 * `pnpm -w test` — this repo's own command, shipped to everybody. In any workspace that is not a
+                 * pnpm monorepo that command cannot succeed, so the check could never pass, so the step looped
+                 * to its ceiling and failed, and a run that had built the thing twice and merged it correctly
+                 * reported failure. A template ships to strangers' repos; a command in one is a guess about a
+                 * tree nobody here has seen. Telling the model to run the suite is the portable version of the
+                 * same intent, and it is in the prompt below. */
                 step(`synthesise`, `Take the best of both`, {
                     needs: [`attempt-a`, `attempt-b`],
-                    goal: `One coherent implementation exists that keeps the best of both attempts, and the suite is green.`,
+                    goal: `One coherent implementation exists that keeps the best of both attempts, and the project's own tests pass.`,
                     prompt:
                         `Two sessions were given the request above and each built it, on the branches named above. Read both diffs in ` +
                         `full — the diffs, not the summaries of them — and judge them against what was asked and against the code they ` +
                         `had to live in, not against your own taste in style.\n\n` +
                         `Then write the version worth keeping, here in your own worktree. Start from the stronger of the two rather ` +
                         `than retyping it: bring its branch in with \`git merge --squash\`, then fix what it got wrong and fold in ` +
-                        `whatever the other one did better. What lands must read as one change somebody made on purpose, not as two ` +
+                        `whatever the other one did better. Run whatever this project uses to test itself and leave it passing. ` +
+                        `What lands must read as one change somebody made on purpose, not as two ` +
                         `stitched together — and say, in a sentence each, what you took from where.`,
-                    checks: [{ kind: `command`, command: `pnpm -w test` }],
                 }),
             ],
         },
