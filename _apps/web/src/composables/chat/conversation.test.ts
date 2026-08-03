@@ -2057,4 +2057,52 @@ describe(`the transcript's clock`, () => {
         conversation.stop();
         await turn;
     });
+
+    /* The rewind's one genuine hazard: the DAEMON's transcript index and the BUBBLE's position are different
+     * numbers, and they diverge the moment a local notice is drawn. Sending the bubble position would restore
+     * a different turn than the one clicked and drop a different set of messages. */
+    it(`rewinds by the daemon's transcript index and truncates by the bubble's, then drops the session`, async () => {
+        const conversation = new Conversation(`c-rewind`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `session`, sessionId: `s-1` },
+                // index 0: the daemon has this turn's user message at the head of its record.
+                { kind: `checkpoint`, id: `cp-1`, index: 0 },
+                { kind: `delta`, text: `done` },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`first`, settings);
+        expect(conversation.session.value).toBeDefined();
+
+        const user = conversation.messages.value[0];
+        expect(user).toMatchObject({ role: `user`, checkpointId: `cp-1`, rewindIndex: 0 });
+
+        sandboxRequestMock.mockImplementation(async () => new Response(JSON.stringify({ snapshot: `cp-1`, dropped: 2 }), { status: 200 }));
+        expect(await conversation.rewindTo(user!)).toBe(true);
+
+        const [path, init] = sandboxRequestMock.mock.calls.at(-1)!;
+        expect(path).toBe(`/agent/rewind`);
+        expect(JSON.parse(init!.body as string)).toEqual({ conversationId: `c-rewind`, index: 0 });
+        // Everything from the rewound message on is gone, and the next send starts a fresh provider thread.
+        expect(conversation.messages.value).toHaveLength(0);
+        expect(conversation.session.value).toBeUndefined();
+    });
+
+    it(`leaves the tab untouched when the daemon refuses the rewind`, async () => {
+        const conversation = new Conversation(`c-busy`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `checkpoint`, id: `cp-1`, index: 0 }, { kind: `done` }]),
+        );
+        await conversation.send(`first`, settings);
+        const before = conversation.messages.value.length;
+
+        sandboxRequestMock.mockImplementation(async () => new Response(`busy`, { status: 409 }));
+        expect(await conversation.rewindTo(conversation.messages.value[0]!)).toBe(false);
+
+        // A transcript cut against a workspace that never moved is the one state with no way back.
+        expect(conversation.messages.value).toHaveLength(before);
+        expect(conversation.session.value).toBeDefined();
+        expect(conversation.error.value).toContain(`running a turn`);
+    });
 });

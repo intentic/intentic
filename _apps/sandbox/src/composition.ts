@@ -65,6 +65,7 @@ import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import { createHostHub, type HostHub } from "./hosts/host-hub.js";
 import { fileHostsStore, type HostsStore } from "./hosts/hosts-store.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/turn-journal.js";
+import { fileRewindPoints, type RewindPoints } from "./agent/rewind-points.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
 import { fileAgentsStore } from "./agents/agents-store.js";
@@ -227,7 +228,18 @@ export interface Services {
     // scope reaches is auth/control-tokens.ts. Persisted in /work/.intentic like owner/members.
     readonly controlTokens: ControlTokens;
     // This sandbox's identity for the platform's Connections card; undefined ⇒ /info returns {} (loopback/test).
-    readonly info: { readonly name: string; readonly image: string; readonly version: string } | undefined;
+    readonly info:
+        | {
+              readonly name: string;
+              readonly image: string;
+              readonly version: string;
+              // The release channel this sandbox follows and the image it would roll back to — both runner-set
+              // container env (see env.config.ts). Absent when this sandbox predates channels, or has never
+              // been swapped, in which case the Update card offers no rollback.
+              readonly channel?: string;
+              readonly previousImage?: string;
+          }
+        | undefined;
     // Intent-declared internal MCP tools (constant for the sandbox), merged with mcp-kind capabilities each turn.
     readonly tools: readonly AgentTool[];
     // The unified capability manifest (.intentic/capabilities.json) — DevOps/mcp/service/integration.
@@ -276,6 +288,10 @@ export interface Services {
     // daemon died under, which is what turn-resume re-runs. On the HISTORY volume: it holds full prompts, and
     // it must outlive the container recreates (rebuild, update, dev-sandbox.sh swap) that cause the deaths.
     readonly turnJournal: TurnJournal;
+    // Which checkpoint each conversation message can be restored to (historyRoot/rewind-points.json). Written
+    // at every main-tree turn's start beside the `checkpoint` frame, read by the rewind route and by a
+    // transcript being read back — see agent/rewind-points.ts for why this is a map and not the commit.
+    readonly rewindPoints: RewindPoints;
     // The activity audit log (historyRoot/activity.jsonl, outside the agent's reach): inbound wakes,
     // sniffed outbound provider calls, voice sessions, failures. /activity reads it; only the daemon appends.
     readonly activity: ActivityStore;
@@ -494,6 +510,11 @@ export interface Services {
         // The conversation's user prompts, cached against the record's size — what /agents/search matches per
         // entry per keystroke, instead of re-reading the whole store (see createAgentPromptsReader).
         readonly prompts: (agent: TranscriptAgent) => Promise<readonly string[]>;
+        // How many messages are stored — the position the next turn starts at, which its checkpoint is filed
+        // under so a rewind can address it (see transcript-record.ts).
+        readonly count: (agent: TranscriptAgent) => Promise<number>;
+        // Drop everything after the message a rewind went back to; returns how many went.
+        readonly truncate: (agent: TranscriptAgent, keep: number) => Promise<number>;
     };
     // platformHostTunnel relays to the platform (connect-token auth) to mint an intentic-provided host tunnel,
     // which needs intentic's platform Cloudflare account the daemon doesn't hold.
@@ -550,7 +571,17 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // (OpenCode's XDG_DATA_HOME) is the credential root so xAI OAuth tokens persist across restarts.
     const openCode = createOpenCodeService(authRoot);
     const info =
-        config.sandbox.name !== "" && config.sandbox.image !== "" ? { name: config.sandbox.name, image: config.sandbox.image, version } : undefined;
+        config.sandbox.name !== "" && config.sandbox.image !== ""
+            ? {
+                  name: config.sandbox.name,
+                  image: config.sandbox.image,
+                  version,
+                  // Empty is "not set", never a value to publish: `channel: ""` on the wire reads as a channel
+                  // literally named nothing, and a rollback offer pointing at "" is a button that cannot work.
+                  ...(config.sandbox.channel !== "" ? { channel: config.sandbox.channel } : {}),
+                  ...(config.sandbox.previousImage !== "" ? { previousImage: config.sandbox.previousImage } : {}),
+              }
+            : undefined;
     const members = fileMembersStore(statePath(workspace.root, ".intentic/members.json"));
     // The session secret lives under historyRoot (like the activity/usage ledgers) — daemon-private, outside
     // the workspace, and persistent, so a daemon restart doesn't sign every browser out.
@@ -628,8 +659,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
     // Bound once, and against the SAME registry instance above — `sessionIdOf` answers from live turn state as
     // well as the persisted entry, so a second registry would report no session for a first turn still running.
+    const rewindPoints = fileRewindPoints(join(config.historyRoot, "rewind-points.json"));
     const transcriptDeps: AgentTranscriptDeps = {
         record: fileTranscriptRecord(join(config.historyRoot, "transcripts")),
+        rewindPoints,
         root: workspace.root,
         codexHome: codexBase,
         sessionIdOf: agents.sessionIdOf,
@@ -675,6 +708,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/thread-sessions.json")),
         drafts: fileDraftsStore(statePath(workspace.root, ".intentic/drafts/")),
         turnJournal: fileTurnJournal(join(config.historyRoot, "turns")),
+        // The same instance the transcript reader holds — two would answer a read from a file the other had
+        // already moved past, exactly the argument the chores store above makes.
+        rewindPoints,
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/settings.json")),
@@ -797,6 +833,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
             open: (agent) => transcriptDeps.record.open(agent.id, () => storedTranscript(transcriptDeps, agent)),
             append: (agent, messages) => transcriptDeps.record.append(agent.id, messages),
             prompts: createAgentPromptsReader(transcriptDeps),
+            count: (agent) => transcriptDeps.record.count(agent.id),
+            truncate: (agent, keep) => transcriptDeps.record.truncate(agent.id, keep),
         },
         platformHostTunnel: (hostName) => postToPlatform(config, "/sandbox/host-tunnel", { hostName }),
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),

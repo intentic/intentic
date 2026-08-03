@@ -188,6 +188,14 @@ export interface SandboxRun {
     // The approved overlay's hash, when the image was built from one — stamps SANDBOX_ENVIRONMENT_HASH so
     // the daemon's recompose check stays quiet.
     readonly environmentHash?: string;
+    /* WHICH RELEASE CHANNEL this sandbox follows, and what it was on before the swap that made it — set by
+     * recreate.sh, which owns both facts (it is the thing on the host doing the swapping).
+     *
+     * Here rather than in the replay allowlist below for the same reason SANDBOX_IMAGE is: they are decided
+     * per run by the runner, so replaying the OLD container's values would pin a sandbox to the channel it was
+     * created on forever and make its rollback target permanently the same one. */
+    readonly channel?: string;
+    readonly previousImage?: string;
     // Replayed/wizard env pairs, already filtered through replayableEnv.
     readonly env?: readonly (readonly [string, string])[];
     // Allowlisted runtime directive tokens (runtimeDirectivesOf).
@@ -250,6 +258,8 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => [
     "-e",
     `SANDBOX_BASE_IMAGE=${run.baseImage}`,
     ...(run.environmentHash === undefined ? [] : ["-e", `SANDBOX_ENVIRONMENT_HASH=${run.environmentHash}`]),
+    ...(run.channel === undefined ? [] : ["-e", `SANDBOX_CHANNEL=${run.channel}`]),
+    ...(run.previousImage === undefined ? [] : ["-e", `SANDBOX_PREVIOUS_IMAGE=${run.previousImage}`]),
     ...(run.env ?? []).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
     run.image,
 ];

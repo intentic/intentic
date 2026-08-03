@@ -35,20 +35,44 @@ DEV_TAG="intentic-sandbox:dev"
 
 # Mode by argument shape, so every one-liner the platform ever handed out keeps working: the Environment
 # card's rebuild command passes <slug> <sha256>, the Sandbox card's update command passes <slug> alone.
+#
+# The two flags are distinguishable from a hash by their leading `--`, which is what lets them share the second
+# position with it — a sha256 is 64 hex characters and can never start that way.
 MODE=""
 SLUG=""
 WANT_HASH=""
+WANT_CHANNEL=""
 case "${1:-}" in
     --dev) MODE="dev" ;;
-    "") echo "usage: recreate.sh <slug> [sha256-of-approved-overlay] | recreate.sh --dev" >&2 && exit 1 ;;
+    "")
+        echo "usage: recreate.sh <slug> [sha256-of-approved-overlay]" >&2
+        echo "       recreate.sh <slug> --channel <tag>   # move onto a release channel and stay there" >&2
+        echo "       recreate.sh <slug> --rollback        # back to the image this sandbox came from" >&2
+        echo "       recreate.sh --dev" >&2
+        exit 1
+        ;;
     *)
         SLUG="$1"
-        if [ -n "${2:-}" ]; then
-            MODE="rebuild"
-            WANT_HASH="$2"
-        else
-            MODE="update"
-        fi
+        case "${2:-}" in
+            "") MODE="update" ;;
+            --rollback) MODE="rollback" ;;
+            --channel)
+                MODE="update"
+                WANT_CHANNEL="${3:-}"
+                if [ -z "$WANT_CHANNEL" ]; then
+                    echo "error: --channel needs a tag, e.g. --channel stable" >&2
+                    exit 1
+                fi
+                ;;
+            --*)
+                echo "error: unknown option ${2}" >&2
+                exit 1
+                ;;
+            *)
+                MODE="rebuild"
+                WANT_HASH="$2"
+                ;;
+        esac
         ;;
 esac
 
@@ -77,6 +101,31 @@ fi
 if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
     echo "error: sandbox container ${CONTAINER} does not exist on this machine — re-run connect first." >&2
     exit 1
+fi
+
+# ——— The channel record: which tag this sandbox follows, and what it was on before. ———
+#
+# Both facts live HERE, on the machine that runs the container, because both are about a swap this script
+# performed and neither survives one otherwise: the container's env carries the image it is running, and
+# `docker rm -f` below is the moment the previous one stops being knowable at all. Writing it down before that
+# rm is the whole of what makes a bad update reversible — until now the only way back from one was to re-run
+# the connect wizard, which is a heavier answer than the problem deserves.
+#
+# A plain KEY=VALUE file rather than JSON: this script runs on whatever the user's machine has, and it already
+# refuses to assume jq (see boot_step below).
+RECORD="${INTENTIC_HOME:-$HOME/.intentic}/sandbox-${SLUG}.channel"
+record_value() {
+    [ -f "$RECORD" ] || return 0
+    sed -n "s/^$1=//p" "$RECORD" | tail -n 1
+}
+# The tag this sandbox follows. An explicit --channel wins and is remembered; otherwise the remembered one, and
+# `stable` for a sandbox that predates this file — which is what every existing sandbox is already on.
+CHANNEL="${WANT_CHANNEL:-$(record_value channel)}"
+CHANNEL="${CHANNEL:-stable}"
+# SANDBOX_IMAGE still overrides everything, unchanged: it is how a pinned or locally-built image is passed in,
+# and a channel is a default rather than a policy.
+if [ -z "${SANDBOX_IMAGE:-}" ] && [ "$MODE" = "update" ]; then
+    REGISTRY_IMAGE="registry.gitlab.com/radarsu/intentic/sandbox:${CHANNEL}"
 fi
 
 # Everything this script reads off the OLD container is read WITHOUT `docker exec`, so a crashed sandbox is
@@ -153,6 +202,24 @@ case "$MODE" in
         # Re-apply the approved overlay (if any) FROM the fresh base, so the extended environment carries on.
         docker cp "${CONTAINER}:${APPROVED_FILE}" "$overlay" >/dev/null 2>&1 || : >"$overlay"
         ;;
+    rollback)
+        ROLLBACK_IMAGE="$(record_value previous)"
+        if [ -z "$ROLLBACK_IMAGE" ]; then
+            echo "error: nothing to roll back to — this sandbox has not been updated since the rollback record existed." >&2
+            echo "       The record is written on every update from now on; ${RECORD}" >&2
+            exit 1
+        fi
+        REGISTRY_IMAGE="$ROLLBACK_IMAGE"
+        # NO pull, and no "is there anything newer" check. The point of a rollback is to reach an image that is
+        # already on this machine — usually one the registry has since moved the tag away from, so a pull would
+        # at best be a no-op and at worst fetch the very build being rolled back from.
+        if ! docker image inspect "$REGISTRY_IMAGE" >/dev/null 2>&1; then
+            echo "intentic: ${REGISTRY_IMAGE} is not on this machine any more — pulling it…"
+            pull_image "$REGISTRY_IMAGE" 2>&1 | tee -a "$LOG" || true
+        fi
+        echo "intentic: rolling back to ${REGISTRY_IMAGE}…"
+        docker cp "${CONTAINER}:${APPROVED_FILE}" "$overlay" >/dev/null 2>&1 || : >"$overlay"
+        ;;
     dev)
         if ! docker image inspect "$DEV_TAG" >/dev/null 2>&1; then
             echo "error: image ${DEV_TAG} not found — run 'pnpm build:sandbox' first." >&2
@@ -204,7 +271,9 @@ case "$MODE" in
         echo "== docker build ${TARGET_IMAGE} ==" >>"$LOG"
         docker build -t "$TARGET_IMAGE" - <"$overlay" 2>&1 | tee -a "$LOG" || true
         ;;
-    update)
+    # One arm, because a rollback IS an update pointed at an older tag: same overlay rebuild, same base
+    # pinning, same health gate. Only where REGISTRY_IMAGE came from differs, and that was settled above.
+    update | rollback)
         TARGET_IMAGE="$REGISTRY_IMAGE"
         BASE_IMAGE="${BASE_IMAGE:-$REGISTRY_IMAGE}"
         if [ -s "$overlay" ]; then
@@ -268,7 +337,12 @@ RUNTIME_LINES="$(grep '^# intentic:runtime ' "$overlay" || true)"
 # owner rebuilt it; replaying them through the contract is what fixes that class.
 DNS_SERVERS="$(docker inspect --format '{{join .HostConfig.Dns " "}}' "$CONTAINER" 2>/dev/null || true)"
 
-set -- --slug "$SLUG" --image "$TARGET_IMAGE" --base-image "$BASE_IMAGE"
+# What this swap replaces — recorded now, while the old container is still here to be asked, and forwarded so
+# the daemon can name it on the Update card ("Roll back to …"). A first-ever recreate has no previous base and
+# passes none; the daemon then offers no rollback, which is the honest answer.
+PREVIOUS_IMAGE="$(container_env SANDBOX_BASE_IMAGE || true)"
+set -- --slug "$SLUG" --image "$TARGET_IMAGE" --base-image "$BASE_IMAGE" --channel "$CHANNEL"
+[ -n "$PREVIOUS_IMAGE" ] && set -- "$@" --previous-image "$PREVIOUS_IMAGE"
 [ -n "$DNS_SERVERS" ] && set -- "$@" --dns "$DNS_SERVERS"
 [ -n "$ENV_HASH" ] && set -- "$@" --environment-hash "$ENV_HASH"
 [ -n "$RUNTIME_LINES" ] && set -- "$@" --runtime "$RUNTIME_LINES"
@@ -283,6 +357,41 @@ fi
 echo "intentic: recreating the sandbox from ${TARGET_IMAGE}…"
 echo "== previous container logs (${CONTAINER}) ==" >>"$LOG"
 docker logs --tail 5000 "$CONTAINER" >>"$LOG" 2>&1 || true
+
+# Written BEFORE the rm, because the rm is what makes the old base unknowable — asking after it is asking a
+# container that no longer exists. Written before the LAUNCH too, deliberately: a swap that starts and then
+# crash-loops is exactly the case rollback is for, and a record only written on success would be missing at the
+# one moment it is needed.
+#
+# A ROLLBACK SWAPS THE PAIR rather than appending, so pressing it twice returns you to where you started instead
+# of walking backwards through history one release at a time. That is the behaviour a single button has to have:
+# there is nowhere in the UI to say "how far back".
+#
+# Temp-then-mv, like every other record this repo writes: a reader landing mid-write must see the whole previous
+# file or the whole next one, never a seam (store/json-file.ts makes the argument at length).
+# Resolved BEFORE the block below, not inside it. A conditional as the block's last statement makes the block's
+# exit status that condition's — so on the one case with nothing to carry (a first-ever swap, no previous
+# image, no prior record) the `&&` would fail and the record would silently not be written at all. That is the
+# sandbox whose next update has no channel and no way back: the exact case this whole record exists for.
+if [ "$MODE" = "rollback" ]; then
+    # Rolling back makes the image we are LEAVING the thing to come back to.
+    NEXT_PREVIOUS="$(record_value current)"
+elif [ -n "$PREVIOUS_IMAGE" ] && [ "$PREVIOUS_IMAGE" != "$BASE_IMAGE" ]; then
+    NEXT_PREVIOUS="$PREVIOUS_IMAGE"
+else
+    # An unchanged base (a rebuild, a re-run of the same update) leaves the rollback target where it was —
+    # overwriting it with the image we are already on would quietly turn the button into a no-op.
+    NEXT_PREVIOUS="$(record_value previous)"
+fi
+mkdir -p "$(dirname "$RECORD")"
+{
+    printf 'channel=%s\n' "$CHANNEL"
+    printf 'current=%s\n' "$BASE_IMAGE"
+    if [ -n "$NEXT_PREVIOUS" ]; then
+        printf 'previous=%s\n' "$NEXT_PREVIOUS"
+    fi
+} >"${RECORD}.tmp" && mv "${RECORD}.tmp" "$RECORD"
+
 docker rm -f "$CONTAINER" >/dev/null
 echo "== run command ==" >>"$LOG"
 cat "$run_command" >>"$LOG"
@@ -357,7 +466,13 @@ done
 
 case "$MODE" in
     rebuild) echo "intentic: sandbox rebuilt — the Environment card will show Applied once it reconnects." ;;
-    update) echo "intentic: sandbox updated to ${TARGET_IMAGE}." ;;
+    update)
+        echo "intentic: sandbox updated to ${TARGET_IMAGE} (channel ${CHANNEL})."
+        # Named on success, not only in the failure paths: a bad build is usually one that STARTS, and the
+        # moment to learn the way back is before anyone needs it.
+        [ -n "$PREVIOUS_IMAGE" ] && echo "          Roll back with: sh recreate.sh ${SLUG} --rollback"
+        ;;
+    rollback) echo "intentic: sandbox rolled back to ${TARGET_IMAGE} — run --rollback again to return." ;;
     dev) echo "intentic: sandbox is live on ${TARGET_IMAGE} — docker logs -f ${CONTAINER}" ;;
 esac
 echo "Logs: docker logs -f ${CONTAINER} (recreate log: ${LOG})"

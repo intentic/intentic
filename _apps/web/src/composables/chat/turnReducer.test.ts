@@ -316,8 +316,20 @@ describe(`turn boundaries`, () => {
     });
 
     it(`anchors a checkpoint on the turn's user bubble, not the assistant's`, () => {
+        const { state } = run(started(), { kind: `checkpoint`, id: `cp-1`, index: 4 });
+        const user = state.messages.find((message) => message.id === USER_ID);
+        expect(user?.checkpointId).toBe(`cp-1`);
+        // The DAEMON's transcript position, which is what the rewind route addresses — not the bubble's own.
+        expect(user?.rewindIndex).toBe(4);
+    });
+
+    // A turn with no conversation behind it still gets a checkpoint id (the timeline can restore it) but no
+    // message to rewind to, and the bubble must not claim otherwise.
+    it(`leaves the rewind anchor off a checkpoint that names no transcript position`, () => {
         const { state } = run(started(), { kind: `checkpoint`, id: `cp-1` });
-        expect(state.messages.find((message) => message.id === USER_ID)?.checkpointId).toBe(`cp-1`);
+        const user = state.messages.find((message) => message.id === USER_ID);
+        expect(user?.checkpointId).toBe(`cp-1`);
+        expect(user?.rewindIndex).toBeUndefined();
     });
 });
 

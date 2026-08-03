@@ -160,3 +160,34 @@ test("the publish is the one part of the run that may be dropped: no id, or a po
     const hosted = sandboxRunArgv({ names, image: "i", baseImage: "i", ports: ["10.0.0.2:5173:5173"], sandboxId: "abc123def456", localPublish: false });
     expect(hosted.join(" ")).toContain("-p 10.0.0.2:5173:5173");
 });
+
+/* The channel and the rollback target: both runner-set per run, both deliberately outside the replay
+ * allowlist. That last part is what this test is really pinning — replaying them from the OLD container would
+ * make the channel unchangeable and freeze the rollback target at whatever it was when the sandbox was first
+ * created, which is the opposite of what either is for. */
+test("channel and previousImage ride as container env, and only when the runner set them", () => {
+    const bare = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" });
+    expect(bare.join(" ")).not.toContain("SANDBOX_CHANNEL");
+    expect(bare.join(" ")).not.toContain("SANDBOX_PREVIOUS_IMAGE");
+
+    const swapped = sandboxRunArgv({
+        names,
+        image: "img:2",
+        baseImage: "img:2",
+        channel: "stable",
+        previousImage: "registry.example/sandbox:1.4.2",
+    });
+    expect(swapped.join(" ")).toContain("SANDBOX_CHANNEL=stable");
+    expect(swapped.join(" ")).toContain("SANDBOX_PREVIOUS_IMAGE=registry.example/sandbox:1.4.2");
+});
+
+// Replaying an old container's env must not carry either one back in — the runner decides both per run.
+test("neither name survives the replay allowlist", () => {
+    const replayed = replayableEnv([
+        ["SANDBOX_CHANNEL", "canary"],
+        ["SANDBOX_PREVIOUS_IMAGE", "registry.example/sandbox:1.0.0"],
+        ["CONNECT_TOKEN", "t"],
+    ]);
+    expect(replayed.map(([name]) => name)).not.toContain("SANDBOX_CHANNEL");
+    expect(replayed.map(([name]) => name)).not.toContain("SANDBOX_PREVIOUS_IMAGE");
+});

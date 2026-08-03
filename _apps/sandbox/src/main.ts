@@ -56,6 +56,7 @@ import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/l
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
+import { startRuntimeHealth } from "./agent/adapter-health.js";
 import { startRepoWatch, subscribeRepoChanges } from "./workspace/repo-watch.js";
 import { startRefWatch } from "./git/ref-watch.js";
 import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/workspace-watch.js";
@@ -593,6 +594,10 @@ const main = async (): Promise<void> => {
     // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking
     // update without ever fetching on the request path.
     const versionCheck = startVersionCheck();
+
+    // The same bargain for "can each agent runtime serve a turn": probed off the turn path so the picker can
+    // say a subscription is missing BEFORE a prompt is written, rather than as that turn's failure.
+    startRuntimeHealth(services);
 
     // Realtime agent wake-ups are provider gateways now: a listener extension (ext-discord) runs an autoStart
     // process that holds the connection and drives the daemon's /listeners/<provider> routes — the daemon holds

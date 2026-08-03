@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type RestoredMessage, RestoredMessageSchema } from "@intentic/sandbox-contract";
 
@@ -37,10 +37,30 @@ export interface TranscriptRecord {
     // The whole conversation, oldest first. Empty ⇒ this conversation has no record (never written, or written
     // under a daemon whose history volume is gone) — the caller decides what that means.
     readonly read: (conversationId: string) => Promise<RestoredMessage[]>;
-    // The record's byte size, undefined when no record exists. The file is append-only, so this is a version
-    // key: an unchanged size means an unchanged record, which is what lets the search fan-out cache what it
+    // The record's byte size, undefined when no record exists. Append-only plus rewind's truncate, so this is a
+    // version key in both directions: any change moves it, which is what lets the search fan-out cache what it
     // extracted instead of re-reading the whole store per keystroke (see agent-transcript.ts).
     readonly size: (conversationId: string) => Promise<number | undefined>;
+    /* How many messages the record holds — the position the NEXT turn will start at, which is the index its
+     * checkpoint is filed under and the count a rewind to it keeps.
+     *
+     * Counts stored ROWS, not parsed messages, for the same reason truncate slices raw lines: `read` drops a
+     * torn or schema-stale row, and a count that skipped it would file the checkpoint one short of where the
+     * next append actually lands. Reading without parsing is also what keeps this affordable on the turn-start
+     * path, which is the only place it is called. */
+    readonly count: (conversationId: string) => Promise<number>;
+    /* THE ONE OPERATION THAT SHORTENS A RECORD — a rewind, dropping every message after the one the user went
+     * back to. Everything else here only ever appends, and this is deliberately the single exception rather
+     * than a general edit: the file's whole value is being the daemon's own account of what it streamed.
+     *
+     * Rewritten whole through a temp file and a rename, for the reason store/json-file.ts spells out at
+     * length — a bare truncate-and-fill leaves a reader in that window holding half a transcript, and every
+     * reader here treats an unparseable tail as "the record ends there". A rename is atomic within the
+     * directory, so a concurrent read sees the whole old record or the whole new one.
+     *
+     * Returns how many messages were dropped; 0 when the record is already that short (which makes a repeated
+     * rewind to the same message a no-op rather than an error). */
+    readonly truncate: (conversationId: string, keep: number) => Promise<number>;
 }
 
 const lines = (messages: readonly RestoredMessage[]): string => messages.map((message) => `${JSON.stringify(message)}\n`).join("");
@@ -57,6 +77,15 @@ const row = (line: string): RestoredMessage[] => {
     }
     const message = RestoredMessageSchema.safeParse(parsed);
     return message.success ? [message.data] : [];
+};
+
+/* THE STORED ROWS, unparsed — the one notion of "position in this record" that read, count and truncate all
+ * share. They must agree: `read` drops a row it cannot parse, so counting or slicing parsed messages instead
+ * would renumber everything after the first bad row, and the index a checkpoint was filed under would address
+ * a different message than the one the user clicked. */
+const rawRows = async (path: string): Promise<string[]> => {
+    const raw = await readFile(path, "utf8").catch(() => undefined);
+    return raw === undefined ? [] : raw.split("\n").filter((line) => line.length > 0);
 };
 
 export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
@@ -94,12 +123,9 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         if (!FILE_ID.test(conversationId)) {
             return [];
         }
-        const raw = await readFile(join(dir, `${conversationId}.jsonl`), "utf8").catch(() => undefined);
-        if (raw === undefined) {
-            return [];
-        }
-        return raw.split("\n").flatMap((line) => (line.length === 0 ? [] : row(line)));
+        return (await rawRows(join(dir, `${conversationId}.jsonl`))).flatMap(row);
     },
+    count: async (conversationId) => (FILE_ID.test(conversationId) ? (await rawRows(join(dir, `${conversationId}.jsonl`))).length : 0),
     size: async (conversationId) => {
         if (!FILE_ID.test(conversationId)) {
             return undefined;
@@ -108,5 +134,19 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
             (info) => info.size,
             () => undefined,
         );
+    },
+    truncate: async (conversationId, keep) => {
+        if (!FILE_ID.test(conversationId)) {
+            return 0;
+        }
+        const path = join(dir, `${conversationId}.jsonl`);
+        const rows = await rawRows(path);
+        if (rows.length <= keep) {
+            return 0;
+        }
+        const temp = `${path}.${process.pid}.tmp`;
+        await writeFile(temp, rows.slice(0, keep).map((line) => `${line}\n`).join(""));
+        await rename(temp, path);
+        return rows.length - keep;
     },
 });

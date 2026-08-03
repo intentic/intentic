@@ -6,6 +6,7 @@ import {
     agentContract,
     capabilitiesOf,
     type EditorContext,
+    type SnapshotTurn,
     type WorkspaceEvent,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -26,10 +27,12 @@ import { isIsolated } from "../agents/agents-store.js";
 import { landAgent } from "../agents/land.js";
 import { type RepoSync, syncConversation } from "../agents/sync.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
+import { turnStartIndex } from "../sessions/turn-transcript.js";
 import type { AgentRequest, ParkedSync } from "./agent.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { syncNote } from "./turn-preamble.js";
 import { resolveRequest } from "./agent-requests.js";
+import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
 import { mentionsSpentAllowance } from "./failure-sentences.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
@@ -156,9 +159,14 @@ async function* runConversationTurn(
     nameAgentTitle(services, conversationId, input.prompt).catch((error: unknown) =>
         services.logger.warn({ err: error }, "agents: title naming failed"),
     );
+    /* Where this turn sits in its conversation — read ONCE here, above the isolated/workspace fork, because
+     * both arms end in a turn checkpoint and both must file it under the same index. Awaited rather than
+     * fire-and-forget: it is one read of an already-open record, and a checkpoint that arrives without its
+     * binding is a message the user cannot rewind to. */
+    const turn: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
     if (!isolated) {
         try {
-            for await (const event of runTurn(services, input, signal, undefined, steering)) {
+            for await (const event of runTurn(services, input, signal, undefined, steering, turn)) {
                 services.agents.observe(conversationId, event);
                 yield event;
             }
@@ -309,7 +317,7 @@ async function* runConversationTurn(
             }
         };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
-        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd, synced, resync }, steering)) {
+        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd, synced, resync }, steering, turn)) {
             services.agents.observe(conversationId, event);
             if (event.kind === "error") {
                 failed = true;
@@ -418,6 +426,9 @@ async function* runTurn(
         | { readonly id: string; readonly cwd: string; readonly synced: readonly RepoSync[]; readonly resync: () => Promise<ParkedSync | undefined> }
         | undefined,
     steering: SteeringQueue | undefined,
+    // Which conversation message this turn answers, for its end-of-turn checkpoint. Undefined on a turn with no
+    // conversation behind it (the bench, a one-shot) — there is no transcript for a rewind to address.
+    turn?: SnapshotTurn,
 ): AsyncGenerator<AgentEvent> {
     // Whatever turn runs on this conversation supersedes a pending usage-limit resume — the user retrying by
     // hand (or the scheduler's own fire, which comes through here) must not be doubled by the scheduler later.
@@ -589,7 +600,17 @@ async function* runTurn(
                 return undefined;
             });
         if (checkpointId !== undefined) {
-            yield { kind: "checkpoint", id: checkpointId };
+            /* Written down as well as streamed. The frame alone reaches only the browser watching THIS turn,
+             * and the affordance it powers ("go back to before this message") is wanted most by the tab that
+             * comes back tomorrow — see agent/rewind-points.ts. Awaited, unlike the fence snapshot above: it is
+             * one small file write, and a frame promising a rewind the daemon cannot resolve is worse than a
+             * turn that starts a millisecond later. */
+            if (turn !== undefined) {
+                await services.rewindPoints
+                    .record(turn.conversationId, turn.index, checkpointId)
+                    .catch((error: unknown) => services.logger.warn({ err: error }, "rewind: recording the turn's checkpoint failed"));
+            }
+            yield { kind: "checkpoint", id: checkpointId, ...(turn !== undefined ? { index: turn.index } : {}) };
         }
     }
     mark("snapshot");
@@ -994,6 +1015,21 @@ export const createAgentRoutes = (services: Services) => {
             // Join the run here: a successful Stop response now means the conversation lock is truly free.
             await run?.waitUntilFinished();
             return { ok: true } as const;
+        }),
+        /* Go back to a message — files, transcript and provider session together (see agent/rewind.ts).
+         *
+         * CONFLICT rather than a queue-and-wait on a running turn: rewinding is a decision about work the user
+         * is looking at, and holding it until a twenty-minute turn finishes would apply it to a workspace that
+         * has moved on since they asked. The same code the busy send uses, so the client already knows it. */
+        rewind: i.rewind.handler(async ({ input }) => {
+            const outcome = await rewindConversation(services, input.conversationId, input.index);
+            if (outcome === "busy") {
+                throw new ORPCError("CONFLICT", { message: "This agent is running a turn — stop it before going back." });
+            }
+            if (outcome === "no-checkpoint") {
+                throw new ORPCError("NOT_FOUND", { message: "That message has no checkpoint to go back to." });
+            }
+            return outcome;
         }),
         // The provider's slash commands from its most recent turn. Empty (not an error) when it has never run
         // one here — the popover simply stays closed until the first turn publishes the list.

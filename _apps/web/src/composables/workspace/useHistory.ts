@@ -20,22 +20,30 @@ const fileDiff = (id: string, scope: string, path: string): Promise<FileDiffResp
         `/history/file-diff?id=${encodeURIComponent(id)}&scope=${encodeURIComponent(scope)}&path=${encodeURIComponent(path)}`,
     );
 
-// The restore action, standalone so surfaces without their own useHistory() (the chat bubble's per-message
-// restore) can share it — the caller supplies the setup-scoped queryClient.
+/* WHAT EVERY SURFACE HAS TO DO ONCE /work HAS BEEN REWRITTEN UNDER IT — shared because there is now more than
+ * one thing that rewrites it: the timeline's restore below, and the chat bubble's rewind, which restores
+ * daemon-side as one step of a larger operation and so cannot go through the POST above.
+ *
+ * RAW prefix for the tree — its keys carry an "all"/"filtered" discriminator before the appended sandbox id,
+ * so sandboxKey("workspace","tree") would NOT prefix-match them (see useSandbox). Snapshots have no such
+ * discriminator, so the exact sandboxKey match is fine there. A restore never moves the repos' HEADs, so the
+ * restored-vs-HEAD delta IS the new review set. Disjoint caches — refetch concurrently. */
+export const invalidateWorkspace = async (queryClient: QueryClient): Promise<void> => {
+    // Stale buffers would silently resurrect post-restore files on save.
+    resetEditBuffers();
+    await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }),
+        queryClient.invalidateQueries({ queryKey: sandboxKey(`history`, `snapshots`) }),
+        queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) }),
+    ]);
+};
+
+// The restore action, standalone so surfaces without their own useHistory() can share it — the caller supplies
+// the setup-scoped queryClient.
 export const restoreSnapshot = (queryClient: QueryClient, id: string): Promise<void> =>
     run(async () => {
         await sandboxJson(`/history/restore`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify({ id }) });
-        // /work changed underneath the UI: stale buffers would silently resurrect post-restore files on save.
-        resetEditBuffers();
-        // RAW prefix for the tree — its keys carry an "all"/"filtered" discriminator before the appended sandbox
-        // id, so sandboxKey("workspace","tree") would NOT prefix-match them (see useSandbox). Snapshots have no
-        // such discriminator, so the exact sandboxKey match is fine there. A restore never moves the repos'
-        // HEADs, so the restored-vs-HEAD delta IS the new review set. Disjoint caches — refetch concurrently.
-        await Promise.all([
-            queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }),
-            queryClient.invalidateQueries({ queryKey: sandboxKey(`history`, `snapshots`) }),
-            queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) }),
-        ]);
+        await invalidateWorkspace(queryClient);
     }, `Restore failed.`);
 
 export function useHistory() {

@@ -434,8 +434,15 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             return step(mapMessage(opened.state, opened.id, (message) => ({ ...message, todos: event.items })));
         }
         case `checkpoint`:
-            // The pre-turn workspace state's id — anchor the restore affordance on the turn's user bubble.
-            return step(mapMessage(state, context.userMessageId, (message) => ({ ...message, checkpointId: event.id })));
+            // The pre-turn workspace state's id, plus where this turn sits in the daemon's transcript — both
+            // anchored on the turn's user bubble, which is what the rewind affordance addresses it by.
+            return step(
+                mapMessage(state, context.userMessageId, (message) => ({
+                    ...message,
+                    checkpointId: event.id,
+                    ...(event.index !== undefined ? { rewindIndex: event.index } : {}),
+                })),
+            );
         case `usage`: {
             // End-of-turn accounting — and the turn BOUNDARY: a steered conversation's stream can carry several
             // turns (a queued message the running turn couldn't absorb runs as its own turn after this one

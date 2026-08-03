@@ -22,11 +22,13 @@ import { bashCommand, psCommand } from "../environments/scriptCommand";
 
 const props = defineProps<{
     slug: string;
-    /// The approved overlay's sha256 — present for a rebuild, absent for an update.
+    /// The approved overlay's sha256 — present for a rebuild, absent for an update or a rollback.
     hash?: string;
-    /// What the button says. The command block is labelled from the same word.
-    action: `Update` | `Rebuild`;
+    /// What the button says. The command block is labelled from the same word, and — for the two modes that
+    /// share the update script — it is also what selects between them.
+    action: `Update` | `Rebuild` | `Roll back`;
 }>();
+
 
 const { cmdOs } = useOsPreference();
 const desktop = computed(() => desktopVersion() !== undefined);
@@ -37,13 +39,20 @@ const command = computed(() => {
         const args = props.hash === undefined ? `-Slug ${props.slug}` : `-Slug ${props.slug} -Hash ${props.hash}`;
         return psCommand(props.hash === undefined ? `updatePs1` : `rebuildPs1`, ``, args);
     }
+    // Rollback rides the update script with a flag — one script, three ways in, exactly as rebuild does with
+    // its hash (see recreate.sh's argument-shape dispatch).
+    if (props.action === `Roll back`) {
+        return bashCommand(key, ``, `${props.slug} --rollback`);
+    }
     return bashCommand(key, ``, props.hash === undefined ? props.slug : `${props.slug} ${props.hash}`);
 });
 </script>
 
 <template>
     <div class="flex flex-col gap-2">
-        <template v-if="desktop">
+        <!-- The desktop deep link carries update and rebuild only; a rollback has no verb there, so it falls
+             through to the command block rather than being wired to a link that would run the wrong swap. -->
+        <template v-if="desktop && action !== `Roll back`">
             <Button :label="`${action} now`" class="self-start" @click="openDesktopLink(desktopRecreateLink(slug, hash))">
                 <template #icon><Icon name="bolt" /></template>
             </Button>

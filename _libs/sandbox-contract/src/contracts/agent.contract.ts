@@ -6,6 +6,8 @@ import {
     AttachTurnSchema,
     OkSchema,
     ProviderRefusalsSchema,
+    RewindResultSchema,
+    RewindTurnSchema,
     StartedTurnSchema,
     SteerSchema,
     StopTurnSchema,
@@ -22,6 +24,10 @@ export const agentContract = {
     reply: oc.route({ method: "POST", path: "/agent/reply" }).input(AgentReplySchema).output(OkSchema),
     steer: oc.route({ method: "POST", path: "/agent/steer" }).input(SteerSchema).output(OkSchema),
     stop: oc.route({ method: "POST", path: "/agent/stop" }).input(StopTurnSchema).output(OkSchema),
+    // Go back to a message: restore the workspace to that turn's checkpoint, drop the messages after it, and
+    // forget the provider session. CONFLICT while a turn is running — a restore cannot overwrite files an
+    // agent is editing. NOT_FOUND when that message has no checkpoint to go back to.
+    rewind: oc.route({ method: "POST", path: "/agent/rewind" }).input(RewindTurnSchema).output(RewindResultSchema),
     // The provider's slash commands as last published by one of its turns, so a conversation's `/` popover is
     // populated before it has run one. The live `commands` frame stays authoritative for a running turn.
     commands: oc.route({ method: "GET", path: "/agent/commands" }).input(AgentCommandsQuerySchema).output(AgentCommandsSchema),

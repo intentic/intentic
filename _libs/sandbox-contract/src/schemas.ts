@@ -1682,7 +1682,33 @@ export const SnapshotSchema = z.object({
     label: z.string().optional(),
 });
 export type Snapshot = z.infer<typeof SnapshotSchema>;
+
+/* WHICH CONVERSATION MESSAGE A TURN ANSWERS — carried alongside the turn so its pre-turn checkpoint can be
+ * filed under it (see the sandbox's agent/rewind-points.ts). `index` is the transcript position the turn began
+ * at, which is also how many messages a rewind to it keeps. */
+export interface SnapshotTurn {
+    readonly conversationId: string;
+    readonly index: number;
+}
 export const SnapshotsListSchema = z.object({ snapshots: z.array(SnapshotSchema) });
+
+/* REWIND — go back to a message and carry on from there. Restores the workspace to that turn's checkpoint,
+ * drops every message after it, and forgets the provider session so the next turn opens a fresh one.
+ *
+ * `index` is the transcript position of the user message being rewound TO, which is also how many messages
+ * survive — rewinding to the first message of a conversation keeps none of it and restores the workspace to
+ * before it ran. */
+export const RewindTurnSchema = z.object({
+    conversationId: z.string().min(1),
+    index: z.number().int().nonnegative(),
+});
+export const RewindResultSchema = z.object({
+    // The checkpoint the workspace was restored to, for the History timeline to select.
+    snapshot: z.string(),
+    // Messages dropped from the transcript — what the client removes from its own bubbles.
+    dropped: z.number().int().nonnegative(),
+});
+export type RewindResult = z.infer<typeof RewindResultSchema>;
 export const SnapshotIdSchema = z.object({ id: z.string().min(1) });
 export const SnapshotChangeSchema = z.object({
     scope: z.string(),
@@ -3913,12 +3939,33 @@ export const SecretInventorySchema = z.object({ entries: z.array(SecretInventory
 
 // version: what this daemon runs (baked). latest/updateAvailable: the daemon compares its version to the
 // latest published `stable` release so the web can offer a non-blocking update (see system/version-check.ts).
+/* Whether an agent runtime can serve a turn right now, probed off the turn path (see the sandbox's
+ * agent/adapter-health.ts). "unknown" is a real answer — a probe that could not run must not read as
+ * "unavailable" and grey out a provider the user can in fact use — so surfaces treat it as
+ * available-but-unverified rather than as a soft no. */
+export const AdapterHealthSchema = z.object({
+    state: z.enum(["ready", "unavailable", "unknown"]),
+    // Why it cannot serve, in the user's terms and naming what to do about it. Absent when ready.
+    detail: z.string().optional(),
+    checkedAt: z.number(),
+});
+export type AdapterHealthReport = z.infer<typeof AdapterHealthSchema>;
+
 export const InfoSchema = z.object({
     name: z.string().optional(),
     image: z.string().optional(),
     version: z.string().optional(),
     latest: z.string().optional(),
     updateAvailable: z.boolean().optional(),
+    // Keyed by AgentCapabilities.runtime. Absent until the first background sweep lands, which reads the same
+    // as every entry being "unknown" — one of the two cannot go stale, so the daemon sends the absence.
+    runtimes: z.record(z.string(), AdapterHealthSchema).optional(),
+    /* Which release channel this sandbox follows (`stable` unless it was moved), and the base image the last
+     * swap replaced — both set on the container by the host script that performed the swap, since neither is
+     * knowable from inside afterwards. `previousImage` is what a rollback returns to; absent means there is
+     * nothing to go back to and no rollback is offered. */
+    channel: z.string().optional(),
+    previousImage: z.string().optional(),
 });
 export type Info = z.infer<typeof InfoSchema>;
 

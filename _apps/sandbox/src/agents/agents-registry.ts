@@ -116,8 +116,23 @@ export interface AgentsRegistry {
     // it at finish, so `entry(id).sessionId` alone is undefined for exactly the turn most likely to be steered.
     readonly sessionIdOf: (id: string) => string | undefined;
     // Acquire the conversation's turn mutex and mark it running, creating/updating the entry. False ⇒ a turn
-    // is already running for that conversation (the caller surfaces the coded busy error).
+    // is already running for that conversation, or a rewind holds the same mutex (the caller surfaces the
+    // coded busy error).
     readonly begin: (turn: AgentTurnIdentity, now: number) => Promise<boolean>;
+    /* HOLD THE CONVERSATION AGAINST ITS OWN TURNS while something destructive happens to the workspace — the
+     * rewind's restore, which overwrites the files a running turn is reading and editing.
+     *
+     * The lease exists because "check that nothing is running, then restore" is NOT the same thing and cannot
+     * be made safe by adding checks: a turn admitted in the gap between the last check and the first `git
+     * checkout` lands mid-restore, and both halves lose. What closes it is that this and `begin` are the same
+     * mutex, taken in one synchronous step — the refusal and the claim happen with no await between them, so
+     * there is no gap for a turn to arrive in. Both directions are covered: a turn cannot start under a lease,
+     * and a lease cannot be taken under a turn.
+     *
+     * Undefined ⇒ refused because a turn is running; the caller surfaces that as busy, exactly like begin's
+     * false. The lease is always released, including when `fn` throws — a conversation stuck unrunnable
+     * because a restore failed would be a worse outcome than the failure itself. */
+    readonly withRewindLease: <T>(conversationId: string, fn: () => Promise<T>) => Promise<T | undefined>;
     // Record the worktree composition on first creation (per-repo full base shas).
     readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][]) => Promise<void>;
     // Set the display title, subject to the source ranking (see AgentTitleSourceSchema): a rename always
@@ -133,6 +148,14 @@ export interface AgentsRegistry {
     // it leaves updatedAt alone (configuring is not activity) and needs no running guard — the value is read
     // at turn COMPLETION, so flipping it mid-turn is exactly "hold THIS turn's work". Undefined ⇒ unknown id.
     readonly setAutoLand: (id: string, autoLand: boolean | null) => Promise<AgentSummary | undefined>;
+    /* Forget which provider session this conversation was resuming — what a rewind does after restoring the
+     * files, so the next turn opens a fresh thread instead of resuming one whose context describes edits that
+     * are no longer on disk. That mismatch is the whole reason rewind drops messages rather than only
+     * restoring: a provider still holding the dropped turns would keep reasoning from them.
+     *
+     * Only the pointer goes. The provider's own store keeps the old session, and the daemon's transcript record
+     * is authoritative for reading the conversation back, so nothing the user can see is lost by this. */
+    readonly clearSession: (id: string) => Promise<void>;
     // "Mark all read" — one stamp across the whole fleet, so a board full of badges has a single escape hatch.
     readonly markAllSeen: (now: number) => Promise<void>;
     // Persist a land's outcome: the advanced per-repo landedTips (partial lands included — conflicted repos
@@ -184,6 +207,11 @@ export interface AgentsRegistry {
 export const createAgentsRegistry = (store: AgentsStore, standings: LandStandings): AgentsRegistry => {
     let entries: PersistedAgent[] = [];
     const runtime = new Map<string, RuntimeState>();
+    /* The other half of the turn mutex — conversations a rewind is currently restoring. Deliberately NOT a flag
+     * on RuntimeState: that map is rebuilt per turn (freshRuntime in begin), and a lease that a turn's own
+     * bookkeeping could clear is not a lease. Empty in the overwhelmingly common case, so the extra read in
+     * begin costs a Set miss. */
+    const rewinding = new Set<string>();
     const listeners = new Set<(agents: AgentSummary[], rev: number) => void>();
     // Bumped by broadcast(), so it advances exactly once per published change — see `revision` on the interface.
     let revision = 0;
@@ -406,8 +434,26 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     const sessionId = state.pendingSessionId ?? entryOf(id)?.sessionId;
                     return sessionId === undefined ? [] : [sessionId];
                 }),
+        withRewindLease: async (conversationId, fn) => {
+            /* The claim. `running` is read and `rewinding` is written with NOTHING between them — no await, no
+             * call that could yield — so from the event loop's point of view this is one step, and `begin`
+             * (whose own check-to-claim path is likewise unbroken) can only ever observe it as taken or not
+             * taken. Introducing an await here, however harmless it looks, is what reopens the hole this
+             * function exists to close. */
+            if (runtime.get(conversationId)?.running === true) {
+                return undefined;
+            }
+            rewinding.add(conversationId);
+            try {
+                return await fn();
+            } finally {
+                rewinding.delete(conversationId);
+            }
+        },
         begin: async (turn, now) => {
-            if (runtime.get(turn.conversationId)?.running === true) {
+            // Both arms of the mutex, read together. Everything from here to the runtime.set below is
+            // synchronous, which is what makes this a claim rather than a hopeful check — see withRewindLease.
+            if (runtime.get(turn.conversationId)?.running === true || rewinding.has(turn.conversationId)) {
                 return false;
             }
             const existing = entryOf(turn.conversationId);
@@ -544,6 +590,23 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             await persist();
             broadcast();
             return summaryOf(next);
+        },
+        clearSession: async (id) => {
+            const entry = entryOf(id);
+            if (entry === undefined) {
+                return;
+            }
+            // The RUNTIME's pending id too, not just the persisted one: a first turn's session lives only there
+            // until finish() flushes it, and sessionIdOf reads it in preference — clearing one of the two would
+            // leave the next turn resuming through the half that survived.
+            const state = runtime.get(id);
+            if (state !== undefined) {
+                state.pendingSessionId = undefined;
+            }
+            const { sessionId: _dropped, ...carried } = entry;
+            replace(carried);
+            await persist();
+            broadcast();
         },
         observe: (id, event) => {
             const state = runtimeOf(id);

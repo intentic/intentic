@@ -12,7 +12,7 @@ import { errandOf } from "../composables/chat/errands";
 import { type ChatMessage, foldsIntoTurn, type PlanRequest } from "../composables/chat/transcript";
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
-import { restoreSnapshot } from "../composables/workspace/useHistory";
+import { invalidateWorkspace } from "../composables/workspace/useHistory";
 import { usePaneView } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
@@ -372,17 +372,35 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
     ];
 };
 
-// --- Per-message workspace restore (hover history icon on user bubbles) -----------------------
-// Restores /work to the checkpoint captured before this turn ran (the daemon's checkpoint frame). Gated on
-// the conversation-level stream like canEdit — no rewind may land while a turn is in flight.
+/* --- Per-message rewind (hover history icon on user bubbles) ---------------------------------
+ *
+ * "Go back to before this message": the workspace returns to the checkpoint this turn found, and the
+ * conversation goes with it — the messages after this one are dropped and the provider session is forgotten,
+ * so the next send starts from what is actually on disk. Restoring the files ALONE was the older behaviour
+ * and it left the agent's context describing edits that no longer existed.
+ *
+ * Two gates, and they are different: `rewindIndex` says the daemon knows where this message sits in its own
+ * transcript (so there is something to address), and the conversation-level stream gate says no turn is in
+ * flight (so there is nothing to overwrite). The daemon enforces the second one too — this one only spares
+ * the user a button that would refuse.
+ *
+ * Click-again-to-confirm rather than a dialog, unchanged from the restore this replaces: the press is
+ * reversible (the daemon takes its own checkpoint before restoring) and a modal for it would be heavier than
+ * the thing it guards. The wording carries the extra cost, because dropping messages is the part a user who
+ * remembers the old behaviour would not expect. */
 const queryClient = useQueryClient();
-const restoring = ref(false);
+const rewinding = ref(false);
 const confirmRestore = ref(false);
 let confirmTimer: ReturnType<typeof setTimeout> | undefined;
-const canRestore = computed(() => props.message.role === `user` && props.message.checkpointId !== undefined && !conversationStreaming.value);
-const restoreToCheckpoint = async (): Promise<void> => {
-    const checkpointId = props.message.checkpointId;
-    if (checkpointId === undefined || restoring.value) {
+const canRestore = computed(() => props.message.role === `user` && props.message.rewindIndex !== undefined && !conversationStreaming.value);
+// How many bubbles this press would drop, for the confirm wording — counted over what is on screen, which is
+// what the user is looking at.
+const rewindDrops = computed(() => {
+    const index = conversation.value.messages.value.indexOf(props.message);
+    return index < 0 ? 0 : conversation.value.messages.value.length - index;
+});
+const rewindToCheckpoint = async (): Promise<void> => {
+    if (props.message.rewindIndex === undefined || rewinding.value) {
         return;
     }
     if (!confirmRestore.value) {
@@ -393,11 +411,15 @@ const restoreToCheckpoint = async (): Promise<void> => {
     }
     clearTimeout(confirmTimer);
     confirmRestore.value = false;
-    restoring.value = true;
+    rewinding.value = true;
     try {
-        await restoreSnapshot(queryClient, checkpointId);
+        // The workspace views are reading the tree this just rewrote — the same invalidation the plain restore
+        // did, and for the same reason.
+        if (await conversation.value.rewindTo(props.message)) {
+            await invalidateWorkspace(queryClient);
+        }
     } finally {
-        restoring.value = false;
+        rewinding.value = false;
     }
 };
 
@@ -707,8 +729,10 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
             </template>
             <div v-else class="flex items-center gap-1">
-                <!-- Restore the workspace to the checkpoint captured before this turn ran. Two-step: the first
-                     click arms (red), the second restores; arming decays after 4s. -->
+                <!-- Go back to before this message: the workspace returns to the checkpoint this turn found
+                     and the messages after it are dropped. Two-step: the first click arms (red), the second
+                     goes; arming decays after 4s. The armed wording names what is dropped, because that is
+                     the half a user cannot see coming from the icon. -->
                 <button
                     v-if="canRestore"
                     type="button"
@@ -718,12 +742,14 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         { 'text-danger opacity-100': confirmRestore },
                     ]"
                     v-tooltip.top="
-                        confirmRestore ? 'Click again to restore the workspace to before this message' : 'Restore workspace to before this message'
+                        confirmRestore
+                            ? `Click again — restores the workspace and drops ${rewindDrops} message${rewindDrops === 1 ? '' : 's'}`
+                            : 'Go back to before this message'
                     "
-                    aria-label="Restore workspace to before this message"
-                    @click="restoreToCheckpoint"
+                    aria-label="Go back to before this message"
+                    @click="rewindToCheckpoint"
                 >
-                    <Icon :name="restoring ? 'spinner' : 'history'" :spin="restoring" class="text-2xs" />
+                    <Icon :name="rewinding ? 'spinner' : 'history'" :spin="rewinding" class="text-2xs" />
                 </button>
                 <!-- Edit & re-run from here: hover-revealed on desktop, always dimly visible on touch. -->
                 <button

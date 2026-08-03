@@ -25,6 +25,7 @@ import { subscribeWorkspaceChanges } from "../workspace/workspace-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 import { isValidSessionName } from "../terminal/terminal-session.js";
 import { isNewer, latestVersion } from "../platform/version-check.js";
+import { runtimeHealth } from "../agent/adapter-health.js";
 import { buildId } from "../version.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 
@@ -207,10 +208,16 @@ export const createSystemRoutes = (services: Services) => {
             if (info === undefined) {
                 return {};
             }
-            // Read the background-warmed cache synchronously — no fetch on the request path. Cold cache (tests,
-            // first-boot instant) omits latest/updateAvailable; the browser's shared /info query refetches.
+            // Read the background-warmed caches synchronously — no fetch or credential read on the request
+            // path. A cold cache (tests, first-boot instant) omits the field entirely; the browser's shared
+            // /info query refetches. Same shape for both, for the same reason — see adapter-health.ts.
             const latest = latestVersion();
-            return { ...info, ...(latest !== undefined ? { latest, updateAvailable: isNewer(latest, info.version) } : {}) };
+            const runtimes = runtimeHealth();
+            return {
+                ...info,
+                ...(latest !== undefined ? { latest, updateAvailable: isNewer(latest, info.version) } : {}),
+                ...(runtimes !== undefined ? { runtimes } : {}),
+            };
         }),
         // Exchange the request's verified bearer for a daemon-minted session (the steady-state browser
         // credential — see auth/session.ts). The bearer middleware already verified WHO is asking (a Google ID

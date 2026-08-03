@@ -8,6 +8,8 @@ import type { Services } from "../composition.js";
 import { extensionAgentDirsOf } from "../extensions/installed-extensions.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
 import type { AgentRequest, ParkedSync } from "./agent.js";
+import { adapterFor } from "./adapter-registry.js";
+import { missingSession } from "./adapter.js";
 import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { withAttachmentNote } from "./attachment-note.js";
@@ -98,21 +100,16 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     // declared record (capabilitiesOf) names the runtime, so the arm that serves a turn and the abilities the
     // rest of the daemon gates on can't disagree: both read the same row.
     const provider = input.agent ?? "claude";
-    const capabilities = capabilitiesOf(provider, input.harness ?? "native");
+    const harness = input.harness ?? "native";
+    const capabilities = capabilitiesOf(provider, harness);
     // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them. NOT the
     // record above — these are what the OWNER installed, that is what the runtime can DO.
     const installed = await services.capabilities.list();
     const planned: TurnContext = { ...context, base: honoured(services, context, capabilities) };
-    if (capabilities.runtime === "codex") {
-        return planCodexTurn(services, input, planned);
-    }
-    if (capabilities.runtime === "opencode") {
-        return planGrokTurn(services, input, planned);
-    }
-    if (capabilities.runtime === "acp") {
-        return planAcpTurn(services, input, planned, installed, provider);
-    }
-    return planHarnessTurn(services, input, planned, installed);
+    // The dispatch, through the registry rather than an if/else chain over the same union — so the set of
+    // runtimes has one declaration, and the health probe the picker reads is written next to the arm it
+    // predicts (see agent/adapter-registry.ts).
+    return adapterFor(provider, harness).preflight(services, input, planned, installed);
 };
 
 /* THE REQUEST EVERY ARM BUILDS ON, with the controls this runtime does not honour already gone.
@@ -161,14 +158,10 @@ const honoured = (services: Services, context: TurnContext, capabilities: AgentC
 // translator. There's a single sandbox-wide CODEX_HOME (the adapter's default), so a resume is a plain existence
 // check against it; a missing thread self-heals like the harness path below. Claude-only fields (plugins, MCP,
 // thinking) don't apply here.
-const planCodexTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
-    if (input.sessionId !== undefined && !(await services.codexThreadExists(input.sessionId))) {
-        return {
-            ok: false,
-            code: "session-not-found",
-            message:
-                "This chat's Codex thread no longer exists on the sandbox — it was deleted or lost in a rebuild. The next message starts a fresh session.",
-        };
+export const planCodexTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
+    const deadThread = await missingSession(input.sessionId, (id) => services.codexThreadExists(id));
+    if (deadThread !== undefined) {
+        return deadThread;
     }
     // The subscription (via the translator) is the credential; the container OPENAI_API_KEY is the only fallback
     // (a bare dev run with no translator baked).
@@ -207,23 +200,16 @@ const planCodexTurn = async (services: Services, input: AgentTurn, context: Turn
 
 // Grok rides OpenCode with xAI subscription OAuth (OpenCode owns the credential). Gate on OpenCode's own
 // connection view. Claude-only fields (plugins, MCP tools, thinking) don't apply.
-const planGrokTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
+export const planGrokTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
     if (!(await services.openCode.connected("xai"))) {
         return {
             ok: false,
             message: "No Grok account connected — sign in with your xAI (SuperGrok/X Premium) account in Setup before chatting.",
         };
     }
-    // Pre-flight the resume target, exactly as the codex and harness arms do: a session OpenCode no longer holds
-    // rejects the prompt with a message that names nothing the client can act on, so the chat re-sent the same
-    // dead id on every retry. The coded refusal is what lets the UI drop it and start fresh on the next send.
-    if (input.sessionId !== undefined && !(await services.openCode.sessionExists(input.sessionId, context.effectiveCwd))) {
-        return {
-            ok: false,
-            code: "session-not-found",
-            message:
-                "This chat's Grok session no longer exists on the sandbox — it was deleted or lost in a rebuild. The next message starts a fresh session.",
-        };
+    const deadSession = await missingSession(input.sessionId, (id) => services.openCode.sessionExists(id, context.effectiveCwd));
+    if (deadSession !== undefined) {
+        return deadSession;
     }
     // Grok MUST ride an explicit, live-valid xAI model id: OpenCode's own default is a retired models.dev id
     // (grok-code-fast-1) xAI rejects, and its catalog is empty for xai — so an omitted model makes the turn fall
@@ -247,7 +233,7 @@ const planGrokTurn = async (services: Services, input: AgentTurn, context: TurnC
 // An ACP provider: the id of an installed `agent`-kind capability, spawned and driven over the Agent Client
 // Protocol. Harness doesn't apply (the agent IS its own loop) and neither do the Claude-only request fields; the
 // adapter passes http MCP tools through when the agent advertises support.
-const planAcpTurn = async (
+export const planAcpTurn = async (
     services: Services,
     input: AgentTurn,
     context: TurnContext,
@@ -271,7 +257,7 @@ const planAcpTurn = async (
  * the translator endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
  * which the quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically;
  * its refusals are values, and this is where they become the refusal the composer's connect gate reads. */
-const planHarnessTurn = async (services: Services, input: AgentTurn, context: TurnContext, installed: readonly Capability[]): Promise<TurnPlan> => {
+export const planHarnessTurn = async (services: Services, input: AgentTurn, context: TurnContext, installed: readonly Capability[]): Promise<TurnPlan> => {
     const resolved = await resolveHarnessCredentials(services, {
         agent: input.agent,
         ...(input.account !== undefined ? { account: input.account } : {}),
@@ -281,16 +267,9 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
         return { ok: false, ...(resolved.code !== undefined ? { code: resolved.code } : {}), message: resolved.message };
     }
     const { oauthToken, refreshOauthToken, endpoint, allowance } = resolved.credentials;
-    // Pre-flight the resume target: a session id that outlived its transcript (deleted, or minted before the
-    // store persisted across rebuilds) would otherwise spawn the CLI just to fail opaquely — on every retry. The
-    // coded refusal lets the UI drop the dead id so the next send starts fresh.
-    if (input.sessionId !== undefined && !(await services.sessions.exists(context.effectiveCwd, input.sessionId))) {
-        return {
-            ok: false,
-            code: "session-not-found",
-            message:
-                "This chat's session no longer exists on the sandbox — it was deleted or lost in a rebuild. The next message starts a fresh session.",
-        };
+    const dead = await missingSession(input.sessionId, (id) => services.sessions.exists(context.effectiveCwd, id));
+    if (dead !== undefined) {
+        return dead;
     }
     // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named
     // external tool overrides, matching mcpServersOf's last-wins merge.

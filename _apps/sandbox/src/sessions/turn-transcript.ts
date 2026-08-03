@@ -191,6 +191,26 @@ export const openTurnTranscript = async (
         .catch((error: unknown) => services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript open failed"));
 };
 
+/* WHERE THIS TURN SITS IN ITS CONVERSATION — the index its checkpoint is filed under, and the number of
+ * messages a rewind to it keeps.
+ *
+ * Read at turn START, in the window every path guarantees: the record has been opened and adopted (the callers
+ * above all await that first), and this turn's own messages are not appended until it settles. Measured at the
+ * END instead it would be a race — the settle hook's append and the end-of-turn snapshot are not ordered
+ * against each other, so the index would sometimes already count the very turn it is naming.
+ *
+ * Never rejects. 0 on failure files the checkpoint at the head of the conversation: a rewind that goes further
+ * back than it should is still recoverable (restore takes its own pre-restore checkpoint first), whereas an
+ * index pointing past the end of the transcript addresses a message that never existed. */
+export const turnStartIndex = async (
+    services: Pick<Services, "transcripts" | "logger">,
+    turn: AgentTurn & { readonly conversationId: string },
+): Promise<number> =>
+    services.transcripts.count(transcriptAgentOf(turn)).catch((error: unknown) => {
+        services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript count failed");
+        return 0;
+    });
+
 /* WRITE one settled turn to that record — the single spelling of that, because every road a turn can be started
  * down ends here: the /agent pump (turn-runs' settle hook), an automation wake, a landing-gate fix. Each used to
  * repeat the same two normalizations, and one of them had drifted to hardcoded literals. The paths are relative

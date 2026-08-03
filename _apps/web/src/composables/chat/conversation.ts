@@ -524,15 +524,59 @@ export class Conversation {
         this.title.value = null;
     }
 
+    /* GO BACK TO A MESSAGE. The daemon restores the workspace to the checkpoint that turn found, drops the
+     * messages after it from its record, and forgets the provider session; this then makes the tab agree.
+     *
+     * The two indices are different numbers and mixing them is the bug this method exists to not have.
+     * `message.rewindIndex` is the position in the DAEMON's transcript — what the route addresses — while the
+     * slice below is over the BUBBLES, which additionally carry local notices the daemon never recorded.
+     *
+     * The local session is dropped to match the daemon's: the next send then starts a fresh provider thread
+     * rather than resuming one whose context still describes the edits just rolled back. Returns false when
+     * the daemon refused (a turn is running, or that message has no checkpoint) — the tab is left untouched,
+     * because a transcript cut against a workspace that never moved is the one state with no way back. */
+    async rewindTo(message: ChatMessage): Promise<boolean> {
+        const index = message.rewindIndex;
+        const bubble = this.messages.value.indexOf(message);
+        if (index === undefined || bubble < 0) {
+            return false;
+        }
+        const response = await sandboxRequest(`/agent/rewind`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ conversationId: this.conversationId, index }),
+        });
+        if (!response.ok) {
+            this.error.value =
+                response.status === 409
+                    ? `This agent is running a turn — stop it before going back.`
+                    : `That message can no longer be gone back to.`;
+            return false;
+        }
+        this.transcript.rebuild(this.messages.value.slice(0, bubble));
+        this.session.value = undefined;
+        this.error.value = null;
+        this.persist(true);
+        return true;
+    }
+
     // Redraw the bubbles of a transcript the daemon replayed, leaving every other property of the conversation
     // alone. This is the whole of what a RESTORED tab needs: it already carries its own session, title,
     // provider and isolation from the tab snapshot, and overwriting those with the history-menu defaults below
     // would quietly move an isolated agent's next turn onto the main tree.
     restoreMessages(messages: readonly RestoredMessage[]): void {
         this.transcript.rebuild(
-            messages.map((message) => ({
+            messages.map((message, index) => ({
                 role: message.role,
                 text: message.text,
+                /* The rewind anchor. The array position IS the daemon's index here — this is the record read
+                 * back verbatim, one bubble per stored row — which is the one moment the two numberings are
+                 * guaranteed to agree, and why the index is captured now rather than recomputed later from a
+                 * bubble list that has since grown local notices.
+                 *
+                 * Only where the daemon supplied a checkpoint: it stamps one on the messages that still have a
+                 * state to go back to, so an offer here is an offer the rewind route will honour. */
+                ...(message.checkpointId !== undefined ? { checkpointId: message.checkpointId, rewindIndex: index } : {}),
                 // Chips from the restored workspace-relative paths; thumbnails re-mint from the
                 // workspace bytes at render time (attachmentPreview) — object URLs don't survive here.
                 ...(message.attachments !== undefined && message.attachments.length > 0

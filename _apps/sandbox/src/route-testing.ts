@@ -479,6 +479,14 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             // The same extraction production's cached reader applies over agentTranscript, minus the cache —
             // a test double re-reading per call is exactly the behavior the cache exists to avoid paying for.
             prompts: async (agent) => userPromptsOf(await merged.transcripts.read(agent)),
+            // Both derived from `read`, so the fake's three answers cannot disagree with each other the way a
+            // hand-written constant would. `count` is on the TURN path (it files each checkpoint's index), so
+            // omitting it here is the failure mode this fake's comment above describes: every agent.run test in
+            // the file dies on a bare "Internal server error" and no type catches it.
+            count: async (agent) => (await merged.transcripts.read(agent)).length,
+            // Inert: there is no store behind this fake to shorten. It still answers what a real truncate WOULD
+            // have dropped, so a rewind test can assert on the count without standing up a transcript file.
+            truncate: async (agent, keep) => Math.max(0, (await merged.transcripts.read(agent)).length - keep),
         },
         ...rest,
     });

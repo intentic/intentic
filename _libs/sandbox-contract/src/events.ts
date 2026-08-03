@@ -168,6 +168,10 @@ export const RestoredMessageSchema = z.object({
     // Files the user attached to this turn (user bubbles only) as workspace-relative paths, recovered from
     // the stored prompt's attachment note — so a reopened tab redraws chips, not the injected protocol text.
     attachments: z.array(z.string()).optional(),
+    /* The checkpoint this message can be rewound to (user bubbles only), filled in when the transcript is read
+     * back. Not stored in the record itself — it is looked up per read from the daemon's rewind points, which
+     * a rewind rewrites — so a reopened tab offers exactly the turns that are still there to go back to. */
+    checkpointId: z.string().optional(),
     thinking: z.string().optional(),
     tools: z.array(RestoredToolCallSchema).optional(),
 });
@@ -236,7 +240,11 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // The pre-turn workspace snapshot's id (the attribution-fence "user" capture), emitted once before the
     // provider stream so the client can offer "restore to before this message" on the turn's user bubble.
     // Absent on isolated turns (they snapshot nothing) and when the tree was already clean at turn start.
-    z.object({ kind: z.literal("checkpoint"), id: z.string() }),
+    /* The workspace checkpoint capturing the state as this turn FOUND it — what "go back to before this
+     * message" restores. `index` is the message's position in the conversation's transcript, which the rewind
+     * route addresses it by; absent on a turn with no conversation behind it (the bench, a one-shot), where
+     * the id still powers a plain restore but there is no message to rewind to. */
+    z.object({ kind: z.literal("checkpoint"), id: z.string(), index: z.number().int().nonnegative().optional() }),
     z.object({ kind: z.literal("delta"), text: z.string(), parentToolUseId: z.string().optional() }),
     // The prose block the `delta` frames were writing is finished. A turn emits several: the model says what
     // it is about to do, runs tools, reports what it found, runs more, then summarizes — each a separate text

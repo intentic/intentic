@@ -38,6 +38,10 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "agents.json", portability: "carry" },
     { path: "turns/", portability: "carry" },
     { path: "transcripts/", portability: "carry" },
+    // Which checkpoint each message can be rewound to. Carried WITH the transcripts and the scopes above,
+    // because it is the join between them: without it a restored conversation reads back whole and offers no
+    // way back into it, even though both the messages and the checkpoints travelled.
+    { path: "rewind-points.json", portability: "carry" },
     { path: "activity.jsonl", portability: "carry" },
     { path: "usage.jsonl", portability: "carry" },
     { path: "account-usage.json", portability: "carry" },

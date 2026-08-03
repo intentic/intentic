@@ -2,12 +2,13 @@
 import { SearchBar, useDevice, useListNavigation } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";
+import { type AgentProvider, capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady } from "../composables/chat/access";
 import { BADGE_META } from "../composables/chat/catalog";
 import { acpProviders, endpointProviders, providerDisplayLabel, providerModelsState } from "../composables/chat/providerCatalog";
 import { customEntryFor, filterEntries, type PickerEntry, pickerBlocks, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
 import { loadAllProviderModels, loadProviderModels } from "../composables/chat/useChat";
+import { useSandboxVersion } from "../composables/sandbox/useSandboxVersion";
 import ProviderLogo from "./ProviderLogo.vue";
 
 /* THE APP'S ONE MODEL PICKER (search + provider rail + one grouped list) — width-agnostic so a desktop host
@@ -191,6 +192,19 @@ const railProviders = computed<readonly { label: string; value: AgentProvider }[
 // doesn't look identical to a healthy one until the user tries to chat.
 const providerNeedsReauth = (target: AgentProvider): boolean => accessStateFor(target).needsReauth;
 
+/* Why this provider's RUNTIME can't serve a turn, as the daemon's own background probe found it (see the
+ * sandbox's agent/adapter-health.ts). Distinct from the credential badges above, which are about the account:
+ * this answers "is the thing that would run the turn even reachable", and it is the one thing the picker used
+ * to be unable to say — the answer arrived as the turn's failure, after a prompt had been written.
+ *
+ * Silent unless the probe is sure. `unknown` and "not probed yet" both render as nothing at all.
+ *
+ * Asked against the NATIVE harness, because the harness is a separate axis this picker does not carry — and
+ * native is the honest one to name: it is what the row would run on unless the user has already moved the
+ * other axis, and a provider forced onto the Claude Code loop is served by a runtime this rail is not about. */
+const { runtimeIssue } = useSandboxVersion();
+const providerRuntimeIssue = (target: AgentProvider): string | undefined => runtimeIssue(capabilitiesOf(target, `native`).runtime);
+
 // The rail tooltip carries what the icon cannot: whether this provider can run at all, and at what price. It is
 // the only place the requirement shows while the rail is filtered to a single provider.
 const railTooltip = (target: AgentProvider): string =>
@@ -199,6 +213,7 @@ const railTooltip = (target: AgentProvider): string =>
         ...(target === provider ? [`active`] : []),
         ...(accessBadge(target) !== undefined ? [accessBadge(target)!] : []),
         ...(providerNeedsReauth(target) ? [`needs reconnect`] : []),
+        ...(providerRuntimeIssue(target) !== undefined ? [providerRuntimeIssue(target)!] : []),
     ].join(` · `);
 
 // A group with no rows yet gets a state row (loading / error+retry — keyed off section.rowCount in the

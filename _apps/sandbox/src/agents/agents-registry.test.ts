@@ -52,6 +52,59 @@ describe("agents registry", () => {
         expect(summary?.startedAt).toBe(1_000);
     });
 
+    /* The rewind lease and the turn mutex are the SAME mutex, and these are the two directions that matter.
+     * Both would pass against a naive "check, then act" too — what they pin is that the two operations see each
+     * other at all, so a later refactor that gives either one its own flag fails here rather than in a
+     * half-restored workspace. */
+    it("refuses a turn while a rewind holds the conversation, and readmits it after", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+
+        let beganDuringRewind: boolean | undefined;
+        const held = await registry.withRewindLease("c1", async () => {
+            beganDuringRewind = await registry.begin(turn(), 1_000);
+            return "restored";
+        });
+
+        expect(held).toBe("restored");
+        expect(beganDuringRewind).toBe(false);
+        // The lease is gone the moment the work is, so the very next turn runs.
+        expect(await registry.begin(turn(), 2_000)).toBe(true);
+    });
+
+    it("refuses a rewind while a turn is running, and releases the lease even when the rewind throws", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+
+        expect(await registry.withRewindLease("c1", async () => "restored")).toBeUndefined();
+        // A different conversation is unaffected — the mutex is per conversation, not global.
+        expect(await registry.withRewindLease("c2", async () => "restored")).toBe("restored");
+
+        await registry.finish("c1", 2_000);
+        await expect(
+            registry.withRewindLease("c1", () => {
+                throw new Error("restore blew up");
+            }),
+        ).rejects.toThrow("restore blew up");
+        // Left unrunnable by a failed restore would be worse than the failure itself.
+        expect(await registry.begin(turn(), 3_000)).toBe(true);
+    });
+
+    it("clearSession drops the pointer so the next turn opens a fresh provider thread", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "session", sessionId: "sess-1" });
+        expect(registry.sessionIdOf("c1")).toBe("sess-1");
+
+        await registry.clearSession("c1");
+        // Both halves: the runtime's pending id (a first turn's, not yet flushed) and the persisted one.
+        expect(registry.sessionIdOf("c1")).toBeUndefined();
+        await registry.finish("c1", 2_000);
+        expect(registry.sessionIdOf("c1")).toBeUndefined();
+    });
+
     it("registers a workspace conversation without inventing a branch and projects its clean completion as idle", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();

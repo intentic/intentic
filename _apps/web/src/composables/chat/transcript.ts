@@ -163,8 +163,15 @@ export interface ChatMessage {
     // Files the user attached to this turn (user bubbles only), for the chip/thumbnail row.
     readonly attachments?: readonly ChatAttachment[];
     // The workspace checkpoint capturing the state BEFORE this turn ran (user bubbles only, main-tree turns
-    // only) — powers the hover "restore to before this message" affordance.
+    // only) — powers the hover "go back to before this message" affordance.
     readonly checkpointId?: string;
+    /* This message's position in the DAEMON's transcript, which is how the rewind route addresses it (user
+     * bubbles only). Deliberately not the bubble's own index: the two diverge the moment a local `notice` line
+     * is drawn, and a rewind aimed one message off restores the wrong turn and drops the wrong messages.
+     *
+     * Set from the daemon's `checkpoint` frame while a turn streams, and from the transcript's own ordering
+     * when a tab reopens — the record holds exactly the user/assistant rows this index counts. */
+    readonly rewindIndex?: number;
     // Accumulated extended-thinking text for assistant turns (empty when none / thinking off).
     readonly thinking?: string;
     // Set when this assistant turn proposed a plan; carries the approval state for the card UI.

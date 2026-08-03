@@ -25,6 +25,14 @@
   There is no -Dev mode here. That one drives the in-repo dogfood loop (dev-sandbox.sh, POSIX sh only), so a
   PowerShell port of it would be an untested path with no callers — run the repo's dev loop under WSL.
 
+  There is no -Rollback or -Channel here yet either, for the same reason and with a real consequence worth
+  stating: a Windows host updates onto :stable as it always has, and cannot walk that back with one command.
+  recreate.sh grew both (it records the base it replaced beside its logs, and swaps the pair on each rollback
+  so pressing it twice returns you), and the daemon reports channel/previousImage on /info regardless of which
+  script created the container — so the Update card's rollback offer is simply absent on a Windows-created
+  sandbox rather than broken. Porting the pair here is the follow-up; until then the way back on Windows is
+  the connect one-liner, which is what it was before.
+
 .EXAMPLE
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug sandbox-abc123def456
 

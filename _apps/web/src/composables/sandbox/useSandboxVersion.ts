@@ -30,9 +30,20 @@ export function useSandboxVersion() {
     const latest = computed(() => info.value?.latest);
     const updateAvailable = computed(() => info.value?.updateAvailable === true);
 
+    /* Which agent runtimes can serve a turn right now, keyed by AgentCapabilities.runtime — the daemon probes
+     * this off the turn path so a picker can say a subscription is missing BEFORE the user writes a prompt.
+     *
+     * `unknown` and absent both mean "not verified", and both are deliberately NOT rendered as a problem: the
+     * probe failing must never grey out a provider that in fact works. Only an explicit `unavailable` is worth
+     * showing, and it arrives with the sentence naming what to connect. */
+    const runtimeIssue = (runtime: string): string | undefined => {
+        const health = info.value?.runtimes?.[runtime];
+        return health?.state === `unavailable` ? (health.detail ?? `This runtime can't serve a turn right now.`) : undefined;
+    };
+
     // Which sandbox a recreate would name — the container comes from /environment (the daemon returns it even
     // without an overlay). HostRecreate turns this into a button in the desktop app and a command elsewhere.
     const slug = computed(() => envState.value?.container?.replace(/^intentic-sandbox-/, ``));
 
-    return { info, installed, latest, updateAvailable, serverManaged, slug };
+    return { info, installed, latest, updateAvailable, runtimeIssue, serverManaged, slug };
 }

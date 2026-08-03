@@ -30,6 +30,8 @@ export const sandboxRunCommandCli = buildCommand<{
     image: string;
     baseImage: string;
     environmentHash?: string;
+    channel?: string;
+    previousImage?: string;
     runtime?: string;
     mounts?: string;
     dns?: string;
@@ -51,6 +53,18 @@ export const sandboxRunCommandCli = buildCommand<{
                 parse: String,
                 optional: true,
                 brief: "The approved overlay's sha256, when `image` was built from one (SANDBOX_ENVIRONMENT_HASH)",
+            },
+            channel: {
+                kind: "parsed",
+                parse: String,
+                optional: true,
+                brief: "The release channel this sandbox follows, e.g. stable (SANDBOX_CHANNEL)",
+            },
+            previousImage: {
+                kind: "parsed",
+                parse: String,
+                optional: true,
+                brief: "The base image this swap replaces, so the daemon can offer a rollback (SANDBOX_PREVIOUS_IMAGE)",
             },
             runtime: {
                 kind: "parsed",
@@ -91,6 +105,8 @@ export const sandboxRunCommandCli = buildCommand<{
             ...(sandboxId !== undefined ? { sandboxId } : {}),
             localPublish: flags.noLocalPublish !== true,
             ...(flags.environmentHash !== undefined && flags.environmentHash !== "" ? { environmentHash: flags.environmentHash } : {}),
+            ...(flags.channel !== undefined && flags.channel !== "" ? { channel: flags.channel } : {}),
+            ...(flags.previousImage !== undefined && flags.previousImage !== "" ? { previousImage: flags.previousImage } : {}),
             env,
             // The caller hands the directive LINES through; extraction + allowlist validation both live in the
             // contract, so a typo'd or smuggled token stops the recreate with its name.
