@@ -1,4 +1,6 @@
-import type { Advisory, DeadCode, Duplication, OutdatedPackage, ProbeFacts, ProbeId } from "../schemas.js";
+import type { Advisory, Bundle, DeadCode, Duplication, OutdatedPackage, ProbeFacts, ProbeId, UiScan } from "../schemas.js";
+import type { IdiomRule } from "./stack.js";
+import { BYPASS_PATTERN, COMPONENT_GLOBS, IDIOM_RULES, MARKUP_GLOBS, normalizePath, SCAN_IGNORES, UI_FRAMEWORKS, TAILWIND_PACKAGES } from "./stack.js";
 
 /* THE PROBES — the measurements that cost a subprocess, declared once so the daemon that runs them and the panel
  * that explains them cannot disagree about what "outdated" meant.
@@ -207,6 +209,145 @@ const parseJscpd = (stdout: string): ProbeFacts | undefined => {
     return { id: `jscpd`, duplication };
 };
 
+/* THE UI SWEEP. The only probe here whose command is COMPOSED rather than written out, because its subject is a
+ * table (stack.ts) that will grow and a hand-written command would be a second copy of it going stale.
+ *
+ * Everything it emits is a labelled, tab-separated line, and the first line is always the bare marker `UI`. That
+ * marker is the whole reason this parser can tell "the sweep ran and this repository is clean" from "the sweep
+ * never ran": every other line is optional, so without it an empty stdout and a spotless codebase are the same
+ * string — and reporting the second when it was the first is the one thing probes.ts exists to prevent. */
+const UI_MARKER = `UI`;
+// Caps, applied after `sort` so truncation is alphabetical and therefore identical between runs — an unsorted
+// truncation would mint a new digest on every sweep and badge forever. What is dropped is genuinely dropped: a
+// component past the cap cannot join a family, and the chore says so rather than implying it saw everything.
+const COMPONENT_LIMIT = 2000;
+const RULE_FILE_LIMIT = 500;
+
+/* THE `.` IS LOAD-BEARING, and leaving it off cost this probe every finding it will ever have. Given no path,
+ * ripgrep searches the tree only when stdin is a TTY — otherwise it reads STDIN, which is exactly how the runner
+ * spawns a probe. The sweep therefore ran, exited 0, printed its marker and matched nothing, in every repository,
+ * forever: the precise failure the marker line was introduced to make impossible, arriving through the one door it
+ * does not cover. It reproduces from Node and not from an interactive shell, which is why it survived being read.
+ *
+ * The prefix that comes back with it (`./src/Button.vue`) is normalised away at the parse, so one spelling of a
+ * path reaches the chores no matter which tool produced it. */
+const SCAN_ROOT = `.`;
+
+const globArgs = (globs: readonly string[]): string => [...globs, ...SCAN_IGNORES].map((glob) => `-g '${glob}'`).join(` `);
+
+// `path:count` from `rg --count-matches`, normalised. Split at the LAST colon: a path may contain one, a count is
+// always the digits at the end.
+const splitCount = (text: string): { path: string; count: number } | undefined => {
+    const at = text.lastIndexOf(`:`);
+    if (at <= 0) {
+        return undefined;
+    }
+    const count = Number.parseInt(text.slice(at + 1), 10);
+    return Number.isNaN(count) || count <= 0 ? undefined : { path: normalizePath(text.slice(0, at)), count };
+};
+
+/* An idiom's line is a PATH AND NOTHING ELSE, which is what lets one line shape carry both kinds of rule. A
+ * present rule asks ripgrep which files match (`-l`); an absent one asks which files do not (`--files-without-
+ * match`), and neither has a count to report. Nothing downstream ever wanted one: a file is on the old idiom or
+ * it is not, and how many times it says so within itself is not a fact anyone would act on differently. */
+const idiomCommand = (rule: IdiomRule): string =>
+    `rg --no-messages ${rule.absent === undefined ? `-l` : `--files-without-match`} -e '${rule.pattern}' ${globArgs(rule.globs)} ${SCAN_ROOT} 2>/dev/null ` +
+    `| sort | head -n ${RULE_FILE_LIMIT} | awk '{print "IDIOM\\t${rule.id}\\t" $0}'`;
+
+const scanCommand = (): string =>
+    [
+        `echo ${UI_MARKER}`,
+        `rg --files ${globArgs(COMPONENT_GLOBS)} ${SCAN_ROOT} 2>/dev/null | sort | head -n ${COMPONENT_LIMIT} | awk '{print "COMPONENT\\t" $0}'`,
+        `rg --no-messages --count-matches -e '${BYPASS_PATTERN}' ${globArgs(MARKUP_GLOBS)} ${SCAN_ROOT} 2>/dev/null ` +
+            `| sort | head -n ${RULE_FILE_LIMIT} | awk '{print "BYPASS\\t" $0}'`,
+        ...IDIOM_RULES.map(idiomCommand),
+        // Every rg above exits 1 when it matches nothing, which is the healthy case and must not read as a broken
+        // command. The runner judges by the parse, but leaving the script's own status at 1 would be a lie.
+        `true`,
+    ].join(`; `);
+
+const parseUi = (stdout: string): ProbeFacts | undefined => {
+    const lines = stdout.split(`\n`).map((line) => line.trim());
+    if (lines.find((line) => line !== ``) !== UI_MARKER) {
+        return undefined;
+    }
+    const components: string[] = [];
+    const bypasses: UiScan["bypasses"] = [];
+    const byIdiom = new Map<string, string[]>();
+    for (const line of lines) {
+        const [label, ...rest] = line.split(`\t`);
+        if (label === `COMPONENT` && rest[0] !== undefined) {
+            components.push(normalizePath(rest[0]));
+        } else if (label === `BYPASS`) {
+            const hit = splitCount(rest.join(`\t`));
+            if (hit !== undefined) {
+                bypasses.push(hit);
+            }
+        } else if (label === `IDIOM` && rest[0] !== undefined) {
+            const path = normalizePath(rest.slice(1).join(`\t`));
+            if (path !== ``) {
+                byIdiom.set(rest[0], [...(byIdiom.get(rest[0]) ?? []), path]);
+            }
+        }
+    }
+    const scan: UiScan = { components, bypasses, idioms: [...byIdiom].map(([id, files]) => ({ id, files })) };
+    return { id: `ui`, scan };
+};
+
+/* THE BUILD OUTPUT, measured where it already is. See BundleSchema for why this never runs the build; the
+ * consequence here is that `available` is a question about the filesystem rather than about the toolchain, and a
+ * repository whose only builds happen in CI reports `unavailable` rather than a wrong number. */
+const BUILD_DIRS = [`dist`, `build`, `out`, `public/build`];
+const BUNDLE_MARKER = `DIR`;
+// Enough of the ranking to see the shape of a build. Past this the assets are the long tail of lazy chunks, and
+// carrying four hundred of them on a route the rail badge polls would cost more than the finding is worth.
+const ASSET_LIMIT = 40;
+
+const bundleCommand = (): string =>
+    [
+        `dir=""`,
+        `for d in ${BUILD_DIRS.join(` `)}; do if [ -d "$d" ]; then dir="$d"; break; fi; done`,
+        `[ -n "$dir" ] || exit 0`,
+        `printf '${BUNDLE_MARKER}\\t%s\\n' "$dir"`,
+        // `-exec ... {} +` rather than a `for` over command substitution: a hashed asset name will not contain a
+        // space, but a build that copies user content into the output can, and a probe is not the place to find
+        // out. Sorted by raw bytes so the head is the ranking rather than whatever order the walk returned.
+        `find "$dir" -type f \\( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.css' \\) ` +
+            `-exec sh -c 'for f; do printf "ASSET\\t%s\\t%s\\t%s\\n" "$(wc -c <"$f")" "$(gzip -c "$f" | wc -c)" "$f"; done' _ {} + ` +
+            `2>/dev/null | sort -k2 -rn | head -n ${ASSET_LIMIT}`,
+    ].join(`; `);
+
+const parseBundle = (stdout: string): ProbeFacts | undefined => {
+    const lines = stdout.split(`\n`).map((line) => line.trim());
+    const dirLine = lines.find((line) => line.startsWith(`${BUNDLE_MARKER}\t`));
+    if (dirLine === undefined) {
+        return undefined;
+    }
+    const assets: Bundle["assets"] = [];
+    for (const line of lines) {
+        const [label, rawBytes, rawGzip, ...path] = line.split(`\t`);
+        if (label !== `ASSET` || path.length === 0) {
+            continue;
+        }
+        const bytes = Number.parseInt(rawBytes ?? ``, 10);
+        const gzip = Number.parseInt(rawGzip ?? ``, 10);
+        if (Number.isNaN(bytes) || Number.isNaN(gzip)) {
+            continue;
+        }
+        assets.push({ path: path.join(`\t`), bytes, gzip });
+    }
+    const bundle: Bundle = {
+        dir: dirLine.slice(BUNDLE_MARKER.length + 1),
+        // Of the assets CARRIED, which is the top of the ranking rather than the whole build. The chore says so
+        // when it quotes the number: a total that silently excluded the tail would be the more misleading of the
+        // two, and re-walking the tree to sum it would double the probe's cost for a figure nobody splits on.
+        totalBytes: assets.reduce((sum, asset) => sum + asset.bytes, 0),
+        totalGzip: assets.reduce((sum, asset) => sum + asset.gzip, 0),
+        assets,
+    };
+    return { id: `bundle`, bundle };
+};
+
 // Where the tier-2 tools leave their reports. Under /tmp because they are inputs to a parse that happens
 // immediately after, never something to keep — the cached ProbeResult is the artefact that survives. The same
 // path the scheduled form of this chore uses (chores.ts), so a workspace running both keeps one copy.
@@ -270,6 +411,44 @@ export const PROBES: readonly ProbeSpec[] = [
             `pnpm dlx jscpd --reporters json --output ${JSCPD_DIR} --min-lines 12 --threshold 100 . >/dev/null 2>&1; ` +
             `cat ${JSCPD_DIR}/jscpd-report.json 2>/dev/null`,
         parse: parseJscpd,
+    },
+    {
+        id: `ui`,
+        title: `Front-end source`,
+        measures: `components, hard-coded styles and idioms the framework has replaced`,
+        /* Tier 1 despite reading the whole tree, and the placement is a judgement rather than an oversight. The
+         * tier is about COST: this is a dozen ripgrep walks, seconds on a large monorepo, against knip
+         * type-checking the tree and jscpd tokenizing every file for minutes. A weekly TTL would also make it the
+         * wrong shape — its findings move whenever someone writes a component, which is daily. */
+        tier: 1,
+        ttlMs: DAY_MS,
+        timeoutMs: 5 * 60_000,
+        // Any manifest in the repo declaring a UI framework or Tailwind, not just the root's — a monorepo keeps
+        // React in the app package and the root manifest is a handful of build tools.
+        available:
+            `rg -l --no-messages -g '**/package.json' -g '!**/node_modules/**' ` +
+            `-e '[\\x22](${[...UI_FRAMEWORKS.flatMap((framework) => framework.packages), ...TAILWIND_PACKAGES].join(`|`)})[\\x22]\\s*:' . >/dev/null`,
+        unavailable: `no package here declares a UI framework or Tailwind`,
+        command: scanCommand(),
+        parse: parseUi,
+    },
+    {
+        id: `bundle`,
+        title: `Build output`,
+        measures: `what the last build put on disk for a browser to download`,
+        tier: 1,
+        ttlMs: DAY_MS,
+        timeoutMs: 5 * 60_000,
+        // A build directory that actually contains something a browser would download. `-d` alone would pass on
+        // the empty `dist/` a cleaned checkout leaves behind, and the measurement would report a zero-byte bundle
+        // as a fact about the application.
+        available:
+            `find ${BUILD_DIRS.join(` `)} -maxdepth 4 -type f \\( -name '*.js' -o -name '*.mjs' -o -name '*.css' \\) 2>/dev/null | head -n 1 | grep -q .`,
+        // Says what is missing AND that this never builds, because the obvious reading of "no build output" is
+        // that we tried and it failed. The owner running their own build once is the whole fix.
+        unavailable: `no build output on disk — this reads the last build, it never runs one`,
+        command: bundleCommand(),
+        parse: parseBundle,
     },
 ];
 

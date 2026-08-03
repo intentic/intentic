@@ -112,6 +112,64 @@ const webRepo = (now: number) => ({
             },
             now,
         ),
+        /* THE FRONT-END SWEEP. A storefront that has been shipped for a few years: mostly migrated to hooks with
+         * a corner that never was, a price card somebody rebuilt rather than found, and colours typed straight
+         * into the markup on the pages that were in a hurry.
+         *
+         * The clone above between PricingPage and LegacyPlanTable is deliberately left in the jscpd result rather
+         * than restated here — both sides are in the inventory below, which is exactly how component-overlap
+         * turns a generic duplication finding into a front-end one. */
+        probe(
+            `ui`,
+            0.3,
+            2_400,
+            {
+                id: `ui` as const,
+                scan: {
+                    components: [
+                        `src/pricing/CheckoutPanel.tsx`,
+                        `src/pricing/PricingPage.tsx`,
+                        `src/pricing/LegacyPlanTable.tsx`,
+                        `src/pricing/PriceCard.tsx`,
+                        `src/checkout/PriceCardV2.tsx`,
+                        `src/checkout/AddressForm.tsx`,
+                        `src/common/Spinner.tsx`,
+                    ],
+                    bypasses: [
+                        { path: `src/pricing/CheckoutPanel.tsx`, count: 11 },
+                        { path: `src/pricing/LegacyPlanTable.tsx`, count: 6 },
+                        { path: `src/checkout/AddressForm.tsx`, count: 2 },
+                    ],
+                    idioms: [
+                        { id: `react-class-component`, files: [`src/pricing/LegacyPlanTable.tsx`, `src/common/Spinner.tsx`] },
+                        { id: `react-prop-types`, files: [`src/pricing/LegacyPlanTable.tsx`] },
+                    ],
+                },
+            },
+            now,
+        ),
+        // One vendor chunk carrying two thirds of the download, which is what a Vite app looks like before anyone
+        // has split a route — and the reason this reads off disk is that nobody rebuilt anything to find out.
+        probe(
+            `bundle`,
+            0.3,
+            1_900,
+            {
+                id: `bundle` as const,
+                bundle: {
+                    dir: `dist`,
+                    totalBytes: 1_612_000,
+                    totalGzip: 486_000,
+                    assets: [
+                        { path: `dist/assets/vendor-DlAUqK2U.js`, bytes: 1_098_000, gzip: 331_000 },
+                        { path: `dist/assets/index-B7fQ2xNp.js`, bytes: 372_000, gzip: 112_000 },
+                        { path: `dist/assets/checkout-Ck1vRt8s.js`, bytes: 98_000, gzip: 29_000 },
+                        { path: `dist/assets/index-Xy4mNb2q.css`, bytes: 44_000, gzip: 14_000 },
+                    ],
+                },
+            },
+            now,
+        ),
     ],
     signals: {
         // Single-package repo: `packages` is empty, exactly as the daemon reports it, which is what makes the
@@ -123,6 +181,10 @@ const webRepo = (now: number) => ({
             ci: [`.github/workflows/ci.yml`],
             lockfile: true,
             packageManifest: true,
+            // A React storefront on Tailwind, which is what makes the four front-end chores apply here at all.
+            // Read from the root manifest rather than from `packages` above — which is empty, and would have
+            // left every one of them silently dark in exactly the kind of repository they were written for.
+            deps: [`react`, `react-dom`, `react-router`, `tailwindcss`, `vite`, `image-resize`, `esbuild`],
         },
         hotspots: [
             { path: `src/pricing/CheckoutPanel.tsx`, commits: 34, adds: 812, dels: 396, complexity: 41, score: 0.94, latestMs: now - 90_000 },
@@ -192,7 +254,16 @@ const apiRepo = (now: number) => ({
         packages: [],
         // No architecture documents in the repo: the API's set is still a DRAFT (fixture/docs.ts), so the
         // documentation-drift survey has nothing to re-read and says so rather than firing on its cadence.
-        shape: { docs: [], dockerfiles: [`Dockerfile`], ci: [`.github/workflows/api.yml`], lockfile: true, packageManifest: true },
+        // No UI framework here, so the four front-end chores read "not applicable" against the API and the
+        // footer says why — the same distinction the missing Dockerfile draws for the storefront.
+        shape: {
+            docs: [],
+            dockerfiles: [`Dockerfile`],
+            ci: [`.github/workflows/api.yml`],
+            lockfile: true,
+            packageManifest: true,
+            deps: [`fastify`, `pino`, `zod`, `drizzle-orm`],
+        },
         hotspots: [
             { path: `src/routes/checkout.ts`, commits: 16, adds: 380, dels: 120, complexity: 14, score: 0.52, latestMs: now - 4 * 3_600_000 },
             { path: `src/db/schema.ts`, commits: 11, adds: 210, dels: 60, complexity: 9, score: 0.31, latestMs: now - DAY },

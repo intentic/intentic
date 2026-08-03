@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { probeSpec } from "./probes.js";
+import { IDIOM_RULES } from "./stack.js";
 
 /* The parsers are the part of this library that faces someone else's output, so they are tested the way that
  * output actually arrives: real shapes, then the shapes that have historically broken things — a tool that
@@ -162,5 +163,136 @@ describe(`jscpd`, () => {
     // jscpd writes its report to a file; when the run dies the `cat` in the command prints nothing at all.
     test(`no output at all is a failure`, () => {
         expect(parse(`jscpd`, ``)).toBeUndefined();
+    });
+});
+
+/* The UI sweep is the one probe whose output we produce ourselves, which removes the "their JSON moved" failure
+ * and replaces it with a worse one: a command of eleven piped ripgreps in which any single stage can silently
+ * contribute nothing. The marker line is what tells those two apart, and most of what is below is about it. */
+describe(`ui`, () => {
+    const sweep = (...lines: readonly string[]) => [`UI`, ...lines].join(`\n`);
+
+    test(`sorts the labelled lines into an inventory, per-file counts and idioms`, () => {
+        const facts = parse(
+            `ui`,
+            sweep(
+                `COMPONENT\tsrc/Button.vue`,
+                `COMPONENT\tsrc/Card.tsx`,
+                `BYPASS\tsrc/Button.vue:3`,
+                `IDIOM\tvue-options-api\tsrc/Button.vue`,
+                `IDIOM\tvue-2-lifecycle\tsrc/Button.vue`,
+                `IDIOM\tvue-options-api\tsrc/Old.vue`,
+            ),
+        );
+        expect(facts).toEqual({
+            id: `ui`,
+            scan: {
+                components: [`src/Button.vue`, `src/Card.tsx`],
+                bypasses: [{ path: `src/Button.vue`, count: 3 }],
+                idioms: [
+                    { id: `vue-options-api`, files: [`src/Button.vue`, `src/Old.vue`] },
+                    { id: `vue-2-lifecycle`, files: [`src/Button.vue`] },
+                ],
+            },
+        });
+    });
+
+    /* The distinction the marker exists for, and the one this whole probe would get wrong without it: a
+     * repository with no components and no findings emits exactly the marker, while a sweep that never ran emits
+     * nothing. Collapsing them would report a spotless front-end for a command that failed to start. */
+    test(`the marker alone is a clean repository`, () => {
+        expect(parse(`ui`, sweep())).toEqual({ id: `ui`, scan: { components: [], bypasses: [], idioms: [] } });
+    });
+
+    test(`output with no marker is a failure, however much of it there is`, () => {
+        expect(parse(`ui`, ``)).toBeUndefined();
+        expect(parse(`ui`, `COMPONENT\tsrc/Button.vue`)).toBeUndefined();
+        expect(parse(`ui`, `rg: unrecognized flag --count-matches`)).toBeUndefined();
+    });
+
+    // A path with a colon in it is legal and rare; the count is always the digits after the last one.
+    test(`splits a count off the end of a path that contains a colon`, () => {
+        expect(parse(`ui`, sweep(`BYPASS\tsrc/weird:name.vue:7`))).toMatchObject({ scan: { bypasses: [{ path: `src/weird:name.vue`, count: 7 }] } });
+    });
+
+    test(`a line that is not a count is dropped rather than counted as zero`, () => {
+        expect(parse(`ui`, sweep(`BYPASS\tsrc/Button.vue`, `BYPASS\tsrc/Card.tsx:notanumber`))).toMatchObject({ scan: { bypasses: [] } });
+    });
+
+    /* Every path the sweep prints wears a `./`, because every ripgrep in it is handed `.` to walk. Downstream this
+     * would have to be remembered at each comparison — jscpd's paths against the component list, a bypass against
+     * a component — so it is spent once, here, and one spelling of a path leaves the parser. */
+    test(`strips the prefix ripgrep prints for a path it was told to walk`, () => {
+        expect(parse(`ui`, sweep(`COMPONENT\t./src/Button.vue`, `BYPASS\t./src/Button.vue:3`, `IDIOM\tvue-options-api\t./src/Old.vue`))).toEqual({
+            id: `ui`,
+            scan: { components: [`src/Button.vue`], bypasses: [{ path: `src/Button.vue`, count: 3 }], idioms: [{ id: `vue-options-api`, files: [`src/Old.vue`] }] },
+        });
+    });
+
+    test(`an idiom line naming no file is dropped rather than recorded as an empty path`, () => {
+        expect(parse(`ui`, sweep(`IDIOM\tvue-options-api`, `IDIOM\tvue-options-api\t`))).toMatchObject({ scan: { idioms: [] } });
+    });
+});
+
+/* THE COMMAND ITSELF, which for this probe is generated and therefore the thing to test. Both cases below are
+ * bugs that reached a real repository and could not be seen in the output: one made the sweep silently empty, the
+ * other made it depend on a ripgrep feature that is a compile-time option. */
+describe(`the sweep's composed command`, () => {
+    const stages = (): string[] => probeSpec(`ui`).command.split(`; `);
+
+    /* Given no path, ripgrep searches STDIN whenever stdin is not a TTY — which is exactly how a probe is spawned.
+     * The sweep exited 0, printed its marker and matched nothing, in every repository, forever, which the marker
+     * line cannot catch because the sweep really did run. It reproduces from a child process and never from an
+     * interactive shell, so the command is the only place it is visible. */
+    test(`every ripgrep is given a path to walk, including the availability gate`, () => {
+        const searches = stages().filter((stage) => stage.startsWith(`rg `));
+        expect(searches).toHaveLength(IDIOM_RULES.length + 2);
+        for (const search of searches) {
+            expect(search.split(`2>/dev/null`)[0], search).toMatch(/ \.\s*$/);
+        }
+        expect(probeSpec(`ui`).available).toMatch(/ \. >\/dev\/null$/);
+    });
+
+    test(`an absent rule asks which files do NOT match, and no rule reaches for PCRE2`, () => {
+        for (const rule of IDIOM_RULES) {
+            const stage = stages().find((part) => part.includes(`"IDIOM\\t${rule.id}\\t"`));
+            expect(stage, rule.id).toContain(rule.absent === undefined ? `rg --no-messages -l ` : `rg --no-messages --files-without-match `);
+        }
+        expect(probeSpec(`ui`).command).not.toContain(`-P `);
+    });
+});
+
+describe(`bundle`, () => {
+    test(`reads the directory and each asset's raw and gzipped size`, () => {
+        const facts = parse(`bundle`, [`DIR\tdist`, `ASSET\t54038\t41096\tdist/assets/vendor-abc.js`, `ASSET\t2704\t2103\tdist/assets/style.css`].join(`\n`));
+        expect(facts).toEqual({
+            id: `bundle`,
+            bundle: {
+                dir: `dist`,
+                totalBytes: 56742,
+                totalGzip: 43199,
+                assets: [
+                    { path: `dist/assets/vendor-abc.js`, bytes: 54038, gzip: 41096 },
+                    { path: `dist/assets/style.css`, bytes: 2704, gzip: 2103 },
+                ],
+            },
+        });
+    });
+
+    // The `find` prints nothing for a directory that exists but holds no assets. `available` is supposed to catch
+    // that, and this is the second line of defence — a zero-byte bundle would otherwise read as a fact.
+    test(`a directory line with no assets is an empty build, not a failure`, () => {
+        expect(parse(`bundle`, `DIR\tbuild`)).toMatchObject({ bundle: { dir: `build`, assets: [], totalBytes: 0, totalGzip: 0 } });
+    });
+
+    test(`no directory line is a failure`, () => {
+        expect(parse(`bundle`, ``)).toBeUndefined();
+        expect(parse(`bundle`, `find: dist: No such file or directory`)).toBeUndefined();
+    });
+
+    test(`an asset whose sizes did not come through is skipped, never counted as zero bytes`, () => {
+        expect(parse(`bundle`, [`DIR\tdist`, `ASSET\t\t\tdist/broken.js`, `ASSET\t10\t5\tdist/ok.js`].join(`\n`))).toMatchObject({
+            bundle: { assets: [{ path: `dist/ok.js`, bytes: 10, gzip: 5 }] },
+        });
     });
 });

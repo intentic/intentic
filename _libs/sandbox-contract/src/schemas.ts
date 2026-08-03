@@ -4153,7 +4153,7 @@ export type PushTest = z.infer<typeof PushTestSchema>;
  *   signals  things the daemon already knows — the resident iq index's health ranking, the package manifests it
  *            reads for the dependency graph, its own node version. Recomputed per request; all of it is cheap. */
 
-export const PROBE_IDS = ["outdated", "audit", "knip", "jscpd"] as const;
+export const PROBE_IDS = ["outdated", "audit", "knip", "jscpd", "ui", "bundle"] as const;
 export const ProbeIdSchema = z.enum(PROBE_IDS);
 export type ProbeId = z.infer<typeof ProbeIdSchema>;
 
@@ -4207,6 +4207,42 @@ export const DuplicationSchema = z.object({
 });
 export type Duplication = z.infer<typeof DuplicationSchema>;
 
+/* ONE SWEEP OF THE UI SOURCE, serving three chores. Component files, Tailwind classes that hard-code a value, and
+ * files still on a replaced framework idiom are three questions about the same tree, and asking them in three
+ * probes would walk it three times for nothing.
+ *
+ * Counts per FILE rather than the matched text. A reader deciding whether to open something is served better by
+ * "Checkout.vue · 11 hard-coded values" than by eleven class attributes, and a file path is an identity a digest
+ * can be built from while a class string is not. */
+export const UiScanSchema = z.object({
+    // Framework-shaped source files — tests, stories and generated output excluded. The inventory that makes a
+    // duplication finding a COMPONENT duplication finding rather than a generic one.
+    components: z.array(z.string()),
+    // Where the design system was routed around, and how often in each file.
+    bypasses: z.array(z.object({ path: z.string(), count: z.number().int().positive() })),
+    // Files still on an idiom their framework has replaced, grouped by which one. `id` is looked up in the stack
+    // table rather than enumerated here: the rules are a product decision that ships with the browser, and a
+    // daemon an image behind must be able to report one this schema has never heard of.
+    idioms: z.array(z.object({ id: z.string(), files: z.array(z.string()) })),
+});
+export type UiScan = z.infer<typeof UiScanSchema>;
+
+/* WHAT THE LAST BUILD ACTUALLY PRODUCED. Measured from the build output already on disk, never by running the
+ * build: a maintenance probe that mutates the owner's working tree — and `dist/` appearing in their `git status`
+ * is exactly that — is a worse surprise than a measurement that is sometimes a commit behind. It also means this
+ * never needs the env vars, secrets or network a real production build would.
+ *
+ * Gzip alongside raw because gzip is what crosses the wire, and the ratio between them is the difference between
+ * "this chunk is big" and "this chunk is big and incompressible", which are different problems. */
+export const BundleSchema = z.object({
+    // Which directory was measured, so the panel can say what it is talking about rather than implying it built.
+    dir: z.string(),
+    totalBytes: z.number().int().nonnegative(),
+    totalGzip: z.number().int().nonnegative(),
+    assets: z.array(z.object({ path: z.string(), bytes: z.number().int().nonnegative(), gzip: z.number().int().nonnegative() })),
+});
+export type Bundle = z.infer<typeof BundleSchema>;
+
 /* One probe's cached result. The three states are deliberately distinct, because a panel that collapses them
  * lies about the most important case:
  *   ok           the tool ran and reported. `facts` carries its findings — including "nothing found", which is
@@ -4228,6 +4264,8 @@ export const ProbeFactsSchema = z.discriminatedUnion("id", [
     z.object({ id: z.literal("audit"), advisories: z.array(AdvisorySchema) }),
     z.object({ id: z.literal("knip"), deadCode: DeadCodeSchema }),
     z.object({ id: z.literal("jscpd"), duplication: DuplicationSchema }),
+    z.object({ id: z.literal("ui"), scan: UiScanSchema }),
+    z.object({ id: z.literal("bundle"), bundle: BundleSchema }),
 ]);
 export type ProbeFacts = z.infer<typeof ProbeFactsSchema>;
 
@@ -4291,6 +4329,18 @@ export const ChoreShapeSchema = z.object({
     // a Rust or Go repository has no majors to be behind on and no engines field to be pinned by, and offering it
     // those chores would be this surface guessing at what it is looking at.
     packageManifest: z.boolean(),
+    /* EVERY DEPENDENCY NAME DECLARED ANYWHERE IN THE REPO — the root manifest's blocks unioned with every
+     * workspace package's, sorted and deduplicated.
+     *
+     * It is here rather than derived from `packages` because `packages` is EMPTY for a repository that is not a
+     * pnpm workspace, and the repositories these names exist to recognise — a Vite app, a Next app, an Angular
+     * CLI project — are overwhelmingly single-package. A framework gate built on `packages` would be dark in
+     * exactly the repositories it was written for, silently, which is the worst way for a gate to be wrong.
+     *
+     * NAMES, not a `framework: "react"` verdict. Which names amount to "this is a React app" is a product
+     * decision, and product decisions live in the chore book that ships with the browser — a daemon baked into an
+     * image months ago must not be the thing that decides Svelte is not a UI framework. */
+    deps: z.array(z.string()),
 });
 export type ChoreShape = z.infer<typeof ChoreShapeSchema>;
 

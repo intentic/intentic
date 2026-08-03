@@ -214,7 +214,46 @@ describe(`repo shape`, () => {
 
     test(`an empty repository rules everything out rather than guessing`, async () => {
         const found = choreShape(await scaffold({ "README.md": `# hi` }));
-        expect(found).toEqual({ docs: [], dockerfiles: [], ci: [], lockfile: false, packageManifest: false });
+        expect(found).toEqual({ docs: [], dockerfiles: [], ci: [], lockfile: false, packageManifest: false, deps: [] });
+    });
+
+    /* THE CASE THE FRONT-END GATES LIVE OR DIE ON. `packages` comes from pnpm-workspace.yaml, so it is empty for
+     * a repository that is not a monorepo — which every Vite, Next and Angular CLI project is. Reading the root
+     * manifest here is what stops a framework gate being permanently and silently dark in exactly the
+     * repositories it exists for. */
+    test(`a single-package app declares its dependencies even though it has no workspace packages`, async () => {
+        const dir = await scaffold({
+            "package.json": JSON.stringify({ dependencies: { react: `^19.0.0` }, devDependencies: { tailwindcss: `^4.0.0`, vite: `^6.0.0` } }),
+        });
+        expect(packageSignals(dir)).toEqual([]);
+        expect(choreShape(dir).deps).toEqual([`react`, `tailwindcss`, `vite`]);
+    });
+
+    // A monorepo keeps its framework in the app package while the root manifest holds build tools, so the union
+    // is the only reading that recognises either shape.
+    test(`a workspace unions the root manifest with every package's`, async () => {
+        const dir = await scaffold({
+            "package.json": JSON.stringify({ devDependencies: { turbo: `^2.0.0` } }),
+            "pnpm-workspace.yaml": `packages:\n  - _apps/*\n`,
+            "_apps/web/package.json": JSON.stringify({ name: `@x/web`, dependencies: { vue: `^3.4.0` } }),
+        });
+        expect(choreShape(dir).deps).toEqual([`turbo`, `vue`]);
+    });
+
+    // Peer dependencies count: every component library in the ecosystem takes its framework as one, and a gate
+    // that skipped them would decide such a package is not a React package while every file in it imports React.
+    test(`peer and optional dependencies count, and a name is never repeated`, async () => {
+        const dir = await scaffold({
+            "package.json": JSON.stringify({ dependencies: { react: `^19.0.0` }, peerDependencies: { react: `^19.0.0`, "@angular/core": `^19.0.0` } }),
+        });
+        expect(choreShape(dir).deps).toEqual([`@angular/core`, `react`]);
+    });
+
+    // An unparseable manifest is the repository's problem to report; every other gate here still has an answer.
+    test(`a manifest that does not parse leaves the rest of the shape intact`, async () => {
+        const found = choreShape(await scaffold({ "package.json": `{ not json`, "Dockerfile": `FROM node` }));
+        expect(found.deps).toEqual([]);
+        expect(found.dockerfiles).toEqual([`Dockerfile`]);
     });
 
     /* An empty `docs/architecture/` is a directory somebody made and never filled. Gating the drift survey on the

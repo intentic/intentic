@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ChorePackage, ChoreShape, ChoreSignals } from "@intentic/sandbox-contract";
 import { readWorkspaceManifests } from "../workspace/package-graph.js";
@@ -117,6 +117,37 @@ const findFiles = (root: string, matches: (name: string) => boolean): string[] =
 // deliberately not counted: they orchestrate images, they are not one to make smaller.
 const isDockerfile = (name: string): boolean => name === "Dockerfile" || name.startsWith("Dockerfile.") || name.endsWith(".Dockerfile");
 
+const DEP_BLOCKS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+
+/* Every dependency name declared anywhere in the repo, sorted and deduplicated. The ROOT manifest is read
+ * directly here even though `packageSignals` already walks the workspace packages, and that is the entire point:
+ * a repository with no pnpm-workspace.yaml has no workspace packages, so a single-package Vite or Angular app
+ * would otherwise declare no dependencies at all and every gate reading them would be silently dark.
+ *
+ * All four blocks, peer and optional included. A UI framework arrives as a peerDependency in every component
+ * library in the ecosystem, and a gate that only read `dependencies` would decide such a package is not a React
+ * package while every file in it imports React. */
+const declaredDeps = (repoDir: string): string[] => {
+    const names = new Set<string>();
+    const collect = (manifest: Record<string, unknown>): void => {
+        for (const block of DEP_BLOCKS) {
+            for (const name of dependencyNames(manifest, block)) {
+                names.add(name);
+            }
+        }
+    };
+    try {
+        collect(JSON.parse(readFileSync(join(repoDir, "package.json"), "utf8")) as Record<string, unknown>);
+    } catch {
+        // No root manifest, or one that does not parse. The workspace packages below are still worth reading, and
+        // an unparseable manifest is the repo's problem to report — not a reason for every gate here to throw.
+    }
+    for (const { manifest } of readWorkspaceManifests(repoDir)) {
+        collect(manifest);
+    }
+    return [...names].toSorted();
+};
+
 /* What this repository is MADE OF, for the applicability gates. Every check here is a stat or a shallow readdir,
  * which is what lets it sit on a route the rail badge polls — anything that needed a subprocess would be a probe.
  *
@@ -134,6 +165,7 @@ export const choreShape = (repoDir: string): ChoreShape => ({
     ],
     lockfile: ["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lockb"].some((file) => existsSync(join(repoDir, file))),
     packageManifest: existsSync(join(repoDir, "package.json")),
+    deps: declaredDeps(repoDir),
 });
 
 export const choreSignals = async (services: Services, repo: string): Promise<ChoreSignals> => {

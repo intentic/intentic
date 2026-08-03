@@ -1,4 +1,4 @@
-import type { ChoreLedgerEntry, ChorePackage, ChoresReport, ChoreShape, ChoreSignals, ProbeResult } from "../schemas.js";
+import type { Bundle, ChoreLedgerEntry, ChorePackage, ChoresReport, ChoreShape, ChoreSignals, Duplication, ProbeResult, UiScan } from "../schemas.js";
 import { describe, expect, test } from "vitest";
 import { choreById, CHORES } from "./chores.js";
 import { assessReport, ledgerKey, unseenVerdicts } from "./verdict.js";
@@ -20,14 +20,15 @@ const pkg = (over: Partial<ChorePackage> = {}): ChorePackage => ({
     ...over,
 });
 
-// A repository that is a Node workspace with documents, a pipeline and an image — so every chore APPLIES by
-// default and each applicability test can turn off exactly the one fact it is about.
+// A repository that is a Node workspace with documents, a pipeline, an image and a Tailwind front-end — so every
+// chore APPLIES by default and each applicability test can turn off exactly the one fact it is about.
 const shape = (over: Partial<ChoreShape> = {}): ChoreShape => ({
     docs: [`docs/architecture/repo.md`],
     dockerfiles: [`Dockerfile`],
     ci: [`.github/workflows/ci.yml`],
     lockfile: true,
     packageManifest: true,
+    deps: [`tailwindcss`, `vue`],
     ...over,
 });
 
@@ -372,6 +373,166 @@ describe(`what does not apply here`, () => {
 
     test(`a fully-equipped repository rules nothing out`, () => {
         expect(assessReport(withShape({}), NOW).filter((verdict) => verdict.state === `not-applicable`)).toEqual([]);
+    });
+});
+
+/* THE FRONT-END CHORES. Four chores over two probes, tested where they decide something — the share that makes a
+ * bundle a finding, the names that make two components one component, and above all the digests, because three of
+ * these four measure things that move every time anyone writes a line of markup. */
+const uiProbe = (scan: Partial<UiScan> = {}): ProbeResult => probe({ id: `ui`, facts: { id: `ui`, scan: { components: [], bypasses: [], idioms: [], ...scan } } });
+
+const bundleProbe = (assets: Bundle["assets"]): ProbeResult =>
+    probe({
+        id: `bundle`,
+        facts: {
+            id: `bundle`,
+            bundle: {
+                dir: `dist`,
+                assets,
+                totalBytes: assets.reduce((sum, asset) => sum + asset.bytes, 0),
+                totalGzip: assets.reduce((sum, asset) => sum + asset.gzip, 0),
+            },
+        },
+    });
+
+const jscpdProbe = (top: Duplication["top"]): ProbeResult =>
+    probe({ id: `jscpd`, facts: { id: `jscpd`, duplication: { percentage: 1, clones: top.length, top } } });
+
+const withProbes = (probes: readonly ProbeResult[], over: Partial<ChoreShape> = {}): ChoresReport =>
+    report({ repos: [{ repo: `app`, probes: [...probes], signals: signals({ shape: shape(over) }) }] });
+
+const chunk = (path: string, gzip: number): Bundle["assets"][number] => ({ path, bytes: gzip * 3, gzip });
+
+describe(`what the browser downloads`, () => {
+    test(`one chunk over half the transfer is the finding, and the headline names it`, () => {
+        const verdict = verdictFor(withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/index-a1.js`, 100), chunk(`dist/s-b2.css`, 50)])]), `bundle-weight`);
+        expect(verdict.state).toBe(`due`);
+        expect(verdict.headline).toContain(`dist/vendor-DlAUqK2U.js`);
+        expect(verdict.headline).toContain(`84%`);
+    });
+
+    test(`a build that is actually split says nothing`, () => {
+        const even = [chunk(`dist/a-1.js`, 100), chunk(`dist/b-2.js`, 100), chunk(`dist/c-3.js`, 100), chunk(`dist/d-4.js`, 100)];
+        expect(verdictFor(withProbes([bundleProbe(even)]), `bundle-weight`).state).toBe(`clear`);
+    });
+
+    // Two files cannot tell you how a build is divided, and the larger of them is over half by arithmetic.
+    test(`too few assets to have a shape is clear, not due`, () => {
+        expect(verdictFor(withProbes([bundleProbe([chunk(`dist/a-1.js`, 900), chunk(`dist/b-2.js`, 10)])]), `bundle-weight`).state).toBe(`clear`);
+    });
+
+    /* THE CASE THIS CHORE WOULD OTHERWISE FAIL EVERY DAY. A content hash changing is what a content hash is for,
+     * so rebuilding identical code renames every asset. Digesting the raw paths would mint new evidence on every
+     * `pnpm build` and badge forever while reporting nothing new. */
+    test(`rebuilding the same code does not read as new evidence`, () => {
+        const before = verdictFor(withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/index-a1b2c3d4.js`, 100), chunk(`dist/s.css`, 50)])]), `bundle-weight`);
+        const after = verdictFor(withProbes([bundleProbe([chunk(`dist/vendor-Zq99XxYw.js`, 802), chunk(`dist/index-9z8y7x6w.js`, 101), chunk(`dist/s.css`, 50)])]), `bundle-weight`);
+        expect(after.digest).toBe(before.digest);
+    });
+
+    test(`a genuinely different chunk appearing does`, () => {
+        const before = verdictFor(withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/index-a1b2c3d4.js`, 100), chunk(`dist/s.css`, 50)])]), `bundle-weight`);
+        const after = verdictFor(withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/charting-a1b2c3d4.js`, 100), chunk(`dist/s.css`, 50)])]), `bundle-weight`);
+        expect(after.digest).not.toBe(before.digest);
+    });
+});
+
+describe(`idioms the framework has replaced`, () => {
+    const idioms = (id: string, count: number) => ({ id, files: Array.from({ length: count }, (_, index) => `src/C${index}.vue`) });
+
+    test(`names what is still in use and what replaced it`, () => {
+        const verdict = verdictFor(withProbes([uiProbe({ idioms: [idioms(`vue-options-api`, 3)] })]), `framework-idiom`);
+        expect(verdict.state).toBe(`due`);
+        expect(verdict.detail).toEqual([`3 files · the Options API → <script setup> with the Composition API`]);
+    });
+
+    /* A migration in progress is a set that changes on every commit, so digesting the file identities — which is
+     * right for the documentation chore, whose set is packages — would badge continuously through exactly the
+     * period someone is doing the work. The bucketed count moves on real progress and not on daily churn. */
+    test(`one more file in a large migration is not news`, () => {
+        const before = verdictFor(withProbes([uiProbe({ idioms: [idioms(`vue-options-api`, 40)] })]), `framework-idiom`);
+        const after = verdictFor(withProbes([uiProbe({ idioms: [idioms(`vue-options-api`, 41)] })]), `framework-idiom`);
+        expect(after.digest).toBe(before.digest);
+    });
+
+    test(`a kind of legacy code the repository did not have before is`, () => {
+        const before = verdictFor(withProbes([uiProbe({ idioms: [idioms(`vue-options-api`, 40)] })]), `framework-idiom`);
+        const after = verdictFor(withProbes([uiProbe({ idioms: [idioms(`vue-options-api`, 40), idioms(`vue-global-api`, 1)] })]), `framework-idiom`);
+        expect(after.digest).not.toBe(before.digest);
+    });
+
+    // The daemon composes the sweep from its own copy of the table, so an image ahead of the browser can report a
+    // rule this build has no label or replacement for. A row about it could say nothing useful.
+    test(`an idiom this build of the book does not know is dropped, not shown unnamed`, () => {
+        expect(verdictFor(withProbes([uiProbe({ idioms: [idioms(`react-from-2029`, 5)] })]), `framework-idiom`).state).toBe(`clear`);
+    });
+
+    /* A probe's command is a fixed string, so every rule sweeps every repository and the Angular patterns get
+     * their chance in a Vue codebase. Run against this workspace it found one file: the rule table itself, which
+     * quotes `RouterModule.forRoot` as a pattern. What the repository declares is what settles it. */
+    test(`an idiom from a framework the repository does not declare is not its problem`, () => {
+        const vue = withProbes([uiProbe({ idioms: [idioms(`angular-ngmodule`, 4)] })], { deps: [`vue`] });
+        const angular = withProbes([uiProbe({ idioms: [idioms(`angular-ngmodule`, 4)] })], { deps: [`@angular/core`] });
+        expect(verdictFor(vue, `framework-idiom`).state).toBe(`clear`);
+        expect(verdictFor(angular, `framework-idiom`).state).toBe(`due`);
+    });
+});
+
+describe(`components built twice`, () => {
+    const components = (...paths: readonly string[]) => uiProbe({ components: [...paths] });
+
+    test(`a shared name across two directories is a family, whatever each file is called`, () => {
+        const verdict = verdictFor(withProbes([components(`src/ui/BaseButton.vue`, `src/checkout/ButtonV2.tsx`), jscpdProbe([])]), `component-overlap`);
+        expect(verdict.state).toBe(`due`);
+        expect(verdict.headline).toBe(`1 name used by more than one component`);
+        expect(verdict.detail).toEqual([`button · src/checkout/ButtonV2.tsx, src/ui/BaseButton.vue`]);
+    });
+
+    test(`components that merely coexist are not a finding`, () => {
+        expect(verdictFor(withProbes([components(`src/Button.vue`, `src/Card.vue`), jscpdProbe([])]), `component-overlap`).state).toBe(`clear`);
+    });
+
+    // The other half of the evidence: two components with unrelated names doing the same work, which no name
+    // comparison can reach and jscpd already measured.
+    test(`a clone counts only when a component sits on both sides of it`, () => {
+        const ui = components(`src/Chart.vue`, `src/Graph.vue`);
+        const shared = verdictFor(withProbes([ui, jscpdProbe([{ lines: 40, first: `./src/Chart.vue`, second: `./src/Graph.vue` }])]), `component-overlap`);
+        const oneSided = verdictFor(withProbes([ui, jscpdProbe([{ lines: 40, first: `./src/Chart.vue`, second: `./src/utils/format.ts` }])]), `component-overlap`);
+        expect(shared.state).toBe(`due`);
+        expect(shared.headline).toBe(`1 clone spanning two of them`);
+        expect(oneSided.state).toBe(`clear`);
+    });
+
+    /* Half a measurement would let the row claim it looked for shared logic in a repository where jscpd has never
+     * run — the "measured and found nothing" lie the unavailable state exists to prevent. */
+    test(`without the clone sweep the chore is unavailable, not clear`, () => {
+        expect(verdictFor(withProbes([components(`src/Button.vue`, `src/ui/Button.vue`)]), `component-overlap`).state).toBe(`unavailable`);
+    });
+});
+
+describe(`hard-coded styles`, () => {
+    test(`counts the values and leads with the heaviest files`, () => {
+        const verdict = verdictFor(withProbes([uiProbe({ bypasses: [{ path: `src/Checkout.vue`, count: 11 }, { path: `src/Nav.vue`, count: 2 }] })]), `tailwind-arbitrary-values`);
+        expect(verdict.state).toBe(`due`);
+        expect(verdict.headline).toBe(`13 hard-coded values across 2 files`);
+        expect(verdict.detail[0]).toBe(`src/Checkout.vue · 11 values`);
+    });
+
+    // Tailwind gates this one alone — a Vue repository with no Tailwind has no theme scale to have bypassed, and
+    // a row saying so would be the surface inventing a subject.
+    test(`a repository without Tailwind is not asked the question at all`, () => {
+        const verdict = verdictFor(withProbes([uiProbe({ bypasses: [{ path: `src/Nav.vue`, count: 2 }] })], { deps: [`vue`] }), `tailwind-arbitrary-values`);
+        expect(verdict.state).toBe(`not-applicable`);
+        expect(verdict.headline).toContain(`does not use Tailwind`);
+    });
+
+    // And the framework gate the other four share, from the other side: deps come from shape, not from packages,
+    // because a single-package Vite app has no workspace packages at all.
+    test(`a repository with no framework rules the front-end chores out entirely`, () => {
+        const states = [`bundle-weight`, `framework-idiom`, `component-overlap`, `tailwind-arbitrary-values`].map(
+            (id) => verdictFor(withProbes([], { deps: [`pino`] }), id).state,
+        );
+        expect(states).toEqual([`not-applicable`, `not-applicable`, `not-applicable`, `not-applicable`]);
     });
 });
 

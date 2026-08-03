@@ -1,6 +1,7 @@
 import type { Advisory, ChoreSignals, OutdatedPackage, ProbeId, ProbeResult } from "../schemas.js";
 import { bucketOf, digestOf } from "./digest.js";
 import { CHORE_INVARIANTS, composeAsk, REPORT_INVARIANTS, TRIAGE_NOTE } from "./prompt.js";
+import { componentStem, frameworksOf, idiomRule, normalizePath, UI_FRAMEWORKS, usesTailwind } from "./stack.js";
 
 /* THE CHORE BOOK — what routine maintenance a repository is owed, and what has to be TRUE before we say so.
  *
@@ -618,6 +619,321 @@ const libraries: Chore = {
     done: `Done when every overlapping pair has a recommendation with a call-site count behind it, or a reason the overlap is fine.`,
 };
 
+/* ---- THE FRONT-END CHORES -------------------------------------------------------------------------------------
+ *
+ * Four chores that only exist where a UI framework does, kept together because they share one gate and one
+ * probe — and split across the reading order in CHORES, since where a row belongs is decided by what KIND of
+ * finding it is, not by which file paragraph it was written in.
+ *
+ * They gate on `shape.deps` rather than on `signals.packages`, and that is not interchangeable. `packages` is
+ * populated from pnpm-workspace.yaml, so it is EMPTY for a repository that is not a monorepo — which is what a
+ * Vite app, a Next app and an Angular CLI project all are. A framework gate reading it would be permanently dark
+ * in the overwhelming majority of the repositories these four were written for, and dark silently: the chores
+ * would not appear, the footer would say the repository has no packages, and nothing would look broken.
+ *
+ * All four also say something the rest of the book does not have to. A component, a class name and a bundle chunk
+ * are things nobody sees the whole of — you read one component at a time, and the tenth copy of a button looks
+ * exactly like the first nine did. That is the same argument the whole surface rests on, just further from the
+ * places a compiler will ever help. */
+
+// How many rows of evidence a UI finding lists before it is a wall rather than a list. The standing count still
+// leads the headline; this only bounds what is enumerated underneath it.
+const DETAIL_LIMIT = 8;
+
+const FRAMEWORK_LABELS = UI_FRAMEWORKS.map((framework) => framework.label).join(`, `);
+
+// One gate, one sentence, four chores. Built from the table so that a framework added to stack.ts cannot leave a
+// stale list of names behind in an error message nobody re-reads.
+const needsFramework = (signals: ChoreSignals): string | undefined =>
+    frameworksOf(signals.shape.deps).length > 0 ? undefined : `this repository declares no ${FRAMEWORK_LABELS} dependency, so it has no components`;
+
+const bytesLabel = (bytes: number): string => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(bytes / 1024)} kB`);
+
+/* BUNDLE. What a browser downloads before anything appears, which is the fact about a front-end that is furthest
+ * from anything visible in an editor: every dependency looks the same size in an import statement.
+ *
+ * The criterion is a SHARE, and that is deliberate — it is the second exception to the book's leader-relative
+ * rule, and it earns the same defence duplication's 5% does. A byte threshold would need a different value for a
+ * marketing page and an IDE, would be argued about forever, and would be wrong the moment either one grew. "One
+ * chunk is more than half of everything you ship" needs no calibration: it says the build is not split, which is
+ * true or false at any size. A well-split app has its largest chunk well under this whatever it weighs, and a
+ * small app that genuinely is one chunk trips it and is right to — that IS its entire download.
+ *
+ * Report-stance. Where the split boundaries go is a routing and product decision, and an agent that lazily
+ * imported things unattended at three in the morning would be making it. */
+const BUNDLE_SHARE_FLOOR = 50;
+// Below this there is no ranking to be an outlier in — two files cannot tell you anything about how a build is
+// divided, and the largest of them is over half by arithmetic rather than by fault.
+const BUNDLE_MIN_ASSETS = 3;
+
+/* An asset's name with its content hash taken out — `assets/vendor-DlAUqK2U.js` becomes `assets/vendor.js`.
+ *
+ * Without this the digest changes on every single build, because a content hash changing is the entire point of a
+ * content hash. The chore would badge after every `pnpm build` while reporting nothing new, which is precisely
+ * the lit-every-day failure the digest exists to prevent.
+ *
+ * Eight or more characters containing a digit, immediately before the final extension: long enough to leave
+ * `vendor-react.js` and `.min.js` alone, specific enough to catch Vite's `-DlAUqK2U` and webpack's `.9f2a1b0c`. */
+const stableAsset = (path: string): string => path.replace(/[.-](?=[A-Za-z0-9_-]*[0-9])[A-Za-z0-9_-]{8,}(\.[a-z0-9]+)$/, `$1`);
+
+const bundleWeight: Chore = {
+    id: `bundle-weight`,
+    title: `Split what the browser downloads first`,
+    icon: `download`,
+    description: `What the last build put on disk, and whether it arrives as one download or several.`,
+    criterion: `A single asset is more than half of the build's total transfer size.`,
+    applies: needsFramework,
+    stance: `report`,
+    needs: [`bundle`],
+    cadenceMs: 30 * DAY_MS,
+    assess: (context) => {
+        const facts = factsOf(context, `bundle`);
+        if (facts === undefined) {
+            return undefined;
+        }
+        const { assets, totalGzip, dir } = facts.bundle;
+        if (assets.length < BUNDLE_MIN_ASSETS || totalGzip === 0) {
+            return undefined;
+        }
+        // By GZIP, not by raw bytes. What is on disk is not what crosses the wire, and a large but highly
+        // compressible asset — a source map comment, a big JSON blob — is not the download this is about.
+        const ranked = assets.toSorted((left, right) => right.gzip - left.gzip);
+        const largest = ranked[0];
+        if (largest === undefined) {
+            return undefined;
+        }
+        const share = (largest.gzip / totalGzip) * 100;
+        if (share < BUNDLE_SHARE_FLOOR) {
+            return undefined;
+        }
+        return {
+            headline: `${largest.path} is ${Math.round(share)}% of the ${bytesLabel(totalGzip)} this build ships`,
+            detail: ranked.slice(0, DETAIL_LIMIT).map((asset) => `${bytesLabel(asset.gzip)} gzipped · ${asset.path} (${bytesLabel(asset.bytes)} on disk)`),
+            // The bucketed total and the hash-stripped identities of the biggest chunks. A rebuild of the same
+            // code is silent; a new heavy chunk appearing, or the whole thing doubling, is not.
+            digest: digestOf(`total:${bucketOf(totalGzip)}`, ...ranked.slice(0, 5).map((asset) => stableAsset(asset.path)).toSorted()),
+            // Not a risk being carried, however large. `warning` is reserved for something with a clock on it.
+            severity: `info`,
+            why:
+                `The build output in ${dir}/ of ${repoLabel(context.repo)} is ${bytesLabel(totalGzip)} gzipped across ` +
+                `${plural(assets.length, `asset`)}, and ${largest.path} alone is ${bytesLabel(largest.gzip)} of it — ${Math.round(share)}%. ` +
+                `The next largest are ${ranked.slice(1, 4).map((asset) => `${asset.path} (${bytesLabel(asset.gzip)})`).join(`, `)}. ` +
+                `This is the last build someone ran, read off disk; nothing rebuilt it to measure.`,
+        };
+    },
+    diagnosis: `Everything in the first chunk is downloaded and parsed before anything renders, whether or not the visitor needed it.`,
+    goal:
+        `Find out what is actually IN the dominant chunk before proposing anything — the repository's own bundler can report this, and a ` +
+        `recommendation made without it is guesswork. Then report the split worth making: which routes or features could load on demand, ` +
+        `which dependencies are pulled in wholesale for one function, and which are only used behind an interaction nobody has yet had. ` +
+        `Name the boundary for each and estimate what it saves. Where the chunk is genuinely all first-paint code, say so and close it.`,
+    done: `Done when every recommendation names a specific import boundary and the bytes it would move out of the first download.`,
+};
+
+/* FRAMEWORK IDIOMS. A migration nobody finished, which is the most ordinary state for a front-end of any age: the
+ * new way arrived, the new files use it, and the old files keep working — so nothing ever forces the rest.
+ *
+ * The digest is the one place this chore differs in shape from its neighbours, and it has to. Digesting the file
+ * identities, the way the documentation chore does, would re-badge every time anyone touched any of two hundred
+ * files, because a migration in progress is a set that changes constantly. So it digests the BUCKETED COUNT per
+ * idiom instead: a kind of legacy code appearing where there was none speaks, real progress through a bucket
+ * speaks, and one more file drifting in or out of a set of two hundred does not. */
+const frameworkIdiom: Chore = {
+    id: `framework-idiom`,
+    title: `Finish the framework migrations`,
+    icon: `history`,
+    description: `Code still written the way the framework used to recommend, long after it stopped.`,
+    criterion: `A file uses a framework idiom that framework's own maintainers have replaced.`,
+    applies: needsFramework,
+    stance: `act`,
+    needs: [`ui`],
+    cadenceMs: 60 * DAY_MS,
+    assess: (context) => {
+        const facts = factsOf(context, `ui`);
+        if (facts === undefined) {
+            return undefined;
+        }
+        /* Two rules are dropped rather than shown, and the second is the one that would have made this chore
+         * embarrassing.
+         *
+         * AN IDIOM THIS BUILD HAS NEVER HEARD OF. The daemon composes the sweep from its own copy of the table, so
+         * a sandbox image ahead of the browser can report a rule that has no label or replacement here — and a row
+         * saying "42 files use react-foo" with no idea what to do about them is worse than no row.
+         *
+         * AN IDIOM BELONGING TO A FRAMEWORK THIS REPOSITORY DOES NOT USE. A probe's command is a fixed string, so
+         * every rule in the table is swept in every repository, and an Angular pattern gets its chance in a Vue
+         * codebase: `RouterModule.forRoot` inside a comment, a `*ngIf` in an example string, and — the case that
+         * caught this — the book's own rule table quoting its own patterns back at it. What the repository
+         * DECLARES is the arbiter, the same `deps` the gate above reads. */
+        const frameworks = new Set(frameworksOf(context.signals.shape.deps).map((framework) => framework.id));
+        const found = facts.scan.idioms.flatMap(({ id, files }) => {
+            const rule = idiomRule(id);
+            return rule === undefined || !frameworks.has(rule.framework) || files.length === 0 ? [] : [{ rule, files }];
+        });
+        if (found.length === 0) {
+            return undefined;
+        }
+        const total = found.reduce((sum, entry) => sum + entry.files.length, 0);
+        const ranked = found.toSorted((left, right) => right.files.length - left.files.length);
+        return {
+            headline: `${plural(found.length, `retired idiom`)} still in use, across ${plural(total, `file`)}`,
+            detail: ranked.map((entry) => `${plural(entry.files.length, `file`)} · ${entry.rule.label} → ${entry.rule.replacement}`),
+            digest: digestOf(...ranked.map((entry) => `${entry.rule.id}:${bucketOf(entry.files.length)}`).toSorted()),
+            severity: `info`,
+            why:
+                `${repoLabel(context.repo)} still uses ${plural(found.length, `idiom`)} its framework has replaced: ` +
+                `${ranked.map((entry) => `${entry.rule.label} in ${plural(entry.files.length, `file`)} (replaced by ${entry.rule.replacement})`).join(`; `)}. ` +
+                `A sample of the files: ${ranked.flatMap((entry) => entry.files.slice(0, 3)).slice(0, DETAIL_LIMIT).join(`, `)}.`,
+        };
+    },
+    diagnosis: `A retired idiom keeps working until the major release that drops it, and then it is an emergency inside somebody else's upgrade.`,
+    goal:
+        `Take ONE idiom, the one with the most files, and no more. Convert the files where the conversion is mechanical and the behaviour ` +
+        `is provably identical. Stop at the first file that needs a design decision — a class component with genuine error-boundary ` +
+        `semantics, an NgModule that something outside the repository imports — leave it, and say what it would take. Do not convert an ` +
+        `idiom the repository has deliberately kept: if the newest code uses it too, that is a choice, and reporting it as one is the ` +
+        `useful answer.`,
+    done: `Done when a re-scan reports fewer files on that idiom, the repository's type-check and tests pass, and every file you skipped has a one-line reason.`,
+};
+
+/* COMPONENTS. Two components that are the same component, which is the `library-overlap` finding turned inward:
+ * somebody needed a button, did not find the one that existed, and wrote a second one. It is the most ordinary
+ * kind of duplication in a front-end and the one no tool complains about, because both files are perfectly good
+ * code and neither knows the other exists.
+ *
+ * TWO KINDS OF EVIDENCE, and they catch opposite failures. A NAME FAMILY catches components that were written
+ * separately and never shared a line — `BaseButton.vue` and `ButtonV2.tsx` reduce to the same stem, and no clone
+ * detector will ever connect them. A CLONE PAIR catches the reverse: two components with unrelated names doing
+ * the same work, which is what jscpd is actually good at, filtered to the pairs where both sides are components
+ * so it is a finding about the UI rather than a slice of the repo-wide duplication chore.
+ *
+ * It needs jscpd rather than reading it if present. Half a measurement would let the row claim it had looked for
+ * shared logic in a repository where that sweep has never run — the exact "measured and found nothing" lie the
+ * `unavailable` state exists to make impossible. jscpd is already running weekly for the duplication chore in any
+ * Node repository, so the honest choice is also the free one. */
+const componentOverlap: Chore = {
+    id: `component-overlap`,
+    title: `Settle on one component per job`,
+    icon: `copy`,
+    description: `Components built twice — the same name in two places, or the same logic under two names.`,
+    criterion: `Two component files reduce to the same name, or a duplicated block spans two components.`,
+    applies: needsFramework,
+    stance: `report`,
+    needs: [`ui`, `jscpd`],
+    cadenceMs: 90 * DAY_MS,
+    assess: (context) => {
+        const ui = factsOf(context, `ui`);
+        const jscpd = factsOf(context, `jscpd`);
+        if (ui === undefined || jscpd === undefined) {
+            return undefined;
+        }
+        const byStem = new Map<string, string[]>();
+        for (const path of ui.scan.components) {
+            const stem = componentStem(path);
+            if (stem !== undefined) {
+                byStem.set(stem, [...(byStem.get(stem) ?? []), normalizePath(path)]);
+            }
+        }
+        const families = [...byStem]
+            .filter(([, paths]) => paths.length > 1)
+            .map(([stem, paths]) => ({ stem, paths: paths.toSorted() }))
+            .toSorted((left, right) => right.paths.length - left.paths.length);
+        // Only the clones with a component on BOTH sides. A component that shares a block with a utility module
+        // is the duplication chore's finding, not this one, and reporting it here would be two rows lighting for
+        // one fact.
+        const inventory = new Set(ui.scan.components.map(normalizePath));
+        const pairs = jscpd.duplication.top.filter((clone) => inventory.has(normalizePath(clone.first)) && inventory.has(normalizePath(clone.second)));
+        if (families.length === 0 && pairs.length === 0) {
+            return undefined;
+        }
+        const parts = [
+            ...(families.length === 0 ? [] : [`${plural(families.length, `name`)} used by more than one component`]),
+            ...(pairs.length === 0 ? [] : [`${plural(pairs.length, `clone`)} spanning two of them`]),
+        ];
+        return {
+            headline: parts.join(`, `),
+            detail: [
+                ...families.slice(0, DETAIL_LIMIT).map((family) => `${family.stem} · ${family.paths.join(`, `)}`),
+                ...pairs.map((clone) => `${clone.lines} shared lines · ${normalizePath(clone.first)} ↔ ${normalizePath(clone.second)}`),
+            ],
+            // Identities on both halves: every component that joins or leaves a family, and every clone pair that
+            // appears, is genuinely a new fact rather than drift in a number.
+            digest: digestOf(
+                ...families.map((family) => `${family.stem}:${family.paths.join(`+`)}`).toSorted(),
+                ...pairs.map((clone) => `${normalizePath(clone.first)}|${normalizePath(clone.second)}`).toSorted(),
+            ),
+            severity: `info`,
+            why:
+                `${repoLabel(context.repo)} has ${parts.join(` and `)}, out of ${plural(ui.scan.components.length, `component file`)} scanned. ` +
+                `${families.length === 0 ? `` : `The names: ${families.slice(0, DETAIL_LIMIT).map((family) => `${family.stem} (${family.paths.join(`, `)})`).join(`; `)}. `}` +
+                `${pairs.length === 0 ? `` : `The clones: ${pairs.map((clone) => `${normalizePath(clone.first)} ↔ ${normalizePath(clone.second)}, ${clone.lines} lines`).join(`; `)}.`}`,
+        };
+    },
+    diagnosis: `A component built twice is maintained once — whichever copy the next person happens to open is the one that gets the fix.`,
+    goal:
+        `Read every file in each group before saying anything about it; a shared name is a reason to look, not a finding on its own. For ` +
+        `each group, say whether these genuinely do the same job, and if they do, name the one to keep and count the call sites that would ` +
+        `have to move. Where the answer is that the same LOGIC is duplicated rather than the whole component — the same fetch and loading ` +
+        `state, the same form validation, the same list virtualization written twice — say so, and name the hook or composable it should ` +
+        `become and where it would live. Where two components share a name and nothing else, say that too and close it: a false family is ` +
+        `worth one line, and the next reader needs to know it was considered.`,
+    done: `Done when every group has either a component to keep with a call-site count, a shared unit to extract with a home, or a reason it is fine.`,
+};
+
+/* TAILWIND. A design system exists to make a decision once; an arbitrary value is that decision being made again,
+ * inline, by whoever was in the file. What makes this measurable rather than a matter of taste is that Tailwind
+ * spells the bypass out loud — `bg-[#3b82f6]` is the palette being stepped around, in the markup, in a form no
+ * reviewer can miss and no linter mentions.
+ *
+ * Deliberately NOT every arbitrary value. `grid-cols-[1fr_auto]` is the feature working as intended and there is
+ * no token it should have been; matching those would make this an objection to Tailwind rather than a finding
+ * about this repository. Only colours and pixel sizes, which are the two things the theme definitely already has
+ * an answer for. */
+const tailwindBypass: Chore = {
+    id: `tailwind-arbitrary-values`,
+    title: `Put hard-coded styles back on the scale`,
+    icon: `palette`,
+    description: `Colours and sizes written inline in the markup, around the theme that already defines them.`,
+    criterion: `A Tailwind class hard-codes a colour or a pixel size instead of using the theme's scale.`,
+    applies: (signals) => (usesTailwind(signals.shape.deps) ? undefined : `this repository does not use Tailwind, so there is no theme scale to bypass`),
+    stance: `act`,
+    needs: [`ui`],
+    cadenceMs: 30 * DAY_MS,
+    assess: (context) => {
+        const facts = factsOf(context, `ui`);
+        if (facts === undefined) {
+            return undefined;
+        }
+        const { bypasses } = facts.scan;
+        if (bypasses.length === 0) {
+            return undefined;
+        }
+        const total = bypasses.reduce((sum, entry) => sum + entry.count, 0);
+        const worst = bypasses.toSorted((left, right) => right.count - left.count).slice(0, DETAIL_LIMIT);
+        return {
+            headline: `${plural(total, `hard-coded value`)} across ${plural(bypasses.length, `file`)}`,
+            detail: worst.map((entry) => `${entry.path} · ${plural(entry.count, `value`)}`),
+            // The worst files by identity — a new file arriving at the top of this list is the event — with the
+            // spread and the total riding along bucketed, because both drift by one every time anyone writes
+            // markup and neither is worth interrupting somebody about.
+            digest: digestOf(...worst.map((entry) => entry.path).toSorted(), `files:${bucketOf(bypasses.length)}`, `total:${bucketOf(total)}`),
+            severity: `info`,
+            why:
+                `${repoLabel(context.repo)} has ${plural(total, `Tailwind class`, `Tailwind classes`)} hard-coding a colour or a pixel size ` +
+                `across ${plural(bypasses.length, `file`)}; the heaviest are ` +
+                `${worst.slice(0, 5).map((entry) => `${entry.path} (${entry.count})`).join(`, `)}.`,
+        };
+    },
+    diagnosis: `Every inline colour is a place the theme cannot reach — a palette change lands everywhere except the files that opted out of it.`,
+    goal:
+        `Read the theme first — the Tailwind config, or the CSS that defines the tokens — so you know what the scale actually offers. Then ` +
+        `replace the values that have a token: an exact palette match, a spacing step, a type size. Where a value is CLOSE to a token but ` +
+        `not equal, do not round it silently; that is a visual change wearing a refactor's clothes. List those separately with both values ` +
+        `and let the owner decide. Where a value has no token and should — a brand colour used in nine places — say that the theme is ` +
+        `missing an entry rather than editing nine files.`,
+    done: `Done when a re-scan reports fewer hard-coded values, nothing renders differently, and every value you left has a one-line reason.`,
+};
+
 /* THE SURVEYS. Chores with no measurement at all, and they are here because the absence of a measurement is not
  * the absence of value — these are the reviews a codebase silently rots without, and none of them can be detected
  * by a tool. Their trigger is the calendar, and the ledger is what makes that trigger honest: a survey is due
@@ -779,21 +1095,29 @@ const images = survey({
  * order these were written in. It narrows from "this is a risk you are carrying right now" to "this is worth
  * thinking about this quarter":
  *   carrying   security, runtime — someone else decides when these become urgent
- *   accruing   dependencies, dead code, complexity — cheap now, expensive later, and always getting later
- *   drifting   documentation, duplication, libraries — the shape of the thing is diverging from the idea of it
+ *   accruing   dependencies, dead code, complexity, bundle, framework idioms — cheap now, expensive later, and
+ *              always getting later
+ *   drifting   documentation, duplication, libraries, components, hard-coded styles — the shape of the thing is
+ *              diverging from the idea of it
  *   surveying  the periodic reads, which have no urgency by construction
  *
  * Ordering is by KIND, not by whether a given repository will see them: a chore that does not apply is dropped
- * from that repository's list entirely (verdict.ts), so the reading order never has holes in it. */
+ * from that repository's list entirely (verdict.ts), so the reading order never has holes in it. That is also why
+ * the front-end chores are interleaved here rather than kept in the block they are written in — a Vue repository
+ * should read its bundle row next to its dependency row, not in a "front-end" section at the bottom. */
 export const CHORES: readonly Chore[] = [
     security,
     runtime,
     dependencies,
     deadCode,
     complexity,
+    bundleWeight,
+    frameworkIdiom,
     documentation,
     duplication,
     libraries,
+    componentOverlap,
+    tailwindBypass,
     patterns,
     deprecated,
     documentationDrift,

@@ -5,5 +5,7 @@ export { CHORE_INVARIANTS, composeAsk, REFACTOR_INVARIANTS, REPORT_INVARIANTS, T
 export type { Ask } from "./prompt.js";
 export { PROBES, probeSpec } from "./probes.js";
 export type { ProbeSpec } from "./probes.js";
+export { componentStem, frameworksOf, IDIOM_RULES, idiomRule, normalizePath, UI_FRAMEWORKS, usesTailwind } from "./stack.js";
+export type { IdiomRule, UiFramework } from "./stack.js";
 export { assessChore, assessReport, ledgerKey, unseenVerdicts } from "./verdict.js";
 export type { ChoreState, ChoreVerdict } from "./verdict.js";
