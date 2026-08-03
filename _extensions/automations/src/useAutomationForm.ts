@@ -1,11 +1,11 @@
 import type { AgentHarness, AgentProvider, Automation, AutomationSummary, WorkspaceEventKind } from "@intentic/sandbox-contract";
 import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
-import { computed, reactive } from "vue";
+import { computed, reactive, watch } from "vue";
 import { cronOf, defaultSchedule, parseCron } from "./cronSchedule";
 import { host } from "./host";
-import { type ListenerEventType, LISTENER_SOURCES } from "./listenerSources";
-import type { AutomationRecipe } from "./recipes";
+import { type ListenerEventType, LISTENER_SOURCES, type ListenerSource } from "./listenerSources";
+import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
 
 /* ONE automation form, for both the thing that creates automations and the thing that edits them.
  *
@@ -27,6 +27,23 @@ export const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 export const DOORBELL_TOOLS = [`Read`, `Grep`, `Glob`, `WebFetch`] as const;
 
 export type TriggerKind = `schedule` | `event` | `listener` | `workspace`;
+
+/* WHAT A PROMPT WAS WRITTEN FOR. The kind, plus — for a listener — the source, because that is the granularity
+ * at which the payload changes: Discord delivers `mentioned` and a channelId, CI delivers a branch, a sha and
+ * failedJobs, and a briefing written for one describes nothing that arrives from the other. Exported because the
+ * create dialog compares its picked template against it. */
+export const triggerKey = (trigger: { readonly kind: TriggerKind; readonly provider?: string }): string =>
+    trigger.kind === `listener` ? `listener:${trigger.provider}` : trigger.kind;
+
+/* TEXT THE FORM PUT IN THE BOX, rather than the user — a live source's starter, a template's prompt, or nothing
+ * typed yet. Compared verbatim, and that is the whole test: one keystroke makes the prompt the user's and
+ * nothing here rewrites it again. */
+const FORM_PROMPTS = new Set<string>([
+    ``,
+    ...Object.values(LISTENER_SOURCES).map((source) => source.starterPrompt),
+    ...AUTOMATION_RECIPES.map((recipe) => recipe.prompt),
+]);
+const FORM_GUARDS = new Set<string>([``, ...AUTOMATION_RECIPES.flatMap((recipe) => (recipe.guard === undefined ? [] : [recipe.guard]))]);
 
 export function useAutomationForm() {
     const capabilities = computed(() => host().workspace.capabilities());
@@ -123,6 +140,54 @@ export function useAutomationForm() {
     // loop, and kimi/gemini only ever run on it — so none of the three has a harness to choose.
     const harnessChoosable = computed(() => form.agent === `codex` || form.agent === `grok`);
 
+    /* ---- the prompt follows the trigger ---- */
+
+    // The starting point for whatever is picked right now. Only a live source has one: every other trigger's
+    // payload is whatever its sender POSTs, and no starter can describe that.
+    const starterPrompt = computed<string | undefined>(() => (form.kind === `listener` ? LISTENER_SOURCES[form.provider].starterPrompt : undefined));
+
+    /* Which trigger the prompt now in the box was written for. Both directions below stamp it, because filling
+     * the form from a template — or from a stored automation — sets the trigger and the prompt in one go, and
+     * without the stamp that reads as a trigger change and the template's own text is the first thing rewritten. */
+    let promptFor = triggerKey(form);
+
+    /* A starter is only true for the trigger it was written for, so it FOLLOWS the trigger while it is still the
+     * form's to write. Seeding it once (which is what this used to do, on the trigger cards alone) is how a CI
+     * automation ends up briefed on Discord messages: every other field re-renders for the new source — events,
+     * channel, branch — and the prompt, the one field nothing validates, keeps the old source's text. */
+    watch(
+        () => triggerKey(form),
+        (key) => {
+            if (key === promptFor || !FORM_PROMPTS.has(form.prompt)) {
+                return;
+            }
+            form.prompt = starterPrompt.value ?? ``;
+            // A template's GUARD came with its prompt and goes with it: a jq over .intentic/drafts/ left behind on
+            // a Discord listener is a row that never fires and never says why.
+            if (FORM_GUARDS.has(form.guard)) {
+                form.guard = ``;
+            }
+            promptFor = key;
+        },
+    );
+
+    /* The prompt is verbatim ANOTHER source's starter: an automation made before the prompt followed the trigger,
+     * or one whose prompt was edited and whose source then changed. Nothing may rewrite it — it is not the form's
+     * — but it is the one mismatch that can be named, so the form offers the swap instead of leaving a Discord
+     * briefing on a CI trigger to be discovered from a confused run at 3 a.m. */
+    const staleStarter = computed<ListenerSource | undefined>(() => {
+        if (form.kind !== `listener` || form.prompt === starterPrompt.value) {
+            return undefined;
+        }
+        return Object.values(LISTENER_SOURCES).find((source) => source.starterPrompt === form.prompt);
+    });
+
+    // Take the picked source's starter by hand — and hand the prompt back to the form, so it keeps following.
+    const applyStarter = (): void => {
+        form.prompt = starterPrompt.value ?? ``;
+        promptFor = triggerKey(form);
+    };
+
     /* ---- validation ---- */
 
     const touched = reactive(new Set<string>());
@@ -213,6 +278,8 @@ export function useAutomationForm() {
         if (recipe.trigger.kind === `workspace`) {
             form.workspaceEvent = recipe.trigger.event;
         }
+        // The template's prompt WAS written for the trigger it just set, so this is not a trigger change.
+        promptFor = triggerKey(form);
     };
 
     // Put the user in front of the form that produced this record. The inverse of `build` — see the note at the
@@ -257,6 +324,10 @@ export function useAutomationForm() {
             form.greeting = webchat.greeting ?? ``;
             form.dailyMessageMax = webchat.dailyMessageMax === undefined ? `` : String(webchat.dailyMessageMax);
         }
+        // This prompt is the OWNER's, written for the trigger it is stored with — so opening the editor is not a
+        // trigger change either. Changing the source from in here still re-writes a prompt nobody has touched
+        // since a template wrote it, and never one that was typed.
+        promptFor = triggerKey(form);
     };
 
     // The record to upsert. Fields carrying a default stay ABSENT rather than being written explicitly, so an
@@ -322,6 +393,11 @@ export function useAutomationForm() {
         cronPreview,
         harnessChoosable,
         dailyMessageMaxDefault: WEBCHAT_DAILY_MAX_DEFAULT,
+        // the prompt's relationship to the trigger
+        triggerKey: computed(() => triggerKey(form)),
+        starterPrompt,
+        staleStarter,
+        applyStarter,
         // validation
         touched,
         markTouched,

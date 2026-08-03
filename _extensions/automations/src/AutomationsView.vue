@@ -2,8 +2,8 @@
 import type { AutomationSummary } from "@intentic/sandbox-contract";
 import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, Segmented } from "@intentic/extension-ui";
 import { computed, reactive, ref } from "vue";
+import AutomationComposer from "./AutomationComposer.vue";
 import AutomationRow from "./AutomationRow.vue";
-import CreateAutomationDialog from "./CreateAutomationDialog.vue";
 import DoorbellInstallDialog from "./DoorbellInstallDialog.vue";
 import { since } from "./cronSchedule";
 import { host } from "./host";
@@ -25,7 +25,14 @@ import { useAutomations } from "./useAutomations";
  * expected to want without knowing it exists, so they must stay visible, but they are an offer and the list is
  * the content. Turning one on writes a REAL automation into the list above, with its prompt, model and guard
  * editable like any other — there is deliberately no chore toggle that isn't an automation: a second place to
- * turn something on is a second place for it to disagree with itself. */
+ * turn something on is a second place for it to disagree with itself.
+ *
+ * NOTHING ON THIS PAGE AUTHORS AN AUTOMATION IN A DIALOG. Creating opens a panel at the top of the list and
+ * editing opens one inside the row, both at page width and both rendering the same <AutomationFields> — an
+ * automation is the largest form in the app, and the modal that used to hold it had already been widened once
+ * and had its template gallery folded away to cope. Keeping the list on screen is the other half: the questions
+ * asked while writing one are "do I already have this?" and "what did the last one say?", and a modal covers
+ * the only thing that answers them. */
 
 const { automations, pending, error: listError, save, remove, run, approve, reject } = useAutomations();
 
@@ -111,11 +118,15 @@ const availableSuggestions = computed(() => {
             (recipe.providers === undefined || recipe.providers.some((provider) => connected.has(provider))),
     );
 });
-// Which recipe the create dialog opens on, when it was opened from a suggestion rather than from "New".
+// Which recipe the composer opens on, when it was opened from a suggestion rather than from "New".
 const createPrefill = ref<AutomationRecipe | undefined>(undefined);
 const openFromSuggestion = (recipe: AutomationRecipe): void => {
     createPrefill.value = recipe;
     createOpen.value = true;
+};
+const closeComposer = (): void => {
+    createOpen.value = false;
+    createPrefill.value = undefined;
 };
 
 // The enabled toggle is a plain re-post of the automation with the flag flipped (upsert keeps the run history).
@@ -277,6 +288,16 @@ const toggleDetail = (id: string): void => {
                 </div>
             </section>
 
+            <!-- Creating, in the list. Keyed on the prefill so picking a different suggestion while the panel is
+                 already open remounts it on that template rather than leaving the previous one's fields up. -->
+            <AutomationComposer
+                v-if="createOpen"
+                :key="createPrefill?.id ?? `blank`"
+                :prefill="createPrefill"
+                @created="expanded.add($event)"
+                @close="closeComposer"
+            />
+
             <!-- Filter bar: one line that answers "how many, how many on, is anything broken" before a single row
                  is read. Only once the list is long enough to need it. -->
             <div v-if="automations.length >= FILTER_FROM" class="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -405,7 +426,6 @@ const toggleDetail = (id: string): void => {
             </section>
         </div>
 
-        <CreateAutomationDialog v-model:visible="createOpen" :prefill="createPrefill" @update:visible="!$event && (createPrefill = undefined)" />
         <!-- Keyed on the row so re-opening a different Doorbell remounts the panel rather than showing the
              previous one's install probes while its own query is still in flight. -->
         <DoorbellInstallDialog

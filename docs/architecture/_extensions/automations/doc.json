@@ -6,8 +6,12 @@
       "what": "The entry point — what this package hands to everyone else."
     },
     {
-      "path": "_extensions/automations/src/CreateAutomationDialog.vue",
-      "what": "The largest file here — usually where the real work happens."
+      "path": "_extensions/automations/src/AutomationFields.vue",
+      "what": "Every field of an automation, once — rendered by both the composer that creates one and the row that edits one."
+    },
+    {
+      "path": "_extensions/automations/src/AutomationsView.vue",
+      "what": "The page: the list of automations, and the panels that create and edit them in place rather than in a dialog."
     }
   ],
   "name": "@intentic/ext-automations",
