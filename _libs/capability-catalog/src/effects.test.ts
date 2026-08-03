@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { capabilityEffects } from "./effects.js";
 import { CapabilityKindSchema } from "@intentic/sandbox-contract";
 
-const connector = (overrides?: Partial<CapabilityContribution>): CapabilityContribution => ({
+// The cli arm specifically: the fixture is a connector spec, and `Partial<CapabilityContribution>` over the
+// discriminated union would let an override widen `kind` back to the whole union.
+type CliContribution = Extract<CapabilityContribution, { kind: "cli" }>;
+
+const connector = (overrides?: Partial<CliContribution>): CliContribution => ({
     id: "github",
     kind: "cli",
     catalog: { name: "GitHub", description: "Issues and PRs.", category: "code" },

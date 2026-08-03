@@ -86,9 +86,9 @@ const CONNECTOR_EXTENSIONS: ExtensionSummary[] = [
             version: `1.0.0`,
             engines: { intentic: `^0.4.0` },
             contributes: {
-                connectors: [
+                capabilities: [
                     {
-                        provider: `github`,
+                        id: `github`,
                         kind: `cli`,
                         catalog: {
                             name: `GitHub`,
@@ -112,7 +112,7 @@ const CONNECTOR_EXTENSIONS: ExtensionSummary[] = [
                         skill: `skills/github/SKILL.md`,
                     },
                     {
-                        provider: `postgres`,
+                        id: `postgres`,
                         kind: `cli`,
                         catalog: {
                             name: `PostgreSQL`,
@@ -132,7 +132,7 @@ const CONNECTOR_EXTENSIONS: ExtensionSummary[] = [
                         fragment: `env/postgres.Dockerfile`,
                     },
                     {
-                        provider: `sentry`,
+                        id: `sentry`,
                         kind: `cli`,
                         catalog: {
                             name: `Sentry`,
@@ -149,7 +149,7 @@ const CONNECTOR_EXTENSIONS: ExtensionSummary[] = [
                         skill: `skills/sentry/SKILL.md`,
                     },
                     {
-                        provider: `outline`,
+                        id: `outline`,
                         kind: `cli`,
                         catalog: {
                             name: `Outline`,
@@ -179,9 +179,9 @@ const CONNECTOR_EXTENSIONS: ExtensionSummary[] = [
             version: `1.0.0`,
             engines: { intentic: `^0.4.0` },
             contributes: {
-                connectors: [
+                capabilities: [
                     {
-                        provider: `discord`,
+                        id: `discord`,
                         kind: `cli`,
                         catalog: {
                             name: `Discord`,
