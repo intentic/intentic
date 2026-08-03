@@ -1,4 +1,5 @@
 import { syncFolder } from "@intentic/sandbox-contract";
+import { timeAgo } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import { sandboxRequest } from "./sandboxClient";
@@ -13,6 +14,13 @@ import { useSandbox } from "./useSandbox";
  * "mirror" — so pairMode reflects the daemon's ANSWER, and the one-liner/copy follow it, never the request. */
 
 type SyncMode = `sync` | `mirror`;
+
+/* How long since the holder's last poll before its sync counts as STOPPED. The daemon refreshes seenAt at most
+ * once a minute while the agent is polling (every 5s), so a live holder is always well inside this; anything older
+ * means the agent stopped polling — the machine is asleep or offline, or its pairing was taken over by another
+ * sandbox's setup on the same computer. Enrollment alone used to be the signal, so the card claimed "Syncing from
+ * X" for as long as the record existed, whether or not anything was syncing. */
+const SYNC_STALE_MS = 5 * 60 * 1000;
 
 // In the shell command SYNC_DIR is double-quoted so a leading ~ must become $HOME to expand; Windows also flips
 // separators. Anything the user types past the leading ~ is preserved verbatim.
@@ -31,6 +39,9 @@ export function useDesktopSync() {
     // The machine currently holding sync (the enrolled key's comment), or undefined when none — for the
     // "Syncing from X" line and the takeover prompt.
     const syncingFrom = ref<string | undefined>(undefined);
+    // When that machine last used its enrollment; undefined for one that never has. The agent's ports poll is the
+    // heartbeat behind it (the daemon stamps it on verify).
+    const syncSeenAt = ref<number | undefined>(undefined);
     // Machines with a mirror-only enrollment (collaborators forwarding ports to their own localhost) — shown so
     // an active localhost mirror is never invisible in the card.
     const mirroredBy = ref<readonly string[]>([]);
@@ -48,6 +59,15 @@ export function useDesktopSync() {
     // When set, the generated one-liner carries TAKEOVER=1 so the agent moves sync here, revoking the other
     // machine's key. The user opts in explicitly (the card only offers it when another machine holds sync).
     const takeover = ref(false);
+
+    // Whether the holder has gone quiet: enrolled, but its agent hasn't polled in long enough that nothing is
+    // reaching the folder any more. An enrollment that has NEVER been used (no seenAt) counts as stopped too —
+    // that is a setup that didn't finish.
+    const syncStopped = computed(
+        () => syncingFrom.value !== undefined && (syncSeenAt.value === undefined || Date.now() - syncSeenAt.value > SYNC_STALE_MS),
+    );
+    // "just now" / "12m ago" / an absolute timestamp once it's old, per the shared formatter.
+    const syncLastSeen = computed(() => (syncSeenAt.value === undefined ? undefined : timeAgo(syncSeenAt.value)));
 
     const defaultFolder = computed(() => syncFolder(active.value?.name ?? `sandbox`, daemonUrl.value));
     const folder = ref(defaultFolder.value);
@@ -122,10 +142,17 @@ export function useDesktopSync() {
             if (!response.ok) {
                 return;
             }
-            const body = (await response.json()) as { enrolled?: boolean; sshHostname?: string; syncingFrom?: string; mirroredBy?: string[] };
+            const body = (await response.json()) as {
+                enrolled?: boolean;
+                sshHostname?: string;
+                syncingFrom?: string;
+                syncSeenAt?: number;
+                mirroredBy?: string[];
+            };
             enrolled.value = body.enrolled === true;
             available.value = typeof body.sshHostname === `string`;
             syncingFrom.value = body.syncingFrom;
+            syncSeenAt.value = body.syncSeenAt;
             mirroredBy.value = body.mirroredBy ?? [];
         } catch {
             // Sandbox not reachable yet — leave the last known state.
@@ -162,6 +189,8 @@ export function useDesktopSync() {
         isOwner,
         enrolled,
         syncingFrom,
+        syncStopped,
+        syncLastSeen,
         mirroredBy,
         revokedFrom,
         available,

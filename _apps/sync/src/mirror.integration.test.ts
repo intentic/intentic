@@ -13,9 +13,9 @@ import type { ForwardExecutor } from "./mirror.js";
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-mirror-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { mirrorPidPath } = await import("./config.js");
-const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, retireMirror, SyncAuthError } = await import("./mirror.js");
+const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, retirePairingMirror, stopWatcher, SyncAuthError } = await import("./mirror.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
-// setup() creates ~/.intentic/sync via writeConfig; the pidfile test writes there directly, so make it first.
+// setup() creates ~/.intentic/sync when it writes the state; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(mirrorPidPath), { recursive: true });
 
 afterEach(() => {
@@ -50,6 +50,9 @@ const fakeExecutor = (free: (port: number) => boolean = () => true): { executor:
 };
 
 const log = (): void => {};
+
+// Nothing else on this machine is mirroring — the single-pairing case, and the default for these tests.
+const unclaimed = new Map<number, string>();
 
 describe("fetchWorkspacePorts", () => {
     it("sends the sync token and returns only forwardable workspace-kind ports", async () => {
@@ -97,7 +100,7 @@ describe("reconcileForwards (minimal-touch)", () => {
     it("leaves unchanged forwards alone and creates only new ports", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const current: MirroredPort[] = [{ port: 3000, host: "127.0.0.1" }];
-        const next = await reconcileForwards(executor, current, [ws(3000), ws(4321)], log);
+        const next = await reconcileForwards(executor, current, [ws(3000), ws(4321)], unclaimed, log);
         expect(next).toEqual([
             { port: 3000, host: "127.0.0.1" },
             { port: 4321, host: "127.0.0.1" },
@@ -112,7 +115,7 @@ describe("reconcileForwards (minimal-touch)", () => {
             { port: 3000, host: "127.0.0.1" },
             { port: 4321, host: "127.0.0.1" },
         ];
-        const next = await reconcileForwards(executor, current, [ws(3000)], log);
+        const next = await reconcileForwards(executor, current, [ws(3000)], unclaimed, log);
         expect(next).toEqual([{ port: 3000, host: "127.0.0.1" }]);
         expect(created).toEqual([]);
         expect(terminated).toEqual([4321]);
@@ -120,7 +123,7 @@ describe("reconcileForwards (minimal-touch)", () => {
 
     it("recreates a forward whose sandbox loopback family moved (127.0.0.1 → ::1)", async () => {
         const { executor, created, terminated } = fakeExecutor();
-        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000, "::1")], log);
+        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000, "::1")], unclaimed, log);
         expect(next).toEqual([{ port: 3000, host: "::1" }]);
         expect(terminated).toEqual([3000]);
         expect(created).toEqual([3000]);
@@ -128,9 +131,33 @@ describe("reconcileForwards (minimal-touch)", () => {
 
     it("skips a port a foreign local process already holds", async () => {
         const { executor, created } = fakeExecutor((port) => port !== 5000);
-        const next = await reconcileForwards(executor, [], [ws(5000)], log);
+        const next = await reconcileForwards(executor, [], [ws(5000)], unclaimed, log);
         expect(next).toEqual([]);
         expect(created).toEqual([]);
+    });
+
+    /* Two sandboxes on one machine routinely serve the same dev-server port, and only one can own localhost:6480.
+     * The contest is decided here rather than by the OS probe, so the loser is told WHICH sandbox holds it — and
+     * critically, the winner's live forward is never terminated by the loser's pass. */
+    it("yields a port another pairing already mirrors, without disturbing it", async () => {
+        const { executor, created, terminated } = fakeExecutor();
+        const claimed = new Map([[6480, "sandbox-first.example.dev"]]);
+        const next = await reconcileForwards(executor, [], [ws(6480), ws(7000)], claimed, log);
+        expect(next).toEqual([{ port: 7000, host: "127.0.0.1" }]);
+        expect(created).toEqual([7000]);
+        // 6480 is neither created nor terminated: the other pairing's session keeps serving it.
+        expect(terminated).toEqual([7000]);
+    });
+
+    // A port THIS pairing already mirrors is its own — a claim map naming it would otherwise make a pairing
+    // release the port it is already serving on the very next tick.
+    it("keeps its own established forward even if the port is claimed", async () => {
+        const { executor, created, terminated } = fakeExecutor();
+        const claimed = new Map([[3000, "sandbox-other.example.dev"]]);
+        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000)], claimed, log);
+        expect(next).toEqual([{ port: 3000, host: "127.0.0.1" }]);
+        expect(created).toEqual([]);
+        expect(terminated).toEqual([]);
     });
 });
 
@@ -143,21 +170,8 @@ describe("readLiveWatcherPid", () => {
     });
 });
 
-describe("retireMirror", () => {
-    it("stops the resident watcher before returning and terminates only the forwards that are ours", async () => {
-        // A stand-in mutagen: reports three live forward sessions — one of them a stranger's — and records what
-        // it was asked to terminate. Real mutagen was checked separately; what matters here is which names go.
-        const record = join(dirname(mirrorPidPath), "terminated.txt");
-        const fakeMutagen = join(dirname(mirrorPidPath), "fake-mutagen.sh");
-        await writeFile(
-            fakeMutagen,
-            `#!/bin/sh
-if [ "$2" = "list" ]; then echo "intentic-fwd-sandbox-old-5173 someone-elses-forward intentic-fwd-sandbox-old-6480"; exit 0; fi
-if [ "$2" = "terminate" ]; then shift 2; echo "$@" > ${record}; exit 0; fi
-exit 0
-`,
-            { mode: 0o755 },
-        );
+describe("stopWatcher", () => {
+    it("returns only once the watcher is GONE, not merely signalled", async () => {
         // A watcher shaped like the real one: it handles SIGTERM and takes a moment to wind down (the real one
         // removes its pidfile first). An instantly-dying stand-in cannot tell "waited for it" from "signalled
         // it and moved on" — which is the whole property under test.
@@ -175,21 +189,44 @@ exit 0
         await new Promise((ready) => watcher.stdout?.once("data", ready));
         await writeFile(mirrorPidPath, String(pid));
 
-        const retired = await retireMirror(fakeMutagen);
+        await expect(stopWatcher()).resolves.toBe(pid);
 
-        expect(retired).toEqual({ pid, forwards: 2 });
-        // The stranger's session is untouched: this agent owns a name prefix, not the user's whole daemon.
-        expect((await readFile(record, "utf8")).trim()).toBe("intentic-fwd-sandbox-old-5173 intentic-fwd-sandbox-old-6480");
-        // GONE by the time this resolves, not merely signalled — setup overwrites the config the watcher was
-        // serving in the very next statement, and a watcher still alive writes its own baseline back over it.
+        // setup replaces the agent binary this process is running, and on Windows a live one holds that file open.
         expect(() => process.kill(pid, 0)).toThrow();
         await expect(readFile(mirrorPidPath, "utf8")).rejects.toThrow();
     });
 
     it("is a no-op when nothing is running", async () => {
+        await expect(stopWatcher()).resolves.toBeUndefined();
+    });
+});
+
+/* Unpairing ONE sandbox must leave every other pairing on the machine mirroring. Tearing down all of this agent's
+ * forwards on every setup is half of what broke a live pairing: the forwards were named for the other sandbox, the
+ * config that replaced it named none of them, and Mutagen holds a released port's listener for good. */
+describe("retirePairingMirror", () => {
+    it("terminates only the named sandbox's forwards — not a sibling pairing's, not a stranger's", async () => {
+        const record = join(dirname(mirrorPidPath), "terminated.txt");
+        const fakeMutagen = join(dirname(mirrorPidPath), "fake-mutagen.sh");
+        await writeFile(
+            fakeMutagen,
+            `#!/bin/sh
+if [ "$2" = "list" ]; then echo "intentic-fwd-sandbox-keep-5173 someone-elses-forward intentic-fwd-sandbox-drop-6480 intentic-fwd-sandbox-drop-7000"; exit 0; fi
+if [ "$2" = "terminate" ]; then shift 2; echo "$@" > ${record}; exit 0; fi
+exit 0
+`,
+            { mode: 0o755 },
+        );
+
+        await expect(retirePairingMirror(fakeMutagen, "sandbox-drop")).resolves.toBe(2);
+
+        expect((await readFile(record, "utf8")).trim()).toBe("intentic-fwd-sandbox-drop-6480 intentic-fwd-sandbox-drop-7000");
+    });
+
+    it("has nothing to do for a sandbox holding no forwards", async () => {
         const quiet = join(dirname(mirrorPidPath), "quiet-mutagen.sh");
         await writeFile(quiet, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-        await expect(retireMirror(quiet)).resolves.toEqual({ forwards: 0 });
+        await expect(retirePairingMirror(quiet, "sandbox-none")).resolves.toBe(0);
     });
 });
 

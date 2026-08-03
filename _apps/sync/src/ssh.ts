@@ -4,7 +4,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import type { Log } from "@intentic/local-agent";
-import { baseDir, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
+import { baseDir, knownHostsPath, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
 
 // Paths Mutagen must NOT two-way-sync. Its OWN purpose-built list (not the daemon's search-ignore set): it must
 // also exclude secret files + the daemon's .intentic state, which the search-ignore set deliberately keeps visible.
@@ -118,12 +118,32 @@ export const ensureSshKey = async (): Promise<string> => {
     return (await readFile(pub, "utf8")).trim();
 };
 
+// The whole fragment for a set of pairings: one Host block each, in pairing order. Regenerated from the pairing
+// list rather than appended to, so adding or dropping one sandbox can neither duplicate a block nor strip a
+// sibling's — which is what a single-block overwrite did to every other sandbox on the machine.
+export const pairingSshConfig = (
+    pairings: readonly { readonly sandboxId: string; readonly sshHostname: string }[],
+    cloudflaredPath: string,
+): string =>
+    pairings
+        .map((pairing) =>
+            sshConfigBlock({
+                alias: sshAlias(pairing.sandboxId),
+                hostname: pairing.sshHostname,
+                identityFile: sshKeyPath,
+                knownHostsFile: knownHostsPath,
+                cloudflaredPath,
+            }),
+        )
+        .join("\n");
+
 // Write our managed ssh-config fragment into ~/.ssh and make the user's own config include it, so `ssh` — and
-// therefore Mutagen — resolves the alias. We never edit their host entries; the include line is the only thing
-// we own, and it is rewritten from scratch each time so no earlier spelling of it can linger alongside.
-export const writeManagedSshConfig = async (block: string): Promise<void> => {
+// therefore Mutagen — resolves every paired sandbox's alias. We never edit their host entries; the include line
+// is the only thing we own, and it is rewritten from scratch each time so no earlier spelling of it can linger
+// alongside.
+export const writeManagedSshConfig = async (fragment: string): Promise<void> => {
     await mkdir(sshDir, { recursive: true, mode: 0o700 });
-    await writeFile(sshConfigPath, block, { mode: 0o600 });
+    await writeFile(sshConfigPath, fragment, { mode: 0o600 });
     const current = await readFile(userSshConfigPath, "utf8").catch(() => "");
     const desired = `${INCLUDE_MARKER}\n${stripManagedIncludes(current)}`;
     if (desired === current) {

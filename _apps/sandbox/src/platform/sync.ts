@@ -129,6 +129,9 @@ interface SyncEnrollment {
     // The key line's comment field — the machine label for the UI.
     readonly machine: string;
     readonly enrolledAt: number;
+    // When this machine last USED its enrollment (see verifySyncToken). Absent until the first poll — an
+    // enrollment that has never been used is exactly what a machine that never finished setup leaves behind.
+    readonly seenAt?: number;
 }
 
 const enrollmentsPath = (historyRoot: string): string => join(historyRoot, "sync-enrollments.json");
@@ -199,23 +202,64 @@ export const enrollSyncKey = async (args: {
     return { syncToken: token };
 };
 
-// Whether a presented sync token matches ANY enrollment — the /ports read credential + the self-revoke identity.
+/* How stale a seenAt may get before a verification refreshes it. The desktop agent's mirror watcher polls /ports
+ * every 5 seconds per pairing and every poll lands here, so stamping each one would be a disk write every 5
+ * seconds per machine, forever — to answer a question ("is that machine still syncing?") whose useful resolution
+ * is minutes. Throttled, a live holder's seenAt is never more than this far behind. */
+const SEEN_THROTTLE_MS = 60_000;
+
+/* Whether a presented sync token matches ANY enrollment — the /ports read credential + the self-revoke identity.
+ *
+ * AND the heartbeat. The agent's ports poll is the one thing a live desktop sync does on its own, every few
+ * seconds, so verification is where "this machine is still there" is knowable; nothing else on either end ever
+ * asked. Without it an enrollment reads as active from the moment it is made until someone revokes it, so the
+ * Desktop-sync card kept claiming "Syncing from <machine>" long after that machine had stopped — which is what a
+ * folder silently losing its pairing looks like from the sandbox side, and why it took days to notice.
+ *
+ * The write goes through persist(), which also rewrites authorized_keys: the key set is unchanged by construction
+ * here, and keeping the two coupled is worth more than skipping one small write a minute. A concurrent poll from
+ * another machine can lose this stamp to a read-modify-write race; the next poll re-stamps it seconds later. */
 export const verifySyncToken = async (historyRoot: string, presented: string): Promise<boolean> => {
     const digest = Buffer.from(digestOf(presented));
     const enrollments = await readEnrollments(historyRoot);
-    return enrollments.some((entry) => {
+    const matched = enrollments.find((entry) => {
         const stored = Buffer.from(entry.tokenDigest);
         return stored.length === digest.length && timingSafeEqual(stored, digest);
     });
+    if (matched === undefined) {
+        return false;
+    }
+    const now = Date.now();
+    if (matched.seenAt === undefined || now - matched.seenAt >= SEEN_THROTTLE_MS) {
+        await persist(
+            historyRoot,
+            // oxlint-disable-next-line oxc/no-map-spread -- an enrollment is readonly; a fresh record for the one machine that polled is the point
+            enrollments.map((entry) => (entry === matched ? { ...entry, seenAt: now } : entry)),
+        );
+    }
+    return true;
 };
 
 // Whether ANY machine is enrolled — the UI's "desktop sync/mirror active" signal.
 export const isKeyEnrolled = async (historyRoot: string): Promise<boolean> => (await readEnrollments(historyRoot)).length > 0;
 
+// The machine holding file sync, as the card needs it: its label plus when it was last heard from. A projection
+// rather than the enrollment itself — the record next to these two fields is a key and a token digest, which have
+// no business reaching a browser.
+export interface SyncHolder {
+    readonly machine: string;
+    readonly seenAt?: number;
+}
+
 // The machine holding file sync (there is at most one), for the "Syncing from X" card. Mirror-only machines
 // aren't file-syncing, so they don't appear here.
-export const syncHolder = async (historyRoot: string): Promise<string | undefined> =>
-    (await readEnrollments(historyRoot)).find((entry) => entry.mode === "sync")?.machine;
+export const syncHolder = async (historyRoot: string): Promise<SyncHolder | undefined> => {
+    const holder = (await readEnrollments(historyRoot)).find((entry) => entry.mode === "sync");
+    if (holder === undefined) {
+        return undefined;
+    }
+    return { machine: holder.machine, ...(holder.seenAt === undefined ? {} : { seenAt: holder.seenAt }) };
+};
 
 // The machines currently mirroring ports (any number) — for the UI to show who has live previews.
 export const mirrorMachines = async (historyRoot: string): Promise<string[]> =>

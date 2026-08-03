@@ -114,10 +114,10 @@ describe("enrollment store", () => {
         const first = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
         // A DIFFERENT machine can't grab sync without takeover.
         expect(await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "sync", takeover: false })).toEqual({ locked: "laptop-a" });
-        expect(await syncHolder(history)).toBe("laptop-a");
+        expect((await syncHolder(history))?.machine).toBe("laptop-a");
         // Takeover moves it — and kills the old holder's token.
         const second = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "sync", takeover: true }));
-        expect(await syncHolder(history)).toBe("laptop-b");
+        expect((await syncHolder(history))?.machine).toBe("laptop-b");
         expect(await verifySyncToken(history, first)).toBe(false);
         expect(await verifySyncToken(history, second)).toBe(true);
     });
@@ -129,7 +129,7 @@ describe("enrollment store", () => {
         await enrollSyncKey({ historyRoot: history, key: key("laptop-c"), mode: "sync", takeover: true });
         expect(await verifySyncToken(history, mirror)).toBe(true);
         expect(await mirrorMachines(history)).toEqual(["laptop-b"]);
-        expect(await syncHolder(history)).toBe("laptop-c");
+        expect((await syncHolder(history))?.machine).toBe("laptop-c");
     });
 
     it("re-enrolling the same machine rotates its token", async () => {
@@ -160,7 +160,7 @@ describe("enrollment store", () => {
         ]);
         expect(await verifySyncToken(history, laptop)).toBe(true);
         expect(await verifySyncToken(history, collaborator)).toBe(true);
-        expect(await syncHolder(history)).toBe("laptop-a");
+        expect((await syncHolder(history))?.machine).toBe("laptop-a");
     });
 
     // A sandbox nobody has ever enrolled on must still land an empty file, so sshd reads "no one is authorized"
@@ -168,6 +168,55 @@ describe("enrollment store", () => {
     it("restores an empty authorized_keys when no one is enrolled", async () => {
         await restoreAuthorizedKeys(history);
         expect(await readFile(join(process.env["HOME"]!, ".ssh", "authorized_keys"), "utf8")).toBe("");
+    });
+
+    /* The heartbeat. A verification is the agent's ports poll arriving, and it is the ONLY thing a live desktop
+     * sync does on its own — so if it doesn't record "this machine is still here", nothing does, and an enrollment
+     * reads as active sync from the moment it is made until someone revokes it. That is what let the card claim
+     * "Syncing from <machine>" for a folder that had silently stopped syncing days earlier. */
+    it("stamps seenAt when a machine uses its enrollment, and never before", async () => {
+        await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false });
+        // Enrolled but never polled: no seenAt at all — which the UI reads as "setup didn't finish", not as healthy.
+        expect(await syncHolder(history)).toEqual({ machine: "laptop-a" });
+
+        const holderToken = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
+        const before = Date.now();
+        expect(await verifySyncToken(history, holderToken)).toBe(true);
+
+        const seen = (await syncHolder(history))?.seenAt;
+        expect(seen).toBeGreaterThanOrEqual(before);
+        expect(seen).toBeLessThanOrEqual(Date.now());
+    });
+
+    it("leaves seenAt alone for a rejected token — a stranger's poll must not look like the holder's", async () => {
+        const holderToken = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
+        await verifySyncToken(history, holderToken);
+        const stamped = (await syncHolder(history))?.seenAt;
+
+        expect(await verifySyncToken(history, "ist_not-enrolled")).toBe(false);
+
+        expect((await syncHolder(history))?.seenAt).toBe(stamped);
+    });
+
+    // The agent polls every 5s per pairing; persisting each one would be a disk write every 5s per machine forever.
+    // Throttled, so a burst of polls costs one write — and the stamp stays within a minute of the last poll.
+    it("throttles the stamp rather than writing on every poll", async () => {
+        const holderToken = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
+        await verifySyncToken(history, holderToken);
+        const first = (await syncHolder(history))?.seenAt;
+
+        await verifySyncToken(history, holderToken);
+        await verifySyncToken(history, holderToken);
+
+        expect((await syncHolder(history))?.seenAt).toBe(first);
+    });
+
+    // A mirror-only machine's poll verifies too. It must not turn into a file-sync holder on the way through.
+    it("does not invent a sync holder out of a mirror-only machine's poll", async () => {
+        const mirror = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "mirror", takeover: false }));
+        expect(await verifySyncToken(history, mirror)).toBe(true);
+        expect(await syncHolder(history)).toBeUndefined();
+        expect(await mirrorMachines(history)).toEqual(["laptop-b"]);
     });
 
     it("self-revoke drops just that enrollment; clear-all drops everyone", async () => {

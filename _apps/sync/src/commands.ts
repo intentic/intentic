@@ -7,21 +7,44 @@ import { cliLauncher, type Log, registerAutostart, unregisterAutostart } from "@
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { MIRROR_AUTOSTART } from "./autostart.js";
-import { knownHostsPath, readConfig, type SyncConfig, type SyncMode, sshKeyPath, writeConfig } from "./config.js";
+import { type Pairing, readState, removePairing, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
-import { retireMirror, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
-import { ensureCloudflared, ensureMutagen, ensureSyncSession, runMutagen, sessionName } from "./mutagen.js";
+import { readLiveWatcherPid, retirePairingMirror, runMirrorWatch, startMirrorWatcher, stopMirror, stopWatcher } from "./mirror.js";
+import { ensureCloudflared, ensureMutagen, ensureSyncSession, retireOrphanSessions, runMutagen, sessionName } from "./mutagen.js";
 import {
     assertSshConfigVisible,
     ensureSshKey,
     mutagenSshPath,
+    pairingSshConfig,
     probeSshTransport,
     removeManagedSshConfig,
     sanitizeId,
     sshAlias,
-    sshConfigBlock,
     writeManagedSshConfig,
 } from "./ssh.js";
+
+// Which pairings a command acts on. No selector means every one this machine holds — with a fleet, `--sandbox`
+// takes the sandbox id or any substring that matches exactly one of them (real ids are
+// `sandbox-<hex>-<zone>`-shaped, so "0738" is how a human names one).
+export const selectPairings = (state: SyncState, selector: string | undefined): readonly Pairing[] => {
+    if (selector === undefined) {
+        return state.pairings;
+    }
+    const exact = state.pairings.filter((pairing) => pairing.sandboxId === sanitizeId(selector));
+    if (exact.length === 1) {
+        return exact;
+    }
+    const matched = state.pairings.filter((pairing) => pairing.sandboxId.includes(selector));
+    if (matched.length === 0) {
+        throw new Error(
+            `no paired sandbox matches "${selector}". This machine pairs: ${state.pairings.map((pairing) => pairing.sandboxId).join(", ") || "none"}`,
+        );
+    }
+    if (matched.length > 1) {
+        throw new Error(`"${selector}" matches more than one paired sandbox: ${matched.map((pairing) => pairing.sandboxId).join(", ")}`);
+    }
+    return matched;
+};
 
 // Enroll our SSH public key using the browser-minted pairing token (single-use). The daemon returns the tunnel's
 // SSH hostname + the sync token `mirror` reads /ports with — the only HTTP surface the agent ever touches;
@@ -133,14 +156,6 @@ const setup = buildCommand<SetupFlags>({
 
         const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
         const alias = sshAlias(sandboxId);
-        await writeManagedSshConfig(
-            sshConfigBlock({ alias, hostname: sshHostname, identityFile: sshKeyPath, knownHostsFile: knownHostsPath, cloudflaredPath }),
-        );
-        // Prove the transport before handing it to Mutagen, using the very client Mutagen will pick — on
-        // Windows that is not the `ssh` on PATH but the first hit in its own hardcoded list (see ssh.ts).
-        const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
-        assertSshConfigVisible(ssh, alias, sshHostname);
-        probeSshTransport(ssh, alias, out);
 
         // File sync exists only in "sync" mode — a mirror-only enrollment (a collaborator) has no local dir and
         // no sync session, just port forwards. A `~` prefix can reach us verbatim (SYNC_DIR travels as data from
@@ -161,7 +176,7 @@ const setup = buildCommand<SetupFlags>({
             await mkdir(localDir, { recursive: true });
         }
 
-        const config: SyncConfig = {
+        const pairing: Pairing = {
             sandboxUrl: flags.url,
             sandboxId,
             sshHostname,
@@ -170,28 +185,37 @@ const setup = buildCommand<SetupFlags>({
             ...(syncToken === undefined ? {} : { syncToken }),
         };
 
-        // Retire the PREVIOUS pairing before this one replaces it on disk. A watcher left resident from an
-        // earlier sandbox keeps serving whatever the config says, so it quietly adopts this pairing while
-        // still running the agent binary this very run just replaced — every fix shipped since the day it
-        // started stays inert until the machine reboots, and `setup` reports "already running (pid …)" as if
-        // that were the same thing. Its forwards are worse: they are named for the OLD sandbox, the config
-        // written below names none of them, and Mutagen holds their localhost ports for good — so every port
-        // the old sandbox used greets the new one as "busy on this machine" and never mirrors again.
-        const retired = await retireMirror(mutagen);
-        if (retired.pid !== undefined) {
-            out(`stopped the previous pairing's mirror watcher (pid ${retired.pid}) — it was running the agent binary this run replaced.`);
+        // Stop the resident watcher before touching state or sessions — and ONLY the watcher. It is running the
+        // agent binary this very run just replaced, so every fix shipped since the day it started stays inert
+        // until it restarts (and `setup` would report "already running (pid …)" as if that were the same thing);
+        // on Windows it also holds that binary open. Its forwards stay up throughout — Mutagen's daemon holds
+        // them, so no live connection drops, and the pairings it was serving are untouched.
+        const stoppedPid = await stopWatcher();
+        if (stoppedPid !== undefined) {
+            out(`stopped the mirror watcher (pid ${stoppedPid}) — it was running the agent binary this run replaced; restarting it below.`);
         }
-        if (retired.forwards > 0) {
-            out(`released ${retired.forwards} port forward(s) the previous pairing had left holding localhost.`);
-        }
-        await writeConfig(config);
+        // ADD this pairing to whatever this machine already holds. Pairing a second sandbox used to overwrite the
+        // first — dropping its ssh alias, its folder and its file-sync session — which is how installing the
+        // desktop app beside a CLI-started sandbox silently stopped syncing the folder the user was working in.
+        await upsertPairing(pairing);
+        const pairings = (await readState()).pairings;
 
-        // Start the file sync — or, when re-running setup found the same session already running on this
-        // version's rules, leave it exactly as it is rather than paying a full rescan for nothing.
-        ensureSyncSession(mutagen, config, out);
+        // The ssh fragment is regenerated from the WHOLE pairing list, so every paired sandbox keeps its alias.
+        await writeManagedSshConfig(pairingSshConfig(pairings, cloudflaredPath));
+        // Prove the transport before handing it to Mutagen, using the very client Mutagen will pick — on
+        // Windows that is not the `ssh` on PATH but the first hit in its own hardcoded list (see ssh.ts).
+        const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
+        assertSshConfigVisible(ssh, alias, sshHostname);
+        probeSshTransport(ssh, alias, out);
+
+        // Start THIS pairing's file sync — or, when re-running setup found the same session already running on
+        // this version's rules, leave it exactly as it is rather than paying a full rescan for nothing. Every
+        // other pairing's session keeps running; only sessions no pairing claims any more are swept.
+        ensureSyncSession(mutagen, pairing, out);
+        retireOrphanSessions(mutagen, pairings, out);
         // One bridge pass right away, so a fresh pairing's local repos carry the sandbox's git history from
         // the first minute rather than waiting out the watcher's cadence.
-        runGitBridge(realBridgeExec, config, out, undefined);
+        runGitBridge(realBridgeExec, pairing, out, undefined);
         // Register the Mutagen daemon to autostart at login and resume sessions across reboots — it holds BOTH
         // sync and forward sessions, so this covers mirror-only too. Its own native mechanism (launchd/Task
         // Scheduler); no register verb on Linux. Best-effort: already-registered isn't worth failing on.
@@ -209,11 +233,23 @@ const setup = buildCommand<SetupFlags>({
                 ? `Sync started: ${localDir} ↔ ${sshHostname}:/work. Check it with \`intentic-sync status\`.`
                 : `Enrolled for port mirroring on ${sshHostname} (mirror-only — no file sync). Check it with \`intentic-sync status\`.`,
         );
+        // Say the fleet out loud. Pairing a sandbox on a machine that already had one is the exact moment the
+        // user needs to know the others are still syncing — the silence there is what made a lost pairing take
+        // days to notice.
+        if (pairings.length > 1) {
+            out(`This machine now syncs ${pairings.length} sandboxes:`);
+            for (const held of pairings) {
+                out(`  ${held.sandboxId}${held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`);
+            }
+        }
 
-        // Auto-start port mirroring so the user never types a command: the sandbox's dev servers become
-        // localhost:<same-port> here, new ones appear as they start, and it resumes after a reboot. Needs the
-        // enrollment sync token; a daemon that predates mirroring simply skips this (file sync still works).
-        if (syncToken !== undefined) {
+        // Auto-start port mirroring so the user never types a command: each sandbox's dev servers become
+        // localhost:<same-port> here, new ones appear as they start, and it resumes after a reboot.
+        //
+        // Gated on ANY pairing having a sync token, not just this one: the watcher stopped above was serving the
+        // whole fleet, so declining to restart it because THIS enrollment happens to lack a token (a daemon
+        // predating port mirroring) would leave every sibling's mirroring dead until the next login.
+        if (pairings.some((held) => held.syncToken !== undefined)) {
             await enableMirroring(out);
         }
     },
@@ -262,61 +298,120 @@ const mirror = buildCommand<MirrorFlags>({
     },
 });
 
+/* Status leads with the PAIRING LIST — which sandboxes this machine syncs and into which folders — because that
+ * is the question a user actually arrives with, and the one this command could not answer before: it read the
+ * single pairing and printed Mutagen's view of it, so a folder that had quietly stopped being synced was
+ * indistinguishable from one that never existed. Every folder that should be syncing is named here, or it isn't
+ * being synced. The watcher's liveness follows, since a healthy session list under a dead watcher means new dev
+ * server ports stop appearing on localhost and commits stop arriving in the local clones. */
 const status = buildCommand<Record<string, never>>({
-    docs: { brief: "Show file-sync and port-mirror status" },
+    docs: { brief: "Show every paired sandbox, the mirror watcher, and Mutagen's own file-sync/forward state" },
     parameters: { flags: {} },
     async func(this: CommandContext) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        const config = await readConfig();
+        const { pairings } = await readState();
         const mutagen = await ensureMutagen();
-        if (config.mode === "sync") {
+        out(`Paired sandboxes (${pairings.length}):`);
+        for (const pairing of pairings) {
+            out(`  ${pairing.sandboxId}  ${pairing.mode === "sync" ? (pairing.localDir ?? "(no folder)") : "(ports only)"}`);
+        }
+        const pid = await readLiveWatcherPid();
+        out(pid === undefined ? "Mirror watcher: NOT running — run `intentic-sync mirror` to restart it." : `Mirror watcher: running (pid ${pid})`);
+        const syncing = pairings.filter((pairing) => pairing.mode === "sync");
+        if (syncing.length > 0) {
             out("File sync:");
-            runMutagen(mutagen, ["sync", "list", sessionName(config.sandboxId)]);
+            runMutagen(mutagen, ["sync", "list", ...syncing.map((pairing) => sessionName(pairing.sandboxId))]);
         }
         out("Port mirroring:");
         runMutagen(mutagen, ["forward", "list"]);
     },
 });
 
-// Pause/resume act on file sync — a no-op with a note for a mirror-only enrollment (mirroring is controlled by
+// Which sandbox a command acts on — every one this machine pairs unless named. Shared by pause/resume/uninstall.
+interface SandboxFlags {
+    readonly sandbox?: string;
+}
+
+const sandboxFlag = {
+    sandbox: {
+        kind: "parsed",
+        parse: String,
+        optional: true,
+        brief: "Act on one paired sandbox (its id, or any substring matching exactly one). Default: all of them",
+    },
+} as const;
+
+// Pause/resume act on file sync — skipped with a note for a mirror-only enrollment (mirroring is controlled by
 // `intentic-sync mirror`, not paused).
 const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
-    buildCommand<Record<string, never>>({
+    buildCommand<SandboxFlags>({
         docs: { brief },
-        parameters: { flags: {} },
-        async func(this: CommandContext) {
-            const config = await readConfig();
-            if (config.mode !== "sync") {
-                this.process.stdout.write(`mirror-only enrollment — no file sync to ${verb}.\n`);
+        parameters: { flags: sandboxFlag },
+        async func(this: CommandContext, flags: SandboxFlags) {
+            const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+            const selected = selectPairings(await readState(), flags.sandbox);
+            if (selected.length === 0) {
+                out(`no sandboxes are paired on this machine — nothing to ${verb}. Enable sync from a sandbox's Desktop sync card.`);
                 return;
             }
-            runMutagen(await ensureMutagen(), ["sync", verb, sessionName(config.sandboxId)]);
+            const syncing = selected.filter((pairing) => pairing.mode === "sync");
+            if (syncing.length === 0) {
+                out(`mirror-only enrollment${selected.length > 1 ? "s" : ""} — no file sync to ${verb}.`);
+                return;
+            }
+            const mutagen = await ensureMutagen();
+            runMutagen(mutagen, ["sync", verb, ...syncing.map((pairing) => sessionName(pairing.sandboxId))]);
+            out(`${verb === "pause" ? "Paused" : "Resumed"} file sync for: ${syncing.map((pairing) => pairing.sandboxId).join(", ")}`);
         },
     });
 
 const pause = fileSyncOnly("Pause file syncing", "pause");
 const resume = fileSyncOnly("Resume file syncing", "resume");
 
-const uninstall = buildCommand<Record<string, never>>({
-    docs: { brief: "Terminate the sync session and remove the managed ssh-config include" },
-    parameters: { flags: {} },
-    async func(this: CommandContext) {
-        // Stop mirroring first: unregister login-autostart, kill the watcher, and tear down its port forwards
-        // before the SSH transport goes.
+/* Uninstall. With `--sandbox` it unpairs ONE sandbox and leaves the agent — and every other pairing — running;
+ * bare, it removes the agent from this machine entirely. Either way the pairings it drops are self-revoked on
+ * their sandboxes, so a machine walking away cleans up after itself. */
+const uninstall = buildCommand<SandboxFlags>({
+    docs: { brief: "Unpair a sandbox (--sandbox), or remove the sync agent and every pairing from this machine" },
+    parameters: { flags: sandboxFlag },
+    async func(this: CommandContext, flags: SandboxFlags) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        const state = await readState();
+        const dropped = selectPairings(state, flags.sandbox);
+        const mutagen = await ensureMutagen();
+        const remaining = state.pairings.filter((held) => !dropped.some((pairing) => pairing.sandboxId === held.sandboxId));
+
+        // Self-revoke each dropped enrollment so its sandbox drops the key + token (a collaborator leaving cleans
+        // up after itself, without touching anyone else's mirror). Best-effort — an unreachable sandbox shouldn't
+        // block local teardown.
+        for (const pairing of dropped) {
+            if (pairing.syncToken !== undefined) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one HTTP call per sandbox being dropped, sequenced so a failure names its own
+                await revokeEnrollment(pairing.sandboxUrl, pairing.syncToken).catch(() => {});
+            }
+            if (pairing.mode === "sync") {
+                spawnSync(mutagen, ["sync", "terminate", sessionName(pairing.sandboxId)], { stdio: "ignore" });
+            }
+            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+            await retirePairingMirror(mutagen, pairing.sandboxId);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            await removePairing(pairing.sandboxId);
+            out(`unpaired ${pairing.sandboxId}${pairing.localDir === undefined ? "" : ` (${pairing.localDir} is no longer synced)`}.`);
+        }
+
+        if (remaining.length > 0) {
+            // The agent stays: regenerate the ssh fragment for the pairings that are still live, restart the
+            // watcher so it stops serving what just went, and leave Mutagen's daemon alone.
+            await writeManagedSshConfig(pairingSshConfig(remaining, await ensureCloudflared()));
+            await stopWatcher();
+            await startMirrorWatcher(cliLauncher("intentic-sync"), out);
+            out(`Still syncing ${remaining.length} sandbox(es): ${remaining.map((pairing) => pairing.sandboxId).join(", ")}`);
+            return;
+        }
+
+        // Nothing left to serve — remove the agent's own residency: login-autostart, watcher, forwards, transport.
         await unregisterAutostart(MIRROR_AUTOSTART, out);
         await stopMirror(out);
-        const config = await readConfig();
-        const mutagen = await ensureMutagen();
-        if (config.mode === "sync") {
-            spawnSync(mutagen, ["sync", "terminate", sessionName(config.sandboxId)], { stdio: "ignore" });
-        }
-        // Self-revoke this machine's enrollment so the sandbox drops its key + token (a collaborator leaving
-        // cleans up after itself, without touching anyone else's mirror). Best-effort — an unreachable sandbox
-        // shouldn't block local teardown.
-        if (config.syncToken !== undefined) {
-            await revokeEnrollment(config.sandboxUrl, config.syncToken).catch(() => {});
-        }
         await removeManagedSshConfig();
         // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely — the login
         // registration and the resident process both. A system-installed `mutagen` on PATH may hold the user's

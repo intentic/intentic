@@ -2,7 +2,7 @@ import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Log } from "@intentic/local-agent";
-import { binDir, type SyncConfig } from "./config.js";
+import { binDir, type Pairing } from "./config.js";
 import { IGNORES, sanitizeId, sshAlias } from "./ssh.js";
 
 // Pinned tool versions. cloudflared matches the sandbox image's pin so both ends speak the same tunnel protocol.
@@ -28,11 +28,43 @@ export const forwardSessionName = (sandboxId: string, port: number): string => `
 // prefix belongs to the user's own Mutagen — never ours to terminate.
 const oursIn = (listed: string, prefix: string): string[] => listed.split(/\s+/).filter((name) => name.startsWith(prefix));
 
-export const parseForwardNames = (listed: string): string[] => oursIn(listed, FORWARD_PREFIX);
+// The sandbox a forward session belongs to. The port is the trailing all-digit segment, so a sanitized id
+// containing dashes (every real one does) still splits off correctly.
+const FORWARD_NAME = new RegExp(`^${FORWARD_PREFIX}(.+)-(\\d+)$`);
 
-// Which file-sync sessions a pairing should retire: every session of ours except the one it wants to keep.
+// Our forward sessions, optionally narrowed to ONE sandbox — what lets a single pairing be torn down without
+// touching the forwards every other paired sandbox on this machine is holding. Matching parses the name instead
+// of testing a prefix: `intentic-fwd-sandbox-a-` is a prefix of `intentic-fwd-sandbox-a-b-5173` too.
+export const parseForwardNames = (listed: string, sandboxId?: string): string[] => {
+    const names = oursIn(listed, FORWARD_PREFIX);
+    if (sandboxId === undefined) {
+        return names;
+    }
+    const wanted = sanitizeId(sandboxId);
+    return names.filter((name) => FORWARD_NAME.exec(name)?.[1] === wanted);
+};
+
+// Forward sessions belonging to no pairing we still hold: a sandbox that was unpaired (or whose config was lost)
+// while Mutagen kept its localhost listener bound. Verified against 0.18.1: a session whose sandbox has been
+// destroyed still reports ForwardingConnections and still holds the port, so every port it used greets the next
+// pairing as "busy on this machine" until something terminates it.
+export const parseOrphanForwardNames = (listed: string, keptSandboxIds: readonly string[]): string[] => {
+    const kept = new Set(keptSandboxIds.map(sanitizeId));
+    return parseForwardNames(listed).filter((name) => {
+        const owner = FORWARD_NAME.exec(name)?.[1];
+        return owner === undefined || !kept.has(owner);
+    });
+};
+
+// Which file-sync sessions to retire: ours, minus the ones the pairings we still hold name. A session is retired
+// because NOTHING claims it any more — never merely because another pairing arrived. Mutagen retries a
+// disconnected session every 15 seconds for as long as the daemon lives, so an orphan is a dead sandbox being
+// dialled forever and a line of junk in `intentic-sync status`.
 // Forward sessions carry the same prefix but never appear in a `sync list`, so they can't be caught here.
-export const parseStaleSyncNames = (listed: string, keep: string): string[] => oursIn(listed, SESSION_PREFIX).filter((name) => name !== keep);
+export const parseOrphanSyncNames = (listed: string, keep: readonly string[]): string[] => {
+    const kept = new Set(keep);
+    return oursIn(listed, SESSION_PREFIX).filter((name) => !kept.has(name));
+};
 
 // The raw name listing for one kind of session. A daemon that isn't running (or a list that fails) has nothing
 // of ours to report — and nothing to tear down either.
@@ -41,11 +73,13 @@ const listSessionNames = (mutagen: string, kind: "forward" | "sync"): string => 
     return result.status === 0 ? result.stdout : "";
 };
 
-// Every forward session in the daemon that is ours, whichever sandbox created it.
-export const ourForwardSessions = (mutagen: string): string[] => parseForwardNames(listSessionNames(mutagen, "forward"));
+// Every forward session in the daemon that is ours — all of them, or just one sandbox's.
+export const ourForwardSessions = (mutagen: string, sandboxId?: string): string[] =>
+    parseForwardNames(listSessionNames(mutagen, "forward"), sandboxId);
 
-// Every file-sync session of ours that isn't the one `keep` names.
-const staleSyncSessions = (mutagen: string, keep: string): string[] => parseStaleSyncNames(listSessionNames(mutagen, "sync"), keep);
+// Forward sessions no pairing in `keptSandboxIds` claims.
+export const orphanForwardSessions = (mutagen: string, keptSandboxIds: readonly string[]): string[] =>
+    parseOrphanForwardNames(listSessionNames(mutagen, "forward"), keptSandboxIds);
 
 // `mutagen forward create` args: bind the SAME port on the local loopback and pipe it to the sandbox listener
 // at its recorded loopback address — `host` is the daemon-reported dial host, because a `localhost` bind inside
@@ -75,12 +109,12 @@ export interface SyncSessionSpec {
     readonly remoteDir: string;
 }
 
-// The session for a config: name and ssh alias both namespace on the sandbox id, and the remote side is always
+// The session for a pairing: name and ssh alias both namespace on the sandbox id, and the remote side is always
 // /work — the sandbox's workspace root is the only thing there is to sync.
-const sessionSpec = (config: SyncConfig & { readonly localDir: string }): SyncSessionSpec => ({
-    name: sessionName(config.sandboxId),
-    localDir: config.localDir,
-    alias: sshAlias(config.sandboxId),
+const sessionSpec = (pairing: Pairing & { readonly localDir: string }): SyncSessionSpec => ({
+    name: sessionName(pairing.sandboxId),
+    localDir: pairing.localDir,
+    alias: sshAlias(pairing.sandboxId),
     remoteDir: "/work",
 });
 
@@ -148,20 +182,11 @@ export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec):
 // The recreate is cheap where it counts: content that already matches on both ends reconciles without transfer,
 // so it costs a rescan, not a re-download. A paused session is recreated paused — drift gets fixed without
 // overriding a deliberate `intentic-sync pause`.
-export const ensureSyncSession = (mutagen: string, config: SyncConfig, log: Log): void => {
-    // One file-sync session per machine: this pairing's. An earlier pairing's session is never reused — its
-    // sandbox is gone and its ssh alias went with it — but Mutagen retries a disconnected session every 15
-    // seconds for as long as the daemon lives, so every pairing left behind another dead sandbox being dialled
-    // forever, and another line of junk in `intentic-sync status`.
-    const stale = staleSyncSessions(mutagen, sessionName(config.sandboxId));
-    if (stale.length > 0) {
-        spawnSync(mutagen, ["sync", "terminate", ...stale], { stdio: "ignore" });
-        log(`retired ${stale.length} file-sync session(s) left behind by previous pairings.`);
-    }
-    if (config.mode !== "sync" || config.localDir === undefined) {
+export const ensureSyncSession = (mutagen: string, pairing: Pairing, log: Log): void => {
+    if (pairing.mode !== "sync" || pairing.localDir === undefined) {
         return; // a mirror-only enrollment has no file sync at all — just port forwards
     }
-    const spec = sessionSpec({ ...config, localDir: config.localDir });
+    const spec = sessionSpec({ ...pairing, localDir: pairing.localDir });
     const live = readSession(mutagen, spec.name);
     if (live !== undefined && sessionMatchesSpec(live, spec)) {
         return;
@@ -173,6 +198,26 @@ export const ensureSyncSession = (mutagen: string, config: SyncConfig, log: Log)
         spawnSync(mutagen, ["sync", "terminate", spec.name], { stdio: "ignore" });
     }
     runMutagen(mutagen, mutagenCreateArgs(spec, live?.paused === true));
+};
+
+// Sweep the file-sync and forward sessions no pairing claims any more. Run when the pairing list changes, so an
+// unpaired sandbox stops being dialled and releases the localhost ports it was holding — WITHOUT this being the
+// thing that fires when a second sandbox is merely added, which is how a live pairing used to get evicted.
+export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing[], log: Log): void => {
+    const ids = pairings.map((pairing) => pairing.sandboxId);
+    const sessions = parseOrphanSyncNames(
+        listSessionNames(mutagen, "sync"),
+        pairings.map((pairing) => sessionName(pairing.sandboxId)),
+    );
+    if (sessions.length > 0) {
+        spawnSync(mutagen, ["sync", "terminate", ...sessions], { stdio: "ignore" });
+        log(`retired ${sessions.length} file-sync session(s) belonging to sandboxes this machine no longer pairs.`);
+    }
+    const forwards = orphanForwardSessions(mutagen, ids);
+    if (forwards.length > 0) {
+        spawnSync(mutagen, ["forward", "terminate", ...forwards], { stdio: "ignore" });
+        log(`released ${forwards.length} port forward(s) left holding localhost for sandboxes this machine no longer pairs.`);
+    }
 };
 
 const osToken = (): "linux" | "darwin" | "windows" => {

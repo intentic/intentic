@@ -2,15 +2,32 @@
   "dir": "_apps/sync",
   "keyFiles": [
     {
+      "path": "_apps/sync/src/config.ts",
+      "line": 46,
+      "what": "The pairing list — one entry per paired sandbox, and the reason a computer can sync a fleet."
+    },
+    {
       "path": "_apps/sync/src/commands.ts",
-      "what": "The largest file here — usually where the real work happens."
+      "what": "The CLI: setup adds a pairing, status lists them, uninstall drops one or all."
+    },
+    {
+      "path": "_apps/sync/src/mirror.ts",
+      "what": "The one resident watcher: walks every pairing per tick, reconciling port forwards."
+    },
+    {
+      "path": "_apps/sync/src/mutagen.ts",
+      "what": "Session naming and the orphan sweep — what is retired, and what is deliberately left alone."
+    },
+    {
+      "path": "_apps/sync/src/git-bridge.ts",
+      "what": "Why no .git ever file-syncs: commits travel by git's own protocol instead."
     }
   ],
   "name": "@intentic/sync",
-  "oneLiner": "Keeps a folder on your computer in step with the sandbox.",
+  "oneLiner": "Keeps folders on your computer in step with your sandboxes.",
   "provenance": {
-    "generatedAt": 1785535377531,
+    "generatedAt": 1785797368290,
     "model": "claude-opus-4-6",
-    "sourceRev": "9351dd9b346041edd7b1c4e34ae5218fd5d356f8"
+    "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4"
   }
 }

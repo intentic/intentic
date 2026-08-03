@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Log } from "@intentic/local-agent";
-import type { SyncConfig } from "./config.js";
+import type { Pairing } from "./config.js";
 import { sshAlias } from "./ssh.js";
 
 /* THE GIT BRIDGE: how commits reach the desktop now that no .git file-syncs (ssh.ts IGNORES). File sync owns
@@ -162,24 +162,24 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
     }
 };
 
-// One bridge pass over every sandbox repo. Only a "sync"-mode enrollment has a local tree to bridge into.
+// One bridge pass over one pairing's sandbox repos. Only a "sync"-mode enrollment has a local tree to bridge into.
 //
 // `known` is the repo list an earlier pass returned. The set only changes when a repo is added or removed, so
 // the caller holds onto it and passes undefined when it wants a fresh listing — that keeps the per-tick cost at
 // the one `ls-remote` each repo already pays instead of an ssh round trip just to re-learn the same names.
 // Returns the list that was used, or undefined when there was nothing to bridge or the sandbox was unreachable.
-export const runGitBridge = (exec: BridgeExec, config: SyncConfig, log: Log, known: readonly string[] | undefined): readonly string[] | undefined => {
-    if (config.mode !== "sync" || config.localDir === undefined) {
+export const runGitBridge = (exec: BridgeExec, pairing: Pairing, log: Log, known: readonly string[] | undefined): readonly string[] | undefined => {
+    if (pairing.mode !== "sync" || pairing.localDir === undefined) {
         return undefined;
     }
-    const alias = sshAlias(config.sandboxId);
+    const alias = sshAlias(pairing.sandboxId);
     const repos = known ?? listSandboxRepos(exec, alias);
     if (repos === undefined) {
         log("  git bridge: couldn't list the sandbox's repos — will retry next pass");
         return undefined;
     }
     for (const repo of repos) {
-        bridgeRepo(exec, alias, config.localDir, repo, log);
+        bridgeRepo(exec, alias, pairing.localDir, repo, log);
     }
     return repos;
 };

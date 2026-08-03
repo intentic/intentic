@@ -1,6 +1,6 @@
 # @intentic/sync
 
-Keeps a folder on your computer in step with the sandbox.
+Keeps folders on your computer in step with your sandboxes.
 
 ```stats
 { "items": [
@@ -14,6 +14,12 @@ Keeps a folder on your computer in step with the sandbox.
 ## The problem it solves
 
 Some people want their own editor and their own terminal. This mirrors files both ways and forwards ports, so a dev server in the cloud behaves like one on your laptop.
+
+One agent per computer, **many sandboxes**. Each paired sandbox is an entry in one state file, with its own local folder, its own ssh alias and its own Mutagen session; a single resident watcher walks that list every few seconds. This is the part worth knowing, because the agent used to hold exactly one pairing and treated a new `setup` as replacing a dead one — so pairing a second sandbox on the same computer silently stopped syncing the first one's folder. Adding a pairing is now purely additive, and sessions are retired only when no pairing claims them.
+
+Two sandboxes often serve the same dev-server port, and only one can own `localhost:6480`. First paired wins; the other is told which sandbox holds it.
+
+The agent's ports poll doubles as a **heartbeat**. It is the only thing a live sync does on its own, so the sandbox records when it last arrived, and the Desktop sync card reports a machine that has gone quiet instead of trusting the enrollment record forever.
 
 ```dag
 { "title": "Its neighbours",

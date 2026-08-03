@@ -21,6 +21,8 @@ const {
     isOwner,
     enrolled,
     syncingFrom,
+    syncStopped,
+    syncLastSeen,
     mirroredBy,
     revokedFrom,
     available,
@@ -105,12 +107,15 @@ onUnmounted(stop);
                     </p>
                 </div>
             </div>
+            <!-- The pill follows the HEARTBEAT, not the enrollment record: a green "Enabled" over a machine that
+                 stopped polling hours ago is the exact lie that let a lost pairing go unnoticed. -->
             <span
                 v-if="enrolled"
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+                :class="syncStopped ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'"
             >
-                <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-                Enabled
+                <span class="h-1.5 w-1.5 rounded-full" :class="syncStopped ? 'bg-warning' : 'bg-success'"></span>
+                {{ syncStopped ? "Not syncing" : "Enabled" }}
             </span>
         </div>
 
@@ -119,8 +124,11 @@ onUnmounted(stop);
             <template v-if="enrolled">
                 <dl class="flex flex-col gap-1.5 rounded-lg bg-canvas px-3 py-2.5 text-2xs">
                     <div v-if="syncingFrom !== undefined" class="flex items-center justify-between gap-3">
-                        <dt class="text-subtle">Syncing from</dt>
-                        <dd class="truncate font-mono text-content">{{ syncingFrom }}</dd>
+                        <dt class="text-subtle">{{ syncStopped ? "Last synced from" : "Syncing from" }}</dt>
+                        <dd class="flex min-w-0 items-center gap-1.5">
+                            <span class="truncate font-mono text-content">{{ syncingFrom }}</span>
+                            <span v-if="syncLastSeen !== undefined" :class="syncStopped ? 'text-warning' : 'text-subtle'">{{ syncLastSeen }}</span>
+                        </dd>
                     </div>
                     <div class="flex items-center justify-between gap-3">
                         <dt class="text-subtle">Ports</dt>
@@ -133,6 +141,19 @@ onUnmounted(stop);
                         <dd class="font-mono text-content">intentic-sync status</dd>
                     </div>
                 </dl>
+                <!-- The holder went quiet. Name the likeliest cause first: on a computer running more than one
+                     sandbox, the agent is shared, and older builds silently handed the whole pairing to whichever
+                     sandbox was set up last — so a folder stops syncing with nothing on either end saying so. -->
+                <div v-if="syncStopped" class="flex flex-col gap-1 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-2xs text-warning">
+                    <p class="font-medium">
+                        <span class="font-mono">{{ syncingFrom }}</span> hasn't checked in since {{ syncLastSeen ?? "it was enrolled" }}.
+                    </p>
+                    <p>
+                        Nothing is reaching its folder. That computer may be asleep or offline — or its sync agent was pointed at a different sandbox.
+                        Run <span class="font-mono">intentic-sync status</span> there to see every sandbox it pairs, then re-enable below if this one
+                        is missing.
+                    </p>
+                </div>
                 <div v-if="isOwner" class="flex items-center justify-between gap-2">
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
                         <button

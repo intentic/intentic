@@ -38,12 +38,13 @@ export interface MirroredPort {
 // holder), "mirror" = port mirroring only (unlimited collaborators). Decided by the pairing the enroll redeemed.
 export type SyncMode = "sync" | "mirror";
 
-// What `intentic-sync setup` writes and the other commands read back. sshHostname is what the daemon returned
-// on enrollment — the tunnel host Mutagen reaches; sandboxId namespaces the ssh alias + Mutagen sessions.
-// syncToken is the enrollment-minted credential for the daemon's GET /ports (what `mirror` reconciles against)
-// + self-revoke on uninstall. localDir is set only for mode "sync" (mirror-only has no file sync). mirroredPorts
-// is the set of Mutagen forward sessions the last reconcile left alive — the baseline, so vanished ports get terminated.
-export interface SyncConfig {
+// One paired sandbox. sshHostname is what the daemon returned on enrollment — the tunnel host Mutagen reaches;
+// sandboxId namespaces the ssh alias + Mutagen sessions, and is the KEY: it comes from the sandbox's own URL
+// host, so it identifies the sandbox across re-pairings. syncToken is the enrollment-minted credential for the
+// daemon's GET /ports (what `mirror` reconciles against) + self-revoke on uninstall. localDir is set only for
+// mode "sync" (mirror-only has no file sync). mirroredPorts is the set of Mutagen forward sessions the last
+// reconcile left alive — the baseline, so vanished ports get terminated.
+export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
     readonly sshHostname: string;
@@ -53,7 +54,47 @@ export interface SyncConfig {
     readonly mirroredPorts?: readonly MirroredPort[];
 }
 
-export const readConfig = async (): Promise<SyncConfig> => JSON.parse(await readFile(configPath, "utf8")) as SyncConfig;
+/* Every pairing this machine holds — a LIST, because one machine legitimately runs a fleet of sandboxes.
+ *
+ * This file used to hold exactly one pairing, and `setup` therefore treated pairing a new sandbox as replacing a
+ * dead one: it overwrote the whole ssh fragment, tore down every forward on the machine, forgot the old folder,
+ * and terminated its file-sync session. That premise ("an earlier pairing's sandbox is gone") is false the moment
+ * two sandboxes run side by side — installing the desktop app next to a CLI-started sandbox silently stopped
+ * syncing the folder the user was working in, with both `intentic-sync status` and the evicted sandbox's own
+ * Desktop-sync card still reporting a healthy sync. Keyed by sandboxId, a second pairing is an ADDITION. */
+export interface SyncState {
+    readonly pairings: readonly Pairing[];
+}
 
-export const writeConfig = async (config: SyncConfig): Promise<void> =>
-    await writeSecretFile(configPath, baseDir, JSON.stringify(config, undefined, 2));
+// The state as written. A missing file is an EMPTY pairing list rather than an error: "nothing has ever been
+// paired here" is a state every caller has a real answer for — `status` prints none, `uninstall` still strips the
+// agent's residency, the watcher exits — so making them each catch an ENOENT bought nothing. A file that EXISTS
+// and won't parse is a genuine fault and propagates.
+export const readState = async (): Promise<SyncState> => {
+    const raw = await readFile(configPath, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") {
+            return undefined;
+        }
+        throw error;
+    });
+    return raw === undefined ? { pairings: [] } : (JSON.parse(raw) as SyncState);
+};
+
+/* Read-modify-write the pairing list. Every mutation goes through here and re-reads immediately beforehand, so a
+ * caller mutates what is on disk now rather than a state it built earlier — two processes write this file for
+ * different reasons (`setup` adds a pairing; the resident watcher stamps mirroredPorts onto the ones already
+ * there), and the mutations are expected to name only what they change.
+ *
+ * This is NOT cross-process exclusion, and doesn't pretend to be: `setup` still stops the watcher before writing,
+ * which is what actually keeps those two apart. What the narrow window plus targeted mutations buy is the size of
+ * the worst case — a lost update costs one tick's port baseline instead of a sibling's whole pairing. */
+export const updateState = async (mutate: (state: SyncState) => SyncState): Promise<void> =>
+    await writeSecretFile(configPath, baseDir, JSON.stringify(mutate(await readState()), undefined, 2));
+
+// Add a pairing, or replace the one already held for that sandbox (re-running setup rotates its token). Every
+// OTHER pairing survives untouched — the whole point of the list.
+export const upsertPairing = async (pairing: Pairing): Promise<void> =>
+    await updateState((state) => ({ pairings: [...state.pairings.filter((held) => held.sandboxId !== pairing.sandboxId), pairing] }));
+
+export const removePairing = async (sandboxId: string): Promise<void> =>
+    await updateState((state) => ({ pairings: state.pairings.filter((held) => held.sandboxId !== sandboxId) }));

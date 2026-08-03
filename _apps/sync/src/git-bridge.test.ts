@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { SyncConfig } from "./config.js";
+import type { Pairing } from "./config.js";
 import { type BridgeExec, bridgeRepo, listSandboxRepos, runGitBridge } from "./git-bridge.js";
 
 // A scripted BridgeExec: `handlers` maps a command-line PREFIX to its stdout (undefined = that command fails),
@@ -182,7 +182,7 @@ describe("bridgeRepo", () => {
 });
 
 describe("runGitBridge", () => {
-    const config: SyncConfig = { sandboxUrl: "https://s.example.dev", sandboxId: "x", sshHostname: "ssh.example.dev", mode: "sync", localDir: LOCAL };
+    const config: Pairing = { sandboxUrl: "https://s.example.dev", sandboxId: "x", sshHostname: "ssh.example.dev", mode: "sync", localDir: LOCAL };
     // A mirror-only enrollment has no localDir AT ALL — the key is absent, not present-and-undefined, which
     // is the distinction the config type draws and the bridge reads.
     const { localDir: _localDir, ...withoutLocalDir } = config;

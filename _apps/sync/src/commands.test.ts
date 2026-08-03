@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { enrollKey } from "./commands.js";
+import { enrollKey, selectPairings } from "./commands.js";
+import type { Pairing, SyncState } from "./config.js";
 
 const jsonResponse = (status: number, body: unknown): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -53,5 +54,40 @@ describe("enrollKey", () => {
             /enrolling the sync key failed \(502\)/,
         );
         expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+});
+
+/* Which sandbox a command acts on. With a fleet on one machine, `pause`/`resume`/`uninstall` need to name one —
+ * and a real id is `sandbox-<hex>-<zone>`-shaped, so a human names it by the fragment they recognize. An ambiguous
+ * or unknown fragment must refuse rather than guess: guessing here unpairs the wrong sandbox. */
+describe("selectPairings", () => {
+    const pairing = (sandboxId: string): Pairing => ({
+        sandboxUrl: `https://${sandboxId}/`,
+        sandboxId,
+        sshHostname: `ssh-${sandboxId}`,
+        mode: "sync",
+    });
+    const state: SyncState = {
+        pairings: [pairing("sandbox-0738cd6b5027-intentic-dev"), pairing("sandbox-bce57bb9fe3b-intentic-dev")],
+    };
+
+    it("selects every pairing when no sandbox is named", () => {
+        expect(selectPairings(state, undefined)).toEqual(state.pairings);
+    });
+
+    it("selects by full sandbox id", () => {
+        expect(selectPairings(state, "sandbox-bce57bb9fe3b-intentic-dev")).toEqual([state.pairings[1]]);
+    });
+
+    it("selects by the fragment a human would type", () => {
+        expect(selectPairings(state, "0738")).toEqual([state.pairings[0]]);
+    });
+
+    it("refuses an ambiguous fragment instead of picking one", () => {
+        expect(() => selectPairings(state, "intentic-dev")).toThrow(/matches more than one/);
+    });
+
+    it("refuses an unknown fragment, listing what this machine does pair", () => {
+        expect(() => selectPairings(state, "nope")).toThrow(/no paired sandbox matches "nope".*0738cd6b5027/s);
     });
 });

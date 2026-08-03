@@ -1043,11 +1043,13 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         const mirrors = await mirrorMachines(services.config.historyRoot);
         // Always 200 so the UI can render its "enable" vs "enabled" state; sshHostname is omitted when this
         // sandbox has no SSH tunnel (loopback/preview), which the card treats as "sync unavailable". syncingFrom
-        // names the single machine holding file sync (takeover target); mirroredBy lists every machine mirroring
-        // ports (unlimited — each collaborator on their own localhost).
+        // names the single machine holding file sync (takeover target) and when it was last heard from — an
+        // enrollment nobody has used for hours is a sync that has stopped, which the card must not report as
+        // healthy. mirroredBy lists every machine mirroring ports (unlimited — each collaborator on their own
+        // localhost).
         return c.json({
             enrolled: await isKeyEnrolled(services.config.historyRoot),
-            ...(holder !== undefined ? { syncingFrom: holder } : {}),
+            ...(holder !== undefined ? { syncingFrom: holder.machine, ...(holder.seenAt === undefined ? {} : { syncSeenAt: holder.seenAt }) } : {}),
             ...(mirrors.length > 0 ? { mirroredBy: mirrors } : {}),
             ...(sshHostname !== undefined ? { sshHostname } : {}),
         });

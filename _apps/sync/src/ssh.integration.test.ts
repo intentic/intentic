@@ -3,7 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { mutagenCreateArgs, sessionMatchesSpec, sessionName, type SyncSessionSpec } from "./mutagen.js";
-import { IGNORES, INCLUDE_MARKER, mutagenSshPath, resolvedHostname, sanitizeId, sshAlias, sshConfigBlock, stripManagedIncludes } from "./ssh.js";
+import {
+    IGNORES,
+    INCLUDE_MARKER,
+    mutagenSshPath,
+    pairingSshConfig,
+    resolvedHostname,
+    sanitizeId,
+    sshAlias,
+    sshConfigBlock,
+    stripManagedIncludes,
+} from "./ssh.js";
 
 describe("id sanitization", () => {
     it("keeps only alias-safe chars and trims stray dashes", () => {
@@ -52,6 +62,30 @@ describe("sshConfigBlock", () => {
 // silent) reads no config at all. Every Windows setup then died at "unable to receive server magic number: EOF"
 // with the alias echoed back as an unresolvable hostname. A relative name is the one spelling every build
 // anchors identically.
+/* The fragment is regenerated from the pairing LIST. Writing a single block was the first thing that broke a live
+ * pairing: pairing a second sandbox overwrote the file, the first sandbox's alias stopped resolving, and Mutagen's
+ * ssh then dialled the alias as a literal hostname — surfacing, if at all, as "unable to receive server magic
+ * number: EOF" in a log nobody was reading. */
+describe("pairingSshConfig", () => {
+    const pairings = [
+        { sandboxId: "sandbox-0738cd6b5027.intentic.dev", sshHostname: "ssh-0738cd6b5027.intentic.dev" },
+        { sandboxId: "sandbox-bce57bb9fe3b.intentic.dev", sshHostname: "ssh-bce57bb9fe3b.intentic.dev" },
+    ];
+
+    it("emits a Host block for every paired sandbox, each on its own hostname", () => {
+        const fragment = pairingSshConfig(pairings, "/home/u/.intentic/sync/bin/cloudflared");
+        expect(fragment).toContain(`Host ${sshAlias("sandbox-0738cd6b5027.intentic.dev")}`);
+        expect(fragment).toContain("HostName ssh-0738cd6b5027.intentic.dev");
+        expect(fragment).toContain(`Host ${sshAlias("sandbox-bce57bb9fe3b.intentic.dev")}`);
+        expect(fragment).toContain("HostName ssh-bce57bb9fe3b.intentic.dev");
+        expect(fragment.match(/^Host /gm)).toHaveLength(2);
+    });
+
+    it("is empty when nothing is paired, so unpairing the last sandbox leaves no dangling alias", () => {
+        expect(pairingSshConfig([], "/usr/bin/cloudflared")).toBe("");
+    });
+});
+
 describe("the managed ssh-config include", () => {
     it("is a bare relative name, never an absolute path", () => {
         expect(INCLUDE_MARKER).toBe("Include intentic-sync.conf");
