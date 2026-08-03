@@ -14,7 +14,7 @@ import type { FleetLane } from "../composables/agents/agentStatus";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import { laneOfRun, liveConversations, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
-import { showRun } from "../composables/chat/chatRun";
+import { chatRun, showRun } from "../composables/chat/chatRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -157,7 +157,12 @@ watch(needle, () => (showBeyond.value = false));
  * window keeps this card whatever its age (windowFinished), and a selection made anywhere but this board
  * scrolls it into view (revealCard). */
 const flashId = ref<string | undefined>(undefined);
-const highlightId = computed(() => flashId.value ?? (mobile.value ? undefined : active.value.conversationId));
+/* A RUN'S DIAGRAM ON SCREEN TAKES THE RING OFF EVERY AGENT, because in that state the chat is pointing at no
+ * conversation at all — it is showing the map of one. The board went on ringing whichever card had the focus
+ * before the run took the panel, which reads as "that chat is what you are looking at" while the panel shows
+ * something else entirely, and the run card beside it wore nothing. The run's own sessions are a different
+ * case and keep the ordinary rule: those ARE conversations, and the focused one is genuinely on screen. */
+const highlightId = computed(() => flashId.value ?? (mobile.value || chatRun.value?.mode === `graph` ? undefined : active.value.conversationId));
 // The Finished window is only in force while the lane is BROWSING its own recent tail. The archive is a
 // different list entirely, and both a filter and an explicit expand lift the cap outright — see cardsFor.
 const windowed = computed(() => !archiveOpen.value && !filtering.value && !showAllFinished.value);
@@ -853,6 +858,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             v-for="run in runsFor(lane.key)"
                             :key="run.runId"
                             :run="run"
+                            :selected="chatRun?.runId === run.runId"
                             :stopping="stoppingRuns.has(run.runId)"
                             @open="openRun(run)"
                             @graph="openRunGraph(run)"

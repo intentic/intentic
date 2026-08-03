@@ -28,6 +28,8 @@ import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
+import { chatRun, showRun } from "../composables/chat/chatRun";
+import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { commandShortcut } from "../composables/commands/useCommands";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
@@ -84,7 +86,20 @@ const emit = defineEmits<{
 
 const { conversations, activeId, tabReveal, panes, openBeside, closePane, setPanes } = useChat();
 const { agentById, fleet, loadArchived } = useAgents();
+
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
+
+/* The workflow run the panel is showing, if it is showing one — the row at the head of the list. Looked up
+ * rather than held, so the step counter on it keeps up with the run while the reader watches.
+ *
+ * Popped out only, and for the same reason the run itself is: the diagram takes the pane area, and a docked
+ * panel has no pane area to give it. A row offering to open something this frame cannot draw would be a dead
+ * control, which is worse than no row at all. */
+const { runs: workflowRuns } = useWorkflowRuns();
+const shownRun = computed(() => (poppedOut.value ? workflowRuns.value.find((run) => run.runId === chatRun.value?.runId) : undefined));
+// Its row reads as SELECTED only while the diagram is the thing on screen. In the run's sessions the focused
+// chat's own row wears that, and two rows claiming it would be the list contradicting itself.
+const runOnScreen = computed(() => shownRun.value !== undefined && chatRun.value?.mode === `graph`);
 
 interface OpenChat {
     readonly conversation: Conversation;
@@ -567,6 +582,30 @@ const closeTab = (event: Event, id: string): void => {
             class="shrink-0"
         />
         <div ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
+            <!-- THE RUN THIS PANEL IS SHOWING, at the head of the list and in the list's own card language.
+                 It is here because it is one of the things this window is displaying, and the list is the
+                 window's answer to "what am I in": a run that took the whole pane area and appeared nowhere
+                 in the rail left the reader with no way back to its diagram except the bar's arrow, and no
+                 sign that the panel was in a run at all once they had clicked into one of its sessions.
+                 Above the lanes rather than in one — a run is not a chat, and the lanes sort chats. -->
+            <button
+                v-if="shownRun"
+                type="button"
+                class="chat-tab rail-card group flex w-full min-w-0 shrink-0 flex-col gap-1 rounded-lg border-dashed p-2.5 text-left text-2xs"
+                :class="{ 'chat-tab-on': runOnScreen }"
+                :aria-label="`Back to the diagram of ${shownRun.workflow.name}`"
+                @click="showRun(shownRun.runId, `graph`)"
+            >
+                <span class="flex min-w-0 items-center gap-1.5">
+                    <Icon name="sitemap" class="shrink-0 text-2xs text-link" />
+                    <span class="min-w-0 flex-1 truncate font-semibold text-content">{{ shownRun.workflow.name }}</span>
+                </span>
+                <span class="text-2xs text-subtle">
+                    {{ shownRun.steps.filter((step) => step.state === `done`).length }}/{{ shownRun.steps.length }} steps ·
+                    {{ runOnScreen ? `the diagram` : `back to the diagram` }}
+                </span>
+            </button>
+
             <!-- A lane with nothing in it is not drawn at all (occupiedLanes — and see the note there before
                  reaching for `v-show` here); a lane the FILTER emptied keeps its header and says so, so the
                  list doesn't reshuffle under the cursor mid-keystroke. -->

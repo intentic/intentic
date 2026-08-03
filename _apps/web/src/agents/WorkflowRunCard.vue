@@ -20,7 +20,7 @@ import { laneOfRun, liveConversations, runningTitles, spentOn } from "../composa
  * this board is where the panes are.
  */
 
-const { run } = defineProps<{ run: WorkflowRun; stopping?: boolean }>();
+const { run } = defineProps<{ run: WorkflowRun; selected?: boolean; stopping?: boolean }>();
 const emit = defineEmits<{ open: []; stop: []; graph: [] }>();
 
 const lane = computed(() => laneOfRun(run));
@@ -52,7 +52,10 @@ const TONE: Record<WorkflowRun["state"], string> = {
             // rather than one of them. The lane bar is the agent card's, unchanged — attention means the same
             // thing whatever kind of row is carrying it.
             lane === 'attention' ? 'border-l-[3px] border-l-warning' : '',
-            'border-line bg-card hover:border-line-strong',
+            // The agent card's selection, on the agent card's channel: the chat panel is showing THIS run, and
+            // a board that says so about a session but not about a run makes the run look like a thing you
+            // cannot point the chat at.
+            selected ? 'border-primary-500 bg-overlay ring-2 ring-primary-500/50' : 'border-line bg-card hover:border-line-strong',
             stopping ? 'pointer-events-none opacity-60' : '',
         ]"
         @click="emit(`open`)"
