@@ -178,7 +178,11 @@ const shapeOf = (workflow: Workflow): string => {
     <!-- THREE SCREENS, ONE VIEW. The designer and a run each need the whole page (a graph does not fit in a
          dialog), and an extension's route space is the query — so this switches on it rather than layering
          modals over the list. `h-full` because both of those are canvas pages that must not scroll. -->
-    <WorkflowDesigner v-if="designing" :key="editing" :initial="designing" @close="backToList()" @saved="openSaved($event)" />
+    <!-- SAVING GOES BACK TO THE LIST. It used to navigate `?edit=new` → `?edit=<id>`, which is the same
+         screen at a different address — and since `editing` is this component's `:key`, the designer was torn
+         down and rebuilt in place: a flicker, then the form you were already looking at. Nothing about the
+         press was legible as having worked. A save is finishing with the document, so it closes it. -->
+    <WorkflowDesigner v-if="designing" :key="editing" :initial="designing" @close="backToList()" @saved="backToList()" />
     <WorkflowRunPage v-else-if="watching" :key="watching.runId" :run="watching" @close="backToList()" />
 
     <Page v-else width="wide">

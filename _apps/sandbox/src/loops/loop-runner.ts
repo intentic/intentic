@@ -218,7 +218,21 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 at: Date.now(),
                 outcome: verdict.done ? "done" : outcome.failure !== undefined ? "error" : "continue",
                 changed,
-                ...(verdict.detail !== undefined ? { detail: verdict.detail } : outcome.failure !== undefined ? { detail: outcome.failure } : {}),
+                /* THE TURN'S FAILURE OUTRANKS THE CHECK'S VERDICT, unless the check says the goal was met.
+                 *
+                 * The two disagree in a specific, common way: a turn the provider refused writes nothing, so
+                 * the completion check reports "no output file — the iteration ended without writing
+                 * iteration-1.json". That is true and it is the CONSEQUENCE; the cause is a sentence the
+                 * provider already handed us. Preferring the verdict buried it, and a workflow step whose
+                 * model was refused ("your organization has disabled Claude subscription access") recorded
+                 * two rounds of a missing file instead — the reason nowhere, on any surface. */
+                ...(verdict.done
+                    ? verdict.detail !== undefined
+                        ? { detail: verdict.detail }
+                        : {}
+                    : (outcome.failure ?? verdict.detail) !== undefined
+                      ? { detail: (outcome.failure ?? verdict.detail) as string }
+                      : {}),
                 ...(cost !== undefined ? { costUsd: cost } : {}),
                 ...(outcome.sessionId !== undefined ? { sessionId: outcome.sessionId } : {}),
             };
@@ -230,7 +244,16 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
             // Checked AFTER the iteration is recorded, so the history shows the unchanged runs that earned the
             // verdict — a stalled loop whose rows do not show the stall is an accusation with no evidence.
             if (stalls >= record.stallLimit) {
-                ended = { state: "stalled", detail: `${stalls} iterations in a row changed nothing in the tree.` };
+                /* A loop that stalled because every turn was REFUSED says so. Otherwise the step's one-line
+                 * detail — the sentence the run view and the fleet card both read — is "3 iterations in a row
+                 * changed nothing", which describes a wedged agent and hides a provider that never ran one. */
+                ended = {
+                    state: "stalled",
+                    detail:
+                        outcome.failure === undefined
+                            ? `${stalls} iterations in a row changed nothing in the tree.`
+                            : `${stalls} iterations in a row changed nothing — the last one failed: ${outcome.failure}`,
+                };
             }
         }
     } catch (error) {

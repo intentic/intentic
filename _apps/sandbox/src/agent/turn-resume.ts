@@ -168,7 +168,17 @@ const resumedTurn = (
  * setting resolves nothing and the turn keeps its unset model — the daemon then falls to the provider's live
  * catalog default exactly as a composer turn with an unloaded catalog does. */
 const withAgentRunModel = async <T extends AgentTurn>(services: Services, turn: T): Promise<T> => {
-    if (turn.unattended !== true || turn.model !== undefined) {
+    /* A TURN THAT NAMES ITS PROVIDER KEEPS IT, and the `agent` half of this guard is as load-bearing as the
+     * `model` half. The pin below carries a provider WITH its model, so filling a turn that already chose one
+     * does not top it up — it moves the turn to a different provider entirely. A workflow step pinned to
+     * `claude` with no model (the ordinary case: pinning a model id would go stale) would silently run on
+     * whatever the sandbox's agent-run pin names, which for the one design where the provider IS the point
+     * — two models racing the same request — quietly makes both arms the same model.
+     *
+     * Absent a model AND absent an agent is the case this is for: a surface that chose neither, which is what
+     * "nobody picked a model for this turn" means. Naming an agent and no model falls to that provider's own
+     * catalog default, exactly as it did before the flag existed. */
+    if (turn.unattended !== true || turn.model !== undefined || turn.agent !== undefined) {
         return turn;
     }
     const { agentRunModel, agentRunEffort } = await services.sandboxSettings.get();

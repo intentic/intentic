@@ -159,10 +159,26 @@ const tabMatches = (entry: OpenChat): boolean => {
     );
 };
 
+/* A RUN'S STEPS ARE INSIDE ITS ROW, not beside it — the same rule the fleet board follows, for the reason this
+ * list exists at all: it IS the board one card wide, and a workflow that collapsed into one row there while
+ * spilling five chats here would be two answers to "what am I looking at".
+ *
+ * The steps are still OPEN (the run's own row put them on screen, and the panes are showing them); what they
+ * are not is separately listed. The run's row is how you get back to them, through its diagram.
+ *
+ * Gated on the run being drawn, exactly as the board gates it: while filtering, or once a run has rolled off
+ * the ledger, nothing stands for those chats and they list themselves again. Hiding a chat nothing else shows
+ * would be worse than showing it twice.
+ */
 const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
     const grouped: Record<FleetLane, OpenChat[]> = { attention: [], active: [], finished: [] };
+    // The three lane keys spelled out rather than read off LANES, which is declared below this.
+    const drawnRuns = new Set(([`attention`, `active`, `finished`] as const).flatMap((lane) => runsIn(lane)).map((run) => run.runId));
     for (const conversation of conversations.value) {
         const agent = agentById(conversation.conversationId);
+        if (agent?.workflow !== undefined && drawnRuns.has(agent.workflow.runId)) {
+            continue;
+        }
         grouped[laneOfTab(conversation, agent)].push({ conversation, agent });
     }
     // The board's own orderings (useAgents.lanes): fresh drafts lead Active, then turn start — fixed for the
