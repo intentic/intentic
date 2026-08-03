@@ -94,16 +94,50 @@ const cycleFaults = (steps: readonly WorkflowStep[]): string[] => {
     return faults;
 };
 
+/* A GATE THAT CANNOT BE ANSWERED. Every rule here is about the gate against the GRAPH — which is why none of
+ * them can live in the schema — and all of them fail the same expensive way if unchecked: the run spends its
+ * whole fan-out of sessions and then answers `blocked`, on every commit, for a reason nobody sees until they
+ * go reading the daemon's log.
+ *
+ * The `string[]` refusal is the least obvious and the most worth having. A release decision is one value
+ * compared against a list of values that ship; a field holding several has no such reading, and the one the
+ * gate would fall into (join them and compare the string) is a rule nobody wrote down and nobody could guess.
+ */
+const gateFaults = (workflow: Pick<Workflow, "steps" | "gate">): string[] => {
+    const { gate } = workflow;
+    if (gate === undefined) {
+        return [];
+    }
+    const step = workflow.steps.find((entry) => entry.id === gate.step);
+    if (step === undefined) {
+        return [`The gate reads step "${gate.step}", which is not a step in this workflow.`];
+    }
+    if (step.output.kind !== "json") {
+        return [`The gate reads "${step.title}", but that step declares no output fields for it to read.`];
+    }
+    const field = step.output.fields.find((entry) => entry.name === gate.field);
+    if (field === undefined) {
+        return [`The gate reads "${gate.field}", which "${step.title}" does not declare.`];
+    }
+    if (field.type === "string[]") {
+        return [`The gate reads "${gate.field}", which is a list — a release decision has to be one value.`];
+    }
+    // A field the step may legally omit is a gate that answers `blocked` whenever it does, which is a release
+    // stuck on a technicality rather than on the product.
+    return field.required ? [] : [`The gate reads "${gate.field}", which "${step.title}" declares optional — it has to be required.`];
+};
+
 /* Why the graph is not runnable, as a list of sentences. Empty ⇒ it is. Shared by the save route (which
  * refuses) and the designer (which shows them under the canvas as you type), because a rule enforced only
  * daemon-side is a rule the user meets as a failed save with no idea which node is wrong.
  */
-export const workflowFaults = (workflow: Pick<Workflow, "steps">): string[] => {
+export const workflowFaults = (workflow: Pick<Workflow, "steps" | "gate">): string[] => {
     const ids = new Set(workflow.steps.map((step) => step.id));
     return [
         ...duplicateIdFaults(workflow.steps),
         ...workflow.steps.flatMap((step) => stepFaults(step, ids)),
         ...sharedContinuationFaults(workflow.steps),
         ...cycleFaults(workflow.steps),
+        ...gateFaults(workflow),
     ];
 };

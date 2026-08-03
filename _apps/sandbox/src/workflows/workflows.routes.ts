@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { type Workflow, workflowFaults, workflowsContract, type WorkflowSummary } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
@@ -27,8 +28,18 @@ export const createWorkflowsRoutes = (services: Services) => {
             if (faults.length > 0) {
                 throw new ORPCError("BAD_REQUEST", { message: faults.join(" ") });
             }
-            await services.workflows.upsert(input);
-            return input;
+            /* Mint the gate's webhook token, exactly as an event automation's is minted and for the same
+             * reason — its caller is a machine that cannot present a Google identity. A round-tripped token is
+             * KEPT, because the designer re-posts the whole workflow on every edit: a gate whose URL changed
+             * each time somebody renamed a step would be one every pipeline had to be re-taught. */
+            const workflow =
+                input.gate !== undefined && input.gate.token === undefined
+                    ? { ...input, gate: { ...input.gate, token: randomBytes(24).toString("base64url") } }
+                    : input;
+            await services.workflows.upsert(workflow);
+            // Returned rather than echoing the input: the token is minted here, and the designer has no other
+            // way to learn the URL it has to hand the pipeline.
+            return workflow;
         }),
         // Deliberately does not stop a run of it that is in flight, and does not delete its history: a run
         // snapshotted its definition when it started, so it stays readable and stays stoppable.

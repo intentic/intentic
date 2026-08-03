@@ -44,6 +44,7 @@ import { createBrowserViewRoute } from "./browser/browser-view.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoutes } from "./webchat/webchat.routes.js";
 import { createWidgetRoute } from "./webchat/webchat-widget.js";
+import { createGateRoute } from "./workflows/gate.routes.js";
 import { extractTarToWorkspace, PathEscapeError } from "./workspace/workspace-archive.js";
 import { computeUploadSkip, type UploadManifestEntry } from "./workspace/workspace-diff.js";
 import {
@@ -84,6 +85,11 @@ const webchatPublicPath = (path: string): boolean => path === "/webchat/widget.j
 // exempt from the bearer middleware and gated by the per-sandbox webhook secret instead (github signs the
 // body, gitlab echoes the token — see ci/webhook.routes.ts).
 const ciWebhookPath = /^\/ci\/webhook\/[^/]+$/;
+
+// The release gate — its callers are pipeline runners (no Google token, and no Origin either, which is why it
+// cannot ride the Doorbell's allowlist), so it's exempt from the bearer middleware and gated by the workflow's
+// own minted gate token instead (see workflows/gate.routes.ts).
+const gatePath = /^\/workflows\/[^/]+\/gate$/;
 
 /* The two doors a connected computer opens, both exempt from the bearer middleware because neither caller has a
  * Google identity to present:
@@ -273,6 +279,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 eventFirePath.test(c.req.path) ||
                 webchatPublicPath(c.req.path) ||
                 ciWebhookPath.test(c.req.path) ||
+                gatePath.test(c.req.path) ||
                 hostPublicPath(c.req.path) ||
                 hostMcpPath.test(c.req.path)
             ) {
@@ -612,6 +619,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }).catch((error: unknown) => services.logger.error({ err: error, automation: automation.id }, "automation run failed"));
         return c.json({ ok: true });
     });
+
+    /* The release gate: a pipeline runner POSTs here to run a workflow and WAIT for its verdict. Public
+     * (gatePath above), authenticated by the workflow's own minted gate token, and the only route in the
+     * daemon that holds a request open for the work it started — see workflows/gate.routes.ts for why. */
+    app.post("/workflows/:id/gate", createGateRoute(services));
 
     /* The Doorbell: the embeddable widget bundle, the per-automation config it renders itself from, its bot
      * challenge, and the message ingest whose reply streams back as SSE. All four are exempt from the bearer

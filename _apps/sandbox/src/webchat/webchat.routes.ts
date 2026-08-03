@@ -7,6 +7,7 @@ import type { AutomationRecord } from "../automations/automations-store.js";
 import { fireAutomation, PAYLOAD_MAX, TITLE_MAX, type WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../context.js";
+import { dailyBudget } from "../store/daily-budget.js";
 import { createSseStream } from "./sse-stream.js";
 import { antiBotAccepted, issueChallenge } from "./webchat-antibot.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
@@ -39,22 +40,9 @@ const rateLimited = (key: string, now: number): boolean => {
     return false;
 };
 
-/* The per-automation daily ceiling, counted in memory against the UTC day. Deliberately NOT persisted: its job
- * is to bound a runaway day, and a daemon restart resetting it is a smaller problem than a counter file
- * written on every visitor message. The per-conversation ceiling IS persisted, because it rides the session
- * record that has to be written anyway. */
-const daily = new Map<string, { day: number; count: number }>();
-const dayOf = (now: number): number => Math.floor(now / 86_400_000);
-const overDailyBudget = (automationId: string, max: number, now: number): boolean => {
-    const day = dayOf(now);
-    const current = daily.get(automationId);
-    const count = current !== undefined && current.day === day ? current.count : 0;
-    if (count >= max) {
-        return true;
-    }
-    daily.set(automationId, { day, count: count + 1 });
-    return false;
-};
+// The per-automation daily ceiling — see daily-budget.ts for why it is in memory. The per-CONVERSATION ceiling
+// is persisted instead, because it rides the thread session record that has to be written anyway.
+const daily = dailyBudget();
 
 /* A web-chat automation runs ONE turn at a time: concurrent visitor messages QUEUE instead of overlapping, so
  * no request is dropped — fireAutomation's own inFlight guard DROPS overlaps, which is wrong for support where
@@ -208,7 +196,7 @@ export const createWebchatRoutes = (
             if (existing !== undefined && config.conversationMessageMax !== undefined && existing.messages >= config.conversationMessageMax) {
                 return c.json({ error: "this conversation has reached its message limit" }, 429);
             }
-            if (overDailyBudget(automation.id, config.dailyMessageMax ?? WEBCHAT_DAILY_MAX_DEFAULT, now)) {
+            if (daily.spend(automation.id, config.dailyMessageMax ?? WEBCHAT_DAILY_MAX_DEFAULT, now)) {
                 return c.json({ error: "this chat has reached today's limit — try again tomorrow" }, 429);
             }
 

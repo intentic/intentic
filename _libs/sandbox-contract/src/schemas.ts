@@ -3034,11 +3034,79 @@ export const WorkflowStepSchema = z.object({
 });
 export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
 
+/* THE GATE — how a finished run becomes a release decision, and how a machine with no identity asks for one.
+ *
+ * A workflow is a DESIGN; a gate is a PROMISE ABOUT ITS RESULT, and keeping the two separable is the whole
+ * point. What a run does — how many sessions, whether they drive a browser, which repos they touch — stays the
+ * graph's business, because the value of running a release check this way is that the check is a workflow like
+ * any other: an acceptance sweep today, a security review or a performance budget next month, with nothing
+ * here ever learning what any of them are.
+ *
+ * So a gate reads exactly one thing: a named FIELD off a named STEP's declared output (output-fields.ts). That
+ * field already exists for precisely the reason this needs it — a declared field is the one part of a session's
+ * answer that was VALIDATED rather than parsed back out of the prose the model was talking to a person in —
+ * and pointing at one is the entire rule.
+ */
+export const WorkflowGateSchema = z.object({
+    // Which step's declared output carries the decision. Ordinarily a leaf that weighs up the steps before it;
+    // nothing requires that, and a one-step workflow naming its only step is the common small case.
+    step: StepIdSchema,
+    // Which of that step's declared fields is read. Checked against what the step actually declares when the
+    // workflow is saved — a gate pointed at a field nobody writes answers `blocked` on every run, forever.
+    field: z.string().min(1),
+    /* The values of that field that mean SHIP IT. Everything else fails the gate.
+     *
+     * An allowlist rather than a blocklist, because the two are not symmetric under a model's vocabulary. A
+     * step that answers "mostly-pass", "pass-with-notes" or "pass (2 minor defects)" must not ship, and the
+     * allowlist gets that right without anyone having had to enumerate the ways a model can hedge.
+     */
+    pass: z.array(z.string().min(1)).min(1),
+    // The webhook's own auth, minted on save exactly as an event automation's is. The caller is a pipeline
+    // runner with no Google identity, so this is the only credential in the exchange.
+    token: z.string().optional(),
+    /* Runs per UTC day, across every caller. A gate is a paid endpoint reachable with no person in the loop:
+     * one of these wired into a push-triggered pipeline is a fan-out of sessions per commit, and the
+     * per-request deadline bounds one call's WALL CLOCK without bounding the day's SPEND. Absent ⇒
+     * GATE_DAILY_MAX_DEFAULT, not uncapped, for the reason the Doorbell's ceiling is not optional either.
+     */
+    dailyMax: z.number().int().positive().optional(),
+});
+export type WorkflowGate = z.infer<typeof WorkflowGateSchema>;
+
+/* The gate's daily ceiling when its author sets none. Deliberately small next to the Doorbell's 200: a
+ * Doorbell message is one turn, a gate run is a whole graph of sessions, and the honest comparison is cost
+ * rather than count. Twenty is a busy day of merges and a script's first minute. */
+export const GATE_DAILY_MAX_DEFAULT = 20;
+
+/* What a gate answers a pipeline, and the three-way split is load-bearing.
+ *
+ * `blocked` exists for the same reason acceptance's verdict has one: "we could not reach a judgment" is not
+ * "the product is broken". A gate that reported them the same way would go red for its own outages, and a team
+ * that cannot tell the two apart turns the gate off — so `blocked` is meant to be the honest answer far more
+ * often than it is the convenient one. It maps to a NEUTRAL pipeline exit, never a failed build.
+ */
+export const GateOutcomeSchema = z.enum(["pass", "fail", "blocked"]);
+export type GateOutcome = z.infer<typeof GateOutcomeSchema>;
+
+// What the gate route answers with. `value` is the field as the step actually wrote it, absent when the gate
+// never got one to read — which is every `blocked` that is not a disagreement about the value.
+export const GateVerdictSchema = z.object({
+    outcome: GateOutcomeSchema,
+    // One line: why. Realistically the only part of this a pipeline log will ever show.
+    reason: z.string(),
+    runId: z.string(),
+    value: z.string().optional(),
+});
+export type GateVerdict = z.infer<typeof GateVerdictSchema>;
+
 export const WorkflowSchema = z.object({
     id: entryId,
     name: z.string().min(1).max(80),
     description: z.string().max(400).optional(),
     steps: z.array(WorkflowStepSchema).min(1).max(WORKFLOW_STEPS_MAX),
+    // Present ⇒ this design can be run by a machine and answers a release decision. Absent ⇒ an ordinary
+    // workflow, started by a person from the workflows page, with no public door onto it at all.
+    gate: WorkflowGateSchema.optional(),
     /* Whether the run's sessions work in their own git worktrees or on the shared /work tree, decided once for
      * the whole run because it changes what a `fresh` step can see.
      *
