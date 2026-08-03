@@ -18,8 +18,8 @@ import {
     planLimitSummary,
     type PlanHeadroom,
     planHeadroom,
-    refusalIsCurrent,
-    refusalLine,
+    refusalNote,
+    type RefusalReading,
     usageDetail,
     usagePercent,
     usageStatusByAccount,
@@ -351,7 +351,9 @@ describe(`plan-limit aggregates`, () => {
     const at = (percent: number | undefined, over: Partial<PlanLimitRow> = {}): PlanLimitRow => ({
         id: `claude:${percent ?? `none`}`,
         provider: `claude`,
+        account: `${percent ?? `none`}`,
         label: `account`,
+        identity: undefined,
         percent,
         pools: percent === undefined ? [] : [{ kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000 }],
         binding: percent === undefined ? undefined : { kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000 },
@@ -396,34 +398,85 @@ describe(`plan-limit aggregates`, () => {
     /* The refusal, which is the only OBSERVED fact on this screen — everything else is a poll. What these guard
      * is that it is read as such: it survives a week in the store, so the question "is this still describing the
      * situation" has to be answered here rather than by whether a record exists. */
-    it(`hands each provider its own last refusal`, () => {
-        const refusals = { kimi: { at: 1_000, kind: `limit` as const, message: `You've reached your usage limit` } };
-        const groups = planLimitGroups([at(20, { id: `k`, provider: `kimi` }), at(95, { id: `c` })], refusals);
-        expect(groups.map((group) => [group.provider, group.refusal?.message])).toEqual([
+    it(`hands each provider its own last refusal, and points it at the account it names`, () => {
+        const refusals = { kimi: { at: 1_000, kind: `limit` as const, message: `You've reached your usage limit`, account: `20` } };
+        const groups = planLimitGroups([at(20, { id: `k`, provider: `kimi` }), at(95, { id: `c` })], refusals, 5_000);
+        expect(groups.map((group) => [group.provider, group.refusal?.line])).toEqual([
             [`claude`, undefined],
-            [`kimi`, `You've reached your usage limit`],
+            [`kimi`, `Hit its usage limit just now — You've reached your usage limit`],
         ]);
+        // The row it belongs to, so the panel can draw it under that account rather than over the provider.
+        expect(groups[1]?.refusedRow?.id).toBe(`k`);
     });
 
-    it(`stays current until a reading taken since finds headroom`, () => {
+    /* A REFUSAL IS ANSWERED BY ITS OWN KIND OF EVIDENCE, FROM ITS OWN ACCOUNT. Headroom answers a spent pool and
+     * says nothing about a rejected token; a working credential answers a 401 and says nothing about a pool. And
+     * both questions are about the account the daemon named, never about whichever sibling happens to be idle —
+     * that conflation is what left a healed 401 standing over three accounts it did not describe. */
+    const reading = (over: Partial<RefusalReading> = {}): RefusalReading => ({
+        account: `a`,
+        measuredAt: 2_000,
+        percent: 3,
+        needsReauth: false,
+        ...over,
+    });
+
+    it(`keeps a spent-pool refusal standing until a reading taken since finds headroom`, () => {
         const refusal = { at: 1_000, kind: `limit` as const, message: `spent` };
+        const current = (readings: RefusalReading[]): boolean | undefined => refusalNote(refusal, readings, 5_000)?.current;
         // Nothing measured at all, and a reading from BEFORE the refusal: neither can contradict it.
-        expect(refusalIsCurrent(refusal, [])).toBe(true);
-        expect(refusalIsCurrent(refusal, [{ measuredAt: 500, percent: 3 }])).toBe(true);
+        expect(current([])).toBe(true);
+        expect(current([reading({ measuredAt: 500 })])).toBe(true);
         // Measured since, and still spent — the refusal is exactly what that pool is saying.
-        expect(refusalIsCurrent(refusal, [{ measuredAt: 2_000, percent: 99 }])).toBe(true);
+        expect(current([reading({ percent: 99 })])).toBe(true);
         // Measured since, with room: the pool reopened and the refusal is history.
-        expect(refusalIsCurrent(refusal, [{ measuredAt: 2_000, percent: 3 }])).toBe(false);
-        expect(refusalIsCurrent(undefined, [])).toBe(false);
+        expect(current([reading()])).toBe(false);
+        expect(refusalNote(undefined, [], 5_000)).toBeUndefined();
     });
 
-    /* The prefix is read off the record's `kind`, which the daemon derived from the SENTENCE rather than from
+    it(`answers a rejected credential with the named account's own sign-in, not a sibling's percentage`, () => {
+        const refusal = { at: 1_000, kind: `auth` as const, message: `401 OAuth access token has been revoked.`, account: `a` };
+        const current = (readings: RefusalReading[]): boolean | undefined => refusalNote(refusal, readings, 5_000)?.current;
+        // A DIFFERENT account of the same provider, read since and perfectly healthy, beside the named one whose
+        // last reading predates the refusal. The sibling cannot speak for the credential that was rejected, and
+        // letting it was what quietly dismissed a live 401.
+        expect(current([reading({ account: `b` }), reading({ measuredAt: 500 })])).toBe(true);
+        // The named account itself, read since — every reading is taken through that same credential, so it
+        // worked. This is the state the daemon's own re-mint leaves behind seconds after a token is refused.
+        expect(current([reading({ account: `b` }), reading()])).toBe(false);
+        // Read since, but the store has given up on the credential: a reconnect is the only thing that fixes it.
+        expect(current([reading({ needsReauth: true })])).toBe(true);
+        // Nothing read at all yet (mid-load): absence is not evidence, so the refusal keeps standing.
+        expect(current([])).toBe(true);
+    });
+
+    it(`settles a refusal whose account has been disconnected, instead of shouting about one nobody holds`, () => {
+        const refusal = { at: 1_000, kind: `auth` as const, message: `401 OAuth access token has been revoked.`, account: `a` };
+        const note = refusalNote(refusal, [reading({ account: `b`, measuredAt: 500 })], 5_000);
+        expect(note?.current).toBe(false);
+        expect(note?.line).toBe(`Refused its credential just now — that account is no longer connected.`);
+    });
+
+    /* The condition is read off the record's `kind`, which the daemon derived from the SENTENCE rather than from
      * the frame code — this is the whole reason a spent Kimi plan stops telling the user to reconnect a healthy
-     * account. The provider's own words are then printed verbatim: they are the only part naming which pool. */
-    it(`names the condition from the record, then quotes the provider verbatim`, () => {
+     * account. While it stands, the provider's own words are printed verbatim: they are the only part naming
+     * which pool. Once answered, the line says what has happened since and the words move to the hover — a
+     * quoted 401 over an account that has been serving turns all afternoon is an alarm the reader learns to
+     * ignore. */
+    it(`quotes the provider while the refusal stands, and says what answered it once one has`, () => {
         const message = `API Error: 403 You've reached your usage limit for this billing cycle.`;
-        expect(refusalLine({ at: 0, kind: `limit`, message }, 300_000)).toBe(`Hit its usage limit 5m ago — ${message}`);
-        expect(refusalLine({ at: 0, kind: `auth`, message: `token revoked` }, 300_000)).toBe(`Refused its credential 5m ago — token revoked`);
+        expect(refusalNote({ at: 0, kind: `limit`, message }, [], 300_000)?.line).toBe(`Hit its usage limit 5m ago — ${message}`);
+        expect(refusalNote({ at: 0, kind: `auth`, message: `token revoked` }, [], 300_000)?.line).toBe(
+            `Refused its credential 5m ago — token revoked`,
+        );
+
+        const answered = refusalNote({ at: 0, kind: `auth`, message: `token revoked` }, [reading({ measuredAt: 1_000 })], 300_000);
+        expect(answered?.line).toBe(`Refused its credential 5m ago — has authenticated fine since.`);
+        // Kept whole, either way: the sentence is what a hover is for once it stops being the headline.
+        expect(answered?.detail).toBe(`token revoked`);
+        expect(refusalNote({ at: 0, kind: `limit`, message }, [reading({ measuredAt: 1_000 })], 300_000)?.line).toBe(
+            `Hit its usage limit 5m ago — has had room since.`,
+        );
     });
 
     it(`raises only what someone has to act on — a spent pool or a dead credential`, () => {

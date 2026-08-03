@@ -266,7 +266,14 @@ export interface PlanLimitRow {
     // within its own provider.
     readonly id: string;
     readonly provider: AgentProvider;
+    // The key the DAEMON knows this account by — the account id or the auth-file name — which is what `id` is
+    // made unique from, and the key a refusal names the account it was serving with (see refusalNote).
+    readonly account: string;
     readonly label: string;
+    // Who this account signs in as, when the LABEL does not already say it. The label is the user's to rename
+    // and starts life as whatever the provider offered, so a row can read "Claude" beside two emails and answer
+    // nothing; the identity rides alongside rather than inside it, exactly as it does on the Agent tab.
+    readonly identity: string | undefined;
     // Undefined ⇒ no reading at all; `readable` then says whether one is even obtainable.
     readonly percent: number | undefined;
     readonly pools: readonly PlanLimitPool[];
@@ -281,27 +288,34 @@ export interface PlanLimitRow {
     readonly needsReauth: boolean;
 }
 
-const planLimitRow = (
-    provider: AgentProvider,
-    key: string,
-    label: string,
-    attached: AccountUsage | undefined,
-    needsReauth: boolean,
-): PlanLimitRow => {
-    const usage = liveUsage(key, attached);
+// What a row is built from, in the two lists' common terms — the daemon's key for the account, who it says it
+// is, and the reading it arrived with. Named rather than passed as five positionals, because `label` and
+// `identity` are both strings and swapping them silently produces a plausible-looking wrong screen.
+interface PlanLimitSource {
+    readonly account: string;
+    readonly label: string;
+    readonly identity: string | undefined;
+    readonly attached: AccountUsage | undefined;
+    readonly needsReauth: boolean;
+}
+
+const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLimitRow => {
+    const usage = liveUsage(source.account, source.attached);
     const pools = usage === undefined ? [] : usagePools(usage);
     const binding = bindingPool(pools);
     return {
-        id: `${provider}:${key}`,
+        id: `${provider}:${source.account}`,
         provider,
-        label,
+        account: source.account,
+        label: source.label,
+        identity: source.identity,
         percent: binding?.percent,
         pools,
         binding,
         measuredAt: usage?.measuredAt,
         stale: usage !== undefined && isStale(usage),
         readable: reportsPlanLimits(provider),
-        needsReauth,
+        needsReauth: source.needsReauth,
     };
 };
 
@@ -310,12 +324,31 @@ const planLimitRow = (
 export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, routed: TranslatorAccounts): PlanLimitRow[] =>
     [
         ...Object.entries(native).flatMap(([provider, accounts]) =>
-            accounts.map((account) => planLimitRow(provider, account.id, account.label, account.usage, account.needsReauth === true)),
+            accounts.map((account) =>
+                planLimitRow(provider, {
+                    account: account.id,
+                    label: account.label,
+                    // Only when it adds something: an account already named by its own email must not print it
+                    // twice, which is the same rule the Agent tab's identity note follows.
+                    identity: account.email === account.label ? undefined : account.email,
+                    attached: account.usage,
+                    needsReauth: account.needsReauth === true,
+                }),
+            ),
         ),
         // A routed subscription has no reauth flag of its own: CLIProxyAPI drops an auth file it can no longer
-        // refresh, so a broken one leaves the list rather than sitting in it.
+        // refresh, so a broken one leaves the list rather than sitting in it. Nor a separate identity — the
+        // translator reports one name per auth file, and that name IS the label.
         ...Object.entries(routed).flatMap(([provider, accounts]) =>
-            accounts.map((account) => planLimitRow(provider, account.name, account.label, account.usage, false)),
+            accounts.map((account) =>
+                planLimitRow(provider, {
+                    account: account.name,
+                    label: account.label,
+                    identity: undefined,
+                    attached: account.usage,
+                    needsReauth: false,
+                }),
+            ),
         ),
     ].toSorted((left, right) => {
         if (left.percent === undefined || right.percent === undefined) {
@@ -390,8 +423,13 @@ export interface PlanLimitGroup {
     // The account that gates this provider first — what the group row states instead of a percentage of its own.
     readonly tightest: PlanLimitRow | undefined;
     readonly nextResetAt: number | undefined;
-    // The last turn this provider actually refused. Provider-level like the group itself — see refusalLine.
-    readonly refusal: ProviderRefusal | undefined;
+    // The last turn this provider actually refused, already read against what has happened since — see
+    // refusalNote.
+    readonly refusal: RefusalNote | undefined;
+    // The account it happened on, when the daemon named one and that account is still connected. Placement,
+    // not judgement: a refusal belongs on its own account's block wherever that block is drawn, and names its
+    // account in the line when it isn't.
+    readonly refusedRow: PlanLimitRow | undefined;
 }
 
 // One group per provider, each group's most-constrained account first, and the groups themselves ordered by how
@@ -411,50 +449,113 @@ export const planLimitGroups = (
     return [...byProvider.entries()]
         .map(([provider, groupRows]): PlanLimitGroup => {
             const tightest = groupRows.find((row) => row.percent !== undefined);
+            const refusal = refusals[provider];
             return {
                 provider,
                 rows: groupRows,
                 counts: countBands(groupRows),
                 tightest,
                 nextResetAt: nextReset(groupRows, now),
-                refusal: refusals[provider],
+                refusal: refusalNote(refusal, groupRows, now),
+                refusedRow: groupRows.find((row) => row.account === refusal?.account),
             };
         })
         .toSorted((left, right) => (right.tightest?.percent ?? -1) - (left.tightest?.percent ?? -1) || left.provider.localeCompare(right.provider));
 };
 
 /* WHAT A REFUSAL READS AS, once — because both surfaces that show one (the Agent tab's connection list, the
- * Usage tab's provider groups) have to say the same thing about the same event, and because the sentence is the
- * whole point. It is the PROVIDER's own words, and it is the only part that names which pool ran out or which
- * credential was rejected; paraphrasing it would throw away the single most useful thing here.
+ * Usage tab's provider groups) have to say the same thing about the same event.
  *
- * The prefix says which of the two conditions it was, from the record's `kind` — read off what the provider
- * said, not off the frame code, precisely so a spent Kimi plan stops reading as a broken sign-in.
+ * Two states, and the difference between them is the whole design. While a refusal is CURRENT it is quoted: the
+ * provider's own words are the only part that names which pool ran out or which credential was rejected, and
+ * paraphrasing them would throw away the single most useful thing here. Once it has been answered by what
+ * happened afterwards it becomes a footnote about a thing that is over, and quoting a 401 at someone whose
+ * account has been serving turns all afternoon is how a surface teaches its reader to distrust it — the words
+ * move to `detail`, where a hover still reaches them.
  *
- * The AGE, not the clock time, and no reset instant: a reset belongs to a POOL, and this event knows only that
- * one of them refused. The pools' own resets are already on the meters beside this line. */
-export const refusalLine = (refusal: ProviderRefusal, now: number = Date.now()): string =>
-    `${refusal.kind === `limit` ? `Hit its usage limit` : `Refused its credential`} ${formatAge(refusal.at, now)} — ${refusal.message}`;
+ * The condition comes from the record's `kind` — read off what the provider SAID, not off the frame code,
+ * precisely so a spent Kimi plan stops reading as a broken sign-in. The AGE, not the clock time, and no reset
+ * instant: a reset belongs to a POOL, and this event knows only that one of them refused. */
+const REFUSAL_CONDITION: Record<ProviderRefusal["kind"], string> = {
+    limit: `Hit its usage limit`,
+    auth: `Refused its credential`,
+};
+const REFUSAL_ANSWERED: Record<ProviderRefusal["kind"], string> = {
+    limit: `has had room since`,
+    auth: `has authenticated fine since`,
+};
 
-/* Whether a refusal still describes the situation on screen, or has been overtaken by a reading taken since.
- * A refusal survives in the store for a week (the longest pool cycle any of these plans sells), which is right
- * for keeping it and wrong for shouting about it: an account measured with room AFTER the refusal has provably
- * recovered, and leading with a stale alarm over a live meter is how a surface loses the reader's trust.
- *
- * So: loud while it is the newest thing known about the provider, quiet once a reading has overtaken it. Never
- * hidden — "this refused a turn on Tuesday" is context worth having, just not context worth alarming over. */
-export const refusalIsCurrent = (
-    refusal: ProviderRefusal | undefined,
-    // Structurally what a PlanLimitRow already is, so the Usage tab passes its rows straight in and the Agent
-    // tab passes the same two fields off the snapshot it decorated its own rows with.
-    readings: readonly { readonly measuredAt: number | undefined; readonly percent: number | undefined }[],
-): boolean => {
-    if (refusal === undefined) {
+export interface RefusalNote {
+    // The line to draw: the provider's sentence while this is current, what has happened since once it is not.
+    readonly line: string;
+    // The provider's own words, in both states — the hover behind a line that no longer prints them.
+    readonly detail: string;
+    // Alarm or footnote. Never hidden either way: "this refused a turn on Tuesday" is context worth having,
+    // just not context worth alarming over.
+    readonly current: boolean;
+}
+
+// One account's state, as much of it as a refusal can be judged against. Structurally what a PlanLimitRow
+// already is, so the Usage tab passes its rows straight in and the Agent tab maps the same four fields off the
+// snapshot it decorated its own rows with.
+export interface RefusalReading {
+    readonly account: string;
+    readonly measuredAt: number | undefined;
+    readonly percent: number | undefined;
+    readonly needsReauth: boolean;
+}
+
+/* What it takes to say a refusal is OVER, which differs by kind because the two facts differ. A spent pool is
+ * answered by HEADROOM — a reading taken since with room in it. A rejected credential is not: a percentage says
+ * nothing about whether a token works, so what answers it is the account having been read at all since (every
+ * reading is taken through that same credential) while the store still holds it as usable. That distinction is
+ * what lets the daemon's own recovery show: a refused Claude token is re-minted and the turn re-run within
+ * seconds, and the reading that follows is the proof it worked. */
+const answersRefusal = (refusal: ProviderRefusal, reading: RefusalReading): boolean => {
+    if (reading.measuredAt === undefined || reading.measuredAt <= refusal.at) {
         return false;
     }
-    const overtaken = (reading: (typeof readings)[number]): boolean =>
-        reading.measuredAt !== undefined && reading.measuredAt > refusal.at && reading.percent !== undefined && reading.percent < SPENT_PERCENT;
-    return !readings.some(overtaken);
+    return refusal.kind === `auth` ? !reading.needsReauth : reading.percent !== undefined && reading.percent < SPENT_PERCENT;
+};
+
+/* WHAT HAS ANSWERED THIS REFUSAL, if anything — the clause the line ends with, and undefined while it still
+ * stands. Everything hangs off WHO may answer: a native turn names the account it was serving, and only that
+ * credential's later readings say anything about it. A second Claude account polling fine proves nothing about
+ * the one whose token was rejected, and letting the provider's whole list answer is what put a three-hour-old
+ * 401 over three accounts that were all working — dismissed by one of them, kept standing by another sitting at
+ * 95%, describing neither.
+ *
+ * Two cases where the named account cannot answer at all. It is GONE (disconnected since, so nothing on screen
+ * is what refused) — which settles the refusal rather than leaving it shouting about an account the reader no
+ * longer has. Or there is no list yet, mid-load, where absence means nothing has been read: that one keeps the
+ * refusal standing, because "we know nothing" must not render as "it's fine now" for a frame.
+ *
+ * A routed turn names nobody — CLIProxyAPI picks the auth file itself and only refuses once every credential it
+ * holds is cooling down — so there the provider's whole list is the honest resolution rather than a guess. */
+const refusalAnswer = (refusal: ProviderRefusal, readings: readonly RefusalReading[]): string | undefined => {
+    const named = readings.filter((reading) => reading.account === refusal.account);
+    if (refusal.account !== undefined && named.length === 0) {
+        return readings.length === 0 ? undefined : `that account is no longer connected`;
+    }
+    const speaking = refusal.account === undefined ? readings : named;
+    return speaking.some((reading) => answersRefusal(refusal, reading)) ? REFUSAL_ANSWERED[refusal.kind] : undefined;
+};
+
+export const refusalNote = (
+    refusal: ProviderRefusal | undefined,
+    readings: readonly RefusalReading[],
+    now: number = Date.now(),
+): RefusalNote | undefined => {
+    if (refusal === undefined) {
+        return undefined;
+    }
+    const answer = refusalAnswer(refusal, readings);
+    const opening = `${REFUSAL_CONDITION[refusal.kind]} ${formatAge(refusal.at, now)}`;
+    return {
+        line: answer === undefined ? `${opening} — ${refusal.message}` : `${opening} — ${answer}.`,
+        detail: refusal.message,
+        current: answer === undefined,
+    };
 };
 
 export interface PlanLimitSummary {

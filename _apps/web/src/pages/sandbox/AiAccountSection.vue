@@ -16,7 +16,7 @@ import { relativeTime } from "../../composables/chat/catalog";
 import { providerRefusals } from "../../composables/chat/providerAccounts";
 import { providerTabs } from "../../composables/chat/providerCatalog";
 import { useChat } from "../../composables/chat/useChat";
-import { isSpent, liveUsage, type PlanHeadroom, planHeadroom, refusalIsCurrent, refusalLine } from "../../composables/chat/usageStatus";
+import { isSpent, liveUsage, type PlanHeadroom, planHeadroom, refusalNote } from "../../composables/chat/usageStatus";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
@@ -237,14 +237,24 @@ const translatorRows = computed<readonly AccountRow<TranslatorAccount>[]>(() =>
  * This is the state that sent someone here to reconnect a Kimi account in perfect health — the chat said
  * "Failed to authenticate", because that is what the harness prints over a 403, and the Agent tab showed a
  * healthy green dot beside it with nothing to reconcile the two. */
-const refusal = computed(() => providerRefusals.value[managedProvider.value]);
-// Loud only while nothing measured since has found headroom — see refusalIsCurrent. Both lists, because the
-// provider's accounts are one list to the reader whichever mechanism holds them.
-const refusalCurrent = computed(() =>
-    refusalIsCurrent(
-        refusal.value,
-        [...accountRows.value, ...translatorRows.value].map((row) => ({ measuredAt: row.headroom?.measuredAt, percent: row.headroom?.percent })),
-    ),
+// Loud only while nothing that happened since has answered it — see refusalNote, which also decides what a
+// refusal SAYS in each of those two states. Both lists, because the provider's accounts are one list to the
+// reader whichever mechanism holds them, and each row carries the account key a refusal names its own by.
+const refusal = computed(() =>
+    refusalNote(providerRefusals.value[managedProvider.value], [
+        ...accountRows.value.map((row) => ({
+            account: row.account.id,
+            measuredAt: row.headroom?.measuredAt,
+            percent: row.headroom?.percent,
+            needsReauth: row.account.needsReauth === true,
+        })),
+        ...translatorRows.value.map((row) => ({
+            account: row.account.name,
+            measuredAt: row.headroom?.measuredAt,
+            percent: row.headroom?.percent,
+            needsReauth: false,
+        })),
+    ]),
 );
 
 /* --- Collapsing long lists -----------------------------------------------------------------------------------
@@ -383,10 +393,11 @@ onUnmounted(() => clearTimeout(ringTimer));
         <p v-if="chatError" :class="cmp.alertDanger('m-3')">{{ chatError }}</p>
 
         <!-- The provider's own words, the last time it refused a turn (see `refusal` above). An alert while it
-             is the newest thing known about this provider; a quiet footnote once a reading has overtaken it,
-             because a stale alarm over a live meter is worse than no alarm at all. -->
-        <p v-if="refusal && refusalCurrent" :class="cmp.alertWarning('m-3')">{{ refusalLine(refusal) }}</p>
-        <p v-else-if="refusal" class="mx-3 mt-3 text-2xs text-subtle">{{ refusalLine(refusal) }}</p>
+             is the newest thing known about this provider; once something taken since has answered it, a quiet
+             footnote saying so with those words on the hover — a stale alarm over a live meter is worse than no
+             alarm at all. -->
+        <p v-if="refusal !== undefined && refusal.current" :class="cmp.alertWarning('m-3')">{{ refusal.line }}</p>
+        <p v-else-if="refusal !== undefined" class="mx-3 mt-3 text-2xs text-subtle" v-tooltip.top="refusal.detail">{{ refusal.line }}</p>
 
         <!-- Nothing has been read yet. An offline sandbox says so and stops (there is nothing to wait for);
              otherwise the rows that are coming stand in as skeletons, in their own shape, so the section keeps

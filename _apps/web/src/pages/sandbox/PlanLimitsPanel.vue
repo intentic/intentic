@@ -18,8 +18,6 @@ import {
     type PlanLimitRow,
     planLimitRows,
     planLimitSummary,
-    refusalIsCurrent,
-    refusalLine,
     usageTone,
 } from "../../composables/chat/usageStatus";
 
@@ -86,6 +84,26 @@ const isInline = (group: PlanLimitGroup): boolean => group.rows.length <= INLINE
 // A provider with ONE account has no list to head: the group row IS that account's row, so it carries the label
 // and the read age itself. Rendering both produced "Kimi Code · 1 account" directly above a lone "kimi".
 const single = (group: PlanLimitGroup): PlanLimitRow | undefined => (group.rows.length === 1 ? group.rows[0] : undefined);
+
+// What the provider line says after the provider's name: the lone account it holds — named, and identified when
+// the name alone doesn't — else how many there are. "1 account" is a fact nobody came here for.
+const groupNote = (group: PlanLimitGroup): string => {
+    const account = single(group);
+    if (account === undefined) {
+        return `${group.rows.length} accounts`;
+    }
+    return account.identity === undefined ? account.label : `${account.label} · ${account.identity}`;
+};
+
+/* WHERE A REFUSAL BELONGS. The daemon names the account it was serving whenever it has one to name (a native
+ * turn does; a routed turn is served by whichever auth file CLIProxyAPI picked, so it names nobody), and drawing
+ * that on the provider line instead reads as "all of Claude Code is broken" — which is what put a three-hour-old
+ * 401 above three accounts that had been serving turns all afternoon.
+ *
+ * So it goes on its own account's block, wherever that block exists. A folded group draws none, and a lone
+ * account IS the provider line; both keep the line at group level and name the account inside it instead. */
+const refusedRowId = (group: PlanLimitGroup): string | undefined =>
+    isInline(group) && single(group) === undefined ? group.refusedRow?.id : undefined;
 
 // Never all 31: past this the bars are hairlines and the roster is the better answer. Rows arrive tightest-first,
 // so a truncated strip keeps the accounts that gate a turn — and says that it truncated.
@@ -186,39 +204,66 @@ const roster = computed(() => {
                 <ProviderLogo :provider="group.provider" class="shrink-0 self-center text-sm text-muted" />
                 <span class="text-sm text-content">{{ providerLabel(group.provider) }}</span>
                 <!-- One account ⇒ its own name, because "1 account" says nothing a reader wanted. -->
-                <span class="min-w-0 truncate text-2xs text-subtle">
-                    {{ single(group)?.label ?? `${group.rows.length} accounts` }}
-                </span>
+                <span class="min-w-0 truncate text-2xs text-subtle">{{ groupNote(group) }}</span>
                 <span v-if="single(group)?.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle">
                     read {{ formatAge(single(group)!.measuredAt!) }}
                 </span>
                 <span v-else-if="!isInline(group)" class="ml-auto shrink-0 text-2xs text-muted">{{ groupState(group) }}</span>
             </div>
 
-            <!-- What the provider itself said, the last time it refused a turn. Above the meters because it
-                 OVERRIDES them when it is current: a meter is a poll and this is an observation, so a green bar
-                 under a fresh refusal means the poll is stale, not that there is room. Dimmed once a reading
-                 taken since has found headroom — kept, because "this refused on Tuesday" is still context, but
-                 no longer shouted. Two lines at most: the vendors' sentences run to a paragraph with a pricing
-                 URL on the end, and the part that matters is at the front. -->
+            <!-- The last time this provider refused a turn, when it belongs to no block of its own (see
+                 refusedRowId) — named with its account where the daemon knew one, because a bare provider-wide
+                 refusal over 24 bars answers "which of these do I go and fix?" with nothing.
+                 It sits ABOVE the meters because it OVERRIDES them while it is current: a meter is a poll and
+                 this is an observation, so a green bar under a fresh refusal means the poll is stale, not that
+                 there is room. Once something taken since has answered it, it drops to a footnote saying so and
+                 the provider's own sentence moves to the hover. Two lines at most: the vendors' sentences run to
+                 a paragraph with a pricing URL on the end, and the part that matters is at the front. -->
             <p
-                v-if="group.refusal"
+                v-if="group.refusal !== undefined && refusedRowId(group) === undefined"
                 class="line-clamp-2 text-2xs"
-                :class="refusalIsCurrent(group.refusal, group.rows) ? `text-warning` : `text-subtle`"
-                v-tooltip.top.overflow="refusalLine(group.refusal)"
+                :class="group.refusal.current ? `text-warning` : `text-subtle`"
+                v-tooltip.top="group.refusal.detail"
             >
-                {{ refusalLine(group.refusal) }}
+                {{ group.refusedRow === undefined ? group.refusal.line : `${group.refusedRow.label} · ${group.refusal.line}` }}
             </p>
 
             <!-- Small provider: the meters themselves, exactly as before. Nothing that fits is folded away. -->
             <template v-if="isInline(group)">
-                <div v-for="row in group.rows" :key="row.id" class="flex flex-col gap-1.5">
-                    <div v-if="single(group) === undefined" class="flex items-baseline gap-2">
-                        <span class="min-w-0 truncate text-2xs text-muted">{{ row.label }}</span>
+                <!-- A hairline between accounts, and none above the first: three accounts of three pools each is
+                     nine meters in one column, and without a break the reader has to count rows to know which
+                     account a "95%" belongs to. -->
+                <div
+                    v-for="(row, index) in group.rows"
+                    :key="row.id"
+                    class="flex flex-col gap-1.5"
+                    :class="index > 0 && single(group) === undefined ? `border-t border-line/60 pt-2.5` : ``"
+                >
+                    <!-- THE ACCOUNT IS A TIER OF ITS OWN — one step under the provider heading it, one over the
+                         pools it heads. It used to be set exactly like a pool label, same size and same colour,
+                         directly above three of them: an email read as a fourth pool that happened to have no
+                         meter, and the eye had nothing to group the meters by. -->
+                    <div v-if="single(group) === undefined" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span class="min-w-0 truncate text-xs text-content">{{ row.label }}</span>
+                        <!-- Whose sign-in this is, when the NAME does not already say it. The label is the
+                             user's to rename and starts as whatever the provider offered, so one row reads
+                             "Claude" beside two emails and identifies nothing — the same rule, and the same
+                             answer, as the Agent tab's identity note. -->
+                        <span v-if="row.identity !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ row.identity }}</span>
                         <span v-if="row.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs" :class="row.stale ? `text-muted` : `text-subtle`">
                             read {{ formatAge(row.measuredAt) }}
                         </span>
                     </div>
+
+                    <!-- This account's own refusal, under its own name — see refusedRowId. -->
+                    <p
+                        v-if="group.refusal !== undefined && refusedRowId(group) === row.id"
+                        class="line-clamp-2 text-2xs"
+                        :class="group.refusal.current ? `text-warning` : `text-subtle`"
+                        v-tooltip.top="group.refusal.detail"
+                    >
+                        {{ group.refusal.line }}
+                    </p>
 
                     <p v-if="row.pools.length === 0" class="text-2xs text-subtle">
                         {{ row.readable ? `No reading yet.` : `This plan publishes no limits — spend is all this sandbox can tell you.` }}
@@ -331,7 +376,12 @@ const roster = computed(() => {
                     </thead>
                     <tbody class="text-muted">
                         <tr v-for="row in roster" :key="row.id" class="border-b border-line/50">
-                            <td class="max-w-56 truncate py-1.5 pr-3 text-content">{{ row.label }}</td>
+                            <!-- Name over sign-in identity, because this table is where a reader comes to
+                                 reconcile ONE account and a name it can't place is the whole reason they came. -->
+                            <td class="max-w-56 py-1.5 pr-3">
+                                <span class="block truncate text-content">{{ row.label }}</span>
+                                <span v-if="row.identity !== undefined" class="block truncate text-subtle">{{ row.identity }}</span>
+                            </td>
                             <td class="py-1.5 pr-3">{{ providerLabel(row.provider) }}</td>
                             <td class="py-1.5 pr-3">{{ row.binding?.label ?? (row.readable ? `—` : `no published limits`) }}</td>
                             <td class="py-1.5 pr-3 text-right tabular-nums" :class="row.percent === undefined ? `` : usageTone(row.percent)">
