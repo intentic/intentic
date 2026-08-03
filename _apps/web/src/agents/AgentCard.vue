@@ -4,6 +4,7 @@ import { formatTokens, ProgressRing, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import OriginMark from "../components/OriginMark.vue";
+import WorkflowMark from "../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../composables/agents/laneDrop";
 import {
     activityIcon,
@@ -290,8 +291,9 @@ const grab = (event: PointerEvent): void => {
             </p>
 
             <!-- Provenance, ahead of the model/branch line: for an agent the user never started, "who asked for
-                 this" outranks what it runs on. Renders nothing for a user-started agent. -->
+                 this" outranks what it runs on. Both render nothing for a user-started agent. -->
             <OriginMark :origin="agent.origin" />
+            <WorkflowMark :workflow="agent.workflow" />
 
             <div v-if="model !== undefined || agent.branch !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs text-subtle">
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>

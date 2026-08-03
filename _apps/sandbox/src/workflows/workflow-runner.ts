@@ -3,6 +3,7 @@ import type { Loop, LoopDocument, Workflow, WorkflowRun, WorkflowRunState, Workf
 import type { Services } from "../composition.js";
 import { runLoop, stopLoop, type TurnFn } from "../loops/loop-runner.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
+import { workflowProjection } from "./workflow-state.js";
 
 /* THE SCHEDULER — run a graph of steps, each one a loop, in dependency order.
  *
@@ -157,7 +158,13 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
         services.workflowRuns.patchStep(runId, stepId, { state, endedAt: Date.now(), detail });
 
     const execute = async (step: WorkflowStep, conversationId: string, handovers: readonly Handover[]): Promise<StepOutcome> => {
-        const prompt = briefForStep(workflow, step, position.get(step.id) ?? 1, handovers);
+        const index = position.get(step.id) ?? 1;
+        const prompt = briefForStep(workflow, step, index, handovers);
+        /* Tell the fleet card what this conversation is now part of, BEFORE the loop starts — the card exists
+         * from the loop's first iteration, and a card that says nothing for the first minute of a four-minute
+         * step is a card that says nothing. A `continue` step overwrites its predecessor's entry, which is
+         * right: one conversation, and the name of what it is doing has moved on. */
+        workflowProjection.set(conversationId, { runId, name: workflow.name, step: step.title, index, total: workflow.steps.length });
         await services.workflowRuns.patchStep(runId, step.id, { state: "running", startedAt: Date.now() });
         /* A fresh loop record per step, even for one that shares its predecessor's conversation. The loops
          * manifest is keyed by conversation and holds the LATEST loop on it, so a continued step replaces the

@@ -71,6 +71,11 @@ export function useWorkflows() {
     return {
         workflows: computed<WorkflowSummary[]>(() => query.data.value ?? []),
         runs: computed<WorkflowRun[]>(() => runsQuery.data.value ?? []),
+        // Whether the LEDGER has actually been read, as opposed to being empty or still in flight. Only a
+        // surface that has to tell "this run is not on the record" apart from "the record has not arrived"
+        // needs it — an empty `runs` means both, and guessing wrong accuses a link of being broken while it
+        // is still loading.
+        runsLoaded: runsQuery.isSuccess,
         error: computed(() => query.error.value?.message ?? runsQuery.error.value?.message),
         isLoading: query.isLoading,
         save,

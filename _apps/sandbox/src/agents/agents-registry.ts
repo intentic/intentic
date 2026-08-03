@@ -1,7 +1,8 @@
 import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
 import { isFailureSentence } from "../agent/failure-sentences.js";
 import { subagentCountsOf } from "../agent/subagents.js";
-import { forgetLoops, loopProjectionOf, onLoopChange } from "../loops/loop-state.js";
+import { loopProjection } from "../loops/loop-state.js";
+import { workflowProjection } from "../workflows/workflow-state.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
 import { type AgentsStore, type AgentTitleSource, isIsolated, type PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
@@ -227,7 +228,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         const inputTokens = entry.inputTokens + (state?.pendingInputTokens ?? 0);
         const outputTokens = entry.outputTokens + (state?.pendingOutputTokens ?? 0);
         const subagents = subagentCountsOf(entry.id);
-        const loop = loopProjectionOf(entry.id);
+        const loop = loopProjection.of(entry.id);
+        const workflow = workflowProjection.of(entry.id);
         return {
             id: entry.id,
             status,
@@ -275,6 +277,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // The loop driving this conversation, read off the pump's own live state for the same reason the
             // subagent counts are read off theirs — one projection, no second copy to go stale.
             ...(loop !== undefined ? { loop } : {}),
+            ...(workflow !== undefined ? { workflow } : {}),
         };
     };
 
@@ -290,11 +293,13 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         }
     };
 
-    /* A loop's state moves BETWEEN turns, which is the one card-visible change no frame announces: the last
-     * iteration's finish() has already published, and only then does the pump decide the goal is met. Without
-     * this the card would hold `running · iteration 12/12` until something unrelated moved the fleet — at
-     * precisely the moment someone is watching it. Never unsubscribed: the registry outlives the process. */
-    onLoopChange(broadcast);
+    /* Both projections move BETWEEN turns, which is the card-visible change no frame announces: the last
+     * iteration's finish() has already published, and only then does the pump decide the goal is met; a step
+     * settles, and only then does the step after it name itself. Without this the card would hold
+     * `running · iteration 12/12` until something unrelated moved the fleet — at precisely the moment someone is
+     * watching it. Never unsubscribed: the registry outlives the process. */
+    loopProjection.onChange(broadcast);
+    workflowProjection.onChange(broadcast);
 
     // Only the live, branch-backed roster is probed — see LandStandings.refresh on why an archived agent keeps
     // its last answer, and why a workspace conversation has no standing to probe at all.
@@ -735,7 +740,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 runtime.delete(id);
             }
             standings.forget(ids);
-            forgetLoops(ids);
+            loopProjection.forget(ids);
+            workflowProjection.forget(ids);
             await persist();
             broadcast();
         },

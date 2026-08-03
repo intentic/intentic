@@ -3,7 +3,8 @@ import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeade
 import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef } from "vue";
 import WorkflowDesigner from "./WorkflowDesigner.vue";
-import WorkflowRunPanel from "./WorkflowRunPanel.vue";
+import WorkflowRunPage from "./WorkflowRunPage.vue";
+import { host } from "./host";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "./templates";
 import { useWorkflows } from "./useWorkflows";
 
@@ -21,36 +22,70 @@ import { useWorkflows } from "./useWorkflows";
  * on the page rather than hiding one level in, and each card sells its SHAPE rather than its topic.
  */
 
-const { workflows, runs, error: listError, remove, start } = useWorkflows();
+const { workflows, runs, runsLoaded, error: listError, remove, start } = useWorkflows();
 
-// shallowRef, not ref: this holds a document that is only ever read and handed to the designer, which takes
-// its own copy. Deep reactivity would buy nothing and would wrap it in a proxy on the way out — see
-// workflowDraft.ts for what that used to cost.
-const designing = shallowRef<Workflow | undefined>();
-const designerOpen = ref(false);
-const watchingId = ref<string | undefined>();
+/* WHICH OF THE THREE SCREENS THIS IS, and it is read from the URL rather than held in a ref.
+ *
+ * `?edit=<id>` is the designer, `?run=<runId>` is a run, neither is the list. The query is an extension view's
+ * whole route space (IntenticApi.route), so this buys Back, reload and a linkable address for free — and it is
+ * why the designer stopped being a dialog: a modal cannot be any of those things, and a graph needs a page.
+ *
+ * A DRAFT IS NOT IN THE URL. `?edit=new` names an unsaved workflow whose content is held here, because a
+ * document nobody has saved has no address to link to. Held in a shallowRef: it is only read and handed to the
+ * designer, which takes its own copy, and deep reactivity would wrap it in a proxy on the way out (see
+ * workflowDraft.ts for what that cost).
+ */
+const query = computed(() => host().route.query());
+const editing = computed(() => query.value[`edit`]);
+const watchingId = computed(() => query.value[`run`]);
+const drafted = shallowRef<Workflow | undefined>();
+
 const confirmRemoveId = ref<string | undefined>();
 const actionError = ref<string | undefined>();
 
 const topError = computed(() => actionError.value ?? listError.value);
 const watching = computed(() => runs.value.find((run) => run.runId === watchingId.value));
+/* `?run=` naming a run the ledger no longer holds. Reachable rather than theoretical: the workflow mark on a
+ * fleet card is never cleared (which run a conversation came out of is what its card is read for a week later),
+ * while the ledger keeps only the last 50 runs — so the card outlives the record it links to. Falling through
+ * to the list silently reads as the link having done nothing, which is the one thing it must not look like.
+ * Gated on the ledger having actually been READ, so a slow first load cannot accuse a good link. */
+const lostRunId = computed(() => (watchingId.value !== undefined && watching.value === undefined && runsLoaded.value ? watchingId.value : undefined));
+/* The workflow the designer is on: a saved one by id, or the draft that `?edit=new` stands for.
+ *
+ * The draft ALSO answers for its own id once it has been saved, and that is not belt-and-braces — it closes a
+ * real gap. Saving navigates to `?edit=<id>` the moment the POST resolves, but the list query is only
+ * invalidated then, so for one refetch there is no saved workflow under that id yet. Without this the designer
+ * would unmount and flick back to the list at the exact moment the user pressed Save. Scoped by id rather than
+ * left as a general fallback, so `?edit=<something-deleted>` cannot quietly open a stale draft instead. */
+const designing = computed<Workflow | undefined>(() => {
+    if (editing.value === undefined) {
+        return undefined;
+    }
+    const saved = workflows.value.find((workflow) => workflow.id === editing.value);
+    return saved ?? (editing.value === `new` || drafted.value?.id === editing.value ? drafted.value : undefined);
+});
 const live = computed(() => runs.value.filter((run) => run.state === `running`));
 const past = computed(() => runs.value.filter((run) => run.state !== `running`).slice(0, 12));
 // A template already saved under its own id is not offered again — the gallery is for shapes you do not have.
 const available = computed(() => WORKFLOW_TEMPLATES.filter((template) => !workflows.value.some((workflow) => workflow.id === template.workflow.id)));
 
-const design = (workflow: Workflow): void => {
-    designing.value = workflow;
-    designerOpen.value = true;
+// A saved workflow opens by id; anything unsaved is parked in `drafted` first and opens as `new`.
+const openSaved = (id: string): void => host().route.setQuery({ edit: id, run: undefined }, { push: true });
+const openDraft = (workflow: Workflow): void => {
+    drafted.value = workflow;
+    host().route.setQuery({ edit: `new`, run: undefined }, { push: true });
 };
+const watchRun = (runId: string): void => host().route.setQuery({ run: runId, edit: undefined }, { push: true });
+const backToList = (): void => host().route.setQuery({ edit: undefined, run: undefined });
 
 // A template opens the designer PREFILLED rather than creating the workflow: a graph that costs money to run
 // is not something to create by accident, and looking at the picture before saving is the whole point.
 // Handed over uncloned — the designer copies whatever it is given, so the module constant is only ever read.
-const fromTemplate = (template: WorkflowTemplate): void => design(template.workflow);
+const fromTemplate = (template: WorkflowTemplate): void => openDraft(template.workflow);
 
 const blank = (): void =>
-    design({
+    openDraft({
         id: `workflow-${workflows.value.length + 1}`,
         name: `New workflow`,
         steps: [
@@ -81,7 +116,7 @@ const runNow = async (workflow: WorkflowSummary): Promise<void> => {
     actionError.value = undefined;
     try {
         const run = await start.mutateAsync(workflow.id);
-        watchingId.value = run.runId;
+        watchRun(run.runId);
     } catch (error) {
         actionError.value = error instanceof Error ? error.message : `The workflow could not be started.`;
     }
@@ -126,12 +161,23 @@ const RUN_TONE: Record<WorkflowRun["state"], string> = {
 const shapeOf = (workflow: Workflow): string => {
     const roots = workflow.steps.filter((step) => step.needs.length === 0).length;
     const widest = Math.max(1, ...workflow.steps.map((step) => workflow.steps.filter((other) => other.needs.includes(step.id)).length));
-    return roots > 1 || widest > 1 ? `${workflow.steps.length} steps, branching` : `${workflow.steps.length} steps in a line`;
+    const count = `${workflow.steps.length} step${workflow.steps.length === 1 ? `` : `s`}`;
+    // A single step has no shape to describe — "1 step in a line" is a sentence about nothing.
+    if (workflow.steps.length === 1) {
+        return count;
+    }
+    return roots > 1 || widest > 1 ? `${count}, branching` : `${count} in a line`;
 };
 </script>
 
 <template>
-    <Page width="wide">
+    <!-- THREE SCREENS, ONE VIEW. The designer and a run each need the whole page (a graph does not fit in a
+         dialog), and an extension's route space is the query — so this switches on it rather than layering
+         modals over the list. `h-full` because both of those are canvas pages that must not scroll. -->
+    <WorkflowDesigner v-if="designing" :key="editing" :initial="designing" @close="backToList()" @saved="openSaved($event)" />
+    <WorkflowRunPage v-else-if="watching" :key="watching.runId" :run="watching" @close="backToList()" />
+
+    <Page v-else width="wide">
         <PageHeader title="Workflows" description="A designed run of agent sessions, each one handing a declared result to the next.">
             <template #info>
                 <InfoHint label="How a workflow runs">
@@ -154,6 +200,12 @@ const shapeOf = (workflow: Workflow): string => {
 
         <div v-if="topError" :class="cmp.alertDanger('mb-4')">{{ topError }}</div>
 
+        <!-- A link to a run that has rolled off the ledger. Not an error — nothing failed and nothing is wrong
+             with the card that sent you here — so it states the fact and leaves the page usable beneath it. -->
+        <div v-if="lostRunId !== undefined" :class="cmp.alertInfo('mb-4')">
+            Run <span class="font-mono">{{ lostRunId }}</span> is no longer on the record — the ledger keeps the last 50 runs.
+        </div>
+
         <div class="flex flex-col gap-6">
             <!-- Runs in flight sit at the top, above the designs: while something is going, that is the page. -->
             <section v-if="live.length > 0">
@@ -167,7 +219,7 @@ const shapeOf = (workflow: Workflow): string => {
                         :key="run.runId"
                         type="button"
                         class="flex w-full cursor-pointer items-center gap-2 px-2.5 py-2 text-left hover:bg-canvas"
-                        @click="watchingId = run.runId"
+                        @click="watchRun(run.runId)"
                     >
                         <span class="truncate text-xs font-medium text-content">{{ run.workflow.name }}</span>
                         <span class="flex-1 truncate text-2xs text-subtle">{{ runLine(run) }}</span>
@@ -190,14 +242,14 @@ const shapeOf = (workflow: Workflow): string => {
                         type="button"
                         class="shrink-0 cursor-pointer text-2xs hover:underline"
                         :class="RUN_TONE[workflow.runs[0].state]"
-                        @click="watchingId = workflow.runs[0].runId"
+                        @click="watchRun(workflow.runs[0].runId)"
                     >
                         {{ workflow.runs[0].state }} {{ timeAgo(workflow.runs[0].startedAt) }}
                     </button>
                     <Button label="Run" size="small" :disabled="start.isPending.value" @click="runNow(workflow)">
                         <template #icon><Icon name="play" /></template>
                     </Button>
-                    <button type="button" :class="cmp.iconButton()" aria-label="Edit" @click="design(workflow)"><Icon name="pencil" /></button>
+                    <button type="button" :class="cmp.iconButton()" aria-label="Edit" @click="openSaved(workflow.id)"><Icon name="pencil" /></button>
                     <button type="button" :class="cmp.iconButton('text-danger')" aria-label="Delete" @click="confirmRemoveId = workflow.id">
                         <Icon name="trash" />
                     </button>
@@ -238,7 +290,7 @@ const shapeOf = (workflow: Workflow): string => {
                     :key="run.runId"
                     type="button"
                     class="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left hover:bg-canvas"
-                    @click="watchingId = run.runId"
+                    @click="watchRun(run.runId)"
                 >
                     <span class="shrink-0 truncate text-xs text-content">{{ run.workflow.name }}</span>
                     <span class="shrink-0 text-2xs font-medium" :class="RUN_TONE[run.state]">{{ run.state }}</span>
@@ -248,14 +300,6 @@ const shapeOf = (workflow: Workflow): string => {
             </RowGroup>
         </div>
 
-        <WorkflowDesigner v-if="designing" v-model="designerOpen" :initial="designing" />
-        <WorkflowRunPanel
-            v-if="watching"
-            :key="watching.runId"
-            :model-value="watchingId !== undefined"
-            :run="watching"
-            @update:model-value="watchingId = undefined"
-        />
         <ConfirmDialog
             :open="confirmRemoveId !== undefined"
             header="Delete this workflow?"

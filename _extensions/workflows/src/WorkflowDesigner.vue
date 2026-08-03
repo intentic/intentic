@@ -1,36 +1,45 @@
 <script setup lang="ts">
-import { Button, cmp, Dialog, Icon, ToggleSwitch } from "@intentic/extension-ui";
-import { type Workflow, type WorkflowStep, workflowFaults } from "@intentic/sandbox-contract";
+import { Button, cmp, Icon, Popover, ToggleSwitch } from "@intentic/extension-ui";
+import { type Workflow, workflowFaults } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
-import StepFields from "./StepFields.vue";
-import WorkflowGraph from "./WorkflowGraph.vue";
+import StepInspector from "./StepInspector.vue";
+import WorkflowCanvas from "./WorkflowCanvas.vue";
+import { addStep, connectSteps, disconnectSteps, removeStep, toggleHandoff, updateStep } from "./workflowEdit";
 import { editableCopy } from "./workflowDraft";
 import { useWorkflows } from "./useWorkflows";
 
-/* THE DESIGNER — the graph on the left, the step you are editing on the right.
+/* THE DESIGNER — a full page whose content is the canvas.
  *
- * THE CANVAS DOES NOT EDIT, AND THAT IS THE DESIGN DECISION HERE. The obvious build is a node editor: drag
- * boxes, pull edges between them. It is the wrong shape for this content. A workflow step is a goal, an
- * instruction, an output shape and four ceilings — overwhelmingly prose — and a canvas is a poor text editor
- * at any size. Meanwhile the dependency graph is small (a handful of edges, mostly a chain) and a multi-select
- * of names is both faster to author than dragging and far faster to correct. So the canvas keeps the job it is
- * genuinely best at, which is showing you the shape you have made, and clicking a node selects the step whose
- * form is beside it. One picture, one form, and the picture is always the truth because both read the same
- * derivation.
+ * IT WAS A DIALOG, AND THAT WAS THE WHOLE PROBLEM. A graph needs horizontal room; a modal is the one container
+ * that categorically cannot give it any. Inside 72rem the canvas was a letterbox that showed one node while the
+ * second sat off-screen, and the form beside it was a scrolling column of nine questions. The page it is now
+ * uses `Page width="full"` — the width tier whose own comment reads "canvas surfaces that need every pixel" —
+ * and reserves everything below the header for the graph.
  *
- * THE FAULTS ARE LIVE, under the canvas, and they are the same sentences the save route refuses with. A rule
- * the daemon holds privately is a rule you meet as a failed save with no idea which node is wrong.
+ * IT IS A MODE OF THE WORKFLOWS VIEW, NOT A ROUTE OF ITS OWN. An extension's route space is the QUERY (see
+ * IntenticApi.route), so `?edit=<id>` is the whole navigation, Back leaves the designer, and the URL is
+ * linkable. Same shape the documentation extension uses for opening a document.
+ *
+ * WHAT LIVES WHERE, and it is the same rule three times: the thing goes where you can see it.
+ *  · dependencies  → the canvas. You draw them.
+ *  · the handoff   → the EDGE. Click it; it is already drawn as solid-versus-dashed.
+ *  · a step's prose → the inspector, which asks two questions and folds the other nine away.
+ *  · run settings  → a popover off the header. They belong to the whole run, not to any step, and putting them
+ *                    beside a step's fields is what made the old panel read as one undifferentiated wall.
  */
 
 const { initial } = defineProps<{ initial: Workflow }>();
-const open = defineModel<boolean>({ required: true });
+const emit = defineEmits<{ close: []; saved: [id: string] }>();
 
 const { save } = useWorkflows();
-// `editableCopy`, not structuredClone — `initial` is always a reactive proxy here, and structuredClone throws
-// on one rather than cloning through it. See workflowDraft.ts; this line is where that crash landed.
+// `editableCopy`, not structuredClone — `initial` is a reactive proxy here. See workflowDraft.ts.
 const draft = ref<Workflow>(editableCopy(initial));
 const selectedId = ref<string | undefined>(initial.steps[0]?.id);
+// The edge the reader last clicked, as its endpoints. Drives the little edge card over the canvas.
+const pickedEdge = ref<{ from: string; to: string }>();
 const failure = ref<string>();
+const settingsAnchor = ref<HTMLElement>();
+const settings = ref<InstanceType<typeof Popover>>();
 
 // Re-opening on a different workflow must not keep the last one's draft — a designer that silently edits the
 // wrong workflow is the one mistake here that is invisible until it is saved.
@@ -39,89 +48,65 @@ watch(
     (next) => {
         draft.value = editableCopy(next);
         selectedId.value = next.steps[0]?.id;
+        pickedEdge.value = undefined;
         failure.value = undefined;
     },
 );
 
 const faults = computed(() => workflowFaults(draft.value));
 const selected = computed(() => draft.value.steps.find((step) => step.id === selectedId.value));
-const others = computed(() => draft.value.steps.filter((step) => step.id !== selectedId.value));
+const pickedStep = computed(() => draft.value.steps.find((step) => step.id === pickedEdge.value?.to));
+const stepTitle = (id: string): string => draft.value.steps.find((step) => step.id === id)?.title ?? id;
 
 const patch = (over: Partial<Workflow>): void => {
     draft.value = { ...draft.value, ...over };
 };
 
-// A new step's id has to be unique AND slug-shaped (it is spliced into a conversation id and a branch name),
-// so it is minted rather than typed. The title is what the user names; the id is plumbing they never see.
-const nextStepId = (): string => {
-    const used = new Set(draft.value.steps.map((step) => step.id));
-    let n = draft.value.steps.length + 1;
-    while (used.has(`step-${n}`)) {
-        n += 1;
-    }
-    return `step-${n}`;
+// Every graph gesture goes through workflowEdit, which is where the invariants are kept and where they are
+// tested. This component's job is to say which gesture happened, not what it means.
+const onAdd = (after?: string): void => {
+    const added = addStep(draft.value, after);
+    draft.value = added.workflow;
+    selectedId.value = added.stepId;
+    pickedEdge.value = undefined;
 };
-
-const addStep = (): void => {
-    const id = nextStepId();
-    // Chained onto the last step by default. A workflow is a sequence far more often than it is a fan-out, and
-    // starting every new step disconnected means the common case is two clicks of housekeeping per step.
-    const previous = draft.value.steps.at(-1);
-    const step: WorkflowStep = {
-        id,
-        title: `Step ${draft.value.steps.length + 1}`,
-        goal: ``,
-        prompt: ``,
-        needs: previous === undefined ? [] : [previous.id],
-        handoff: `fresh`,
-        output: { kind: `claim` },
-        checks: [],
-        context: `fresh`,
-        maxIterations: 8,
-        stallLimit: 2,
-        maxSpendUsd: 5,
-    };
-    patch({ steps: [...draft.value.steps, step] });
-    selectedId.value = id;
+const onConnect = (from: string, to: string): void => {
+    draft.value = connectSteps(draft.value, from, to);
 };
-
-const updateStep = (next: WorkflowStep): void => patch({ steps: draft.value.steps.map((step) => (step.id === next.id ? next : step)) });
-
-const removeStep = (id: string): void => {
-    // Its dependents lose the edge rather than being left pointing at nothing — a dangling `needs` is a fault,
-    // and producing one as a side effect of a delete would be the designer breaking its own document.
-    const withoutNeed = (step: WorkflowStep): WorkflowStep =>
-        step.needs.includes(id) ? { ...step, needs: step.needs.filter((need) => need !== id) } : step;
-    patch({ steps: draft.value.steps.filter((step) => step.id !== id).map(withoutNeed) });
+const onSelectEdge = (from: string, to: string): void => {
+    pickedEdge.value = { from, to };
+    selectedId.value = undefined;
+};
+const onRemove = (id: string): void => {
+    draft.value = removeStep(draft.value, id);
     selectedId.value = draft.value.steps[0]?.id;
 };
-
-const moveStep = (id: string, by: -1 | 1): void => {
-    const from = draft.value.steps.findIndex((step) => step.id === id);
-    const to = from + by;
-    if (from === -1 || to < 0 || to >= draft.value.steps.length) {
-        return;
+const dropEdge = (): void => {
+    const edge = pickedEdge.value;
+    if (edge !== undefined) {
+        draft.value = disconnectSteps(draft.value, edge.from, edge.to);
+        pickedEdge.value = undefined;
     }
-    const steps = [...draft.value.steps];
-    const [moved] = steps.splice(from, 1);
-    if (moved !== undefined) {
-        steps.splice(to, 0, moved);
+};
+const flipHandoff = (): void => {
+    if (pickedEdge.value !== undefined) {
+        draft.value = toggleHandoff(draft.value, pickedEdge.value.to);
     }
-    patch({ steps });
 };
 
 const ready = computed(
-    () =>
-        faults.value.length === 0 &&
-        draft.value.name.trim() !== `` &&
-        draft.value.steps.every((step) => step.goal.trim() !== `` && step.prompt.trim() !== ``),
+    () => faults.value.length === 0 && draft.value.name.trim() !== `` && draft.value.steps.every((step) => step.prompt.trim() !== ``),
 );
 
 const commit = async (): Promise<void> => {
     failure.value = undefined;
     try {
-        await save.mutateAsync(draft.value);
-        open.value = false;
+        /* A step's `goal` is required by the contract but not by this form — "done when" is the second
+         * question and plenty of steps do not need one. Falling back to the title is honest rather than
+         * invented: an unstated goal IS "do what this step is called", which is what the title says. */
+        const steps = draft.value.steps.map((step) => (step.goal.trim() === `` ? { ...step, goal: step.title } : step));
+        await save.mutateAsync({ ...draft.value, steps });
+        emit(`saved`, draft.value.id);
     } catch (error) {
         failure.value = error instanceof Error ? error.message : `The workflow could not be saved.`;
     }
@@ -129,14 +114,145 @@ const commit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Dialog v-model:visible="open" :modal="true" :draggable="false" :style="{ width: '72rem', maxWidth: '95vw' }" header="Design a workflow">
-        <div class="flex flex-col gap-4">
-            <div class="flex flex-wrap items-end gap-3">
-                <label class="flex min-w-52 flex-1 flex-col gap-1">
-                    <span :class="cmp.sectionLabel()">Name</span>
-                    <input :value="draft.name" :class="cmp.input()" @input="patch({ name: ($event.target as HTMLInputElement).value })" />
+    <!-- The page does not scroll; the canvas fills it and the inspector scrolls itself. -->
+    <div class="flex h-full min-h-0 flex-col">
+        <header class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
+            <button type="button" :class="cmp.iconButton()" aria-label="Back to workflows" @click="emit(`close`)"><Icon name="arrow-left" /></button>
+            <input
+                :value="draft.name"
+                :class="[cmp.input(), `min-w-48 max-w-96 flex-1 font-medium`]"
+                aria-label="Workflow name"
+                placeholder="Name this workflow"
+                @input="patch({ name: ($event.target as HTMLInputElement).value })"
+            />
+            <!-- The discoverable way to add a step. The `+` on a node's handle is faster once you know it is
+                 there, and dragging off a handle is faster still — but neither is visible until you hover a
+                 node, and an editor whose primary action only appears on hover has no primary action. -->
+            <Button label="Add step" size="small" severity="secondary" @click="onAdd(selectedId ?? draft.steps.at(-1)?.id)">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
+            <span ref="settingsAnchor">
+                <Button label="Run settings" size="small" severity="secondary" :text="true" @click="settings?.toggle($event)">
+                    <template #icon><Icon name="sliders-h" /></template>
+                </Button>
+            </span>
+            <span class="flex-1"></span>
+            <span v-if="faults.length > 0" class="truncate text-2xs text-warning">{{ faults[0] }}</span>
+            <button type="button" :class="cmp.linkButton()" @click="emit(`close`)">Cancel</button>
+            <Button label="Save" size="small" :disabled="!ready || save.isPending.value" @click="commit()">
+                <template #icon><Icon name="save" /></template>
+            </Button>
+        </header>
+
+        <p v-if="failure" :class="cmp.alertDanger('m-3')">{{ failure }}</p>
+
+        <div class="flex min-h-0 flex-1">
+            <!-- The canvas takes everything the inspector does not. -->
+            <div class="relative min-w-0 flex-1">
+                <WorkflowCanvas
+                    v-model="selectedId"
+                    :workflow="draft"
+                    @connect="onConnect"
+                    @select-edge="onSelectEdge"
+                    @add="(from) => onAdd(from)"
+                />
+
+                <!-- The empty state sits ON the canvas, because the canvas is where the first step goes. -->
+                <div v-if="draft.steps.length === 0" class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
+                    <p class="text-xs text-subtle">Nothing here yet.</p>
+                    <Button class="pointer-events-auto" label="Add the first step" size="small" @click="onAdd()">
+                        <template #icon><Icon name="plus" /></template>
+                    </Button>
+                </div>
+
+                <!-- THE EDGE CARD. A dependency has exactly two things worth saying about it, so it gets two
+                     controls floating over the canvas rather than a panel: is this the same agent carrying on,
+                     and should the line be there at all. -->
+                <div
+                    v-if="pickedEdge && pickedStep"
+                    class="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-line bg-card px-2.5 py-1.5 shadow-sm"
+                >
+                    <span class="text-2xs text-subtle">
+                        <span class="text-content">{{ stepTitle(pickedEdge.from) }}</span> →
+                        <span class="text-content">{{ stepTitle(pickedEdge.to) }}</span>
+                    </span>
+                    <button
+                        type="button"
+                        v-tooltip.top="
+                            pickedStep.needs.length === 1
+                                ? `A new session knows only what the step before it declared — the only honest way to review work. Carrying on keeps the agent, its thread and its working tree.`
+                                : `Only a step with exactly one predecessor can carry a session on.`
+                        "
+                        class="cursor-pointer rounded-full border px-2 py-0.5 text-2xs disabled:cursor-default disabled:opacity-40"
+                        :class="
+                            pickedStep.handoff === `continue`
+                                ? `border-link bg-link/10 text-link`
+                                : `border-line text-subtle hover:border-line-strong`
+                        "
+                        :disabled="pickedStep.needs.length !== 1"
+                        @click="flipHandoff()"
+                    >
+                        {{ pickedStep.handoff === `continue` ? `Same agent` : `New agent` }}
+                    </button>
+                    <button type="button" :class="cmp.iconButton(`text-danger`)" aria-label="Remove this dependency" @click="dropEdge()">
+                        <Icon name="times" />
+                    </button>
+                </div>
+            </div>
+
+            <aside v-if="selected" class="flex w-80 shrink-0 flex-col border-l border-line">
+                <StepInspector
+                    :key="selected.id"
+                    :model-value="selected"
+                    @update:model-value="draft = updateStep(draft, selected.id, $event)"
+                    @remove="onRemove(selected.id)"
+                />
+            </aside>
+        </div>
+
+        <!-- Run settings: properties of the WHOLE run, so they are one click off the header rather than mixed
+             in with a step's own fields. -->
+        <Popover ref="settings">
+            <div class="flex w-80 flex-col gap-3 p-1">
+                <label class="flex items-start gap-2">
+                    <ToggleSwitch :model-value="draft.isolated" @update:model-value="patch({ isolated: $event })" />
+                    <span class="flex flex-col">
+                        <span class="text-xs font-medium text-content">Work on branches</span>
+                        <span class="text-2xs text-subtle">
+                            {{
+                                draft.isolated
+                                    ? `Each new agent gets its own worktree off main, and is told the branch the steps before it worked on.`
+                                    : `Every step works directly on this workspace, so each sees what the last one did — but steps running side by side share one tree.`
+                            }}
+                        </span>
+                    </span>
                 </label>
-                <label class="flex min-w-52 flex-[2] flex-col gap-1">
+                <div class="flex flex-wrap items-end gap-3">
+                    <label class="flex flex-col gap-1">
+                        <span :class="cmp.sectionLabel()">At once</span>
+                        <input
+                            :value="draft.maxParallel"
+                            type="number"
+                            min="1"
+                            max="8"
+                            :class="[cmp.input(), `w-20`]"
+                            @input="patch({ maxParallel: Number(($event.target as HTMLInputElement).value) })"
+                        />
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span :class="cmp.sectionLabel()">Whole run, at most</span>
+                        <input
+                            :value="draft.maxSpendUsd ?? ``"
+                            type="number"
+                            min="1"
+                            step="1"
+                            placeholder="dollars"
+                            :class="[cmp.input(), `w-28`]"
+                            @input="patch({ maxSpendUsd: Number(($event.target as HTMLInputElement).value) || undefined })"
+                        />
+                    </label>
+                </div>
+                <label class="flex flex-col gap-1">
                     <span :class="cmp.sectionLabel()">What it is for</span>
                     <input
                         :value="draft.description ?? ``"
@@ -145,93 +261,8 @@ const commit = async (): Promise<void> => {
                         @input="patch({ description: ($event.target as HTMLInputElement).value })"
                     />
                 </label>
+                <p v-for="fault in faults" :key="fault" class="text-2xs text-warning">{{ fault }}</p>
             </div>
-
-            <div class="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
-                <div class="flex flex-col gap-2">
-                    <WorkflowGraph v-model="selectedId" :workflow="draft" />
-
-                    <!-- The faults, live. Same sentences the save route refuses with — see workflowFaults. -->
-                    <div v-if="faults.length > 0" :class="cmp.alertWarning()">
-                        <span class="block font-medium">This cannot run yet</span>
-                        <span v-for="fault in faults" :key="fault" class="mt-0.5 block text-xs">{{ fault }}</span>
-                    </div>
-
-                    <!-- The run-level settings sit under the canvas because they are properties of the PICTURE,
-                         not of any step: where the work happens and how wide it may go. -->
-                    <div class="flex flex-col gap-2 rounded-lg border border-line bg-card p-3">
-                        <label class="flex items-start gap-2">
-                            <ToggleSwitch :model-value="draft.isolated" @update:model-value="patch({ isolated: $event })" />
-                            <span class="flex flex-col">
-                                <span class="text-xs font-medium text-content">Work on branches</span>
-                                <span class="text-2xs text-subtle">
-                                    {{
-                                        draft.isolated
-                                            ? `Each new session gets its own worktree off main, and is told the branch the steps before it worked on. Right for reviewing, and for anything you want to land deliberately.`
-                                            : `Every step works directly on this workspace, so each one sees what the last one did. Right for a chain that builds on itself — but steps running side by side share one tree.`
-                                    }}
-                                </span>
-                            </span>
-                        </label>
-                        <div class="flex flex-wrap items-end gap-3">
-                            <label class="flex flex-col gap-1">
-                                <span :class="cmp.sectionLabel()">At once</span>
-                                <input
-                                    :value="draft.maxParallel"
-                                    type="number"
-                                    min="1"
-                                    max="8"
-                                    :class="[cmp.input(), `w-20`]"
-                                    @input="patch({ maxParallel: Number(($event.target as HTMLInputElement).value) })"
-                                />
-                            </label>
-                            <label class="flex flex-col gap-1">
-                                <span :class="cmp.sectionLabel()">Whole run, at most</span>
-                                <input
-                                    :value="draft.maxSpendUsd ?? ``"
-                                    type="number"
-                                    min="1"
-                                    step="1"
-                                    placeholder="dollars"
-                                    :class="[cmp.input(), `w-28`]"
-                                    @input="patch({ maxSpendUsd: Number(($event.target as HTMLInputElement).value) || undefined })"
-                                />
-                            </label>
-                            <span class="flex-1 text-2xs text-subtle">
-                                Each step has its own ceiling too. This one is the number that stops the run — eight steps under $2 each is a $16 run.
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex max-h-[60vh] flex-col gap-2 overflow-y-auto pr-1">
-                    <StepFields
-                        v-if="selected"
-                        :key="selected.id"
-                        :model-value="selected"
-                        :others="others"
-                        @update:model-value="updateStep($event)"
-                        @remove="removeStep(selected.id)"
-                        @move="moveStep(selected.id, $event)"
-                    />
-                    <div v-else :class="cmp.emptyState('py-5')">Pick a step on the left, or add one.</div>
-                    <Button label="Add a step" size="small" severity="secondary" @click="addStep()">
-                        <template #icon><Icon name="plus" /></template>
-                    </Button>
-                </div>
-            </div>
-
-            <p v-if="failure" :class="cmp.alertDanger()">{{ failure }}</p>
-        </div>
-
-        <template #footer>
-            <button type="button" :class="cmp.linkButton()" @click="open = false">Cancel</button>
-            <Button
-                size="small"
-                :label="save.isPending.value ? `Saving…` : `Save workflow`"
-                :disabled="!ready || save.isPending.value"
-                @click="commit()"
-            />
-        </template>
-    </Dialog>
+        </Popover>
+    </div>
 </template>

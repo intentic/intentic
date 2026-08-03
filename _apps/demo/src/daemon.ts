@@ -20,6 +20,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { BROWSER_SESSIONS } from "./browser";
 import { automationApprovals, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
+import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
@@ -375,6 +376,18 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
         () => refuse(`This is the demo workspace — approving a held wake would start the turn it is holding.`),
     ],
     [`POST`, `/automations/pending/{id}/reject`, ({ param }) => okAfter(() => resolveApproval(Date.now(), param(`id`)))],
+
+    /* Workflows — a designed graph of sessions, with one run of it going on right now. Reading is real (the
+     * designer opens on the saved graph, the run page draws the run the board's two review cards are steps
+     * of); what refuses is RUNNING one, because a run is several agent sessions against a real tree. Saving and
+     * deleting refuse for the same reason the run does: a design the demo let you keep would be a design that
+     * silently vanishes on reload, which teaches worse than a clear no. */
+    [`GET`, `/workflows`, () => json({ workflows: demoWorkflows(Date.now()) })],
+    [`GET`, `/workflows/runs`, () => json({ runs: demoRuns(Date.now()) })],
+    [`POST`, `/workflows`, () => refuse(`This is the demo workspace — designs are read-only here.`)],
+    [`DELETE`, `/workflows/{id}`, () => refuse(`This is the demo workspace — designs are read-only here.`)],
+    [`POST`, `/workflows/{id}/run`, () => refuse(`This is the demo workspace — running a workflow starts several agent sessions on a real tree.`)],
+    [`POST`, `/workflows/runs/{runId}/stop`, () => refuse(`This is the demo workspace — nothing is really running to stop.`)],
 
     /* Memory: what the agent carries between sessions, readable and — the point of the surface — editable. The
      * red pen writes into the fixture, so an edit and a forget both hold until the tab is reloaded. */

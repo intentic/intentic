@@ -6,7 +6,7 @@ import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-trans
 import { briefForIteration, loopDirIn } from "./loop-brief.js";
 import { treeDigest } from "./loop-progress.js";
 import { evaluateStop } from "./loop-stop.js";
-import { setLoopProjection } from "./loop-state.js";
+import { loopProjection } from "./loop-state.js";
 
 /* THE PUMP — run a conversation's turn, ask whether the goal is met, and if not run it again.
  *
@@ -106,7 +106,7 @@ const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { 
 // end — the last one is the whole reason loop-state carries a change notification, since no turn frame follows
 // it to broadcast the roster.
 const publish = (loop: Loop, state: LoopState, iteration: number): void =>
-    setLoopProjection(loop.conversationId, { state, iteration, maxIterations: loop.maxIterations, goal: loop.goal });
+    loopProjection.set(loop.conversationId, { state, iteration, maxIterations: loop.maxIterations, goal: loop.goal });
 
 /* HOW A LOOP ENDED, handed back to whoever started it.
  *

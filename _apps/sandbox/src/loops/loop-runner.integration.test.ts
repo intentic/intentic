@@ -8,7 +8,7 @@ import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "./loops-store.js";
 import { loopRunning, runLoop, type TurnFn } from "./loop-runner.js";
-import { loopProjectionOf } from "./loop-state.js";
+import { loopProjection } from "./loop-state.js";
 
 /* The pump's ceilings, end to end. Every test here is about a way the loop STOPS, because that is the whole
  * risk surface: a loop that never converges and never gives up is the one failure mode that costs real money
@@ -64,7 +64,7 @@ test("a loop that never claims done runs to its iteration ceiling and settles `e
     expect(settled?.state).toBe("exhausted");
     expect(settled?.iterations).toHaveLength(3);
     // The card must end up saying what the record says — the projection is the only thing the fleet reads.
-    expect(loopProjectionOf("c1")).toMatchObject({ state: "exhausted", iteration: 3 });
+    expect(loopProjection.of("c1")).toMatchObject({ state: "exhausted", iteration: 3 });
     expect(loopRunning("c1")).toBe(false);
 });
 

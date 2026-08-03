@@ -517,6 +517,32 @@ export const AgentSummarySchema = z.object({
     loop: z
         .object({ state: LoopStateSchema, iteration: z.number().int().min(0), maxIterations: z.number().int().min(1), goal: z.string() })
         .optional(),
+    /* The workflow run this conversation is a step of — "Ship the feature · step 3 of 4 · Review the change".
+     *
+     * Projected for the same reason the loop above is, and it answers a question only the board can be asked. A
+     * run of four `fresh` steps IS four conversations, so it arrives on the board as four unrelated cards that
+     * started a few minutes apart — the work reads as four people who happen to be busy rather than as one job
+     * with a shape. Naming the run on each card is what makes them one block, and `runId` is what lets the board
+     * order them together and link every one of them at the run's own graph.
+     *
+     * POSITION IS A FACT ABOUT THE STEP, not a running total: `index`/`total` are its place in the workflow's own
+     * step order, so a card is published once when its step starts and never has to be rewritten because a
+     * sibling advanced. How the run as a whole is going is the run page's job, and how THIS step is going is
+     * already the card's status and the loop line above.
+     *
+     * `step` moves within one conversation when steps are chained with `continue` — they share it, which is the
+     * point of chaining — so this says which one is on it NOW.
+     *
+     * Absent ⇒ an ordinary conversation. */
+    workflow: z
+        .object({
+            runId: z.string(),
+            name: z.string(),
+            step: z.string(),
+            index: z.number().int().min(1),
+            total: z.number().int().min(1),
+        })
+        .optional(),
     // When the agent was ARCHIVED (ms epoch) — off the board, but nothing lost: its checkout was retired
     // (worktree removed) while the agent/<id> branch, the transcript, and every counter stayed. Absent ⇒ live
     // on the board. Archived agents are excluded from the roster the fleet renders; `agents.archived` lists

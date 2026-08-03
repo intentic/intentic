@@ -25,6 +25,7 @@ export {
     CopyButton,
     CountBar,
     type CountItem,
+    DagEditor,
     DagGraph,
     type DagEdge,
     type DagNode,

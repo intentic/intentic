@@ -12,6 +12,7 @@ export { default as ConfirmDialog } from "./components/ConfirmDialog.vue";
 export { default as ContextMenu } from "./components/ContextMenu.vue";
 export { default as CopyButton } from "./components/CopyButton.vue";
 export { type CountItem, default as CountBar } from "./components/CountBar.vue";
+export { default as DagEditor } from "./components/DagEditor.vue";
 export { default as DagGraph } from "./components/DagGraph.vue";
 // Types only. The DAG layout FUNCTIONS ship as `@intentic/ui/dag` for the same reason the markdown engine
 // does: they are plain TypeScript, and a unit test should not have to boot this barrel's component graph (and a

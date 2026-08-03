@@ -13,6 +13,7 @@ export const extensionUiNames = [
     "ContextMenu",
     "CopyButton",
     "CountBar",
+    "DagEditor",
     "DagGraph",
     "Dialog",
     "FilterBar",

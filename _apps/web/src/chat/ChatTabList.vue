@@ -21,6 +21,7 @@ import { type FleetAgent, useAgents, windowFinished } from "../composables/agent
 import FilterField from "../components/FilterField.vue";
 import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
+import WorkflowMark from "../components/WorkflowMark.vue";
 import { relativeTime, statusIcon, statusLabel } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
@@ -653,6 +654,7 @@ const closeTab = (event: Event, id: string): void => {
                                      rather than its name, so they ride the meta line the way the board
                                      puts its OriginMark in the card body. -->
                                 <OriginMark :origin="originOf(c)" compact />
+                                <WorkflowMark :workflow="agent?.workflow" compact />
                                 <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
                                     <Icon name="box" class="text-2xs text-subtle" />
                                 </span>
