@@ -32,7 +32,18 @@ installed for that tier — never in the image, which has to stay bare for the d
 | on disk | the executable, the `.desktop` entry, and the bundled `scripts/` the launcher spawns |
 | registration | `xdg-mime query default x-scheme-handler/intentic` resolves — the AppImage's is checked *after* launch, since it has no installer and registers itself at runtime |
 | launch | the process survives startup and maps its workspace window |
-| deep link | a real `xdg-open intentic://setup?code=…` opens the Sandbox Manager, in the instance that was already running |
+| deep link, app running | a real `xdg-open intentic://setup?code=…` opens the Sandbox Manager, in the instance that was already running |
+| deep link, app not running | the same link **starts** the app and still opens the Sandbox Manager — fired at the deb *before its first launch*, so the package's own entry is the handler, and at the AppImage *after it has been run and quit*, since nothing installs an AppImage's entry and it registers itself at runtime |
+
+The two deep-link rows share the link and nothing else. A running app is reached by starting a second copy whose
+argv the single-instance plugin forwards over DBus; a stopped one is reached by the OS starting it *with* the
+link in argv, which the app has to notice at startup. The second is the state a machine is in when someone
+installs the app and clicks "set up" — and it was broken in both halves (a shipped `Exec` with no `%u`, and a
+startup that never read the url back) for as long as only the first row was asserted.
+
+When the app is found dead, the failure names the signal that killed it (`wait` yields the status, 128+n is a
+signal) and prints the container's cgroup memory counters — an OOM kill and a segfault are otherwise the same
+empty log.
 
 Assertions read **window titles** through `xdotool`, not a test hook — the app has none and should not grow
 one. The window appearing is the behaviour a user is promised, so it is the thing worth asserting. Two host

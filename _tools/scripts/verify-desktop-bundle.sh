@@ -16,7 +16,9 @@
 #      recreate, sign-in, and the credential coming back. On the installed paths that registration is a
 #      `x-scheme-handler/intentic` MIME entry in the .desktop file, written by the bundler from
 #      tauri.conf.json's `plugins.deep-link`. Nothing else in the pipeline reads that config, so a bad edit
-#      there produces a perfectly working build whose sign-in never returns.
+#      there produces a perfectly working build whose sign-in never returns. The MIME entry is only half of it:
+#      an Exec line with no `%u` field code is launched with no arguments, so the entry wins the handler lookup
+#      and then drops the link — see _apps/desktop/src-tauri/main.desktop. Both halves are asserted.
 #
 # This is deliberately the cheap tier: it is pure archive inspection, runs in seconds, needs no display, no
 # Docker and no privileges — and it is the ONLY automated check that reaches inside the Windows NSIS installer,
@@ -109,6 +111,14 @@ compare_desktop_entry() {
         echo "  ✓ $label: $(basename "$entry") registers x-scheme-handler/intentic"
     else
         fail "$label: $(basename "$entry") does not register x-scheme-handler/intentic — deep links would not route"
+    fi
+    # The url has to survive the launch as well as reach the right binary. A handler entry whose Exec carries no
+    # %u/%U is started with an EMPTY argv (desktop-entry spec, "The Exec key"), which is indistinguishable from a
+    # user opening the app from the menu — the link is not delivered anywhere, it stops existing.
+    if grep -qE '^Exec=.*%[uU]([[:space:]]|$)' "$entry"; then
+        echo "  ✓ $label: $(basename "$entry") passes the url to the app (%u)"
+    else
+        fail "$label: $(basename "$entry") has no %u in Exec — the OS would start the app without the link"
     fi
 }
 

@@ -28,7 +28,11 @@
         },
         "linux": {
             "deb": {
-                "depends": []
+                "depends": [],
+                "desktopTemplate": "main.desktop"
+            },
+            "rpm": {
+                "desktopTemplate": "main.desktop"
             }
         },
         "windows": {

@@ -93,6 +93,23 @@ Four actions, and it is the whole channel between the SPA and the app
 
 Each one works identically from an external browser, where the OS routes it to the installed app.
 
+**How a link gets in** depends on whether the app is already running, and the two paths share nothing but the
+url. If it is, the OS starts a second copy and `tauri-plugin-single-instance` forwards that copy's argv to the
+first over DBus. If it is not, the OS starts the app *with* the link in argv — which is the path a first-time
+user takes (install, click **Set up on this computer**, nothing running yet) and it needs two things the warm
+path does not:
+
+- **`%u` on the installed entry's `Exec`.** A handler without a field code is launched with no arguments at all
+  (desktop-entry spec), so it wins the lookup and then drops every link it wins. Tauri's bundler writes the
+  `MimeType` line but no field code, so the deb and rpm entries come from
+  [`src-tauri/main.desktop`](src-tauri/main.desktop) instead of its built-in template.
+- **Reading the url back in `setup()`.** `tauri-plugin-deep-link` captures argv during its own plugin setup and
+  emits it there — before the app's `on_open_url` listener exists — and nothing replays it. `setup()` asks for
+  what it captured (`deep_link().get_current()`) rather than waiting for an event that has already been sent.
+
+Neither is exercised by firing a link at a running app, which is why the smoke tier fires one at a stopped one
+too.
+
 ## Layout
 
 - `src/` — the launcher UI (Vue + `@intentic/ui`): setup progress and the sandbox manager. Two components
@@ -123,8 +140,8 @@ fact: **this app is cross-built on Linux and its Windows conventions first execu
 | Tier | Runs | Proves |
 | --- | --- | --- |
 | `cargo test` | per MR (`desktop:check`) | the argv/env each flow assembles — for **both** hosts, since `Host` is a value rather than a `cfg!` read, so the `.ps1` named-parameter conventions are covered on a Linux runner |
-| `_tools/scripts/verify-desktop-bundle.sh` | every build (called by `build-desktop.sh`) | the bundled scripts are present and byte-identical, and the `.desktop` entry registers `intentic://`. Reads the deb, rpm, AppImage **and the NSIS installer** — the only automated look inside the Windows artifact |
-| `_tools/scripts/verify-desktop-install.sh` | main + nightly (`desktop:verify`) | the artifacts install on a **bare** Debian, launch under Xvfb, and answer a real `xdg-open intentic://` — see [`_tools/desktop-smoke`](../../_tools/desktop-smoke/README.md) |
+| `_tools/scripts/verify-desktop-bundle.sh` | every build (called by `build-desktop.sh`) | the bundled scripts are present and byte-identical, and the `.desktop` entry both registers `intentic://` and carries the `%u` that delivers it. Reads the deb, rpm, AppImage **and the NSIS installer** — the only automated look inside the Windows artifact |
+| `_tools/scripts/verify-desktop-install.sh` | main + nightly (`desktop:verify`) | the artifacts install on a **bare** Debian, launch under Xvfb, and answer a real `xdg-open intentic://` — with the app running *and* with it closed, which are different mechanisms — see [`_tools/desktop-smoke`](../../_tools/desktop-smoke/README.md) |
 | `_tools/scripts/verify-desktop-setup.sh` | nightly | the `connect.sh` **extracted from the installer** brings a sandbox up on a clean Docker host, hermetically (no Cloudflare, no Google, no platform) |
 
 Run the last two locally against your own build:

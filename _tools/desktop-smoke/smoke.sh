@@ -15,6 +15,12 @@
 #      the .desktop MIME entry, the OS handler lookup, the second instance's argv, and the single-instance
 #      plugin's forward — and every one of them is invisible to a unit test. Firing a real `xdg-open` at a real
 #      installed app and watching the launcher window appear exercises all four.
+#      Twice, because a link finds the app in one of TWO states and they share almost no mechanism. Running: the
+#      OS starts a second copy, whose argv the single-instance plugin forwards over DBus to the first. NOT
+#      running: the OS starts the app WITH the link in argv, and the app has to notice it at startup. The second
+#      is the first-time user's path — the state a machine is in the moment someone installs and clicks — and it
+#      is the one that was broken in both halves (no `%u` on the shipped Exec, no read-back at startup) while
+#      the running-app assertion passed on every build.
 #
 # Assertions are made against WINDOW TITLES via xdotool rather than against anything the app was modified to
 # emit: there is no test hook in this app, and there should not be one — the window appearing IS the behaviour
@@ -78,6 +84,65 @@ until_true() {
 }
 
 window_titled() { xdotool search --name "$1"; }
+
+# The link every tier fires. A setup link, because it is the one a first-time user meets and the only one whose
+# arrival is VISIBLE without a test hook: it parks a pending setup and raises the launcher.
+LINK="intentic://setup?code=smoke-test-code&name=Smoke"
+
+# A deep link fired at a machine where the app is NOT running — a different mechanism from the one a running
+# instance gets, and the one a first-time user meets. The OS has to start the app AND hand it the url in argv;
+# the app then has to read that url back at startup, from a plugin that captured it before any listener of ours
+# existed. Neither half is exercised by firing a link at an app that is already up.
+cold_link() {
+    xdg-open "$LINK" >/tmp/xdg-open-cold.log 2>&1 || true
+    until_true 60 "$1" window_titled "Sandbox Manager" || {
+        echo "--- xdg-open output ---" >&2
+        cat /tmp/xdg-open-cold.log >&2 || true
+    }
+}
+
+# Leave no window behind — and ASSERT it, because this is the precondition the cold tiers rest on. Every
+# assertion here reads the X tree by title: a launcher left over from the phase before satisfies the next search
+# instantly, and a cold-start tier that never actually started anything cold reports a pass. Matched on the
+# binary name rather than "$BINARY", which for an AppImage is the bundle path and not what the extracted process
+# is running under.
+quit_app() {
+    pkill -f intentic-desktop 2>/dev/null || true
+    until_true 20 "the app closed" bash -c '! xdotool search --name "Intentic" >/dev/null 2>&1' || true
+}
+
+# Where a container's OOM kill is recorded: not in the app's output (there is none — the kernel does not ask),
+# not in dmesg (that is the host's). Without this an OOM and a segfault are the same empty log.
+memory_report() {
+    if [ -r /sys/fs/cgroup/memory.events ]; then
+        echo "--- container memory ---" >&2
+        for stat in memory.max memory.peak memory.current memory.events; do
+            if [ -r "/sys/fs/cgroup/$stat" ]; then
+                sed "s/^/    ${stat}: /" "/sys/fs/cgroup/$stat" >&2
+            fi
+        done
+    fi
+    return 0
+}
+
+# The app is gone and we are the shell that started it, so its status is still ours to collect — `wait` yields
+# it even after the process is reaped, and bash spells "killed by signal n" as 128+n. Which signal it was IS the
+# diagnosis: a crash (SIGSEGV), the kernel reclaiming memory (SIGKILL) and a clean exit are three different
+# bugs, and a bare "it died" tells a CI log's reader none of them. Runs in this shell, never a subshell — `wait`
+# in one knows nothing of this shell's jobs.
+app_died() {
+    local status
+    wait "$APP_PID"
+    status=$?
+    if [ "$status" -gt 128 ]; then
+        fail "$1 (killed by SIG$(kill -l "$((status - 128))"))"
+    else
+        fail "$1 (exit status $status)"
+    fi
+    echo "--- app output ---" >&2
+    cat "$LOG" >&2 || true
+    memory_report
+}
 
 echo "==> smoke: ${KIND}"
 
@@ -172,7 +237,18 @@ python3 -m http.server 8099 --directory /srv/stub >/tmp/stub.log 2>&1 &
 until_true 15 "stub workspace origin is serving" \
     python3 -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8099').read()" || exit 1
 
-# ── 4. launch ─────────────────────────────────────────────────────────────────────────────────────────────────
+# ── 4. the deep link a FRESH INSTALL gets, before the app has ever run ─────────────────────────────────────────
+# Deb only, and FIRST — this is the one moment the package's OWN .desktop entry is the handler. The app rewrites
+# that registration on its first run (register_all in lib.rs, with an Exec of its own), so every assertion made
+# after a single launch tests the app's handler and none of them test the shipped one. Which is how an entry
+# that registers the scheme and then drops every link it wins can sit in a release: correct in the archive,
+# correct once the app has run, dead for exactly the user who just installed it and clicked "set up".
+if [ "$KIND" = "deb" ]; then
+    cold_link "the setup link started the app and opened the Sandbox Manager"
+    quit_app
+fi
+
+# ── 5. launch ─────────────────────────────────────────────────────────────────────────────────────────────────
 setsid "${LAUNCH[@]}" >"$LOG" 2>&1 &
 APP_PID=$!
 
@@ -186,11 +262,10 @@ fi
 if kill -0 "$APP_PID" 2>/dev/null; then
     pass "the process survived startup (pid $APP_PID)"
 else
-    fail "the process exited during startup"
-    echo "--- app output ---" >&2
-    cat "$LOG" >&2 || true
+    app_died "the process exited during startup"
 fi
 
+# ── 6. the registration an AppImage does for itself ───────────────────────────────────────────────────────────
 # The AppImage has no installer, so lib.rs registers the scheme itself on first run. That is the fallback the
 # whole AppImage deep-link path rests on, and it is best-effort in the code — so assert it actually happened.
 if [ "$KIND" = "appimage" ]; then
@@ -200,10 +275,10 @@ if [ "$KIND" = "appimage" ]; then
     fi
 fi
 
-# ── 5. the deep link, through the real OS path ────────────────────────────────────────────────────────────────
+# ── 7. the deep link, into the app that is already running ────────────────────────────────────────────────────
 # xdg-open, not a direct argv call: this is the route a link takes from an external browser, and it exercises
 # the MIME entry and the handler lookup along with the app's own forwarding.
-xdg-open "intentic://setup?code=smoke-test-code&name=Smoke" >/tmp/xdg-open.log 2>&1 || true
+xdg-open "$LINK" >/tmp/xdg-open.log 2>&1 || true
 
 until_true 45 "the setup link opened the Sandbox Manager" window_titled "Sandbox Manager" || {
     echo "--- xdg-open output ---" >&2
@@ -216,7 +291,17 @@ until_true 45 "the setup link opened the Sandbox Manager" window_titled "Sandbox
 if kill -0 "$APP_PID" 2>/dev/null; then
     pass "the original instance handled the link and is still running (pid $APP_PID)"
 else
-    fail "the original instance died while handling the link"
+    app_died "the original instance died while handling the link"
+fi
+
+# ── 8. the deep link an AppImage gets once it has been run and quit ────────────────────────────────────────────
+# The AppImage's own tier of section 4, and it has to come last: nothing installs an AppImage's .desktop entry,
+# so until the app has run once and registered itself there is no handler at all and a link goes nowhere. This
+# is the state a user leaves it in — downloaded, run, closed — and the next link they click has to start it
+# again and still arrive.
+if [ "$KIND" = "appimage" ]; then
+    quit_app
+    cold_link "the setup link restarted the app and opened the Sandbox Manager"
 fi
 
 kill "$APP_PID" 2>/dev/null || true

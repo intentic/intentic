@@ -64,10 +64,12 @@ pub fn run() {
             app.manage(auth::PendingAuth::default());
             create_tray(app.handle())?;
 
-            // AppImage/dev runs have no installer to register the scheme — best-effort at runtime.
+            windows::show_workspace(app.handle());
+
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
+                // AppImage/dev runs have no installer to register the scheme — best-effort at runtime.
                 let _ = app.deep_link().register_all();
                 let handle = app.handle().clone();
                 app.deep_link().on_open_url(move |event| {
@@ -75,12 +77,20 @@ pub fn run() {
                         handle_intentic_link(&handle, url.as_str());
                     }
                 });
+                // A COLD start: the OS starts the app with the link in argv (that is the whole Linux/Windows
+                // deep-link mechanism — there is no running process to deliver it to). The plugin reads argv
+                // during ITS OWN setup, which is over before the listener above exists, so the event it emits
+                // there is announced to an empty room. Nothing replays it — `on_open_url` is a plain listener —
+                // and the link a first-time user clicked would be silently dropped. What the plugin kept is the
+                // url itself, so ask for it. AFTER show_workspace: an auth handoff navigates that window, and a
+                // setup link should leave the launcher — not the workspace — in front.
+                if let Ok(Some(urls)) = app.deep_link().get_current() {
+                    for url in urls {
+                        handle_intentic_link(app.handle(), url.as_str());
+                    }
+                }
+                spawn_update_check(app.handle().clone());
             }
-
-            windows::show_workspace(app.handle());
-
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
-            spawn_update_check(app.handle().clone());
             Ok(())
         })
         .build(tauri::generate_context!())
