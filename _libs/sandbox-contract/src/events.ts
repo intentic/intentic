@@ -122,9 +122,10 @@ export const ToolCallContentSchema = z.discriminatedUnion("type", [
 export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
 
 // ---- restored transcripts ----
-// What /sessions/{id} replays into a reopened tab. Deliberately NOT SessionTranscriptMessage (the {role,text}
-// seed a resumed turn carries as prompt context): this one has to REDRAW the transcript the user was looking
-// at, so it keeps the assistant's thinking and the tool cards its turn ran. Reconstructed from the stored
+// What /sessions/{id} replays into a reopened tab, and what the daemon's own conversation record stores. It has
+// to REDRAW the transcript the user was looking at rather than merely paraphrase it, so it keeps the assistant's
+// thinking and the tool cards its turn ran — which is also what lets a runtime handoff carry more than bare
+// prose across to the replacement session (see runtime-history.ts). Reconstructed from the stored
 // tool_use/tool_result blocks, so a restored card carries everything the live `tool_call` frame did except
 // the streaming-only correlation fields.
 //

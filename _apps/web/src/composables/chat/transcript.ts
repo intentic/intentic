@@ -235,16 +235,26 @@ export interface ChatTurn {
     readonly folded: readonly ChatMessage[];
 }
 
-// The client transcript as a daemon-seed history: user/assistant text turns only. Notices, tool runs, todos,
-// and thinking are UI artifacts; a plan card's markdown IS the assistant's output in plan mode, so it rides.
-export const transcriptOf = (messages: readonly ChatMessage[]): { role: "user" | "assistant"; text: string }[] =>
-    messages.flatMap((message) => {
+/* HOW MANY ROWS THE DAEMON'S RECORD HOLDS FOR THESE BUBBLES — the one place the two numberings are converted,
+ * and the count a branch hands the daemon so it can copy that prefix of the source conversation.
+ *
+ * The record and the bubble list are deliberately not the same list: notices are drawn by this client and never
+ * recorded, and a bubble that produced nothing at all is not a row. Everything else is 1:1, because both sides
+ * fold a turn the same way (one user row, then one assistant row per prose block with its cards beneath it).
+ *
+ * The assistant guard below MIRRORS the daemon's own (`flush` in sessions/turn-transcript.ts): text, thinking or
+ * tools makes a row, and nothing makes none. The two have to agree — a branch that counts one row too many
+ * inherits a turn the user cut, one too few drops a turn they kept — so change them together. */
+export const recordedRows = (messages: readonly ChatMessage[]): number =>
+    messages.filter((message) => {
         if (message.role === `notice`) {
-            return [];
+            return false;
         }
-        const text = message.plan !== undefined ? [message.text, message.plan.text].filter((part) => part.length > 0).join(`\n\n`) : message.text;
-        return text.trim().length > 0 ? [{ role: message.role, text }] : [];
-    });
+        if (message.role === `user`) {
+            return true;
+        }
+        return message.text.length > 0 || (message.thinking?.length ?? 0) > 0 || (message.tools?.length ?? 0) > 0;
+    }).length;
 
 /* Messages whose ENTIRE content is "keep going". Such a message points at the previous prompt instead of
  * carrying intent of its own — so opening a turn on it would pin "Continue" to the top of the panel while the

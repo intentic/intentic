@@ -1,11 +1,24 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
+import { withRuntimeHistory } from "../agent/runtime-history.js";
 import { restoredTurn, subagentTurn } from "./turn-transcript.js";
 
 describe("restoredTurn", () => {
     it("opens with the user's own words, with the daemon's injections taken back out", () => {
         const prompt = "fix the build\n\nThe user attached these files — read them with the Read tool as needed:\n- /work/shot.png";
         expect(restoredTurn({ prompt }, [], "/work")[0]).toEqual({ role: "user", text: "fix the build", attachments: ["shot.png"] });
+    });
+
+    /* The handoff envelope is one of those injections. The conversation it carries is THIS record's own earlier
+     * rows — the daemon read them out of it to seed the new session — so re-emitting them appended a second,
+     * budget-truncated copy of the conversation on every provider or account switch, and a reopened chat showed
+     * everything before the switch twice. */
+    it("keeps only the typed prompt out of a handoff envelope, never the transcript folded into it", () => {
+        const prompt = withRuntimeHistory("second", [
+            { role: "user", text: "first" },
+            { role: "assistant", text: "sure" },
+        ]);
+        expect(restoredTurn({ prompt }, [], "/work")).toEqual([{ role: "user", text: "second" }]);
     });
 
     /* The live bubble boundary, matched to turnReducer's: `text_end` retires the block that WROTE something, so

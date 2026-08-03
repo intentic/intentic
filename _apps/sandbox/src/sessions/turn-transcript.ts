@@ -34,14 +34,13 @@ export const restoredTurn = (
     // Claude path's way of carrying it, and the other adapters word it differently.
     const stripped = stripAttachmentNote(stripTurnPreamble(turn.prompt));
     const attachments = (turn.attachments ?? stripped.attachments).map((path) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path));
-    const runtime = parseRuntimeHistory(stripped.text);
-    if (runtime !== undefined) {
-        out.push(...runtime.history);
-        if (runtime.prompt.length > 0 || attachments.length > 0) {
-            out.push({ role: "user", text: runtime.prompt, ...(attachments.length > 0 ? { attachments } : {}) });
-        }
-    } else if (stripped.text.length > 0 || attachments.length > 0) {
-        out.push({ role: "user", text: stripped.text, ...(attachments.length > 0 ? { attachments } : {}) });
+    /* A handoff turn's prompt opens with the transcript the daemon folded into it (runtime-history.ts). Unwrap
+     * that and keep only what the user actually typed: the rows inside the envelope are this conversation's OWN
+     * earlier messages, which this record already holds. Re-emitting them appended a second — and, being
+     * budget-capped, truncated — copy of the conversation every time a provider or account was switched. */
+    const text = parseRuntimeHistory(stripped.text)?.prompt ?? stripped.text;
+    if (text.length > 0 || attachments.length > 0) {
+        out.push({ role: "user", text, ...(attachments.length > 0 ? { attachments } : {}) });
     }
 
     out.push(...foldFrames(events, undefined));
@@ -186,9 +185,15 @@ export const openTurnTranscript = async (
     services: Pick<Services, "transcripts" | "logger">,
     turn: AgentTurn & { readonly conversationId: string },
 ): Promise<void> => {
-    await services.transcripts
-        .open(transcriptAgentOf(turn))
-        .catch((error: unknown) => services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript open failed"));
+    const agent = transcriptAgentOf(turn);
+    /* A BRANCH opens differently, and only ever once: its opening history is a prefix of the conversation it was
+     * cut from, which no provider store and no adoption could supply — the branch is a new conversation nothing
+     * else knows about yet. From the copy onward it is an ordinary conversation: it seeds a switched session
+     * from its own record like any other, and it reads back with the turns it inherited rather than beginning
+     * abruptly at the edit. */
+    const branch = turn.branchOf;
+    const opening = branch !== undefined ? services.transcripts.fork(agent, branch.conversationId, branch.keep) : services.transcripts.open(agent);
+    await opening.catch((error: unknown) => services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript open failed"));
 };
 
 /* WHERE THIS TURN SITS IN ITS CONVERSATION — the index its checkpoint is filed under, and the number of
@@ -209,6 +214,30 @@ export const turnStartIndex = async (
     services.transcripts.count(transcriptAgentOf(turn)).catch((error: unknown) => {
         services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript count failed");
         return 0;
+    });
+
+/* THE TRANSCRIPT A FRESH SESSION IS SEEDED WITH — this conversation's own record, read at turn start for a turn
+ * that resumes nothing.
+ *
+ * A provider, account or harness switch retires the session (a session id only resumes on the runtime and
+ * credential that minted it), so its replacement starts blank and has to be told what came before. That used to
+ * be the CLIENT's job — it shipped a text mirror of its own bubbles up with the turn — which meant the daemon
+ * ignored the fuller account it keeps itself, and a conversation opened in a second window seeded from whatever
+ * that window had happened to paint. This is the same record every other reader of the conversation already
+ * uses, so a handoff carries tool calls and attachments the text mirror never had.
+ *
+ * Empty is the ordinary answer twice over: the first turn of a conversation has nothing recorded yet, and a turn
+ * that RESUMES is never asked (its session carries its own context). Both mean "send the prompt alone".
+ *
+ * Never rejects. A transcript the daemon cannot read costs this turn its continuity, which is bad; failing the
+ * turn outright over a side-channel read is worse. */
+export const handoffHistory = async (
+    services: Pick<Services, "transcripts" | "logger">,
+    turn: AgentTurn & { readonly conversationId: string },
+): Promise<readonly RestoredMessage[]> =>
+    services.transcripts.read(transcriptAgentOf(turn)).catch((error: unknown) => {
+        services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript read for handoff failed");
+        return [];
     });
 
 /* WRITE one settled turn to that record — the single spelling of that, because every road a turn can be started

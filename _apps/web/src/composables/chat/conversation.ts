@@ -22,7 +22,7 @@ import { errorMessage } from "../useAsyncAction";
 import { clampEffort } from "./effortScale";
 import { rememberedAccountFor, selectedAccountId } from "./providerAccounts";
 import { providerModels, providerTabs } from "./providerCatalog";
-import { type CardKind, type ChatAttachment, type ChatMessage, isAwaitingDecision, transcriptOf, withCancelledCards } from "./transcript";
+import { type CardKind, type ChatAttachment, type ChatMessage, isAwaitingDecision, recordedRows, withCancelledCards } from "./transcript";
 import { readTranscript, saveTranscript } from "./transcriptCache";
 import { TranscriptClock } from "./transcriptClock";
 import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
@@ -320,6 +320,11 @@ export class Conversation {
     // permanent by the next send (the segment cut).
     private pendingSwitchNoticeId: number | undefined;
 
+    // Where this conversation was cut from, until its first turn carries it (see branchFrom). Undefined on every
+    // conversation that is not a branch, and on a branch from its first send onward — the daemon has copied the
+    // rows by then, and from there this conversation's record is its own.
+    private pendingBranchOf: { conversationId: string; keep: number } | undefined;
+
     // Aborts the in-flight ATTACH STREAM when the user hits Stop / closes the tab; cleared once the stream
     // settles. The turn itself runs detached on the daemon — only /agent/stop cancels it.
     private inflight: AbortController | null = null;
@@ -465,11 +470,10 @@ export class Conversation {
         // ACP providers have no tab entry — the shared label fallback (capability name layered by the picker,
         // else the raw id) covers them.
         const label = providerTabs.find((tab) => tab.value === this.provider.value)?.label ?? providerLabel(this.provider.value);
-        // A restored codex/grok tab has a session but no readable transcript (the daemon's reader is
-        // Claude-only) — there is nothing to carry over, so say so instead of promising continuity.
-        const text = this.messages.value.some((message) => message.role !== `notice`)
-            ? `Switched to ${label} — your next message starts a fresh session with the conversation so far carried over.`
-            : `Switched to ${label} — your next message starts a fresh session (the earlier transcript isn't available to carry over).`;
+        // Unconditional now: what carries over is the DAEMON's record of this conversation, not what this window
+        // happens to have painted. The notice used to hedge for a restored codex/grok tab, whose transcript no
+        // reader could reach — that gap closed when the daemon started recording every runtime's turns itself.
+        const text = `Switched to ${label} — your next message starts a fresh session with the conversation so far carried over.`;
         const noticeId = this.pendingSwitchNoticeId;
         if (noticeId !== undefined) {
             this.transcript.write((state) => ({
@@ -512,13 +516,20 @@ export class Conversation {
         return true;
     }
 
-    // Seed this conversation as a BRANCH of `source` taken just before `index`: the turns before that point
-    // become this conversation's transcript and its settings ride across, while the source is left completely
-    // untouched — that is the whole point of branching over rewinding. No session is carried: a branch is a
-    // new conversation daemon-side, and its first send seeds a fresh one from the transcript above via the
-    // same `history` mechanism a provider switch already uses.
+    /* Seed this conversation as a BRANCH of `source` taken just before `index`: the turns before that point
+     * become this conversation's transcript and its settings ride across, while the source is left completely
+     * untouched — that is the whole point of branching over rewinding. No session is carried: a branch is a new
+     * conversation daemon-side.
+     *
+     * The daemon is told where the cut was rather than what was on this screen, so it can copy that prefix of
+     * the SOURCE's record into this conversation's own. Two things follow that sending bubbles up never gave:
+     * the branch's first turn is seeded with the full recorded turns (tool calls and attachments included, not a
+     * prose summary of them), and the branch reads back with its inherited history when it is reopened
+     * tomorrow instead of appearing to begin mid-conversation. */
     branchFrom(source: Conversation, index: number): void {
-        this.transcript.rebuild(source.messages.value.slice(0, index));
+        const kept = source.messages.value.slice(0, index);
+        this.pendingBranchOf = { conversationId: source.conversationId, keep: recordedRows(kept) };
+        this.transcript.rebuild(kept);
         this.provider.value = source.provider.value;
         this.harness.value = source.harness.value;
         this.account.value = source.account.value;
@@ -642,8 +653,9 @@ export class Conversation {
         this.probe?.abort();
         this.failures.cancelProbe();
         // The session is resumed only while the selection still matches the runtime/account that minted it — a
-        // switched provider or account retires it, and the transcript so far (captured before this turn's
-        // bubbles land) seeds the replacement session on the new runtime.
+        // switched provider or account retires it. Nothing is carried up the wire to replace it: the daemon
+        // seeds the fresh session from its own record of this conversation, which is keyed by conversationId
+        // and therefore still describes the chat the retired session was serving.
         const session = this.session.value;
         const resume = resumes(session, settings) ? session : undefined;
         if (resume === undefined) {
@@ -654,9 +666,12 @@ export class Conversation {
             this.agentTerminal.value = undefined;
             this.agentBrowser.value = undefined;
         }
-        const history = resume === undefined ? transcriptOf(this.messages.value).slice(-200) : [];
         // The switch divider (if any) is frozen into the transcript — the segment cut happened.
         this.pendingSwitchNoticeId = undefined;
+        // A branch names its origin on its first turn only: this send is what makes the daemon copy the rows,
+        // and from here on this conversation's record stands on its own.
+        const branchOf = this.pendingBranchOf;
+        this.pendingBranchOf = undefined;
         // First message of a fresh conversation names it — free, no model call. An attachment-only send has no
         // prose to read, so it is named after what was dropped in.
         if (this.title.value === null) {
@@ -697,7 +712,7 @@ export class Conversation {
                         mode: this.mode.value,
                         settings,
                         resume,
-                        history,
+                        branchOf,
                         attachmentPaths,
                         editorContext,
                     }),

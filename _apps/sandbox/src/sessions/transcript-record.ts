@@ -32,6 +32,13 @@ export interface TranscriptRecord {
      * provider-store parse on the daemon's hottest completion path. An empty file is a real open record: it
      * says there was no older history, so settlement can only append what just streamed. */
     readonly open: (conversationId: string, adopt: () => Promise<readonly RestoredMessage[]>) => Promise<void>;
+    /* Open a record as a COPY of another's first `keep` rows — how a branch begins. It is `open` with a
+     * different source of opening history: a branch is a new conversation, so nothing it should start with is
+     * anywhere in its own namespace, and the turns it inherits are sitting in the record it was cut from.
+     *
+     * Same `wx` write and the same no-op-if-opened rule as `open`, which is what makes a branch's later turns
+     * (which may still name their origin) leave the copy alone. */
+    readonly fork: (conversationId: string, source: string, keep: number) => Promise<void>;
     // Add one settled turn. Callers open first; append never consults a provider store.
     readonly append: (conversationId: string, messages: readonly RestoredMessage[]) => Promise<void>;
     // The whole conversation, oldest first. Empty ⇒ this conversation has no record (never written, or written
@@ -107,6 +114,31 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         const opening = await adopt();
         await mkdir(dir, { recursive: true });
         await writeFile(path, lines(opening), { flag: "wx" }).catch((error: unknown) => {
+            if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+                throw error;
+            }
+        });
+    },
+    fork: async (conversationId, source, keep) => {
+        if (!FILE_ID.test(conversationId) || !FILE_ID.test(source) || keep <= 0) {
+            return;
+        }
+        const path = join(dir, `${conversationId}.jsonl`);
+        const opened = await stat(path).then(
+            () => true,
+            () => false,
+        );
+        if (opened) {
+            return;
+        }
+        // Raw rows, so this slices exactly where `count` and `truncate` do — a branch cut before row N keeps
+        // the same N rows a rewind to that point would have kept, torn or schema-stale lines included.
+        const rows = (await rawRows(join(dir, `${source}.jsonl`))).slice(0, keep);
+        if (rows.length === 0) {
+            return;
+        }
+        await mkdir(dir, { recursive: true });
+        await writeFile(path, rows.map((line) => `${line}\n`).join(""), { flag: "wx" }).catch((error: unknown) => {
             if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
                 throw error;
             }

@@ -6,7 +6,7 @@ import { providerAccounts } from "./providerAccounts";
 import { transcriptView } from "./transcriptClock";
 import { turnDefaults } from "./turnDefaults";
 import { resolvePrompt } from "../agents/conflictResolution";
-import { type ChatMessage, foldsIntoTurn, isAcknowledgment, transcriptOf, turnsOf } from "./transcript";
+import { type ChatMessage, foldsIntoTurn, isAcknowledgment, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
@@ -190,7 +190,7 @@ describe(`Conversation`, () => {
         expect(secondBody![`sessionId`]).toBe(`s-1`);
     });
 
-    it(`switches provider mid-conversation: retires the session and seeds the new runtime with the transcript`, async () => {
+    it(`switches provider mid-conversation: retires the session and carries no transcript up the wire`, async () => {
         const conversation = new Conversation(`c1`);
         // The selection and the turn settings move together (useChat builds settings from the selection).
         conversation.selectProvider(`codex`);
@@ -209,24 +209,22 @@ describe(`Conversation`, () => {
         conversation.selectProvider(`claude`);
         expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
 
-        // A Codex thread must not resume as a Claude session: the switched turn drops the session id and
-        // carries the transcript instead (empty bubbles and the switch notice excluded).
+        /* A Codex thread must not resume as a Claude session: the switched turn drops the session id. It sends
+         * NOTHING in its place — seeding the replacement is the daemon's job, off its own record of this
+         * conversation (sessions/turn-transcript.ts → handoffHistory), so an omitted sessionId is the whole
+         * signal. This window's painted bubbles never ride the wire. */
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
         await conversation.send(`second`, settings);
         const secondBody = turnBodies()[1]!;
         expect(secondBody[`agent`]).toBe(`claude`);
         expect(`sessionId` in secondBody).toBe(false);
-        expect(secondBody[`history`]).toEqual([
-            { role: `user`, text: `first` },
-            { role: `assistant`, text: `sure` },
-        ]);
+        expect(`history` in secondBody).toBe(false);
 
-        // The new runtime's session is captured with its own provider; the next turn resumes it, history-free.
+        // The new runtime's session is captured with its own provider; the next turn resumes it.
         expect(conversation.session.value).toMatchObject({ id: `s-1`, provider: `claude` });
         await conversation.send(`third`, settings);
         const thirdBody = turnBodies()[2]!;
         expect(thirdBody[`sessionId`]).toBe(`s-1`);
-        expect(`history` in thirdBody).toBe(false);
     });
 
     it(`switching away and back before sending keeps the session and removes the notice`, async () => {
@@ -255,19 +253,6 @@ describe(`Conversation`, () => {
         expect(conversation.provider.value).toBe(`claude`);
         conversation.stop();
         await turn;
-    });
-
-    it(`transcriptOf keeps user/assistant text, folds plan markdown, and drops notices and empty bubbles`, () => {
-        const messages: ChatMessage[] = [
-            { id: 1, role: `user`, text: `hi` },
-            { id: 2, role: `assistant`, text: ``, thinking: `` },
-            { id: 3, role: `notice`, text: `Stopped.` },
-            { id: 4, role: `assistant`, text: `intro`, plan: { requestId: `d`, text: `# Plan`, status: `approved` } },
-        ];
-        expect(transcriptOf(messages)).toEqual([
-            { role: `user`, text: `hi` },
-            { role: `assistant`, text: `intro\n\n# Plan` },
-        ]);
     });
 
     it(`turnsOf opens a group at each prompt and keeps pre-prompt frames in one ahead of it`, () => {
@@ -988,16 +973,13 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
 
-        // The next send starts fresh — no dead id on the wire, and the replacement session is seeded from the
-        // client transcript (empty assistant bubbles and the notice excluded).
+        // The next send starts fresh — no dead id on the wire. The conversation id is unchanged, so the daemon
+        // reseeds the replacement session from its own record of this same conversation; nothing rides up.
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
         await conversation.send(`third`, settings);
         const thirdBody = turnBodies()[2]!;
         expect(`sessionId` in thirdBody).toBe(false);
-        expect(thirdBody[`history`]).toEqual([
-            { role: `user`, text: `first` },
-            { role: `user`, text: `second` },
-        ]);
+        expect(`history` in thirdBody).toBe(false);
         expect(conversation.session.value).toMatchObject({ id: `s-2`, provider: `claude` });
     });
 
@@ -1437,15 +1419,19 @@ describe(`Conversation`, () => {
 
         // The branch carries the turns before the edit, then the edited turn and its answer.
         expect(branch.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second, revised`, `redone`]);
-        // The branch is a new conversation daemon-side: no session id rides, and the copied transcript seeds it.
+        /* The branch is a new conversation daemon-side: no session id rides. What rides instead is where it was
+         * cut from — two RECORD rows (the "first" prompt and the "one" answer) — so the daemon copies that
+         * prefix of c1's record into c2's before running, and the branch seeds itself from there like any other
+         * conversation. The bubbles themselves never go up. */
         const body = turnBodies()[2]!;
         expect(`sessionId` in body).toBe(false);
-        expect(body[`history`]).toEqual([
-            { role: `user`, text: `first` },
-            { role: `assistant`, text: `one` },
-        ]);
+        expect(`history` in body).toBe(false);
+        expect(body[`branchOf`]).toEqual({ conversationId: `c1`, keep: 2 });
         expect(branch.session.value).toMatchObject({ id: `s-2`, provider: `claude` });
         expect(branch.conversationId).not.toBe(source.conversationId);
+        // Named once. The copy has happened, so a later turn is an ordinary turn on an ordinary conversation.
+        await branch.send(`again`, settings);
+        expect(`branchOf` in turnBodies()[3]!).toBe(false);
         // The point of branching: the source keeps its own transcript and session, untouched.
         expect(source.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
         expect(source.session.value).toMatchObject({ id: `s-1` });

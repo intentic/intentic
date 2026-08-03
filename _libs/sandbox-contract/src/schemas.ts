@@ -21,9 +21,6 @@ export const RepoParamSchema = z.object({ repo: z.string() });
 
 // ---- agent ----
 
-export const SessionTranscriptMessageSchema = z.object({ role: z.enum(["user", "assistant"]), text: z.string() });
-export type SessionTranscriptMessage = z.infer<typeof SessionTranscriptMessageSchema>;
-
 // The agent runtimes the daemon can serve — the vocabulary every surface that picks an agent shares (chat
 // turns, automations). The NATIVE providers have dedicated adapters (and their ids are reserved); an
 // `endpoint/<id>` value names an installed `endpoint`-kind capability (a model API the user pointed us at,
@@ -115,10 +112,16 @@ export const AgentTurnSchema = z
         // outside message rather than a user. Recorded on the registry entry so the fleet can say where the
         // agent came from. Requires conversationId — there is nothing to record it on otherwise.
         origin: AgentOriginSchema.optional(),
-        // The client-held transcript of a conversation that just switched provider/account: seeds the FIRST
-        // turn of the replacement session. The daemon folds it into the prompt as one role-attributed context
-        // preamble for every runtime. Mutually exclusive with sessionId — a resumed session has its context.
-        history: z.array(SessionTranscriptMessageSchema).max(200).optional(),
+        // No `history` field: a turn that switched provider/account/harness carries no transcript up the wire.
+        // The daemon seeds the replacement session from its OWN record of the conversation, which is keyed by
+        // conversationId and outlives every session (sessions/turn-transcript.ts → handoffHistory).
+        /* WHERE A BRANCH WAS CUT FROM, on its first turn — the one case the daemon cannot work out for itself,
+         * because a branch is a NEW conversation whose record is empty and the cut is a gesture only the client
+         * saw. `keep` counts the source's RECORD rows to copy, not its bubbles (see the web transcript's
+         * recordedRows). The daemon copies that prefix into the new conversation's record before the turn runs,
+         * after which a branch is an ordinary conversation: it seeds like any other and reads back in full.
+         * Requires conversationId — the branch it describes IS that conversation. */
+        branchOf: z.object({ conversationId: ConversationIdSchema, keep: z.number().int().nonnegative() }).optional(),
         // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
         model: z.string().optional(),
         /* NOBODY PICKED A MODEL FOR THIS TURN — a surface started it (Fix with agent, a Maintenance chore, a
@@ -160,14 +163,14 @@ export const AgentTurnSchema = z
     .refine((turn) => turn.prompt.trim().length > 0 || (turn.attachments?.length ?? 0) > 0, {
         message: "prompt or attachments required",
     })
-    .refine((turn) => turn.sessionId === undefined || turn.history === undefined, {
-        message: "history and sessionId are mutually exclusive",
-    })
     .refine((turn) => turn.isolated !== true || turn.conversationId !== undefined, {
         message: "isolated requires conversationId",
     })
     .refine((turn) => turn.origin === undefined || turn.conversationId !== undefined, {
         message: "origin requires conversationId",
+    })
+    .refine((turn) => turn.branchOf === undefined || turn.conversationId !== undefined, {
+        message: "branchOf requires conversationId",
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
 

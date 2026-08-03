@@ -506,6 +506,9 @@ export interface Services {
         // Opens/adopts the durable record before the provider starts the next turn. Settlement must never be
         // the first time a provider store is read (see transcript-record.ts).
         readonly open: (agent: TranscriptAgent) => Promise<void>;
+        // Opens a BRANCH's record instead, as a copy of the first `keep` rows of the conversation it was cut
+        // from. Same no-op-if-already-opened rule as `open`.
+        readonly fork: (agent: TranscriptAgent, source: string, keep: number) => Promise<void>;
         readonly append: (agent: TranscriptAgent, messages: readonly RestoredMessage[]) => Promise<void>;
         // The conversation's user prompts, cached against the record's size — what /agents/search matches per
         // entry per keystroke, instead of re-reading the whole store (see createAgentPromptsReader).
@@ -831,6 +834,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
             // at the moment it opens, and what a conversation had before it is exactly what the provider store
             // holds. This runs before the new turn, so that turn cannot be adopted and appended twice.
             open: (agent) => transcriptDeps.record.open(agent.id, () => storedTranscript(transcriptDeps, agent)),
+            // No provider-store fallback here, unlike `open`: a branch's opening history is by definition the
+            // source conversation's record, and no provider knows this conversation exists yet.
+            fork: (agent, source, keep) => transcriptDeps.record.fork(agent.id, source, keep),
             append: (agent, messages) => transcriptDeps.record.append(agent.id, messages),
             prompts: createAgentPromptsReader(transcriptDeps),
             count: (agent) => transcriptDeps.record.count(agent.id),

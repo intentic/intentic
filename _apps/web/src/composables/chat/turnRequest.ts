@@ -6,8 +6,8 @@ import type { AgentHarness, AgentProvider, EditorContext, PermissionMode } from 
  *
  * The provider (AgentProvider) and harness (AgentHarness) a turn runs on are the contract's wire enums — see
  * schemas.ts for their semantics. Both are switchable mid-conversation: a session id only resumes on the runtime
- * that minted it, so a switched turn retires the session and starts a fresh one seeded with the transcript so
- * far (see Conversation.send). */
+ * that minted it, so a switched turn simply omits it. Seeding the replacement session with what came before is
+ * the DAEMON's job, from its own record of the conversation — this client sends the prompt and nothing else. */
 
 // The turn settings passed into a send — the active conversation's own selected provider/model/effort/thinking
 // (see useChat's active-conversation facades), captured at send time.
@@ -49,8 +49,8 @@ export const resumes = (
     session !== undefined && session.provider === selection.agent && session.account === selection.account && session.harness === selection.harness;
 
 /* Every field here is a rule about what the daemon then does — an omitted `model` makes it resolve its own
- * live-catalog default, an omitted `harness` means the native loop, `history` and `sessionId` are mutually
- * exclusive (seed a fresh session, or resume an existing one), `isolated` decides whether the turn runs in this
+ * live-catalog default, an omitted `harness` means the native loop, an omitted `sessionId` means "start a fresh
+ * session and seed it from the conversation's record", `isolated` decides whether the turn runs in this
  * conversation's worktree or on /work. Undefined keys drop out at JSON.stringify, which is what makes "omitted"
  * expressible at all. */
 export const turnRequestBody = (input: {
@@ -62,8 +62,9 @@ export const turnRequestBody = (input: {
     readonly settings: TurnSettings;
     // The session this turn resumes, when the selection still matches the runtime/account that minted it.
     readonly resume: SessionRef | undefined;
-    // The transcript seeding a fresh-after-switch session; empty whenever `resume` carries one.
-    readonly history: readonly { readonly role: "user" | "assistant"; readonly text: string }[];
+    // Where this conversation was branched from, on a branch's first turn — the daemon copies that many rows of
+    // the source's record into this one before running (see Conversation.branchFrom).
+    readonly branchOf: { readonly conversationId: string; readonly keep: number } | undefined;
     // Uploaded attachments plus @-mentioned workspace paths — the daemon resolves both the same way.
     readonly attachmentPaths: readonly string[];
     readonly editorContext: EditorContext | undefined;
@@ -84,7 +85,7 @@ export const turnRequestBody = (input: {
     // Which connected account of the provider serves the turn; omitted ⇒ the daemon picks the first.
     account: input.settings.account,
     sessionId: input.resume?.id,
-    ...(input.history.length > 0 ? { history: input.history } : {}),
+    ...(input.branchOf !== undefined ? { branchOf: input.branchOf } : {}),
     // An empty selection (a catalog not yet loaded) is dropped from the wire; the daemon then resolves the
     // provider's live catalog default server-side.
     model: input.settings.model || undefined,

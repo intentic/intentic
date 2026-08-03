@@ -45,6 +45,34 @@ describe("fileTranscriptRecord", () => {
         expect(adoptions).toBe(1);
     });
 
+    /* A BRANCH opens as a copy of the conversation it was cut from — the one opening history no provider store
+     * and no adoption could supply, since the branch is a conversation nothing else knows about yet. Copying it
+     * is what lets a branch seed a switched session and read back in full, instead of appearing to begin at the
+     * edit. */
+    it("opens a branch with the source's first rows and leaves the source alone", async () => {
+        const record = fileTranscriptRecord(await dir());
+        await record.open("c1", nothing);
+        await record.append("c1", [{ role: "user", text: "one" }, said("first")]);
+        await record.append("c1", [{ role: "user", text: "two" }, said("second")]);
+
+        await record.fork("c2", "c1", 2);
+        await record.append("c2", [{ role: "user", text: "two, revised" }, said("redone")]);
+
+        expect((await record.read("c2")).map((message) => message.text)).toEqual(["one", "first", "two, revised", "redone"]);
+        expect((await record.read("c1")).map((message) => message.text)).toEqual(["one", "first", "two", "second"]);
+    });
+
+    it("leaves an already-opened branch alone, so a repeated origin cannot re-copy over its turns", async () => {
+        const record = fileTranscriptRecord(await dir());
+        await record.open("c1", nothing);
+        await record.append("c1", [said("source")]);
+        await record.fork("c2", "c1", 1);
+        await record.append("c2", [said("branch's own")]);
+
+        await record.fork("c2", "c1", 1);
+        expect((await record.read("c2")).map((message) => message.text)).toEqual(["source", "branch's own"]);
+    });
+
     it("costs a torn final line its own row, not the conversation above it", async () => {
         const root = await dir();
         const record = fileTranscriptRecord(root);

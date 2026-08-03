@@ -137,18 +137,17 @@ export const pendingOutageFailure = (conversationId: string): OutageFailure | un
 /* The turn a fire runs. The original prompt rides again IN FULL rather than as a bare "continue": whether
  * the CLI persisted the unprocessed user message before the refusal is its own implementation detail, and a
  * resume that guesses wrong there loses the message — repeating it costs at most a duplicate the model reads
- * past. The session override keeps partial work; `history` seeds a FRESH session, so it only rides when there
- * is no session to return to. */
+ * past. The session override keeps partial work; with no session to return to, the turn starts a fresh one and
+ * the daemon seeds it from this conversation's record, the same way a switched turn is seeded. */
 const resumedTurn = (
     failure: { readonly input: AgentTurn & { conversationId: string }; readonly sessionId?: string },
     note: string,
 ): AgentTurn & { conversationId: string } => {
     const sessionId = failure.sessionId ?? failure.input.sessionId;
-    const { history, ...rest } = failure.input;
     return {
-        ...rest,
+        ...failure.input,
         prompt: withResumeNote(failure.input.prompt, note),
-        ...(sessionId !== undefined ? { sessionId } : history !== undefined ? { history } : {}),
+        ...(sessionId !== undefined ? { sessionId } : {}),
     };
 };
 

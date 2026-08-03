@@ -27,7 +27,7 @@ import { isIsolated } from "../agents/agents-store.js";
 import { landAgent } from "../agents/land.js";
 import { type RepoSync, syncConversation } from "../agents/sync.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
-import { turnStartIndex } from "../sessions/turn-transcript.js";
+import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
 import type { AgentRequest, ParkedSync } from "./agent.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { syncNote } from "./turn-preamble.js";
@@ -525,8 +525,17 @@ async function* runTurn(
               });
     // Editor context attaches to THIS message, so it folds in before the (older) history preamble wraps it.
     const promptWithEditor = input.editorContext !== undefined ? `${input.prompt}\n\n${editorContextNote(input.editorContext)}` : input.prompt;
+    /* A turn that resumes no session, on a conversation that has already said something, is a runtime handoff:
+     * the switch retired the old session and this one has to carry the conversation across. Read at turn start,
+     * in the window every caller guarantees — the record is open and adopted (startConversationTurn awaits that
+     * before the pump invokes the provider) and this turn's own messages are not appended until it settles. */
+    const history =
+        input.sessionId === undefined && input.conversationId !== undefined
+            ? await handoffHistory(services, { ...input, conversationId: input.conversationId })
+            : [];
+    mark("history");
     const base: AgentRequest = {
-        prompt: input.history !== undefined && input.history.length > 0 ? withRuntimeHistory(promptWithEditor, input.history) : promptWithEditor,
+        prompt: history.length > 0 ? withRuntimeHistory(promptWithEditor, history) : promptWithEditor,
         cwd: effectiveCwd,
         // Which agent the children this turn spawns belong to (agent/subagents.ts). Absent for a turn with no
         // conversation behind it, whose children are not surfaced.

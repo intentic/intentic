@@ -17,7 +17,7 @@ describe(`turnRequestBody`, () => {
         mode: `plan`,
         settings,
         resume: undefined,
-        history: [],
+        branchOf: undefined,
         attachmentPaths: [],
         editorContext: undefined,
     } as const;
@@ -42,15 +42,23 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, isolated: true }))).toMatchObject({ isolated: true });
     });
 
-    // The two are mutually exclusive by construction: send() only builds a history when nothing resumes.
-    it(`carries a resumed session id, or the transcript seeding a fresh one — never both`, () => {
+    /* An omitted session id is the whole of what a switched turn says. No transcript rides with it — the daemon
+     * seeds the replacement from its own record of the conversation — so "starts a fresh session" and "resumes"
+     * are one key present or absent, with nothing to keep consistent between them. */
+    it(`carries a resumed session id, and nothing at all in its place when there is none`, () => {
         const resumed = wire(turnRequestBody({ ...base, resume: { id: `s-1`, provider: `claude`, account: undefined, harness: `native` } }));
         expect(resumed).toMatchObject({ sessionId: `s-1` });
-        expect(resumed).not.toHaveProperty(`history`);
 
-        const seeded = wire(turnRequestBody({ ...base, history: [{ role: `user`, text: `earlier` }] }));
-        expect(seeded).toMatchObject({ history: [{ role: `user`, text: `earlier` }] });
-        expect(seeded).not.toHaveProperty(`sessionId`);
+        expect(wire(turnRequestBody(base))).not.toHaveProperty(`sessionId`);
+    });
+
+    // A branch is the one turn that has to say where its conversation came from: it is new daemon-side, so
+    // nothing there knows what it should start with until this names the cut.
+    it(`names a branch's origin, and only for the branch's own first turn`, () => {
+        expect(wire(turnRequestBody(base))).not.toHaveProperty(`branchOf`);
+        expect(wire(turnRequestBody({ ...base, branchOf: { conversationId: `c0`, keep: 4 } }))).toMatchObject({
+            branchOf: { conversationId: `c0`, keep: 4 },
+        });
     });
 
     it(`omits an absent title, attachments and editor context rather than sending empties`, () => {
