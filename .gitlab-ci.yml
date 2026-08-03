@@ -4,6 +4,7 @@
 # version is repeated here.
 
 stages:
+  - preflight
   - prebuild
   - test
   - images
@@ -92,6 +93,32 @@ default:
   before_script:
     - !reference [.pnpm-setup, script]
 
+# The checks that read the checkout and nothing else, ahead of the install that every other job starts with.
+#
+# `prepass.mjs --checks-only` is the first half of the prepass the fleet already runs before landing (its header
+# says what each invariant is): every test file sits in a type-check program, every machine-touching suite is
+# named as one, and every package.json specifier is the one pnpm-lock.yaml recorded. No node_modules, no
+# network, ~70ms of actual work — so this job deliberately clears the default before_script instead of
+# installing, and its cost is the clone.
+#
+# The measurement that put it here: across 40 main pipelines, 22 `test` jobs failed and 10 of them died on one
+# of these three invariants — 6 on ERR_PNPM_OUTDATED_LOCKFILE, 4 on a suite sitting under the wrong budget.
+# Every one of those failed AFTER `pnpm install --frozen-lockfile` resolved 1,800+ packages (0.6-2.0 min), and
+# because test, mirror:verify, desktop:check and desktop:verify all start with that same install, one stale
+# lockfile burned four concurrent slots to say so four times. As its own STAGE rather than a `needs:` edge on
+# each of them: a stage barrier keeps the existing ordering exactly as it was (nothing has to learn about this
+# job), and jobs downstream of `test` inherit it through the `needs` they already declare.
+#
+# No `rules:` — this runs in every pipeline there is, including schedules. It is the cheapest job in the file
+# and the only one whose failure means the rest cannot be worth starting.
+preflight:
+  stage: preflight
+  interruptible: true
+  before_script: []
+  cache: []
+  script:
+    - node _tools/scripts/prepass.mjs --checks-only
+
 # The CI job image itself. Runs ahead of everything, but ONLY when _tools/ci-base changes — every other pipeline
 # skips it and the prebuild stage costs nothing. It cannot run in $CI_BASE_IMAGE (building that is the point), so
 # it uses the plain docker CLI image and clears the default before_script/cache, which assume node + pnpm.
@@ -108,7 +135,10 @@ ci-base:
   before_script: []
   cache: []
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    # Same `!= "schedule"` as the publish jobs, and for the same reason: on a scheduled pipeline `changes:` is
+    # unconditionally true, so without this the nightly would rebuild and re-push the mutable `latest` base tag
+    # every night against a commit that never touched it.
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
       changes:
         - _tools/ci-base/**/*
       variables:
@@ -339,8 +369,11 @@ images:
   before_script:
     - !reference [.pnpm-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  # `!= "schedule"`, here and on images:platform and release: a scheduled pipeline runs on main with no diff, so
+  # `changes:` is unconditionally true in one and every publish/deploy rule in this file would match. The nightly
+  # exists to run the deep verification tiers, not to re-tag images and roll production at 03:00 for no commit.
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
       changes:
         - _apps/sandbox/**/*
         - _apps/cli/**/*
@@ -375,7 +408,7 @@ images:platform:
     - !reference [.pnpm-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
       changes:
         - _apps/api/**/*
         - _apps/web/**/*
@@ -407,7 +440,18 @@ release:
   # mirror:verify is the second gate for one reason: this job publishes the public mirror unattended, and an
   # export that doesn't install is a broken public repo AND no npm release (the mirror's tag is what triggers
   # the npm publish). Proving it on the merge request is what keeps that safe.
-  needs: ["test", "mirror:verify"]
+  #
+  # desktop:verify is OPTIONAL because it is rule-gated on the desktop tree changing, and a release that touches
+  # nothing desktop-shaped must still go out — `optional: true` means "wait for it and require it when this
+  # pipeline has one, ignore it when it does not". It is not the real gate on the installers: release-prepare.sh
+  # verifies the artifacts this job builds ITSELF, because those are the bytes that get published and no other
+  # job's output can stand in for them. This edge is the cheap half of the same fix — when the pipeline already
+  # knows the desktop is broken, spend zero of the release's forty minutes finding out again.
+  needs:
+    - "test"
+    - "mirror:verify"
+    - job: "desktop:verify"
+      optional: true
   resource_group: release
   # The publish is heavy (a cold image build pushes ~1.5 GB). Give it room beyond the 1h default so a cold
   # first-build can't fail the job AFTER the release already succeeded. NOTE: if the job still stops at
@@ -427,7 +471,7 @@ release:
   # published by GitHub Actions off that tag, tokenless, through npm's OIDC trusted publishing, which the
   # self-hosted runner here could never use and which is what earns the packages their provenance badge.
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
   before_script:
     - !reference [.pnpm-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"

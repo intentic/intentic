@@ -30,6 +30,24 @@ bash "$DIR/publish-agent-binaries.sh" _apps/host intentic-host "$VERSION"
 # so both publishers below ship it verbatim.
 bash "$DIR/build-desktop.sh" "$VERSION"
 
+# …and prove those exact bytes install and run before anything publishes them. build-desktop.sh ends with
+# verify-desktop-bundle.sh (tier 1: the bundled scripts are present and byte-identical); this is tier 2, which
+# installs the .deb and the AppImage on a bare Debian, starts the app under Xvfb and fires a real xdg-open
+# intentic:// at it.
+#
+# It runs HERE, in prepareCmd, rather than being left to the desktop:verify job, because that job is not a gate
+# and cannot become one: it builds its own artifacts on its own rules, and `release` reaches its `needs` the
+# moment `test` goes green. On 2026-08-03 that gap shipped: desktop:verify failed at 12:34:10 with `the setup
+# link opened the Sandbox Manager (waited 45s)` and `the original instance died while handling the link`,
+# release started at 12:34:12, and forty minutes later the installers with that bug were on the GitHub Release.
+# Verifying the release's OWN output is the only version of this check that cannot be outrun — a failure here
+# aborts semantic-release before publish-github.sh, so there is no tag, no Release, and no npm publish.
+#
+# Linux only, and that is the honest limit: running Intentic-setup.exe needs Windows. Until a Windows runner
+# exists the NSIS installer is covered by tier 1 as an archive, and the .ps1 setup path only by the argv unit
+# tests in commands.rs.
+bash "$DIR/verify-desktop-install.sh"
+
 # The public export, and the last build artifact this release produces on its own: it attaches everything in
 # the dist-bin dirs above to a GitHub Release, then pushes the `v<version>` tag whose arrival is what publishes
 # the npm packages (GitHub Actions, provenance, tokenless — .github/workflows/npm-publish.yml in the mirror).

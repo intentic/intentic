@@ -2,8 +2,13 @@
 /* Both gates, made runnable everywhere the code is written.
  *
  * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
- * --only`. Two invariants live here, and both exist because the checks that catch fixture drift used to run in
+ * --only`. Three invariants live here, and all three exist because the checks that catch drift used to run in
  * exactly one place — CI, on main, after the merge.
+ *
+ * The first two need no node_modules and no network, which is what lets `--checks-only` run them from a
+ * `pre-push` hook and from a CI job that has not installed anything yet (.gitlab-ci.yml, the `preflight` job).
+ * Measured over 40 main pipelines, 10 of the 22 red ones died on invariant 1 or 3 — each after 0.6-2.0 min of
+ * runner time, in four jobs at once, for a fact that is readable from the checkout in under a second.
  *
  * 1. COVERAGE — every test file sits inside some type-check program.
  *
@@ -34,7 +39,21 @@
  * declarations and 3 were real. Output like that is what teaches everyone to read a red type check as
  * "baseline failures" and land anyway.
  *
- * Both invariants are recognized by SHAPE rather than listed, because a list repeats the miss the first time
+ * 3. LOCKFILE — every dependency specifier in a package.json is the one the lockfile recorded.
+ *
+ * `pnpm install --frozen-lockfile` is the first line of every CI job, and ERR_PNPM_OUTDATED_LOCKFILE is what it
+ * says when someone edited a package.json without installing. That is a pure comparison between two files in
+ * the checkout, and CI reaches it only after resolving 1,800+ packages against the registry — 0.6-1.5 min, paid
+ * by four jobs in parallel, to report a mismatch that needs no network to see. `verifyDepsBeforeRun: false`
+ * (pnpm-workspace.yaml) is what makes it reachable at all: with the pre-run deps check off, nothing else in a
+ * worktree ever says the manifest and the lockfile disagree.
+ *
+ * Read with a line scanner rather than a YAML parser on purpose — the check has to run BEFORE `pnpm install`,
+ * so it cannot import one. The `importers:` block it reads is the flattest, most stable region of the v9 format
+ * (importer at 2 spaces, dependency block at 4, name at 6, `specifier:` at 8), and a shape it stops recognizing
+ * is a shape this reports as drift rather than passing in silence.
+ *
+ * All three invariants are recognized by SHAPE rather than listed, because a list repeats the miss the first time
  * somebody adds the 43rd package (AGENTS.md — "guard invariants by discovery, not enumeration"). The
  * hand-written `tsconfig.libs.json` is the proof: it names 13 of the 23 packages that need building, and the
  * one it happens to omit — `@intentic/constants` — was on its own worth 3 phantom errors in the daemon.
@@ -200,11 +219,182 @@ for (const { name, dir, pkg } of packages) {
     }
 }
 
-if (problems.length > 0) {
-    console.error(`Test files outside the program or the budget they belong in:\n${problems.map((line) => `  - ${line}`).join("\n")}`);
+/* Invariant 3. The `importers:` region of pnpm-lock.yaml, as `importer -> block -> { name: specifier }`.
+ *
+ * A line scanner rather than a YAML parser because this has to run before `pnpm install` — see the header. The
+ * indentation IS the grammar here (2/4/6/8), and each level's anchor makes the levels mutually exclusive, so a
+ * line is read as exactly one of importer, block, entry or specifier. Everything outside `importers:` — the
+ * `packages:` and `snapshots:` regions, which are far larger and far less regular — is never looked at. */
+const unquote = (value) => (/^'.*'$/s.test(value) ? value.slice(1, -1).replaceAll("''", "'") : /^".*"$/s.test(value) ? value.slice(1, -1) : value);
+
+const LEVELS = [
+    { depth: 2, of: "importer" },
+    { depth: 4, of: "block" },
+    { depth: 6, of: "entry" },
+];
+const SPECIFIER = /^ {8}specifier:[ \t]*(.*?)[ \t]*$/;
+
+const recorded = new Map();
+let inImporters = false;
+let at, block, entry;
+for (const line of readFileSync(join(root, "pnpm-lock.yaml"), "utf8").split("\n")) {
+    // A column-0 key ends the region as surely as it starts it; blank lines are neither and are left alone.
+    if (/^\S/.test(line)) {
+        inImporters = line.startsWith("importers:");
+        continue;
+    }
+    if (!inImporters) {
+        continue;
+    }
+    const level = LEVELS.find(({ depth }) => new RegExp(String.raw`^ {${depth}}\S`).test(line));
+    const key = level && new RegExp(String.raw`^ {${level.depth}}(\S.*?):[ \t]*$`).exec(line);
+    if (key) {
+        const name = unquote(key[1]);
+        if (level.of === "importer") {
+            at = name;
+            recorded.set(at, new Map());
+        } else if (level.of === "block") {
+            block = name;
+            // `?.` here and below: a level arriving without its parent means the shape moved, and the empty
+            // `recorded` that leaves is reported as drift by the size check — which a stack trace would not be.
+            recorded.get(at)?.set(block, new Map());
+        } else {
+            entry = name;
+        }
+        continue;
+    }
+    const specifier = SPECIFIER.exec(line);
+    if (specifier) {
+        recorded.get(at)?.get(block)?.set(entry, unquote(specifier[1]));
+    }
+}
+
+/* The catalogs, as `catalog name -> { dependency: version }`. A `catalog:` specifier in a package.json may be
+ * recorded in the importer EITHER verbatim or already resolved through these — pnpm writes whichever form was
+ * current when that entry was last touched, and accepts both on the way back in. This lockfile holds both at
+ * once (`@orpc/server: 'catalog:'` beside `zod: 4.4.3`), and the pipelines that installed it were green, which
+ * is the whole reason this is a resolution and not a string compare. Same flat shape, same scanner: `catalog:`
+ * at column 0 is the default catalog's entries, `catalogs:` is a level of named ones above them. */
+const catalogs = new Map([["default", new Map()]]);
+let named;
+for (const line of readFileSync(join(root, "pnpm-workspace.yaml"), "utf8").split("\n")) {
+    if (/^\S/.test(line)) {
+        named = line.startsWith("catalog:") ? "default" : line.startsWith("catalogs:") ? "" : undefined;
+        continue;
+    }
+    if (named === undefined || /^\s*(#|$)/.test(line)) {
+        continue;
+    }
+    const mapping = /^ {2}(\S.*?):[ \t]*(.*?)[ \t]*$/.exec(line) ?? /^ {4}(\S.*?):[ \t]*(.*?)[ \t]*$/.exec(line);
+    if (mapping === null) {
+        continue;
+    }
+    // A 2-space key with no value inside `catalogs:` names the catalog the 4-space entries below it belong to.
+    if (named === "" || (mapping[2] === "" && /^ {2}\S/.test(line))) {
+        named = unquote(mapping[1]);
+        catalogs.set(named, new Map());
+        continue;
+    }
+    catalogs.get(named).set(unquote(mapping[1]), unquote(mapping[2]));
+}
+
+/* What a package.json declares, flattened to `name -> { specifier, required }`.
+ *
+ * Compared as one set against the union of the importer's blocks rather than block by block, because which
+ * block an entry lands in is pnpm's business and not a fact about the manifest: `autoInstallPeers: true` (see
+ * the lockfile's own settings) installs peerDependencies and files them under the importer's `dependencies`,
+ * which is why `_libs/astro-integrations` records an `astro` its package.json only ever declares as a peer.
+ * Matching by name keeps every drift this exists to catch — a dependency added, removed, or re-specified
+ * without an install — and drops a placement rule that would only ever produce false alarms.
+ *
+ * A peer is PERMITTED rather than required for the same reason from the other side: pnpm installs one only when
+ * nothing else already satisfies it, so its absence from the lockfile says nothing, while a mismatch still does.
+ * And it never SHADOWS a real declaration — a package that declares the same name both ways is recorded by the
+ * real one, which every Vue library here does (`vue: catalog:` as a devDependency, `vue: 3` as the peer). */
+const declaredBy = (manifest) => {
+    const declared = new Map(
+        ["dependencies", "devDependencies", "optionalDependencies"].flatMap((field) =>
+            Object.entries(manifest[field] ?? {}).map(([name, specifier]) => [name, { specifier, required: true }]),
+        ),
+    );
+    for (const [name, specifier] of Object.entries(manifest.peerDependencies ?? {})) {
+        if (!declared.has(name)) {
+            declared.set(name, { specifier, required: false });
+        }
+    }
+    return declared;
+};
+
+// Whether the lockfile's recorded specifier is one the declared specifier is allowed to have produced.
+const matches = (name, declared, inLockfile) => {
+    if (inLockfile === declared) {
+        return true;
+    }
+    if (!declared.startsWith("catalog:")) {
+        return false;
+    }
+    return catalogs.get(declared.slice("catalog:".length) || "default")?.get(name) === inLockfile;
+};
+
+// Every importer pnpm would write, by the same walk the checks above use, plus the root the walk does not reach.
+const importers = [{ at: ".", dir: root }, ...packages.map(({ name, dir }) => ({ at: name, dir }))];
+
+const drift = [];
+if (recorded.size === 0) {
+    drift.push(`pnpm-lock.yaml has no readable "importers:" region — the lockfile format moved and this check needs rewriting`);
+}
+for (const { at: importer, dir } of recorded.size === 0 ? [] : importers) {
+    const declared = declaredBy(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")));
+    const blocks = recorded.get(importer);
+    if (blocks === undefined) {
+        // A package that installs nothing gets no importer — there is nothing for pnpm to have recorded.
+        if (declared.size > 0) {
+            drift.push(`${importer}: declares dependencies but has no importer in the lockfile — it has never been installed`);
+        }
+        continue;
+    }
+    const inLockfile = new Map(blocks.values().flatMap((fromBlock) => fromBlock.entries()));
+    for (const [name, { specifier, required }] of declared) {
+        const was = inLockfile.get(name);
+        if (was === undefined) {
+            if (required) {
+                drift.push(`${importer}: ${name}@${specifier} is not in the lockfile`);
+            }
+        } else if (!matches(name, specifier, was)) {
+            drift.push(`${importer}: ${name} is ${specifier}, the lockfile records ${was}`);
+        }
+    }
+    for (const name of inLockfile.keys()) {
+        if (!declared.has(name)) {
+            drift.push(`${importer}: ${name} is in the lockfile but no longer in package.json`);
+        }
+    }
+}
+for (const importer of recorded.keys()) {
+    if (!importers.some(({ at: known }) => known === importer)) {
+        drift.push(`${importer}: an importer in the lockfile with no package.json — the package was removed without installing`);
+    }
+}
+
+// Both reports before either exit, so one run says everything that is wrong rather than the first thing.
+const reports = [
+    ["Test files outside the program or the budget they belong in", problems],
+    ["pnpm-lock.yaml is out of date — run `pnpm install` and commit it (this is CI's ERR_PNPM_OUTDATED_LOCKFILE)", drift],
+];
+if (reports.some(([, lines]) => lines.length > 0)) {
+    for (const [heading, lines] of reports.filter(([, some]) => some.length > 0)) {
+        console.error(`${heading}:\n${lines.map((line) => `  - ${line}`).join("\n")}`);
+    }
     process.exit(1);
 }
 console.log(`typecheck coverage: every package with tests type-checks them, and every machine-touching suite is named as one`);
+console.log(`lockfile: ${importers.length} importers record the specifiers their package.json declares`);
+
+/* Everything below needs node_modules and writes to the tree; everything above reads the checkout and nothing
+ * else. `--checks-only` is that line — it is what the pre-push hook and the CI preflight job run. */
+if (process.argv.includes("--checks-only")) {
+    process.exit(0);
+}
 
 /* A package needs building exactly when its `exports` resolve into `dist/`: that is the path a DEPENDENT's
  * compiler reads, so a stale or absent dist there is a phantom error in somebody else's package. The ones that
