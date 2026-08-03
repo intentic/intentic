@@ -279,6 +279,19 @@ export interface IntenticApi {
         // Open (or focus) the tab for a stored runtime session id — the same path the History menu and the fleet
         // board take. A session the daemon no longer holds opens an empty tab rather than failing.
         openSession(sessionId: string): void;
+        /* Show a WORKFLOW RUN in the chat: the host pops the panel out and fills its columns with the run's
+         * sessions — the ones already going, or, for a run just started, the ones about to. A run whose steps
+         * are over opens on its diagram instead.
+         *
+         * It takes an id and not the run, and that is the contract's own dependency direction rather than a
+         * simplification: sandbox-contract imports THIS package, so this one cannot import `WorkflowRun` back.
+         * The host reads the run itself, which it would have to do anyway to know what is live.
+         *
+         * Here for the reason `openSession` is: an extension that starts agent work should be able to put the
+         * user in front of it, and the alternative is a navigation to a page ABOUT the work — which is what
+         * pressing Run used to do, and the thing it most obviously should not.
+         */
+        openWorkflowRun(runId: string): void;
     };
     /* WHICH MODEL A RUN THIS EXTENSION STARTS WILL SPEND, the way `terminal` is the shell's one terminal panel:
      * the extension names the choice it is holding, the host owns the picker.

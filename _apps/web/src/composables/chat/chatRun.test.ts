@@ -14,7 +14,7 @@ vi.hoisted(() => {
     });
 });
 
-import { runColumns, runOnFocus } from "./chatRun";
+import { runColumns, runOnFocus, sessionsToOpen } from "./chatRun";
 
 /* WHICH SESSIONS A COLUMN OPENS. The graph's one gesture is "click a step, get its whole column", so this is
  * the arithmetic between a click and a pane set — and it is the part that cannot be checked by looking, since
@@ -131,4 +131,37 @@ test("steps that never started contribute no session", () => {
     const columns = runColumns(run([step(`brief`), step(`later`, { needs: [`brief`] })], [{}, { state: `pending`, iterations: 0 }]));
     expect(columns.get(`brief`)?.sessions.map((session) => session.conversationId)).toEqual([`wf-r1-brief`]);
     expect(columns.get(`later`)?.sessions).toEqual([]);
+});
+
+/* WHAT "OPEN THIS RUN" LANDS ON, and the case that makes pressing Run feel like starting an agent.
+ *
+ * The daemon acks a run before a single step has begun, so at that instant nothing is `running` and the only
+ * thing there was to show was the diagram — a picture of boxes, when what the user just did was ask for work.
+ * The roots are starting right now and their conversation ids were written into the record before the run
+ * began, so the panes can open on the chats that are about to fill.
+ */
+test("a run that has just started opens on its roots", () => {
+    const design = run(
+        [step(`a`), step(`b`), step(`after`, { needs: [`a`, `b`] })],
+        [
+            { state: `pending`, iterations: 0 },
+            { state: `pending`, iterations: 0 },
+            { state: `pending`, iterations: 0 },
+        ],
+    );
+    expect(sessionsToOpen(design).map((session) => session.conversationId)).toEqual([`wf-r1-a`, `wf-r1-b`]);
+});
+
+// Once a step is actually going, THAT is what to show — the roots were only ever a stand-in for the first
+// moment, and a run three steps deep must not reopen the two chats it has finished with.
+test("a run with something live opens on the live sessions, not the roots", () => {
+    const design = run([step(`a`), step(`b`), step(`after`, { needs: [`a`, `b`] })], [{ state: `done` }, { state: `done` }, { state: `running` }]);
+    expect(sessionsToOpen(design).map((session) => session.conversationId)).toEqual([`wf-r1-after`]);
+});
+
+// A run that is over has no session on screen to land on. The caller falls through to the diagram, which is
+// where a finished run's answer lives.
+test("a finished run offers nothing to open", () => {
+    const design = run([step(`a`)], [{ state: `done` }]);
+    expect(sessionsToOpen({ ...design, state: `done` })).toEqual([]);
 });

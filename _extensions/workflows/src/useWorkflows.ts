@@ -58,9 +58,16 @@ export function useWorkflows() {
     // The daemon acks with the opened run and executes detached, so success here means "it started". The run
     // that comes back is already complete as a graph — every step recorded `pending` — which is what lets the
     // run view open on it immediately rather than on a spinner.
+    /* The request rides with the start — the sentence the user typed before pressing Run, which every step is
+     * handed on top of its own prompt (WorkflowRun.request). It is what makes a saved design a SHAPE you point
+     * at today's job rather than a document you edit to ask a question. */
     const start = useMutation({
-        mutationFn: async (id: string): Promise<WorkflowRun> =>
-            (await api.sandbox.json(`/workflows/${encodeURIComponent(id)}/run`, { method: `POST` })) as WorkflowRun,
+        mutationFn: async ({ id, request }: { id: string; request?: string }): Promise<WorkflowRun> =>
+            (await api.sandbox.json(`/workflows/${encodeURIComponent(id)}/run`, {
+                method: `POST`,
+                headers: { "content-type": `application/json` },
+                body: JSON.stringify(request === undefined ? {} : { request }),
+            })) as WorkflowRun,
         onSuccess: invalidate,
     });
     const stop = useMutation({

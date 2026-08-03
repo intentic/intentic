@@ -1,6 +1,7 @@
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import { type WorkflowRun, WorkflowRunsListSchema } from "@intentic/sandbox-contract";
 import { useAgents } from "../agents/useAgents";
-import { liveSessions, type RunSession, showRun } from "./chatRun";
+import { sandboxJson } from "../sandbox/sandboxClient";
+import { type RunSession, sessionsToOpen, showRun } from "./chatRun";
 import { openAgentConversation, useChat } from "./useChat";
 import { useChatPopout } from "./useChatPopout";
 
@@ -44,18 +45,31 @@ export const openRunSessions = (sessions: readonly RunSession[]): boolean => {
     return true;
 };
 
-/* Show a run: its live sessions if it has any, its diagram if it does not.
+/* Show a run: the sessions it has on screen if there are any, its diagram if there are not.
  *
  * POPPED OUT FIRST, because both of those need the room. The panes only exist in the window (a docked column
  * is ~22rem and a second pane in it would be two slivers), and the diagram takes the pane area — so a run
  * opened into a docked panel would set a split nobody can see and then draw nothing. Idempotent: a no-op when
  * the window is already up.
  *
- * A run with nothing live — finished, failed, or in the seconds between one step ending and the next
- * registering its conversation — opens on the DIAGRAM, which is the map you pick a session from. Same panel,
- * same run, other mode: the press always lands somewhere that can answer.
+ * A finished or failed run has no sessions on screen to open, so it lands on the DIAGRAM, which is the map you
+ * pick one from. A run that has only just started lands on its ROOTS (sessionsToOpen) — the chats that are
+ * about to fill — which is what makes starting a workflow feel like starting an agent rather than like filing
+ * a request. Same panel, same run, other mode: the press always lands somewhere that can answer.
+ *
+ * TAKES AN ID AS WELL AS A RUN, because the extension that owns the Run button cannot hold a `WorkflowRun` on
+ * this side of the host API (the contract imports extension-api, so extension-api cannot import the contract).
+ * Given an id it reads the run once, directly, rather than waiting for the board's poll to come round — the
+ * press has to land now or it has not landed.
  */
-export const openRunInChat = (run: WorkflowRun): void => {
+export const openRunInChat = async (run: WorkflowRun | string): Promise<void> => {
     useChatPopout().popOut();
-    showRun(run.runId, openRunSessions(liveSessions(run)) ? `sessions` : `graph`);
+    const resolved = typeof run === `string` ? (await sandboxRuns()).find((entry) => entry.runId === run) : run;
+    if (resolved === undefined) {
+        // The id named nothing the ledger holds. Nothing to show and nothing to claim about it.
+        return;
+    }
+    showRun(resolved.runId, openRunSessions(sessionsToOpen(resolved)) ? `sessions` : `graph`);
 };
+
+const sandboxRuns = async (): Promise<WorkflowRun[]> => WorkflowRunsListSchema.parse(await sandboxJson(`/workflows/runs`)).runs;

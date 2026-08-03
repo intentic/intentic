@@ -6,6 +6,7 @@ import { watch } from "vue";
 import { requestModelPick } from "../composables/chat/hostModelPicker";
 import { modelLabelFor } from "../composables/chat/modelPicker";
 import { useChat } from "../composables/chat/useChat";
+import { openRunInChat } from "../composables/chat/openRun";
 import { useAgents } from "../composables/agents/useAgents";
 import { registerCommand, executeCommand } from "../composables/commands/useCommands";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
@@ -325,6 +326,9 @@ export const createExtensionApi = (
                         await useChat().openConversation(id);
                     }
                 })(),
+            // The whole of it is openRunInChat — the same act the fleet board's run card and the chat rail's
+            // run row perform, so an extension's Run lands the user exactly where pressing the card would.
+            openWorkflowRun: (runId) => void openRunInChat(runId),
         },
         /* The shell's own model picker and the default it opens on. Nothing here is gated on a manifest
          * permission: the extension never learns a credential, never reaches a provider route, and cannot

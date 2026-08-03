@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
+import { Button, cmp, ConfirmDialog, Dialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
 import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef } from "vue";
 import WorkflowDesigner from "./WorkflowDesigner.vue";
@@ -110,14 +110,35 @@ const blank = (): void =>
         maxSpendUsd: 15,
     });
 
-/* Starting a run opens the run panel on the record the daemon just acked. That record is already a complete
- * graph — every step written down as `pending` — so the panel opens on the shape rather than on a spinner,
- * which is what makes "did it start?" answerable at a glance. */
-const runNow = async (workflow: WorkflowSummary): Promise<void> => {
+/* --- Starting a run ------------------------------------------------------------------------------
+ * RUN ASKS WHAT FOR, AND THEN GETS OUT OF THE WAY. Pressing it used to start the run and open this page's own
+ * graph view — which answered a question nobody had. Starting a workflow is starting agent work, and starting
+ * agent work in this product means typing what you want and landing in the chat with it; a page showing a
+ * picture of five boxes is the opposite of that.
+ *
+ * So it is the composer's shape, in a dialog: a box for the request, one button, and then the host puts the
+ * user in front of the sessions (api.chat.openWorkflowRun — the same act the fleet board's run card performs).
+ * The request is optional, because a design whose steps already say what they want is complete on its own.
+ */
+const runTarget = ref<WorkflowSummary | undefined>();
+const runRequest = ref(``);
+const askToRun = (workflow: WorkflowSummary): void => {
     actionError.value = undefined;
+    runRequest.value = ``;
+    runTarget.value = workflow;
+};
+
+const runNow = async (): Promise<void> => {
+    const workflow = runTarget.value;
+    if (workflow === undefined) {
+        return;
+    }
+    actionError.value = undefined;
+    const request = runRequest.value.trim();
     try {
-        const run = await start.mutateAsync(workflow.id);
-        watchRun(run.runId);
+        const run = await start.mutateAsync({ id: workflow.id, ...(request === `` ? {} : { request }) });
+        runTarget.value = undefined;
+        host().chat.openWorkflowRun(run.runId);
     } catch (error) {
         actionError.value = error instanceof Error ? error.message : `The workflow could not be started.`;
     }
@@ -247,7 +268,7 @@ const shapeOf = (workflow: Workflow): string => {
                     >
                         {{ workflow.runs[0].state }} {{ timeAgo(workflow.runs[0].startedAt) }}
                     </button>
-                    <Button label="Run" size="small" :disabled="start.isPending.value" @click="runNow(workflow)">
+                    <Button label="Run" size="small" :disabled="start.isPending.value" @click="askToRun(workflow)">
                         <template #icon><Icon name="play" /></template>
                     </Button>
                     <button type="button" :class="cmp.iconButton()" aria-label="Edit" @click="openSaved(workflow.id)"><Icon name="pencil" /></button>
@@ -301,6 +322,42 @@ const shapeOf = (workflow: Workflow): string => {
                 </button>
             </RowGroup>
         </div>
+
+        <!-- THE RUN COMPOSER. One box and one button, because that is what starting agent work looks like
+             everywhere else in this product — and the moment it is sent, the chat takes over. Deliberately not
+             a form: the design already carries every setting, and the only thing missing is what to point it
+             at this time. -->
+        <Dialog
+            :visible="runTarget !== undefined"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            :style="{ width: '36rem' }"
+            :header="runTarget?.name ?? 'Run'"
+            @update:visible="runTarget = undefined"
+        >
+            <div class="flex flex-col gap-2">
+                <textarea
+                    v-model="runRequest"
+                    rows="4"
+                    autofocus
+                    :class="[cmp.input(), `resize-y`]"
+                    placeholder="What should this run do? Every step is handed these words."
+                    @keydown.enter.meta.prevent="runNow()"
+                    @keydown.enter.ctrl.prevent="runNow()"
+                ></textarea>
+                <p class="text-2xs text-subtle">
+                    {{ runTarget?.steps.filter((step) => step.needs.length === 0).length ?? 0 }} step(s) start immediately, each in a worktree of its
+                    own. Leave this empty to run the design exactly as it is written.
+                </p>
+            </div>
+            <template #footer>
+                <button type="button" :class="cmp.linkButton()" @click="runTarget = undefined">Cancel</button>
+                <Button size="small" :label="start.isPending.value ? `Starting…` : `Run`" :disabled="start.isPending.value" @click="runNow()">
+                    <template #icon><Icon name="play" /></template>
+                </Button>
+            </template>
+        </Dialog>
 
         <ConfirmDialog
             :open="confirmRemoveId !== undefined"

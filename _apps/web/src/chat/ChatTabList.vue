@@ -643,7 +643,7 @@ const closeTab = (event: Event, id: string): void => {
                         class="chat-tab rail-card group flex w-full min-w-0 shrink-0 flex-col gap-1 rounded-lg border-dashed p-2.5 text-left text-2xs"
                         :class="{ 'chat-tab-on': runOnScreen(run) }"
                         :aria-label="`Open the workflow run ${run.workflow.name}`"
-                        @click="openRunInChat(run)"
+                        @click="void openRunInChat(run)"
                     >
                         <span class="flex min-w-0 items-center gap-1.5">
                             <Icon name="sitemap" class="shrink-0 text-2xs text-link" />

@@ -120,6 +120,35 @@ export const liveSessions = (run: WorkflowRun): RunSession[] => {
     });
 };
 
+/* WHAT TO PUT ON SCREEN WHEN A RUN IS OPENED — its live sessions, or, in the seconds before any step has
+ * registered one, the sessions it is ABOUT to open.
+ *
+ * The second half is what makes pressing Run feel like starting an agent. The daemon acks a run before a
+ * single step has begun, so at that instant nothing is `running` and "open the run" had nothing to show but
+ * the diagram — a picture of five boxes, when what the user just did was ask for work. The roots are the steps
+ * with nothing to wait for, they are starting right now, and their conversation ids were written into the
+ * record before the run began (that is what makes them addressable at all). So the panes open on the chats
+ * that are about to fill, exactly as a new agent's tab opens before its first token.
+ *
+ * Only while the run is going: a finished run's roots are history, and the diagram is the right landing for
+ * one of those.
+ */
+export const sessionsToOpen = (run: WorkflowRun): RunSession[] => {
+    const live = liveSessions(run);
+    if (live.length > 0 || run.state !== `running`) {
+        return live;
+    }
+    const seen = new Set<string>();
+    const roots = new Set(run.workflow.steps.filter((step) => step.needs.length === 0).map((step) => step.id));
+    return run.steps.flatMap((step) => {
+        if (!roots.has(step.stepId) || seen.has(step.conversationId)) {
+            return [];
+        }
+        seen.add(step.conversationId);
+        return [sessionOf(run, step.stepId, step.conversationId)];
+    });
+};
+
 /* The run's steps grouped into the columns the diagram DRAWS, keyed by step id.
  *
  * Grouped on the laid-out x rather than on dependency depth, and the difference is not academic: dagre ranks

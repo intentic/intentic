@@ -632,7 +632,7 @@ const openRunGraph = (run: WorkflowRun): void => {
  * which is precisely what the popped-out panel is for — and a page showing a picture of them is a detour on
  * the way there. The picture is still one press away, as the panel's own back arrow (chatRun's two modes).
  */
-const openRun = (run: WorkflowRun): void => openRunInChat(run);
+const openRun = (run: WorkflowRun): void => void openRunInChat(run);
 
 // Which runs have been asked to stop and have not settled yet. The daemon's stop is graceful — steps in
 // flight finish their current round — so without this the card looks untouched for as long as a round takes,
