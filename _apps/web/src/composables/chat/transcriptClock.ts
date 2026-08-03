@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { computed, type ComputedRef, shallowRef } from "vue";
+import { computed, type ComputedRef, ref, shallowRef } from "vue";
 import { recordPerf } from "../perf";
 import type { CardKind, ChatMessage } from "./transcript";
 import {
@@ -90,6 +90,22 @@ export class TranscriptClock {
      * for, so the same synchronous test clock finds it already in the field and clears it. */
     private clockArmed = false;
     private clockFallback: ReturnType<typeof setTimeout> | undefined;
+
+    /* IS ANYONE LOOKING AT THIS TRANSCRIPT — set by the pane holding it (ChatPane), true for the pane with the
+     * focus and false for every other one.
+     *
+     * The typewriter is an animation, and an animation is worth paying for only where the eye is. With several
+     * chats side by side in a popped-out window, N transcripts typing at once is N things moving in the reader's
+     * periphery while they try to read one — the single fastest way to make a split unbearable. So an unwatched
+     * transcript SETTLES each batch whole instead of revealing it a slice per paint: the same text, the same
+     * order, arriving as it lands rather than at reading speed.
+     *
+     * It is the cost answer too. The reveal is the per-paint work (`chat.type` below) and it re-runs the
+     * reducer to append a few characters to one bubble; settling pays that once per frame batch instead of once
+     * per paint, which is what keeps four live agents on screen affordable. Watched by default, so a
+     * conversation nobody has claimed — a test, a background tab's first frames — behaves exactly as it always
+     * has. */
+    readonly watched = ref(true);
 
     /* Frames waiting for the next tick, with the turn each arrived under (a stream holds one turn, but the
      * buffer outlives any single `follow` call, so the pairing has to be explicit).
@@ -190,8 +206,9 @@ export class TranscriptClock {
         const from = performance.now();
         const { state, applied } = this.foldInbox(this.state.value);
         const folded = performance.now();
-        // Reveal against the state the fold just produced, so the tick's single write carries both jobs.
-        const next = state.pending !== undefined ? revealPending(state) : state;
+        // Reveal against the state the fold just produced, so the tick's single write carries both jobs — a
+        // slice at a time where someone is reading it, the whole buffer where nobody is (see `watched`).
+        const next = state.pending === undefined ? state : this.watched.value ? revealPending(state) : flushPending(state);
         this.state.value = next;
         if (applied.length > 0) {
             recordPerf(`chat.frame`, folded - from, { frames: applied.length, messages: next.messages.length });

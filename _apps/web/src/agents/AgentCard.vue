@@ -49,6 +49,10 @@ const props = defineProps<{
     // fired it can say so while the rest of the card only dims (see PendingAction).
     pending?: PendingAction;
     selected?: boolean;
+    // This agent's chat has a pane of its own in the chat window, but not the focus — a weaker claim than
+    // `selected` and drawn as such, so a split reads as "these are on screen, this one is live" rather than as
+    // several selected cards.
+    showing?: boolean;
     // The board's filter, when one is on. `match` is the line of the user's own prompt the query hit — the
     // EVIDENCE for this card being in a filtered lane. Absent when the hit was the title (already on the card,
     // and marked below instead). A card that matches for a reason the user can't see is what teaches people
@@ -56,7 +60,16 @@ const props = defineProps<{
     match?: string;
     query?: string;
 }>();
-const emit = defineEmits<{ open: []; review: []; resolve: []; land: []; archive: []; restore: []; grab: [event: PointerEvent, card: HTMLElement] }>();
+const emit = defineEmits<{
+    // The click that opened it, when there was one — a modified click asks for a pane rather than the focus.
+    open: [event?: MouseEvent];
+    review: [];
+    resolve: [];
+    land: [];
+    archive: [];
+    restore: [];
+    grab: [event: PointerEvent, card: HTMLElement];
+}>();
 
 const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
@@ -138,12 +151,14 @@ const edit = createTitleEdit(
     () => props.agent.id,
     () => props.agent.title,
 );
-// A blur-commit's click on the card body must commit the rename, not also focus the agent.
-const openCard = (): void => {
+// A blur-commit's click on the card body must commit the rename, not also focus the agent. The EVENT rides
+// along because a modified click means something else on this board — a column of its own for this agent, or a
+// run of them (AgentsView.focusAgent); a keyboard open carries none and is the plain act.
+const openCard = (event?: MouseEvent): void => {
     if (edit.editing || edit.consumeSuppressedOpen()) {
         return;
     }
-    emit(`open`);
+    emit(`open`, event);
 };
 
 // The view-change is deliberate, never a side effect of a plain click: the contextual affordance below fires
@@ -168,6 +183,12 @@ const grab = (event: PointerEvent): void => {
     if (event.target.closest(`input, button`) !== null) {
         return;
     }
+    // A MODIFIED press is picking this card into a chat pane, not dragging it to a lane (see AgentsView's
+    // focusAgent). Without this the selection click would also start a drag, and the board would be answering
+    // one gesture two ways.
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+    }
     emit(`grab`, event, event.currentTarget);
 };
 </script>
@@ -187,15 +208,19 @@ const grab = (event: PointerEvent): void => {
                user's focus, in the app's own primary), attention is a solid bar down the left edge (a property
                of the agent, in warning — the same colour as its chip on the row above). */
             lane === 'attention' ? 'border-l-[3px] border-l-warning' : '',
-            selected ? 'border-primary-500 bg-overlay ring-2 ring-primary-500/50' : 'border-line bg-card hover:border-line-strong',
+            selected
+                ? 'border-primary-500 bg-overlay ring-2 ring-primary-500/50'
+                : showing
+                  ? 'border-primary-500/45 bg-card ring-1 ring-primary-500/30'
+                  : 'border-line bg-card hover:border-line-strong',
             dragging ? 'opacity-40' : '',
             pending !== undefined ? 'pointer-events-none opacity-60' : '',
         ]"
         @pointerdown="grab"
         @click="openCard"
         @dblclick="reviewCard"
-        @keydown.enter.self.prevent="openCard"
-        @keydown.space.self.prevent="openCard"
+        @keydown.enter.self.prevent="openCard()"
+        @keydown.space.self.prevent="openCard()"
     >
         <div class="flex items-center gap-2">
             <!-- The IDENTITY TILE (IdentityTile) — the kind-of-work glyph on a tint of this agent's CATEGORY

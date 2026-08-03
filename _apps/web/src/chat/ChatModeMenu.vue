@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { modeOptions } from "../composables/chat/catalog";
-import { useChat } from "../composables/chat/useChat";
+import { usePaneView } from "../composables/chat/useChat";
 
 /* The permission-mode picker body — width-agnostic (Popover on desktop, BottomSheet on mobile). Emits
  * `selected` so the host can close its overlay. Only the postures this conversation's runtime can actually be
@@ -9,7 +9,7 @@ import { useChat } from "../composables/chat/useChat";
 
 const emit = defineEmits<{ selected: [] }>();
 
-const { mode, capabilities } = useChat();
+const { mode, capabilities } = usePaneView();
 const modes = computed(() => modeOptions(capabilities.value));
 </script>
 

@@ -86,7 +86,10 @@ const {
     busyIds,
     agentById,
 } = useAgents();
-const { active, openConversation } = useChat();
+const { active, openConversation, panes, openBeside, closePane, setPanes } = useChat();
+// This agent's chat has a column in the chat window but not the focus — the board's half of the rail's
+// "showing" mark, so a split is legible from either surface.
+const showingInPane = (id: string): boolean => panes.value.length > 1 && id !== active.value.conversationId && panes.value.includes(id);
 const {
     dragged,
     dragging,
@@ -484,7 +487,49 @@ const clearable = computed(() => lanes.value.finished.length);
 // at this agent and highlights the card — cheap and reversible, so the user can click down a lane to skim.
 // The view-change to the review detail is a deliberate, separate act (reviewAgent, below). Mobile has no dock,
 // so a tap there IS the way into the conversation — it navigates.
-const focusAgent = (agent: FleetAgent): void => {
+/* --- Cards into chat panes ----------------------------------------------------------------------
+ * The chat rail's gestures (ChatTabList.onRowClick), on the board — because at N panes the two are the same
+ * act: what is selected IS what is on screen, so a card picked here is a chat given a column there.
+ *
+ * ALT carries "in addition" rather than Ctrl alone, and not because Ctrl is taken: a card is a drag source
+ * (lanes, land, resolve), and on macOS Ctrl+click IS the secondary click. Alt collides with neither, so the
+ * one-shot verb — the one most people will reach for — is the one that can never be misread. Ctrl/Cmd and
+ * Shift are there for whoever learned them on the strips.
+ *
+ * The pane is claimed BEFORE `open` (see useChat.openBeside): the opening would otherwise take the focused
+ * pane's column on its way in, and the chat the user was reading would vanish to make room. */
+const paneOrder = computed<FleetAgent[]>(() => LANES.flatMap((lane) => cardsFor(lane.key)));
+const paneAnchor = ref<string>();
+const paneGesture = (agent: FleetAgent, event: MouseEvent): boolean => {
+    if (event.shiftKey) {
+        const order = paneOrder.value;
+        const from = order.findIndex((card) => card.id === (paneAnchor.value ?? active.value.conversationId));
+        const to = order.findIndex((card) => card.id === agent.id);
+        const run = from === -1 ? [agent] : order.slice(Math.min(from, to), Math.max(from, to) + 1);
+        // Every card in the run has to BE a chat before the set can name it, and each open lands in the column
+        // the claim reserved for it.
+        for (const card of run) {
+            openBeside(card.id);
+            open(card);
+        }
+        setPanes(run.map((card) => card.id));
+        return true;
+    }
+    if (!event.altKey && !event.ctrlKey && !event.metaKey) {
+        return false;
+    }
+    paneAnchor.value = agent.id;
+    // Ctrl/Cmd toggles; Alt only ever adds, which is what makes it the safe one-shot.
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && panes.value.includes(agent.id) && panes.value.length > 1) {
+        closePane(agent.id);
+        return true;
+    }
+    openBeside(agent.id);
+    open(agent);
+    return true;
+};
+
+const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
     // A drag's pointerup arrives here as a click on the card it started from; it must not also open the agent.
     if (consumeSuppressedOpen()) {
         return;
@@ -495,6 +540,12 @@ const focusAgent = (agent: FleetAgent): void => {
     selectedHere = agent.id;
     // The click itself, before anything downstream can move it — the head of the focus trace (focusTrace.ts).
     traceFocus(`board-click`, { id: agent.id, status: agent.status });
+    // A modified click asks for a column rather than the focus, and says so itself. Desktop only: panes live
+    // in the pop-out window, and a phone navigates to the conversation instead of pointing anything at it.
+    if (event !== undefined && !mobile.value && paneGesture(agent, event)) {
+        return;
+    }
+    paneAnchor.value = agent.id;
     open(agent);
     if (mobile.value) {
         void router.push(`/agents/${encodeURIComponent(agent.id)}`);
@@ -725,9 +776,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :dragging="draggedId === agent.id && dragging"
                             :pending="pendingFor(agent)"
                             :selected="agent.id === highlightId"
+                            :showing="showingInPane(agent.id)"
                             :match="snippetOf(agent)"
                             :query="needle"
-                            @open="focusAgent(agent)"
+                            @open="(event) => focusAgent(agent, event)"
                             @review="reviewAgent(agent)"
                             @resolve="resolveNow(agent.id)"
                             @land="landNow(agent.id)"
@@ -801,9 +853,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :dense="narrow"
                             :pending="pendingFor(agent)"
                             :selected="agent.id === highlightId"
+                            :showing="showingInPane(agent.id)"
                             :match="snippetOf(agent)"
                             :query="needle"
-                            @open="focusAgent(agent)"
+                            @open="(event) => focusAgent(agent, event)"
                             @review="reviewAgent(agent)"
                             @restore="restore([agent.id])"
                         />

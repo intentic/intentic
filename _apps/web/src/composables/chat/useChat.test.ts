@@ -1007,3 +1007,179 @@ describe(`the plan preview's auto-open`, () => {
         expect(planTabs()).toMatchObject([{ title: `Rename the thing` }]);
     });
 });
+
+/* THE PANES — which of the open chats are on screen at once, and in which columns. One is the ordinary case;
+ * several is the popped-out window showing a fleet side by side (ChatPanel renders one ChatPane per id).
+ *
+ * The rule every case below turns on: SWITCHING is not OPENING. Everything that moves the focus — a rail
+ * click, a card on the board, a deep link, a history row, a close reseating the focus — lands on setActive and
+ * swaps the focused column, leaving the other panes where they are. Adding a column is a verb of its own. */
+describe(`chat panes`, () => {
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+    });
+
+    // Three tabs with content, so none of them is the untouched draft the strip reaps; the first is focused.
+    const openThree = (): readonly string[] => {
+        const chat = useChat();
+        const ids: string[] = [];
+        for (let at = 0; at < 3; at++) {
+            const conversation = at === 0 ? chat.active.value : chat.newChat();
+            conversation.draft.value = `tab ${at}`;
+            ids.push(conversation.conversationId);
+        }
+        chat.setActive(ids[0]!);
+        return ids;
+    };
+
+    it(`starts as one pane, holding the focused chat`, () => {
+        const chat = useChat();
+        expect(chat.panes.value).toEqual([chat.activeId.value]);
+    });
+
+    it(`gives a chat a column of its own beside the focused one, and the focus with it`, () => {
+        const chat = useChat();
+        const ids = openThree();
+
+        chat.openBeside(ids[1]!);
+
+        expect(chat.panes.value).toEqual([ids[0], ids[1]]);
+        expect(chat.activeId.value).toBe(ids[1]);
+    });
+
+    it(`swaps the focused pane rather than adding one when a chat is merely selected`, () => {
+        const chat = useChat();
+        const ids = openThree();
+        chat.openBeside(ids[1]!); // panes [0, 1], focus on 1
+
+        chat.setActive(ids[2]!);
+
+        // The column the focus was in shows the new chat; the other pane is untouched.
+        expect(chat.panes.value).toEqual([ids[0], ids[2]]);
+        expect(chat.activeId.value).toBe(ids[2]);
+    });
+
+    // Selecting a chat that is already on screen is a focus move and nothing else — no second column for it.
+    it(`only moves the focus when the selected chat already has a pane`, () => {
+        const chat = useChat();
+        const ids = openThree();
+        chat.openBeside(ids[1]!);
+
+        chat.setActive(ids[0]!);
+
+        expect(chat.panes.value).toEqual([ids[0], ids[1]]);
+        expect(chat.activeId.value).toBe(ids[0]);
+    });
+
+    it(`takes a chat's column back without closing the chat`, () => {
+        const chat = useChat();
+        const ids = openThree();
+        chat.openBeside(ids[1]!);
+
+        chat.closePane(ids[1]!);
+
+        expect(chat.panes.value).toEqual([ids[0]]);
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual(ids); // still open, still in the rail
+        expect(chat.activeId.value).toBe(ids[0]);
+    });
+
+    // The panel IS its last pane, so there is no such thing as closing it — the way to have no chat on screen
+    // is to have no chats.
+    it(`refuses to close the last pane`, () => {
+        const chat = useChat();
+        const ids = openThree();
+
+        chat.closePane(ids[0]!);
+
+        expect(chat.panes.value).toEqual([ids[0]]);
+    });
+
+    it(`drops a pane whose tab is closed`, () => {
+        const chat = useChat();
+        const ids = openThree();
+        chat.openBeside(ids[1]!);
+
+        chat.closeTabs(new Set([ids[1]!]));
+
+        expect(chat.panes.value).toEqual([ids[0]]);
+        expect(chat.activeId.value).toBe(ids[0]);
+    });
+
+    /* A multi-selection lands as a SET, and the chats already on screen keep the columns they are in — adding a
+     * third chat must not reshuffle the two the user is reading (pane order is insertion order, never the
+     * rail's, which re-sorts as turns end). */
+    it(`keeps existing columns and appends the newcomers when a selection lands`, () => {
+        const chat = useChat();
+        const ids = openThree();
+        chat.openBeside(ids[2]!); // panes [0, 2]
+
+        chat.setPanes([ids[2]!, ids[1]!, ids[0]!]); // the same three, named in a different order
+
+        expect(chat.panes.value).toEqual([ids[0], ids[2], ids[1]]);
+    });
+
+    // The board's order: claim the column, THEN open the chat. Without the claim coming first, the opening
+    // would take the focused pane's column on its way in and the chat being read would vanish to make room.
+    it(`keeps the chat being read when a not-yet-open chat claims a column first`, () => {
+        const chat = useChat();
+        const ids = openThree();
+        const arriving = `agent-from-the-board`;
+
+        chat.openBeside(arriving);
+        openAgentConversation({ id: arriving, provider: `claude`, harness: `native` });
+
+        expect(chat.panes.value).toEqual([ids[0], arriving]);
+        expect(chat.activeId.value).toBe(arriving);
+    });
+
+    it(`comes back from a reload with its columns, in the order they were left`, async () => {
+        const chat = useChat();
+        const ids = openThree();
+        chat.openBeside(ids[2]!);
+        await nextTick();
+
+        resetChat();
+
+        expect(useChat().panes.value).toEqual([ids[0], ids[2]]);
+    });
+
+    // A pane naming a tab that did not come back is a column with nothing in it — the restore keeps the rest.
+    it(`reconciles a restored pane set against the tabs that actually restored`, () => {
+        session.clear();
+        local.set(
+            `intentic.chatTabs.sb1`,
+            JSON.stringify({
+                active: `conv-a`,
+                panes: [`conv-a`, `conv-gone`, `conv-b`],
+                tabs: [
+                    { conversationId: `conv-a`, isolated: true, draft: `one`, attachments: [], queued: [] },
+                    { conversationId: `conv-b`, isolated: true, draft: `two`, attachments: [], queued: [] },
+                ],
+            }),
+        );
+
+        resetChat();
+
+        expect(useChat().panes.value).toEqual([`conv-a`, `conv-b`]);
+    });
+
+    // A window that never split has no layout to record, and comes back as the single pane it always was.
+    it(`restores a snapshot that names no panes as the focused chat alone`, () => {
+        session.clear();
+        local.set(
+            `intentic.chatTabs.sb1`,
+            JSON.stringify({
+                active: `conv-b`,
+                tabs: [
+                    { conversationId: `conv-a`, isolated: true, draft: `one`, attachments: [], queued: [] },
+                    { conversationId: `conv-b`, isolated: true, draft: `two`, attachments: [], queued: [] },
+                ],
+            }),
+        );
+
+        resetChat();
+
+        expect(useChat().panes.value).toEqual([`conv-b`]);
+    });
+});

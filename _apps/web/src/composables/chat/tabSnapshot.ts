@@ -53,10 +53,12 @@ export interface StoredTab {
     readonly queued: { text: string; attachments: { name: string; path: string }[] }[];
 }
 
-// A sandbox's whole strip: the open tabs and which one is focused, named by conversationId. Coherent by
-// construction — `active` always names one of `tabs`, and no conversation appears twice.
+// A sandbox's whole strip: the open tabs, which one is focused, and which of them are on screen at once (the
+// panes, in their column order). Coherent by construction — `active` always names one of `tabs`, every pane
+// names one too, `active` is always among the panes, and no conversation appears twice.
 export interface TabSnapshot {
     readonly active: string;
+    readonly panes: readonly string[];
     readonly tabs: readonly StoredTab[];
 }
 
@@ -117,9 +119,9 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
 // would render as two tabs sharing a key, which is how a strip ends up with the wrong name on the wrong tab
 // and a × that removes neither), and a focus that names one of them.
 const parse = (raw: string): TabSnapshot | undefined => {
-    let stored: { active?: unknown; tabs?: unknown };
+    let stored: { active?: unknown; panes?: unknown; tabs?: unknown };
     try {
-        stored = JSON.parse(raw) as { active?: unknown; tabs?: unknown };
+        stored = JSON.parse(raw) as { active?: unknown; panes?: unknown; tabs?: unknown };
     } catch {
         return undefined;
     }
@@ -140,7 +142,13 @@ const parse = (raw: string): TabSnapshot | undefined => {
         return undefined;
     }
     const active = typeof stored.active === `string` && seen.has(stored.active) ? stored.active : first.conversationId;
-    return { active, tabs };
+    // The panes, in their stored column order, keeping only those that still name a readable tab. A window
+    // that named none — the ordinary single-pane panel, which has no layout to record — comes back showing the
+    // focused chat alone, which is what an absent pane set MEANS rather than something to patch up.
+    const panes = (Array.isArray(stored.panes) ? (stored.panes as unknown[]) : []).filter(
+        (id): id is string => typeof id === `string` && seen.has(id),
+    );
+    return { active, panes: panes.includes(active) ? panes : [...panes, active], tabs };
 };
 
 // This window's tabs for a sandbox, else the last window's (the seed) when this one has never opened it.

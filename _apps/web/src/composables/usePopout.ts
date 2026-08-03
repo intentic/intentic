@@ -333,6 +333,9 @@ export interface Popout {
     readonly popOut: () => void;
     readonly dock: () => void;
     readonly toggle: () => void;
+    // Ask the window for at least this much width — what the chat panel does when it has just added a pane the
+    // current frame has no room for. Never shrinks, never leaves the screen, and does nothing while docked.
+    readonly fit: (width: number) => void;
 }
 
 // One pop-out store. `name` is the panel's slug, and every identity the window has is that one string: its
@@ -558,7 +561,23 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         popOut();
     };
 
+    /* Grow the window to fit what the panel has just put in it. Only ever outward — a panel that asks for less
+     * than the user has already dragged out is describing its minimum, not their preference — and never past
+     * the room left on the screen the window starts on, so a window that was already at the right edge widens
+     * as far as it can rather than hanging off it. A browser that refuses resizeTo (a window it did not open,
+     * a maximized one) simply leaves the frame alone, and the panes scroll instead. */
+    const fit = (width: number): void => {
+        const win = popoutWindow;
+        if (win === undefined || win.closed || win.outerWidth >= width) {
+            return;
+        }
+        // What is left of the screen to the window's right. A window on a monitor this page cannot measure
+        // reports an offset past that screen and comes out negative, which the floor turns into "leave it".
+        const room = Math.max(win.outerWidth, window.screen.availWidth - win.screenX);
+        win.resizeTo(Math.round(Math.min(width, room)), win.outerHeight);
+    };
+
     const overlayTarget = computed<HTMLElement | "body">(() => (poppedOut.value ? (body.value ?? `body`) : `body`));
 
-    return { poppedOut, restoring, body, overlayTarget, popOut, dock, toggle };
+    return { poppedOut, restoring, body, overlayTarget, popOut, dock, toggle, fit };
 };

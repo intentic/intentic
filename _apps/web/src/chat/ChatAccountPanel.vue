@@ -4,16 +4,18 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { connectPitch } from "../composables/chat/access";
 import { providerTabs } from "../composables/chat/providerCatalog";
-import { useChat } from "../composables/chat/useChat";
+import { useChat, usePaneView } from "../composables/chat/useChat";
 
-/* The connect gate above the composer: shown when the active conversation's provider+harness selection has
- * nothing to send with. What it asks for comes from the shared access table (access.ts / PROVIDER_ACCESS), the
- * same one the model picker's locks and chips read — the gate and the lock a user just clicked past must name
- * the SAME credential, and they drifted when each surface carried its own copy. The "Connect" button deep-links
- * to the Sandbox ▸ Agent tab, where the handshake lives; the picked provider rides along as `?connect=<provider>`
- * so that tab opens on its card and flashes it into view. */
+/* The connect gate above the composer: shown when THIS pane's conversation has a provider+harness selection
+ * with nothing to send with. What it asks for comes from the shared access table (access.ts / PROVIDER_ACCESS),
+ * the same one the model picker's locks and chips read — the gate and the lock a user just clicked past must
+ * name the SAME credential, and they drifted when each surface carried its own copy. The "Connect" button
+ * deep-links to the Sandbox ▸ Agent tab, where the handshake lives; the picked provider rides along as
+ * `?connect=<provider>` so that tab opens on its card and flashes it into view. */
 
-const { connected, provider, harness, selectProvider, accountsLoaded } = useChat();
+const { connected, provider, harness, selectProvider } = usePaneView();
+// Whether the daemon has answered about connections AT ALL is the sandbox's fact, not this conversation's.
+const { accountsLoaded } = useChat();
 const router = useRouter();
 
 const pitch = computed(() => connectPitch(provider.value, harness.value));

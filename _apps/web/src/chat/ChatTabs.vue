@@ -49,7 +49,7 @@ const emit = defineEmits<{
     open: [id: string];
 }>();
 
-const { conversations, active, activeId, sessions, loadSessions } = useChat();
+const { conversations, active, activeId, panes, openBeside, closePane, sessions, loadSessions } = useChat();
 const { agentById } = useAgents();
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
 // The toolbar button's tooltip AND its accessible name, one string: the control the pointer finds is what
@@ -282,6 +282,21 @@ const cycleTab = (delta: number): void => {
         emit(`select`, next.conversationId);
     }
 };
+// The chord's half of Open Beside: the first chat AFTER the focused one that isn't already in a column, else
+// the first anywhere that isn't — so repeated presses fill the window rather than re-opening the same chat.
+// Tab order, like cycleTab, since both answer "the next chat" and must not mean two different things.
+const splitBeside = (): void => {
+    if (!poppedOut.value) {
+        return;
+    }
+    const list = conversations.value;
+    const index = list.findIndex((conversation) => conversation.conversationId === activeId.value);
+    const free = (conversation: (typeof list)[number]): boolean => !panes.value.includes(conversation.conversationId);
+    const next = list.slice(index + 1).find(free) ?? list.find(free);
+    if (next !== undefined) {
+        openBeside(next.conversationId);
+    }
+};
 onMounted(() => {
     const entries: Omit<RegisteredCommand, `owner`>[] = [
         {
@@ -363,6 +378,25 @@ onMounted(() => {
         },
         { command: `chat.nextTab`, title: `Next Chat`, keybinding: `Alt+PageDown`, when: inTabSurface(`chat`), handler: () => cycleTab(1) },
         { command: `chat.previousTab`, title: `Previous Chat`, keybinding: `Alt+PageUp`, when: inTabSurface(`chat`), handler: () => cycleTab(-1) },
+        {
+            /* VSCode's split-editor chord doing the chat's version of it: give the next chat a column of its
+             * own beside this one. NOT a second view of the same conversation, which is what VSCode splits to
+             * — a chat carries a composer, and two of them writing into one transcript is a worse answer than
+             * the question deserves. Pop-out only, where the width for a second column exists (ChatPanel). */
+            command: `chat.splitView`,
+            title: `Open Next Chat Beside`,
+            keybinding: `Mod+\\`,
+            when: inTabSurface(`chat`),
+            handler: () => splitBeside(),
+        },
+        {
+            // Unbound, like Close Finished: the verb is one press away on the row's own menu, and every chord
+            // worth spending here is already spent. Takes the focused chat's column back — the chat stays open.
+            command: `chat.closePane`,
+            title: `Close Pane`,
+            when: inTabSurface(`chat`),
+            handler: () => closePane(activeId.value),
+        },
         {
             // Unbound by default, like Close Finished: every chord this surface could claim is either taken
             // (Mod+Shift+P is the palette this command is reached FROM) or worth more to the file tabs. The

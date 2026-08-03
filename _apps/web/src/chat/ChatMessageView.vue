@@ -13,7 +13,7 @@ import { type ChatMessage, foldsIntoTurn, type PlanRequest } from "../composable
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
-import { useChat } from "../composables/chat/useChat";
+import { usePaneView } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { openWorkTerminal, useWorkTerminals } from "../composables/terminal/useWorkTerminals";
@@ -37,7 +37,7 @@ const props = defineProps<{
 }>();
 
 const {
-    active,
+    conversation,
     decidePlan,
     planApprovals,
     answerQuestion,
@@ -47,7 +47,7 @@ const {
     editAndResend,
     streaming: conversationStreaming,
     awaitingDecision,
-} = useChat();
+} = usePaneView();
 const { mobile } = useDevice();
 
 /* The landed notice's one-press offer (ChatMessage.noticeAction): flip THIS agent to holding its future work
@@ -60,11 +60,12 @@ const { mobile } = useDevice();
 const { agentById, setAutoLand } = useAgents();
 const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
 const holdOffer = computed(
-    () => props.message.noticeAction === `landHold` && effectiveAutoLand(agentById(active.value.conversationId), sandboxSettings.value?.autoLand),
+    () =>
+        props.message.noticeAction === `landHold` && effectiveAutoLand(agentById(conversation.value.conversationId), sandboxSettings.value?.autoLand),
 );
 // Best-effort like markSeen: a failed write leaves the offer standing to press again.
 const holdFutureLands = (): void => {
-    void setAutoLand(active.value.conversationId, false).catch(() => undefined);
+    void setAutoLand(conversation.value.conversationId, false).catch(() => undefined);
 };
 
 /* The outage notice's opt-out, on exactly the same reasoning one line up — with one difference: this one is the
@@ -175,12 +176,12 @@ const showTyping = computed(() => props.streaming && !awaitingDecision.value);
 // source means a view mounted halfway through a turn starts halfway through its counter too.
 const now = ref(Date.now());
 const loaderSeconds = computed(() => {
-    const startedAt = active.value.turnStartedAt.value;
+    const startedAt = conversation.value.turnStartedAt.value;
     return startedAt === undefined ? 0 : Math.max(0, Math.floor((now.value - startedAt) / 1000));
 });
 // The readout itself is the shared elapsed format, so a turn that runs long reads "9m 12s" rather than "552s".
 const loaderElapsed = computed(() => {
-    const startedAt = active.value.turnStartedAt.value;
+    const startedAt = conversation.value.turnStartedAt.value;
     return startedAt === undefined ? undefined : formatElapsed(startedAt, now.value);
 });
 const loaderWord = computed(() => LOADER_WORDS[Math.floor(loaderSeconds.value / 2) % LOADER_WORDS.length] ?? `Thinking`);
@@ -193,7 +194,7 @@ const loaderWord = computed(() => LOADER_WORDS[Math.floor(loaderSeconds.value / 
  * identical to a hung one for minutes at a stretch, and the move a user makes against an apparent hang is Stop —
  * the only move that actually throws away the work the turn has already done. Rides the same one-second tick as
  * the elapsed counter, so the countdown moves and stale-looks impossible. */
-const providerRetry = computed(() => active.value.providerRetry.value);
+const providerRetry = computed(() => conversation.value.providerRetry.value);
 // "and here is when it tries again" holds only when the harness said when — Claude's does. Codex reports which
 // attempt it is on and nothing else (codex-agent.ts), so its line drops the countdown rather than name an
 // instant the retry never agreed to.
@@ -209,7 +210,9 @@ const retryReason = computed(() => (providerRetry.value?.status === 529 ? `at ca
  * describes; the CONVERSATION says whether that wait is still on. Pairing the two is what keeps a replayed
  * transcript honest: the line stays in the record, and it only spins while there is genuinely something to wait
  * for. Undefined the rest of the time, which is also what turns the ticker below off again. */
-const pendingWait = computed(() => (props.message.noticeWait === `credentialRenewal` ? active.value.failures.credentialRenewal.value : undefined));
+const pendingWait = computed(() =>
+    props.message.noticeWait === `credentialRenewal` ? conversation.value.failures.credentialRenewal.value : undefined,
+);
 
 // One second-ticking clock for every live readout in this view — the turn's elapsed counter, the retry
 // countdown, and a pending notice's wait. Runs whenever any of them is showing, which is why a notice's wait

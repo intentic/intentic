@@ -3,7 +3,7 @@ import type { IconName } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import type { ChatTool } from "../composables/chat/transcript";
-import { useChat } from "../composables/chat/useChat";
+import { usePaneView } from "../composables/chat/useChat";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { openWorkTerminal } from "../composables/terminal/useWorkTerminals";
 import { openWorkspaceRef } from "../composables/workspace/openFileRef";
@@ -75,16 +75,16 @@ const location = computed(() => props.tool.locations?.[0]);
 /* The shell behind a command card. An agent's Bash runs in a real tmux session that the terminal panel can
  * attach to, but those sessions no longer tab themselves into the strip (useWorkTerminals) — so this card is
  * where watching one is offered, which is also where the question ("what is it actually doing?") gets asked.
- * Only command-shaped cards get it, and only while the conversation on screen has a shell recorded: the panel
- * renders the ACTIVE conversation, so its terminal is this card's terminal. */
-const { active } = useChat();
-const agentTerminal = computed(() => (view.value.body?.kind === `command` ? active.value.agentTerminal.value : undefined));
+ * Only command-shaped cards get it, and only while the conversation on screen has a shell recorded: the card
+ * reads the conversation of the PANE it is in, so with two chats side by side each card offers its own. */
+const { conversation } = usePaneView();
+const agentTerminal = computed(() => (view.value.body?.kind === `command` ? conversation.value.agentTerminal.value : undefined));
 
 /* The BROWSER behind a browser card, on the same terms but through a different door: its Chromium is not a
  * pane in the terminal panel but a surface of its own, so this jumps to the Browsers area with that session
  * already selected. Every browser tool gets the button, not just the ones that returned a picture — a click or
  * a form fill is precisely when watching is worth more than reading. */
-const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`browser `) ? active.value.agentBrowser.value : undefined));
+const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`browser `) ? conversation.value.agentBrowser.value : undefined));
 const router = useRouter();
 const watchBrowser = (session: string): void => void router.push(`/browsers/${session}`);
 

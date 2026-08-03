@@ -82,7 +82,7 @@ const emit = defineEmits<{
     open: [id: string];
 }>();
 
-const { conversations, activeId, tabReveal } = useChat();
+const { conversations, activeId, tabReveal, panes, openBeside, closePane, setPanes } = useChat();
 const { agentById, fleet, loadArchived } = useAgents();
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
 
@@ -426,6 +426,57 @@ const hidePreview = (): void => {
     hoverCard.value?.hide();
 };
 
+/* --- Picking chats into panes -------------------------------------------------------------------
+ * The terminal strip's gesture, on the surface that is this panel's equivalent of it (TerminalPanel's
+ * onSegmentClick): a plain click SWITCHES, Ctrl/Cmd+click toggles a chat into a column of its own beside the
+ * others, and Shift+click takes the run between the anchor and the row — all three landing on the pane verbs
+ * in useChat. Learning it once on either strip is learning it for both, which is the whole reason the
+ * gestures are the same to the letter rather than merely similar.
+ *
+ * The MENU is what makes it discoverable; the modifiers are the accelerator for whoever already knows. */
+const showing = (id: string): boolean => panes.value.includes(id);
+// More than one chat has a column, so a row can say "on screen" without that being the same claim as "focused".
+const split = computed(() => panes.value.length > 1);
+// Panes exist in the POP-OUT window only — the docked column is ~22rem, and a second chat in it would be two
+// unusable slivers (ChatPanel holds that rule). So the gestures and the rows that teach them are offered where
+// they do something, rather than sitting in the docked sheet quietly doing nothing.
+const paneable = computed(() => poppedOut.value);
+
+// The rows as the eye reads them, top to bottom, across the lanes that are drawn — what a Shift+range means.
+// The lanes SORT (by status, then recency), so this is the list's own order rather than the tab order; a range
+// is "these rows", which is what the user is pointing at.
+const rowOrder = computed<string[]>(() => occupiedLanes.value.flatMap((lane) => cardsIn(lane.key).map((entry) => entry.conversation.conversationId)));
+const anchor = ref<string>();
+
+const onRowClick = (event: MouseEvent, id: string): void => {
+    if (!paneable.value) {
+        anchor.value = id;
+        emit(`select`, id);
+        return;
+    }
+    if (event.shiftKey) {
+        const order = rowOrder.value;
+        const from = order.indexOf(anchor.value ?? activeId.value);
+        const to = order.indexOf(id);
+        if (to !== -1) {
+            setPanes(from === -1 ? [id] : order.slice(Math.min(from, to), Math.max(from, to) + 1));
+        }
+        return;
+    }
+    if (event.ctrlKey || event.metaKey) {
+        anchor.value = id;
+        // Toggle: a chat that already has a column gives it back, one that doesn't takes one beside the focus.
+        if (showing(id) && split.value) {
+            closePane(id);
+            return;
+        }
+        openBeside(id);
+        return;
+    }
+    anchor.value = id;
+    emit(`select`, id);
+};
+
 /* --- Right-click menu -----------------------------------------------------------------------------
  * The same close set the workspace's file tabs carry, plus this list's own rename and the pop-out toggle. It
  * acts on the RIGHT-CLICKED card (`menuTabId`), never on the active one — the split the workspace makes, and
@@ -444,6 +495,21 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     return [
         { label: `Rename`, icon: `pencil`, shortcut: commandShortcut(`chat.rename`), command: () => beginRename(id) },
         { separator: true },
+        /* The pane pair. "Open Beside" is the discoverable half of Ctrl/Cmd+click, and it names the result
+         * rather than the mechanism — a column of its own next to the one you are in. Its opposite takes the
+         * column back WITHOUT closing the chat, which is the distinction the two rows have to carry between
+         * them: the Close block below ends the conversation's place in this window, this one only ends its
+         * share of the screen. Offered only where there is room to use it (see `paneable`). */
+        ...(paneable.value
+            ? [
+                  // No glyph on either, like the terminal's own Split row — and pointedly not the × the Close
+                  // block wears, which would say this ends the chat.
+                  showing(id) && split.value
+                      ? { label: `Close Pane`, shortcut: commandShortcut(`chat.closePane`), command: () => closePane(id) }
+                      : { label: `Open Beside`, shortcut: commandShortcut(`chat.splitView`), command: () => openBeside(id) },
+                  { separator: true },
+              ]
+            : []),
         { label: `Close`, icon: `times`, shortcut: commandShortcut(`chat.closeTab`), command: () => emit(`close`, new Set([id])) },
         {
             label: `Close Others`,
@@ -563,8 +629,12 @@ const closeTab = (event: Event, id: string): void => {
                             type="button"
                             :data-chat-tab="c.conversationId"
                             class="chat-tab rail-card group flex w-full min-w-0 shrink-0 scroll-mt-8 flex-col gap-1.5 rounded-lg p-2.5 text-left text-2xs"
-                            :class="{ 'chat-tab-on': activeId === c.conversationId, 'rail-card-attention': lane.key === 'attention' }"
-                            @click="emit('select', c.conversationId)"
+                            :class="{
+                                'chat-tab-on': activeId === c.conversationId,
+                                'chat-tab-shown': split && activeId !== c.conversationId && showing(c.conversationId),
+                                'rail-card-attention': lane.key === 'attention',
+                            }"
+                            @click="onRowClick($event, c.conversationId)"
                             @dblclick.prevent.stop="beginRename(c.conversationId)"
                             @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
                             @mouseenter="showPreview($event, { conversation: c, agent })"
@@ -860,6 +930,13 @@ const closeTab = (event: Event, id: string): void => {
  * opened the card, on the theory that "you are here" outranks "this needs you", which quietly cost the one
  * card most likely to be read the only mark saying why it was in that lane. An inset shadow rather than a
  * wider left border: no layout shift, so a stacked lane's cards keep their text on one axis. */
+/* A chat that HAS a column but is not the one the keyboard is in — the active card's own mark at half weight,
+ * on the same two channels. Drawn only in a split (where "on screen" and "focused" are different facts), so a
+ * single-pane rail is exactly what it always was. */
+.rail-card.chat-tab-shown {
+    border-color: color-mix(in srgb, var(--color-primary-500) 45%, var(--color-line));
+    --rail-ring: 0 0 0 1px color-mix(in srgb, var(--color-primary-500) 30%, transparent);
+}
 .rail-card.chat-tab-on {
     border-color: var(--color-primary-500);
     background: var(--color-overlay);

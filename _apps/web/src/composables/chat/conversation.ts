@@ -80,6 +80,10 @@ export class Conversation {
     private readonly transcript = new TranscriptClock((event, turn, effects) => this.applied(event, turn, effects));
 
     readonly messages = this.transcript.messages;
+    // Whether a pane is showing this transcript WITH the focus — the typewriter's gate, written by the pane
+    // that holds it (ChatPane) and read by the clock's tick. See TranscriptClock.watched for why an unwatched
+    // transcript settles its text instead of typing it.
+    readonly watched = this.transcript.watched;
     readonly streaming = ref(false);
     /* True while the attached stream is still re-telling frames that PREDATE this attach (see followRun). The
      * transcript is rebuilt from that frame log, so a card the user answered long ago passes back through

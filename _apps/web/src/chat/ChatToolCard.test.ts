@@ -30,12 +30,16 @@ vi.hoisted(() => {
 });
 
 const { default: ChatToolCard } = await import("./ChatToolCard.vue");
+const { conversationView, PANE_VIEW, useChat } = await import("../composables/chat/useChat");
 
 let app: App | undefined;
 const mount = (tool: ChatTool, live = true): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatToolCard, { tool, live }) });
+    // A card only ever renders inside a pane, and reads that pane's conversation for the shell/browser behind
+    // the call (see ChatToolCard). The store's own chat stands in for one here.
+    app.provide(PANE_VIEW, conversationView(useChat().active));
     // Icon and v-tooltip are both registered app-wide by installUi. Stand-ins keep the test
     // off the whole UI plugin. Icon renders which glyph it was handed (and whether it spins), because that IS
     // what the liveness rule below decides; the tooltip's content is not under test.

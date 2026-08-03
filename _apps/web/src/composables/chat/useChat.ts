@@ -17,7 +17,7 @@ import {
     type TranslatorAccounts,
     type UsageAccount,
 } from "@intentic/sandbox-contract";
-import { computed, ref, shallowRef, watch } from "vue";
+import { computed, type ComputedRef, inject, type InjectionKey, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
@@ -110,7 +110,15 @@ const untouchedDraft = (conversation: Conversation): boolean =>
  * the tab that LOST the focus, so a draft that lost it to a list rewrite instead (a close reseating the focus on
  * the last tab) survived as a permanent, unsweepable "New agent" tab. One synchronous write, no ordering. */
 const setConversations = (next: readonly Conversation[], focus: string, reason: string): void => {
-    const focused = next.some((conversation) => conversation.conversationId === focus) ? focus : next[next.length - 1]!.conversationId;
+    /* Where the focus lands when the id asked for names no tab in the list being written — a close taking the
+     * tab that had it. A chat still ON SCREEN wins over the strip's last tab: with several panes open, closing
+     * the focused one should hand the keyboard to a column the user is already looking at and let that column
+     * go, rather than pull an unrelated chat into the vacated slot to hold a focus that had nowhere else to be
+     * (VSCode closes the group with its last editor; this is the same move). With one pane the only pane IS the
+     * closed tab, so this falls through to the last tab exactly as it always has. */
+    const focused = next.some((conversation) => conversation.conversationId === focus)
+        ? focus
+        : (panes.value.find((id) => next.some((conversation) => conversation.conversationId === id)) ?? next[next.length - 1]!.conversationId);
     // The focused tab is always kept, so the list can never come out empty. A dropped draft needs no teardown:
     // untouched means no turn to detach from and no transcript to evict.
     const kept = next.filter((conversation) => conversation.conversationId === focused || !untouchedDraft(conversation));
@@ -135,7 +143,44 @@ const setConversations = (next: readonly Conversation[], focus: string, reason: 
     if (kept.length !== conversations.value.length || kept.some((conversation, at) => conversation !== conversations.value[at])) {
         conversations.value = kept;
     }
+    // Before the focus moves, since which COLUMN the incoming chat lands in is answered by where the focus is
+    // leaving from.
+    reconcilePanes(kept, focused);
     activeId.value = focused;
+};
+
+/* WHICH CHATS ARE ON SCREEN AT ONCE — the panes, in the order they were opened.
+ *
+ * One id is the ordinary case (the docked column has room for nothing else); several is the popped-out window
+ * showing a fleet side by side. The focused pane is `activeId`, always a member, so every surface outside this
+ * panel goes on reading `active` and means "the chat the user is looking at".
+ *
+ * ORDER IS INSERTION ORDER, never the rail's. The rail sorts by lane (attention / active / finished), so a
+ * chat changes rows the moment its turn ends — and panes laid out in rail order would swap columns under the
+ * reader's eyes mid-answer. A pane holds its column from the moment it opens until it closes. */
+const panes = ref<string[]>([]);
+
+/* The pane invariants, held in the same write as the focus and the tab list: every pane names an open tab, the
+ * focused chat is always in one, and the set is never empty.
+ *
+ * The slot rule below is what keeps every existing caller working: a plain tab click, a card on the board, a
+ * deep link and a history row all land on setActive, and none of them means "open another pane" — they mean
+ * "show me this chat", so the incoming chat takes the column the focus was already in and the other panes are
+ * left alone. Opening a pane is a separate verb (openBeside / setPanes). */
+const reconcilePanes = (kept: readonly Conversation[], focused: string): void => {
+    const open = new Set(kept.map((conversation) => conversation.conversationId));
+    const held = panes.value.filter((id) => open.has(id));
+    if (!held.includes(focused)) {
+        const slot = held.indexOf(activeId.value);
+        if (slot === -1) {
+            held.push(focused);
+        } else {
+            held[slot] = focused;
+        }
+    }
+    if (held.length !== panes.value.length || held.some((id, at) => id !== panes.value[at])) {
+        panes.value = held;
+    }
 };
 
 // The focused conversation. The find always hits — setConversations reconciles the focus with every list it
@@ -228,6 +273,14 @@ const restoreTabs = (): void => {
     }
     // `stored.active` names one of the tabs — the reader guarantees it.
     setConversations(stored.tabs.map(restoreTab), stored.active, `restore-snapshot`);
+    /* The pane set comes back with the tabs: how this window is laid out is a decision the user made, and a
+     * reload is not a decision to collapse it back to one chat. Assigned rather than run through setPanes,
+     * which is the only caller with an authoritative ORDER — the columns come back where they were left.
+     * Filtered against what actually restored, since the write above sweeps an untouched draft and a pane
+     * naming one would be a column with nothing in it. */
+    const restored = new Set(conversations.value.map((conversation) => conversation.conversationId));
+    const held = stored.panes.filter((id) => restored.has(id));
+    panes.value = held.length > 0 ? held : [activeId.value];
 };
 
 restoreTabs();
@@ -239,6 +292,7 @@ watch(
     () =>
         JSON.stringify({
             active: activeId.value,
+            panes: panes.value,
             tabs: conversations.value.map((conversation) => ({
                 // JSON.stringify drops undefined keys, matching StoredTab's optional fields.
                 conversationId: conversation.conversationId,
@@ -298,40 +352,243 @@ const loadProviderCommands = async (target: AgentProvider): Promise<void> => {
 // Past conversations from the sandbox's session store, loaded on demand for the history menu.
 const sessions = ref<ChatSession[]>([]);
 
-// Active-conversation facade — the chat panel binds these; they forward to the active tab so the
-// message/composer template stays put as the user switches tabs.
-const messages = computed(() => active.value.messages.value);
-const streaming = computed(() => active.value.streaming.value);
-// The active conversation's slash commands: the list its own turns published (authoritative — it reflects the
-// session's live config), falling back to the provider's last daemon-published list so a conversation that
-// hasn't run a turn yet still has a populated `/` popover.
-const availableCommands = computed<readonly AgentCommand[]>(() => {
-    const own = active.value.availableCommands.value;
-    return own.length > 0 ? own : (providerCommands.value[active.value.provider.value] ?? []);
-});
-const awaitingDecision = computed(() => active.value.awaitingDecision.value);
-const pendingPlanMessage = computed(() => active.value.pendingPlanMessage.value);
-// Whether the active conversation's attach stream is still re-telling frames from before it attached — see
-// Conversation.replaying, and the plan-preview watch below, which is what it exists for.
-const replaying = computed(() => active.value.replaying.value);
-// The active conversation's undelivered messages (submitted while its turn was running) and whether its
-// running turn can take one mid-flight — the composer renders the first and words its hints from the second.
-const queued = computed(() => active.value.queued.value);
-const removeQueued = (id: string): void => active.value.removeQueued(id);
-const steerable = computed(() => active.value.steerable.value);
-// What the active conversation's runtime can do (the contract's declared record) — the composer reads it to
-// offer only the controls something applies, and to say what this provider can't do at all.
-const capabilities = computed(() => active.value.capabilities.value);
-
-// Open (or re-focus) the active conversation's plan preview tab in the main view — the workspace tab is keyed
+// Open (or re-focus) a conversation's plan preview tab in the main view — the workspace tab is keyed
 // `plan:<conversationId>`, so any plan card in the transcript reopens/replaces the same preview, and it stays
 // that conversation's preview across a reload rather than being inherited by whichever chat happens to land in
 // the same strip position. Also the target of the auto-open watch below.
 const { openPlan } = useWorkspaceTabs();
-const openPlanPreview = (plan: PlanRequest): void => {
-    openPlan(active.value.conversationId, planParts(plan.text).title ?? `Plan`, plan.text);
-    void router.push({ name: `workspace` });
+
+/* ONE CONVERSATION, AS A PANEL BINDS IT — the facade every chat surface renders through, over whichever
+ * conversation it was built for rather than over the focused one.
+ *
+ * It exists as a FACTORY because the chat panel shows several conversations at once (the pop-out's panes): a
+ * transcript, its composer, its pickers and its tool cards all have to answer for the chat they are IN, and a
+ * module-level facade over `active` can only ever answer for the focused one. The singleton below builds its
+ * own from `active`, so the store's exported surface — and every consumer outside the panel — is unchanged;
+ * a pane builds one over its own conversation and is right by construction.
+ *
+ * Everything here is a computed or a function, so the factory can be called before the module bindings it
+ * closes over (chatReady, setConversations, loadProviderModels) are initialized: nothing is dereferenced until
+ * a surface reads it. */
+export const conversationView = (conversation: ComputedRef<Conversation>) => ({
+    conversation,
+    messages: computed(() => conversation.value.messages.value),
+    streaming: computed(() => conversation.value.streaming.value),
+    // This conversation's slash commands: the list its own turns published (authoritative — it reflects the
+    // session's live config), falling back to the provider's last daemon-published list so a conversation that
+    // hasn't run a turn yet still has a populated `/` popover.
+    availableCommands: computed<readonly AgentCommand[]>(() => {
+        const own = conversation.value.availableCommands.value;
+        return own.length > 0 ? own : (providerCommands.value[conversation.value.provider.value] ?? []);
+    }),
+    awaitingDecision: computed(() => conversation.value.awaitingDecision.value),
+    pendingPlanMessage: computed(() => conversation.value.pendingPlanMessage.value),
+    // Whether this conversation's attach stream is still re-telling frames from before it attached — see
+    // Conversation.replaying, and the plan-preview watch below, which is what it exists for.
+    replaying: computed(() => conversation.value.replaying.value),
+    // This conversation's undelivered messages (submitted while its turn was running) and whether its running
+    // turn can take one mid-flight — the composer renders the first and words its hints from the second.
+    queued: computed(() => conversation.value.queued.value),
+    removeQueued: (id: string): void => conversation.value.removeQueued(id),
+    steerable: computed(() => conversation.value.steerable.value),
+    // What this conversation's runtime can do (the contract's declared record) — the composer reads it to
+    // offer only the controls something applies, and to say what this provider can't do at all.
+    capabilities: computed(() => conversation.value.capabilities.value),
+    openPlanPreview: (plan: PlanRequest): void => {
+        openPlan(conversation.value.conversationId, planParts(plan.text).title ?? `Plan`, plan.text);
+        void router.push({ name: `workspace` });
+    },
+    activeModel: computed(() => conversation.value.activeModel.value),
+    contextUsage: computed(() => conversation.value.contextUsage.value),
+    // This conversation's permission mode (read + write) — the composer's mode pill drives it. Reads the
+    // RUNNING turn's posture while one is live (the agent can enter plan mode on its own, and the pill must not
+    // claim otherwise); a pick replaces it, because from that click on the user's choice is the truth. Not
+    // written through to the persisted defaults: the posture belongs to the conversation, not to the next one.
+    mode: computed<PermissionMode>({
+        get: () => conversation.value.liveMode.value ?? conversation.value.mode.value,
+        set: (value) => {
+            conversation.value.modePick.value = value;
+            conversation.value.liveMode.value = undefined;
+        },
+    }),
+    // The plan card's approve buttons, the posture the approved plan will RESTORE first.
+    planApprovals: computed(() => approvalsFor(conversation.value.mode.value)),
+    // Turn settings (read+write) — the composer binds these, so switching tabs shows that chat's
+    // provider/model/effort/thinking. All of it is switchable mid-chat: a provider/account switch takes effect
+    // at the next send (see Conversation.send's segment cut).
+    provider: computed<AgentProvider>(() => conversation.value.provider.value),
+    selectProvider: (p: AgentProvider): void => {
+        conversation.value.selectProvider(p);
+        // The catalog is daemon-owned and can be stale (loaded before the account connected, or an empty
+        // transient) — refetch on landing so the model picker is populated on arrival (the daemon caches, so
+        // this is cheap).
+        void loadProviderModels(p);
+    },
+    // The harness (Default = the provider's native runtime, vs the Claude Code loop). Only meaningful for
+    // codex/grok; picked through the model picker's footer chips. A switch retires the session at the next send.
+    harness: computed<AgentHarness>(() => conversation.value.harness.value),
+    // Switch the harness — an axis orthogonal to the model now (the catalog is shared, so the chosen model
+    // rides across). No-ops on claude (always its own loop) and mid-stream (selectHarness guards both).
+    selectHarness: (next: AgentHarness): void => conversation.value.selectHarness(next),
+    model: computed<string>({
+        get: () => conversation.value.model.value,
+        set: (value) => conversation.value.selectModel({ provider: conversation.value.provider.value, value }),
+    }),
+    // Conversation.selectModel is the whole rule (provider re-point, per-provider memory, the mid-stream
+    // guard); what this adds is the catalog refetch, which only a surface that did not open the picker needs —
+    // the picker warms every catalog on mount and so drives the conversation directly.
+    selectModel: (pick: { provider: AgentProvider; value: string }): void => {
+        conversation.value.selectModel(pick);
+        void loadProviderModels(pick.provider);
+    },
+    // The effort the composer shows is the EFFECTIVE one (the pick clamped to the current model's scale);
+    // setting it records a new pick, on this conversation and as the seed for the next new chat.
+    effort: computed<string>({
+        get: () => conversation.value.effort.value,
+        set: (value) => conversation.value.setEffort(value),
+    }),
+    thinking: computed<boolean>({
+        get: () => conversation.value.thinking.value,
+        set: (value) => conversation.value.setThinking(value),
+    }),
+    // Fast speed: the pick, whether the control is offered at all for the current provider/model, and what the
+    // last turn actually ran at. Three values rather than one because they answer different questions — what
+    // the user asked for, whether asking is even possible here, and what came back.
+    fast: computed<boolean>({
+        get: () => conversation.value.fast.value,
+        set: (value) => conversation.value.setFast(value),
+    }),
+    fastOffered: computed<boolean>(() => conversation.value.fastOffered.value),
+    fastMode: computed(() => conversation.value.fastMode.value),
+    // Account facades: this conversation's account selection + the connected accounts of its provider, for the
+    // composer switcher.
+    account: computed<string | undefined>(() => conversation.value.account.value),
+    selectAccount: (id: string): void => conversation.value.selectAccount(id),
+    accounts: computed<readonly OauthAccount[]>(() => accountsOf(conversation.value.provider.value)),
+    // Whether this conversation's selection can actually send — the composer gate.
+    connected: computed(() => chatReady(conversation.value.provider.value, conversation.value.harness.value)),
+    // This conversation's composer draft (text + staged attachments) — per-tab, so switching tabs swaps the
+    // composer back to whatever was typed and attached there.
+    draft: computed<string>({
+        get: () => conversation.value.draft.value,
+        set: (value) => {
+            conversation.value.draft.value = value;
+        },
+    }),
+    attachments: computed<PendingAttachment[]>({
+        get: () => conversation.value.attachments.value,
+        set: (value) => {
+            conversation.value.attachments.value = value;
+        },
+    }),
+    send: (prompt: string, staged?: readonly ChatAttachment[], editorContext?: EditorContext): Promise<void> => {
+        // Core funnel milestone (autocapture misses Enter-key sends); PostHog derives "first message" per person.
+        track(`message_sent`, { agent: conversation.value.provider.value, queued: conversation.value.streaming.value });
+        return conversation.value.enqueue(prompt, staged, editorContext);
+    },
+    stop: (): void => {
+        conversation.value.stop();
+    },
+    /* Edit a past user message and re-run from that point — as a BRANCH, in a new tab. The turns before the
+     * edited message are copied into a fresh conversation which sends the edited text (with the original turn's
+     * attachments) as its first turn; the source conversation is untouched, so the answer being replaced is
+     * still there to compare against and nothing is destroyed by an experiment. The branch's first send seeds a
+     * fresh daemon session from the copied transcript, the same way a provider switch does. */
+    editAndResend: async (message: ChatMessage, text: string): Promise<void> => {
+        const source = conversation.value;
+        const index = source.messages.value.findIndex((entry) => entry.id === message.id);
+        if (index === -1 || message.role !== `user` || source.streaming.value) {
+            return;
+        }
+        // The edited turn's OWN attachments, not the composer's — a branch resends what the original message
+        // carried.
+        const carried = message.attachments ?? [];
+        // Mirror send's own guard before opening a tab, so an empty edit doesn't leave an empty branch behind.
+        if (text.trim().length === 0 && carried.length === 0) {
+            return;
+        }
+        const branch = new Conversation();
+        branch.branchFrom(source, index);
+        setConversations([...conversations.value, branch], branch.conversationId, `branch`);
+        track(`message_sent`, { agent: branch.provider.value, edited: true });
+        await branch.send(text, branch.turnSettings(), carried);
+    },
+    // `nextMode` is the posture the approved plan executes in (Claude Code's auto-accept vs approve-each-edit
+    // choice); a rejection passes `plan` so the agent stays put and revises, with the composer's text and staged
+    // files as the feedback.
+    decidePlan: (
+        message: ChatMessage,
+        approve: boolean,
+        nextMode: PermissionMode,
+        feedback?: string,
+        staged?: readonly ChatAttachment[],
+    ): Promise<void> => conversation.value.decidePlan(message, approve, nextMode, feedback, staged),
+    answerQuestion: (message: ChatMessage, answers: Record<string, string[]>): Promise<void> => conversation.value.answerQuestion(message, answers),
+    cancelQuestion: (message: ChatMessage): Promise<void> => conversation.value.cancelQuestion(message),
+    decidePermission: (message: ChatMessage, decision: "once" | "always" | "deny", feedback?: string): Promise<void> =>
+        conversation.value.decidePermission(message, decision, feedback),
+});
+
+export type ConversationView = ReturnType<typeof conversationView>;
+
+/* THE PANE'S VIEW, for the surfaces under it — the transcript rows, their tool cards, the mode menu, the
+ * account panel. Injected rather than threaded through four levels of props, and it is the pane's OWN view:
+ * a tool card in the right-hand pane must answer for the chat it is in, not for whichever one has the focus.
+ * Absent means the component was mounted outside a pane, which is a wiring mistake rather than a state to
+ * render — so it is discovered at mount instead of silently rendering the focused chat's content. */
+export const PANE_VIEW: InjectionKey<ConversationView> = Symbol(`chat-pane-view`);
+export const usePaneView = (): ConversationView => {
+    const view = inject(PANE_VIEW);
+    if (view === undefined) {
+        throw new Error(`a chat surface was mounted outside a ChatPane`);
+    }
+    return view;
 };
+
+// The focused conversation's view — what the store itself binds, and what every surface outside the chat panel
+// reads through `useChat()`.
+const activeView = conversationView(active);
+const {
+    messages,
+    streaming,
+    availableCommands,
+    awaitingDecision,
+    pendingPlanMessage,
+    replaying,
+    queued,
+    removeQueued,
+    steerable,
+    capabilities,
+    openPlanPreview,
+    activeModel,
+    contextUsage,
+    mode,
+    planApprovals,
+    provider,
+    selectProvider,
+    harness,
+    selectHarness,
+    model,
+    selectModel,
+    effort,
+    thinking,
+    fast,
+    fastOffered,
+    fastMode,
+    account,
+    selectAccount,
+    accounts,
+    connected,
+    draft,
+    attachments,
+    send,
+    stop,
+    editAndResend,
+    decidePlan,
+    answerQuestion,
+    cancelQuestion,
+    decidePermission,
+} = activeView;
 
 /* A newly proposed plan opens as a rendered markdown preview tab in the main view (Claude Code VSCode style);
  * the approve/keep-planning buttons stay on the chat card. Keyed by requestId so unrelated transcript updates
@@ -353,95 +610,11 @@ watch([() => pendingPlanMessage.value?.plan?.requestId, replaying], ([requestId,
     openPlanPreview(plan);
 });
 
-const activeModel = computed(() => active.value.activeModel.value);
-const contextUsage = computed(() => active.value.contextUsage.value);
-// The active conversation's permission mode (read + write) — the composer's mode pill drives it. Reads the
-// RUNNING turn's posture while one is live (the agent can enter plan mode on its own, and the pill must not
-// claim otherwise); a pick replaces it, because from that click on the user's choice is the truth. Not written
-// through to the persisted defaults: the posture belongs to the conversation, not to the next one.
-const mode = computed<PermissionMode>({
-    get: () => active.value.liveMode.value ?? active.value.mode.value,
-    set: (value) => {
-        active.value.modePick.value = value;
-        active.value.liveMode.value = undefined;
-    },
-});
-
-// The plan card's approve buttons for the active conversation, the posture it will RESTORE first.
-const planApprovals = computed(() => approvalsFor(active.value.mode.value));
-
-// Active-conversation turn settings (read+write) — the composer binds these; they forward to the active tab
-// so switching tabs shows that chat's provider/model/effort/thinking. All of it is switchable mid-chat: a
-// provider/account switch takes effect at the next send (see Conversation.send's segment cut).
-const provider = computed<AgentProvider>(() => active.value.provider.value);
-const selectProvider = (p: AgentProvider): void => {
-    active.value.selectProvider(p);
-    // The catalog is daemon-owned and can be stale (loaded before the account connected, or an empty transient)
-    // — refetch on landing so the model picker is populated on arrival (the daemon caches, so this is cheap).
-    void loadProviderModels(p);
-};
-// The active conversation's harness (Default = the provider's native runtime, vs the Claude Code loop). Only
-// meaningful for codex/grok; picked through the model picker's footer chips. A switch retires the session at
-// the next send.
-const harness = computed<AgentHarness>(() => active.value.harness.value);
-// Switch the active conversation's harness — an axis orthogonal to the model now (the catalog is shared, so the
-// chosen model rides across). No-ops on claude (always its own loop) and mid-stream (selectHarness guards both).
-const selectHarness = (next: AgentHarness): void => active.value.selectHarness(next);
-const model = computed<string>({
-    get: () => active.value.model.value,
-    set: (value) => active.value.selectModel({ provider: active.value.provider.value, value }),
-});
-// Conversation.selectModel is the whole rule (provider re-point, per-provider memory, the mid-stream guard);
-// what this adds is the catalog refetch, which only a surface that did not open the picker needs — the picker
-// warms every catalog on mount and so drives the conversation directly.
-const selectModel = (pick: { provider: AgentProvider; value: string }): void => {
-    active.value.selectModel(pick);
-    void loadProviderModels(pick.provider);
-};
-
-// The effort the composer shows is the EFFECTIVE one (the pick clamped to the current model's scale); setting
-// it records a new pick, on this conversation and as the seed for the next new chat.
-const effort = computed<string>({
-    get: () => active.value.effort.value,
-    set: (value) => active.value.setEffort(value),
-});
-const thinking = computed<boolean>({
-    get: () => active.value.thinking.value,
-    set: (value) => active.value.setThinking(value),
-});
-// Fast speed: the pick, whether the control is offered at all for the current provider/model, and what the
-// last turn actually ran at. Three values rather than one because they answer different questions — what the
-// user asked for, whether asking is even possible here, and what came back.
-const fast = computed<boolean>({
-    get: () => active.value.fast.value,
-    set: (value) => active.value.setFast(value),
-});
-const fastOffered = computed<boolean>(() => active.value.fastOffered.value);
-const fastMode = computed(() => active.value.fastMode.value);
-// Account facades: the active conversation's account selection + its picker. `accounts` lists the active
-// provider's connected accounts for the composer switcher; `managedAccounts` the manage card's.
-const account = computed<string | undefined>(() => active.value.account.value);
-const selectAccount = (id: string): void => active.value.selectAccount(id);
 // Providers are an open string vocabulary — an unseeded key (an ACP agent, which owns its own credentials)
 // simply has no daemon account list.
 export const accountsOf = (target: AgentProvider): readonly OauthAccount[] => providerAccounts.value[target] ?? [];
-const accounts = computed<readonly OauthAccount[]>(() => accountsOf(active.value.provider.value));
+// The manage card's accounts, which follow the card's own provider rather than any conversation's.
 const managedAccounts = computed<readonly OauthAccount[]>(() => accountsOf(managedProvider.value));
-
-// The active conversation's composer draft (text + staged attachments) — per-tab, so switching tabs swaps the
-// composer back to whatever was typed and attached there.
-const draft = computed<string>({
-    get: () => active.value.draft.value,
-    set: (value) => {
-        active.value.draft.value = value;
-    },
-});
-const attachments = computed<PendingAttachment[]>({
-    get: () => active.value.attachments.value,
-    set: (value) => {
-        active.value.attachments.value = value;
-    },
-});
 
 // The route prefix each provider's daemon routes live under.
 // An endpoint's catalog route carries its capability id, since there is one route per configured endpoint
@@ -671,7 +844,6 @@ const chatReady = (target: AgentProvider, loop: AgentHarness): boolean => {
     }
     return hasAccount(target) || acpProviders.value.some((agent) => agent.id === target);
 };
-const connected = computed(() => chatReady(provider.value, harness.value));
 const claudeConnected = computed(() => hasAccount(`claude`));
 
 // Keep the composer usable whenever ANY provider has an account: when the connection state changes (initial
@@ -1021,6 +1193,59 @@ const setActive = (conversationId: string): void => {
     }
 };
 
+const isOpen = (conversationId: string): boolean => conversations.value.some((conversation) => conversation.conversationId === conversationId);
+
+/* --- The panes ---------------------------------------------------------------------------------
+ * Three verbs over the pane set, and the only ways to change how many chats are on screen — everything else
+ * that touches the focus goes through setActive and swaps a column rather than adding one.
+ *
+ * Give a chat a column of its OWN, immediately right of the focused pane (VSCode's Open to the Side), and put
+ * the focus in it. Already on screen ⇒ this is just a focus move, which is what the user means by asking for a
+ * chat they can already see.
+ *
+ * The column is claimed for an id that need not name an open tab YET, so a surface handing over a conversation
+ * it is about to open — the fleet board's cards — calls this FIRST and opens second. That order is what stops
+ * the opening from eating the focused pane's column on its way in: by the time the pane set is reconciled the
+ * id names a real tab, the focus is already inside the set, and the chat that was there keeps its place. A
+ * claim nobody follows through on costs nothing — the next reconcile drops an id that names no tab. */
+const openBeside = (conversationId: string): void => {
+    if (!panes.value.includes(conversationId)) {
+        const beside = panes.value.indexOf(activeId.value);
+        panes.value = panes.value.toSpliced(beside === -1 ? panes.value.length : beside + 1, 0, conversationId);
+    }
+    setActive(conversationId);
+};
+
+// Take a chat's column back. The chat itself stays open — it is still in the rail, one click from a column
+// again — and the last pane is never closed, since that one IS the panel.
+const closePane = (conversationId: string): void => {
+    if (panes.value.length < 2 || !panes.value.includes(conversationId)) {
+        return;
+    }
+    const rest = panes.value.filter((id) => id !== conversationId);
+    panes.value = rest;
+    if (activeId.value === conversationId) {
+        // The neighbour that took its place on screen, which is where the eye already is.
+        setActive(rest[rest.length - 1]!);
+    }
+};
+
+/* The pane set as a whole — what a multi-selection on the rail or the board lands as. Chats already on screen
+ * KEEP their columns and the newcomers are appended in the order given, so adding a third chat never reshuffles
+ * the two the user is reading. An empty selection is not a request for an empty panel and is ignored; the way
+ * to have fewer panes is to close one. */
+const setPanes = (ids: readonly string[]): void => {
+    const wanted = [...new Set(ids)].filter(isOpen);
+    if (wanted.length === 0) {
+        return;
+    }
+    const kept = panes.value.filter((id) => wanted.includes(id));
+    panes.value = [...kept, ...wanted.filter((id) => !kept.includes(id))];
+    if (!panes.value.includes(activeId.value)) {
+        setActive(panes.value[0]!);
+    }
+};
+
 // Close a set of tabs (the tab ×, or the strip menu's Close / Close Others / Close to the Right / Close All):
 // detach from each in-flight turn (Conversation.abort is soft — the daemon-side run keeps working and reopening
 // reattaches to it), drop each cached transcript, and keep at least one conversation — a fresh chat when
@@ -1073,59 +1298,6 @@ const closeRetired = (ids: ReadonlySet<string>): void => {
 // --- Active-conversation actions (forwarded) --------------------------------------------------
 // The composer's one send path, whatever the conversation is doing: an idle chat starts a turn, a running one
 // takes the message mid-turn (or holds it until it settles). See Conversation.enqueue.
-const send = (prompt: string, staged?: readonly ChatAttachment[], editorContext?: EditorContext): Promise<void> => {
-    // Core funnel milestone (autocapture misses Enter-key sends); PostHog derives "first message" per person.
-    track(`message_sent`, { agent: active.value.provider.value, queued: active.value.streaming.value });
-    return active.value.enqueue(prompt, staged, editorContext);
-};
-
-// Edit a past user message and re-run from that point — as a BRANCH, in a new tab. The turns before the
-// edited message are copied into a fresh conversation which sends the edited text (with the original turn's
-// attachments) as its first turn; the source conversation is untouched, so the answer being replaced is still
-// there to compare against and nothing is destroyed by an experiment. The branch's first send seeds a fresh
-// daemon session from the copied transcript, the same way a provider switch does.
-const editAndResend = async (message: ChatMessage, text: string): Promise<void> => {
-    const source = active.value;
-    const index = source.messages.value.findIndex((entry) => entry.id === message.id);
-    if (index === -1 || message.role !== `user` || source.streaming.value) {
-        return;
-    }
-    // The edited turn's OWN attachments, not the composer's (`attachments` above) — a branch resends what the
-    // original message carried.
-    const carried = message.attachments ?? [];
-    // Mirror send's own guard before opening a tab, so an empty edit doesn't leave an empty branch behind.
-    if (text.trim().length === 0 && carried.length === 0) {
-        return;
-    }
-    const branch = new Conversation();
-    branch.branchFrom(source, index);
-    setConversations([...conversations.value, branch], branch.conversationId, `branch`);
-    track(`message_sent`, { agent: branch.provider.value, edited: true });
-    await branch.send(text, branch.turnSettings(), carried);
-};
-
-const stop = (): void => {
-    active.value.stop();
-};
-
-// `nextMode` is the posture the approved plan executes in (Claude Code's auto-accept vs approve-each-edit
-// choice); a rejection passes `plan` so the agent stays put and revises, with the composer's text and staged
-// files as the feedback.
-const decidePlan = (
-    message: ChatMessage,
-    approve: boolean,
-    nextMode: PermissionMode,
-    feedback?: string,
-    staged?: readonly ChatAttachment[],
-): Promise<void> => active.value.decidePlan(message, approve, nextMode, feedback, staged);
-
-const answerQuestion = (message: ChatMessage, answers: Record<string, string[]>): Promise<void> => active.value.answerQuestion(message, answers);
-
-const cancelQuestion = (message: ChatMessage): Promise<void> => active.value.cancelQuestion(message);
-
-const decidePermission = (message: ChatMessage, decision: "once" | "always" | "deny", feedback?: string): Promise<void> =>
-    active.value.decidePermission(message, decision, feedback);
-
 // --- History ----------------------------------------------------------------------------------
 // Refresh the history list from the sandbox's session store (call when opening the history menu). A query
 // filters the list by chat title or content, server-side.
@@ -1714,6 +1886,10 @@ export function useChat() {
         conversations,
         activeId,
         active,
+        panes,
+        openBeside,
+        closePane,
+        setPanes,
         sessions,
         messages,
         streaming,

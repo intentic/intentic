@@ -57,9 +57,11 @@ vi.mock("./ChatTodoList.vue", () => ({ default: { render: () => undefined } }));
 vi.mock("./ChatToolCard.vue", () => ({ default: { render: () => undefined } }));
 vi.mock("./ChatToolGroup.vue", () => ({ default: { render: () => undefined } }));
 
+// The row reads its PANE's conversation, not the focused one (useChat's PANE_VIEW) — so what stands in for the
+// store here is the pane's view, and `conversation` is the chat this row belongs to.
 vi.mock("../composables/chat/useChat", async () => {
     const { ref, shallowRef } = await import("vue");
-    const active = shallowRef({
+    const conversation = shallowRef({
         conversationId: `agent-1`,
         providerRetry: ref(undefined),
         turnStartedAt: {
@@ -69,8 +71,8 @@ vi.mock("../composables/chat/useChat", async () => {
         },
     });
     return {
-        useChat: () => ({
-            active,
+        usePaneView: () => ({
+            conversation,
             decidePlan: vi.fn(),
             planApprovals: ref([]),
             answerQuestion: vi.fn(),
