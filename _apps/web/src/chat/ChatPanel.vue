@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic/ui";
+import { Icon, useDevice } from "@intentic/ui";
 import { computed, nextTick, ref, watch } from "vue";
+import { chatRun, closeRun, showRun } from "../composables/chat/chatRun";
 import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { transcriptView } from "../composables/chat/transcriptClock";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
+import { useAgents } from "../composables/agents/useAgents";
+import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { useLayout } from "../composables/useLayout";
 import ChatPane from "./ChatPane.vue";
+import ChatRunGraph from "./ChatRunGraph.vue";
 import ChatTabs from "./ChatTabs.vue";
 import ChatTabsMobile from "./ChatTabsMobile.vue";
 
@@ -21,7 +25,7 @@ import ChatTabsMobile from "./ChatTabsMobile.vue";
  * the resize handle disappears. Popped out the panel turns on its side: the strip becomes a left rail, and the
  * panes stand side by side in the room that leaves. */
 
-const { active, activeId, conversations, panes, setActive, closeTabs, openConversation } = useChat();
+const { active, activeId, conversations, panes, setActive, setPanes, openBeside, closeTabs, openConversation } = useChat();
 const layout = useLayout();
 const { poppedOut, fit } = useChatPopout();
 const { mobile } = useDevice();
@@ -66,6 +70,37 @@ watch([() => activeId.value, paneIds], () => {
         paneRow.value?.querySelector(`.chat-pane-on`)?.scrollIntoView({ block: `nearest`, inline: `nearest` });
     });
 });
+
+/* --- The run this panel is showing ----------------------------------------------------------------
+ * A workflow run opened from the fleet board takes over the pane area: its live sessions in the columns, and
+ * one press back, the diagram they came from. Only while POPPED OUT and on a desktop, for the same reason the
+ * split itself is: a run's whole point is several sessions at once, and a 22rem docked column can hold one.
+ *
+ * The run is looked up rather than held (see chatRun): the ledger is polled, so the graph a reader is looking
+ * at keeps up with the run under it instead of freezing at the moment they clicked.
+ */
+const { runs } = useWorkflowRuns();
+const { agentById, open: openAgent } = useAgents();
+const shownRun = computed(() => (poppedOut.value && !mobile.value ? runs.value.find((run) => run.runId === chatRun.value?.runId) : undefined));
+const showingGraph = computed(() => shownRun.value !== undefined && chatRun.value?.mode === `graph`);
+
+/* A column of the diagram, onto the columns of the panel — the one gesture the graph offers, and the reason
+ * the two words are the same word. Conversations the fleet does not know are dropped rather than opened as
+ * empty tabs; when that leaves nothing, the graph stays up, because a back arrow that lands on an empty pane
+ * set would read as the press having broken something. */
+const openRunColumn = (conversationIds: readonly string[]): void => {
+    const runId = chatRun.value?.runId;
+    const known = conversationIds.map((id) => agentById(id)).filter((agent) => agent !== undefined);
+    if (runId === undefined || known.length === 0) {
+        return;
+    }
+    for (const agent of known) {
+        openBeside(agent.id);
+        openAgent(agent);
+    }
+    setPanes(known.map((agent) => agent.id));
+    showRun(runId, `sessions`);
+};
 
 // A pane the window has no room for is a pane the user cannot see, so adding one asks the window to widen
 // (usePopout.fit only ever grows it, and only as far as the screen allows). Docked, there is no window of ours
@@ -146,16 +181,53 @@ const endResize = (event: PointerEvent): void => {
         <ChatTabsMobile v-if="mobile" @select="setActive" @close="closeTabs" @open="openConversation" />
         <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />
 
-        <!-- The panes, sharing the room equally (the terminal panel's split cells, which this is the chat's
-             half of) until the floor, past which the row scrolls sideways rather than crushing them. -->
-        <div ref="paneRow" class="chat-panes flex min-h-0 min-w-0 flex-1 overflow-x-auto" :class="{ 'chat-panes-split': split }">
-            <ChatPane
-                v-for="(conversation, at) in shown"
-                :key="conversation.conversationId"
-                :conversation="conversation"
-                :focused="paneIds[at] === activeId"
-                @focus="setActive(conversation.conversationId)"
-            />
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+            <!-- THE RUN BAR, and the back arrow is the whole of it. Sessions ⇄ diagram is a there-and-back,
+                 not a place in a history, so it is one arrow that points at the map and is absent once you
+                 are on it — the folder/file relationship, drawn the way every file manager draws it. Above
+                 the panes rather than inside one: the run owns all of the columns, not the focused one. -->
+            <div v-if="shownRun" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
+                <button
+                    v-if="!showingGraph"
+                    type="button"
+                    class="flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                    v-tooltip.bottom="`Back to the diagram — every step of this run`"
+                    aria-label="Back to the run's diagram"
+                    @click="showRun(shownRun.runId, `graph`)"
+                >
+                    <Icon name="arrow-left" class="text-2xs" />
+                </button>
+                <Icon v-else name="sitemap" class="shrink-0 text-2xs text-link" />
+                <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ shownRun.workflow.name }}</span>
+                <span class="shrink-0 text-2xs text-subtle"
+                    >{{ shownRun.steps.filter((step) => step.state === `done`).length }}/{{ shownRun.steps.length }}</span
+                >
+                <button
+                    type="button"
+                    class="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"
+                    v-tooltip.bottom="`Leave the run — the chats stay open`"
+                    aria-label="Leave the run"
+                    @click="closeRun()"
+                >
+                    <Icon name="times" class="text-2xs" />
+                </button>
+            </div>
+
+            <!-- The diagram takes the pane area whole: it is the map OF those columns, so showing it beside
+                 them would be asking the reader to hold two answers to one question. -->
+            <ChatRunGraph v-if="showingGraph && shownRun" :run="shownRun" class="min-h-0 flex-1" @open="openRunColumn" />
+
+            <!-- The panes, sharing the room equally (the terminal panel's split cells, which this is the chat's
+                 half of) until the floor, past which the row scrolls sideways rather than crushing them. -->
+            <div v-else ref="paneRow" class="chat-panes flex min-h-0 min-w-0 flex-1 overflow-x-auto" :class="{ 'chat-panes-split': split }">
+                <ChatPane
+                    v-for="(conversation, at) in shown"
+                    :key="conversation.conversationId"
+                    :conversation="conversation"
+                    :focused="paneIds[at] === activeId"
+                    @focus="setActive(conversation.conversationId)"
+                />
+            </div>
         </div>
     </div>
 </template>

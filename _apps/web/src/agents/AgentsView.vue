@@ -14,8 +14,10 @@ import type { FleetLane } from "../composables/agents/agentStatus";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import { laneOfRun, liveConversations, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
+import { showRun } from "../composables/chat/chatRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { useChat } from "../composables/chat/useChat";
+import { useChatPopout } from "../composables/chat/useChatPopout";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import FilterField from "../components/FilterField.vue";
 import AgentCard from "./AgentCard.vue";
@@ -90,6 +92,7 @@ const {
     agentById,
 } = useAgents();
 const { active, openConversation, panes, openBeside, closePane, setPanes } = useChat();
+const { popOut: popOutChat } = useChatPopout();
 // This agent's chat has a column in the chat window but not the focus — the board's half of the rail's
 // "showing" mark, so a split is legible from either surface.
 const showingInPane = (id: string): boolean => panes.value.length > 1 && id !== active.value.conversationId && panes.value.includes(id);
@@ -582,35 +585,40 @@ const runsFor = (lane: FleetLane): WorkflowRun[] => {
     return lane === `finished` ? inLane.slice(0, FINISHED_WINDOW) : inLane;
 };
 
+// The run's DESIGN, on the workflows page — a different question from "what is it doing", and the only one
+// this board cannot answer: editing the graph belongs where the graph is authored.
 const openRunGraph = (run: WorkflowRun): void => {
     void router.push({ name: `extension`, params: { ext: `workflows` }, query: { run: run.runId } });
 };
 
-/* OPENING A RUN PUTS ITS LIVE SESSIONS ON SCREEN, one column each — the same act the board's shift-click
- * performs over a range of cards (paneGesture), because it is the same thing: a set of chats onto a set of
- * columns. The difference is only who chose the set, and a workflow is somebody having chosen it in advance.
- * This is the whole reason the card belongs on THIS board rather than only on the workflows page: the panes
- * are here.
+/* OPENING A RUN PUTS ITS SESSIONS IN THE CHAT PANEL, one column each, and pops the panel out to hold them.
  *
- * A run with nothing live — finished, or in the seconds between one step ending and the next registering its
- * conversation — has no sessions to show, so it opens its GRAPH instead. An empty pane set would read as a
- * click that did nothing, and for a finished run the graph is where the answer is anyway.
+ * IT DOES NOT NAVIGATE, and that is the correction: sending the main view to the workflows extension answered
+ * a question nobody asked. What a person wants from a run in flight is the transcripts — several at once,
+ * which is precisely what the popped-out panel is for — and a page showing a picture of them is a detour on
+ * the way there. The picture is still one press away, as the panel's own back arrow (chatRun's two modes).
+ *
+ * A run with nothing live — finished, failed, or in the seconds between one step ending and the next
+ * registering its conversation — opens on the DIAGRAM instead, which is the map you pick a session from. Same
+ * panel, same run, other mode: the click always lands somewhere that can answer.
  */
 const openRun = (run: WorkflowRun): void => {
     const known = liveConversations(run)
         .map((id) => agentById(id))
         .filter((agent): agent is FleetAgent => agent !== undefined);
-    if (known.length === 0) {
-        openRunGraph(run);
-        return;
-    }
+    // Popped out first: the panes only exist in the window, so a run opened into a docked column would set a
+    // split nobody can see. Idempotent, and a no-op when the window is already up.
+    popOutChat();
+    showRun(run.runId, known.length === 0 ? `graph` : `sessions`);
     for (const agent of known) {
         // Claimed before opening, for the reason the card gestures do it: the opening would otherwise take the
         // focused pane's column on its way in.
         openBeside(agent.id);
         open(agent);
     }
-    setPanes(known.map((agent) => agent.id));
+    if (known.length > 0) {
+        setPanes(known.map((agent) => agent.id));
+    }
 };
 
 // Which runs have been asked to stop and have not settled yet. The daemon's stop is graceful — steps in

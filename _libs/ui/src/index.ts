@@ -23,7 +23,10 @@ export { default as DagGraph } from "./components/DagGraph.vue";
 // Types only. The DAG layout FUNCTIONS ship as `@intentic/ui/dag` for the same reason the markdown engine
 // does: they are plain TypeScript, and a unit test should not have to boot this barrel's component graph (and a
 // DOM with it) to call one. See the note above renderMarkdown's subpath.
-export { type DagEdge, type DagNode } from "./components/dagLayout.js";
+// `layoutDag` ships beside the types because a caller sometimes needs to know WHERE the graph put things —
+// the chat panel groups a run's steps into the columns the reader can see, and computing that from the
+// dependency depth instead would be a second opinion about a layout dagre has already decided.
+export { type DagEdge, type DagNode, layoutDag } from "./components/dagLayout.js";
 // The instrument above a list — free text, the controls that narrow it, and any bare action. In the kit rather
 // than in any one view because six views had written the row by hand and no two of them agreed.
 export { default as FilterBar } from "./components/FilterBar.vue";

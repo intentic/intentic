@@ -1,0 +1,88 @@
+import { layoutDag } from "@intentic/ui";
+import type { DagNode } from "@intentic/ui";
+import { workflowDag } from "@intentic/ext-workflows";
+import type { WorkflowRun } from "@intentic/sandbox-contract";
+import { ref } from "vue";
+
+/* A WORKFLOW RUN, INSIDE THE CHAT PANEL — the state behind "show me what this run is doing".
+ *
+ * WHY IT IS NOT A NAVIGATION. Opening a run used to send the main view to the workflows extension, which is
+ * the wrong half of the screen: what a person wants from a live run is the SESSIONS, and sessions are chats.
+ * Sending them to a page elsewhere meant leaving the panel that can show four transcripts at once in order to
+ * look at a picture of them. So the run rides in the chat panel, which already knows how to put N conversations
+ * side by side, and the picture is a mode of that panel rather than a different address.
+ *
+ * TWO MODES, AND THE BACK ARROW IS THE HINGE. `sessions` is the panes, which is where you land: the run's live
+ * steps, one column each. `graph` is the diagram, one press back from them — the map you go to in order to
+ * choose a different part of the run. It is the same relationship a folder has to a file, and the arrow points
+ * the same way.
+ *
+ * The run itself is NOT held here, only its id: the ledger is polled (useWorkflowRuns) and a snapshot taken at
+ * click time would freeze the graph at the moment it was opened — every node still `pending`, forever.
+ */
+
+export type ChatRunMode = "sessions" | "graph";
+
+export interface ChatRunView {
+    readonly runId: string;
+    readonly mode: ChatRunMode;
+}
+
+export const chatRun = ref<ChatRunView | undefined>();
+
+export const showRun = (runId: string, mode: ChatRunMode): void => {
+    chatRun.value = { runId, mode };
+};
+
+export const closeRun = (): void => {
+    chatRun.value = undefined;
+};
+
+/* THE NODE GEOMETRY, here rather than in the component, because two things have to agree about it: the graph
+ * the user clicks and the columns this file computes from the same layout. A node size passed to one and not
+ * the other would put the seam between columns somewhere nobody can see.
+ */
+export const RUN_NODE_WIDTH = 216;
+export const RUN_NODE_HEIGHT = 62;
+
+export interface RunColumn {
+    // The steps dagre put at this depth — what the reader sees as one vertical band of the diagram.
+    readonly stepIds: readonly string[];
+    // Their conversations, deduped and in column order. Steps that never started are left out: their id names
+    // a conversation the daemon has not opened, and a pane for one is an empty chat that explains nothing.
+    readonly conversationIds: readonly string[];
+}
+
+/* The run's steps grouped into the columns the diagram DRAWS, keyed by step id.
+ *
+ * Grouped on the laid-out x rather than on dependency depth, and the difference is not academic: dagre ranks
+ * with network simplex, so a step whose only dependency finished three columns back is drawn beside the work
+ * it feeds and not beside the work it waited for. Computing "depth" here instead would be a second opinion
+ * about a picture the user is looking at, and the first time the two disagreed the click would open a column
+ * other than the one under the pointer.
+ */
+export const runColumns = (run: WorkflowRun): Map<string, RunColumn> => {
+    const { nodes, edges } = workflowDag(run.workflow, run);
+    const positions = layoutDag(nodes as readonly DagNode<never>[], edges, {
+        direction: `LR`,
+        nodeWidth: RUN_NODE_WIDTH,
+        nodeHeight: RUN_NODE_HEIGHT,
+    });
+    const byX = new Map<number, string[]>();
+    for (const node of nodes) {
+        const x = positions.get(node.id)?.x ?? 0;
+        byX.set(x, [...(byX.get(x) ?? []), node.id]);
+    }
+    const started = new Map(run.steps.filter((step) => step.state !== `pending`).map((step) => [step.stepId, step.conversationId]));
+    const columns = new Map<string, RunColumn>();
+    for (const stepIds of byX.values()) {
+        // A `continue` step shares its predecessor's conversation, so a column holding both must not open the
+        // same chat twice — the pane set is a set, and asking for two of one would silently be one.
+        const conversationIds = [...new Set(stepIds.flatMap((id) => (started.has(id) ? [started.get(id)!] : [])))];
+        const column: RunColumn = { stepIds, conversationIds };
+        for (const id of stepIds) {
+            columns.set(id, column);
+        }
+    }
+    return columns;
+};
