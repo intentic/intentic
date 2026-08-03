@@ -31,9 +31,6 @@ const DEFAULTS = {
     output: { kind: `claim` },
     checks: [],
     context: `fresh`,
-    maxIterations: 8,
-    stallLimit: 2,
-    maxSpendUsd: 5,
 } as const satisfies Omit<WorkflowStep, "id" | "title" | "needs">;
 
 /* A slug-shaped, unique id. Minted rather than typed because it is spliced into a conversation id and a git

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, Popover, ResizeSeam, ToggleSwitch } from "@intentic/extension-ui";
+import { Button, cmp, Icon, Popover, ResizeSeam } from "@intentic/extension-ui";
 import { type Workflow, workflowFaults } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import StepInspector from "./StepInspector.vue";
@@ -247,44 +247,18 @@ const commit = async (): Promise<void> => {
              in with a step's own fields. -->
         <Popover ref="settings">
             <div class="flex w-80 flex-col gap-3 p-1">
-                <label class="flex items-start gap-2">
-                    <ToggleSwitch :model-value="draft.isolated" @update:model-value="patch({ isolated: $event })" />
-                    <span class="flex flex-col">
-                        <span class="text-xs font-medium text-content">Work on branches</span>
-                        <span class="text-2xs text-subtle">
-                            {{
-                                draft.isolated
-                                    ? `Each new agent gets its own worktree off main, and is told the branch the steps before it worked on.`
-                                    : `Every step works directly on this workspace, so each sees what the last one did — but steps running side by side share one tree.`
-                            }}
-                        </span>
-                    </span>
+                <label class="flex flex-col gap-1">
+                    <span :class="cmp.sectionLabel()">At once</span>
+                    <input
+                        :value="draft.maxParallel"
+                        type="number"
+                        min="1"
+                        max="8"
+                        :class="[cmp.input(), `w-20`]"
+                        @input="patch({ maxParallel: Number(($event.target as HTMLInputElement).value) })"
+                    />
+                    <span class="text-2xs text-subtle">How many steps may run side by side. Every one of them works in a worktree of its own.</span>
                 </label>
-                <div class="flex flex-wrap items-end gap-3">
-                    <label class="flex flex-col gap-1">
-                        <span :class="cmp.sectionLabel()">At once</span>
-                        <input
-                            :value="draft.maxParallel"
-                            type="number"
-                            min="1"
-                            max="8"
-                            :class="[cmp.input(), `w-20`]"
-                            @input="patch({ maxParallel: Number(($event.target as HTMLInputElement).value) })"
-                        />
-                    </label>
-                    <label class="flex flex-col gap-1">
-                        <span :class="cmp.sectionLabel()">Whole run, at most</span>
-                        <input
-                            :value="draft.maxSpendUsd ?? ``"
-                            type="number"
-                            min="1"
-                            step="1"
-                            placeholder="dollars"
-                            :class="[cmp.input(), `w-28`]"
-                            @input="patch({ maxSpendUsd: Number(($event.target as HTMLInputElement).value) || undefined })"
-                        />
-                    </label>
-                </div>
                 <label class="flex flex-col gap-1">
                     <span :class="cmp.sectionLabel()">What it is for</span>
                     <input

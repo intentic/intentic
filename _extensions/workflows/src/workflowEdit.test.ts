@@ -14,9 +14,7 @@ const base = (): Workflow => ({
     id: `wf`,
     name: `a workflow`,
     steps: [],
-    isolated: true,
     maxParallel: 2,
-    maxSpendUsd: 15,
 });
 
 // Build a workflow of `n` chained steps through the real API, so the fixtures are themselves an edit trace.

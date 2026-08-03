@@ -15,10 +15,10 @@ import type { OutputField, Workflow, WorkflowStep } from "@intentic/sandbox-cont
  * worktrees, and a third session that reads both diffs and writes the version worth keeping. By hand that is
  * two chats, two branches, and a comparison you hold in your head from two transcripts you cannot read at once.
  *
- * AND IT TEACHES EVERY SHAPE AT ONCE, which is why one card does the work five did: a fan-out that IS the
- * start of the run, a fan-in that reads what both arms produced, a step declaring structured output for the
- * one after it to act on, a session judging work it did not do, and a continued chain finishing the job under
- * a command gate. templates.test.ts asserts exactly that, so the claim cannot quietly stop being true.
+ * AND IT TEACHES THE SHAPES IN THREE STEPS: a fan-out that IS the start of the run, a fan-in that reads what
+ * both arms produced, steps declaring structured output for the one after them to act on, and a session
+ * judging work it did not do — closed by a command gate. templates.test.ts asserts exactly that, so the claim
+ * cannot quietly stop being true.
  */
 
 export interface WorkflowTemplate {
@@ -29,9 +29,8 @@ export interface WorkflowTemplate {
     readonly workflow: Workflow;
 }
 
-// Defaults every step shares unless it says otherwise. A step is mostly prose; these are the knobs that would
-// otherwise be repeated forty times, and their values are the safe ones — eight iterations is a real
-// convergence budget, two idle rounds catches a stall before it is expensive.
+// What a step is when it says nothing else. Short, because a step is mostly prose now: there are no ceilings
+// to declare, no worktree to opt into, and nothing to budget — a step runs the way any agent session runs.
 const step = (id: string, title: string, over: Partial<WorkflowStep> & Pick<WorkflowStep, "goal" | "prompt">): WorkflowStep => ({
     id,
     title,
@@ -40,9 +39,6 @@ const step = (id: string, title: string, over: Partial<WorkflowStep> & Pick<Work
     output: { kind: `claim` },
     checks: [],
     context: `fresh`,
-    maxIterations: 8,
-    stallLimit: 2,
-    maxSpendUsd: 5,
     ...over,
 });
 
@@ -65,14 +61,9 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
             id: `two-models-one-task`,
             name: `Two models, one task`,
             description: `One request, built twice at once by different models in their own worktrees, then read side by side and merged into the version worth keeping.`,
-            // NOT NEGOTIABLE for this shape. Isolated is what gives each attempt its own worktree and its own
-            // branch — without it the two would write over each other in /work, and there would be no two diffs
-            // left to compare.
-            isolated: true,
             // Two, which is the width of the fan-out AND the width of the run's first moment: both attempts
             // start at once, so a 1 here would silently make this a race with a false start.
             maxParallel: 2,
-            maxSpendUsd: 25,
             steps: [
                 /* THE TWO ATTEMPTS, AND THEY ARE WHERE THE RUN STARTS. Your request reaches both of them
                  * directly, at the same moment, as the first thing either session is told — which is what makes
@@ -98,68 +89,42 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                     goal: `What was asked for is built, on this session's own branch.`,
                     prompt: `Build what the request above asks for. Read the code it touches before you change any of it. You are in a worktree of your own and nothing else is working in it, so commit as you go; follow the repo's own conventions rather than importing new ones, and stay inside what was actually asked for.`,
                     output: { kind: `json`, fields: attemptFields() },
-                    maxIterations: 10,
-                    maxSpendUsd: 10,
                 }),
                 step(`attempt-b`, `GPT's attempt`, {
                     agent: `codex`,
                     goal: `What was asked for is built, on this session's own branch.`,
                     prompt: `Build what the request above asks for. Read the code it touches before you change any of it. You are in a worktree of your own and nothing else is working in it, so commit as you go; follow the repo's own conventions rather than importing new ones, and stay inside what was actually asked for.`,
                     output: { kind: `json`, fields: attemptFields() },
-                    maxIterations: 10,
-                    maxSpendUsd: 10,
                 }),
-                /* THE FAN-IN. Fresh, so it wrote neither attempt and has no stake in either — the same reason a
-                 * reviewer is a different session, and the reason this reading is worth more than asking either
-                 * author which one won. It is handed two documents and two BRANCH NAMES (the run supplies those
-                 * on an isolated workflow), so `git diff main...<branch>` is the whole of its reading.
+                /* THE SYNTHESIS — one step, and it both reads and writes.
+                 *
+                 * It was two: a session that read the diffs and reported a verdict, then a continued session
+                 * that wrote the merge from it. That split bought nothing. The two ran on one conversation
+                 * anyway (`continue`), so it was never two opinions — just one session made to stop, publish a
+                 * structured account of what it had just read, and be handed its own words back. The account
+                 * was for nobody: no other step consumed it, and the reader who wants it has the diff.
+                 *
+                 * FRESH, so it wrote neither attempt and has no stake in either — the same reason a reviewer is
+                 * a different session, and what makes this merge worth more than asking either author which one
+                 * won. It is handed both documents and both BRANCH NAMES (the run supplies those), so
+                 * `git diff main...<branch>` is the whole of its reading, and its own worktree is a clean
+                 * checkout that is neither attempt — exactly the tree a merge of the two wants to start from.
+                 * What comes out is a third branch, and that is the one you land.
                  *
                  * Unpinned, so it runs on whatever you normally use. If you have a third provider connected,
                  * pinning it here is the upgrade: a judge from neither family has no house style to reward. */
-                step(`compare`, `Read both diffs`, {
+                step(`synthesise`, `Take the best of both`, {
                     needs: [`attempt-a`, `attempt-b`],
-                    goal: `Both diffs have been read in full, and there is a specific account of what each one got right and wrong.`,
-                    prompt: `Two sessions were given the request above and each built it, on the branches named above. Read both diffs in full — the diffs, not the summaries of them. Judge them against the brief and against the code they had to live in, not against your own taste in style. Be specific enough that someone could act on this without reading the diffs again.`,
-                    output: {
-                        kind: `json`,
-                        fields: [
-                            {
-                                name: `stronger`,
-                                type: `string`,
-                                description: `Which attempt is the better base to build on, and why, in one sentence`,
-                                required: true,
-                            },
-                            {
-                                name: `keep`,
-                                type: `string[]`,
-                                description: `Each decision worth keeping, naming the attempt it came from`,
-                                required: true,
-                            },
-                            {
-                                name: `drop`,
-                                type: `string[]`,
-                                description: `What either attempt got wrong, so the merge does not inherit it`,
-                                required: true,
-                            },
-                        ],
-                    },
-                    maxIterations: 4,
-                }),
-                /* THE SYNTHESIS, CONTINUED — the one place in this graph where sharing a session is plainly
-                 * right. It has just read both diffs; a fresh session here would be handed a summary of a
-                 * reading it would have to do again. Continuing also means it writes in the comparison's own
-                 * worktree — a clean checkout that is neither attempt, which is exactly the tree a merge of the
-                 * two wants to start from. What comes out is a third branch, and that is the one you land. */
-                step(`merge`, `Write the better version`, {
-                    needs: [`compare`],
-                    handoff: `continue`,
-                    context: `continue`,
-                    goal: `One coherent implementation exists that keeps everything you said to keep, and the suite is green.`,
-                    prompt: `Now write the version you just argued for, here in your own worktree. Start from the stronger attempt rather than retyping it: the two are on branches ending \`-attempt-a\` and \`-attempt-b\` (\`git branch --list 'agent/wf-*'\` finds them), so bring the better one in with \`git merge --squash\` and apply your keep and drop list on top of it. What lands must read as one change somebody made on purpose, not as two stitched together.`,
-                    output: { kind: `none` },
+                    goal: `One coherent implementation exists that keeps the best of both attempts, and the suite is green.`,
+                    prompt:
+                        `Two sessions were given the request above and each built it, on the branches named above. Read both diffs in ` +
+                        `full — the diffs, not the summaries of them — and judge them against what was asked and against the code they ` +
+                        `had to live in, not against your own taste in style.\n\n` +
+                        `Then write the version worth keeping, here in your own worktree. Start from the stronger of the two rather ` +
+                        `than retyping it: bring its branch in with \`git merge --squash\`, then fix what it got wrong and fold in ` +
+                        `whatever the other one did better. What lands must read as one change somebody made on purpose, not as two ` +
+                        `stitched together — and say, in a sentence each, what you took from where.`,
                     checks: [{ kind: `command`, command: `pnpm -w test` }],
-                    maxIterations: 10,
-                    maxSpendUsd: 10,
                 }),
             ],
         },

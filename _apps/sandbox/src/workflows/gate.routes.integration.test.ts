@@ -36,7 +36,6 @@ const fakeServices = (root: string): Services =>
 const gated = (id: string, over: Partial<Workflow> = {}): Workflow => ({
     id,
     name: "release gate",
-    isolated: false,
     maxParallel: 1,
     gate: { step: "judge", field: "release", pass: ["pass"], token: TOKEN },
     steps: [
@@ -50,8 +49,6 @@ const gated = (id: string, over: Partial<Workflow> = {}): Workflow => ({
             output: { kind: "json", fields: [{ name: "release", type: "string", description: "pass | fail", required: true }] },
             checks: [],
             context: "fresh",
-            maxIterations: 2,
-            stallLimit: 99,
         },
     ],
     ...over,

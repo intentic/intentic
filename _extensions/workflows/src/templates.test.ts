@@ -24,6 +24,11 @@ test("template ids are unique — the gallery hides one already saved under its 
  * templates.ts honest about it. Five templates that were all straight chains would have looked like a full
  * gallery and taught nothing; one template that quietly loses its fan-in is the same failure with nowhere left
  * to hide, since there is no second card to make up for it. Nothing else in the build would notice.
+ *
+ * The CONTINUED handoff is not among these any more: the template's last two steps were one session made to
+ * stop and hand itself a summary, and collapsing them into a single synthesis took the only `continue` in the
+ * gallery with it. The shape is still in the contract and still drawn by the canvas; it is simply no longer
+ * something this card teaches, and asserting it here would be asserting a step that exists to be asserted.
  */
 test("the template teaches every shape", () => {
     for (const { workflow } of WORKFLOW_TEMPLATES) {
@@ -38,10 +43,6 @@ test("the template teaches every shape", () => {
         expect(
             steps.some((step) => step.needs.length > 1),
             `${workflow.id}: nothing fans back in`,
-        ).toBe(true);
-        expect(
-            steps.some((step) => step.handoff === `continue`),
-            `${workflow.id}: no step carries a session on`,
         ).toBe(true);
         expect(
             steps.some((step) => step.output.kind === `json`),

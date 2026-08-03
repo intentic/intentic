@@ -178,9 +178,6 @@ const advancedSummary = computed(() => {
     if (step.value.context === `continue`) {
         parts.push(`keeps its thread`);
     }
-    if (step.value.maxIterations !== 8) {
-        parts.push(`${step.value.maxIterations} rounds`);
-    }
     return parts.join(` · `);
 });
 </script>
@@ -292,48 +289,6 @@ const advancedSummary = computed(() => {
                          boxed siblings, and a field hanging 8px to their left reads as a caption on the one
                          above it rather than as a field of its own. -->
                     <ProseField v-model="rubric" :placeholder="RUBRIC_HINT" class="min-h-12" />
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                    <span :class="cmp.sectionLabel()">Give up after</span>
-                    <div class="grid grid-cols-3 gap-2">
-                        <label class="flex flex-col gap-1">
-                            <input
-                                :value="step.maxIterations"
-                                type="number"
-                                min="1"
-                                max="50"
-                                :class="cmp.input()"
-                                @input="patch({ maxIterations: Number(($event.target as HTMLInputElement).value) })"
-                            />
-                            <span class="text-2xs text-subtle">rounds</span>
-                        </label>
-                        <label class="flex flex-col gap-1">
-                            <input
-                                :value="step.maxSpendUsd"
-                                type="number"
-                                min="0.5"
-                                step="0.5"
-                                :class="cmp.input()"
-                                @input="patch({ maxSpendUsd: Number(($event.target as HTMLInputElement).value) })"
-                            />
-                            <span class="text-2xs text-subtle">dollars</span>
-                        </label>
-                        <label class="flex flex-col gap-1">
-                            <input
-                                :value="step.stallLimit"
-                                type="number"
-                                min="1"
-                                max="10"
-                                :class="cmp.input()"
-                                @input="patch({ stallLimit: Number(($event.target as HTMLInputElement).value) })"
-                            />
-                            <span class="text-2xs text-subtle">idle rounds</span>
-                        </label>
-                    </div>
-                    <span class="text-2xs text-subtle"
-                        >An idle round changed nothing in the tree — that, not an error, is how a step usually goes wrong.</span
-                    >
                 </div>
 
                 <div class="flex flex-col gap-1.5">

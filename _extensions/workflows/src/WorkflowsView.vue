@@ -109,14 +109,9 @@ const blank = (): void =>
                 output: { kind: `claim` },
                 checks: [],
                 context: `fresh`,
-                maxIterations: 8,
-                stallLimit: 2,
-                maxSpendUsd: 5,
             },
         ],
-        isolated: true,
         maxParallel: 2,
-        maxSpendUsd: 15,
     });
 
 /* RUN HANDS THE START OVER RATHER THAN PERFORMING IT. Pressing it opens a new agent session with this design
@@ -241,7 +236,6 @@ const shapeOf = (workflow: Workflow): string => {
                 <div v-for="workflow in workflows" :key="workflow.id" class="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-2">
                     <span class="shrink-0 text-xs font-medium text-content">{{ workflow.name }}</span>
                     <span class="shrink-0 text-2xs text-subtle">{{ shapeOf(workflow) }}</span>
-                    <span v-if="workflow.isolated" class="shrink-0 text-2xs text-subtle">· on branches</span>
                     <span v-if="workflow.description" class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ workflow.description }}</span>
                     <span v-else class="flex-1"></span>
                     <!-- The last run, as a state word and nothing else. The row is a design, not a run; clicking

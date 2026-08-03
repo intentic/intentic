@@ -14,9 +14,9 @@ import { workflowProjection } from "./workflow-state.js";
  * does not, and a workflow is a sequence of sequences that can run for hours. So the browser watches and
  * nothing else drives.
  *
- * A STEP IS A LOOP AND THE LOOP DOES THE WORK. Everything hard about running an agent unattended — the
- * iteration ceiling, the spend ceiling, the stall detector, the completion check, the transcript, the worktree,
- * the fleet card, surviving a killed daemon — was solved once in loops/ and this file calls it. What is left
+ * A STEP IS A LOOP AND THE LOOP DOES THE WORK. Everything hard about running an agent unattended — the runaway
+ * backstops, the completion check, the transcript, the worktree, the fleet card, surviving a killed daemon —
+ * was solved once in loops/ and this file calls it. What is left
  * here is genuinely only the graph: who waits for whom, who is handed what, and what happens to the rest when
  * one of them fails.
  *
@@ -147,19 +147,32 @@ interface StepOutcome {
 
 const BLOCKED: StepOutcome = { ok: false, document: undefined, report: "" };
 
-// The loop that runs one step. Everything but the prompt comes straight off the step — a step IS a loop
-// declaration plus a place in the graph, and this is where that stops being a metaphor.
-const loopForStep = (step: WorkflowStep, workflow: Workflow, conversationId: string, prompt: string): Loop => ({
+/* THE BACKSTOPS, and they are backstops rather than settings — which is why they are constants here instead of
+ * three fields on every step. A step runs like any other agent session: until it is done, or until you stop
+ * it. What these bound is the failure nobody chose — an agent that re-reads the same three files, restates the
+ * same plan and declares more work remains, forever, on a workflow that was started and walked away from.
+ *
+ * Generous, deliberately: they must never be what ENDS a step doing real work, only what ends one that has
+ * stopped doing any. The idle-round count is the one that actually fires in practice (a round that changed
+ * nothing in the tree is the shape a stuck agent has), and three of those in a row is not a bad patch.
+ */
+const STEP_ROUNDS_MAX = 20;
+const STEP_IDLE_ROUNDS = 3;
+
+// The loop that runs one step. Everything but the prompt and the backstops comes straight off the step — a
+// step IS a loop declaration plus a place in the graph, and this is where that stops being a metaphor.
+const loopForStep = (step: WorkflowStep, conversationId: string, prompt: string): Loop => ({
     conversationId,
     goal: step.goal,
     prompt,
     context: step.context,
     output: step.output,
     checks: step.checks,
-    maxIterations: step.maxIterations,
-    ...(step.maxSpendUsd !== undefined ? { maxSpendUsd: step.maxSpendUsd } : {}),
-    stallLimit: step.stallLimit,
-    isolated: workflow.isolated,
+    maxIterations: STEP_ROUNDS_MAX,
+    stallLimit: STEP_IDLE_ROUNDS,
+    // Always. A workflow step is an isolated agent session, and there is no longer a way to ask for anything
+    // else (see WorkflowSchema).
+    isolated: true,
     ...(step.agent !== undefined ? { agent: step.agent } : {}),
     ...(step.harness !== undefined ? { harness: step.harness } : {}),
     ...(step.model !== undefined ? { model: step.model } : {}),
@@ -184,10 +197,6 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
     const recorded = new Map(run.steps.map((step) => [step.stepId, step]));
     const gate = slots(workflow.maxParallel);
     const outcomes = new Map<string, Promise<StepOutcome>>();
-    // The run's running total, shared across parallel steps. Read before a step starts and never mid-step: a
-    // ceiling that could interrupt a turn would leave a tree half-edited, which costs more than the turn did.
-    let spentUsd = run.steps.reduce((total, step) => total + (step.costUsd ?? 0), 0);
-    let ceiling: { readonly state: WorkflowRunState; readonly detail: string } | undefined;
 
     const close = (stepId: string, state: WorkflowStepRun["state"], detail: string): Promise<void> =>
         services.workflowRuns.patchStep(runId, stepId, { state, endedAt: Date.now(), detail });
@@ -205,7 +214,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
          * manifest is keyed by conversation and holds the LATEST loop on it, so a continued step replaces the
          * row of the step it continued — right for a per-conversation view, and lossless for the user, because
          * the run record below is what carries each step's own history. */
-        const record = await services.loops.start(loopForStep(step, workflow, conversationId, prompt), Date.now());
+        const record = await services.loops.start(loopForStep(step, conversationId, prompt), Date.now());
         /* Stopping the RUN has to reach a loop that is already turning, and the loop pump's own signal is
          * private to it — `stopLoop` is the door. The listener covers a stop that arrives during the step; the
          * check right after covers one that landed in the instant between the guard above and here, which is
@@ -242,7 +251,6 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
             ...(settlement.document !== undefined ? { document: settlement.document } : {}),
             ...(report !== "" ? { report } : {}),
         });
-        spentUsd += settlement.costUsd;
         return { ok, document: settlement.document, report };
     };
 
@@ -282,24 +290,13 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
                 await close(step.id, "skipped", `Did not run: ${blocked.map((entry) => `"${entry.parent.title}"`).join(", ")} did not finish.`);
                 return BLOCKED;
             }
-            /* The run's spend ceiling, checked HERE — before a step starts, with every upstream cost already
-             * counted. This is the one guard a per-step ceiling cannot give: eight steps each under their own
-             * $2 cap is a $16 run, and the second number is the one a person actually cares about. */
-            if (workflow.maxSpendUsd !== undefined && spentUsd >= workflow.maxSpendUsd) {
-                ceiling = {
-                    state: "overspent",
-                    detail: `Spent $${spentUsd.toFixed(2)} of the $${workflow.maxSpendUsd.toFixed(2)} ceiling before every step had run.`,
-                };
-                await close(step.id, "skipped", "Did not run: the workflow reached its spend ceiling.");
-                return BLOCKED;
-            }
             const conversationId = before?.conversationId ?? "";
-            // The branch is named only when this step CANNOT simply look at the work: an isolated run puts each
-            // fresh session in its own worktree off main, while a step that shares its predecessor's
-            // conversation is already standing in the tree that branch describes.
+            // The branch is named only when this step CANNOT simply look at the work: every fresh session is
+            // in its own worktree off main, while a step that shares its predecessor's conversation is already
+            // standing in the tree that branch describes.
             const handoverFrom = (entry: { parent: WorkflowStep; outcome: StepOutcome }): Handover => {
                 const parentConversation = recorded.get(entry.parent.id)?.conversationId;
-                const separate = workflow.isolated && parentConversation !== undefined && parentConversation !== conversationId;
+                const separate = parentConversation !== undefined && parentConversation !== conversationId;
                 return {
                     title: entry.parent.title,
                     document: entry.outcome.document,
@@ -322,12 +319,11 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
     try {
         const settled = await Promise.all(workflow.steps.map((step) => outcomeOf(step)));
         const failed = settled.filter((outcome) => !outcome.ok).length;
-        const state: WorkflowRunState = ceiling?.state ?? (abort.signal.aborted ? "stopped" : failed === 0 ? "done" : "failed");
+        const state: WorkflowRunState = abort.signal.aborted ? "stopped" : failed === 0 ? "done" : "failed";
         const detail =
-            ceiling?.detail ??
-            (failed === 0
+            failed === 0
                 ? undefined
-                : `${failed} of ${workflow.steps.length} steps did not finish. Open the ones marked failed — the ones marked skipped were waiting on them.`);
+                : `${failed} of ${workflow.steps.length} steps did not finish. Open the ones marked failed — the ones marked skipped were waiting on them.`;
         await services.workflowRuns.settle(runId, state, Date.now(), detail);
     } catch (error) {
         // Only the scheduler's own machinery reaches here — a store write that could not land. A step's failure

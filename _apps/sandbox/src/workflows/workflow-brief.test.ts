@@ -17,8 +17,6 @@ const step = (id: string, over: Partial<WorkflowStep> = {}): WorkflowStep => ({
     output: { kind: "claim" },
     checks: [],
     context: "fresh",
-    maxIterations: 2,
-    stallLimit: 2,
     ...over,
 });
 
@@ -26,7 +24,6 @@ const workflow = (steps: readonly WorkflowStep[]): Workflow => ({
     id: "wf",
     name: "a workflow",
     steps: [...steps],
-    isolated: true,
     maxParallel: 2,
 });
 

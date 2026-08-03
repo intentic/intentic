@@ -3025,9 +3025,13 @@ export const WorkflowStepSchema = z.object({
     // How the step's own ITERATIONS meet each other — the Ralph question, one level down from `handoff`. A
     // long-running step wants `fresh` (no context rot); a short refine-this step wants `continue`.
     context: LoopContextSchema,
-    maxIterations: z.number().int().min(1).max(LOOP_ITERATIONS_MAX),
-    maxSpendUsd: z.number().positive().optional(),
-    stallLimit: z.number().int().min(1),
+    /* NO CEILINGS HERE, and their absence is the design. A step used to declare its own iteration cap, idle-round
+     * cap and dollar cap — three numbers to answer before a workflow would run, on a page that already asks for
+     * a prompt and a goal. Nobody has a considered answer to "how many rounds", and a wrong guess is a step
+     * that gives up mid-job. A step now runs the way any agent session in this product runs: until it is done
+     * or until you stop it. The loop underneath keeps a runaway backstop of its own (WORKFLOW_STEP_ROUNDS in
+     * the scheduler) — a backstop is not a setting, and it is not something a user should have to think about.
+     */
     agent: AgentProviderSchema.optional(),
     harness: AgentHarnessSchema.optional(),
     model: z.string().optional(),
@@ -3107,25 +3111,18 @@ export const WorkflowSchema = z.object({
     // Present ⇒ this design can be run by a machine and answers a release decision. Absent ⇒ an ordinary
     // workflow, started by a person from the workflows page, with no public door onto it at all.
     gate: WorkflowGateSchema.optional(),
-    /* Whether the run's sessions work in their own git worktrees or on the shared /work tree, decided once for
-     * the whole run because it changes what a `fresh` step can see.
+    /* EVERY STEP RUNS IN ITS OWN WORKTREE, always, with no toggle — the same thing an isolated agent session
+     * does, which is what every session in this product already is.
      *
-     * ISOLATED: every `fresh` step branches off main and sees NONE of its predecessors' uncommitted work — only
-     * their declared outputs. Right for fan-out that reads (review three repos, audit a change, research), and
-     * for chains that stay on one conversation via `continue`. Wrong, and quietly so, for a `fresh` step that
-     * expects to find the previous step's edits on disk.
-     *
-     * SHARED: every step works on /work, so each one sees what the last one did whatever its handoff. Right for
-     * a sequential build-on-itself pipeline; the cost is that parallel steps share a tree and can collide, so a
-     * fan-out here should be reading rather than writing.
+     * It was a per-workflow choice between worktrees and the shared /work tree, and the shared side never
+     * earned its place: parallel steps on one tree collide, a `fresh` step there sees a half-finished
+     * predecessor's edits as if they were the workspace, and the branch names that make a fan-in READABLE
+     * (`git diff main...<branch>` — see workflow-brief) only exist on the isolated side. A setting whose other
+     * value is a subtle trap is not a setting, it is a mistake waiting for somebody to make it.
      */
-    isolated: z.boolean(),
     // How many steps may run at once. Bounded because a fan-out of twelve is twelve provider sessions, twelve
     // worktrees and twelve times the burn rate — and because the machine this runs on is one machine.
     maxParallel: z.number().int().min(1).max(8),
-    // The spend ceiling for the WHOLE run, summed across every step. Checked before each step starts, so it
-    // bounds what a run can cost rather than what one step can.
-    maxSpendUsd: z.number().positive().optional(),
 });
 export type Workflow = z.infer<typeof WorkflowSchema>;
 

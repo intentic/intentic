@@ -31,13 +31,11 @@ const step = (id: string, over: Partial<WorkflowStep> = {}): WorkflowStep => ({
     output: { kind: `claim` },
     checks: [],
     context: `fresh`,
-    maxIterations: 2,
-    stallLimit: 2,
     ...over,
 });
 
 const run = (steps: readonly WorkflowStep[], runs: readonly Partial<WorkflowStepRun>[]): WorkflowRun => {
-    const workflow: Workflow = { id: `wf`, name: `a workflow`, steps: [...steps], isolated: true, maxParallel: 2 };
+    const workflow: Workflow = { id: `wf`, name: `a workflow`, steps: [...steps], maxParallel: 2 };
     return {
         runId: `r1`,
         workflow,

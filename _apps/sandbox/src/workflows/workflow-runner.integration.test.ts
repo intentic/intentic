@@ -41,8 +41,6 @@ const step = (id: string, over: Partial<WorkflowStep> = {}): WorkflowStep => ({
     output: { kind: "claim" },
     checks: [],
     context: "fresh",
-    maxIterations: 2,
-    stallLimit: 99,
     ...over,
 });
 
@@ -50,7 +48,6 @@ const workflow = (steps: readonly WorkflowStep[], over: Partial<Workflow> = {}):
     id: "wf",
     name: "a workflow",
     steps: [...steps],
-    isolated: false,
     maxParallel: 4,
     ...over,
 });
@@ -173,33 +170,12 @@ test("a `continue` step runs on its predecessor's conversation; a `fresh` one ge
     expect(conversations.get("third")).not.toBe(conversations.get("first"));
 });
 
-test("the run's spend ceiling stops it before the next step starts, not mid-turn", async () => {
-    const root = tempRoot();
-    const services = fakeServices(root);
-    const spendy: TurnFn = async function* turn(_services, input: AgentTurn) {
-        const conversationId = input.conversationId ?? "";
-        await mkdir(join(root, LOOP_DIR, conversationId), { recursive: true });
-        await writeFile(join(root, LOOP_DIR, conversationId, `iteration-1.json`), JSON.stringify({ done: true, reason: "ok" }));
-        yield { kind: "usage", costUsd: 0.6 } as AgentEvent;
-        yield { kind: "done" } as AgentEvent;
-    };
-    const design = workflow([step("one"), step("two", { needs: ["one"] }), step("three", { needs: ["two"] })], { maxSpendUsd: 1 });
-    const run = await services.workflowRuns.start(openRun(design, 1));
-    await runWorkflow(services, run, spendy);
-
-    const settled = await services.workflowRuns.get(run.runId);
-    // Two steps spend $1.20, which is the first total at or past the ceiling; the third never starts.
-    expect(settled?.steps.map((entry) => entry.state)).toEqual(["done", "done", "skipped"]);
-    expect(settled?.state).toBe("overspent");
-    expect(settled?.detail).toContain("1.20");
-});
-
 test("stopping a run stops the loop in flight and starts nothing further", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
-    const design = workflow([step("slow", { maxIterations: 20 }), step("never", { needs: ["slow"] })]);
+    const design = workflow([step("slow"), step("never", { needs: ["slow"] })]);
     const run = await services.workflowRuns.start(openRun(design, 1));
-    // Never writes a verdict, so its loop would run all 20 iterations; the stop is what ends it.
+    // Never writes a verdict, so its loop would run to the scheduler's backstop; the stop is what ends it.
     const endless: TurnFn = async function* turn() {
         stopWorkflowRun(run.runId);
         yield { kind: "done" } as AgentEvent;

@@ -11,7 +11,6 @@ import { gateVerdictOf } from "./workflow-gate.js";
 const design: Workflow = {
     id: "release-gate",
     name: "release gate",
-    isolated: true,
     maxParallel: 1,
     gate: { step: "judge", field: "release", pass: ["pass", "pass-with-warnings"] },
     steps: [
@@ -25,8 +24,6 @@ const design: Workflow = {
             output: { kind: "json", fields: [{ name: "release", type: "string", description: "pass | fail", required: true }] },
             checks: [],
             context: "fresh",
-            maxIterations: 3,
-            stallLimit: 5,
         },
     ],
 };
@@ -48,8 +45,7 @@ const runWith = (step: WorkflowStepRun, workflow: Workflow = design): WorkflowRu
     steps: [step],
 });
 
-const documented = (data: Record<string, unknown>): WorkflowStepRun =>
-    stepRun({ document: { done: true, reason: "judged", data } });
+const documented = (data: Record<string, unknown>): WorkflowStepRun => stepRun({ document: { done: true, reason: "judged", data } });
 
 test("the declared value being one that ships is the only way to pass", () => {
     const verdict = gateVerdictOf(runWith(documented({ release: "pass" })));
@@ -69,10 +65,12 @@ test("a value adjacent to a passing one still fails", () => {
 });
 
 test("a non-string field is compared as the string a form would have authored", () => {
-    expect(gateVerdictOf(runWith(documented({ release: true }), { ...design, gate: { step: "judge", field: "release", pass: ["true"] } })).outcome).toBe(
-        "pass",
+    expect(
+        gateVerdictOf(runWith(documented({ release: true }), { ...design, gate: { step: "judge", field: "release", pass: ["true"] } })).outcome,
+    ).toBe("pass");
+    expect(gateVerdictOf(runWith(documented({ release: 0 }), { ...design, gate: { step: "judge", field: "release", pass: ["1"] } })).outcome).toBe(
+        "fail",
     );
-    expect(gateVerdictOf(runWith(documented({ release: 0 }), { ...design, gate: { step: "judge", field: "release", pass: ["1"] } })).outcome).toBe("fail");
 });
 
 test("a step that failed is blocked, not failed — the check broke, not the product", () => {
