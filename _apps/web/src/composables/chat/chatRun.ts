@@ -1,7 +1,7 @@
 import { layoutDag } from "@intentic/ui";
 import type { DagNode } from "@intentic/ui";
 import { workflowDag } from "@intentic/ext-workflows";
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import type { AgentHarness, WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 
 /* A WORKFLOW RUN, INSIDE THE CHAT PANEL — the state behind "show me what this run is doing".
@@ -66,13 +66,38 @@ export const runOnFocus = (run: WorkflowRun, conversationId: string): ChatRunVie
 export const RUN_NODE_WIDTH = 216;
 export const RUN_NODE_HEIGHT = 62;
 
+export interface RunSession {
+    readonly conversationId: string;
+    /* What the step's design pinned, for opening a conversation the fleet no longer lists. A step that ran
+     * days ago has been swept off the roster, and its transcript is still there — so the seed only decides
+     * which provider the composer opens on, and the daemon supplies everything that matters. Absent when the
+     * step pinned nothing, which is most of them.
+     */
+    readonly agent: string | undefined;
+    readonly harness: AgentHarness | undefined;
+}
+
 export interface RunColumn {
     // The steps dagre put at this depth — what the reader sees as one vertical band of the diagram.
     readonly stepIds: readonly string[];
-    // Their conversations, deduped and in column order. Steps that never started are left out: their id names
-    // a conversation the daemon has not opened, and a pane for one is an empty chat that explains nothing.
-    readonly conversationIds: readonly string[];
+    // The sessions behind them, deduped and in column order. Empty ⇒ nothing in this band ever ran, which is
+    // what lets the diagram decline the click instead of swallowing it.
+    readonly sessions: readonly RunSession[];
 }
+
+/* WHICH STEP STATES HAVE A SESSION BEHIND THEM, and the distinction the diagram was getting wrong.
+ *
+ * `skipped` is the one that matters and the one that looks like it should qualify: it is not a step that ran
+ * and failed, it is a step that NEVER STARTED because something upstream did not finish. Its conversation id
+ * is derived (wf-<run>-<step>) and written into the record before the run begins, so it exists as a string
+ * long before — and, for a skipped step, forever without — anything opening it. Treating those ids as sessions
+ * is why clicking most of a failed run's diagram did nothing at all: every node offered a chat that had never
+ * been created, the fleet had no card for it, and the click resolved to an empty set in silence.
+ *
+ * `pending` is the same fact one step earlier. Everything else — running, done, failed, stopped — took at
+ * least one turn, which means a transcript.
+ */
+const ran = (state: WorkflowStepRun["state"]): boolean => state !== `pending` && state !== `skipped`;
 
 /* The run's steps grouped into the columns the diagram DRAWS, keyed by step id.
  *
@@ -94,13 +119,22 @@ export const runColumns = (run: WorkflowRun): Map<string, RunColumn> => {
         const x = positions.get(node.id)?.x ?? 0;
         byX.set(x, [...(byX.get(x) ?? []), node.id]);
     }
-    const started = new Map(run.steps.filter((step) => step.state !== `pending`).map((step) => [step.stepId, step.conversationId]));
+    const design = new Map(run.workflow.steps.map((step) => [step.id, step]));
+    const live = new Map(run.steps.filter((step) => ran(step.state)).map((step) => [step.stepId, step.conversationId]));
     const columns = new Map<string, RunColumn>();
     for (const stepIds of byX.values()) {
         // A `continue` step shares its predecessor's conversation, so a column holding both must not open the
         // same chat twice — the pane set is a set, and asking for two of one would silently be one.
-        const conversationIds = [...new Set(stepIds.flatMap((id) => (started.has(id) ? [started.get(id)!] : [])))];
-        const column: RunColumn = { stepIds, conversationIds };
+        const seen = new Set<string>();
+        const sessions = stepIds.flatMap((id): RunSession[] => {
+            const conversationId = live.get(id);
+            if (conversationId === undefined || seen.has(conversationId)) {
+                return [];
+            }
+            seen.add(conversationId);
+            return [{ conversationId, agent: design.get(id)?.agent, harness: design.get(id)?.harness }];
+        });
+        const column: RunColumn = { stepIds, sessions };
         for (const id of stepIds) {
             columns.set(id, column);
         }

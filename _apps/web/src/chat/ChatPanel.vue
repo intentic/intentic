@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Icon, useDevice } from "@intentic/ui";
 import { computed, nextTick, ref, watch } from "vue";
-import { chatRun, closeRun, runOnFocus, showRun } from "../composables/chat/chatRun";
+import { chatRun, closeRun, type RunSession, runOnFocus, showRun } from "../composables/chat/chatRun";
 import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { transcriptView } from "../composables/chat/transcriptClock";
-import { useChat } from "../composables/chat/useChat";
+import { openAgentConversation, useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useAgents } from "../composables/agents/useAgents";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
@@ -98,17 +98,33 @@ watch(activeId, (id) => {
     }
 });
 
-const openRunColumn = (conversationIds: readonly string[]): void => {
+const openRunColumn = (sessions: readonly RunSession[]): void => {
     const runId = chatRun.value?.runId;
-    const known = conversationIds.map((id) => agentById(id)).filter((agent) => agent !== undefined);
-    if (runId === undefined || known.length === 0) {
+    if (runId === undefined || sessions.length === 0) {
         return;
     }
-    for (const agent of known) {
-        openBeside(agent.id);
-        openAgent(agent);
+    for (const session of sessions) {
+        // Claimed before opening, for the reason the board's card gestures do it: the opening would otherwise
+        // take the focused pane's column on its way in.
+        openBeside(session.conversationId);
+        const carded = agentById(session.conversationId);
+        if (carded !== undefined) {
+            openAgent(carded);
+            continue;
+        }
+        /* NOT ON THE FLEET, WHICH IS NOT THE SAME AS NOT EXISTING. A step that ran days ago has been swept off
+         * the roster and still has its branch, its transcript and its record — so the chat opens from the id
+         * alone and hydrates from the daemon. The provider is a SEED for the composer's opening pick (the
+         * step's own pin, or failing that whatever this reader is already working in); nothing about the
+         * transcript depends on getting it right, and a run whose sessions could not be reopened after a week
+         * would make the diagram a picture of things you are no longer allowed to read. */
+        openAgentConversation({
+            id: session.conversationId,
+            provider: session.agent ?? active.value.provider.value,
+            harness: session.harness ?? active.value.harness.value,
+        });
     }
-    setPanes(known.map((agent) => agent.id));
+    setPanes(sessions.map((session) => session.conversationId));
     showRun(runId, `sessions`);
 };
 
