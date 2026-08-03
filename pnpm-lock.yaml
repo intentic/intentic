@@ -1171,6 +1171,9 @@ importers:
       '@intentic/ext-documentation':
         specifier: workspace:*
         version: link:../../_extensions/documentation
+      '@intentic/ext-git-history':
+        specifier: workspace:*
+        version: link:../../_extensions/git-history
       '@intentic/ext-logs':
         specifier: workspace:*
         version: file:_extensions/logs(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
@@ -1487,6 +1490,40 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
 
   _extensions/documentation:
+    dependencies:
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: link:../../_libs/extension-api
+      '@intentic/extension-ui':
+        specifier: workspace:*
+        version: link:../../_libs/extension-ui
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_libs/sandbox-contract
+      '@tanstack/vue-query':
+        specifier: 'catalog:'
+        version: 5.101.4(vue@3.5.40(typescript@5.9.3))
+    devDependencies:
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      jsdom:
+        specifier: 'catalog:'
+        version: 29.1.1(@noble/hashes@2.2.0)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      vue:
+        specifier: 'catalog:'
+        version: 3.5.40(typescript@5.9.3)
+      vue-tsc:
+        specifier: 'catalog:'
+        version: 3.3.9(typescript@5.9.3)
+
+  _extensions/git-history:
     dependencies:
       '@intentic/extension-api':
         specifier: workspace:*
@@ -2544,7 +2581,7 @@ importers:
     devDependencies:
       '@intentic-app/api-contract':
         specifier: workspace:*
-        version: link:../../_libs/api-contract
+        version: file:_libs/api-contract(vue@3.5.40(typescript@5.9.3))
       '@intentic-app/prisma':
         specifier: workspace:*
         version: link:../../_libs/prisma
@@ -3915,6 +3952,11 @@ packages:
 
   '@intentic/ext-documentation@file:_extensions/documentation':
     resolution: {directory: _extensions/documentation, type: directory}
+    peerDependencies:
+      vue: '3'
+
+  '@intentic/ext-git-history@file:_extensions/git-history':
+    resolution: {directory: _extensions/git-history, type: directory}
     peerDependencies:
       vue: '3'
 
@@ -12104,6 +12146,7 @@ snapshots:
       '@intentic/ext-automations': file:_extensions/automations(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-deployments': file:_extensions/deployments(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-documentation': file:_extensions/documentation(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-git-history': file:_extensions/git-history(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-logs': file:_extensions/logs(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-maintenance': file:_extensions/maintenance(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-memory': file:_extensions/memory(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
@@ -12196,6 +12239,7 @@ snapshots:
       '@intentic/ext-automations': file:_extensions/automations(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-deployments': file:_extensions/deployments(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-documentation': file:_extensions/documentation(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-git-history': file:_extensions/git-history(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-logs': file:_extensions/logs(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-maintenance': file:_extensions/maintenance(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-memory': file:_extensions/memory(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
@@ -12435,6 +12479,30 @@ snapshots:
       - typescript
 
   '@intentic/ext-documentation@file:_extensions/documentation(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
+    dependencies:
+      '@intentic/extension-api': file:_libs/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-ui': file:_libs/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_libs/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
+      vue: 3.5.40(typescript@5.9.3)
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@vue/composition-api'
+      - typescript
+
+  '@intentic/ext-git-history@file:_extensions/git-history(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
+    dependencies:
+      '@intentic/extension-api': file:_libs/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-ui': file:_libs/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
+      vue: 3.5.40(typescript@5.9.3)
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@vue/composition-api'
+      - typescript
+
+  '@intentic/ext-git-history@file:_extensions/git-history(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
       '@intentic/extension-api': file:_libs/extension-api(vue@3.5.40(typescript@5.9.3))
       '@intentic/extension-ui': file:_libs/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
