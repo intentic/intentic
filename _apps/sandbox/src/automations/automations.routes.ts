@@ -8,6 +8,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
 import { listenerProvidersOf } from "../extensions/installed-extensions.js";
+import { threadKey } from "../sessions/thread-sessions.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { fireAutomation } from "./scheduler.js";
 
@@ -115,7 +116,23 @@ export const createAutomationsRoutes = (services: Services) => {
                 // conversation the auto path would have.
                 ...(pending.origin !== undefined ? { origin: pending.origin } : {}),
                 ...(pending.title !== undefined ? { title: pending.title } : {}),
-            }).catch((error: unknown) => services.logger.error({ err: error, automation: automation.id }, "approved automation run failed"));
+                // …and its THREAD, so an approved message continues the visitor's chat instead of opening a
+                // second card and a second worktree for it. Absent for a wake that owned no thread.
+                ...(pending.conversationId !== undefined ? { conversationId: pending.conversationId } : {}),
+                ...(pending.sessionId !== undefined ? { sessionId: pending.sessionId } : {}),
+            })
+                // Teach the thread what this run taught us, exactly as the dispatcher does for an auto fire —
+                // otherwise every approved message resumes the session the thread had when it was HELD, and the
+                // agent meets the visitor again on each one. The origin carries the thread's own coordinates,
+                // so this works for any source with continuing threads, not just the Doorbell.
+                .then(async (settled) => {
+                    const origin = pending.origin;
+                    if (origin?.channelId === undefined || settled.sessionId === undefined) {
+                        return;
+                    }
+                    await services.threadSessions.settle(threadKey(origin.provider, origin.automationId, origin.channelId), settled.sessionId, Date.now());
+                })
+                .catch((error: unknown) => services.logger.error({ err: error, automation: automation.id }, "approved automation run failed"));
             return { ok: true } as const;
         }),
         reject: i.reject.handler(async ({ input }) => {

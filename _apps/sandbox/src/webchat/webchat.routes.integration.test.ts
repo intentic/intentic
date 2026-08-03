@@ -34,6 +34,11 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
             notify: async () => ({ delivered: 0, failed: 0 }),
             notifyIfAway: async () => ({ delivered: 0, failed: 0 }),
         }),
+        // Read only on the way out of a FAILED wake (the spin-loop guard weighs the streak). 0 turns the
+        // quarantine off, which keeps these tests about the Doorbell rather than about the failure limit.
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+            get: async () => ({ automationFailureLimit: 0 }) as Awaited<ReturnType<Services["sandboxSettings"]["get"]>>,
+        }),
     });
 
 const fakeWake = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
@@ -104,6 +109,45 @@ test("a requireApproval automation holds the wake and streams a pending notice i
     expect(turns).toEqual([]);
     expect(await services.approvals.list()).toHaveLength(1);
     expect((await services.automations.get("wc-gated"))?.runs).toEqual([]);
+});
+
+/* THE HELD WAKE KEEPS THE VISITOR'S THREAD. Without the conversation on the approval the approve route has
+ * nothing to resume, so it minted a fresh one — and a chat the owner approves message by message became one
+ * fleet card and one worktree per message, each with an agent meeting the visitor for the first time. */
+test("a held Doorbell wake snapshots the conversation the visitor's thread already owns", async () => {
+    const { services } = await setup(webchat("wc-thread", { requireApproval: true }));
+    const app = appFor(services, fakeWake([]));
+    // Draining the SSE body is what waits for the fire — the response resolves as soon as the stream opens.
+    await (await post(app, "wc-thread", { conversationId: "visitor-7", content: "hello" })).text();
+    const [held] = await services.approvals.list();
+    expect(held?.conversationId).toBe("wc-wc-thread-visitor-7");
+    // The same conversation the thread store opened for this visitor — not a second one.
+    const thread = await services.threadSessions.get("webchat:wc-thread:visitor-7", 60_000, Date.now());
+    expect(held?.conversationId).toBe(thread?.conversationId);
+});
+
+/* THE REGRESSION THIS FILE EXISTED WITHOUT. A wake that errors records the reason on the row and in the
+ * activity feed, and used to tell the visitor nothing at all: the stream closed on `done` with no text, so the
+ * widget dropped its typing bubble and left the message looking unsent. */
+test("a wake that errors tells the visitor so, without leaking the owner's reason", async () => {
+    const { services } = await setup(webchat("wc-broken"));
+    const app = appFor(services, fakeWake([], [{ kind: "error", message: "API Error: 401 OAuth access token has been revoked" }]));
+    const body = await (await post(app, "wc-broken", { conversationId: "c1", content: "hi" })).text();
+    expect(body).toContain("event: error");
+    expect(body).toContain("Sorry — I couldn't answer that just now.");
+    // The provider's sentence is the owner's to read, on the row — never the stranger's.
+    expect(body).not.toContain("OAuth");
+    expect((await services.automations.get("wc-broken"))?.runs[0]).toMatchObject({ outcome: "error", detail: expect.stringContaining("OAuth") });
+});
+
+/* A guard that says no is the automation working as configured, and it is STILL a reply that never comes —
+ * the visitor gets the same closed stream an errored wake gives them. */
+test("a guard that skips the run is said out loud rather than closing the stream in silence", async () => {
+    const { services } = await setup(webchat("wc-guarded", { guard: "exit 1" }));
+    const app = appFor(services, fakeWake([]));
+    const body = await (await post(app, "wc-guarded", { conversationId: "c1", content: "hi" })).text();
+    expect(body).toContain("event: error");
+    expect((await services.automations.get("wc-guarded"))?.runs[0]?.outcome).toBe("skipped");
 });
 
 test("a disallowed or missing origin is refused before any wake", async () => {

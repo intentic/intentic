@@ -88,6 +88,13 @@ export interface ReplySink {
     readonly delta: (text: string) => void;
     // The turn is being held for the owner's approval — nothing will stream. Carries the server's own wording.
     readonly pending: (notice: string) => void;
+    /* The turn reached an agent and produced no answer — a wake that errored, one a guard skipped, one dropped
+     * as overlapping. Carries the server's own wording, which is deliberately generic here: the real reason is
+     * about the site owner's credentials or scripts and is kept for them (see the daemon's sse-stream.ts).
+     *
+     * Distinct from a thrown WebchatError, which means the message never reached an agent at all. Both end the
+     * turn, and the difference is the difference between "we couldn't answer" and "we couldn't accept it". */
+    readonly failed: (notice: string) => void;
 }
 
 /* Send one message and pump the reply into `sink` until the stream ends. Resolves when the turn is over, so
@@ -118,6 +125,9 @@ export const sendMessage = async (endpoint: Endpoint, message: WebchatMessage, s
             }
             if (frame.event === "pending") {
                 sink.pending(frame.data);
+            }
+            if (frame.event === "error") {
+                sink.failed(frame.data);
             }
             if (frame.event === "done") {
                 return true;

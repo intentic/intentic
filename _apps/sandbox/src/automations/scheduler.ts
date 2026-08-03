@@ -23,11 +23,20 @@ export const TITLE_MAX = 80;
 // workspace-events.ts turns back into fireAutomation calls: a cycle. Same reason turn-runs takes its TurnFn.
 export type WakeFn = (services: Services, input: AgentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
 
-// A live sink for a turn's assistant text. The Discord source backs it with a channel message it edits as token
-// deltas arrive, so a mention reply appears as it's written instead of only when the turn ends. undefined ⇒ no
-// live delivery: the agent sends its own reply (per its provider skill), as before.
+/* A live sink for a turn's assistant text. The Discord source backs it with a channel message it edits as token
+ * deltas arrive, so a mention reply appears as it's written instead of only when the turn ends. undefined ⇒ no
+ * live delivery: the agent sends its own reply (per its provider skill), as before.
+ *
+ * `failed` is the third frame because a turn that produces NO text is otherwise indistinguishable from a turn
+ * that errored — and the two are opposite things to say to whoever is waiting. Every sink used to end on `end`
+ * alone, so a Doorbell visitor whose wake died on a revoked credential watched the typing dots disappear and
+ * got nothing at all, while the daemon had the provider's exact sentence and wrote it to a row nobody was
+ * looking at. It carries the RAW reason: what an audience may be told differs per sink (a stranger on a
+ * customer's website and the owner's own Discord channel are not owed the same sentence), so the redaction
+ * belongs to each implementation rather than here. Always followed by `end`. */
 export interface TurnStream {
     readonly delta: (text: string) => void;
+    readonly failed: (reason: string) => void;
     readonly end: () => void;
 }
 
@@ -169,6 +178,11 @@ export const fireAutomation = async (
     }: FireOptions = {},
 ): Promise<FireOutcome> => {
     if (inFlight.has(automation.id)) {
+        // Dropped as overlapping — which is a REPLY THAT WILL NEVER COME for anyone waiting on the sink. The
+        // finally below is not reached from here (it belongs to the try we have not entered), so this exit
+        // closes the sink itself or nothing ever does.
+        stream?.failed("this automation is already running, so the message was not picked up");
+        stream?.end();
         return {};
     }
     inFlight.add(automation.id);
@@ -183,6 +197,9 @@ export const fireAutomation = async (
                         outcome: "skipped",
                         ...(guard.detail !== undefined ? { detail: guard.detail } : {}),
                     });
+                    // A guard saying no is the automation working as configured — but to whoever is waiting on
+                    // the sink it is still a reply that never arrives, so it is said rather than left silent.
+                    stream?.failed(guard.detail ?? "this automation's guard skipped the run");
                     return {};
                 }
             }
@@ -197,6 +214,11 @@ export const fireAutomation = async (
                     // an anonymous turn.
                     ...(origin !== undefined ? { origin } : {}),
                     ...(title !== undefined ? { title } : {}),
+                    // …and the THREAD it would have continued, for the same reason. A dispatcher that owns a
+                    // running conversation (the Doorbell, a Discord channel) resolved it before firing; without
+                    // carrying it here the approve route has nothing to resume and mints a fresh one.
+                    ...(resumedConversationId !== undefined ? { conversationId: resumedConversationId } : {}),
+                    ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
                     createdAt: Date.now(),
                 });
                 void services.activity
@@ -263,6 +285,9 @@ export const fireAutomation = async (
                   }
                 : {}),
             ...(automation.agent !== undefined ? { agent: automation.agent } : {}),
+            // The pinned account, when the owner chose one. Absent leaves the resolution where it was — the
+            // provider's first account — so an automation nobody configured keeps behaving as it always has.
+            ...(automation.account !== undefined ? { account: automation.account } : {}),
             ...(automation.harness !== undefined ? { harness: automation.harness } : {}),
             ...(automation.model !== undefined ? { model: automation.model } : {}),
         };
@@ -288,6 +313,13 @@ export const fireAutomation = async (
             services.logger.warn({ err: error, automation: automation.id, conversationId }, "automation turn failed");
         } finally {
             await recordTurnTranscript(services, turn, events);
+        }
+        /* Tell the sink the turn is not going to answer, BEFORE the finally closes it. The daemon has always
+         * known this — it is on the run record below and in the activity feed — and used to keep it: a wake
+         * that died on a revoked credential closed the stream with no text, which every audience reads as the
+         * agent having nothing to say. The raw reason goes out; each sink decides what its audience is told. */
+        if (failure !== undefined) {
+            stream?.failed(failure);
         }
         // The stable conversation rides onto the run record, which makes every wake that reached a turn
         // openable from its row — even when the provider never minted a runtime session.

@@ -2904,6 +2904,15 @@ export const AutomationSchema = z.object({
     allowedTools: z.array(z.string().min(1)).optional(),
     // Which provider adapter serves the wake; absent ⇒ claude. Same dispatch as a chat turn (AgentTurnSchema.agent).
     agent: AgentProviderSchema.optional(),
+    /* Which connected account of that provider serves the wake; absent ⇒ the provider's first account, exactly
+     * as for a chat turn (AgentTurnSchema.account).
+     *
+     * An automation needs this more than a chat does, and for a reason a chat never meets: nobody is watching.
+     * A sandbox holds several accounts side by side, and when the first one is out of headroom — or belongs to
+     * an organization that has disabled the plan — every fire of every automation errors against it until a
+     * human happens to read the row. Pinning the wake to an account that can actually run is the difference
+     * between "my nightly sweep is quiet" and a Doorbell that turns visitors away all day. */
+    account: z.string().optional(),
     // Which harness (agentic loop) runs the wake; absent ⇒ native. Same semantics as AgentTurnSchema.harness.
     harness: AgentHarnessSchema.optional(),
     // Which model the wake runs on (see agent-catalog.ts modelsFor); absent ⇒ the provider's default.
@@ -2931,6 +2940,16 @@ export const AutomationApprovalSchema = z.object({
     // payload so an approved external wake surfaces on the fleet exactly as an auto one would have.
     origin: AgentOriginSchema.optional(),
     title: z.string().optional(),
+    /* The CONTINUING THREAD this wake belonged to, when it had one — the conversation the dispatcher had
+     * already opened for it and the provider session that conversation last ran on.
+     *
+     * Snapshotted for the same reason the payload is, and it is the half that was missing: without it an
+     * approved wake fell through to minting a fresh conversation, so a Doorbell visitor's chat became one card
+     * per approved message instead of the single thread the dispatcher had opened for them — a second worktree
+     * each time, and an agent that met the visitor again on every turn. Absent for a schedule or a webhook,
+     * which own no thread. */
+    conversationId: z.string().optional(),
+    sessionId: z.string().optional(),
     createdAt: z.number(),
 });
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;

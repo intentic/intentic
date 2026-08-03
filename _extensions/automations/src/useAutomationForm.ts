@@ -54,6 +54,9 @@ export function useAutomationForm() {
         guard: ``,
         prompt: ``,
         agent: `claude` as AgentProvider,
+        // The pinned provider account, by its daemon-minted id. Blank ⇒ absent ⇒ the provider's first account,
+        // which is what every automation made before this field existed keeps doing.
+        account: ``,
         harness: `native` as AgentHarness,
         model: ``,
         requireApproval: false,
@@ -235,6 +238,7 @@ export function useAutomationForm() {
             guard: ``,
             prompt: ``,
             agent: `claude`,
+            account: ``,
             harness: `native`,
             model: ``,
             requireApproval: false,
@@ -292,6 +296,7 @@ export function useAutomationForm() {
         form.guard = automation.guard ?? ``;
         form.prompt = automation.prompt;
         form.agent = automation.agent ?? `claude`;
+        form.account = automation.account ?? ``;
         form.harness = automation.harness ?? `native`;
         form.model = automation.model ?? ``;
         form.requireApproval = automation.requireApproval === true;
@@ -356,6 +361,9 @@ export function useAutomationForm() {
         // Defaults stay absent (schema: absent agent = claude, absent harness = native); claude never carries a
         // harness — the two loops are identical for it.
         ...(form.agent !== `claude` ? { agent: form.agent } : {}),
+        // Blank ⇒ absent ⇒ the provider's first account. Written for claude too, unlike `agent`: "claude" is the
+        // default PROVIDER, but which of its accounts runs the wake is a choice on every provider alike.
+        ...(form.account !== `` ? { account: form.account } : {}),
         ...(form.agent !== `claude` && form.harness !== `native` ? { harness: form.harness } : {}),
         ...(form.model !== `` ? { model: form.model } : {}),
         ...(form.requireApproval ? { requireApproval: true } : {}),

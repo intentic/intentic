@@ -18,15 +18,20 @@ const bodyOf = (chunks: string[]): ReadableStream<Uint8Array> => {
     });
 };
 
-const collect = async (chunks: string[]): Promise<{ text: string; pending: string[] }> => {
+const collect = async (chunks: string[]): Promise<{ text: string; pending: string[]; failed: string[] }> => {
     vi.stubGlobal(
         `fetch`,
         vi.fn(async () => new Response(bodyOf(chunks), { status: 200 })),
     );
     let text = ``;
     const pending: string[] = [];
-    await sendMessage(ENDPOINT, MESSAGE, { delta: (part) => (text += part), pending: (notice) => pending.push(notice) });
-    return { text, pending };
+    const failed: string[] = [];
+    await sendMessage(ENDPOINT, MESSAGE, {
+        delta: (part) => (text += part),
+        pending: (notice) => pending.push(notice),
+        failed: (notice) => failed.push(notice),
+    });
+    return { text, pending, failed };
 };
 
 test(`a data line keeps everything past the single framing space`, () => {
@@ -67,6 +72,12 @@ test(`a pending frame reaches the sink and no text is invented for it`, async ()
     expect(text).toBe(``);
 });
 
+test(`an error frame reaches the sink — the turn answered with nothing, which is not an empty answer`, async () => {
+    const { text, failed } = await collect([`event: error\ndata: Sorry — I couldn't answer that just now.\n\nevent: done\ndata: \n\n`]);
+    expect(failed).toEqual([`Sorry — I couldn't answer that just now.`]);
+    expect(text).toBe(``);
+});
+
 test(`a stream that ends without a done frame still delivers what arrived`, async () => {
     const { text } = await collect([`event: delta\ndata: partial\n\n`]);
     expect(text).toBe(`partial`);
@@ -77,7 +88,7 @@ test(`a refusal surfaces the daemon's own sentence and its status, not a generic
         `fetch`,
         vi.fn(async () => new Response(JSON.stringify({ error: `origin not allowed` }), { status: 403 })),
     );
-    await expect(sendMessage(ENDPOINT, MESSAGE, { delta: () => {}, pending: () => {} })).rejects.toThrow(
+    await expect(sendMessage(ENDPOINT, MESSAGE, { delta: () => {}, pending: () => {}, failed: () => {} })).rejects.toThrow(
         expect.objectContaining({ message: `origin not allowed`, status: 403 }) as Error,
     );
 });
@@ -87,7 +98,7 @@ test(`a refusal with no JSON body still names its status`, async () => {
         `fetch`,
         vi.fn(async () => new Response(`<html>502</html>`, { status: 502 })),
     );
-    const error = await sendMessage(ENDPOINT, MESSAGE, { delta: () => {}, pending: () => {} }).catch((caught: unknown) => caught);
+    const error = await sendMessage(ENDPOINT, MESSAGE, { delta: () => {}, pending: () => {}, failed: () => {} }).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(WebchatError);
     expect((error as WebchatError).message).toContain(`502`);
 });
@@ -101,6 +112,6 @@ test(`the message posts to the automation's own path`, async () => {
             return new Response(bodyOf([`event: done\ndata: \n\n`]), { status: 200 });
         }),
     );
-    await sendMessage(ENDPOINT, MESSAGE, { delta: () => {}, pending: () => {} });
+    await sendMessage(ENDPOINT, MESSAGE, { delta: () => {}, pending: () => {}, failed: () => {} });
     expect(urls).toEqual([`https://sandbox-abc.example/webchat/support/message`]);
 });

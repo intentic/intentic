@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { type CatalogOption, HARNESSES, ModelsSchema, modelsFor, PROVIDERS, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import {
+    type CatalogOption,
+    HARNESSES,
+    ModelsSchema,
+    modelsFor,
+    OauthAccountListSchema,
+    PROVIDERS,
+    WEBCHAT_DAILY_MAX_DEFAULT,
+} from "@intentic/sandbox-contract";
 import { cmp, formatDateTime, Icon, ToggleSwitch } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
@@ -132,11 +140,34 @@ const modelOptions = computed<CatalogOption[]>(() => {
     return [{ value: ``, label: `Default` }, ...catalog.filter((option) => option.value !== ``)];
 });
 
-// A provider switch invalidates a pinned model — back to that provider's default. A harness switch keeps it
-// (the catalog is harness-independent).
+/* The picked provider's connected ACCOUNTS, read the same way and on the same seam as its models.
+ *
+ * A sandbox holds several side by side, and an automation is the surface that most needs to say which one:
+ * nobody is watching when it fires, so a first account that is out of headroom — or whose organization has
+ * turned the plan off — is an automation that errors every time until someone reads the row. A provider whose
+ * turns authenticate through the bundled translator has no accounts to choose between and the picker stays
+ * hidden for it, which is also what an unreachable daemon looks like. */
+const liveAccounts = useQuery({
+    queryKey: computed(() => host().sandbox.key(`agent-accounts`, form.agent)),
+    queryFn: async (): Promise<CatalogOption[]> =>
+        OauthAccountListSchema.parse(await host().sandbox.json(`/${form.agent}/accounts`)).accounts.map((account) => ({
+            value: account.id,
+            // The sign-in identity is what the owner recognises — the label is "Claude" on an account nobody
+            // renamed, which says nothing when three of them are listed together.
+            label: account.email ?? account.label,
+        })),
+    enabled: computed(() => host().sandbox.reachable()),
+});
+
+const accountOptions = computed<CatalogOption[]>(() => [{ value: ``, label: `Default` }, ...(liveAccounts.data.value ?? [])]);
+
+// A provider switch invalidates a pinned model AND a pinned account — an account id is one provider's store
+// key, so carrying it across would pin the wake to an account that provider does not have. A harness switch
+// keeps both (the catalog and the credential store are harness-independent).
 const setAgent = (agent: typeof form.agent): void => {
     form.agent = agent;
     form.model = ``;
+    form.account = ``;
 };
 const setHarness = (harness: typeof form.harness): void => {
     form.harness = harness;
@@ -589,7 +620,7 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
             >
                 <Icon class="text-2xs" :name="advancedOpen ? 'chevron-down' : 'chevron-right'" />
                 <span>Advanced</span>
-                <span v-if="!advancedOpen" class="font-normal normal-case tracking-normal">· guard, provider, model, approval</span>
+                <span v-if="!advancedOpen" class="font-normal normal-case tracking-normal">· guard, provider, account, model, approval</span>
             </button>
             <template v-if="advancedOpen">
                 <label class="ui-field">
@@ -643,6 +674,27 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                         {{ form.agent === "codex" ? "ChatGPT" : "SuperGrok" }} subscription (connect it in Sandbox ▸ Agent).
                     </p>
                 </div>
+                <!-- Which connected account pays for — and runs — the wake. Hidden when the provider has none to
+                     choose between (a translator-routed subscription, or a daemon we haven't reached yet). -->
+                <div v-if="accountOptions.length > 1" class="ui-field">
+                    <span class="ui-field-label">Account</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        <button
+                            v-for="option in accountOptions"
+                            :key="option.value"
+                            type="button"
+                            :class="[CHIP_BASE, form.account === option.value ? CHIP_SELECTED : CHIP_IDLE]"
+                            :aria-pressed="form.account === option.value"
+                            @click="form.account = option.value"
+                        >
+                            {{ option.label }}
+                        </button>
+                    </div>
+                    <p class="text-xs text-muted">
+                        Left on Default, this runs on whichever account comes first — so it starts failing when that one runs out of
+                        headroom or its plan is switched off. Pin one to keep this automation on an account you know can answer.
+                    </p>
+                </div>
                 <div class="ui-field">
                     <span class="ui-field-label">Model</span>
                     <div class="flex flex-wrap gap-1.5">
@@ -664,6 +716,13 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                 </label>
                 <p v-if="form.requireApproval" class="-mt-1 text-2xs text-subtle">
                     Each time this fires, the agent waits — you approve or reject it under "Pending approvals" before it acts.
+                </p>
+                <!-- The one place this caveat lands where it changes a decision. It is in the Doorbell docs, but
+                     nobody reads those while flipping a toggle, and a support chat that can never answer is not
+                     what "require my approval" sounds like. -->
+                <p v-if="form.requireApproval && isDoorbell" class="-mt-1 text-2xs text-warning">
+                    On a Doorbell this means visitors never get an answer in the widget: they see "a human will review this", and the
+                    approved reply lands on the conversation for you to handle, not back on their chat.
                 </p>
             </template>
         </div>

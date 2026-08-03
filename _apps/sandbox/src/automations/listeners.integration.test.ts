@@ -102,8 +102,8 @@ test("lines arriving during an in-flight run queue into one follow-up fire — n
 
 test("a superseded reply stream is ended so a streamed dispatch never hangs on it", async () => {
     const ended: string[] = [];
-    const s1: TurnStream = { delta: () => {}, end: () => void ended.push("s1") };
-    const s2: TurnStream = { delta: () => {}, end: () => void ended.push("s2") };
+    const s1: TurnStream = { delta: () => {}, failed: () => {}, end: () => void ended.push("s1") };
+    const s2: TurnStream = { delta: () => {}, failed: () => {}, end: () => void ended.push("s2") };
     const fired: Array<TurnStream | undefined> = [];
     const batcher = createMessageBatcher(
         async (_payload, fireContext) => void fired.push(fireContext.stream),

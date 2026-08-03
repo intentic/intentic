@@ -232,8 +232,14 @@ export const createWebchatRoutes = (
 
             return streamSSE(c, async (sse) => {
                 const stream = createSseStream(sse);
-                // Approval-gated automations HOLD the wake — nothing streams. Send a notice first so the SSE isn't a
-                // silent close; the approved reply is delivered out-of-band (v2). Auto automations stream the reply live.
+                /* Approval-gated automations HOLD the wake — nothing streams. Send a notice first so the SSE isn't
+                 * a silent close; auto automations stream the reply live instead.
+                 *
+                 * The approved run lands in THIS visitor's conversation (the fire snapshots the thread onto the
+                 * approval, and the approve route replays it), so the owner answers from the same card and the
+                 * thread keeps its context. What is still missing is the last hop: this SSE is long closed by
+                 * the time they approve, so the reply reaches the fleet and not the widget. Delivering it needs a
+                 * channel the widget holds open across page loads — v2. */
                 if (automation.requireApproval === true) {
                     await sse.writeSSE({ event: "pending", data: "Thanks — your request was received and a human will review it shortly." });
                 }

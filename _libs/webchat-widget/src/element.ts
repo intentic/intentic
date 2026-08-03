@@ -309,6 +309,13 @@ export class DoorbellElement extends HTMLElement {
                     bubble.remove();
                     this.notice(notice, "notice");
                 },
+                // The turn answered with nothing. Said out loud, in the same place a transport failure is said —
+                // silently dropping the bubble (which is what happened before there was a frame for this) leaves
+                // the visitor staring at their own message wondering whether it sent.
+                failed: (notice) => {
+                    bubble.remove();
+                    this.notice(notice, "failed");
+                },
             });
             if (reply.text === "") {
                 bubble.remove();
