@@ -22,11 +22,14 @@ import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
  *    the DEPENDENCY, and a handoff mode is a detail they can put back.
  */
 
-// What a new step starts as. Everything here is a working default, which is the whole premise of the
-// designer's tiering: fill in the two prose fields and the rest already runs.
+/* What a new step starts as. Everything here is a working default, which is the whole premise of the designer's
+ * tiering — and a new step is now RUNNABLE the moment it exists, because the two prose fields are no longer
+ * among the things it has to be told.
+ *
+ * `goal` and `prompt` are ABSENT rather than empty, and the difference is the contract's: absent means the step
+ * takes both from what the run was asked to do, while `` is a declared empty instruction, which the schema
+ * refuses and which nobody means. */
 const DEFAULTS = {
-    goal: ``,
-    prompt: ``,
     handoff: `fresh`,
     output: { kind: `claim` },
     checks: [],

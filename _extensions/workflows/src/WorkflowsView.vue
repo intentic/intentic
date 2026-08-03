@@ -98,12 +98,13 @@ const blank = (): void =>
     openDraft({
         id: `workflow-${workflows.value.length + 1}`,
         name: `New workflow`,
+        // No goal and no prompt: the step does whatever the run is asked to do and is measured against it. A
+        // blank workflow is therefore RUNNABLE the moment it is named, which is the point — the author adds
+        // structure (a second step, a check, a declared output) rather than filling in boilerplate to begin.
         steps: [
             {
                 id: `step-1`,
                 title: `First step`,
-                goal: ``,
-                prompt: ``,
                 needs: [],
                 handoff: `fresh`,
                 output: { kind: `claim` },

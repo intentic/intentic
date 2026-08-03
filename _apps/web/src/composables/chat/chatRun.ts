@@ -12,16 +12,28 @@ import { ref } from "vue";
  * look at a picture of them. So the run rides in the chat panel, which already knows how to put N conversations
  * side by side, and the picture is a mode of that panel rather than a different address.
  *
- * TWO MODES, AND THE BACK ARROW IS THE HINGE. `sessions` is the panes, which is where you land: the run's live
- * steps, one column each. `graph` is the diagram, one press back from them — the map you go to in order to
- * choose a different part of the run. It is the same relationship a folder has to a file, and the arrow points
- * the same way.
+ * THREE MODES, AND ONLY ONE OF THEM MOVES.
+ *
+ * `live` is where every run lands and where it stays until the reader says otherwise: the panes show whatever
+ * the run has going, and they MOVE WITH IT — when both attempts of a fan-out finish and the merge starts, the
+ * merge is what is on screen. A run has no single moment worth freezing on, so following it is the only mode
+ * that describes what the reader actually asked for ("show me my workflow"), and it is the reason the other two
+ * are defined against it rather than the other way round. It renders the DIAGRAM while nothing is live, which
+ * covers both ends: the seconds after a start, before the first step has opened its conversation, and a
+ * finished run, which has nothing to follow and whose map is the right thing to land on.
+ *
+ * `graph` is the diagram because the reader pressed the back arrow. It does not promote itself when a step
+ * starts — that press said "show me the map", and a map that jumps back to the panes underneath it is a map you
+ * cannot read.
+ *
+ * `pinned` is the panes the reader chose out of that map. It does not move either, for the same reason: they
+ * named a band, and following would yank them off it mid-read.
  *
  * The run itself is NOT held here, only its id: the ledger is polled (useWorkflowRuns) and a snapshot taken at
  * click time would freeze the graph at the moment it was opened — every node still `pending`, forever.
  */
 
-export type ChatRunMode = "sessions" | "graph";
+export type ChatRunMode = "graph" | "live" | "pinned";
 
 export interface ChatRunView {
     readonly runId: string;
@@ -42,6 +54,31 @@ export const closeRun = (): void => {
 // predecessor's, so this set is smaller than the step count.
 const runHolds = (run: WorkflowRun, conversationId: string): boolean => run.steps.some((step) => step.conversationId === conversationId);
 
+/* Whether the panes are showing any of this run's own chats — which is how a FOLLOWING panel decides between
+ * the diagram and the columns, and it is a better question than "is anything live".
+ *
+ * "Nothing live" is true at both ends of a run and wants opposite answers. At the start the panes hold whatever
+ * the reader was on when they pressed send — the composer they typed into, an unrelated chat — and none of it
+ * is about the run, so the diagram is the only honest thing to draw. At the end the panes hold the last band,
+ * which is the work itself, and replacing it with a picture would take the transcripts away at the moment they
+ * finally have the answer in them. Asking what the panes CONTAIN separates the two without a flag.
+ */
+export const paneShowsRun = (run: WorkflowRun, showing: readonly string[]): boolean => showing.some((id) => runHolds(run, id));
+
+/* WHETHER THE DIAGRAM IS WHAT THE PANEL IS DRAWING. Two surfaces ask it: the panel, which draws it, and the
+ * fleet board, which has to take the selection ring off every card while it is up — a ring says "that chat is
+ * what you are looking at", and over a panel showing a picture of a graph that is simply false.
+ *
+ * ONE FUNCTION, because the two disagreeing is the failure itself and neither side can detect it alone: a board
+ * ringing a card the panel is not showing looks, from the board, exactly like a board that is right.
+ *
+ * `graph` is the mode that says so outright. `live` says it only while the panes have nothing of this run in
+ * them, which is the window between pressing send and the first step opening its conversation — see
+ * paneShowsRun for why that is asked of the PANES rather than of the run's own state.
+ */
+export const showingRunGraph = (run: WorkflowRun | undefined, view: ChatRunView | undefined, showing: readonly string[]): boolean =>
+    run !== undefined && (view?.mode === `graph` || (view?.mode === `live` && !paneShowsRun(run, showing)));
+
 /* WHAT A FOCUS CHANGE DOES TO THE RUN ON SCREEN — the rule that keeps the diagram from being a trap.
  *
  * The diagram covers the panes, so while it is up every other way of choosing a chat — a card on the rail, a
@@ -53,11 +90,16 @@ const runHolds = (run: WorkflowRun, conversationId: string): boolean => run.step
  * part of it", so the run stays and the back arrow with it. Any other chat means the reader has left, and the
  * run goes with them rather than hanging a stale run's name over an unrelated transcript.
  *
+ * IT LANDS ON `pinned`, NOT ON `live`, and only out of `graph`. The reader named ONE chat, so the panel must
+ * not then follow the run off it — which is exactly what `live` would do the next time a step settled. Out of
+ * either pane mode the answer is to change nothing: the panes are already showing the run, and a focus moving
+ * between the columns of a band it is following is not a decision to stop following it.
+ *
  * A function rather than eight lines inside a watcher because this is the whole rule, and a rule that only
  * exists inside an SFC is one no test can reach.
  */
-export const runOnFocus = (run: WorkflowRun, conversationId: string): ChatRunView | undefined =>
-    runHolds(run, conversationId) ? { runId: run.runId, mode: `sessions` } : undefined;
+export const runOnFocus = (run: WorkflowRun, conversationId: string, mode: ChatRunMode): ChatRunView | undefined =>
+    runHolds(run, conversationId) ? { runId: run.runId, mode: mode === `graph` ? `pinned` : mode } : undefined;
 
 /* THE NODE GEOMETRY, here rather than in the component, because two things have to agree about it: the graph
  * the user clicks and the columns this file computes from the same layout. A node size passed to one and not
@@ -120,15 +162,53 @@ export const liveSessions = (run: WorkflowRun): RunSession[] => {
     });
 };
 
-/* WHAT TO PUT ON SCREEN WHEN A RUN IS OPENED: the sessions it has RUNNING, and nothing else.
+// Two pane sets naming the same chats, order-insensitive. Both rules below ask this, and neither of them has
+// any business caring which order dagre happened to put a band in.
+const sameChats = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((id) => b.includes(id));
+
+/* WHAT A FOLLOWING PANEL SHOULD BE SHOWING — the rule behind `live`, and the one that makes starting a workflow
+ * feel like starting an agent instead of like filing a request.
  *
- * It briefly also offered the roots of a run that had only just started, on the theory that landing in a chat
- * beats landing on a picture. It does not, and the reason is what those tabs actually contain: the daemon acks
- * a run before any step has opened its conversation, so the "chat" was an empty composer sitting under a
- * "start a new Claude session" placeholder for as long as the first turn took to register — a screen that says
- * nothing about the run and invites you to do something unrelated. The diagram at least draws the work.
+ * `undefined` ⇒ leave the panes alone, and it is the answer in the two cases that look like they want action.
+ * Nothing live is one of them: a run between bands (both attempts settled, the merge not yet started) and a run
+ * that has ENDED both report an empty set, and in both the last thing on screen is the work the reader wants to
+ * read. Clearing the panes there would take the finished transcripts away at the exact moment they became worth
+ * looking at. The other is a set that is already up, which is most polls — this runs on every one of them.
+ *
+ * The panel calls this rather than the route: the daemon acks a run with every step still `pending`, so there
+ * is no moment at start time when the answer is anything but "nothing yet". The first poll that reports a live
+ * session is what puts the panes on screen, and the same poll on the far side of a band moves them on.
  */
-export const sessionsToOpen = (run: WorkflowRun): RunSession[] => liveSessions(run);
+export const runToFollow = (run: WorkflowRun, showing: readonly string[]): RunSession[] | undefined => {
+    const live = liveSessions(run);
+    if (
+        live.length === 0 ||
+        sameChats(
+            live.map((session) => session.conversationId),
+            showing,
+        )
+    ) {
+        return undefined;
+    }
+    return live;
+};
+
+/* Whether putting these chats on screen is still FOLLOWING the run or is the reader going to look at something
+ * specific — the whole difference between `live` and `pinned`, decided from what was pressed rather than from a
+ * second gesture nobody would think to make.
+ *
+ * Pressing the band that is live means "show me what is happening now", which is what `live` already does and
+ * must keep doing when this band gives way to the next. Pressing any other band — a finished attempt, a step
+ * that failed an hour ago — is a decision to stand still, and a panel that followed the run out of it would be
+ * answering a question the reader did not ask.
+ */
+export const modeForSessions = (run: WorkflowRun, conversationIds: readonly string[]): ChatRunMode =>
+    sameChats(
+        conversationIds,
+        liveSessions(run).map((session) => session.conversationId),
+    )
+        ? `live`
+        : `pinned`;
 
 /* The run's steps grouped into the columns the diagram DRAWS, keyed by step id.
  *

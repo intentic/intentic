@@ -29,9 +29,13 @@ export interface WorkflowTemplate {
     readonly workflow: Workflow;
 }
 
-// What a step is when it says nothing else. Short, because a step is mostly prose now: there are no ceilings
-// to declare, no worktree to opt into, and nothing to budget — a step runs the way any agent session runs.
-const step = (id: string, title: string, over: Partial<WorkflowStep> & Pick<WorkflowStep, "goal" | "prompt">): WorkflowStep => ({
+/* What a step is when it says nothing else. Short, because a step is mostly prose now: there are no ceilings to
+ * declare, no worktree to opt into, and nothing to budget — a step runs the way any agent session runs.
+ *
+ * `goal` and `prompt` are NOT required here any more, and their absence is a design rather than an omission: a
+ * step that declares neither is handed what the person typed, verbatim and unwrapped (WorkflowStepSchema). Most
+ * steps of most shapes want exactly that. */
+const step = (id: string, title: string, over: Partial<WorkflowStep> = {}): WorkflowStep => ({
     id,
     title,
     needs: [],
@@ -73,6 +77,14 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                  * reading of the task between you and both attempts, which is precisely the variable this
                  * design exists to hold still.
                  *
+                 * NEITHER DECLARES A GOAL OR A PROMPT, and that is the second half of the same argument. What
+                 * they used to declare was a paraphrase of "build what was asked" wrapped in five headings
+                 * about the workflow — one model's reading of the task, re-inserted one layer down after being
+                 * evicted from the step above. A step with neither is handed YOUR sentence, unwrapped, and is
+                 * measured against it (workflow-brief.ts). The operational facts that prose used to carry — a
+                 * worktree of your own, commit as you go — are now told to every step by the brief itself,
+                 * because they are true of every step and no design should have to remember them.
+                 *
                  * Same words, same output contract, different model, and neither is told the other exists — a
                  * session that knows it is being raced writes for the judge, and what you wanted to measure was
                  * how it writes code. Each gets its own worktree off HEAD and its own branch, which is what the
@@ -86,14 +98,10 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                  */
                 step(`attempt-a`, `Claude's attempt`, {
                     agent: `claude`,
-                    goal: `What was asked for is built, on this session's own branch.`,
-                    prompt: `Build what the request above asks for. Read the code it touches before you change any of it. You are in a worktree of your own and nothing else is working in it, so commit as you go; follow the repo's own conventions rather than importing new ones, and stay inside what was actually asked for.`,
                     output: { kind: `json`, fields: attemptFields() },
                 }),
                 step(`attempt-b`, `GPT's attempt`, {
                     agent: `codex`,
-                    goal: `What was asked for is built, on this session's own branch.`,
-                    prompt: `Build what the request above asks for. Read the code it touches before you change any of it. You are in a worktree of your own and nothing else is working in it, so commit as you go; follow the repo's own conventions rather than importing new ones, and stay inside what was actually asked for.`,
                     output: { kind: `json`, fields: attemptFields() },
                 }),
                 /* THE SYNTHESIS — one step, and it both reads and writes.

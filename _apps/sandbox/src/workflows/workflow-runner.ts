@@ -159,11 +159,16 @@ const BLOCKED: StepOutcome = { ok: false, document: undefined, report: "" };
 const STEP_ROUNDS_MAX = 20;
 const STEP_IDLE_ROUNDS = 3;
 
-// The loop that runs one step. Everything but the prompt and the backstops comes straight off the step — a
-// step IS a loop declaration plus a place in the graph, and this is where that stops being a metaphor.
-const loopForStep = (step: WorkflowStep, conversationId: string, prompt: string): Loop => ({
+/* The loop that runs one step. Everything but the prompt, the goal and the backstops comes straight off the
+ * step — a step IS a loop declaration plus a place in the graph, and this is where that stops being a metaphor.
+ *
+ * `goal` is passed in because a step may not have one: absent, the run's own request is what the step is
+ * measured against (WorkflowStepSchema), which is the ordinary case for a design written as a shape. Resolving
+ * it at the call site keeps the fallback in one place with the prompt's.
+ */
+const loopForStep = (step: WorkflowStep, conversationId: string, prompt: string, goal: string): Loop => ({
     conversationId,
-    goal: step.goal,
+    goal,
     prompt,
     context: step.context,
     output: step.output,
@@ -204,6 +209,11 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
     const execute = async (step: WorkflowStep, conversationId: string, handovers: readonly Handover[]): Promise<StepOutcome> => {
         const index = position.get(step.id) ?? 1;
         const prompt = briefForStep(workflow, step, index, handovers, run.request);
+        /* The step's own goal, or the run's request when it declares none — the same fallback the prompt makes
+         * one line above, and the reason a design can be a shape at all. `??` rather than a check: a run that
+         * would leave both empty never gets this far (workflowRunFaults refuses it at the door), so there is no
+         * third case to write and nothing here that could hand the loop an empty bar. */
+        const goal = step.goal ?? run.request ?? "";
         /* Tell the fleet card what this conversation is now part of, BEFORE the loop starts — the card exists
          * from the loop's first iteration, and a card that says nothing for the first minute of a four-minute
          * step is a card that says nothing. A `continue` step overwrites its predecessor's entry, which is
@@ -214,7 +224,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
          * manifest is keyed by conversation and holds the LATEST loop on it, so a continued step replaces the
          * row of the step it continued — right for a per-conversation view, and lossless for the user, because
          * the run record below is what carries each step's own history. */
-        const record = await services.loops.start(loopForStep(step, conversationId, prompt), Date.now());
+        const record = await services.loops.start(loopForStep(step, conversationId, prompt, goal), Date.now());
         /* Stopping the RUN has to reach a loop that is already turning, and the loop pump's own signal is
          * private to it — `stopLoop` is the door. The listener covers a stop that arrives during the step; the
          * check right after covers one that landed in the instant between the guard above and here, which is
@@ -307,6 +317,25 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
             const handovers: Handover[] = upstream.map(handoverFrom);
             await gate.take();
             try {
+                /* ASKED AGAIN ON THE FAR SIDE OF THE SLOT, and it is not the same question as the one above.
+                 *
+                 * A wide graph QUEUES here: `maxParallel` is two by default, so a fan-out of six leaves four
+                 * steps waiting, and a step waits as long as the steps ahead of it take — a whole agent turn
+                 * each. A run stopped anywhere in that window found the guard above long since passed, and the
+                 * step walked into `execute` anyway: published to the fleet card, written `running` in the
+                 * ledger, a loop record opened on its conversation.
+                 *
+                 * NO TURN WAS EVER WASTED — runLoop asks its own stop signal before it calls one, and the relay
+                 * inside `execute` reaches it first — so this is bookkeeping rather than money. It is
+                 * bookkeeping two surfaces read, which is why it is worth a second guard: a step flickering
+                 * into `running` after the user pressed Stop is the one thing a stop must never look like, and
+                 * a loops manifest carrying a row for a step that ran no iteration is a lie about what
+                 * happened. Settling it as never-started says the true thing instead.
+                 */
+                if (abort.signal.aborted) {
+                    await close(step.id, "stopped", "The run was stopped before this step started.");
+                    return BLOCKED;
+                }
                 return await execute(step, conversationId, handovers);
             } finally {
                 gate.give();

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { type Workflow, workflowFaults, workflowsContract, type WorkflowSummary } from "@intentic/sandbox-contract";
+import { type Workflow, workflowFaults, workflowRunFaults, workflowsContract, type WorkflowSummary } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
@@ -54,7 +54,7 @@ export const createWorkflowsRoutes = (services: Services) => {
             }
             // Re-checked at run time, not only at save time: a manifest can be hand-edited, and the run is
             // where the money gets spent.
-            const faults = workflowFaults(workflow);
+            const faults = [...workflowFaults(workflow), ...workflowRunFaults(workflow, input.request)];
             if (faults.length > 0) {
                 throw new ORPCError("BAD_REQUEST", { message: faults.join(" ") });
             }

@@ -119,7 +119,11 @@ const openChat = (conversationId: string): void => host().navigate(`/agents/${en
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
 
-                <p class="text-xs text-subtle"><span class="text-content">Done when:</span> {{ shownStep.goal }}</p>
+                <!-- A step with no goal of its own is measured against what the run was asked to do, so THAT is
+                     what "done when" has to show. Falling back to the run's request rather than to the step's
+                     title: the title is a label ("Claude's attempt"), and reading it here as a completion bar
+                     is how a panel starts describing a rule the scheduler is not applying. -->
+                <p class="text-xs text-subtle"><span class="text-content">Done when:</span> {{ shownStep.goal ?? run.request }}</p>
 
                 <!-- The declared output, as a table. The reason `json` exists: a step's conclusion as data you
                      can read at a glance and the next step can act on, rather than a paragraph about it. -->

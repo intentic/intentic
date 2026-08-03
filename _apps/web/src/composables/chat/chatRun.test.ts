@@ -14,7 +14,7 @@ vi.hoisted(() => {
     });
 });
 
-import { runColumns, runOnFocus, sessionsToOpen } from "./chatRun";
+import { modeForSessions, paneShowsRun, runColumns, runOnFocus, runToFollow, showingRunGraph } from "./chatRun";
 
 /* WHICH SESSIONS A COLUMN OPENS. The graph's one gesture is "click a step, get its whole column", so this is
  * the arithmetic between a click and a pane set — and it is the part that cannot be checked by looking, since
@@ -109,16 +109,33 @@ test("a column carries the provider its step was pinned to", () => {
  * did not move — the rail's cards, the board's cards, New agent. Every one of those clicks landed and none of
  * them reached the screen, which reads as the whole panel having frozen.
  */
-test("focusing a chat of this run keeps the run and drops back to its sessions", () => {
+test("focusing a chat of this run leaves the diagram for its sessions", () => {
     const design = run([step(`brief`), step(`a`, { needs: [`brief`] })], []);
-    expect(runOnFocus(design, `wf-r1-a`)).toEqual({ runId: `r1`, mode: `sessions` });
+    expect(runOnFocus(design, `wf-r1-a`, `graph`)).toEqual({ runId: `r1`, mode: `pinned` });
+});
+
+/* IT LANDS ON `pinned` AND NOT ON `live`, which is the difference between naming a chat and asking to be kept
+ * up to date. The reader picked one session out of the run; a panel that then followed the run off it the next
+ * time a step settled would be overruling the only instruction it was given.
+ */
+test("focusing a chat of this run does not put the panel back on the run's tail", () => {
+    const design = run([step(`a`), step(`b`)], [{ state: `done` }, {}]);
+    expect(runOnFocus(design, `wf-r1-a`, `graph`)?.mode).toBe(`pinned`);
+});
+
+// Already on the panes, a focus moving between the columns of the band being followed is not a decision about
+// the run at all — so the mode is left exactly where it was, in either direction.
+test("focusing inside the run from a pane mode changes nothing about the mode", () => {
+    const design = run([step(`a`), step(`b`)], []);
+    expect(runOnFocus(design, `wf-r1-a`, `live`)?.mode).toBe(`live`);
+    expect(runOnFocus(design, `wf-r1-a`, `pinned`)?.mode).toBe(`pinned`);
 });
 
 // Focusing anything else means the reader has left: a run bar hanging over an unrelated transcript would be
 // naming a run that has nothing to do with what is on screen.
 test("focusing a chat outside the run leaves the run", () => {
     const design = run([step(`brief`)], []);
-    expect(runOnFocus(design, `some-other-conversation`)).toBeUndefined();
+    expect(runOnFocus(design, `some-other-conversation`, `live`)).toBeUndefined();
 });
 
 /* A step that has not started names a conversation the daemon has not opened. Offering it would put an empty
@@ -131,14 +148,15 @@ test("steps that never started contribute no session", () => {
     expect(columns.get(`later`)?.sessions).toEqual([]);
 });
 
-/* WHAT "OPEN THIS RUN" LANDS ON — the sessions that are going, and only those.
+/* FOLLOWING A RUN — the rule behind `live`, and the regression it exists for.
  *
- * It briefly also offered the ROOTS of a just-started run, so the press would land in a chat rather than on a
- * picture. What it actually landed on was an empty composer under a "start a new Claude session" placeholder:
- * the daemon acks a run before any step has opened its conversation, so those tabs had nothing in them and
- * nothing to say about the run.
+ * The panel used to read the run's live sessions ONCE, at the press, and fall back to the diagram when there
+ * were none. That is every run started from a composer: the daemon acks with every step still `pending`, so the
+ * answer at that instant is always "nothing", and nothing afterwards moved the panel. The user pressed send,
+ * got a picture, and watched two nodes go green on it while the transcripts they wanted stayed one unprompted
+ * click away. So the reading is per-POLL rather than per-press, and these are the polls it has to act on.
  */
-test("a run whose steps have not started yet offers nothing to open", () => {
+test("a run whose steps have not started yet has nothing to follow", () => {
     const design = run(
         [step(`a`), step(`b`)],
         [
@@ -146,11 +164,55 @@ test("a run whose steps have not started yet offers nothing to open", () => {
             { state: `pending`, iterations: 0 },
         ],
     );
-    expect(sessionsToOpen(design)).toEqual([]);
+    expect(runToFollow(design, [])).toBeUndefined();
 });
 
-// Once a step is going, that is what to show.
-test("a run with something live opens on the live sessions", () => {
+// The poll that turns the diagram into the attempts — the moment the whole mode exists for.
+test("the first poll with something live hands over the live sessions", () => {
+    const design = run([step(`a`), step(`b`)], [{}, {}]);
+    expect(runToFollow(design, [`some-other-chat`])?.map((session) => session.conversationId)).toEqual([`wf-r1-a`, `wf-r1-b`]);
+});
+
+// The poll on the far side of a band: both attempts have settled and the merge is up, so the panes move on
+// without the reader pressing anything. This is "when both finish, they get to the next step", on screen.
+test("a band giving way to the next moves the panes on", () => {
     const design = run([step(`a`), step(`b`), step(`after`, { needs: [`a`, `b`] })], [{ state: `done` }, { state: `done` }, { state: `running` }]);
-    expect(sessionsToOpen(design).map((session) => session.conversationId)).toEqual([`wf-r1-after`]);
+    expect(runToFollow(design, [`wf-r1-a`, `wf-r1-b`])?.map((session) => session.conversationId)).toEqual([`wf-r1-after`]);
+});
+
+// Most polls. The set is already up, so there is nothing to do — and doing it anyway would reset the panes
+// (and the focus with them) every few seconds for the entire length of a run.
+test("a live band already on screen is left alone, whatever order it is in", () => {
+    const design = run([step(`a`), step(`b`)], [{}, {}]);
+    expect(runToFollow(design, [`wf-r1-a`, `wf-r1-b`])).toBeUndefined();
+    expect(runToFollow(design, [`wf-r1-b`, `wf-r1-a`])).toBeUndefined();
+});
+
+/* A RUN THAT HAS ENDED KEEPS ITS LAST BAND ON SCREEN. "Nothing live" is true at both ends of a run and wants
+ * opposite answers: at the start the panes hold chats that are not about the run, and at the end they hold the
+ * work itself — which is exactly when the transcripts finally have the answer in them.
+ */
+test("a finished run does not clear the panes that hold its work", () => {
+    const design = run([step(`a`), step(`b`)], [{ state: `done` }, { state: `done` }]);
+    expect(runToFollow(design, [`wf-r1-a`, `wf-r1-b`])).toBeUndefined();
+    // ...and that is why the diagram is decided from the PANES rather than from "is anything live".
+    expect(paneShowsRun(design, [`wf-r1-a`])).toBe(true);
+    expect(showingRunGraph(design, { runId: `r1`, mode: `live` }, [`wf-r1-a`])).toBe(false);
+    expect(showingRunGraph(design, { runId: `r1`, mode: `live` }, [`an-unrelated-chat`])).toBe(true);
+});
+
+/* PRESSING A BAND ON THE DIAGRAM: the live one is a request to keep watching, anything else is a request to
+ * stand still. Decided from what was pressed, because a reader who wanted the difference expressed as a second
+ * gesture would have to know the mode existed.
+ */
+test("opening the live band keeps following, opening a settled one pins", () => {
+    const design = run([step(`a`), step(`b`), step(`after`, { needs: [`a`, `b`] })], [{ state: `done` }, { state: `done` }, { state: `running` }]);
+    expect(modeForSessions(design, [`wf-r1-after`])).toBe(`live`);
+    expect(modeForSessions(design, [`wf-r1-a`, `wf-r1-b`])).toBe(`pinned`);
+});
+
+// The back arrow said "show me the map", so a step starting must not throw the reader back at the panes.
+test("the diagram asked for outright stays up whatever the run does", () => {
+    const design = run([step(`a`)], [{}]);
+    expect(showingRunGraph(design, { runId: `r1`, mode: `graph` }, [`wf-r1-a`])).toBe(true);
 });

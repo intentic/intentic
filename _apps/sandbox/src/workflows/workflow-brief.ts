@@ -94,17 +94,66 @@ const handoverFrom = ({ title, document, report, branch }: Handover): string => 
     ].join(`\n`);
 };
 
+/* WHERE THE SESSION IS STANDING, on every step, and it is here rather than in any step's prose for a reason
+ * that cost the one template we ship.
+ *
+ * Every workflow step runs in a worktree of its own — always, no toggle (WorkflowSchema) — and NOTHING ELSE
+ * SAYS SO. The sandbox's system prompt is silent about isolation, so a step knew only if its author had
+ * remembered to write it down, and the two-models template was the thing carrying that sentence. What it
+ * guards against fails silently and completely: the step downstream reads its predecessors with
+ * `git diff main...<branch>`, so an attempt that did the work and left it uncommitted hands the merge an empty
+ * diff, and the merge truthfully reports that one attempt did nothing. One line, on every step, so no design
+ * can omit it and no design has to remember it.
+ */
+const WHERE_YOU_ARE = [
+    `## Where you are working`,
+    ``,
+    `You are in a git worktree of your own and nothing else is working in it. The steps after you read what you ` +
+        `did with \`git diff main...<your branch>\` — so COMMIT AS YOU GO. Anything you leave uncommitted is ` +
+        `invisible to the rest of this run.`,
+].join(`\n`);
+
 /* The prompt a step's loop is given. Becomes `Loop.prompt`, so the loop wraps it with the iteration heading,
  * the goal and the output contract — this is only the task half.
  *
- * THE REQUEST GOES TO EVERY STEP, not only to the roots, and it goes ABOVE the handovers. A workflow is a
- * shape and the request is what it is pointed at this time, so a step that has not been told it is working
- * from a summary of a summary: the reviewer three steps down reads "make the importer handle empty files" and
- * can tell whether what it is looking at is that. It is short, it is the same text for every step, and it is
- * cached — the cheapest context in the whole brief and the only one that says what any of this is FOR.
+ * A STEP THAT DECLARES NO PROMPT GETS THE REQUEST AND ALMOST NOTHING ELSE, and that default is the whole point.
+ * The headings below are not free: each one stands between the sentence the reader typed and the model that has
+ * to act on it, and a model handed a five-section brief about a workflow will spend some of its attention on
+ * the workflow. A step whose entire job is "do what was asked" has nothing to add to the asking, so it adds
+ * nothing — the request, whatever its predecessors settled, and where it is standing. That is what makes a
+ * saved workflow a SHAPE you point at today's job rather than a document you edit in order to ask a question.
+ *
+ * A STEP THAT DECLARES ONE IS SAYING IT HAS A JOB OF ITS OWN — review this, merge those — and gets the full
+ * brief, because for that step the request genuinely is context rather than the instruction.
+ *
+ * THE REQUEST GOES TO EVERY STEP EITHER WAY, not only to the roots, and above the handovers. A workflow is a
+ * shape and the request is what it is pointed at this time, so a step three down is not working from a summary
+ * of a summary: the reviewer reads "make the importer handle empty files" and can tell whether what it is
+ * looking at is that. It is short, the same text for every step, and cached — the cheapest context in the whole
+ * brief and the only one that says what any of this is FOR.
  */
 export const briefForStep = (workflow: Workflow, step: WorkflowStep, position: number, handovers: readonly Handover[], request?: string): string => {
-    const sections = [
+    const settled =
+        handovers.length === 0
+            ? []
+            : [
+                  [
+                      `## What the steps before you concluded`,
+                      ``,
+                      `Treat this as SETTLED. It was decided by sessions that did that work, and re-litigating it is how a ` +
+                          `workflow ends up describing two different jobs. If it is wrong, say so in your output rather than ` +
+                          `quietly working around it.`,
+                      ``,
+                      ...handovers.map(handoverFrom),
+                  ].join(`\n`),
+              ];
+    /* Inheriting: the request IS the instruction, so it leads and wears no heading — a heading over the only
+     * thing in the brief is furniture. A run that would arrive here with no request at all is refused before it
+     * starts (workflowRunFaults), which is what lets this be the plain string rather than a third case. */
+    if (step.prompt === undefined) {
+        return [request ?? ``, ...settled, WHERE_YOU_ARE].join(`\n\n`);
+    }
+    return [
         [
             `# ${step.title}`,
             ``,
@@ -123,20 +172,8 @@ export const briefForStep = (workflow: Workflow, step: WorkflowStep, position: n
                       request,
                   ].join(`\n`),
               ]),
-        ...(handovers.length === 0
-            ? []
-            : [
-                  [
-                      `## What the steps before you concluded`,
-                      ``,
-                      `Treat this as SETTLED. It was decided by sessions that did that work, and re-litigating it is how a ` +
-                          `workflow ends up describing two different jobs. If it is wrong, say so in your output rather than ` +
-                          `quietly working around it.`,
-                      ``,
-                      ...handovers.map(handoverFrom),
-                  ].join(`\n`),
-              ]),
+        ...settled,
         [`## Your task`, ``, step.prompt].join(`\n`),
-    ];
-    return sections.join(`\n\n`);
+        WHERE_YOU_ARE,
+    ].join(`\n\n`);
 };

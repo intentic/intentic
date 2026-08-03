@@ -1,4 +1,4 @@
-import { GATE_DAILY_MAX_DEFAULT, type GateVerdict, workflowFaults } from "@intentic/sandbox-contract";
+import { GATE_DAILY_MAX_DEFAULT, type GateVerdict, workflowFaults, workflowRunFaults } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { streamAgent } from "../agent/agent.routes.js";
 import { PAYLOAD_MAX } from "../automations/scheduler.js";
@@ -97,6 +97,14 @@ export const createGateRoute =
          * business and not this route's — which is the property that lets one door serve an acceptance sweep
          * and a security review without learning what either of them is. */
         const request = (await c.req.text()).slice(0, PAYLOAD_MAX);
+        /* A design whose steps take their goal from the request cannot be run by a caller that sent an empty
+         * body — there would be nothing to tell the model at all. Refused here rather than discovered by the
+         * first step, because this door spends a whole fan-out of sessions per call and a gate wired into a
+         * push-triggered pipeline would spend it on every commit. 400, not 500: the body is the caller's. */
+        const runFaults = workflowRunFaults(workflow, request);
+        if (runFaults.length > 0) {
+            return c.json({ error: runFaults.join(" ") }, 400);
+        }
         const run = await services.workflowRuns.start(openRun(workflow, Date.now(), request === "" ? undefined : request));
 
         /* Held, unlike every other run-starting route here — holding it IS the product. A pipeline step's whole

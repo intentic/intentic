@@ -1,7 +1,7 @@
 import { type WorkflowRun, WorkflowRunsListSchema } from "@intentic/sandbox-contract";
 import { useAgents } from "../agents/useAgents";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { type RunSession, sessionsToOpen, showRun } from "./chatRun";
+import { type RunSession, showRun } from "./chatRun";
 import { openAgentConversation, useChat } from "./useChat";
 import { useChatPopout } from "./useChatPopout";
 
@@ -45,31 +45,36 @@ export const openRunSessions = (sessions: readonly RunSession[]): boolean => {
     return true;
 };
 
-/* Show a run: the sessions it has on screen if there are any, its diagram if there are not.
+/* Show a run: `live`, always, whatever state it is in.
  *
- * POPPED OUT FIRST, because both of those need the room. The panes only exist in the window (a docked column
- * is ~22rem and a second pane in it would be two slivers), and the diagram takes the pane area — so a run
- * opened into a docked panel would set a split nobody can see and then draw nothing. Idempotent: a no-op when
- * the window is already up.
+ * POPPED OUT FIRST, because that mode needs the room. The panes only exist in the window (a docked column is
+ * ~22rem and a second pane in it would be two slivers), and the diagram takes the pane area — so a run opened
+ * into a docked panel would set a split nobody can see and then draw nothing. Idempotent: a no-op when the
+ * window is already up.
  *
- * A finished or failed run has no sessions on screen to open, so it lands on the DIAGRAM, which is the map you
- * pick one from. A run that has only just started lands on its ROOTS (sessionsToOpen) — the chats that are
- * about to fill — which is what makes starting a workflow feel like starting an agent rather than like filing
- * a request. Same panel, same run, other mode: the press always lands somewhere that can answer.
+ * IT NO LONGER DECIDES WHAT IS ON SCREEN, and that is the fix. It used to read the run's live sessions here and
+ * fall back to the diagram when there were none — which was EVERY run started from a composer, because the
+ * daemon acks with every step still `pending` and the scheduler has not run a line by the time this resolves.
+ * So the press that started a workflow always landed on a picture, and nothing afterwards moved it: the panes
+ * arrived only if the reader thought to click a node. `live` is a standing instruction instead of a one-shot
+ * reading, and the panel honours it on every poll (chatRun's runToFollow) — the diagram while nothing is going,
+ * the sessions the moment something is, and the next band when this one ends.
  *
  * TAKES AN ID AS WELL AS A RUN, because the extension that owns the Run button cannot hold a `WorkflowRun` on
  * this side of the host API (the contract imports extension-api, so extension-api cannot import the contract).
- * Given an id it reads the run once, directly, rather than waiting for the board's poll to come round — the
- * press has to land now or it has not landed.
+ * Given an id it reads the ledger once to check the run is real — a `chatRun` naming nothing would hang an
+ * empty run bar over the panes — rather than waiting for the board's poll to come round.
  */
 export const openRunInChat = async (run: WorkflowRun | string): Promise<void> => {
     useChatPopout().popOut();
-    const resolved = typeof run === `string` ? (await sandboxRuns()).find((entry) => entry.runId === run) : run;
-    if (resolved === undefined) {
-        // The id named nothing the ledger holds. Nothing to show and nothing to claim about it.
+    if (typeof run !== `string`) {
+        showRun(run.runId, `live`);
         return;
     }
-    showRun(resolved.runId, openRunSessions(sessionsToOpen(resolved)) ? `sessions` : `graph`);
+    // The id named nothing the ledger holds. Nothing to show and nothing to claim about it.
+    if ((await sandboxRuns()).some((entry) => entry.runId === run)) {
+        showRun(run, `live`);
+    }
 };
 
 const sandboxRuns = async (): Promise<WorkflowRun[]> => WorkflowRunsListSchema.parse(await sandboxJson(`/workflows/runs`)).runs;

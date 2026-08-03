@@ -99,9 +99,13 @@ const flipHandoff = (): void => {
     }
 };
 
-const ready = computed(
-    () => faults.value.length === 0 && draft.value.name.trim() !== `` && draft.value.steps.every((step) => step.prompt.trim() !== ``),
-);
+/* THE PROMPT IS NO LONGER A CONDITION OF SAVING, and that is the point of the whole change rather than a
+ * loosened rule. A step with no prompt is not an unfinished step — it is one that does whatever the run was
+ * asked to do, which is the ordinary case for a design kept as a SHAPE. Requiring one here forced every author
+ * to write a paraphrase of the request into every node before the graph would save, which is exactly the
+ * wrapper the default removes. What remains is what genuinely cannot be inferred: a name, and a runnable graph.
+ */
+const ready = computed(() => faults.value.length === 0 && draft.value.name.trim() !== ``);
 
 /* THE INSPECTOR'S WIDTH. Remembered per browser rather than per workflow: it is a property of the desk you are
  * working at (how wide the window is, whether you are writing or reading), not of the graph in front of you.
@@ -131,11 +135,12 @@ watch(inspectorWidth, (px) => {
 const commit = async (): Promise<void> => {
     failure.value = undefined;
     try {
-        /* A step's `goal` is required by the contract but not by this form — "done when" is the second
-         * question and plenty of steps do not need one. Falling back to the title is honest rather than
-         * invented: an unstated goal IS "do what this step is called", which is what the title says. */
-        const steps = draft.value.steps.map((step) => (step.goal.trim() === `` ? { ...step, goal: step.title } : step));
-        await save.mutateAsync({ ...draft.value, steps });
+        /* Saved as authored. An unstated goal used to be back-filled with the step's TITLE here, because the
+         * contract demanded one — an invented bar dressed up as an honest one, since "Claude's attempt" is a
+         * label and not a description of done. It is absent now, and absent has a real meaning: the step is
+         * measured against what the run was asked to do. The inspector already stores a cleared box as absent
+         * rather than as ``, so there is nothing left to normalize on the way out. */
+        await save.mutateAsync(draft.value);
         emit(`saved`, draft.value.id);
     } catch (error) {
         failure.value = error instanceof Error ? error.message : `The workflow could not be saved.`;

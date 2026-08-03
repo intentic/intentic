@@ -110,10 +110,14 @@ export function useWorkflowRuns() {
         onSuccess: invalidate,
     });
 
-    /* Ask a run to stop. No step that has not started will start, and the steps in flight stop after their
-     * current ITERATION — the same split as stopping a loop, and the reason the card says so rather than
-     * flipping to a stopped state the daemon has not reached yet. Killing the work outright is Stop on each
-     * step's own card, which is one click away from here now that the run opens its sessions.
+    /* Ask a run to stop. No step that has not started will start, and the steps in flight are CUT OFF where
+     * they are — their turns aborted exactly as /agent/stop aborts one, so whatever they had written stays on
+     * their branches and each step settles as `stopped`.
+     *
+     * NOT the graceful "finish the round you are on" that stopping a LOOP performs, and the difference is the
+     * unit: a loop's iteration is a round somebody is watching, a workflow step's is an entire agent turn.
+     * Waiting for one meant a stopped run kept working, kept spending and kept asking questions for minutes
+     * after the press — indistinguishable from a button that does nothing, which is how it was reported.
      */
     const stop = useMutation({
         mutationFn: (runId: string) => sandboxJson(`/workflows/runs/${encodeURIComponent(runId)}/stop`, { method: `POST` }),

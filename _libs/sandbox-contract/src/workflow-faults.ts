@@ -141,3 +141,27 @@ export const workflowFaults = (workflow: Pick<Workflow, "steps" | "gate">): stri
         ...gateFaults(workflow),
     ];
 };
+
+/* WHAT ONLY A RUN CAN BE WRONG ABOUT — kept apart from the rules above because it is not about the graph, and
+ * the graph is what gets SAVED. A design whose steps take their goal and instruction from the request is a
+ * perfectly good design; it is only unrunnable on the particular run that forgot to bring one.
+ *
+ * Which is why this cannot be a save-time rule and must not become one: refusing to save such a workflow would
+ * outlaw the entire point of a workflow being a SHAPE. The check belongs at the two doors that start runs — the
+ * run route and the gate's webhook — and it has to be there rather than left to fail later, because "later"
+ * means every session in the fan-out has already been paid for before anyone finds out the model was handed an
+ * empty instruction.
+ */
+export const workflowRunFaults = (workflow: Pick<Workflow, "steps">, request: string | undefined): string[] => {
+    if (request !== undefined && request.trim() !== "") {
+        return [];
+    }
+    const inheriting = workflow.steps.filter((step) => step.goal === undefined || step.prompt === undefined);
+    if (inheriting.length === 0) {
+        return [];
+    }
+    return [
+        `${inheriting.map((step) => `"${step.title}"`).join(", ")} take their goal or their instruction from what the run was asked to do, ` +
+            `and this run was started without a request. Say what you want built, or give those steps a goal and a prompt of their own.`,
+    ];
+};

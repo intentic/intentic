@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Icon, useDevice } from "@intentic/ui";
 import { computed, nextTick, ref, watch } from "vue";
-import { chatRun, closeRun, type RunSession, runOnFocus, showRun } from "../composables/chat/chatRun";
+import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToFollow, showingRunGraph, showRun } from "../composables/chat/chatRun";
 import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { transcriptView } from "../composables/chat/transcriptClock";
@@ -81,25 +81,66 @@ watch([() => activeId.value, paneIds], () => {
  */
 const { runs } = useWorkflowRuns();
 const shownRun = computed(() => (poppedOut.value && !mobile.value ? runs.value.find((run) => run.runId === chatRun.value?.runId) : undefined));
-const showingGraph = computed(() => shownRun.value !== undefined && chatRun.value?.mode === `graph`);
+/* WHEN THE DIAGRAM IS WHAT IS ON SCREEN, and `live` is the mode that answers this two different ways over its
+ * own lifetime. Asked for outright (`graph`) it is the diagram, full stop. Following the run, it is the diagram
+ * only while there is nothing to follow — the seconds between a start and the first step opening its
+ * conversation, and again once the run has ended — and it gives way to the panes the moment a session exists.
+ * That is what makes `live` a single instruction rather than two states the caller has to choose between at a
+ * moment when the answer is not knowable yet. */
+const showingGraph = computed(() => showingRunGraph(shownRun.value, chatRun.value, paneIds.value));
 
 /* THE WAY OUT of the diagram, and the reason it is a watch here rather than a rule inside `setActive`:
  * `useChat` owns tabs and panes, and which workflow a conversation came out of is not its business. The rule
  * itself is runOnFocus, which says at length why a focus change is an exit at all.
  */
 watch(activeId, (id) => {
-    if (shownRun.value !== undefined) {
-        chatRun.value = runOnFocus(shownRun.value, id);
+    if (shownRun.value !== undefined && chatRun.value !== undefined) {
+        chatRun.value = runOnFocus(shownRun.value, id, chatRun.value.mode);
     }
 });
 
+/* THE PANEL FOLLOWING THE RUN — the whole of `live`, and the only thing on this side that moves by itself.
+ *
+ * The ledger is polled, so this fires on every poll while a run is on screen and does nothing on almost all of
+ * them (runToFollow returns `undefined` for a set already up). The two it acts on are the ones worth having:
+ * the first poll after a start, which turns the diagram into the attempts, and the poll after a band settles,
+ * which moves the panes to whatever the graph handed the baton to. Between them the reader never presses
+ * anything, which is the point — "show me my workflow" was the whole of the instruction.
+ *
+ * Guarded on the MODE rather than on the run, because `graph` and `pinned` are exactly the states in which the
+ * reader has said where they want to be and this must not overrule them.
+ */
+watch(
+    [shownRun, () => chatRun.value?.mode],
+    () => {
+        const run = shownRun.value;
+        if (run === undefined || chatRun.value?.mode !== `live`) {
+            return;
+        }
+        const following = runToFollow(run, paneIds.value);
+        if (following !== undefined) {
+            openRunSessions(following);
+        }
+    },
+    { immediate: true },
+);
+
 /* A column of the diagram, onto the columns of the panel — the one gesture the graph offers, and the reason
  * the two words are the same word. When nothing in the column opens, the diagram stays up: a back arrow that
- * landed on an empty split would read as the press having broken something. */
+ * landed on an empty split would read as the press having broken something.
+ *
+ * WHICH MODE IT LANDS IN IS READ OFF THE COLUMN (modeForSessions): pressing the band that is live is a request
+ * to watch the run, so it keeps following; pressing a band that has finished is a request to stand still. */
 const openRunColumn = (sessions: readonly RunSession[]): void => {
-    const runId = chatRun.value?.runId;
-    if (runId !== undefined && openRunSessions(sessions)) {
-        showRun(runId, `sessions`);
+    const run = shownRun.value;
+    if (run !== undefined && openRunSessions(sessions)) {
+        showRun(
+            run.runId,
+            modeForSessions(
+                run,
+                sessions.map((session) => session.conversationId),
+            ),
+        );
     }
 };
 

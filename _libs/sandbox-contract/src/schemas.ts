@@ -3029,12 +3029,27 @@ export const WorkflowStepSchema = z.object({
     id: StepIdSchema,
     // What the node says on the graph. Short — the prompt is where the detail goes.
     title: z.string().min(1).max(60),
-    // What "done" means for this step, in the user's words. Restated in every iteration's prompt and put to the
-    // judge; it is the sentence the step is measured against.
-    goal: z.string().min(1),
-    // What the step is told to DO. A different sentence from the goal: "the suite is green" is the goal,
-    // "run the tests, take the top failure, fix it" is the instruction.
-    prompt: z.string().min(1),
+    /* What "done" means for this step, in the user's words. Restated in every iteration's prompt and put to the
+     * judge; it is the sentence the step is measured against.
+     *
+     * ABSENT ⇒ THE RUN'S OWN REQUEST IS THE GOAL, which is the ordinary case and not the exotic one. A saved
+     * workflow is a SHAPE — "two models on one task" — and for most of its steps the thing being asked for is
+     * whatever the person typed this time. Writing a goal here as well means saying the same thing twice and
+     * keeping the two in agreement forever; leaving it out means the step is measured against the request,
+     * which is what anyone would have written anyway. Declare one only where the step's bar is genuinely its
+     * own ("the suite is green") rather than the run's.
+     */
+    goal: z.string().min(1).optional(),
+    /* What the step is told to DO. A different sentence from the goal: "the suite is green" is the goal,
+     * "run the tests, take the top failure, fix it" is the instruction.
+     *
+     * ABSENT ⇒ THE REQUEST IS HANDED OVER VERBATIM, with none of the workflow's own framing around it (see
+     * briefForStep). That is the default because the framing is not free: every heading between the reader's
+     * sentence and the model is a chance for the model to answer the frame instead of the question, and a step
+     * whose whole job is "do what was asked" has nothing to add to it. A step that DOES declare a prompt is
+     * saying it has a job of its own — review this, merge those — and gets the full brief, request included.
+     */
+    prompt: z.string().min(1).optional(),
     // The steps that must finish before this one starts. Empty ⇒ a root, started when the run starts. The
     // graph must be acyclic and every id must exist; both are checked when the workflow is saved.
     needs: z.array(StepIdSchema),

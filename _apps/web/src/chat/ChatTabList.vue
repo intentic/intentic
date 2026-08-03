@@ -28,7 +28,7 @@ import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
-import { chatRun } from "../composables/chat/chatRun";
+import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
 import { openRunInChat } from "../composables/chat/openRun";
 import { runsInLane, runningTitles, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { commandShortcut } from "../composables/commands/useCommands";
@@ -140,8 +140,10 @@ const { runs: workflowRuns } = useWorkflowRuns();
 const runsIn = (lane: FleetLane): WorkflowRun[] =>
     filtering.value ? [] : runsInLane(workflowRuns.value, lane, FINISHED_WINDOW, runsNeedingYou(fleet.value));
 // A run's row reads as selected only while its DIAGRAM is the thing on screen. In the run's sessions the
-// focused chat's own row wears that, and two rows claiming it would be the list contradicting itself.
-const runOnScreen = (run: WorkflowRun): boolean => chatRun.value?.runId === run.runId && chatRun.value.mode === `graph`;
+// focused chat's own row wears that, and two rows claiming it would be the list contradicting itself. The
+// panel's own predicate rather than a second reading of the mode: a run being FOLLOWED draws its diagram too,
+// for as long as it has nothing live to put in the panes, and this row has to say so during that window.
+const runOnScreen = (run: WorkflowRun): boolean => chatRun.value?.runId === run.runId && showingRunGraph(run, chatRun.value, panes.value);
 
 // A chat with no fleet entry (a plain conversation, or the roster briefly down) has no transcript the daemon
 // can search under an agent id, so it is matched on what this browser holds: its title and its own messages.

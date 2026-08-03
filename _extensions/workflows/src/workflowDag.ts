@@ -80,7 +80,12 @@ export const workflowDag = (workflow: Pick<Workflow, "steps">, run?: WorkflowRun
             index: index + 1,
             run: runById.get(step.id),
         },
-        tooltip: step.goal,
+        /* The node's hover text is the step's own goal, and ABSENT when it has none rather than filled in with
+         * something else. A step that inherits is measured against the run's request, which the run bar above
+         * the graph is already showing — repeating it on every node would put the same sentence under all of
+         * them and say nothing about which node is which. `undefined` leaves the node with no tooltip, which is
+         * the honest answer to "what is this step's own bar" when it has not set one. */
+        ...(step.goal === undefined ? {} : { tooltip: step.goal }),
     }));
     /* A continued handoff draws solid and tinted, a fresh one dashed: the solid line says "this is the same
      * agent carrying on", the dash says "this is a handover to someone new". It is the one structural fact

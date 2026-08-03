@@ -57,15 +57,24 @@ const patch = (over: Partial<WorkflowStep>): void => {
 };
 
 const TITLE_HINT = `Fix the failing tests`;
-const PROMPT_HINT = `Run the tests, take the top failure, understand it, fix the code.`;
-const GOAL_HINT = `The whole test suite passes.`;
+// Both hints lead with what LEAVING IT EMPTY does, because that is now the common answer and an empty box
+// that looks unfinished is one people fill in with a paraphrase of the request — which is the wrapper this
+// default exists to remove, retyped by hand.
+const PROMPT_HINT = `Empty — this step does whatever the run was asked to do. Or give it a job of its own: "run the tests, take the top failure, fix it".`;
+const GOAL_HINT = `Empty — measured against what the run was asked to do. Or set its own bar: "the whole test suite passes".`;
 const RUBRIC_HINT = `A rubric for a reviewer that did none of this work.`;
 
-// The document's three passages, as writable views onto the step. `patch` is what keeps every edit a whole
-// new step object, which is what the designer's undo-free draft model depends on.
+/* The document's three passages, as writable views onto the step. `patch` is what keeps every edit a whole new
+ * step object, which is what the designer's undo-free draft model depends on.
+ *
+ * AN EMPTY FIELD IS ABSENT, NOT EMPTY. A step that declares no prompt and no goal is handed what the person
+ * typed when they started the run, verbatim (WorkflowStepSchema) — which is the default and the reason these
+ * two boxes can be left alone. Storing `` instead would mean "this step declares an empty instruction": the
+ * schema refuses it on save, and it is not what clearing a box means to anyone who does it. */
+const declared = (value: string): string | undefined => (value.trim() === `` ? undefined : value);
 const title = computed({ get: () => step.value.title, set: (value: string) => patch({ title: value }) });
-const prompt = computed({ get: () => step.value.prompt, set: (value: string) => patch({ prompt: value }) });
-const goal = computed({ get: () => step.value.goal, set: (value: string) => patch({ goal: value }) });
+const prompt = computed({ get: () => step.value.prompt ?? ``, set: (value: string) => patch({ prompt: declared(value) }) });
+const goal = computed({ get: () => step.value.goal ?? ``, set: (value: string) => patch({ goal: declared(value) }) });
 
 const OUTPUT_OPTIONS = [
     { value: `none` as const, label: `Nothing` },

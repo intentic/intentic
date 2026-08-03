@@ -14,7 +14,7 @@ import type { FleetLane } from "../composables/agents/agentStatus";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import { laneOfRun, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
-import { chatRun } from "../composables/chat/chatRun";
+import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
 import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { useChat } from "../composables/chat/useChat";
@@ -94,7 +94,7 @@ const {
     agentById,
 } = useAgents();
 const { active, openConversation, panes, openBeside, closePane, setPanes } = useChat();
-const { popOut: popOutChat } = useChatPopout();
+const { popOut: popOutChat, poppedOut } = useChatPopout();
 // This agent's chat has a column in the chat window but not the focus — the board's half of the rail's
 // "showing" mark, so a split is legible from either surface.
 const showingInPane = (id: string): boolean => panes.value.length > 1 && id !== active.value.conversationId && panes.value.includes(id);
@@ -202,8 +202,21 @@ const flashId = ref<string | undefined>(undefined);
  * conversation at all — it is showing the map of one. The board went on ringing whichever card had the focus
  * before the run took the panel, which reads as "that chat is what you are looking at" while the panel shows
  * something else entirely, and the run card beside it wore nothing. The run's own sessions are a different
- * case and keep the ordinary rule: those ARE conversations, and the focused one is genuinely on screen. */
-const highlightId = computed(() => flashId.value ?? (mobile.value || chatRun.value?.mode === `graph` ? undefined : active.value.conversationId));
+ * case and keep the ordinary rule: those ARE conversations, and the focused one is genuinely on screen.
+ *
+ * The predicate is the PANEL'S OWN (showingRunGraph), not a second reading of the mode, because the mode alone
+ * stopped being the answer: a run being FOLLOWED draws its diagram too, for as long as it has nothing live to
+ * put in the panes. Only popped out — docked, the panel shows the focused chat whatever the run is doing. */
+const runGraphUp = computed(
+    () =>
+        poppedOut.value &&
+        showingRunGraph(
+            workflowRuns.value.find((run) => run.runId === chatRun.value?.runId),
+            chatRun.value,
+            panes.value,
+        ),
+);
+const highlightId = computed(() => flashId.value ?? (mobile.value || runGraphUp.value ? undefined : active.value.conversationId));
 // The Finished window is only in force while the lane is BROWSING its own recent tail. The archive is a
 // different list entirely, and both a filter and an explicit expand lift the cap outright — see cardsFor.
 const windowed = computed(() => !archiveOpen.value && !filtering.value && !showAllFinished.value);
@@ -634,9 +647,10 @@ const openRunGraph = (run: WorkflowRun): void => {
  */
 const openRun = (run: WorkflowRun): void => void openRunInChat(run);
 
-// Which runs have been asked to stop and have not settled yet. The daemon's stop is graceful — steps in
-// flight finish their current round — so without this the card looks untouched for as long as a round takes,
-// which is exactly how a Stop gets pressed four times.
+// Which runs have been asked to stop and have not settled yet. The abort reaches the turns at once, but the
+// LEDGER only says so once each step has unwound and the scheduler has written the run's outcome — and this
+// card is drawn off the ledger, on a poll. Without the mark it looks untouched until then, which is exactly
+// how a Stop gets pressed four times.
 const stoppingRuns = ref(new Set<string>());
 const forgetStopping = (runId: string): void => {
     const rest = new Set(stoppingRuns.value);

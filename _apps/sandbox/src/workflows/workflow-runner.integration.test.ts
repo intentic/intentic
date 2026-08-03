@@ -190,6 +190,42 @@ test("stopping a run stops the loop in flight and starts nothing further", async
     expect(workflowRunning(run.runId)).toBe(false);
 });
 
+/* THE STOP RACE A WIDE GRAPH HAS, and the reason the abort is asked about on BOTH sides of the slot.
+ *
+ * A step past its dependencies but over `maxParallel` waits for a slot, and it waits as long as the steps ahead
+ * of it take — an agent turn each. The guard before the queue had long since passed by then, so a run stopped
+ * in that window still let the queued step walk into `execute`: it published itself to the fleet card, wrote
+ * itself `running` in the ledger, and opened a loop record. No TURN was wasted — runLoop asks its own stop
+ * signal before it calls one, and the relay gets there first — which is why the cost of this is bookkeeping
+ * rather than money. But it is bookkeeping two surfaces read: a step flickering into `running` after the user
+ * pressed Stop, and a row in the loops manifest for a step that never ran an iteration.
+ */
+test("a step queued behind maxParallel never opens a loop once the run is stopped", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    // One slot and two independent roots, so `queued` is holding the door while `first` runs — and `first` is
+    // what presses Stop.
+    const design = workflow([step("first"), step("queued")], { maxParallel: 1 });
+    const run = await services.workflowRuns.start(openRun(design, 1));
+    const stopper: TurnFn = async function* turn() {
+        stopWorkflowRun(run.runId);
+        yield { kind: "done" } as AgentEvent;
+    };
+    await runWorkflow(services, run, stopper);
+
+    const settled = await services.workflowRuns.get(run.runId);
+    expect(settled?.state).toBe("stopped");
+    const queued = settled?.steps.find((entry) => entry.stepId === "queued");
+    expect(queued?.state).toBe("stopped");
+    /* THE ASSERTION THAT SEPARATES THE FIX FROM THE BUG. Both spellings settle the step as `stopped` with no
+     * iterations, so the step's own record cannot tell them apart — what can is whether a loop was ever opened
+     * on its conversation, and whether the run says the step never started or merely stopped like the rest. */
+    expect(await services.loops.get(queued?.conversationId ?? "")).toBeUndefined();
+    expect(queued?.detail).toBe("The run was stopped before this step started.");
+    // The step that DID run still opened its loop — the guard must not swallow work that was already going.
+    expect(await services.loops.get(settled?.steps[0]?.conversationId ?? "")).toBeDefined();
+});
+
 test("a resumed run replays the steps that already finished instead of paying for them again", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
