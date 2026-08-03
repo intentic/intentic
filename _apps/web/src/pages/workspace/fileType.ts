@@ -95,6 +95,7 @@ const EXT_LANG: Record<string, ShikiLang> = {
     gql: "graphql",
     vue: "vue",
     svelte: "svelte",
+    astro: "astro",
     php: "php",
     rb: "ruby",
     kt: "kotlin",

@@ -39,6 +39,15 @@ describe(`resolveFile text modes carry a lang`, () => {
         expect(codeLangForPath(`icon.svg`)).toBe(`xml`);
     });
 
+    /* The component formats, whose one file holds markup, script and styles together. `.astro` had no row at
+     * all while its siblings did, so a component that reads as three languages in its editor came out of the
+     * DIFF surface as undivided grey text — the same failure as markdown's, one extension along. */
+    it(`resolves a grammar for component files`, () => {
+        expect(codeLangForPath(`Card.vue`)).toBe(`vue`);
+        expect(codeLangForPath(`Card.svelte`)).toBe(`svelte`);
+        expect(resolveFile(`docs/extensions/build.astro`, 1000)).toEqual({ mode: `code`, lang: `astro` });
+    });
+
     it(`applies the highlight cap to every text mode, not just code`, () => {
         expect(resolveFile(`huge.md`, 1_000_000)).toEqual({ mode: `markdown` });
         expect(resolveFile(`huge.svg`, 1_000_000)).toEqual({ mode: `code` });

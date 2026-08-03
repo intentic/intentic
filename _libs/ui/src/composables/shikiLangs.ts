@@ -40,6 +40,7 @@ export const LANGS = {
     graphql: () => import(`@shikijs/langs/graphql`),
     vue: () => import(`@shikijs/langs/vue`),
     svelte: () => import(`@shikijs/langs/svelte`),
+    astro: () => import(`@shikijs/langs/astro`),
     php: () => import(`@shikijs/langs/php`),
     ruby: () => import(`@shikijs/langs/ruby`),
     kotlin: () => import(`@shikijs/langs/kotlin`),

@@ -48,6 +48,7 @@ const EXT_CATEGORY: Record<string, FileCategory> = {
     swift: "code",
     vue: "code",
     svelte: "code",
+    astro: "code",
     html: "code",
     htm: "code",
     // styles
