@@ -28,10 +28,26 @@ const currentStep = computed(() => {
     return last === undefined ? `Starting…` : stepLabel(last.text);
 });
 
+/* PowerShell's ERROR RECORD, which is four lines of furniture around one line of meaning:
+ *
+ *     connect.ps1 : could not redeem the setup code at … (405 Method Not Allowed) - refresh …   ← the message
+ *     At C:\…\connect.ps1:160 char:73
+ *     + ... redeem the setup code at $PlatformUrl ($($_.Exception.Message)) - ref ...
+ *     +                              ~~~~~~~~~~~~~~~~~~~~~
+ *         + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+ *         + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,connect.ps1
+ *
+ * The source excerpt and the caret are for someone debugging the script; CategoryInfo and
+ * FullyQualifiedErrorId name the .NET exception type, which is `WriteErrorException` for every error the
+ * script raises on purpose and so says nothing about this one. Left in, they are the LAST lines — so a
+ * "show me the end of stderr" rule shows the four that cannot help and hides the one that can, which is
+ * exactly what a user meets on a failed setup. */
+const isPowerShellDecoration = (text: string): boolean => /^\s*\+ /.test(text) || /^At .+:\d+ char:\d+$/.test(text);
+
 // The failure's own words. stderr carries what went wrong; the script's last stdout step says where.
 const failure = computed(() =>
     lines.value
-        .filter((line) => line.stream === `stderr` && line.text.trim() !== ``)
+        .filter((line) => line.stream === `stderr` && line.text.trim() !== `` && !isPowerShellDecoration(line.text))
         .slice(-4)
         .map((line) => line.text)
         .join(`\n`),

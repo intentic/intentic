@@ -7,14 +7,27 @@ use tauri::{AppHandle, Manager};
 
 use crate::setup_link::{RecreateArgs, SetupArgs};
 
+/* THE TWO ORIGINS, AND THEY ARE NOT THE SAME HOST.
+ *
+ * `APP_URL` is the SPA — the page the workspace window loads, and the origin the daemon must emit CORS for.
+ * `PLATFORM_URL` is the platform's API, where a setup code is redeemed (`POST /setup/claim`) and where the
+ * daemon announces itself once it boots.
+ *
+ * Naming both is not tidiness. The platform default used to be APP_URL, so every desktop setup ran
+ * `connect.ps1` with `PLATFORM_URL=https://app.intentic.dev`, the claim POSTed at a static site, and the run
+ * died on `HTTP 405 Method Not Allowed` right after "redeeming the setup code" — which reads as a bad code
+ * rather than a wrong host. connect.sh had already met this and special-cases a 405 to say so in words. The
+ * scripts' own default was correct the whole time; the app overrode it with something worse. */
 pub const APP_URL: &str = "https://app.intentic.dev";
+pub const PLATFORM_URL: &str = "https://api.intentic.dev";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
-    /// The workspace SPA origin. Unset ⇒ INTENTIC_APP_URL env ⇒ the hosted app.
+    /// The workspace SPA origin. Unset ⇒ INTENTIC_APP_URL env ⇒ [`APP_URL`].
     pub app_url: Option<String>,
-    /// The platform origin setup codes are claimed against. Unset ⇒ INTENTIC_PLATFORM_URL env ⇒ app URL default.
+    /// The platform API origin setup codes are claimed against. Unset ⇒ INTENTIC_PLATFORM_URL env ⇒
+    /// [`PLATFORM_URL`] — never the app origin, which answers a claim POST with 405.
     pub platform_url: Option<String>,
 }
 
@@ -60,7 +73,7 @@ impl AppState {
         configured
             .or_else(|| std::env::var("INTENTIC_PLATFORM_URL").ok())
             .filter(|url| !url.is_empty())
-            .unwrap_or_else(|| APP_URL.into())
+            .unwrap_or_else(|| PLATFORM_URL.into())
     }
 
     pub fn save_settings(&self, settings: Settings) {
@@ -95,5 +108,42 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
 fn write_json<T: Serialize>(path: &Path, value: &T) {
     if let Ok(serialized) = serde_json::to_string_pretty(value) {
         let _ = std::fs::write(path, serialized);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /* THE DEFAULT, PINNED TO THE SCRIPTS' OWN.
+     *
+     * This app spawns the shipped connect scripts precisely so the desktop and terminal paths cannot disagree
+     * (scripts.rs states the case). But it passes PLATFORM_URL in explicitly, which overrides the default the
+     * script would otherwise pick for itself — so on this one value the two ARE two copies, and the copy here
+     * was wrong: it pointed at the SPA, the claim POST hit a static site, and every desktop install failed on
+     * `HTTP 405 Method Not Allowed` one step after "redeeming the setup code".
+     *
+     * A constant cannot be verified by a Linux CI job talking to the real platform, and it first executes on a
+     * user's machine. What it CAN be checked against is the file it has to agree with, which ships in this
+     * same commit. */
+    #[test]
+    fn the_platform_default_is_the_one_the_connect_scripts_pick_for_themselves() {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../site/public/scripts");
+        let sh = std::fs::read_to_string(dir.join("connect.sh")).expect("connect.sh is readable");
+        let ps1 =
+            std::fs::read_to_string(dir.join("connect.ps1")).expect("connect.ps1 is readable");
+
+        assert!(
+            sh.contains(&format!("PLATFORM_URL=\"${{PLATFORM_URL:-{PLATFORM_URL}}}\"")),
+            "connect.sh no longer falls back to {PLATFORM_URL}. Whatever it picks now is what a pasted \
+             command uses, and this app has to hand the same thing to the script it spawns — the platform's \
+             API origin, never the app's, which answers a claim POST with 405.",
+        );
+        assert!(
+            ps1.contains(&format!("else {{ '{PLATFORM_URL}' }}")),
+            "connect.ps1 no longer falls back to {PLATFORM_URL} — see the message above; the PowerShell \
+             sibling has to agree with connect.sh and with this crate.",
+        );
     }
 }
