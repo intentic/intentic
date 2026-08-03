@@ -19,6 +19,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
+import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
 import { accountsLoaded, providerAccounts, providerRefusals, rememberedAccountFor, selectedAccountId, translatorAccounts } from "./providerAccounts";
 import {
@@ -108,11 +109,27 @@ const untouchedDraft = (conversation: Conversation): boolean =>
  * listed) was live long enough to render and to be persisted by the snapshot watch. It also only ever looked at
  * the tab that LOST the focus, so a draft that lost it to a list rewrite instead (a close reseating the focus on
  * the last tab) survived as a permanent, unsweepable "New agent" tab. One synchronous write, no ordering. */
-const setConversations = (next: readonly Conversation[], focus: string): void => {
+const setConversations = (next: readonly Conversation[], focus: string, reason: string): void => {
     const focused = next.some((conversation) => conversation.conversationId === focus) ? focus : next[next.length - 1]!.conversationId;
     // The focused tab is always kept, so the list can never come out empty. A dropped draft needs no teardown:
     // untouched means no turn to detach from and no transcript to evict.
     const kept = next.filter((conversation) => conversation.conversationId === focused || !untouchedDraft(conversation));
+    /* Every movement of the focus, with what asked for it and what it resolved to — see focusTrace.ts. The
+     * FALLBACK is the line worth having: an id that names no tab in the list being written is not an error
+     * here, it silently seats the focus on the last one instead, which on screen is indistinguishable from
+     * "the chat ignored my click and went somewhere else" — the report this trace exists to settle. Only
+     * actual movements are traced; a write that leaves the focus where it was says nothing. */
+    if (focused !== activeId.value || focus !== focused) {
+        traceFocus(`focus`, {
+            reason,
+            asked: focus,
+            resolved: focused,
+            ...(focus === focused ? {} : { fellBack: true }),
+            from: activeId.value,
+            tabs: kept.length,
+            ...(kept.length === next.length ? {} : { swept: next.length - kept.length }),
+        });
+    }
     // Reassigned only when the list actually moved, so a plain tab switch doesn't re-fire every list watcher
     // (the snapshot write, the hydrate sweep) for a change that is only about the focus.
     if (kept.length !== conversations.value.length || kept.some((conversation, at) => conversation !== conversations.value[at])) {
@@ -201,13 +218,16 @@ const restoreTabs = (): void => {
     // rather than being cleared to nothing.
     selectedAccountId.value = readAccountPreference(scopedSandboxId);
     const stored = readTabSnapshot(scopedSandboxId);
+    // The list is about to be REPLACED wholesale, focus included: the snapshot's active tab wins over whatever
+    // is on screen. Rare (a sandbox switch, a boot) and invisible when it isn't — hence the line.
+    traceFocus(`restore-tabs`, { sandbox: scopedSandboxId ?? `none`, stored: stored?.tabs.length ?? 0, active: stored?.active ?? `none` });
     if (stored === undefined) {
         const conversation = new Conversation();
-        setConversations([conversation], conversation.conversationId);
+        setConversations([conversation], conversation.conversationId, `first-tab`);
         return;
     }
     // `stored.active` names one of the tabs — the reader guarantees it.
-    setConversations(stored.tabs.map(restoreTab), stored.active);
+    setConversations(stored.tabs.map(restoreTab), stored.active, `restore-snapshot`);
 };
 
 restoreTabs();
@@ -956,11 +976,11 @@ export const resetChat = (): void => {
 const newChat = (): Conversation => {
     const open = conversations.value.find(untouchedDraft);
     if (open !== undefined) {
-        setConversations(conversations.value, open.conversationId);
+        setConversations(conversations.value, open.conversationId, `new-chat-reuse`);
         return open;
     }
     const conversation = new Conversation();
-    setConversations([...conversations.value, conversation], conversation.conversationId);
+    setConversations([...conversations.value, conversation], conversation.conversationId, `new-chat`);
     return conversation;
 };
 
@@ -973,7 +993,7 @@ const newChat = (): Conversation => {
  * which is exactly what `untouchedDraft` reads as touched: this conversation is kept, and any empty draft the
  * strip was holding is reaped by the same write, which is the correct outcome either way. */
 export const adoptConversation = (conversation: Conversation): void => {
-    setConversations([...conversations.value, conversation], conversation.conversationId);
+    setConversations([...conversations.value, conversation], conversation.conversationId, `adopt-suggested`);
 };
 
 // "Put the caret in the composer", as a signal rather than a call: the conversation list is store state, but
@@ -996,7 +1016,7 @@ const tabReveal = ref(0);
 // the focus on the last tab instead, and a stale click would silently surface a chat the user didn't ask for.
 const setActive = (conversationId: string): void => {
     if (conversations.value.some((conversation) => conversation.conversationId === conversationId)) {
-        setConversations(conversations.value, conversationId);
+        setConversations(conversations.value, conversationId, `select`);
         tabReveal.value++;
     }
 };
@@ -1007,6 +1027,7 @@ const setActive = (conversationId: string): void => {
 // the set empties the strip. Closing the active tab moves focus to the last remaining one (VSCode behaviour, the
 // same rule the workspace's closeTabs follows). The daemon-side sessions survive: a closed chat is still in History.
 const closeTabs = (ids: ReadonlySet<string>): void => {
+    traceFocus(`close`, { ids: [...ids], active: activeId.value });
     for (const conversation of conversations.value) {
         if (ids.has(conversation.conversationId)) {
             conversation.abort();
@@ -1015,7 +1036,7 @@ const closeTabs = (ids: ReadonlySet<string>): void => {
     }
     const remaining = conversations.value.filter((conversation) => !ids.has(conversation.conversationId));
     const next = remaining.length > 0 ? remaining : [new Conversation()];
-    setConversations(next, activeId.value);
+    setConversations(next, activeId.value, `close`);
 };
 
 /* THE SAME CLOSE, ASKED FOR BY THE DAEMON RATHER THAN BY THE USER — the tabs of agents that left the roster
@@ -1078,7 +1099,7 @@ const editAndResend = async (message: ChatMessage, text: string): Promise<void> 
     }
     const branch = new Conversation();
     branch.branchFrom(source, index);
-    setConversations([...conversations.value, branch], branch.conversationId);
+    setConversations([...conversations.value, branch], branch.conversationId, `branch`);
     track(`message_sent`, { agent: branch.provider.value, edited: true });
     await branch.send(text, branch.turnSettings(), carried);
 };
@@ -1251,7 +1272,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
              * with a transcript in it, it stays open and readable, and its next send registers it anew (the
              * daemon rebuilds the entry at begin, the same path an archived agent's next message takes). */
             conversation.registered.value = false;
-            setConversations(conversations.value, activeId.value);
+            setConversations(conversations.value, activeId.value, `unlatch-registered`);
         } else {
             restored = transcript.messages;
             if (transcript.sessionId !== undefined) {
@@ -1322,6 +1343,8 @@ export const openAgentConversation = (agent: {
 }): Conversation => {
     const registered = agent.registered ?? true;
     const existing = conversations.value.find((conversation) => conversation.conversationId === agent.id);
+    // The id a card handed us, before anything acts on it — the anchor every later line is read against.
+    traceFocus(`open-agent`, { id: agent.id, existing: existing !== undefined, registered });
     if (existing !== undefined) {
         setActive(existing.conversationId);
         // The fleet handed us this id, so the tab is a view of a real agent whatever the live roster says right
@@ -1373,7 +1396,7 @@ export const openAgentConversation = (agent: {
             harness: agent.harness,
         };
     }
-    setConversations([...conversations.value, conversation], conversation.conversationId);
+    setConversations([...conversations.value, conversation], conversation.conversationId, `open-agent`);
     // The agent may be mid-turn right now — attach and render it live (the head synthesizes the prompt
     // bubble). Marked as hydrating so the restore watch above doesn't race a second attach; an idle agent's
     // probe just 404s and its stored transcript is replayed instead.
@@ -1394,7 +1417,7 @@ const openConversation = async (id: string): Promise<void> => {
     const title = sessions.value.find((session) => session.id === id)?.title ?? null;
     conversation.title.value = title;
     conversation.loading.value = true;
-    setConversations([...conversations.value, conversation], conversation.conversationId);
+    setConversations([...conversations.value, conversation], conversation.conversationId, `open-session`);
     try {
         const restored = await fetchTranscript(conversation, id);
         if (restored !== undefined) {

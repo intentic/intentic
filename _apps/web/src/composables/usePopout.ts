@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, nextTick, ref, type Ref, shallowRef, type ShallowRef } from "vue";
+import { traceFocus } from "./chat/focusTrace";
 
 /* Pop-out window core, shared by the chat panel and the terminal panel. createPopout builds one independent
  * pop-out store: the panel's DOM is teleported into a REAL browser window (window.open) while the JS stays in
@@ -439,6 +440,9 @@ export const createPopout = (name: string, title: string, size: () => { width: n
     };
 
     const attach = (win: Window): void => {
+        // Every time the panel is teleported into a window — the pop-out half of the focus trace
+        // (chat/focusTrace.ts), so a panel painting into a document the app has since replaced is visible.
+        traceFocus(`popout-attach`, { panel: name, readopting: poppedOut.value });
         dressWindow(win, title);
         popoutWindow = win;
         shareListeners(win.document);
@@ -490,6 +494,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         if (!poppedOut.value) {
             return;
         }
+        traceFocus(`popout-released`, { panel: name, closed: popoutWindow?.closed === true });
         const win = popoutWindow;
         popoutWindow = undefined;
         themeObserver?.disconnect();

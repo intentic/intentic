@@ -9,6 +9,7 @@ import type { PendingAttachment } from "../composables/chat/conversation";
 import { effortsFor } from "../composables/chat/effortScale";
 import { effectiveAccount } from "../composables/chat/providerAccounts";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
+import { traceFocus } from "../composables/chat/focusTrace";
 import { transcriptView } from "../composables/chat/transcriptClock";
 import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
@@ -150,6 +151,19 @@ const { pin, follow } = useStickToBottom(scroller, content, poppedOut);
  * other way this becomes true. */
 const transcriptWindow = (): Window & typeof globalThis => scroller.value?.ownerDocument.defaultView ?? window;
 watch([scroller, poppedOut], () => (transcriptView.value = transcriptWindow()), { flush: `post`, immediate: true });
+
+/* THE OTHER END OF THE FOCUS TRACE (focusTrace.ts): what this panel actually put on screen, and in WHICH
+ * window it put it. The store's own line says which chat it resolved to; this one says which chat the user is
+ * looking at, out of which document — so a report of "the popped-out chat is showing a different session than
+ * the board" is answerable without guessing at which of the two moved. Post-flush, so the id and the window
+ * are read after the Teleport has settled them, and title-free: the id is what both ends have in common. */
+watch(
+    [() => active.value.conversationId, poppedOut, scroller],
+    ([id, floating]) => {
+        traceFocus(`render`, { id, window: floating ? `popout` : `docked`, document: transcriptWindow().document.title });
+    },
+    { flush: `post`, immediate: true },
+);
 
 const activeError = computed(() => active.value.error.value);
 /* The active conversation's transcript round-trip, still in flight with nothing painted yet — the empty state

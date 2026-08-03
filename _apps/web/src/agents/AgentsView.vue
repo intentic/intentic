@@ -12,6 +12,7 @@ import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import type { FleetLane } from "../composables/agents/agentStatus";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
+import { traceFocus } from "../composables/chat/focusTrace";
 import { useChat } from "../composables/chat/useChat";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import FilterField from "../components/FilterField.vue";
@@ -492,6 +493,8 @@ const focusAgent = (agent: FleetAgent): void => {
     flashId.value = undefined;
     // This board made this selection, so it does not also scroll to it (see the selection watch).
     selectedHere = agent.id;
+    // The click itself, before anything downstream can move it — the head of the focus trace (focusTrace.ts).
+    traceFocus(`board-click`, { id: agent.id, status: agent.status });
     open(agent);
     if (mobile.value) {
         void router.push(`/agents/${encodeURIComponent(agent.id)}`);
