@@ -94,7 +94,9 @@ const openChat = (conversationId: string): void => host().navigate(`/agents/${en
 
         <div class="flex min-h-0 flex-1">
             <div class="min-w-0 flex-1">
-                <DagGraph v-model="selectedId" :nodes="dag.nodes" :edges="dag.edges" :node-width="216" :node-height="62">
+                <!-- Never magnified: this graph gets a whole page, where filling it in both directions turns a
+                     short run into billboards. Same answer the designer's canvas gives (DagEditor's own cap). -->
+                <DagGraph v-model="selectedId" :nodes="dag.nodes" :edges="dag.edges" :node-width="216" :node-height="62" :magnify="false">
                     <template #node="{ node }"><WorkflowNodeCard :node="node.data" /></template>
                 </DagGraph>
             </div>

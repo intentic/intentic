@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Icon, useDevice } from "@intentic/ui";
 import { computed, nextTick, ref, watch } from "vue";
-import { chatRun, closeRun, showRun } from "../composables/chat/chatRun";
+import { chatRun, closeRun, runOnFocus, showRun } from "../composables/chat/chatRun";
 import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { transcriptView } from "../composables/chat/transcriptClock";
@@ -88,6 +88,16 @@ const showingGraph = computed(() => shownRun.value !== undefined && chatRun.valu
  * the two words are the same word. Conversations the fleet does not know are dropped rather than opened as
  * empty tabs; when that leaves nothing, the graph stays up, because a back arrow that lands on an empty pane
  * set would read as the press having broken something. */
+/* THE WAY OUT of the diagram, and the reason it is a watch here rather than a rule inside `setActive`:
+ * `useChat` owns tabs and panes, and which workflow a conversation came out of is not its business. The rule
+ * itself is runOnFocus, which says at length why a focus change is an exit at all.
+ */
+watch(activeId, (id) => {
+    if (shownRun.value !== undefined) {
+        chatRun.value = runOnFocus(shownRun.value, id);
+    }
+});
+
 const openRunColumn = (conversationIds: readonly string[]): void => {
     const runId = chatRun.value?.runId;
     const known = conversationIds.map((id) => agentById(id)).filter((agent) => agent !== undefined);

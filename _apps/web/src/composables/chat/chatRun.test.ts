@@ -14,7 +14,7 @@ vi.hoisted(() => {
     });
 });
 
-import { runColumns } from "./chatRun";
+import { runColumns, runOnFocus } from "./chatRun";
 
 /* WHICH SESSIONS A COLUMN OPENS. The graph's one gesture is "click a step, get its whole column", so this is
  * the arithmetic between a click and a pane set — and it is the part that cannot be checked by looking, since
@@ -76,6 +76,24 @@ test("a column holding a continued step opens one conversation, not two", () => 
         run([step(`first`), step(`carry`, { needs: [`first`], handoff: `continue` })], [{}, { conversationId: `wf-r1-first` }]),
     );
     expect(columns.get(`carry`)?.conversationIds).toEqual([`wf-r1-first`]);
+});
+
+/* THE REGRESSION THE TWO TESTS BELOW EXIST FOR: the diagram was a trap.
+ *
+ * It covers the panes, so with it up every other way of choosing a chat moved the focus under a picture that
+ * did not move — the rail's cards, the board's cards, New agent. Every one of those clicks landed and none of
+ * them reached the screen, which reads as the whole panel having frozen.
+ */
+test("focusing a chat of this run keeps the run and drops back to its sessions", () => {
+    const design = run([step(`brief`), step(`a`, { needs: [`brief`] })], []);
+    expect(runOnFocus(design, `wf-r1-a`)).toEqual({ runId: `r1`, mode: `sessions` });
+});
+
+// Focusing anything else means the reader has left: a run bar hanging over an unrelated transcript would be
+// naming a run that has nothing to do with what is on screen.
+test("focusing a chat outside the run leaves the run", () => {
+    const design = run([step(`brief`)], []);
+    expect(runOnFocus(design, `some-other-conversation`)).toBeUndefined();
 });
 
 /* A step that has not started names a conversation the daemon has not opened. Offering it would put an empty

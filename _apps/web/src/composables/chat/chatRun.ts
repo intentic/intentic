@@ -38,6 +38,27 @@ export const closeRun = (): void => {
     chatRun.value = undefined;
 };
 
+// Every conversation this run drives, whether or not the step has started. A `continue` step shares its
+// predecessor's, so this set is smaller than the step count.
+const runHolds = (run: WorkflowRun, conversationId: string): boolean => run.steps.some((step) => step.conversationId === conversationId);
+
+/* WHAT A FOCUS CHANGE DOES TO THE RUN ON SCREEN — the rule that keeps the diagram from being a trap.
+ *
+ * The diagram covers the panes, so while it is up every other way of choosing a chat — a card on the rail, a
+ * card on the board, New agent, a deep link — moved the focus under a picture that did not move. The panel
+ * looked frozen: the click landed, the panes behind it were reconciled, and none of it reached the screen.
+ * Anything that moves the focus is therefore an exit from the diagram.
+ *
+ * WHERE IT EXITS TO is the honest reading of the gesture. A chat that belongs to this run means "show me this
+ * part of it", so the run stays and the back arrow with it. Any other chat means the reader has left, and the
+ * run goes with them rather than hanging a stale run's name over an unrelated transcript.
+ *
+ * A function rather than eight lines inside a watcher because this is the whole rule, and a rule that only
+ * exists inside an SFC is one no test can reach.
+ */
+export const runOnFocus = (run: WorkflowRun, conversationId: string): ChatRunView | undefined =>
+    runHolds(run, conversationId) ? { runId: run.runId, mode: `sessions` } : undefined;
+
 /* THE NODE GEOMETRY, here rather than in the component, because two things have to agree about it: the graph
  * the user clicks and the columns this file computes from the same layout. A node size passed to one and not
  * the other would put the seam between columns somewhere nobody can see.

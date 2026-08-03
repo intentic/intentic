@@ -16,6 +16,7 @@ const {
     nodeWidth = 208,
     nodeHeight = 64,
     direction = `LR`,
+    magnify = true,
 } = defineProps<{
     nodes: readonly DagNode<T>[];
     edges: readonly DagEdge[];
@@ -23,6 +24,16 @@ const {
     nodeWidth?: number;
     nodeHeight?: number;
     direction?: `LR` | `TB`;
+    /* Whether a graph SMALLER than the viewport is scaled up to fill it. True — the default — is right for
+     * this component's usual caller, which gives it a band a couple of hundred pixels tall where filling the
+     * height is what a reader wants.
+     *
+     * Pass false when the graph gets a whole page or a whole window. `fitView` scales in BOTH directions, so
+     * a five-node run on a wide screen is magnified until it hits `max-zoom`: at 2× a 12px label renders at
+     * 24px and the cards look like billboards. DagEditor caps its own fit for exactly this reason and says so
+     * at length; this is that escape hatch, offered rather than imposed because the two caller shapes want
+     * opposite answers. */
+    magnify?: boolean;
 }>();
 
 // Which node is selected; re-clicking the selected node clears it.
@@ -74,14 +85,27 @@ const targetPosition = computed(() => (direction === `LR` ? Position.Left : Posi
  * apart, which is how a page could inherit the previous page's zoom. See layoutSignature for the failure that
  * produced. `nextTick` first because the container is often sized from the same render (a frame whose height
  * scales with node count), and fitView measures the container. */
+// Undefined is Vue Flow's own default fit — the magnifying one, and what every caller had until `magnify`
+// existed. The capped pair is DagEditor's, down to the padding: two components fitting the same kind of
+// picture must not disagree about how much room it gets.
+const FIT = computed(() => (magnify ? undefined : { padding: 0.08, maxZoom: 1 }));
+
 const flow = ref<VueFlowStore>();
 watch(
     () => layoutSignature(nodes as readonly DagNode<never>[], edges, { direction, nodeWidth, nodeHeight }),
     async () => {
         await nextTick();
-        void flow.value?.fitView();
+        void flow.value?.fitView(FIT.value);
     },
 );
+
+// Not `fit-view-on-init`: that runs Vue Flow's own fit with default options, which is the magnifying one
+// whatever this component was asked for. Fitting on ready is the same moment with the caller's answer applied.
+const onReady = async (store: VueFlowStore): Promise<void> => {
+    flow.value = store;
+    await nextTick();
+    void store.fitView(FIT.value);
+};
 
 const toggle = (id: string): void => {
     selectedId.value = selectedId.value === id ? undefined : id;
@@ -96,12 +120,11 @@ const toggle = (id: string): void => {
         :edges="flowEdges"
         :min-zoom="0.4"
         :max-zoom="2"
-        fit-view-on-init
         :nodes-draggable="false"
         :nodes-connectable="false"
         :elements-selectable="false"
         :zoom-on-double-click="false"
-        @pane-ready="flow = $event"
+        @pane-ready="onReady"
     >
         <template #node-card="{ data }">
             <button

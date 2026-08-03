@@ -54,7 +54,17 @@ const openable = computed(() => [...columns.value.values()].some((column) => col
             <span v-else>No step in this run has a session yet.</span>
         </p>
         <div class="min-h-0 flex-1">
-            <DagGraph v-model="selectedId" :nodes="dag.nodes" :edges="dag.edges" :node-width="RUN_NODE_WIDTH" :node-height="RUN_NODE_HEIGHT">
+            <!-- `magnify` off: this is a popped-out window, and a five-node run stretched to fill one reads
+                 as a diagram of five billboards. Small graphs sit at their natural size and the reader zooms
+                 in by hand if they want to. -->
+            <DagGraph
+                v-model="selectedId"
+                :nodes="dag.nodes"
+                :edges="dag.edges"
+                :node-width="RUN_NODE_WIDTH"
+                :node-height="RUN_NODE_HEIGHT"
+                :magnify="false"
+            >
                 <template #node="{ node }"><WorkflowNodeCard :node="node.data" /></template>
             </DagGraph>
         </div>
