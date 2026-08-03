@@ -25,7 +25,7 @@ import ChatTabsMobile from "./ChatTabsMobile.vue";
  * the resize handle disappears. Popped out the panel turns on its side: the strip becomes a left rail, and the
  * panes stand side by side in the room that leaves. */
 
-const { active, activeId, conversations, panes, setActive, setPanes, openBeside, closeTabs, openConversation } = useChat();
+const { active, activeId, conversations, panes, setActive, closePane, closeTabs, openConversation } = useChat();
 const layout = useLayout();
 const { poppedOut, fit } = useChatPopout();
 const { mobile } = useDevice();
@@ -262,12 +262,18 @@ const endResize = (event: PointerEvent): void => {
             <!-- The panes, sharing the room equally (the terminal panel's split cells, which this is the chat's
                  half of) until the floor, past which the row scrolls sideways rather than crushing them. -->
             <div v-else ref="paneRow" class="chat-panes flex min-h-0 min-w-0 flex-1 overflow-x-auto" :class="{ 'chat-panes-split': split }">
+                <!-- A pane may be closed from its own corner only in a SPLIT: with one column the × would be
+                     a control that closes the panel it lives in, which is the pop-out's job and the strip's.
+                     The panel answers the press, the way it answers `focus` — which chats are on screen is
+                     the frame's state, not any one pane's. -->
                 <ChatPane
                     v-for="(conversation, at) in shown"
                     :key="conversation.conversationId"
                     :conversation="conversation"
                     :focused="paneIds[at] === activeId"
+                    :closable="split"
                     @focus="setActive(conversation.conversationId)"
+                    @close="closePane(conversation.conversationId)"
                 />
             </div>
         </div>

@@ -13,6 +13,7 @@ import { effectiveAccount } from "../composables/chat/providerAccounts";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
+import { withShortcut } from "../composables/commands/useCommands";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useLoadingReveal } from "../composables/loadingReveal";
 import { conversationView, PANE_VIEW, useChat } from "../composables/chat/useChat";
@@ -62,6 +63,9 @@ const props = defineProps<{
     // caret in the composer" signal — with several panes open, every one of them answering would move the
     // caret to whichever mounted last.
     focused: boolean;
+    // Whether this pane's column can be given back — true in a split, where taking one column back still
+    // leaves a panel. The panel decides it (ChatPanel), because it is a fact about the set, not about this chat.
+    closable: boolean;
 }>();
 
 /* THE TYPEWRITER IS THIS PANE'S, and only the focused pane runs one (TranscriptClock.watched). Written as an
@@ -86,12 +90,19 @@ onBeforeUnmount(() => (props.conversation.watched.value = false));
 // (Tab, a picker closing). The panel answers by moving the focus, which is a store write, so it is only
 // raised by a pane that does not already hold it: every click in the focused pane would otherwise re-seat a
 // focus that had not moved and scroll the rail to it.
-const emit = defineEmits<{ focus: [] }>();
+const emit = defineEmits<{ focus: []; close: [] }>();
 const takeFocus = (): void => {
     if (!props.focused) {
         emit(`focus`);
     }
 };
+
+// The corner ×, and what it is careful to say: this ends the COLUMN, not the conversation — the chat is still
+// in the rail, one click from a column again. The chord it duplicates (chat.closePane) acts on the FOCUSED
+// pane, so only the focused pane's button teaches it; on any other, naming a key that would close a different
+// column is worse than naming none.
+const CLOSE_PANE = `Close this pane — the chat stays open`;
+const closeHint = computed(() => (props.focused ? withShortcut(CLOSE_PANE, `chat.closePane`) : CLOSE_PANE));
 
 const paneView = conversationView(computed(() => props.conversation));
 provide(PANE_VIEW, paneView);
@@ -1079,6 +1090,25 @@ watch(
             v-if="dragDepth > 0"
             class="pointer-events-none absolute inset-1 z-30 rounded-xl border-2 border-dashed border-primary-500 bg-primary-500/10"
         ></div>
+        <!-- GIVING THIS COLUMN BACK. It floats over the transcript's top-right corner rather than sitting in a
+             header, because a pane has no header — a bar per column would cost every pane a strip of height to
+             carry one control, and the panel above already names the chats. Muted at rest so a permanent mark
+             does not compete with the conversation, over its own faint backdrop so it stays legible against
+             whatever scrolls under it (it clears the pinned prompt, which is opaque).
+             Neither press moves the FOCUS: stopping pointerdown and focusin keeps closing a pane the user was
+             not working in from flashing the focus accent onto a column that is about to disappear. -->
+        <button
+            v-if="closable"
+            type="button"
+            class="absolute top-2 right-2 z-20 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg bg-card/70 text-subtle backdrop-blur-sm transition-colors hover:bg-overlay hover:text-content"
+            v-tooltip.bottom="closeHint"
+            aria-label="Close pane"
+            @pointerdown.stop
+            @focusin.stop
+            @click.stop="emit(`close`)"
+        >
+            <Icon name="times" class="text-2xs" />
+        </button>
         <!-- ONE scroller for the transcript AND the composer under it, so the room the composer takes is
              reserved by the layout rather than measured back into it: the composer is the last thing in
              the scrolled content and sticks to the bottom edge, which means the transcript can always be
