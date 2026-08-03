@@ -44,18 +44,24 @@ echo "==> desktop release build v${VERSION}"
 # xdg-utils is not a compiler dep but a bundle INPUT: the `intentic://` deep-link scheme in tauri.conf.json makes
 # the AppImage bundler copy the host's /usr/bin/xdg-mime into the AppDir verbatim (it is what registers the scheme
 # on first run), and a host without it aborts the bundle — `failed to bundle project: xdg-mime binary not found`.
-# p7zip-full/rpm/cpio are not build inputs — they are what verify-desktop-bundle.sh (run at the end of this
+# `file` is the same kind of input one level down: linuxdeploy's appimage output plugin shells into
+# appimagetool, which refuses to start without it — "file command is missing but required, please install it",
+# reported back through tauri as the contentless `failed to run linuxdeploy`. Absent from the CI job image
+# (node:24-bookworm-slim carries no /usr/bin/file), present on most desktops, which is exactly the shape of
+# dependency that only ever fails in CI.
+# p7zip-full/rpm are not build inputs — they are what verify-desktop-bundle.sh (run at the end of this
 # script) uses to read back the rpm and the NSIS installer it just produced. Installed here so the verification
 # is unconditional: a verifier that skips when its tool is absent reports "verified" for a bundle nobody opened.
 if ! command -v makensis >/dev/null 2>&1 || ! command -v xdg-mime >/dev/null 2>&1 ||
-    ! command -v 7z >/dev/null 2>&1 || ! command -v rpm2cpio >/dev/null 2>&1 ||
+    ! command -v file >/dev/null 2>&1 ||
+    ! command -v 7z >/dev/null 2>&1 || ! command -v rpm2archive >/dev/null 2>&1 ||
     ! dpkg -s libwebkit2gtk-4.1-dev >/dev/null 2>&1; then
     echo "==> installing system build deps"
     apt-get update -qq
     apt-get install -y -qq --no-install-recommends \
         libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
-        build-essential libssl-dev pkg-config nsis lld llvm clang xdg-utils \
-        p7zip-full rpm cpio
+        build-essential libssl-dev pkg-config nsis lld llvm clang xdg-utils file \
+        p7zip-full rpm
 fi
 if ! command -v cargo >/dev/null 2>&1; then
     echo "==> installing rust"
@@ -91,8 +97,12 @@ export APPIMAGE_EXTRACT_AND_RUN=1
 export NO_STRIP=true
 
 # Stale bundles from a previous (cached) build would make the glob-copies below ambiguous.
-LINUX_BUNDLES="$TAURI_DIR/target/release/bundle"
-WIN_BUNDLES="$TAURI_DIR/target/x86_64-pc-windows-msvc/release/bundle"
+# Both CI jobs that run this set CARGO_TARGET_DIR to the shared /ci-cache store, and cargo puts the bundles
+# under THAT — so the src-tauri/target spelling cleaned nothing and the copies below looked for artifacts in a
+# directory the build never wrote to.
+TARGET_DIR="${CARGO_TARGET_DIR:-$TAURI_DIR/target}"
+LINUX_BUNDLES="$TARGET_DIR/release/bundle"
+WIN_BUNDLES="$TARGET_DIR/x86_64-pc-windows-msvc/release/bundle"
 rm -rf "$LINUX_BUNDLES" "$WIN_BUNDLES"
 
 echo "==> building Linux bundles (deb, rpm, appimage)"

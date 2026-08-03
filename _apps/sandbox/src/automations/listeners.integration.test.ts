@@ -177,6 +177,15 @@ const captureWithSession = (turns: AgentTurn[], sessionId: string): WakeFn =>
         yield { kind: "done" };
     };
 
+// A turn reaching the wake is NOT the turn being over: the fire ends by settling its thread record (the
+// session to resume, and a fresh lastAt), and nothing dispatch returns is awaitable past the wake. So a test
+// that reads the record — or rewrites it, as the TTL one does — waits for that write first, otherwise the
+// settle lands on top of what the test wrote. On a loaded CI runner that is exactly what happened: the aged
+// lastAt was replaced by a fresh one, the thread read as live, and the "fresh conversation" assertion failed.
+const settledThread = async (services: Services, key: string): Promise<void> => {
+    await vi.waitFor(async () => expect((await services.threadSessions.get(key, CHANNEL_SESSION_TTL_MS, Date.now()))?.sessionId).toBeDefined());
+};
+
 test("a follow-up message in the same channel reuses the conversation and resumes its session", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     // A distinct id per test: the batcher map is a module singleton keyed by automation id, so a shared id
@@ -185,6 +194,9 @@ test("a follow-up message in the same channel reuses the conversation and resume
     const turns: AgentTurn[] = [];
     await dispatchListenerMessage(services, message(), captureWithSession(turns, "sess-1"), 5);
     await vi.waitFor(() => expect(turns).toHaveLength(1));
+    // The session to resume is learned when the first turn settles — dispatch the follow-up before that and
+    // it legitimately has nothing to resume.
+    await settledThread(services, threadKey("discord", "thread-follow-up", "c1"));
     await dispatchListenerMessage(services, message({ id: "m2", content: "and one more thing" }), captureWithSession(turns, "sess-1"), 5);
     await vi.waitFor(() => expect(turns).toHaveLength(2));
     const [first, second] = turns as [AgentTurn, AgentTurn];
@@ -216,9 +228,11 @@ test("a channel quiet past the TTL starts a fresh conversation on the next messa
     await dispatchListenerMessage(services, message(), captureWithSession(turns, "sess-1"), 5);
     await vi.waitFor(() => expect(turns).toHaveLength(1));
     // Age the record past the window instead of mocking the clock — the dispatcher's own TTL read is what's
-    // under test, and the store is the only thing that carries "when was this channel last active".
-    const path = join(root, "thread-sessions.json");
+    // under test, and the store is the only thing that carries "when was this channel last active". The wait
+    // is what makes that safe: the fire's own settle must land before the record is rewritten.
     const key = threadKey("discord", "thread-ttl", "c1");
+    await settledThread(services, key);
+    const path = join(root, "thread-sessions.json");
     const aged = JSON.parse(readFileSync(path, "utf8")) as Record<string, { lastAt: number }>;
     (aged[key] as { lastAt: number }).lastAt = Date.now() - CHANNEL_SESSION_TTL_MS - 1;
     writeFileSync(path, JSON.stringify(aged));

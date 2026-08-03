@@ -24,6 +24,18 @@ set -euo pipefail
 KIND="${1:?usage: smoke.sh deb|appimage}"
 DISPLAY_NUM=99
 export DISPLAY=":${DISPLAY_NUM}"
+# A UTF-8 locale, because the assertions read WINDOW TITLES and one of them is "Intentic — Sandbox Manager".
+# X11 window names are transcoded into the client's locale charset, so under the container's default C locale
+# xdotool reads that title as "(failure in conversion from UTF8_STRING to ANSI_X3.4-1968)" — the window is
+# there, correct and mapped, and every search for it misses. C.UTF-8 is built into glibc; no locales package.
+export LANG=C.UTF-8
+# Declare a desktop, so xdg-open routes the link through `gio` the way it does on every desktop this app ships
+# to. Its no-desktop FALLBACK is a shell reimplementation that word-splits the .desktop `Exec` line and looks
+# the first word up with `which` — which cannot resolve the QUOTED program path the deep-link plugin writes
+# when it registers the scheme at runtime (Exec="/usr/bin/intentic-desktop" %u, quoting the desktop-entry spec
+# explicitly allows). The result is xdg-open failing on a registration that is correct, in a mode no desktop
+# session actually uses. The lookup itself is still exercised — gio reads the same mimeapps.list entry.
+export XDG_CURRENT_DESKTOP=GNOME
 # The stub SPA (baked into the image) rather than app.intentic.dev: this tier is hermetic, and the workspace
 # window opening at its CONFIGURED origin is what is being asserted, not that the hosted app renders.
 export INTENTIC_APP_URL="http://127.0.0.1:8099"
@@ -91,6 +103,15 @@ case "$KIND" in
     appimage)
         artifact=/artifacts/Intentic.AppImage
         [ -f "$artifact" ] || { echo "error: $artifact not mounted" >&2; exit 1; }
+        # The excludelist baseline, and nothing above it. linuxdeploy applies the AppImage project's
+        # excludelist, which deliberately does NOT bundle the libraries every graphical Linux install already
+        # carries — so an AppImage is self-contained ABOVE that line and host-dependent below it. This image has
+        # no graphical stack at all, so the line has to be drawn explicitly: these five are what the bundle
+        # resolves against the host, and they are installed HERE rather than in the image so the deb tier keeps
+        # meeting a host with no GUI libraries and has to name its own dependencies.
+        apt-get update -qq
+        apt-get install -y -qq --no-install-recommends \
+            libfribidi0 libharfbuzz0b libasound2 libegl1 libgbm1 >/dev/null
         chmod +x "$artifact"
         # No FUSE in a container; the runtime's own self-extract is how CI runs an AppImage.
         export APPIMAGE_EXTRACT_AND_RUN=1
@@ -128,8 +149,10 @@ if [ "$KIND" = "deb" ]; then
     else
         fail "the bundled scripts are not on disk after install"
     fi
-    # The OS-level half of the deep link: an entry exists, and the handler lookup resolves to it.
-    update-desktop-database /usr/share/applications 2>/dev/null || true
+    # The OS-level half of the deep link: an entry exists, and the handler lookup resolves to it. Not guarded
+    # with `|| true` — a missing update-desktop-database would otherwise be indistinguishable from a package
+    # that registers nothing, which is the exact failure this line exists to tell apart.
+    update-desktop-database /usr/share/applications
     handler="$(xdg-mime query default x-scheme-handler/intentic 2>/dev/null || true)"
     if [ -n "$handler" ]; then
         pass "x-scheme-handler/intentic resolves to $handler"

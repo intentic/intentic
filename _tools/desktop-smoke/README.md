@@ -18,6 +18,12 @@ way to a user's first launch, where it is a linker error they cannot act on. Pre
 would hide exactly the bug this exists to catch. The AppImage is the mirror case: it vendors its libraries, so
 anything it failed to vendor is missing on this host too.
 
+One line is drawn explicitly, in `smoke.sh` and only for the AppImage tier: `linuxdeploy` applies the AppImage
+project's **excludelist**, which by design does not bundle the libraries every graphical Linux install already
+carries (`libfribidi`, `libharfbuzz`, `libasound`, `libEGL`, `libgbm`). An AppImage is self-contained above
+that line and host-dependent below it; a host with no graphical stack at all is below it, so those five are
+installed for that tier — never in the image, which has to stay bare for the deb's `Depends`.
+
 ## What one run asserts
 
 | | |
@@ -29,7 +35,11 @@ anything it failed to vendor is missing on this host too.
 | deep link | a real `xdg-open intentic://setup?code=…` opens the Sandbox Manager, in the instance that was already running |
 
 Assertions read **window titles** through `xdotool`, not a test hook — the app has none and should not grow
-one. The window appearing is the behaviour a user is promised, so it is the thing worth asserting.
+one. The window appearing is the behaviour a user is promised, so it is the thing worth asserting. Two host
+properties that costs: `LANG=C.UTF-8` (X transcodes window names into the client's locale, and the launcher's
+title has an em dash in it), and `XDG_CURRENT_DESKTOP` (so `xdg-open` delegates the handler lookup to `gio`,
+as it does on every desktop this app ships to, instead of falling back to a shell reimplementation that cannot
+resolve a quoted `Exec=` — which is what the deep-link plugin writes when it registers the scheme at runtime).
 
 ## Not covered here
 

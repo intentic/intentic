@@ -124,10 +124,13 @@ check_deb() {
 
 check_rpm() {
     local rpm="$1" out="$WORK/rpm"
-    need rpm2cpio "the .rpm"
-    need cpio "the .rpm"
+    # rpm2archive, not rpm2cpio: on the rpm tauri writes, rpm2cpio emits the COMPLETE payload and then exits 1
+    # anyway (the package is sound — `rpm -K` verifies both digests and `rpm -i` installs it), which under
+    # `pipefail` aborted this script with nothing printed. rpm2archive ships in the same `rpm` package, is what
+    # upstream points at now, and needs no cpio.
+    need rpm2archive "the .rpm"
     mkdir -p "$out"
-    (cd "$out" && rpm2cpio "$rpm" | cpio -idm --quiet)
+    rpm2archive -n <"$rpm" | tar -x -C "$out"
     compare_scripts "rpm" "$out"
     compare_desktop_entry "rpm" "$out"
     checked=$((checked + 1))

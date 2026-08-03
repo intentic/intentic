@@ -8,16 +8,26 @@
 # shared library. Pre-seeding the libraries here would hide exactly that.
 #
 # The AppImage is the mirror-image case on the same bare host: it vendors its libraries, so anything it failed
-# to bundle is missing here too.
+# to bundle is missing here too — except the handful the AppImage excludelist deliberately leaves to the host
+# (libfribidi, libharfbuzz, libEGL …). Those are installed by smoke.sh in the appimage tier ONLY, so this image
+# stays bare for the deb's Depends.
 FROM debian:bookworm-slim
 
 # Xvfb + dbus: a Tauri app is a GTK app, and GTK needs both a display and a session bus. xdg-utils carries
 # xdg-open and xdg-mime — the real OS path a deep link takes, and the thing the .desktop MIME entry feeds.
+# desktop-file-utils carries update-desktop-database, which is what turns an installed .desktop entry's
+# MimeType line into a handler the OS can look up; on a real Debian it arrives as a dpkg trigger and runs
+# itself. Without it `xdg-mime query default` answers nothing however correct the package is, and the deep
+# link — the entire channel from the SPA into the app — reads as broken when only the test host is.
+# libglib2.0-bin carries `gio`, which is what xdg-open delegates the lookup to on every desktop this app ships
+# to (see the XDG_CURRENT_DESKTOP note in smoke.sh for why the delegation matters here).
 # xdotool + x11-utils are how the test observes windows: no window manager, so it reads the X tree directly.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb \
         dbus-x11 \
         xdg-utils \
+        desktop-file-utils \
+        libglib2.0-bin \
         x11-utils \
         xdotool \
         procps \
