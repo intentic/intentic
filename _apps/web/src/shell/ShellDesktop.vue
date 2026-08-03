@@ -1,20 +1,18 @@
 <script setup lang="ts">
 import type { ViewBadge } from "@intentic/extension-api";
 import type { IconName } from "@intentic/ui";
-import { computed, onUnmounted, watch } from "vue";
+import { computed } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
 import { useBrowsersQuery } from "../composables/browser/browsersQuery";
 import { useSubagentsQuery } from "../composables/subagents/subagentsQuery";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
-import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
+import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
-import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 import { commandShortcut } from "../composables/commands/useCommands";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
-import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
 import { useKeybindings } from "../composables/commands/useKeybindings";
@@ -28,7 +26,7 @@ import { usePorts } from "../composables/sandbox/usePorts";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useVpn } from "../composables/sandbox/useVpn";
 import AccountPanel from "./AccountPanel.vue";
-import ChatPanel from "../chat/ChatPanel.vue";
+import { chatDock, terminalDock } from "./dockSlots";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
 import QuickOpen from "./QuickOpen.vue";
 import SandboxGate from "../sandbox-gates/SandboxGate.vue";
@@ -79,7 +77,9 @@ const changes = useChanges();
 const { attention: agentAttention } = useAgents();
 const layout = useLayout();
 const { iconRailSize } = useIconRailSize();
-const { poppedOut, restoring: chatRestoring, body: chatPopoutBody, dock } = useChatPopout();
+// Only what the LAYOUT needs: a popped-out (or returning) chat is a collapsed column. The panel itself is
+// mounted above the router now — this shell just lends it the column (see the slot in the template).
+const { poppedOut, restoring: chatRestoring } = useChatPopout();
 const route = useRoute();
 
 // The connected tunnels behind the rail's VPN indicator. Shown only when non-empty: a VPN badge that is always
@@ -272,8 +272,9 @@ const gridStyle = computed(() => {
     };
 });
 
-// The global terminal panel: mounted here (below every view) because tmux sessions are sandbox-global facts —
-// shells and dev servers stay visible while navigating. Ctrl+` toggles it from anywhere in the shell.
+// The global terminal panel's open state, for the rail tile that toggles it (Ctrl+` does the same from
+// anywhere in the shell). The panel itself docks into the slot below the workspace — tmux sessions are
+// sandbox-global facts, so shells and dev servers stay visible while navigating.
 const terminal = useTerminalPanel();
 // The rail's terminal entry: the ONLY visible affordance for the panel (the Workspace view no longer carries a
 // toggle — terminals are sandbox-global, so their control belongs on the sandbox-global surface). It doubles as
@@ -285,15 +286,6 @@ const terminalLabel = computed(() => {
     const what = terminalActivity.summary.value === undefined ? `Terminal` : `Terminal — ${terminalActivity.summary.value} running`;
     return chord === undefined ? what : `${what} (${chord})`;
 });
-// Like the chat, the whole panel can float in its own window (right-click its tab strip) — teleported there,
-// docked back on window close.
-const { poppedOut: terminalPoppedOut, restoring: terminalRestoring, body: terminalPopoutBody, dock: dockTerminal } = useTerminalPopout();
-// Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pop-out window.
-watch(terminal.open, (open) => {
-    if (!open) {
-        dockTerminal();
-    }
-});
 // The core shell's built-in Command Palette commands (navigation, terminal, chat pop-out, Go to File / Command
 // Palette) — registered on mount, disposed on unmount, so the `>` command mode is populated the moment the shell
 // is up. Each carries its own `keybinding`, so it is reachable by both the palette and a shortcut.
@@ -302,13 +294,6 @@ useShellCommands();
 // (Ctrl+` → terminal, Mod+P → Go to File, Mod+Shift+P → Command Palette, plus any extension-contributed binding),
 // replacing a bespoke per-shortcut hub. All actions are sandbox-global, so it lives at the shell, not in a view.
 useKeybindings();
-
-onUnmounted(() => {
-    // Don't leave a floating chat or terminal window orphaned if the desktop chrome tears down (logout,
-    // session loss, or the viewport crossing into the mobile shell).
-    dock();
-    dockTerminal();
-});
 </script>
 
 <template>
@@ -466,34 +451,22 @@ onUnmounted(() => {
             <AccountPanel />
         </nav>
 
-        <!-- Docked in the grid's chat column, or teleported into the pop-out window — same live DOM either way,
-             so the useChat singleton and the streaming turn are untouched by the move. Held back entirely while
-             a pop-out window from before a reload is still coming back, so the panel mounts once, out there,
-             instead of building itself in the collapsed column first. -->
-        <Teleport :to="chatPopoutBody" :disabled="!poppedOut">
-            <ChatPanel v-if="!chatRestoring" class="border-l border-line" style="grid-area: chat" />
-        </Teleport>
+        <!-- The chat's place in the grid — a slot, not the panel. The panel is mounted above the router and
+             teleported in here (shell/dockSlots.ts), so the same live DOM serves the column, the pop-out window
+             and a route this shell doesn't cover; `display: contents` means this element is not in the layout
+             at all and the panel itself is still the grid item. -->
+        <div ref="chatDock" class="contents"></div>
 
         <main class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
             <SandboxGate>
                 <div class="min-h-0 flex-1 overflow-auto scrollbar-thin">
                     <RouterView />
                 </div>
-                <!-- The ONE terminal panel — sandbox-global (shells + dev servers), persistent across views.
-                     Docked below the workspace, or teleported into its own window when popped out — same live
-                     DOM either way, so the session cache and running shells are untouched by the move (the
-                     panel fills the floating window, hence resizable off there). -->
-                <Teleport :to="terminalPopoutBody" :disabled="!terminalPoppedOut">
-                    <TerminalPanel
-                        v-if="terminal.open.value && !terminalRestoring"
-                        :source="globalTerminalSource"
-                        storage-key="sandbox"
-                        :initial="terminal.requested.value"
-                        :surfaced="terminal.surfaced.value"
-                        :resizable="!terminalPoppedOut"
-                        @close="terminal.setOpen(false)"
-                    />
-                </Teleport>
+                <!-- …and the same for the ONE terminal panel — sandbox-global (shells + dev servers), persistent
+                     across views. Its slot is INSIDE the gate, which is what keeps a docked terminal off screen
+                     while the daemon is unreachable: the panel parks itself when its slot goes away, rather than
+                     presenting dead shells. -->
+                <div ref="terminalDock" class="contents"></div>
             </SandboxGate>
         </main>
 

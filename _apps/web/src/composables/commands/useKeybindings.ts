@@ -30,15 +30,23 @@ export function useKeybindings(): void {
 
     onMounted(() => window.addEventListener(`keydown`, onKey));
 
-    // A popped-out panel's keystrokes dispatch in ITS window, never this one — mirror the listener onto each
-    // pop-out window while it exists, so shortcuts keep working inside the floating chat/terminal. That
-    // document dies with its window, so only a still-open body needs explicit removal on unmount.
+    /* A popped-out panel's keystrokes dispatch in ITS window, never this one — mirror the listener onto each
+     * pop-out window while it exists, so shortcuts keep working inside the floating chat/terminal. That document
+     * dies with its window, so only a still-open body needs explicit removal on unmount.
+     *
+     * Immediate, because a floating window now outlives this dispatcher: the panels are mounted above the router
+     * (shell/dockSlots.ts) and only the SHELL comes and goes, so on a step out to /setup and back there is a
+     * window already open that no `body` change will ever announce again. */
     const popouts = [useChatPopout(), useTerminalPopout()];
     for (const popout of popouts) {
-        watch(popout.body, (body, previous) => {
-            previous?.ownerDocument.defaultView?.removeEventListener(`keydown`, onKey);
-            body?.ownerDocument.defaultView?.addEventListener(`keydown`, onKey);
-        });
+        watch(
+            popout.body,
+            (body, previous) => {
+                previous?.ownerDocument.defaultView?.removeEventListener(`keydown`, onKey);
+                body?.ownerDocument.defaultView?.addEventListener(`keydown`, onKey);
+            },
+            { immediate: true },
+        );
     }
 
     onUnmounted(() => {
