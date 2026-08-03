@@ -211,12 +211,25 @@ const hasDocker = ref(false);
  * script, so nothing about steps 1-2 or the announce-watch below changes. What it removes is the terminal —
  * which is what people actually balk at here, and what the two switches above can only soften.
  *
+ * So inside the app step 3 IS that button, not a second offer beside a command: one line of consequence, the
+ * button, and a link for the person who wanted a server after all. Everything below that belongs to the
+ * COMMAND rather than to the step — the paste-it-into-a-terminal line, the `sudo` switch, "Copy again" —
+ * is gated on the command actually being on screen, because in the app it usually isn't.
+ *
  * A browser that is NOT the app still gets the link (the OS routes it to an installed app) plus somewhere to
  * download one; the pasted command stays the primary path there, because it is the one that always works. */
 const desktop = computed(() => desktopVersion() !== undefined);
 // Inside the app the command is still one click away — a server is a perfectly ordinary place to want the
 // sandbox, and the app cannot run it there.
 const showServerCommand = ref(false);
+const commandVisible = computed(() => !desktop.value || showServerCommand.value);
+// Compose declares its own env, so neither switch under the command applies to it — but "no tab is on screen
+// at all" is a different thing from "the compose tab is", and only the second one hides the sync option.
+const composeShown = computed(() => commandVisible.value && runTab.value === `compose`);
+// The step names the machine, because "run this" alone reads as something the platform does for you. In the
+// app there is no command to point at — the step is one button — so "this" becomes "it", and the button under
+// it is free to say the verb instead of repeating the place.
+const runTitle = computed(() => (desktop.value ? `Run it on this computer` : `Run this on your computer`));
 
 /* The command's options are checkboxes, and now they look like checkboxes: the design system's own control
  * (animated in primeng.css, so this row ticks the same way every other box in the app does) with its name
@@ -295,7 +308,8 @@ const lockedReason = computed(() => {
  * `handoff` is that missing model, in the order it actually happens:
  *   • `locked`  — the chosen path isn't ready, so there is no command yet (lockedReason says what's missing)
  *   • `yours`   — the command is on screen and NOTHING is in flight; the next move is the user's, in a terminal
- *   • `pasted`  — they copied it, so we are waiting on their terminal rather than on our own infrastructure
+ *   • `handed`  — they copied it (or, in the app, pressed the button), so we are waiting on their machine
+ *                 rather than on our own infrastructure
  *   • `claimed` — a machine redeemed the setup code at /setup/claim: the command demonstrably ran, and the
  *                 minutes of invisible Docker work that follow are finally a wait this page has earned
  *
@@ -303,11 +317,15 @@ const lockedReason = computed(() => {
  * evidence the platform ever gets that the pasted command reached a machine, and without it the card cannot
  * tell "you haven't run it yet" from "it's running and slow" — which is exactly the ambiguity people resolve,
  * wrongly, by waiting. */
-type Handoff = "locked" | "yours" | "pasted" | "claimed";
+type Handoff = "locked" | "yours" | "handed" | "claimed";
 
 // This browser put the command on the clipboard. Page-level and persistent, unlike CopyButton's own 1.5s
 // flash: it is the hinge the card turns on, not a button animation.
 const copied = ref(false);
+// The app was handed the setup code — the desktop path's equivalent of copying, and the last thing this page
+// can observe before the machine takes over. Without it, pressing the one button on the card left the footer
+// still reading "Nothing is running yet" for as long as it takes the app to claim.
+const launched = ref(false);
 // Server-side proof the command ran somewhere: when a machine last redeemed THIS code. Minting clears the
 // stamp server-side, so a value here always describes the command currently on screen.
 const claimedAt = ref<string | null>(null);
@@ -322,7 +340,7 @@ const handoff = computed<Handoff>(() => {
     if (claimedAt.value !== null) {
         return `claimed`;
     }
-    return copied.value ? `pasted` : `yours`;
+    return copied.value || launched.value ? `handed` : `yours`;
 });
 
 /* The card escalates on its own, because the failure it guards against is silent: someone who has not realised
@@ -340,7 +358,7 @@ watch(commandReady, (ready) => {
 // sitting on a clipboard. Long enough to walk to another machine; short enough to catch someone who has
 // settled in to watch this page. The compose path is a file to paste into an editor and edited there, so the
 // same nudge on that tab would fire at somebody doing exactly the right thing.
-const nudgeAfterMs = computed(() => (runTab.value === `compose` ? 3 * 60_000 : 40_000));
+const nudgeAfterMs = computed(() => (composeShown.value ? 3 * 60_000 : 40_000));
 // And when it stops assuming the command was never run, and starts helping the person whose terminal errored.
 const STALLED_MS = 3 * 60_000;
 // A claimed code with no daemon behind it yet: the first image pull is genuinely slow, so this waits much
@@ -380,6 +398,7 @@ const runHere = (): void => {
         return;
     }
     track(`desktop_setup_started`, { mode: mode.value, inApp: desktop.value, sync: syncEnabled.value });
+    launched.value = true;
     openDesktopLink(
         desktopSetupLink({
             code,
@@ -564,9 +583,11 @@ const mint = async (chosen: SetupCodeTarget, key: string): Promise<void> => {
         }
         setup.value = minted;
         mintedFor.value = key;
-        // A fresh code is a fresh command, so the handoff starts over: the clipboard holds the old one, and the
-        // server has just cleared the claim stamp this mirrors (see setupCode in sandbox.routes.ts).
+        // A fresh code is a fresh command, so the handoff starts over: the clipboard holds the old one, the app
+        // was handed the old one, and the server has just cleared the claim stamp this mirrors (see setupCode
+        // in sandbox.routes.ts).
         copied.value = false;
+        launched.value = false;
         claimedAt.value = null;
     } catch (err) {
         if (chosen.mode === `intentic` && isNotFound(err)) {
@@ -713,9 +734,10 @@ const startFresh = (): void => {
     setup.value = null;
     mintedFor.value = undefined;
     setupError.value = undefined;
-    // The handoff belonged to the abandoned sandbox's command: a copy already made, and a claim already
-    // recorded, are both facts about a machine the next sandbox has nothing to do with.
+    // The handoff belonged to the abandoned sandbox's command: a copy already made, a setup already handed to
+    // the app, and a claim already recorded are all facts about a machine the next sandbox has nothing to do with.
     copied.value = false;
+    launched.value = false;
     claimedAt.value = null;
     subdomain.value = ``;
     derivedPrefix.value = ``;
@@ -1208,7 +1230,7 @@ watch(commandReady, (ready) => {
                  to remove all of it) moved to SetupRunDetails, which is docked in a column of its own from xl
                  and folded into the (i) below it. That is also what fixed the hint landing ON the command it
                  described, on exactly the screens with room to put it beside instead. -->
-                    <StepSection v-if="created && lane === `provision`" :step="3" title="Run this on your computer">
+                    <StepSection v-if="created && lane === `provision`" :step="3" :title="runTitle">
                         <template #actions>
                             <!-- Below xl only: from there up the same content is docked in its own column (see the
                          aside at the foot of this template), where it never lands on the command. -->
@@ -1216,18 +1238,6 @@ watch(commandReady, (ready) => {
                                 <SetupRunDetails :sync-enabled="syncEnabled" :cleanup="cleanupCommand" />
                             </InfoHint>
                         </template>
-
-                        <!-- One line, because the title already gave the instruction and nobody reads the second
-                     sentence of a step they are trying to get through. All this adds is the bit the title
-                     can't: WHICH machine. On a phone it says the other thing instead — the device reading
-                     this cannot be the device running it. -->
-                        <p class="flex items-start gap-2.5 text-xs text-muted">
-                            <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
-                            <span class="min-w-0">
-                                <template v-if="mobile">Copy it, then paste it into a terminal on the machine that will host your sandbox.</template>
-                                <template v-else>Paste it into a terminal — this computer, or any server you have a shell on.</template>
-                            </span>
-                        </p>
 
                         <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready — a
                      command missing the token/zone/subdomain or the provisioned tunnel would just fail in the sandbox. -->
@@ -1239,32 +1249,49 @@ watch(commandReady, (ready) => {
                             <span>{{ lockedReason }}</span>
                         </div>
                         <template v-else>
-                            <!-- Inside the desktop app the terminal is gone: one click hands this same setup code
-                                 to the app, which runs the same connect script on this machine and streams what it
-                                 says into its manager window. -->
-                            <div v-if="desktop" class="flex flex-col gap-3 rounded-xl border border-primary-600/40 bg-primary-600/5 p-4">
-                                <div class="flex items-center gap-2">
-                                    <Icon name="bolt" class="text-primary-400" />
-                                    <span class="text-sm font-semibold text-content">Run it on this computer</span>
-                                </div>
-                                <p class="text-2xs text-muted">
+                            <!-- Inside the desktop app the terminal is gone: one click hands this same setup code to the
+                                 app, which runs the same connect script on this machine and streams what it says into
+                                 its manager window. So in the app this IS the step — a line of consequence, the button
+                                 that causes it, and a way out for someone who wanted a server after all.
+                                 It used to be a tinted, bordered panel carrying its own "Run it on this computer"
+                                 heading with a primary button inside: the step title, the panel heading and the button
+                                 label all saying the same sentence, three boxes deep, inside a card that already has a
+                                 border. The title above names the machine, so the button only has to name the verb —
+                                 which is also the shape the app's other two handoffs use (HostRecreate, the
+                                 environment card), and there is no reason onboarding should be the loud one. -->
+                            <template v-if="desktop">
+                                <p class="text-xs text-muted">
                                     Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it answers
                                     — no terminal.
                                 </p>
-                                <Button label="Set up on this computer" class="self-start" @click="runHere">
+                                <Button label="Set it up now" class="self-start" @click="runHere">
                                     <template #icon><Icon name="bolt" /></template>
                                 </Button>
-                            </div>
-                            <button
-                                v-if="desktop"
-                                type="button"
-                                class="self-start text-xs text-muted underline hover:text-content"
-                                @click="showServerCommand = !showServerCommand"
-                            >
-                                {{ showServerCommand ? `Hide the server command` : `Running it on a server instead? Show the command` }}
-                            </button>
+                                <button
+                                    type="button"
+                                    class="self-start text-xs text-muted underline hover:text-content"
+                                    @click="showServerCommand = !showServerCommand"
+                                >
+                                    {{ showServerCommand ? `Hide the server command` : `Running it on a server instead? Show the command` }}
+                                </button>
+                            </template>
 
-                            <div v-if="!desktop || showServerCommand" class="flex flex-col gap-2">
+                            <div v-if="commandVisible" class="flex flex-col gap-2">
+                                <!-- One line, because the title already gave the instruction and nobody reads the second
+                             sentence of a step they are trying to get through. All this adds is the bit the title
+                             can't: WHICH machine — which is why it belongs to the COMMAND and not to the step, and
+                             why it is no longer above a button whose whole selling point is that there is no
+                             terminal. On a phone, and in the app (where this computer already has a button of its
+                             own), the machine that runs this is by construction not the one reading it. -->
+                                <p class="flex items-start gap-2.5 text-xs text-muted">
+                                    <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
+                                    <span class="min-w-0">
+                                        <template v-if="mobile || desktop"
+                                            >Copy it, then paste it into a terminal on the machine that will host your sandbox.</template
+                                        >
+                                        <template v-else>Paste it into a terminal — this computer, or any server you have a shell on.</template>
+                                    </span>
+                                </p>
                                 <!-- On a phone the picker and the copy button each take a full row: three pill tabs
                              sharing a 340px line wrapped every label to two lines, and the copy chip that
                              trailed them is the one control this step exists for. -->
@@ -1323,12 +1350,14 @@ watch(commandReady, (ready) => {
                                  of its peers state in one. It is the same kind of thing they are — something that
                                  changes what this command does — so it now reads as one, and the folder it mirrors
                                  to is the caption rather than a sentence of its own.
-                                 Script tabs only — compose carries no SYNC_DIR and declares its own shape. -->
+                                 Sync outlives the command, though: it rides the desktop handoff too, so it stays on
+                                 screen in the app where the command is folded away. Only the compose tab drops it,
+                                 because that file declares its own env. -->
                             <!-- The <label> stops at the option's NAME rather than wrapping the whole row: a
                                  label toggles on any click inside it, and these captions carry a folder path
                                  and a `sudo` mention — text people select and read. Clicking a row's name still
                                  hits a 200px target; selecting its caption no longer rewrites the command. -->
-                            <div v-if="runTab !== `compose`" class="flex flex-col gap-1.5 text-2xs text-muted">
+                            <div v-if="!composeShown" class="flex flex-col gap-1.5 text-2xs text-muted">
                                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                                     <label class="flex cursor-pointer items-center gap-2">
                                         <Checkbox v-model="syncEnabled" :binary="true" size="small" />
@@ -1345,8 +1374,13 @@ watch(commandReady, (ready) => {
                                 </div>
                                 <!-- Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
                              there is no switch here and the Docker prerequisite is left to the panel, which
-                             names the reboot a first Windows install may want. -->
-                                <div v-if="environment.production && runTab === `unix`" class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                             names the reboot a first Windows install may want. And only while the command is on
+                             screen — it rewrites one token of a line, which is no kind of offer when the line
+                             itself is folded away. -->
+                                <div
+                                    v-if="environment.production && commandVisible && runTab === `unix`"
+                                    class="flex flex-wrap items-center gap-x-2 gap-y-1"
+                                >
                                     <label class="flex cursor-pointer items-center gap-2">
                                         <Checkbox v-model="hasDocker" :binary="true" size="small" />
                                         <span :class="optionLabel">I already have Docker</span>
@@ -1408,14 +1442,20 @@ watch(commandReady, (ready) => {
                         <div v-if="waiting" class="flex flex-col gap-2 border-t border-line pt-3">
                             <p class="flex items-start gap-2 text-xs" :class="handoff === `claimed` ? `text-content` : `text-muted`">
                                 <Icon v-if="handoff === `claimed`" name="spinner" spin class="mt-0.5 shrink-0 text-success" />
-                                <Icon v-else-if="handoff === `pasted`" name="spinner" spin class="mt-0.5 shrink-0 text-info" />
+                                <Icon v-else-if="handoff === `handed`" name="spinner" spin class="mt-0.5 shrink-0 text-info" />
                                 <Icon v-else name="circle-fill" class="mt-1 shrink-0 text-[0.5rem] text-subtle" />
                                 <span class="min-w-0">
                                     <template v-if="handoff === `claimed`">
                                         <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker — the first run takes
                                         a few minutes.
                                     </template>
-                                    <template v-else-if="handoff === `pasted`">
+                                    <!-- Handed off two ways, and the next move differs: a copied command still has to
+                                         be pasted, while the app already has everything and is opening its own window. -->
+                                    <template v-else-if="handoff === `handed` && launched">
+                                        <span class="font-medium text-content">Handed to the app.</span> Follow it in the Intentic window — this page
+                                        opens your workspace the moment it answers.
+                                    </template>
+                                    <template v-else-if="handoff === `handed`">
                                         <span class="font-medium text-content">Copied.</span> Paste it into that terminal and press Enter.
                                     </template>
                                     <template v-else>
@@ -1430,21 +1470,31 @@ watch(commandReady, (ready) => {
                             <div v-if="nudging" :class="cmp.alertWarning('flex flex-col gap-2')">
                                 <p class="flex items-start gap-2">
                                     <Icon name="clock" class="mt-0.5 shrink-0" />
-                                    <span class="min-w-0">
+                                    <!-- The correction only holds where the command is the path. In the app the button
+                                         IS the path, so the same sentence would send someone to a terminal the step
+                                         above just told them they don't need. -->
+                                    <span v-if="commandVisible" class="min-w-0">
                                         <span class="font-medium">Still nothing.</span> This has to be pasted into a terminal on the machine that will
                                         run your sandbox.
+                                    </span>
+                                    <span v-else-if="launched" class="min-w-0">
+                                        <span class="font-medium">Still nothing.</span> Check the Intentic window — it shows what the setup is doing,
+                                        and any error it hit.
+                                    </span>
+                                    <span v-else class="min-w-0">
+                                        <span class="font-medium">Still nothing.</span> Nothing starts until you press "Set it up now" above.
                                     </span>
                                 </p>
                                 <!-- After three minutes, stop assuming it was never run and start helping the person
                              whose terminal answered back. Both readings get an action they can take. -->
-                                <p v-if="stalled" class="pl-6 text-2xs opacity-90">
+                                <p v-if="stalled && commandVisible" class="pl-6 text-2xs opacity-90">
                                     Already ran it? Check that terminal — an error there stops the sandbox before it can report in. Safe to run again.
                                 </p>
                                 <!-- `cta`, because in this banner copying again IS the way out — the quiet chip
                                      that suits a copy-beside-content read as the dimmest thing in the loudest
                                      box on the card. self-start, or the column flex stretches it edge to edge. -->
                                 <CopyButton
-                                    v-if="runTab !== `compose`"
+                                    v-if="commandVisible && runTab !== `compose`"
                                     class="ml-6 self-start"
                                     :text="selectedCommand"
                                     label="Copy again"
@@ -1459,7 +1509,8 @@ watch(commandReady, (ready) => {
                             <p v-if="slowBuild" class="flex items-start gap-2 text-2xs text-warning">
                                 <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
                                 <span class="min-w-0"
-                                    >Picked up a while ago, still no sandbox. Check that terminal for an error — it's safe to re-run.</span
+                                    >Picked up a while ago, still no sandbox. Check {{ commandVisible ? `that terminal` : `the Intentic window` }} for
+                                    an error — it's safe to re-run.</span
                                 >
                             </p>
                         </div>
