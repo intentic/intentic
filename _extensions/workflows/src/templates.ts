@@ -79,15 +79,19 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                  * they built different things — which measures the prompt, not the models. So one session
                  * settles the task first and both attempts are handed its document verbatim.
                  *
-                 * It is also the ONE step you have to edit: everything below is written to work whatever the
-                 * task is. */
+                 * IT NEEDS NO EDITING, because the task arrives with the RUN: type what you want in the chat
+                 * composer, pick this workflow from the pill beside Loop, and every step is handed your words
+                 * (WorkflowRun.request). Started from the workflows page instead, with no request, this step
+                 * is where you say what the job is — which is why the prompt asks for it either way. */
                 step(`brief`, `Pin the brief`, {
                     goal: `The task is written down precisely enough that two different models would build the same thing from it.`,
                     prompt:
-                        `THE TASK — replace this line with what you want built.\n\n` +
-                        `Now read the code it touches and turn it into a brief. Say what has to be true when it is done, name the files ` +
-                        `that are in scope, and leave nothing important to interpretation: what you leave vague here is what the two ` +
-                        `attempts below will differ on for the wrong reason. Write no code in this step.`,
+                        `Turn the request above into a brief the next two steps can build from. Read the code it touches first. ` +
+                        `Say what has to be true when it is done, name the files that are in scope, and leave nothing important to ` +
+                        `interpretation: what you leave vague here is what the two attempts below will differ on for the wrong reason. ` +
+                        `Write no code in this step.\n\n` +
+                        `If no request was given, the task is whatever this workflow was saved to do — say so plainly in your output ` +
+                        `rather than inventing one.`,
                     output: {
                         kind: `json`,
                         fields: [

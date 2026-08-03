@@ -56,12 +56,13 @@ export const stopWorkflowRun = (runId: string): boolean => {
  * so the graph is complete from the first frame the UI sees — a node that only appears once it runs makes
  * "waiting" and "not part of this run" the same picture.
  */
-export const openRun = (workflow: Workflow, now: number): WorkflowRun => {
+export const openRun = (workflow: Workflow, now: number, request?: string): WorkflowRun => {
     const runId = runIdOf();
     const conversations = stepConversations(runId, workflow.steps);
     return {
         runId,
         workflow,
+        ...(request !== undefined && request.trim() !== "" ? { request: request.trim() } : {}),
         state: "running",
         startedAt: now,
         resumed: 0,
@@ -159,7 +160,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
 
     const execute = async (step: WorkflowStep, conversationId: string, handovers: readonly Handover[]): Promise<StepOutcome> => {
         const index = position.get(step.id) ?? 1;
-        const prompt = briefForStep(workflow, step, index, handovers);
+        const prompt = briefForStep(workflow, step, index, handovers, run.request);
         /* Tell the fleet card what this conversation is now part of, BEFORE the loop starts — the card exists
          * from the loop's first iteration, and a card that says nothing for the first minute of a four-minute
          * step is a card that says nothing. A `continue` step overwrites its predecessor's entry, which is

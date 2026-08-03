@@ -47,7 +47,7 @@ export const createWorkflowsRoutes = (services: Services) => {
             if (faults.length > 0) {
                 throw new ORPCError("BAD_REQUEST", { message: faults.join(" ") });
             }
-            const run = await services.workflowRuns.start(openRun(workflow, Date.now()));
+            const run = await services.workflowRuns.start(openRun(workflow, Date.now(), input.request));
             // Detached, like every other route that starts a turn: the first step alone can take minutes.
             void runWorkflow(services, run, streamAgent);
             return run;

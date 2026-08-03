@@ -96,8 +96,14 @@ const handoverFrom = ({ title, document, report, branch }: Handover): string => 
 
 /* The prompt a step's loop is given. Becomes `Loop.prompt`, so the loop wraps it with the iteration heading,
  * the goal and the output contract — this is only the task half.
+ *
+ * THE REQUEST GOES TO EVERY STEP, not only to the roots, and it goes ABOVE the handovers. A workflow is a
+ * shape and the request is what it is pointed at this time, so a step that has not been told it is working
+ * from a summary of a summary: the reviewer three steps down reads "make the importer handle empty files" and
+ * can tell whether what it is looking at is that. It is short, it is the same text for every step, and it is
+ * cached — the cheapest context in the whole brief and the only one that says what any of this is FOR.
  */
-export const briefForStep = (workflow: Workflow, step: WorkflowStep, position: number, handovers: readonly Handover[]): string => {
+export const briefForStep = (workflow: Workflow, step: WorkflowStep, position: number, handovers: readonly Handover[], request?: string): string => {
     const sections = [
         [
             `# ${step.title}`,
@@ -105,6 +111,18 @@ export const briefForStep = (workflow: Workflow, step: WorkflowStep, position: n
             `This is step ${position} of ${workflow.steps.length} in the workflow **${workflow.name}**` +
                 `${workflow.description !== undefined ? ` — ${workflow.description}` : ``}.`,
         ].join(`\n`),
+        ...(request === undefined
+            ? []
+            : [
+                  [
+                      `## What this run was asked to do`,
+                      ``,
+                      `The person who started this run wrote the following. Everything below serves it, and where your own ` +
+                          `step's instructions and this disagree, this is the one that is about today's job.`,
+                      ``,
+                      request,
+                  ].join(`\n`),
+              ]),
         ...(handovers.length === 0
             ? []
             : [

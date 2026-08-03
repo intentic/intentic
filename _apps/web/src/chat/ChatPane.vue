@@ -2,8 +2,9 @@
 import { AnchoredOverlay, BottomSheet, Icon, useDevice } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { type AgentCommand, providerLabel } from "@intentic/sandbox-contract";
+import { type AgentCommand, providerLabel, type Workflow } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
+import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { modeMeta } from "../composables/chat/catalog";
 import type { Conversation, PendingAttachment } from "../composables/chat/conversation";
 import { effortsFor } from "../composables/chat/effortScale";
@@ -32,6 +33,7 @@ import ChatMentionPopover from "./ChatMentionPopover.vue";
 import ChatMessageView from "./ChatMessageView.vue";
 import ChatModelPicker from "./ChatModelPicker.vue";
 import ChatModeMenu from "./ChatModeMenu.vue";
+import ChatWorkflowMenu from "./ChatWorkflowMenu.vue";
 import LoopDialog from "../agents/LoopDialog.vue";
 import { stopLoop } from "../composables/agents/useLoops";
 import ChatTranscriptSkeleton from "./ChatTranscriptSkeleton.vue";
@@ -153,6 +155,7 @@ const efforts = computed(() => (capabilities.value.effort ? effortsFor(provider.
 // The mobile pickers: pill taps open bottom sheets instead of anchored panels.
 const modelSheetOpen = ref(false);
 const modeSheetOpen = ref(false);
+const workflowSheetOpen = ref(false);
 
 const scroller = ref<HTMLElement>();
 const content = ref<HTMLElement>();
@@ -163,8 +166,10 @@ const input = ref<HTMLTextAreaElement>();
 // window and still have overlays that land in the right place and close when clicked away from.
 const modelOpen = ref(false);
 const modeOpen = ref(false);
+const workflowOpen = ref(false);
 const modelPill = ref<HTMLElement>();
 const modePill = ref<HTMLElement>();
+const workflowPill = ref<HTMLElement>();
 
 // Auto-follow: the transcript stays at its newest content unless the user has scrolled up to read. The rule
 // and every geometry change it has to survive live in the composable; the pane only says when a NEW
@@ -639,7 +644,41 @@ const composerHint = computed(() => {
 const snapshotAttachments = (): ChatAttachment[] =>
     attachments.value.map(({ name, path, previewUrl }): ChatAttachment => ({ name, path, ...(previewUrl !== undefined ? { previewUrl } : {}) }));
 
+/* --- Running the draft through a workflow ---------------------------------------------------------
+ * The other thing this composer can do with what has been typed: hand it to a saved design as the RUN'S
+ * REQUEST rather than send it as a turn on this conversation. Nothing about this chat changes — the run opens
+ * sessions of its own, which arrive on the agents board under one run card, and this pane keeps its transcript
+ * and its place.
+ *
+ * A workflow whose steps already say everything they want runs fine with an empty composer, so this is not
+ * gated on `canSend`: the request is an addition to a design, not the whole of it.
+ *
+ * The draft is cleared on success for the reason a send clears it — the text has gone somewhere, and a box
+ * still holding it invites sending it again — and KEPT on failure, because the message is all the user has and
+ * a picker that eats it is one nobody presses twice.
+ */
+const { start: startWorkflow } = useWorkflowRuns();
+const workflowReceipt = ref<string>();
+const workflowFailure = ref<string>();
+
+const runThroughWorkflow = async (workflow: Workflow): Promise<void> => {
+    workflowOpen.value = false;
+    workflowSheetOpen.value = false;
+    workflowFailure.value = undefined;
+    const request = draft.value.trim();
+    try {
+        const run = await startWorkflow.mutateAsync({ id: workflow.id, ...(request === `` ? {} : { request }) });
+        draft.value = ``;
+        workflowReceipt.value = `“${workflow.name}” is running — ${run.steps.length} steps. Watch it on the agents board.`;
+    } catch (error) {
+        workflowFailure.value = error instanceof Error ? error.message : `The workflow could not be started.`;
+    }
+};
+
 const submit = (): void => {
+    // A send is the user moving on from whatever the last workflow press said.
+    workflowReceipt.value = undefined;
+    workflowFailure.value = undefined;
     // canSend covers the gates that are left: an empty composer and an attachment that isn't on disk yet.
     if (!connected.value || !canSend.value) {
         return;
@@ -1334,6 +1373,28 @@ watch(
                                         >
                                     </button>
 
+                                    <!-- WORKFLOW. Loop's neighbour because it answers the same question about
+                                         the next message — what is it run THROUGH — and a different answer:
+                                         loop runs it here, over and over; this hands it to a graph of sessions
+                                         that are not this one. Not gated on there being text: a design whose
+                                         steps already say what they want runs on its own, and the message is
+                                         an addition to it rather than the whole of it. -->
+                                    <button
+                                        ref="workflowPill"
+                                        type="button"
+                                        class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        @click="mobile ? (workflowSheetOpen = true) : (workflowOpen = !workflowOpen)"
+                                        v-tooltip.top="
+                                            draft.trim().length > 0
+                                                ? `Run this message through a workflow instead of sending it`
+                                                : `Run a saved workflow — type first to point it at something`
+                                        "
+                                        :aria-expanded="workflowOpen"
+                                        aria-label="Run through a workflow"
+                                    >
+                                        <Icon name="sitemap" class="text-2xs" />
+                                    </button>
+
                                     <button
                                         v-if="speechSupported"
                                         type="button"
@@ -1378,6 +1439,13 @@ watch(
                             </form>
 
                             <p v-if="speechErrorMessage" class="px-1 text-2xs text-danger">{{ speechErrorMessage }}</p>
+                            <!-- What the workflow pill did. A receipt rather than a redirect: the run is not
+                                 this conversation, so taking the user somewhere would be taking them out of
+                                 the chat they were in the middle of. It clears on the next send. -->
+                            <p v-if="workflowFailure" class="px-1 text-2xs text-danger">{{ workflowFailure }}</p>
+                            <p v-else-if="workflowReceipt" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
+                                <Icon name="sitemap" class="shrink-0 text-2xs text-link" />{{ workflowReceipt }}
+                            </p>
                         </template>
                     </template>
                 </div>
@@ -1445,6 +1513,9 @@ watch(
             <BottomSheet v-model="modeSheetOpen" header="Agent mode">
                 <ChatModeMenu @selected="modeSheetOpen = false" />
             </BottomSheet>
+            <BottomSheet v-model="workflowSheetOpen" header="Run through a workflow">
+                <ChatWorkflowMenu @picked="runThroughWorkflow($event)" />
+            </BottomSheet>
             <!-- Mounted here rather than app-wide: a loop belongs to the conversation whose composer opened it,
                  and the dialog takes that conversation's id as a prop precisely so it can never be started
                  against whichever agent happened to be active when a global dialog was raised. -->
@@ -1463,6 +1534,11 @@ watch(
             <AnchoredOverlay v-model="modeOpen" :anchor="modePill" cross="end">
                 <div class="w-56 p-1">
                     <ChatModeMenu @selected="modeOpen = false" />
+                </div>
+            </AnchoredOverlay>
+            <AnchoredOverlay v-model="workflowOpen" :anchor="workflowPill" cross="end">
+                <div class="w-80 p-1">
+                    <ChatWorkflowMenu @picked="runThroughWorkflow($event)" />
                 </div>
             </AnchoredOverlay>
         </template>

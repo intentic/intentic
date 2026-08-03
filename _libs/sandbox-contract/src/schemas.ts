@@ -1664,7 +1664,6 @@ export type GitUndoState = z.infer<typeof GitUndoStateSchema>;
 // `previousSha` is the position the caller was shown; `discardChanges` picks a hard reset over a soft one.
 export const GitUndoSchema = RepoParamSchema.extend({ previousSha: ShaSchema, discardChanges: z.boolean().optional() });
 
-
 // ---- history: daemon-owned workspace snapshots (diff + restore) ----
 // The daemon snapshots /work into bare git dirs on /history (outside the agent's reach). A "snapshot" groups
 // one commit per scope (root + each nested repo) under a shared id. Only checkpoint triggers (turn / user /
@@ -3102,6 +3101,18 @@ export const WorkflowRunSchema = z.object({
      * that has been edited twice since), the boot resume needs the step definitions of a workflow that may have
      * been deleted, and a history row for a deleted workflow is otherwise an id and nothing else. */
     workflow: WorkflowSchema,
+    /* WHAT THIS RUN WAS ASKED TO DO — the sentence the user typed when they started it, handed to every step
+     * on top of its own prompt. Absent for a run started from the workflows page, which has no composer.
+     *
+     * It is what makes one saved design worth keeping: "two models, one task" is a SHAPE, and the task is
+     * different every time. Without this the only way to point a workflow at today's job is to open the
+     * designer and retype a step's prompt, which means the design and the request are the same document —
+     * and editing a graph to ask a question is not something anybody does twice.
+     *
+     * Snapshotted on the run beside the workflow, and for the same reason: the run has to stay readable, and
+     * "what was this one about" is the first thing anyone asks of a row in the history.
+     */
+    request: z.string().optional(),
     state: WorkflowRunStateSchema,
     startedAt: z.number(),
     endedAt: z.number().optional(),
@@ -3122,6 +3133,10 @@ export const WorkflowsListSchema = z.object({ workflows: z.array(WorkflowSummary
 export const WorkflowRunsListSchema = z.object({ runs: z.array(WorkflowRunSchema) });
 export const WorkflowIdParamSchema = z.object({ id: z.string() });
 export const WorkflowRunIdParamSchema = z.object({ runId: z.string() });
+/* Starting a run: which design, and what to point it at. The request is optional because the workflows page
+ * starts runs with no composer to read one from — a design whose steps already say what they want is complete
+ * on its own, and only a design written as a shape needs today's sentence. */
+export const WorkflowRunStartSchema = WorkflowIdParamSchema.extend({ request: z.string().min(1).max(20_000).optional() });
 
 // ---- ci: pipeline runs on the workspace repos' github/gitlab remotes ----
 // The daemon maps each workspace repo to the CI project behind its remote (a connected github/gitlab

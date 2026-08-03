@@ -5,6 +5,7 @@ import {
     WorkflowRunIdParamSchema,
     WorkflowRunSchema,
     WorkflowRunsListSchema,
+    WorkflowRunStartSchema,
     WorkflowSchema,
     WorkflowsListSchema,
 } from "../schemas.js";
@@ -33,10 +34,12 @@ export const workflowsContract = {
     // Deleting a workflow does NOT stop a run of it that is in flight, and does not delete its history: the run
     // snapshotted its definition when it started, so it stays readable and stays stoppable.
     remove: oc.route({ method: "DELETE", path: "/workflows/{id}" }).input(WorkflowIdParamSchema).output(OkSchema),
-    /* Start a run. Every step is recorded `pending` up front, so the graph is complete from the first frame and
-     * a missing node never has to mean two things. Several runs of one workflow may be in flight at once —
-     * they derive different conversation ids, so nothing is shared and nothing can collide. */
-    run: oc.route({ method: "POST", path: "/workflows/{id}/run" }).input(WorkflowIdParamSchema).output(WorkflowRunSchema),
+    /* Start a run, optionally pointed at a request — the sentence the user typed in the composer, which every
+     * step is handed on top of its own prompt. Every step is recorded `pending` up front, so the graph is
+     * complete from the first frame and a missing node never has to mean two things. Several runs of one
+     * workflow may be in flight at once — they derive different conversation ids, so nothing is shared and
+     * nothing can collide, which is what makes "run this design again on a different question" free. */
+    run: oc.route({ method: "POST", path: "/workflows/{id}/run" }).input(WorkflowRunStartSchema).output(WorkflowRunSchema),
     // Every run across every workflow, newest first — the history the run view opens onto, and the only place a
     // deleted workflow's runs are still reachable.
     runs: oc.route({ method: "GET", path: "/workflows/runs" }).output(WorkflowRunsListSchema),
