@@ -2536,6 +2536,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.0-dev.20260707.2
 
+  _tools/desktop-smoke: {}
+
   _tools/dind-host: {}
 
   _tools/e2e:
