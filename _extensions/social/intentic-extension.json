@@ -3,6 +3,7 @@
     "name": "social",
     "version": "1.0.0",
     "category": "connections",
+    "icon": "users",
     "engines": { "intentic": "^0.4.0" },
     "contributes": {
         "capabilities": [

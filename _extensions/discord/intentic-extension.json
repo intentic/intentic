@@ -3,17 +3,14 @@
     "name": "discord",
     "version": "1.0.0",
     "category": "connections",
+    "logo": "discord",
     "engines": {
         "intentic": "^0.4.0"
     },
     "contributes": {
         "listener": {
             "provider": "discord",
-            "eventTypes": [
-                "message",
-                "voice_utterance",
-                "voice_transcript"
-            ]
+            "eventTypes": ["message", "voice_utterance", "voice_transcript"]
         },
         "processes": [
             {

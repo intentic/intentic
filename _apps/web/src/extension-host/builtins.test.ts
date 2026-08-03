@@ -8,7 +8,7 @@ import type {
     ViewRegistration,
 } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-api";
-import { ICON_SETS } from "@intentic/ui";
+import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
 import * as logs from "@intentic/ext-logs";
 import { describe, expect, it, vi } from "vitest";
@@ -131,12 +131,11 @@ describe(`every builtin`, () => {
         it(`names icons that exist — ${id}`, () => {
             const { api, views: registered } = capture();
             module.activate(api, { extensionId: id, subscriptions: [] });
-            const known = new Set(Object.keys(ICON_SETS.phosphor));
             // Facts generous enough that a detect() gated on evidence still produces its activations.
             const icons = registered.flatMap((view) =>
                 view.detect([richRepo], richCapabilities).flatMap((a) => (a.icon === undefined ? [] : [a.icon])),
             );
-            expect(icons.filter((icon) => !known.has(icon))).toEqual([]);
+            expect(icons.filter((icon) => !isIconName(icon))).toEqual([]);
         });
     }
 });

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { cmp, type IconName, Picker, type PickerOption } from "@intentic/ui";
+import { BrandMark, cmp, Picker, type PickerOption } from "@intentic/ui";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
 import { AppsListSchema } from "@intentic-app/api-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
-import { computed, reactive, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useInventory } from "../../composables/extensions/useInventory";
@@ -40,9 +40,6 @@ const values = ref<Record<string, string>>({});
 const on = ref(``);
 const subdomain = ref(``);
 const subdomainValid = computed(() => SUBDOMAIN_RE.test(subdomain.value.trim()));
-
-const logoFailed = reactive(new Set<string>());
-const logoUrl = (service: InventoryServiceDescriptor): string => `https://cdn.simpleicons.org/${service.logo}`;
 
 // The apps living in workspace monorepos, fetched when the dialog opens (one round-trip per monorepo).
 const workspaceApps = ref<{ repo: string; app: string }[]>([]);
@@ -186,19 +183,14 @@ const submit = async (): Promise<void> => {
             </button>
 
             <div class="mb-4 flex items-center gap-3">
-                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas">
-                    <template v-if="selected.kind === `service`">
-                        <img
-                            v-if="selected.service.logo !== undefined && !logoFailed.has(selected.service.service)"
-                            :src="logoUrl(selected.service)"
-                            :alt="selected.service.label"
-                            class="h-5 w-5 object-contain"
-                            @error="logoFailed.add(selected.service.service)"
-                        />
-                        <Icon :name="(selected.service.icon as IconName) ?? `server`" v-else class="text-sm text-link" />
-                    </template>
-                    <Icon name="code" v-else class="text-sm text-link" />
-                </span>
+                <BrandMark
+                    v-if="selected.kind === `service`"
+                    :size="36"
+                    :name="selected.service.label"
+                    :logo="selected.service.logo"
+                    :icon="selected.service.icon ?? `server`"
+                />
+                <BrandMark v-else :size="36" :name="selected.app" icon="code" />
                 <div class="min-w-0">
                     <div class="font-medium text-content">{{ selected.kind === `service` ? selected.service.label : selected.app }}</div>
                     <div class="text-xs text-muted">
@@ -310,16 +302,7 @@ const submit = async (): Promise<void> => {
                     class="flex items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"
                     @click="pick({ kind: `service`, service })"
                 >
-                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas">
-                        <img
-                            v-if="service.logo !== undefined && !logoFailed.has(service.service)"
-                            :src="logoUrl(service)"
-                            :alt="service.label"
-                            class="h-5 w-5 object-contain"
-                            @error="logoFailed.add(service.service)"
-                        />
-                        <Icon :name="(service.icon as IconName) ?? `server`" v-else class="text-sm text-link" />
-                    </span>
+                    <BrandMark :size="32" :name="service.label" :logo="service.logo" :icon="service.icon ?? `server`" />
                     <div class="min-w-0">
                         <div class="font-medium text-content">{{ service.label }}</div>
                         <div class="mt-0.5 text-xs text-muted">{{ service.description }}</div>

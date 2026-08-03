@@ -23,6 +23,7 @@
      initials track it (3/8 of the box, floored so the 16px chip stays legible), so one number sets both. -->
 <script setup lang="ts">
 import { computed } from "vue";
+import { initialsOf } from "../format.js";
 import Icon from "./Icon.vue";
 
 const {
@@ -49,16 +50,9 @@ const {
     ring?: number;
 }>();
 
-// "John Doe" → JD; a one-word handle or a bare email → its first two glyphs. Splits on the separators a name
-// and an address both use, so "ada.lovelace@example.com" gives AL rather than AD.
-const initials = computed<string | undefined>(() => {
-    const words = (name ?? ``).split(/[\s._@-]+/).filter((word) => word !== ``);
-    const [first, second] = words;
-    if (first === undefined) {
-        return undefined;
-    }
-    return (second === undefined ? first.slice(0, 2) : `${first[0]}${second[0]}`).toUpperCase();
-});
+// Shared with <BrandMark>: the monogram rule is the same whether the thing being drawn is a person or a
+// product, and the two copies of it had already drifted apart once.
+const initials = computed<string | undefined>(() => initialsOf(name ?? ``));
 
 // A dead picture URL degrades to the tier underneath it. Hiding the <img> rather than clearing `src` keeps
 // this a pure DOM effect — the caller's data is not ours to correct, and a re-render must not retry forever.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-api";
-import { cmp, StatusBadge } from "@intentic/ui";
+import { BrandMark, cmp, StatusBadge } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import type { ExtensionEntry } from "../../composables/extensions/useExtensionList";
@@ -16,6 +16,12 @@ import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
  *
  * Expanding is therefore the whole design, not a nicety: the row is a summary that a click turns into the full
  * record. The tab keeps one row open at a time, so the list never grows unpredictably under the pointer.
+ *
+ * THE ONE THING WORTH ITS WEIGHT that isn't words: the manifest's mark. It is the only element here that can be
+ * found without reading — twenty-odd rows of grey text differ solely in their middle, and half of these
+ * extensions never reach the rail, so for them this is the ONLY place they are ever drawn as anything. It costs
+ * no vertical space (22px inside a 40px row) and no horizontal decision (it sits in the chevron's column), which
+ * is precisely what the three refusals below are about: they each cost a word, a wrap or a scan.
  *
  * THREE THINGS THE ROW REFUSES TO SPEND WEIGHT ON, because fifteen rows pay for each of them:
  *
@@ -94,6 +100,10 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     :class="expanded ? `rotate-90` : undefined"
                     aria-hidden="true"
                 />
+                <!-- The one thing on the row that is not words. Dimmed AND desaturated when the extension is
+                     off, so a brand logo goes quiet with the rest of the row instead of being the loudest
+                     thing on the one row that is switched off. -->
+                <BrandMark :size="22" :name="manifest.name" :logo="manifest.logo" :icon="manifest.icon" :idle="!entry.extension.enabled" />
                 <span class="min-w-0 flex-1">
                     <span class="flex min-w-0 items-baseline gap-3">
                         <!-- Dimming is never on the switch: a faded control reads as unavailable, and the switch

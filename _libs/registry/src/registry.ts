@@ -53,6 +53,18 @@ const RegistryFileEntrySchema = z.object({
     // trust state with no stated reason is an opinion the reader can't weigh.
     trustReason: z.string().optional(),
     category: z.string().optional(),
+    /* The mark the row is drawn with, copied off the extension's manifest by the scanner exactly like the
+     * description and the version — the same two tiers the manifest declares (a simple-icons slug, then a name
+     * from the app's icon set), and neither is required.
+     *
+     * It rides the CURATED file rather than the generated one, which looks wrong for a derived value until you
+     * ask what a registry is for: a listing is what a human decided to publish, and the mark is part of how it
+     * presents itself, so it belongs in the row a reviewer reads and can strike out. The generated file holds
+     * only what a bot re-reads nightly and nobody reviews. It also has to be here to be of any use at all —
+     * this is what the gallery and the in-app browse list render, and neither of them has the manifest: the
+     * whole point of the row is that the code has NOT been cloned yet. */
+    logo: z.string().optional(),
+    icon: z.string().optional(),
     homepage: z.url().optional(),
     source: z.unknown(),
 });
@@ -91,6 +103,9 @@ export const RegistryEntrySchema = z.object({
     trust: RegistryTrustSchema,
     trustReason: z.string().optional(),
     category: z.string().optional(),
+    // The mark, as the gallery and the app's browse list draw it — see the curated file's fields above.
+    logo: z.string().optional(),
+    icon: z.string().optional(),
     homepage: z.string().optional(),
     // Absent = a source the registry format can express but this daemon can't clone (npm, say). The row still
     // renders; the install button doesn't.
@@ -115,6 +130,8 @@ export const resolveRegistry = (file: RegistryFile, facts: RegistryFacts | undef
             ...(plugin.version !== undefined ? { version: plugin.version } : {}),
             ...(plugin.trustReason !== undefined ? { trustReason: plugin.trustReason } : {}),
             ...(plugin.category !== undefined ? { category: plugin.category } : {}),
+            ...(plugin.logo !== undefined ? { logo: plugin.logo } : {}),
+            ...(plugin.icon !== undefined ? { icon: plugin.icon } : {}),
             ...(plugin.homepage !== undefined ? { homepage: plugin.homepage } : {}),
             ...(install !== undefined ? { install } : {}),
             ...(upstream?.stars !== undefined ? { stars: upstream.stars } : {}),

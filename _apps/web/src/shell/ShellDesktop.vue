@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { ViewBadge } from "@intentic/extension-api";
-import type { IconName } from "@intentic/ui";
+// `initialsOf` is the rail tile's glyph for a repository (my-shop-api → MS), so repositories stay
+// distinguishable instead of all sharing one icon — the same monogram <Avatar> and <BrandMark> fall back to.
+import { type IconName, initialsOf } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
@@ -240,20 +242,6 @@ const tiles = computed<readonly AreaTile[]>(() =>
 // The tiles cut into their bands, so the template can draw a hairline between runs.
 const tileBands = computed(() => railBands(tiles.value, (tile) => tile.id));
 
-// Up to two initials from a repository name's word boundaries (my-shop-api → MS, api → AP) — the rail tile's
-// glyph, so repositories stay distinguishable instead of all sharing one icon.
-const initials = (name: string): string => {
-    const parts = name.split(/[-_\s]+/).filter(Boolean);
-    const raw =
-        parts.length > 1
-            ? parts
-                  .slice(0, 2)
-                  .map((part) => part[0])
-                  .join("")
-            : (parts[0] ?? name).slice(0, 2);
-    return raw.toUpperCase();
-};
-
 // Collapse the chat column to nothing while the panel is popped out (it's teleported into its own window), so
 // the workspace reclaims the full width — and equally while a window from before a page reload is still on its
 // way back, so a refresh doesn't flash the column open for a few frames. The rail variables flow into its child
@@ -327,7 +315,7 @@ useKeybindings();
                         :aria-label="tileLabel(tile)"
                         v-tooltip.right="tileLabel(tile)"
                     >
-                        <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initials(tile.label) }}</span>
+                        <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initialsOf(tile.label) }}</span>
                         <Icon v-else :name="tile.icon!" class="text-lg" />
                         <!-- One badge for every tile, core or extension — see AreaTile.badge. A `mark` replaces the
                              number outright rather than sitting beside it: the chip is four pixels of glance, and a

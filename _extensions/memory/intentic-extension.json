@@ -3,6 +3,7 @@
     "name": "memory",
     "version": "1.0.0",
     "category": "knowledge",
+    "icon": "sparkles",
     "engines": { "intentic": "^0.4.0" },
     "permissions": {
         "sandbox": ["GET /memory", "GET /memory/file", "PUT /memory/file", "DELETE /memory/file"]

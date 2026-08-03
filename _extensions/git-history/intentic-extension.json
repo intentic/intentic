@@ -3,6 +3,7 @@
     "name": "git-history",
     "version": "1.0.0",
     "category": "code",
+    "icon": "history",
     "engines": {
         "intentic": "^0.4.0"
     },

@@ -9,7 +9,7 @@ import {
     contributionCard,
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace } from "@intentic-app/api-contract";
-import { cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic/ui";
+import { BrandMark, cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic/ui";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-api";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import { type CapabilityKind, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
@@ -112,7 +112,9 @@ const ownerExtensionId = (instance: CapabilitySummary): string | undefined =>
         ? instance.id
         : enabledExtensions.value.find((extension) =>
               (extension.manifest.contributes?.capabilities ?? []).some(
-                  (contribution) => contribution.kind === instance.kind && contribution.id === String(instance.config[contributionDiscriminator(instance.kind) ?? ``]),
+                  (contribution) =>
+                      contribution.kind === instance.kind &&
+                      contribution.id === String(instance.config[contributionDiscriminator(instance.kind) ?? ``]),
               ),
           )?.id;
 
@@ -160,9 +162,6 @@ const error = ref<string | null>(null);
 const log = ref<string[]>([]);
 // undefined = the confirm dialog is closed; a string = the capability id awaiting a confirmed removal.
 const confirmRemoveId = ref<string>();
-// Catalog logos that failed to load (bad/absent simple-icons slug) → fall back to a per-kind icon.
-const logoFailed = reactive(new Set<string>());
-
 // --- inline validation (touched-on-blur) ---
 // A field key appears here after the user has interacted with it (blur), so errors show only after they leave.
 const touched = reactive(new Set<string>());
@@ -195,8 +194,6 @@ const fieldError = (field: CapabilityField): string | undefined => {
     return undefined;
 };
 
-const logoUrl = (entry: CapabilityCatalogEntry): string | undefined =>
-    entry.logo !== undefined ? `https://cdn.simpleicons.org/${entry.logo}` : undefined;
 const kindIcon = (kind: string): IconName =>
     kind === `devops`
         ? `server`
@@ -213,8 +210,9 @@ const kindIcon = (kind: string): IconName =>
                   : kind === `agent`
                     ? `sparkles`
                     : `bolt`;
-// The glyph shown when a card has no simple-icons logo (or it failed to load): the card's explicit `icon`,
-// else the generic per-kind fallback.
+// The glyph tier <BrandMark> falls to when a card has no simple-icons logo (or the slug fails to load): the
+// card's explicit `icon`, else the generic per-kind fallback. A card is never left to the initials tier — its
+// KIND is always known, and "some connector" drawn as a bolt beats it drawn as two letters.
 const entryIcon = (entry: CapabilityCatalogEntry): IconName => (entry.icon as IconName | undefined) ?? kindIcon(entry.kind);
 
 // Guided browser-login dialog state (browser-kind capabilities: the session is a real logged-in browser, not a
@@ -660,16 +658,7 @@ const submitLabel = computed(() =>
             </button>
 
             <div class="mb-4 flex items-center gap-3">
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-card">
-                    <img
-                        v-if="logoUrl(selected) && !logoFailed.has(selected.id)"
-                        :src="logoUrl(selected)"
-                        :alt="selected.name"
-                        class="h-5 w-5 object-contain"
-                        @error="logoFailed.add(selected.id)"
-                    />
-                    <Icon v-else :name="entryIcon(selected)" class="text-sm text-link" />
-                </span>
+                <BrandMark :size="32" :name="selected.name" :logo="selected.logo" :icon="entryIcon(selected)" />
                 <div class="min-w-0">
                     <div class="font-medium text-content">{{ selected.name }}</div>
                     <div class="text-xs text-muted">{{ selected.description }}</div>
@@ -924,10 +913,14 @@ const submitLabel = computed(() =>
                                 v-for="entry in marketEntries"
                                 :key="entry.name"
                                 type="button"
-                                class="flex items-baseline gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay disabled:opacity-50"
+                                class="flex items-center gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay disabled:opacity-50"
                                 :disabled="blockedReason(entry) !== undefined"
                                 @click="pickEntry(entry)"
                             >
+                                <!-- The mark the registry carries, which for most rows is the extension's own
+                                     initials: these are names nobody has seen before, and a column of marks is
+                                     the only thing here that can be scanned without reading. -->
+                                <BrandMark :size="20" :name="entry.name" :logo="entry.logo" :icon="entry.icon" />
                                 <!-- Verified is the only badge: it is the one state a human asserted, and badging
                                      "listed" too would dress the honest default up as a review. -->
                                 <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
@@ -1046,16 +1039,7 @@ const submitLabel = computed(() =>
                                 class="flex h-full w-full items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"
                                 @click="pick(entry)"
                             >
-                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-canvas">
-                                    <img
-                                        v-if="logoUrl(entry) && !logoFailed.has(entry.id)"
-                                        :src="logoUrl(entry)"
-                                        :alt="entry.name"
-                                        class="h-5 w-5 object-contain"
-                                        @error="logoFailed.add(entry.id)"
-                                    />
-                                    <Icon v-else :name="entryIcon(entry)" class="text-sm text-link" />
-                                </span>
+                                <BrandMark :size="32" :name="entry.name" :logo="entry.logo" :icon="entryIcon(entry)" />
                                 <div class="min-w-0">
                                     <div class="flex items-center gap-1.5">
                                         <span class="font-medium text-content">{{ entry.name }}</span>

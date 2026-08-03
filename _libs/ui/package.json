@@ -22,6 +22,10 @@
             "types": "./src/format.ts",
             "default": "./src/format.ts"
         },
+        "./icons": {
+            "types": "./src/icons/iconSets.ts",
+            "default": "./src/icons/iconSets.ts"
+        },
         "./path": {
             "types": "./src/path.ts",
             "default": "./src/path.ts"

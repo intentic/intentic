@@ -28,6 +28,7 @@ nowhere for the scan to look. Copy the shape of an existing entry.
     "trust": "listed",
     "description": "Incident triage in the rail — open alerts, acknowledge, jump to the failing run.",
     "version": "1.0.0",
+    "icon": "exclamation-triangle",
     "source": { "source": "github", "repo": "acme/incidents", "sha": "9f2c1ab…" }
 }
 ```
@@ -35,6 +36,12 @@ nowhere for the scan to look. Copy the shape of an existing entry.
 `name` is `publisher.name` from your manifest, not a label you choose — that is the identity the app installs
 under, so two publishers can both ship an `incidents` extension and a repository that copies somebody else's
 manifest collides with their listing instead of shadowing it.
+
+`logo` (a simple-icons slug, e.g. `"linear"`) and `icon` (a glyph from the app's own set) are how the row is
+drawn in the gallery and in the app's browse list. The scanner copies whichever the manifest declares, so an
+author sets it once in the file they own; an entry with neither shows the extension's initials. Both are
+editable here, which is the point of them riding the curated file — a reviewer can correct a mark, or strike
+one, in the same pull request that lists it.
 
 `source` also accepts `{ "source": "url", "url": … }` for any git host and
 `{ "source": "git-subdir", "url": …, "path": … }` for one repo holding several extensions. Give a full

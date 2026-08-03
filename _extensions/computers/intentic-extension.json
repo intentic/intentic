@@ -3,6 +3,7 @@
     "name": "computers",
     "version": "1.0.0",
     "category": "connections",
+    "icon": "desktop",
     "engines": { "intentic": "^0.4.0" },
     "contributes": {
         "capabilities": [
@@ -11,7 +12,7 @@
                 "kind": "host",
                 "catalog": {
                     "name": "Windows PC",
-                    "logo": "windows",
+                    "icon": "desktop",
                     "description": "Let the agent work on your Windows computer — PowerShell, your files, your apps, its screen.",
                     "category": "machines",
                     "hint": "The name is how you and the agent refer to this computer (\"check the logs on my-laptop\"). After adding it, click Connect and run the one-liner on that machine.",

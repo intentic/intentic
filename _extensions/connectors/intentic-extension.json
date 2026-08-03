@@ -3,6 +3,7 @@
     "name": "connectors",
     "version": "1.0.0",
     "category": "connections",
+    "icon": "link",
     "engines": {
         "intentic": "^0.4.0"
     },

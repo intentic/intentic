@@ -67,3 +67,27 @@ export const loadGallery = async (): Promise<Gallery> => {
 
 // github.com/owner/repo for the card's "source" link — the resolved pointer minus git's .git suffix.
 export const sourceHref = (entry: RegistryEntry): string | undefined => entry.install?.url.replace(/\.git$/, "");
+
+/* THE CARD'S MARK, and what this page can and cannot draw of it.
+ *
+ * A registry row carries the two tiers the manifest declares — a simple-icons `logo` and an `icon` from the
+ * app's own set — and this page can honour only the first. The second is a name in a vocabulary that exists as
+ * bundled Iconify data inside @intentic/ui, a Vue design system; a static marketing page has no dependency on
+ * it and should not grow one to draw ~90 glyphs it would then ship to every visitor. So the glyph tier
+ * DEGRADES here to the tier below it, and every card without a logo wears its initials.
+ *
+ * The initials rule is deliberately the same as `initialsOf` in @intentic/ui and deliberately a second copy of
+ * it: there is no dependency edge from this site to that package, and one shouldn't be added for eight lines
+ * of string handling. Keep them in step by hand — "acme.jira" → AJ on both sides. */
+export const markInitials = (name: string): string => {
+    const words = name.split(/[\s._@-]+/).filter((word) => word !== "");
+    const [first, second] = words;
+    if (first === undefined) {
+        return "";
+    }
+    return (second === undefined ? first.slice(0, 2) : `${first[0]}${second[0]}`).toUpperCase();
+};
+
+// The simple-icons CDN URL a row's logo slug resolves to, or undefined for a row that declared none.
+export const markLogoUrl = (entry: RegistryEntry): string | undefined =>
+    entry.logo === undefined ? undefined : `https://cdn.simpleicons.org/${entry.logo}`;

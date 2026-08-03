@@ -44,6 +44,17 @@ A blocked entry stays in the file. Deleting the row hides it from people browsin
 already installed it nothing, which is backwards — they are the ones at risk. Absent on a third-party registry
 resolves to `listed`, because a registry that doesn't use the field hasn't asserted anything.
 
+## The mark
+
+A row carries the two display tiers the manifest declares — `logo` (a simple-icons slug) and `icon` (a glyph
+from the app's own set) — and the [scanner](../../_tools/registry) copies whichever is set into the listing it
+proposes, exactly as it copies the version. A row with neither is drawn as the extension's initials.
+
+They ride the **curated** file, which looks wrong for a copied value until you ask what the two files are for:
+the mark is part of how a listing presents itself, so it belongs in the row a human reviews and can correct.
+It also has to be here to be worth anything — the gallery and the app's browse list render this row and have
+no access to the manifest, because the whole point of browsing is that the code has not been cloned yet.
+
 ## The order
 
 [`compareEntries`](src/registry.ts): verified first, then stars, then most-recently-pushed, then name. Stars

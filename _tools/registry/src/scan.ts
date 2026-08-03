@@ -32,6 +32,8 @@ export interface ListingProposal {
         trust: "listed";
         description?: string;
         version: string;
+        logo?: string;
+        icon?: string;
         source: { source: "github"; repo: string; sha: string };
     };
 }
@@ -91,6 +93,12 @@ const propose = async (repo: GithubRepo, github: GithubReader, listed: Map<strin
             trust: "listed",
             ...(repo.description !== undefined ? { description: repo.description } : {}),
             version: parsed.data.version,
+            /* Off the manifest, like the version — an author who has said how their extension should look has
+             * said it once, in the file they own, and re-typing it into somebody else's registry repo is how
+             * the two would end up disagreeing. Proposed, not enforced: it lands in a pull request a human
+             * merges, so a listing can still have its mark struck out or corrected there. */
+            ...(parsed.data.logo !== undefined ? { logo: parsed.data.logo } : {}),
+            ...(parsed.data.icon !== undefined ? { icon: parsed.data.icon } : {}),
             source: { source: "github", repo: repo.fullName, sha },
         },
     };

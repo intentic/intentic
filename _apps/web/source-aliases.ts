@@ -50,6 +50,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // reset and an extension's day dividers are all pure functions over a number, reached from composables and
     // pure projections whose unit tests run without a DOM.
     "@intentic/ui/format": here("../../_libs/ui/src/format.ts"),
+    // And once more, for the icon VOCABULARY rather than the <Icon> that draws it: every icon name arriving
+    // from a manifest is an open string, and the tests that check our own extensions name real glyphs read
+    // JSON off disk — no components, no DOM, and nothing to gain from booting Picker.vue to get there.
+    "@intentic/ui/icons": here("../../_libs/ui/src/icons/iconSets.ts"),
     "@intentic/ui": here("../../_libs/ui/src/index.ts"),
     "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
     // The "+" grid's card and category data. It was the ONE first-party lib missing from this map, and the

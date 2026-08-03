@@ -3,6 +3,7 @@
     "name": "acp-agents",
     "version": "1.0.0",
     "category": "connections",
+    "icon": "terminal",
     "engines": { "intentic": "^0.4.0" },
     "contributes": {
         "capabilities": [

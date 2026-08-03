@@ -13,6 +13,14 @@ context)` that registers contributions — `views`, `viewers`, `commands`, `sett
 is the approval + gating surface: the host refuses any registration the approved manifest never declared, and
 the extension may reach only the daemon routes its `permissions.sandbox` allowlist declares.
 
+Every manifest here also declares a **mark** — a `logo` (simple-icons slug) or an `icon` (a glyph from
+`@intentic/ui`'s set) — which is what the extension is drawn as wherever it is *listed* rather than used: the
+Extensions tab, a registry being browsed, the public gallery. It is on the manifest rather than on a view
+because more than a third of the packs below contribute no view at all, and because a switched-off or
+not-yet-installed extension still has to look like something. A pack that declared neither would fall back to
+its initials; `extensionMarks.test.ts` in the web app keeps that from happening by accident and checks the
+glyph names are real.
+
 Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/**`) to
 `@intentic/extension-api`, `@intentic/extension-ui`, and `@intentic/sandbox-contract`. Reaching into
 `@intentic-app/*` or the app internals is a boundary violation and fails the build.

@@ -4,7 +4,7 @@ import { APP_URL } from "@intentic-dev/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
-import { loadGallery, sourceHref } from "../../lib/registry";
+import { loadGallery, markInitials, markLogoUrl, sourceHref } from "../../lib/registry";
 
 /* The extension gallery: the official registry repository, rendered. Built from its two JSON files at build
  * time (src/lib/registry.ts), so this page has no backend behind it — curation is pull requests over there
@@ -85,10 +85,27 @@ const scannedNote =
                         <div class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                             {group.entries.map((entry) => (
                                 <article class="card flex flex-col gap-3 p-6">
-                                    <div class="flex items-baseline gap-2">
-                                        <h3 class="min-w-0 truncate font-mono text-sm font-medium text-content">{entry.name}</h3>
-                                        {entry.version && <span class="shrink-0 text-2xs text-subtle">{entry.version}</span>}
-                                        {entry.stars !== undefined && <span class="ml-auto shrink-0 text-2xs text-subtle">★ {entry.stars}</span>}
+                                    <div class="flex items-center gap-3">
+                                        {/* The author's mark over its initials — see markInitials for why this
+                                            page draws two tiers where the app draws three. The image sits OVER
+                                            the letters rather than instead of them, so a slug that 404s at
+                                            build time reveals the tier below instead of a hole. */}
+                                        <span class="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-content/5 text-xs font-semibold text-muted">
+                                            {markInitials(entry.name)}
+                                            {markLogoUrl(entry) && (
+                                                <img
+                                                    src={markLogoUrl(entry)}
+                                                    alt=""
+                                                    referrerpolicy="no-referrer"
+                                                    class="absolute h-5 w-5 object-contain"
+                                                />
+                                            )}
+                                        </span>
+                                        <div class="flex min-w-0 flex-1 items-baseline gap-2">
+                                            <h3 class="min-w-0 truncate font-mono text-sm font-medium text-content">{entry.name}</h3>
+                                            {entry.version && <span class="shrink-0 text-2xs text-subtle">{entry.version}</span>}
+                                            {entry.stars !== undefined && <span class="ml-auto shrink-0 text-2xs text-subtle">★ {entry.stars}</span>}
+                                        </div>
                                     </div>
                                     {entry.description && <p class="text-sm leading-relaxed text-muted">{entry.description}</p>}
                                     <div class="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-2xs">

@@ -666,3 +666,16 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         wrench: "prime:wrench",
     },
 };
+
+/* Is this string a name the app can actually draw?
+ *
+ * Every icon name that arrives from OUTSIDE the app is an open string — `Activation.icon`, a manifest's `icon`,
+ * a capability card's, a document offer's — because a third-party extension is written against a build that
+ * has not shipped yet and must install anyway. <Icon> takes the closed `IconName`, so the cast has to be
+ * checked somewhere, and an UNchecked one is not a loud failure: `ICON_SETS[set][name]` is undefined, Iconify
+ * renders nothing, and the tile comes up blank (which shipped once, as `book`). Asking here lets a renderer
+ * fall to its next tier — a glyph, then initials — instead of to a hole.
+ *
+ * One set is the whole vocabulary: every set maps every name (the type says so), so membership cannot differ
+ * between them. */
+export const isIconName = (name: string): name is IconName => name in ICON_SETS.phosphor;

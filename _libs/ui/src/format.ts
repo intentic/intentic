@@ -25,6 +25,27 @@ export const formatBytes = (bytes: number | undefined): string => {
 export const formatTokens = (tokens: number): string =>
     tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : String(tokens);
 
+/* A NAME, at the width of a small square — the monogram under every avatar and every brand mark, and the last
+ * tier of both ladders: what is drawn for something that has no picture, no logo and no glyph.
+ *
+ * Splits on every separator a person's name, an email address, a repository and a `publisher.name` all use, so
+ * the two letters are word-initials wherever there are words to take them from: "John Doe" → JD,
+ * "ada.lovelace@example.com" → AL, "git-history" → GH. One word keeps its first two glyphs ("memory" → ME)
+ * rather than doubling a letter. Undefined for a name with nothing in it, which is how a caller knows to draw
+ * its neutral glyph instead of an empty plate.
+ *
+ * One rule, because the two copies this replaces had already drifted into two: the rail's split on `[-_\s]`
+ * alone, so a dotted repository name gave its first two LETTERS where the same name gave its two INITIALS
+ * three components away. */
+export const initialsOf = (name: string): string | undefined => {
+    const words = name.split(/[\s._@-]+/).filter((word) => word !== ``);
+    const [first, second] = words;
+    if (first === undefined) {
+        return undefined;
+    }
+    return (second === undefined ? first.slice(0, 2) : `${first[0]}${second[0]}`).toUpperCase();
+};
+
 /* Every absolute date the app shows, in one shape: "Jul 28, 2026" — a spelled-out month, because the browser
  * default is numeric and order-ambiguous ("7/28/2026" to one reader, the 7th of August to the next), and no
  * row anywhere carries enough context to disambiguate it.

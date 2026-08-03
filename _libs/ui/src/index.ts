@@ -6,6 +6,9 @@ export { type Cross, placeAnchored, type Placement, type Side } from "./composab
 export { default as BarChart } from "./components/BarChart.vue";
 export { type BarItem } from "./components/barChart.js";
 export { default as BottomSheet } from "./components/BottomSheet.vue";
+// <Avatar> for things rather than people: the logo → glyph → initials ladder every surface that LISTS
+// something needs, and that four call sites had each got a different amount of right.
+export { default as BrandMark } from "./components/BrandMark.vue";
 export { default as Card } from "./components/Card.vue";
 // The two halves of a changed-file row, shipped together because they are always drawn together: git's status
 // letter in its fixed-width cell, and the +/- line-count badge beside it. Six surfaces had each written both by
@@ -92,6 +95,7 @@ export {
     formatTimestamp,
     formatTokens,
     formatWeekdayTime,
+    initialsOf,
     timeAgo,
 } from "./format.js";
 // The app's one "how far back" vocabulary — the 1h/24h/7d/All pills, the cutoff they mean, and the words a
@@ -111,10 +115,12 @@ export { sinceOf, TIME_WINDOWS, type TimeWindow, timeWindowWords, withinWindow }
 // usage/savings projections are unit-tested in a node environment and this barrel pulls Picker.vue →
 // useDevice → `window` in behind it. One implementation, two doors, and the subpath is the one that must
 // stay open — a test that has to stub matchMedia to compute a colour is a test about the wrong thing.
-// ICON_SETS is exported for its KEYS, not its values: `Activation.icon` in the public extension API is an open
-// string, so the only way to check a first-party extension actually names a real icon is to compare against the
-// vocabulary at runtime (see builtins.test.ts). Renderers should keep using <Icon name="…">.
-export { ICON_SETS, type IconName, type IconSet, iconSets } from "./icons/iconSets.js";
+// The name vocabulary and the set switcher. Asking whether an OPEN string (a manifest's `icon`, an
+// `Activation.icon`) is one of these names is `isIconName`, and it lives at `@intentic/ui/icons` rather than
+// here: its callers are pure-TypeScript — a renderer's fallback ladder, and the tests that read our own
+// extensions' manifests off disk — and reaching it through this barrel boots Picker.vue and wants a DOM.
+// Renderers should keep using <Icon name="…">.
+export { type IconName, type IconSet, iconSets } from "./icons/iconSets.js";
 export { type ExplorerStyle, explorerStyles } from "./icons/explorerStyle.js";
 export {
     categoryForEntry,

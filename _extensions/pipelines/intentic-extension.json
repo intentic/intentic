@@ -3,6 +3,7 @@
     "name": "pipelines",
     "version": "1.0.0",
     "category": "work",
+    "icon": "bolt",
     "engines": { "intentic": "^0.4.0" },
     "permissions": {
         "sandbox": ["GET /ci/runs", "POST /ci/runs/rerun", "POST /ci/runs/cancel", "POST /ci/runs/jobs", "POST /ci/fix", "POST /ci/seen"]

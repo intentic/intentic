@@ -191,13 +191,34 @@ export const CapabilityFieldSchema = z.object({
 });
 export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
 
+/* HOW SOMETHING LOOKS BEFORE ANY OF ITS CODE RUNS — the mark a capability card and an extension are drawn
+ * with, in ONE shape because one component draws both (<BrandMark>) and a second copy of these two fields is a
+ * second answer to what happens when a slug 404s.
+ *
+ * Two tiers, and neither is required. `logo` is a simple-icons slug fetched from a CDN: exactly right for a
+ * card standing in for somebody else's product (GitHub, Postgres, Slack), useless for the many things that
+ * have no brand in that set, and unreachable in an offline sandbox — so it can never be the only tier. `icon`
+ * is a name from the host's own bundled vocabulary, which ships in the image, follows the theme and costs no
+ * request; it is what actually carries a first-party extension. What declares neither is drawn as its
+ * initials, so no row is ever blank and no author is obliged to have a brand.
+ *
+ * A slug that fails to load and an icon name this build has never heard of both fall to the tier BELOW rather
+ * than to a hole — the rule the rail already applies to Activation.icon, here for the surfaces that must draw
+ * an extension whose code is not running: one that is switched off, one that is daemon-only, one being read
+ * about in a registry before it is installed at all. */
+const MARK_FIELDS = {
+    // A simple-icons slug (https://cdn.simpleicons.org/<slug>). A "/<hex>" suffix forces a colour for marks
+    // that vanish against the surface they land on (github's near-black).
+    logo: z.string().optional(),
+    // A name from the host's icon set (@intentic/ui IconName), drawn when no simple-icons slug fits.
+    icon: z.string().optional(),
+};
+
 // The "+" card an entry renders: how it looks in the grid and how the user gets the credential it asks for.
 // Shared by every arm below, because none of that varies with the kind.
 const CatalogSchema = z.object({
     name: z.string().min(1),
-    logo: z.string().optional(),
-    // An @intentic/ui IconName fallback glyph, rendered when no simple-icons `logo` fits the brand.
-    icon: z.string().optional(),
+    ...MARK_FIELDS,
     description: z.string().min(1),
     category: z.string().min(1),
     hint: z.string().optional(),
@@ -282,6 +303,12 @@ export const ExtensionManifestSchema = z.object({
      * to the surface that renders it (extensionCategories.ts in the web app), and an extension declaring a
      * section this app has never heard of lands in "Other" rather than failing to install. */
     category: z.string().min(1).optional(),
+    /* What the extension is drawn as wherever it is LISTED rather than used — the Extensions tab, a registry
+     * being browsed, the gallery. Deliberately here and not on a view: `Activation.icon` is the glyph of one
+     * rail tile, it only exists once the extension's code has activated in this browser, and nine of the
+     * first-party extensions register no view at all. An extension that is switched off, daemon-only, or not
+     * yet installed still has to look like something. See MARK_FIELDS. */
+    ...MARK_FIELDS,
     // Semver range over the host's extension API version (extensionApiVersion) — checked before activation.
     engines: z.object({ intentic: z.string().min(1) }),
     // Repo-relative path of the prebuilt single-file ESM bundle (built with `vue` and `@intentic/extension-api`

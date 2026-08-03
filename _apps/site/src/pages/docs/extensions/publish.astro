@@ -11,6 +11,7 @@ const registry = `{
             "trust": "listed",
             "description": "Incident triage in the rail: open alerts, acknowledge, jump to the failing run.",
             "version": "1.0.0",
+            "icon": "exclamation-triangle",
             "source": { "source": "github", "repo": "acme/incidents", "sha": "9f2c1ab…" }
         },
         {
@@ -19,6 +20,7 @@ const registry = `{
             "trust": "listed",
             "description": "Linear connector: the agent reads and files issues from its shell.",
             "version": "0.3.0",
+            "logo": "linear",
             "source": { "source": "github", "repo": "acme/linear-connector", "sha": "4d81e07…" }
         }
     ]
@@ -99,7 +101,9 @@ const sources = `// A repo of its own
         <li>
             <strong>Add the topic.</strong> Put <code>intentic-extension</code> on your GitHub repository, with an
             <code>intentic-extension.json</code> at its root. A nightly job finds it, checks the manifest parses, resolves your latest commit,
-            and <strong>opens the pull request for you</strong>. That is the whole submission process.
+            and <strong>opens the pull request for you</strong>. That is the whole submission process. Your <code>logo</code> or
+            <code>icon</code> is copied across with it, so the gallery card and the in-app browse row wear the mark you declared — a listing
+            that declares neither shows its initials.
         </li>
         <li>
             <strong>Or open it yourself.</strong> Required if your extension lives in a subdirectory or isn't on GitHub, because there is nowhere for
