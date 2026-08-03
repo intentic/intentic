@@ -59,6 +59,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.deployments",
         "intentic.discord",
         "intentic.documentation",
+        "intentic.git-history",
         "intentic.imap",
         "intentic.logs",
         "intentic.maintenance",

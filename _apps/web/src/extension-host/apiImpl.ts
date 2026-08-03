@@ -1,6 +1,6 @@
 import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, ProcessStatus, RepoFacts } from "@intentic/extension-api";
 import { extensionApiVersion, extensionIdOf, flattenQuery, mergeQuery, sandboxRouteAllowed } from "@intentic/extension-api";
-import { useTheme } from "@intentic/ui";
+import { useDevice, useTheme } from "@intentic/ui";
 import { type AgentProvider, type ExtensionSummary, parsePinned, WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { requestModelPick } from "../composables/chat/hostModelPicker";
@@ -12,7 +12,10 @@ import { extensionSettingsStore } from "../composables/extensions/useExtensionSe
 import { sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { sandboxKey, useSandbox } from "../composables/sandbox/useSandbox";
-import { registerDocumentProvider } from "../core-views/documentRegistry";
+import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
+import { diffTabId } from "../pages/workspace/workspaceTabs";
+import { documentProvider, registerDocumentProvider } from "../core-views/documentRegistry";
+import { onRefsChanged } from "./refEvents";
 import { registerView } from "../core-views/registry";
 import { registerViewer } from "../core-views/viewerRegistry";
 import { router } from "../router";
@@ -168,6 +171,17 @@ export const createExtensionApi = (
                     }),
                 );
             },
+            // Scoped to this extension's OWN providers, and to a path the provider actually has an offer for —
+            // the tab then carries the same title and glyph the tree row would have opened it with, rather than
+            // a caller's second guess at them.
+            open: (id, path) => {
+                const provider = documentProvider(extensionId, id);
+                const offer = provider?.detect(path);
+                if (provider === undefined || offer === undefined) {
+                    return;
+                }
+                useWorkspaceTabs().openDocument(extensionId, id, path, offer.title, offer.icon);
+            },
         },
         commands: {
             register: (command, handler) => {
@@ -235,6 +249,19 @@ export const createExtensionApi = (
             onDidChange: (listener) => {
                 const stop = watch([() => host.repos(), () => host.capabilities()], () => listener());
                 return track({ dispose: () => stop() });
+            },
+            onDidChangeRefs: (listener) => track(onRefsChanged(listener)),
+            /* Opens the tab, then — on mobile only — navigates to it, because the mobile workspace has no tab
+             * strip and renders whichever diff `?diff=` names. Same two steps as WorkspaceMobile's own
+             * openDiffNav, which is what the app's Changes and History panels go through; an extension must not
+             * end up with a diff that exists but is unreachable on a phone. */
+            openDiff: (payload) => {
+                useWorkspaceTabs().openDiff(payload);
+                if (!useDevice().mobile.value) {
+                    return;
+                }
+                const id = diffTabId(payload.key, payload.scope, payload.path);
+                void router.push({ name: `workspace`, params: { path: [] }, query: { ...router.currentRoute.value.query, diff: id } });
             },
             // Through guardSandbox and the daemon's own schema, so the manifest grant still applies and the
             // envelope is validated once here instead of in every extension that reads a file.

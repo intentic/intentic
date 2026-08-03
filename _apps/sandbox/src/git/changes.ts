@@ -53,7 +53,7 @@ export const parseNameStatusZ = (stdout: string): GitChange[] => {
 // Parse `--numstat -z` into a path → {additions, deletions} map, keyed by the (new) path so it merges onto the
 // name-status list. NUL-separated: a normal record is `add\tdel\tpath\0`; a rename is `add\tdel\t\0old\0new\0`
 // (the counts, an empty path, then the two names). Binary files report `-\t-`, left undefined here.
-const parseNumstatZ = (stdout: string): Map<string, { additions?: number; deletions?: number }> => {
+export const parseNumstatZ = (stdout: string): Map<string, { additions?: number; deletions?: number }> => {
     const parts = stdout.split("\0");
     const stats = new Map<string, { additions?: number; deletions?: number }>();
     let cursor = 0;
@@ -484,6 +484,30 @@ export const createBranchAt = async (dir: string, name: string, sha: string, git
     await git(dir, ["branch", name, sha]);
 };
 
+/* Delete a tag locally, and optionally on the remote it was pushed to.
+ *
+ * The remote deletion is a SEPARATE call rather than part of the local one, and is best-effort: a tag that was
+ * never pushed makes `git push --delete` fail, which must not make deleting the local tag look like it failed.
+ * The local side is the one the caller asked for; the remote side is a courtesy that either works or does not.
+ */
+export const deleteTag = async (dir: string, name: string, remote: string | undefined, git: GitRunner = defaultGit): Promise<void> => {
+    if (remote !== undefined) {
+        await git(dir, ["push", remote, "--delete", `refs/tags/${name}`]).catch(() => undefined);
+    }
+    await git(dir, ["tag", "-d", name]);
+};
+
+// Publish one tag. Named explicitly rather than `--tags`, so pushing a tag never drags every other unpushed tag
+// in the repo along with it — which is what makes this safe to offer as a one-click action on a pill.
+export const pushTag = async (dir: string, name: string, remote: string, git: GitRunner = defaultGit): Promise<ActionResult> => {
+    try {
+        await git(dir, ["push", remote, `refs/tags/${name}`]);
+        return { ok: true };
+    } catch {
+        return { ok: false, reason: "push failed" };
+    }
+};
+
 // Tag a commit (`git tag <name> <sha>`). Non-destructive, like a branch; a duplicate name is git's error.
 export const createTagAt = async (dir: string, name: string, sha: string, git: GitRunner = defaultGit): Promise<void> => {
     await git(dir, ["tag", name, sha]);
@@ -521,13 +545,25 @@ export const rebaseOnto = async (dir: string, sha: string, author: Author, git: 
 export const dropCommit = async (dir: string, sha: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> =>
     runOrAbort(dir, [...identity(author), "rebase", "--onto", `${sha}^`, sha, "HEAD"], ["rebase", "--abort"], git);
 
-// The graph/log view: recent commits ACROSS ALL REFS (--all, so branch topology is visible), newest first,
-// capped at `limit`. Fields are delimited with US (\x1f) and records with RS (\x1e) so subjects and multi-line
-// bodies survive intact (a plain -z / newline split can't). `%D` carries the ref decorations; the bare "HEAD"
-// marker is lifted into `head` so `refs` holds only branch/tag names. Author time (%at, seconds) → ms.
+/* The graph/log view: commits ACROSS ALL REFS (--all, so branch topology is visible), newest first, one page at
+ * a time. Fields are delimited with US (\x1f) and records with RS (\x1e) so subjects and multi-line bodies
+ * survive intact (a plain -z / newline split can't). `%D` carries the ref decorations; the bare "HEAD" marker is
+ * lifted into `head` so `refs` holds only branch/tag names. Author time (%at, seconds) → ms.
+ *
+ * PAGED, and it asks for one commit MORE than the page it will return. That extra row is never sent — it exists
+ * only so the answer can say `hasMore` truthfully. Without it the caller cannot distinguish "this repo has
+ * exactly `limit` commits" from "there are thousands and you are seeing the newest few", and the graph read the
+ * second case as the first: the oldest commits in the window have parents outside it, so the layout ended their
+ * lanes and drew them as ROOT commits. A history that silently claims to begin where the page happens to stop.
+ */
 const RS = "\x1e";
 const US = "\x1f";
-export const commitLog = async (dir: string, limit: number, git: GitRunner = defaultGit): Promise<{ branch?: string; commits: GitCommit[] }> => {
+export const commitLog = async (
+    dir: string,
+    limit: number,
+    skip = 0,
+    git: GitRunner = defaultGit,
+): Promise<{ branch?: string; commits: GitCommit[]; hasMore: boolean }> => {
     const format = `${RS}%H${US}%h${US}%P${US}%an${US}%ae${US}%at${US}%D${US}%s${US}%b`;
     // Branch and log are independent read-only spawns — run them concurrently. A repo with no commits yet (an
     // unborn HEAD across every ref) makes `git log` exit non-zero — that's an empty graph, not an error, so
@@ -536,11 +572,19 @@ export const commitLog = async (dir: string, limit: number, git: GitRunner = def
     // runs git piped (non-TTY), so without it the HEAD marker and branch/tag names would silently vanish.
     const [branchOut, logOut] = await Promise.all([
         git(dir, ["branch", "--show-current"]),
-        git(dir, ["log", "--all", "--decorate", "--topo-order", `--max-count=${limit}`, `--pretty=format:${format}`]).catch(() => undefined),
+        git(dir, [
+            "log",
+            "--all",
+            "--decorate",
+            "--topo-order",
+            `--max-count=${limit + 1}`,
+            `--skip=${skip}`,
+            `--pretty=format:${format}`,
+        ]).catch(() => undefined),
     ]);
     const branch = branchOut.stdout.trim();
     if (logOut === undefined) {
-        return { ...(branch !== "" ? { branch } : {}), commits: [] };
+        return { ...(branch !== "" ? { branch } : {}), commits: [], hasMore: false };
     }
     const { stdout } = logOut;
     const commits: GitCommit[] = [];
@@ -574,7 +618,10 @@ export const commitLog = async (dir: string, limit: number, git: GitRunner = def
             head,
         });
     }
-    return { ...(branch !== "" ? { branch } : {}), commits };
+    // The probe row is dropped here rather than by the caller: it is an implementation detail of knowing whether
+    // there is another page, and shipping it would make every page one commit longer than it claims to be.
+    const hasMore = commits.length > limit;
+    return { ...(branch !== "" ? { branch } : {}), commits: hasMore ? commits.slice(0, limit) : commits, hasMore };
 };
 
 // The files one commit changed vs its first parent — `--root` renders a root commit's files as additions

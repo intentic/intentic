@@ -1,0 +1,58 @@
+{
+    "publisher": "intentic",
+    "name": "git-history",
+    "version": "1.0.0",
+    "category": "code",
+    "engines": {
+        "intentic": "^0.4.0"
+    },
+    "permissions": {
+        "sandbox": [
+            "GET /diff/raw",
+            "GET /git/*/branches",
+            "GET /git/*/commit-diff",
+            "GET /git/*/commit-file-diff",
+            "GET /git/*/file-diff",
+            "GET /git/*/log",
+            "GET /git/*/operation",
+            "GET /git/*/stash-diff",
+            "GET /git/*/stashes",
+            "GET /git/*/undo",
+            "GET /git/changes",
+            "POST /git/*/abort",
+            "POST /git/*/branch",
+            "POST /git/*/branches",
+            "POST /git/*/branches/delete",
+            "POST /git/*/checkout",
+            "POST /git/*/cherry-pick",
+            "POST /git/*/drop",
+            "POST /git/*/merge",
+            "POST /git/*/push",
+            "POST /git/*/rebase",
+            "POST /git/*/reset",
+            "POST /git/*/revert",
+            "POST /git/*/stash",
+            "POST /git/*/stash/apply",
+            "POST /git/*/stash/drop",
+            "POST /git/*/tag",
+            "POST /git/*/tag/delete",
+            "POST /git/*/tag/push",
+            "POST /git/*/undo"
+        ]
+    },
+    "contributes": {
+        "documents": [
+            {
+                "id": "git-history",
+                "label": "Git history"
+            }
+        ],
+        "commands": [
+            {
+                "command": "git-history.open",
+                "title": "Show Git History",
+                "icon": "sitemap"
+            }
+        ]
+    }
+}

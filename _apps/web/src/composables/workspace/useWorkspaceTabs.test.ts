@@ -25,7 +25,7 @@ sessionStorage.setItem(
         active: `src/main.ts`,
         tabs: [
             { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
-            { kind: `graph`, id: `graph:root`, repo: `root` },
+            { kind: `health`, id: `health:root`, repo: `root` },
         ],
     }),
 );
@@ -36,7 +36,7 @@ const { tabs, activeId, openDiff, openFile, selectTab, closedTabs, closeTabIds, 
 const stored = (): { active: string | null; tabs: { id: string }[] } => JSON.parse(sessionStorage.getItem(KEY) ?? `{}`);
 
 it(`comes back with the tabs and focus the last visit left`, () => {
-    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `graph:root`]);
+    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`]);
     expect(activeId.value).toBe(`src/main.ts`);
 });
 
@@ -44,7 +44,7 @@ it(`persists an opened tab`, async () => {
     openFile(`README.md`);
     await nextTick();
 
-    expect(stored().tabs.map((tab) => tab.id)).toEqual([`src/main.ts`, `graph:root`, `README.md`]);
+    expect(stored().tabs.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`]);
     expect(stored().active).toBe(`README.md`);
 });
 
@@ -56,7 +56,7 @@ it(`leaves a diff out, and the focus it held with it`, async () => {
     await nextTick();
 
     expect(tabs.value.some((tab) => tab.kind === `diff`)).toBe(true);
-    expect(stored().tabs.map((tab) => tab.id)).toEqual([`src/main.ts`, `graph:root`, `README.md`]);
+    expect(stored().tabs.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`]);
     expect(stored().active).toBe(`README.md`);
 });
 
@@ -75,13 +75,13 @@ it(`reopens the last closed tab at the position it held, and focuses it`, () => 
     selectTab(`src/main.ts`);
     const before = tabs.value.map((tab) => tab.id);
 
-    closeTabIds(new Set([`graph:root`])); // the middle tab
+    closeTabIds(new Set([`health:root`])); // the middle tab
 
     expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `README.md`]);
     reopenClosedTab();
 
     expect(tabs.value.map((tab) => tab.id)).toEqual(before);
-    expect(activeId.value).toBe(`graph:root`);
+    expect(activeId.value).toBe(`health:root`);
     // The diff closed above is still on the stack, one entry below the graph tab just popped off it.
     expect(closedTabs.value).toHaveLength(1);
 });
@@ -89,7 +89,7 @@ it(`reopens the last closed tab at the position it held, and focuses it`, () => 
 // One entry per CLOSE, so undoing a bulk close brings the whole strip back in order and in one press — the
 // action the user took is the unit they undo.
 it(`restores a whole bulk close in one press, in order and focused as it was`, () => {
-    selectTab(`graph:root`);
+    selectTab(`health:root`);
     closeTabIds(new Set(tabs.value.map((tab) => tab.id))); // Close All
 
     expect(tabs.value).toEqual([]);
@@ -97,8 +97,8 @@ it(`restores a whole bulk close in one press, in order and focused as it was`, (
 
     reopenClosedTab();
 
-    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `graph:root`, `README.md`]);
-    expect(activeId.value).toBe(`graph:root`);
+    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`]);
+    expect(activeId.value).toBe(`health:root`);
 });
 
 it(`does nothing when nothing has been closed`, () => {
@@ -107,6 +107,6 @@ it(`does nothing when nothing has been closed`, () => {
 
     reopenClosedTab();
 
-    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `graph:root`, `README.md`]);
+    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`]);
     expect(activeId.value).toBe(`README.md`);
 });

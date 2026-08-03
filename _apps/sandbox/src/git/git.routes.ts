@@ -161,7 +161,7 @@ export const createGitRoutes = (services: Services) => {
                         // The change scan, the remote read and the agent attribution are independent (none touches
                         // the index) — one round-trip for all three. `remote` is what the panel's sync bar renders
                         // per repo; `landed` is which agent landed each path this repo has ever received.
-                        const [{ branch, conflicted, staged, unstaged }, remote, landed] = await Promise.all([
+                        const [{ branch, conflicted, staged, unstaged }, remote, landed, operation] = await Promise.all([
                             services.git.changedFiles(candidate.dir),
                             services.git.remoteState(candidate.dir),
                             // Attribution is the only part of this scan the panel can do without: it decorates the
@@ -171,6 +171,9 @@ export const createGitRoutes = (services: Services) => {
                                 services.logger.debug({ err: error, repo: candidate.repo }, "git changes: origins unavailable");
                                 return {};
                             }),
+                            // A few stat()s beside a `git status` — cheap enough to ride every scan, and this is
+                            // the read that turns "these files are conflicted" into "a rebase stopped here".
+                            services.git.operationInProgress(candidate.dir),
                         ]);
                         // A repo with a clean tree still belongs in the response whenever there is remote work to
                         // do: ahead of or behind its upstream, or sitting on a branch that has a remote but no
@@ -185,7 +188,11 @@ export const createGitRoutes = (services: Services) => {
                             unstaged.length > 0 ||
                             remote.ahead > 0 ||
                             remote.behind > 0 ||
-                            publishable
+                            publishable ||
+                            // A halted repo with a clean tree is rare but real (every conflict resolved, nothing
+                            // committed yet) and it is the one repo the panel most needs to show: it is the only
+                            // place the Abort lives.
+                            operation !== undefined
                         ) {
                             const capped = capRepoChanges(conflicted, staged, unstaged);
                             // Narrowed to the paths this scan actually reports (the capped lists — attribution
@@ -202,6 +209,7 @@ export const createGitRoutes = (services: Services) => {
                                 repo: candidate.repo,
                                 ...(branch !== undefined ? { branch } : {}),
                                 conflicted: capped.conflicted,
+                                ...(operation !== undefined ? { operation } : {}),
                                 staged: capped.staged,
                                 unstaged: capped.unstaged,
                                 ...(capped.truncated > 0 ? { truncated: capped.truncated } : {}),
@@ -321,8 +329,10 @@ export const createGitRoutes = (services: Services) => {
         // returns only the nested repos (the same set the Changes panel and history scopes use).
         repos: i.repos.handler(async () => ({ repos: await discoverRepos(services.workspace.root) })),
         log: i.log.handler(async ({ input }) => {
-            const { branch, commits } = await services.git.commitLog(await repoDir(input.repo), input.limit ?? 300);
-            return { repo: input.repo, ...(branch !== undefined ? { branch } : {}), commits };
+            // 300 is the page size a caller gets if it asks for none — big enough that a small repo arrives whole
+            // on the first request, small enough that a large one does not pay for what nobody scrolls to.
+            const { branch, commits, hasMore } = await services.git.commitLog(await repoDir(input.repo), input.limit ?? 300, input.skip ?? 0);
+            return { repo: input.repo, ...(branch !== undefined ? { branch } : {}), commits, hasMore };
         }),
         commitDiff: i.commitDiff.handler(async ({ input }) => ({ files: await services.git.commitChanges(await repoDir(input.repo), input.sha) })),
         commitFileDiff: i.commitFileDiff.handler(async ({ input }) => {
@@ -334,6 +344,101 @@ export const createGitRoutes = (services: Services) => {
         // non-destructive (git rejects a duplicate name — that error propagates). Checkout/reset and every
         // sequence op (cherry-pick/revert/drop/merge/rebase) are bracketed by an auto-checkpoint via `guarded`
         // / an inline snapshot, so even a history rewrite or a hard reset stays reversible from Checkpoints.
+        /* What the worktree is halted in the middle of, if anything. A plain read, and deliberately outside
+         * `onRepo`'s lock: a surface asks this to EXPLAIN a repo that is stuck, and making that explanation
+         * queue behind whatever is holding the lock is how a stuck repo becomes a stuck panel. */
+        operation: i.operation.handler(async ({ input }) => {
+            const operation = await services.git.operationInProgress(await repoDir(input.repo));
+            return { repo: input.repo, ...(operation !== undefined ? { operation } : {}) };
+        }),
+        /* The way out. Checkpointed first like every other destructive verb — an abort throws away the
+         * conflict resolution done so far, which is real work the user may not have meant to lose. Answers
+         * `ok: false` rather than throwing when nothing is in progress: two people looking at the same repo is
+         * ordinary, and the second Abort landing on a clean worktree is not an error worth a stack trace. */
+        abort: i.abort.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                const operation = await services.git.operationInProgress(dir);
+                if (operation === undefined) {
+                    return { ok: false, reason: "nothing in progress" };
+                }
+                await services.history.snapshot("user", `before aborting ${operation} in ${input.repo}`);
+                await services.git.abortOperation(dir, operation);
+                invalidateScan();
+                services.history.notifyUserWrite();
+                return { ok: true };
+            }),
+        ),
+        // Read-only, and outside the lock for the same reason `operation` is: this is what a toolbar renders to
+        // decide whether to offer an Undo at all, and it must not queue behind a running git write.
+        undoable: i.undoable.handler(async ({ input }) => {
+            const action = await services.git.undoableAction(await repoDir(input.repo));
+            return { repo: input.repo, ...(action !== undefined ? { action } : {}) };
+        }),
+        /* The undo itself. Checkpointed first like every other destructive verb — a hard reset throws away the
+         * worktree, and even a soft one moves the branch — so this stays reversible from the Checkpoints
+         * timeline in turn. Refusals (nothing to undo, the repo moved since) come back as `ok: false`: both are
+         * ordinary outcomes of two people working in one workspace, not faults. */
+        undo: i.undo.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                await services.history.snapshot("user", `before undo in ${input.repo}`);
+                const result = await services.git.undoLastAction(dir, input.previousSha, input.discardChanges === true);
+                if (!result.ok) {
+                    return { ok: false, reason: result.reason };
+                }
+                invalidateScan();
+                services.history.notifyUserWrite();
+                return { ok: true };
+            }),
+        ),
+        // Reads: the entry list, and one entry's files against the commit it was taken on.
+        stashes: i.stashes.handler(async ({ input }) => ({ repo: input.repo, stashes: await services.git.stashList(await repoDir(input.repo)) })),
+        stashDiff: i.stashDiff.handler(async ({ input }) => ({ files: await services.git.stashChanges(await repoDir(input.repo), input.ref) })),
+        /* Setting work aside moves the worktree, so it takes the repo lock like every other worktree write, and
+         * records the result on the timeline. "Nothing to stash" comes back as a value rather than a throw — it
+         * is what an already-clean tree answers, not a fault. */
+        stashPush: i.stashPush.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                const result = await services.git.stashPush(dir, {
+                    ...(input.message !== undefined ? { message: input.message } : {}),
+                    ...(input.includeUntracked !== undefined ? { includeUntracked: input.includeUntracked } : {}),
+                });
+                if (result.ok) {
+                    invalidateScan();
+                    services.history.notifyUserWrite();
+                }
+                return result;
+            }),
+        ),
+        // Putting one back can conflict, which git reports by leaving markers in the tree and (for pop) keeping
+        // the entry — the work is never lost, so this is `ok: false`, not an error.
+        stashApply: i.stashApply.handler(({ input }) =>
+            guarded(input.repo, `before stash ${input.pop === true ? "pop" : "apply"} in ${input.repo}`, (dir) =>
+                services.git.stashApply(dir, input.ref, input.pop === true),
+            ),
+        ),
+        /* The only unrecoverable verb in the stash set: dropping an entry makes its commit unreachable, and
+         * unlike a reset there is no ref left anywhere pointing at it. So it checkpoints first — which is what
+         * makes it reversible from the Checkpoints timeline even though git cannot walk it back. */
+        stashDrop: i.stashDrop.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                await services.history.snapshot("user", `before dropping ${input.ref} in ${input.repo}`);
+                await services.git.stashDrop(dir, input.ref);
+                invalidateScan();
+                return { ok: true } as const;
+            }),
+        ),
+        /* Deleting a tag is a ref op, so it needs no checkpoint — but it CAN reach a remote, which nothing else
+         * in this router does on the user's behalf without saying so. The remote half is opt-in per call and
+         * best-effort inside the service; the local half is what the caller is told about. */
+        deleteTag: i.deleteTag.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                await services.git.deleteTag(dir, input.name, input.remote);
+                return { ok: true } as const;
+            }),
+        ),
+        // Publishing one tag. A GitActionResult rather than Ok: a rejected push (no permission, a tag that moved
+        // on the remote) is an ordinary outcome the pill reports, not a 500.
+        pushTag: i.pushTag.handler(({ input }) => onRepo(input.repo, (dir) => services.git.pushTag(dir, input.name, input.remote))),
         createBranch: i.createBranch.handler(async ({ input }) => {
             await services.git.createBranchAt(await repoDir(input.repo), input.name, input.sha);
             return { ok: true } as const;
@@ -422,7 +527,13 @@ export const createGitRoutes = (services: Services) => {
                 return { ok: true } as const;
             }),
         ),
-        branches: i.branches.handler(async ({ input }) => ({ branches: await services.git.listBranches(await repoDir(input.repo)) })),
+        branches: i.branches.handler(async ({ input }) => {
+            const dir = await repoDir(input.repo);
+            // Two independent read-only for-each-ref sweeps — one round trip for both, since the switcher draws
+            // them paired and a half-populated first render would be worse than a marginally later one.
+            const [branches, remotes] = await Promise.all([services.git.listBranches(dir), services.git.listRemoteBranches(dir)]);
+            return { branches, remotes };
+        }),
         // Creating a branch is non-destructive UNLESS it also checks out — that moves HEAD and the worktree,
         // so it takes the same pre-action checkpoint every HEAD-mover does.
         createBranchAt: i.createBranchAt.handler(async ({ input }) => {

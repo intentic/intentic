@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import type { GitChange, GitDiffSide, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
-import { cmp, useDevice } from "@intentic/ui";
+import { ChangeStatusMark, cmp, DiffStat, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import { computed, ref, shallowRef, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import type { Conversation } from "../../composables/chat/conversation";
-import DiffStat from "../../components/DiffStat.vue";
 import HoverCard from "../../components/HoverCard.vue";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
@@ -27,11 +26,10 @@ import { composeSession, startSession } from "../../composables/agents/sessionSu
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
 import SuggestedSessionBox from "../../agents/SuggestedSessionBox.vue";
 import { fixPrompt, fixSummary } from "./prepushFix";
-import { type DiffTabPayload } from "./workspaceTabs";
+import type { DiffPayload } from "@intentic/extension-api";
 import { moduleGroups, rowName, type ModuleGroup } from "./changeModules";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
 import { useModules } from "../../composables/workspace/useModules";
-import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
 
 /* The Changes review — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
  * handle, and the Files|Changes|History mode switch), VSCode's SCM pattern over the real repos: uncommitted
@@ -78,7 +76,7 @@ const { settings: sandboxSettings } = useSandboxSettings();
 // alongside a failure.
 const scannable = computed(() => changes.repos.value.filter((repo) => repo.error === undefined));
 const unscannable = computed(() => changes.repos.value.filter((repo) => repo.error !== undefined));
-const emit = defineEmits<{ "open-diff": [payload: DiffTabPayload] }>();
+const emit = defineEmits<{ "open-diff": [payload: DiffPayload] }>();
 
 const collapsed = ref<ReadonlySet<string>>(new Set());
 const toggleGroup = (repo: string): void => {
@@ -678,7 +676,7 @@ const stageSide = (repo: RepoChanges, side: GitDiffSide): Promise<void> =>
     changes.stageGroups([{ repo: repo.repo, paths: changesOn(repo, side).map((change) => change.path) }], movesIntoIndex(side));
 
 // --- discard -----------------------------------------------------------------------------------------------
-// A modal confirm, like every other destructive git action in this app (GitGraph's checkout/reset/drop), rather
+// A modal confirm, like every other destructive git action in this app (the history graph's checkout/reset/drop), rather
 // than the inline warning strip this replaces: that one wedged itself between the repo row and the file list,
 // shoved everything below it down, and read as an error that had already happened rather than a question.
 //
@@ -1350,6 +1348,31 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :aria-label="`Dismiss error for ${group.repo}`"
                     >
                         <Icon name="times" class="text-2xs" />
+                    </button>
+                </div>
+
+                <!-- WHY THESE FILES ARE CONFLICTED, and the one way out. Nothing this app starts can leave a repo
+                     mid-operation (every daemon verb aborts itself), so this is always something a terminal left:
+                     an agent's rebase that stopped, a land that could not finish. Above the sections rather than
+                     inside Conflicts, because it explains the whole repo — git refuses almost every other verb
+                     until it ends, including the commit the panel is otherwise inviting. -->
+                <div v-if="group.operation" :class="[NOTICE, 'mx-2 mb-1.5 border-warning/40 bg-warning/10']">
+                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
+                    <div class="min-w-0 flex-1">
+                        <p class="text-2xs font-medium text-warning">A {{ group.operation }} is in progress</p>
+                        <p class="text-2xs text-muted">
+                            Resolve the conflicts and stage them to continue, or abort to return this repository to
+                            where the {{ group.operation }} began.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded border border-warning/50 px-1.5 py-0.5 text-2xs text-warning transition-colors hover:bg-warning/10 disabled:opacity-40"
+                        :disabled="changes.actionBusy.value"
+                        @click="changes.abortOperation(group.repo)"
+                        v-tooltip.top="'A checkpoint is saved first, so this is reversible from Checkpoints'"
+                    >
+                        Abort
                     </button>
                 </div>
 

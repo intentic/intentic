@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { Segmented, useDevice } from "@intentic/ui";
+import { ChangeStatusMark, DiffStat, Segmented, useDevice } from "@intentic/ui";
 import type { DiffLayout } from "../../../composables/useLayout";
 import { useLayout } from "../../../composables/useLayout";
-import DiffStat from "../../../components/DiffStat.vue";
-import { type ChangeStatus } from "../workspaceTabs";
+import type { ChangeStatus } from "@intentic/extension-api";
 import { basename, parentDir } from "@intentic/ui/path";
-import ChangeStatusMark from "../../../components/ChangeStatusMark.vue";
 
 /* The bar above a diff — WHICH file, and HOW it is being read. Every diff surface in the app renders this one:
  * the workspace tab, the agent review, the environment card's proposal. Before it there was no such thing, and

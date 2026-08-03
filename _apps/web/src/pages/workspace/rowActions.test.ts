@@ -10,7 +10,6 @@ const sources = (over: Partial<RowActionSources> = {}): RowActionSources => ({
     repoDirs: new Set<string>(),
     manageableDirs: new Set<string>(),
     openHealth: vi.fn(),
-    openGraph: vi.fn(),
     openDirectory: vi.fn(),
     openDocument: vi.fn(),
     ...over,
@@ -41,9 +40,9 @@ describe(`rowActionsFor`, () => {
         expect(rowActionsFor(`intentic/_apps/web/src`, sources())).toEqual([]);
     });
 
-    it(`gives a repo its health and history, and a managed repo its cog`, () => {
+    it(`gives a repo its health, and a managed repo its cog`, () => {
         const actions = rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]), manageableDirs: new Set([`intentic`]) }));
-        expect(actions.map((action) => action.id)).toEqual([`health`, `graph`, `directory`]);
+        expect(actions.map((action) => action.id)).toEqual([`health`, `directory`]);
     });
 
     // The document is what the directory IS, so it leads — the same narrowing the rail's order follows, rather
@@ -51,7 +50,7 @@ describe(`rowActionsFor`, () => {
     it(`puts a document ahead of the repo's own affordances`, () => {
         provider(`architecture`, `intentic`);
         const actions = rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]) }));
-        expect(actions.map((action) => action.id)).toEqual([`document:acme.docs:architecture`, `health`, `graph`]);
+        expect(actions.map((action) => action.id)).toEqual([`document:acme.docs:architecture`, `health`]);
     });
 
     // The whole point of the path-keyed contribution: a package deep inside a monorepo is not a repo and has no
@@ -84,6 +83,6 @@ describe(`rowActionsFor`, () => {
                 component: () => Promise.resolve({}),
             }),
         );
-        expect(rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]) })).map((action) => action.id)).toEqual([`health`, `graph`]);
+        expect(rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]) })).map((action) => action.id)).toEqual([`health`]);
     });
 });

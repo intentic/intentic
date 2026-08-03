@@ -24,15 +24,25 @@ import {
     GitFileWriteSchema,
     GitLogQuerySchema,
     GitLogSchema,
+    GitOperationStateSchema,
+    GitUndoSchema,
+    GitUndoStateSchema,
     GitRemoteStateSchema,
     GitReposSchema,
     GitResetSchema,
     GitStageSchema,
     GitStatusSchema,
     GitTagCreateSchema,
+    GitTagDeleteSchema,
+    GitTagPushSchema,
     OkSchema,
     PushSchema,
     RepoParamSchema,
+    StashApplySchema,
+    StashDiffQuerySchema,
+    StashListSchema,
+    StashPushSchema,
+    StashRefParamSchema,
 } from "../schemas.js";
 
 // Per-repo git ops over the workspace repos: "root" (the /work repo) plus every discovered repo under /work
@@ -55,8 +65,31 @@ export const gitContract = {
     // Write actions from the graph's commit context menu (VSCode "Git Graph" parity). Non-destructive refs
     // (branch/tag) return Ok and let git's errors propagate; the sequence + HEAD-moving ops return a
     // GitActionResult so a conflict/clean-apply failure is a value, not a 500. Read routes above.
+    /* The halted-operation pair. `operation` is a READ every git surface can use to explain a worktree it cannot
+     * otherwise act on; `abort` is the single way out, and it is git's own `--abort` rather than anything
+     * clever. Neither is reachable from the daemon's own verbs — those abort themselves — so this exists purely
+     * for what a terminal left behind. */
+    operation: oc.route({ method: "GET", path: "/git/{repo}/operation" }).input(RepoParamSchema).output(GitOperationStateSchema),
+    abort: oc.route({ method: "POST", path: "/git/{repo}/abort" }).input(RepoParamSchema).output(GitActionResultSchema),
+    /* Walk the current branch back to where it was before its last action, off the branch's own reflog. The
+     * complement to the Checkpoints timeline, not a duplicate of it: a checkpoint restores the working tree,
+     * this moves the ref. The read carries `previousSha`, which the write sends back as a concurrency token —
+     * an undo prepared against a stale view is refused rather than landing somewhere unlooked-at. */
+    undoable: oc.route({ method: "GET", path: "/git/{repo}/undo" }).input(RepoParamSchema).output(GitUndoStateSchema),
+    undo: oc.route({ method: "POST", path: "/git/{repo}/undo" }).input(GitUndoSchema).output(GitActionResultSchema),
+    /* The stash. Read as a list plus a per-entry diff, mirroring the commit log and commit-diff pair above,
+     * because a stash entry is a commit and the graph renders it as one. The writes are git's own four verbs;
+     * only `drop` is unrecoverable, and the route checkpoints before it. */
+    stashes: oc.route({ method: "GET", path: "/git/{repo}/stashes" }).input(RepoParamSchema).output(StashListSchema),
+    stashDiff: oc.route({ method: "GET", path: "/git/{repo}/stash-diff" }).input(StashDiffQuerySchema).output(GitCommitDiffSchema),
+    stashPush: oc.route({ method: "POST", path: "/git/{repo}/stash" }).input(StashPushSchema).output(GitActionResultSchema),
+    stashApply: oc.route({ method: "POST", path: "/git/{repo}/stash/apply" }).input(StashApplySchema).output(GitActionResultSchema),
+    stashDrop: oc.route({ method: "POST", path: "/git/{repo}/stash/drop" }).input(StashRefParamSchema).output(OkSchema),
     createBranch: oc.route({ method: "POST", path: "/git/{repo}/branch" }).input(GitBranchCreateSchema).output(OkSchema),
     createTag: oc.route({ method: "POST", path: "/git/{repo}/tag" }).input(GitTagCreateSchema).output(OkSchema),
+    // The other two things one does with a tag, so the graph's tag pills are not a create-only affordance.
+    deleteTag: oc.route({ method: "POST", path: "/git/{repo}/tag/delete" }).input(GitTagDeleteSchema).output(OkSchema),
+    pushTag: oc.route({ method: "POST", path: "/git/{repo}/tag/push" }).input(GitTagPushSchema).output(GitActionResultSchema),
     checkout: oc.route({ method: "POST", path: "/git/{repo}/checkout" }).input(GitCheckoutSchema).output(GitActionResultSchema),
     cherryPick: oc.route({ method: "POST", path: "/git/{repo}/cherry-pick" }).input(GitCommitActionSchema).output(GitActionResultSchema),
     revert: oc.route({ method: "POST", path: "/git/{repo}/revert" }).input(GitCommitActionSchema).output(GitActionResultSchema),

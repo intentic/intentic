@@ -20,6 +20,7 @@ import type { OrpcContext } from "../context.js";
 import { EXTENSION_PROCESS_PREFIX, extensionProcessIndex } from "../extensions/extension-processes.js";
 import { PANEL_SESSION_PREFIX, SHELL } from "../processes/managed-processes.js";
 import { subscribeRepoChanges } from "../workspace/repo-watch.js";
+import { subscribeRefChanges } from "../git/ref-watch.js";
 import { subscribeWorkspaceChanges } from "../workspace/workspace-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 import { isValidSessionName } from "../terminal/terminal-session.js";
@@ -149,6 +150,13 @@ async function* systemEvents(
         enqueue({ kind: "reposChanged", repos });
         onWake();
     });
+    // Which repos' refs just moved — a commit, a checkout, a branch or tag, a rebase started or aborted. The
+    // agent does most of these out-of-band, so without this frame every commit-graph surface stays as fresh as
+    // the last thing the user clicked (see git/ref-watch.ts).
+    const unsubscribeRefs = subscribeRefChanges((repos) => {
+        enqueue({ kind: "refsChanged", repos });
+        onWake();
+    });
     abort.addEventListener("abort", onWake);
     try {
         while (!abort.aborted) {
@@ -183,6 +191,7 @@ async function* systemEvents(
         abort.removeEventListener("abort", onWake);
         unsubscribe();
         unsubscribeRepos();
+        unsubscribeRefs();
         unsubscribeAgents();
         unsubscribeBoot();
         unsubscribePresence();

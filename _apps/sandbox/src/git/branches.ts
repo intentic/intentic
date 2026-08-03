@@ -1,4 +1,4 @@
-import type { GitBranch } from "@intentic/sandbox-contract";
+import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 /* Branch management over a real repo: the list the switcher renders, plus create and delete. Reading is one
@@ -68,6 +68,40 @@ export const listBranches = async (dir: string, git: GitRunner = defaultGit): Pr
             ...(gone ? { gone: true } : {}),
             at: Number(at ?? "0") * 1000,
         });
+    }
+    return branches;
+};
+
+/* Every REMOTE-TRACKING branch, newest commit first — `origin/main`, `upstream/main`, and so on.
+ *
+ * Read separately from the local list rather than in one `refs/` sweep, because the two answer different
+ * questions and carry different fields: a local branch has an upstream and an ahead/behind, a remote-tracking
+ * one is somebody else's tip and has neither. Merging them into one shape would give half the rows fields that
+ * are meaningless for them.
+ *
+ * `origin/HEAD` is skipped: it is a symbolic pointer at whichever branch the remote calls default, so listing it
+ * would show the same tip twice under two names — once truthfully and once as a branch nobody has.
+ */
+export const listRemoteBranches = async (dir: string, git: GitRunner = defaultGit): Promise<GitRemoteBranch[]> => {
+    const format = ["%(refname:short)", "%(committerdate:unix)", "%(symref)"].join(US);
+    const { stdout } = await git(dir, ["for-each-ref", "--sort=-committerdate", `--format=${format}`, "refs/remotes"]);
+    const branches: GitRemoteBranch[] = [];
+    for (const line of stdout.split("\n")) {
+        if (line.trim() === "") {
+            continue;
+        }
+        const [name, at, symref] = line.split(US);
+        // A symref has a target; that is what makes it `origin/HEAD` rather than a real branch.
+        if (name === undefined || name === "" || (symref !== undefined && symref !== "")) {
+            continue;
+        }
+        // "origin/feature/x" → remote "origin", branch "feature/x". Split on the FIRST slash only: a branch name
+        // may contain slashes, a remote name may not.
+        const slash = name.indexOf("/");
+        if (slash <= 0) {
+            continue;
+        }
+        branches.push({ name, remote: name.slice(0, slash), branch: name.slice(slash + 1), at: Number(at ?? "0") * 1000 });
     }
     return branches;
 };

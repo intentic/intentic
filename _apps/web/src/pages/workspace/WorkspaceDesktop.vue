@@ -33,7 +33,6 @@ import DirectoryUiHost from "./DirectoryUiHost.vue";
 import FileBreadcrumb from "./FileBreadcrumb.vue";
 import FileTabs from "./FileTabs.vue";
 import FileViewer from "./viewers/FileViewer.vue";
-import GitGraph from "./GitGraph.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import MarkdownViewer from "./viewers/MarkdownViewer.vue";
 import ReviewPanel from "./ReviewPanel.vue";
@@ -133,7 +132,6 @@ const {
     openAtLine,
     openDiff,
     openDirectory,
-    openGraph,
     openHealth,
     openDocument,
     selectTab,
@@ -165,7 +163,6 @@ const rowActions = (dir: string): readonly RowAction[] =>
         repoDirs: repoDirs.value,
         manageableDirs: manageableDirs.value,
         openHealth,
-        openGraph,
         openDirectory,
         openDocument,
     });
@@ -406,10 +403,7 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
     { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
     { command: `workspace.showHistory`, title: `Show Checkpoints`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
-    // The workspace root's commit graph. Root is a repo like any other but owns no tree row, so this is its
-    // keyboard/palette route to the graph — the same target the explorer toolbar's icon opens.
-    { command: `workspace.gitHistory`, title: `Show Git History`, icon: `sitemap`, handler: () => openGraph(`root`) },
-    // Same story for the root repo's health report — the palette route to what a nested repo opens from its row.
+    // The root repo's health report — the palette route to what a nested repo opens from its own tree row.
     { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
     // The explorer toolbar's Ignored chip, reachable from the palette — and from anywhere the sidebar is
@@ -581,7 +575,6 @@ const tooltipWithChord = (label: string, command: string): string => {
 const explorerTooltip = computed(() =>
     tooltipWithChord(layout.sidebarCollapsed.value ? `Show explorer` : `Hide explorer`, `workspace.toggleSidebar`),
 );
-const rootHistoryTooltip = computed(() => tooltipWithChord(`Git history of the workspace root`, `workspace.gitHistory`));
 const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of the workspace root`, `workspace.codebaseHealth`));
 
 const startResize = (event: PointerEvent): void => {
@@ -659,18 +652,6 @@ const endResize = (event: PointerEvent): void => {
                             aria-label="Group changed files by module"
                         >
                             <Icon name="box" class="text-xs" />
-                        </button>
-                        <!-- Git history: the committed side of the same real-git story the panel below reviews
-                             uncommitted. Opens the /work root repo's graph — as does the Files toolbar's icon,
-                             root having no tree row of its own; nested repos open theirs from their tree row. -->
-                        <button
-                            type="button"
-                            :class="cmp.iconButton()"
-                            @click="openGraph('root')"
-                            v-tooltip.bottom="'Git history'"
-                            aria-label="Open git history"
-                        >
-                            <Icon name="sitemap" class="text-xs" />
                         </button>
                         <button
                             type="button"
@@ -789,22 +770,11 @@ const endResize = (event: PointerEvent): void => {
                             <Icon class="text-2xs" :name="layout.showIgnored.value ? `eye` : `eye-slash`" />
                             Ignored
                         </button>
-                        <!-- The /work repo's git history. Root IS a repo (ensureRootRepo versions the whole
-                             workspace), but the tree draws no row for it, so its git-history affordance can't ride a
-                             row the way a nested repo's does — it belongs on the explorer's own root-scoped toolbar,
-                             the same sitemap glyph one level up. Not tree-scoped like Collapse All, so it stays in
-                             both search scopes. -->
-                        <button
-                            type="button"
-                            class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
-                            v-tooltip.bottom="rootHistoryTooltip"
-                            aria-label="Open git history of the workspace root"
-                            @click="openGraph('root')"
-                        >
-                            <Icon name="sitemap" class="text-xs" />
-                        </button>
-                        <!-- The root repo's codebase health, sibling to its history for the same reason: root
-                             owns no tree row to hang the pair off. A nested repo carries both on its own row. -->
+                        <!-- The root repo's codebase health. Root IS a repo (ensureRootRepo versions the whole
+                             workspace), but the tree draws no row for it, so this affordance can't ride a row the
+                             way a nested repo's does — it belongs on the explorer's own root-scoped toolbar. Not
+                             tree-scoped like Collapse All, so it stays in both search scopes. Root's git history
+                             is reached the equivalent way, from the palette: see ext-git-history's command. -->
                         <button
                             type="button"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
@@ -934,9 +904,6 @@ const endResize = (event: PointerEvent): void => {
                 </div>
                 <div v-else-if="activeTab?.kind === 'directory'" class="min-h-0 flex-1">
                     <DirectoryOperator :dir="activeTab.dir" />
-                </div>
-                <div v-else-if="activeTab?.kind === 'graph'" class="min-h-0 flex-1">
-                    <GitGraph :repo="activeTab.repo" @open-diff="openDiff" @switch-repo="openGraph" />
                 </div>
                 <div v-else-if="activeTab?.kind === 'health'" class="min-h-0 flex-1">
                     <!-- Every ranked row is an anchor: clicking one opens the file it names, because a ranking

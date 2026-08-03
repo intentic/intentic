@@ -1405,7 +1405,17 @@ export const GitBranchSchema = z.object({
     at: z.number(),
 });
 export type GitBranch = z.infer<typeof GitBranchSchema>;
-export const GitBranchesSchema = z.object({ branches: z.array(GitBranchSchema) });
+/* One REMOTE-TRACKING branch — somebody else's tip, as this repo last saw it.
+ *
+ * A separate shape from GitBranch rather than the same one with optional fields, because the two genuinely
+ * differ: a remote-tracking branch has no upstream of its own and no ahead/behind, and giving it those fields
+ * as zeroes would make it look like a synced local branch. `name` is the full `origin/main`; `remote` and
+ * `branch` are it split, so a selector can group by remote without re-parsing. */
+export const GitRemoteBranchSchema = z.object({ name: z.string(), remote: z.string(), branch: z.string(), at: z.number() });
+export type GitRemoteBranch = z.infer<typeof GitRemoteBranchSchema>;
+// Locals and remote-tracking branches in one response: the switcher pairs them, and two round trips to draw one
+// list would only ever show a half-populated one first.
+export const GitBranchesSchema = z.object({ branches: z.array(GitBranchSchema), remotes: z.array(GitRemoteBranchSchema) });
 // Create at `start` (a sha or ref; absent ⇒ HEAD); `checkout` switches to it immediately (`git switch -c`).
 export const GitBranchCreateAtSchema = RepoParamSchema.extend({
     name: RefNameSchema,
@@ -1414,6 +1424,18 @@ export const GitBranchCreateAtSchema = RepoParamSchema.extend({
 });
 // `force` is the deliberate retry after git refuses to drop an unmerged branch.
 export const GitBranchDeleteSchema = RepoParamSchema.extend({ name: RefNameSchema, force: z.boolean().optional() });
+
+/* THE OPERATION A REPO IS HALTED IN THE MIDDLE OF — a merge, rebase, cherry-pick or revert that stopped on a
+ * conflict and was never finished or aborted.
+ *
+ * Every verb the daemon runs itself aborts cleanly on failure, so this is never something the UI started. It is
+ * what an agent or a user left behind in a terminal, and it is a state git refuses to do almost anything else
+ * from — so a surface listing the conflicted files without naming it leaves the reader with no way out.
+ * Absent means the worktree is not mid-anything. */
+export const GitOperationSchema = z.enum(["merge", "rebase", "cherry-pick", "revert"]);
+export type GitOperation = z.infer<typeof GitOperationSchema>;
+export const GitOperationStateSchema = z.object({ repo: z.string(), operation: GitOperationSchema.optional() });
+export type GitOperationState = z.infer<typeof GitOperationStateSchema>;
 
 export const RepoChangesSchema = z.object({
     // The {repo} param the per-repo git routes accept: "root" or a repo id (its root-relative dir).
@@ -1425,6 +1447,11 @@ export const RepoChangesSchema = z.object({
     // from the two sides rather than listed in them, because "staged or not" is not a question an unmerged path
     // has an answer to. Staging one (`git add`) is exactly how you tell git it is resolved.
     conflicted: z.array(GitChangeSchema),
+    /* The merge/rebase/cherry-pick/revert this repo is halted in the middle of, when it is. Carried on the SCAN
+     * rather than fetched per repo because it belongs beside `conflicted`: the panel already lists the files,
+     * and this is the sentence that says why they are conflicted and what ends it. Absent = not mid-anything,
+     * which is every repo almost all of the time. */
+    operation: GitOperationSchema.optional(),
     // The two sides git actually models, kept apart because a path can appear on BOTH with different statuses
     // (a staged edit that was then edited again — the classic `MM`). `staged` is index-vs-HEAD: exactly what a
     // bare `git commit` would record. `unstaged` is worktree-vs-index plus untracked files. Each side's
@@ -1530,9 +1557,23 @@ export const GitCommitSchema = z.object({
 export type GitCommit = z.infer<typeof GitCommitSchema>;
 // One repo's log: commits newest-first across ALL refs (branch topology is the point of a graph), plus the
 // checked-out branch (absent on a detached HEAD or an unborn repo).
-export const GitLogSchema = z.object({ repo: z.string(), branch: z.string().optional(), commits: z.array(GitCommitSchema) });
+export const GitLogSchema = z.object({
+    repo: z.string(),
+    branch: z.string().optional(),
+    commits: z.array(GitCommitSchema),
+    // Whether a further page exists behind this one. The daemon learns it by asking git for one commit more than
+    // it returns — see commitLog. It is also what stops the oldest row of a page from being drawn as a ROOT
+    // commit, which is how a truncated history used to claim it began where the page happened to stop.
+    hasMore: z.boolean(),
+});
 export type GitLog = z.infer<typeof GitLogSchema>;
-export const GitLogQuerySchema = RepoParamSchema.extend({ limit: z.coerce.number().int().positive().max(2000).optional() });
+export const GitLogQuerySchema = RepoParamSchema.extend({
+    limit: z.coerce.number().int().positive().max(2000).optional(),
+    // How many newer commits to step over — the page cursor. Paged rather than one big read because a large
+    // repository's log is tens of thousands of rows, and every one of them costs a zod validation, a wire
+    // payload and a lane computation before anything is drawn.
+    skip: z.coerce.number().int().nonnegative().max(1_000_000).optional(),
+});
 // Every real git repo under /work as root-relative dir ids ("root" is implicit — the /work repo itself).
 export const GitReposSchema = z.object({ repos: z.array(z.string()) });
 export type GitRepos = z.infer<typeof GitReposSchema>;
@@ -1553,10 +1594,76 @@ export const GitCommitFileDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSch
 export const GitBranchCreateSchema = RepoParamSchema.extend({ sha: ShaSchema, name: RefNameSchema });
 export const GitTagCreateSchema = RepoParamSchema.extend({ sha: ShaSchema, name: RefNameSchema });
 export const GitCheckoutSchema = RepoParamSchema.extend({ ref: RefNameSchema });
+// Deleting a tag locally, and — when a remote is named — on that remote too. The remote half is best-effort: a
+// tag that was never pushed must not make deleting the local one report a failure.
+export const GitTagDeleteSchema = RepoParamSchema.extend({ name: RefNameSchema, remote: RefNameSchema.optional() });
+// Publishing ONE tag, named explicitly so it never drags every other unpushed tag along with it.
+export const GitTagPushSchema = RepoParamSchema.extend({ name: RefNameSchema, remote: RefNameSchema });
 export const GitResetSchema = RepoParamSchema.extend({ sha: ShaSchema, mode: z.enum(["soft", "mixed", "hard"]) });
 export const GitCommitActionSchema = RepoParamSchema.extend({ sha: ShaSchema });
 export const GitActionResultSchema = z.object({ ok: z.boolean(), reason: z.string().optional() });
 export type GitActionResult = z.infer<typeof GitActionResultSchema>;
+
+/* THE STASH — work set aside without committing it, and the one part of a repository's real state the workspace
+ * used to be blind to entirely. A `git stash` in a terminal made the agent's (or the user's) work vanish from
+ * every surface here.
+ *
+ * An entry IS a commit: it has a sha, a time, a diff, and parents (HEAD when it was taken, the index, and the
+ * untracked tree when `-u` was used). What it does not have is a place in any branch's ancestry, so the graph
+ * hangs it off the commit it was taken on rather than flowing it down a lane.
+ *
+ * `ref` (`stash@{0}`) is the handle every verb takes, and it is POSITIONAL — dropping one renumbers the rest, so
+ * a caller must re-read the list after any mutation rather than holding an index across it. */
+export const StashEntrySchema = z.object({
+    ref: z.string(),
+    sha: z.string(),
+    short: z.string(),
+    // git's own `WIP on <branch>: …` scaffolding stripped, leaving what a reader would call the message.
+    subject: z.string(),
+    branch: z.string().optional(),
+    at: z.number(),
+    parents: z.array(z.string()),
+});
+export type StashEntry = z.infer<typeof StashEntrySchema>;
+export const StashListSchema = z.object({ repo: z.string(), stashes: z.array(StashEntrySchema) });
+// A stash ref as git numbers them. Constrained rather than free text because it reaches a shell argument.
+const StashRefSchema = z.string().regex(/^stash@\{\d{1,4}\}$/);
+export const StashPushSchema = RepoParamSchema.extend({ message: z.string().max(500).optional(), includeUntracked: z.boolean().optional() });
+// `pop` drops the entry on a clean apply; `apply` keeps it. Git's own distinction, and both are things people
+// mean: pop is "resume this", apply is "try this here too".
+export const StashApplySchema = RepoParamSchema.extend({ ref: StashRefSchema, pop: z.boolean().optional() });
+export const StashRefParamSchema = RepoParamSchema.extend({ ref: StashRefSchema });
+export const StashDiffQuerySchema = RepoParamSchema.extend({ ref: StashRefSchema });
+
+/* THE LAST THING THAT MOVED THIS BRANCH, and whether it can be walked back.
+ *
+ * Complements the Checkpoints timeline rather than duplicating it: a checkpoint restores the WORKING TREE, this
+ * moves the BRANCH. After a bad rebase the files are often already right and only the ref is wrong, and
+ * restoring a whole worktree snapshot to fix that would drag every unrelated edit since back with it.
+ *
+ * `description` is git's own reflog subject, so the button can name what it will undo in git's words rather than
+ * a guess. `previousSha` is where the branch returns to, and it doubles as the CONCURRENCY TOKEN: the undo is
+ * refused when the repository has moved since this was read, so an undo prepared against a stale view cannot
+ * land somewhere the user never looked at. Absent = nothing to undo (a fresh branch, a detached HEAD, or a
+ * halted operation, which ends by aborting rather than by moving the branch). */
+export const UndoKindSchema = z.enum(["commit", "amend", "merge", "rebase", "cherry-pick", "revert", "reset", "pull", "other"]);
+export type UndoKind = z.infer<typeof UndoKindSchema>;
+export const UndoableActionSchema = z.object({
+    kind: UndoKindSchema,
+    description: z.string(),
+    branch: z.string(),
+    sha: z.string(),
+    previousSha: z.string(),
+    // The action rewrote FILES as well as the ref, so undoing it faithfully needs a hard reset. The UI uses this
+    // to decide whether it has to warn about losing work.
+    changesWorkingTree: z.boolean(),
+});
+export type UndoableAction = z.infer<typeof UndoableActionSchema>;
+export const GitUndoStateSchema = z.object({ repo: z.string(), action: UndoableActionSchema.optional() });
+export type GitUndoState = z.infer<typeof GitUndoStateSchema>;
+// `previousSha` is the position the caller was shown; `discardChanges` picks a hard reset over a soft one.
+export const GitUndoSchema = RepoParamSchema.extend({ previousSha: ShaSchema, discardChanges: z.boolean().optional() });
+
 
 // ---- history: daemon-owned workspace snapshots (diff + restore) ----
 // The daemon snapshots /work into bare git dirs on /history (outside the agent's reach). A "snapshot" groups

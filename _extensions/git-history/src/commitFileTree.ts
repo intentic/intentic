@@ -1,6 +1,6 @@
-import type { GitChange } from "@intentic-app/api-contract";
+import type { GitChange } from "@intentic/sandbox-contract";
 
-/* Turn a commit's flat changed-file list into a collapsible directory tree (the shape GitGraph.vue's detail
+/* Turn a commit's flat changed-file list into a collapsible directory tree (the shape GitHistoryTab.vue's detail
  * renders), with VSCode-style "compact folders": a directory that holds nothing but a single subdirectory is
  * joined with it into one row ("sandbox / src"), so deep single-child chains don't waste vertical space.
  * Pure + unit-tested; the component owns only the collapse state and the SVG-free row rendering. */

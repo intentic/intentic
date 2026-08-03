@@ -1,13 +1,14 @@
 import type { GitDiffSide } from "@intentic-app/api-contract";
-import type { ChangeStatus } from "../../pages/workspace/workspaceTabs";
+import type { ChangeStatus } from "@intentic/extension-api";
 
 /* WHERE A BINARY DIFF'S BYTES COME FROM. The daemon's file-diff routes ship text and can only FLAG an image
  * (`binary: true`), so the picture itself is fetched separately from /diff/raw — one request per side, the
  * daemon resolving the rev-specs from the same identifiers the JSON diff was asked for.
  *
- * Built here rather than in each panel because there are four diff sources and one route: a review surface that
- * spelled its query differently would fail as a 400 nobody could trace back to it. Each panel names its source
- * and hands over the identifiers it already holds.
+ * Built here rather than in each panel because there are three diff sources in this app and one route: a review
+ * surface that spelled its query differently would fail as a 400 nobody could trace back to it. Each panel names
+ * its source and hands over the identifiers it already holds. The route serves a `commit` source too — that one
+ * belongs to ext-git-history, which spells its own two URLs against the same daemon contract.
  *
  * WHICH SIDES EXIST is read off the row's status, not the response — a binary diff ships no `before`/`after`
  * text to infer it from, and git's status letter is the more direct answer anyway: an added file has no before,
@@ -21,8 +22,6 @@ export type DiffRawSource =
     | { readonly source: "working"; readonly repo: string; readonly side: GitDiffSide }
     // One agent's work vs the base its review is listed against.
     | { readonly source: "agent"; readonly agent: string; readonly repo: string }
-    // A commit in the git-history graph, vs its first parent.
-    | { readonly source: "commit"; readonly repo: string; readonly sha: string }
     // A checkpoint in the timeline, vs the previous VISIBLE checkpoint.
     | { readonly source: "checkpoint"; readonly snapshot: string; readonly scope: string };
 

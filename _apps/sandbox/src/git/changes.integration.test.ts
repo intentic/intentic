@@ -197,6 +197,32 @@ test("commitLog returns commits newest-first with parents, refs, and the HEAD fl
     expect(commits[0]?.refs).not.toContain("HEAD");
 });
 
+/* PAGING, and the `hasMore` that makes it honest. Without it the graph cannot tell "this repo has exactly N
+ * commits" from "there are thousands and you are looking at the newest N" — and it read the second as the first,
+ * drawing the oldest row of the page as a root commit because its parent was outside the window. */
+test("commitLog pages through a history and says whether more is behind it", async () => {
+    const dir = await tempRepo(); // one commit "init"
+    for (const text of ["two", "three", "four"]) {
+        await writeFile(join(dir, "a.txt"), `${text}\n`);
+        await sh(dir, "add", "-A");
+        await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", text);
+    }
+
+    const first = await commitLog(dir, 2);
+    expect(first.commits.map((commit) => commit.subject)).toEqual(["four", "three"]);
+    // Exactly the page asked for — the probe row git also returned is never shipped.
+    expect(first.commits).toHaveLength(2);
+    expect(first.hasMore).toBe(true);
+
+    const second = await commitLog(dir, 2, 2);
+    expect(second.commits.map((commit) => commit.subject)).toEqual(["two", "init"]);
+    // The last page ends the history, and says so.
+    expect(second.hasMore).toBe(false);
+
+    // A page larger than the history is not "more" — the boundary the probe row exists to get right.
+    expect((await commitLog(dir, 4)).hasMore).toBe(false);
+});
+
 test("commitLog degrades to an empty list on a repo with no commits", async () => {
     const dir = await mkdtemp(join(tmpdir(), "intentic-changes-"));
     tempDirs.push(dir);

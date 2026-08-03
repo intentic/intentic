@@ -7,6 +7,12 @@ export { default as BarChart } from "./components/BarChart.vue";
 export { type BarItem } from "./components/barChart.js";
 export { default as BottomSheet } from "./components/BottomSheet.vue";
 export { default as Card } from "./components/Card.vue";
+// The two halves of a changed-file row, shipped together because they are always drawn together: git's status
+// letter in its fixed-width cell, and the +/- line-count badge beside it. Six surfaces had each written both by
+// hand, and the seventh caller was an extension — which could reach none of the six.
+export { default as ChangeStatusMark } from "./components/ChangeStatusMark.vue";
+export { type ChangeStatus } from "./components/changeStatus.js";
+export { default as DiffStat } from "./components/DiffStat.vue";
 export { default as Code } from "./components/Code.vue";
 export { default as ConfirmDialog } from "./components/ConfirmDialog.vue";
 export { default as ContextMenu } from "./components/ContextMenu.vue";

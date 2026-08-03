@@ -30,7 +30,25 @@ const recentlyChanged = reactive(new Set<string>());
 const clearTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let epoch = 0;
 
+/* When the last workspace-change batch landed — the evidence that a ref move ALSO swapped the working tree.
+ *
+ * A checkout, a reset or a rebase rewrites files and so arrives as both a `workspaceChanged` batch and a
+ * `refsChanged` frame; a plain commit moves only the ref and leaves the tree byte-identical. The two frames are
+ * pushed by independent watchers, so "did files move too" cannot be read off the refs frame itself — this is
+ * what systemEvents consults before dropping the editor's buffers, because dropping them after an ordinary
+ * commit would cost the user an unsaved edit for nothing.
+ *
+ * The window is generous on purpose: both watchers debounce (250ms each) and the two batches are not ordered
+ * against each other, so the file batch can land either side of the refs frame. Erring long risks a needless
+ * buffer drop after a commit that happened to follow a save; erring short risks a stale editor after a
+ * checkout, which is the worse of the two.
+ */
+const WORKTREE_MOVE_WINDOW_MS = 3000;
+let lastWorkspaceChangeAt = 0;
+export const worktreeMovedRecently = (): boolean => lastWorkspaceChangeAt !== 0 && Date.now() - lastWorkspaceChangeAt < WORKTREE_MOVE_WINDOW_MS;
+
 export const markWorkspaceChanged = (paths: readonly string[]): void => {
+    lastWorkspaceChangeAt = Date.now();
     for (const path of paths) {
         epochs.set(path, ++epoch);
         recentlyChanged.add(path);

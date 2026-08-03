@@ -597,6 +597,21 @@ export type ReposChanged = z.infer<typeof ReposChangedSchema>;
 export const WorkspaceChangedSchema = z.object({ kind: z.literal("workspaceChanged"), paths: z.array(z.string()) });
 export type WorkspaceChanged = z.infer<typeof WorkspaceChangedSchema>;
 
+/* THE REPOS WHOSE REFS JUST MOVED — a commit, a checkout, a branch or tag, a rebase started or aborted.
+ *
+ * A third push for the same reason as the two above, and the reason is structural: a repo's git dir does not
+ * live under /work at all (it is relocated onto /history so an isolated turn's worktree can stand in for the
+ * workspace root — see git/repo-git-dirs.ts), and the file watcher descent-ignores `.git` besides. So no
+ * `workspaceChanged` path can ever say "a ref moved", and a surface built on the commit graph would otherwise
+ * be exactly as fresh as the last thing the user clicked.
+ *
+ * It matters most for the work the user did NOT do: the agent commits, rebases and lands out-of-band, with no
+ * HTTP mutation in any browser to hang an invalidation on. Ids are root-relative, "root" being the /work repo.
+ * Diff-not-snapshot, unlike reposChanged: this names what moved, and a repo absent from a frame is a repo that
+ * did not move rather than one that stopped existing. */
+export const RefsChangedSchema = z.object({ kind: z.literal("refsChanged"), repos: z.array(z.string()) });
+export type RefsChanged = z.infer<typeof RefsChangedSchema>;
+
 // One connected browser tab of a sandbox member. Identity fields come from the caller's verified Google ID
 // token; activity fields from the tab's own /system/presence reports. No timestamps on the wire — an entry's
 // lifetime IS its /events connection's lifetime, so there is nothing to age out or compare clocks over.
@@ -631,14 +646,15 @@ export const AgentsSchema = z.object({ kind: z.literal("agents"), agents: z.arra
 export type Agents = z.infer<typeof AgentsSchema>;
 
 // The /events stream union: the hello identity frame, then liveness heartbeats interleaved with boot progress,
-// workspace-change batches, repo-set snapshots, and presence + fleet roster snapshots. oRPC validates every
-// yielded frame against this, so all kinds must live here.
+// workspace-change batches, repo-set snapshots, ref-move batches, and presence + fleet roster snapshots. oRPC
+// validates every yielded frame against this, so all kinds must live here.
 export const SystemEventSchema = z.discriminatedUnion("kind", [
     HelloSchema,
     HeartbeatSchema,
     BootSchema,
     WorkspaceChangedSchema,
     ReposChangedSchema,
+    RefsChangedSchema,
     PresenceSchema,
     AgentsSchema,
 ]);

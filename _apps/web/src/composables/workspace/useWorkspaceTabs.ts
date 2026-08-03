@@ -1,6 +1,7 @@
 import { computed, ref, watch } from "vue";
 import { documentTabId } from "../../core-views/documentRegistry";
-import { closeTabs, type DiffTabPayload, diffTabId, type LineJump, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
+import type { DiffPayload } from "@intentic/extension-api";
+import { closeTabs, diffTabId, type LineJump, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
 import { useSandbox } from "../sandbox/useSandbox";
 import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspaceSnapshot";
 
@@ -78,7 +79,7 @@ const openAtLine = (path: string, line: number): void => {
 
 // A changed file from the Changes or History panel opens as a diff tab in the main area. Re-opening the same
 // source's file refreshes its content in place rather than stacking a duplicate tab.
-const openDiff = (payload: DiffTabPayload): void => {
+const openDiff = (payload: DiffPayload): void => {
     const id = diffTabId(payload.key, payload.scope, payload.path);
     const tab: WorkspaceTab = {
         kind: `diff`,
@@ -125,20 +126,8 @@ const openDirectory = (dir: string): void => {
     }
 };
 
-// One repo's git-history graph opens as a document tab in the main area (VSCode "Git Graph"-style), scoped to
-// "root" (the /work repo) or a nested repo's dir. Open-or-focus by repo, like openDirectory — re-opening the
-// same repo's graph focuses its tab rather than stacking a duplicate.
-const openGraph = (repo: string): void => {
-    const id = `graph:${repo}`;
-    openLine.value = undefined;
-    activeId.value = id;
-    if (!tabs.value.some((tab) => tab.id === id)) {
-        tabs.value = [...tabs.value, { kind: `graph`, id, repo }];
-    }
-};
-
-// One repo's codebase-health report — its hotspots and key modules. Open-or-focus by repo, like the graph: the
-// third per-repo document, and the third affordance on a repo's row in the tree.
+// One repo's codebase-health report — its hotspots and key modules. Open-or-focus by repo, like openDirectory:
+// re-opening the same repo's report focuses its tab rather than stacking a duplicate.
 const openHealth = (repo: string): void => {
     const id = `health:${repo}`;
     openLine.value = undefined;
@@ -240,7 +229,6 @@ export function useWorkspaceTabs() {
         openDiff,
         openPlan,
         openDirectory,
-        openGraph,
         openHealth,
         openDocument,
         selectTab,

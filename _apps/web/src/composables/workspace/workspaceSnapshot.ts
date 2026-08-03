@@ -90,8 +90,6 @@ const readTab = (raw: Record<string, unknown>): StoredWorkspaceTab | undefined =
             return path === undefined ? undefined : { kind: `file`, id, path };
         case `directory`:
             return typeof dir === `string` ? { kind: `directory`, id, dir } : undefined;
-        case `graph`:
-            return repo === undefined ? undefined : { kind: `graph`, id, repo };
         case `health`:
             return repo === undefined ? undefined : { kind: `health`, id, repo };
         /* An extension's document. Restored on identity + the strip's own label, never on the provider being

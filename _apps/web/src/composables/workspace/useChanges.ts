@@ -173,6 +173,34 @@ const discardGroups = (groups: readonly RepoPaths[]): Promise<void> =>
         },
     );
 
+/* END A HALTED MERGE, REBASE, CHERRY-PICK OR REVERT — the way out of a repo git will not otherwise act on.
+ *
+ * Nothing this app starts can leave a repo in that state: every git verb the daemon runs aborts itself on
+ * failure. What lands here is what a TERMINAL left — an agent's rebase that stopped on a conflict, a `land` that
+ * could not finish — which is exactly the case the panel could previously only describe, by listing conflicted
+ * files with no account of why they were conflicted.
+ *
+ * The abort rewrites the worktree back to where the operation began, so it drops the edit buffers and refetches
+ * the tree for the same reason discard does. Checkpointed daemon-side first: the conflict resolution being
+ * thrown away is real work.
+ */
+const abortOperation = (repo: string): Promise<void> =>
+    runBatch(
+        [
+            {
+                scope: repo,
+                action: `Abort failed`,
+                run: async (): Promise<void> => {
+                    await post(repo, `abort`, {});
+                },
+            },
+        ],
+        () => {
+            resetEditBuffers();
+            return Promise.all([queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }), invalidateChanges()]);
+        },
+    );
+
 // Index moves. The worktree is untouched, so unlike discard there is nothing to reset or re-read beyond the
 // review set itself — no buffer drop, no tree refetch.
 const stageGroups = (groups: readonly RepoPaths[], staged: boolean): Promise<void> =>
@@ -308,6 +336,7 @@ export function useChanges() {
         fileDiff,
         commitRepos,
         discardGroups,
+        abortOperation,
         stageGroups,
         fetchRepo: (repo: string) => syncRepo(repo, `fetch`, `Fetch`),
         pullRepo: (repo: string) => syncRepo(repo, `pull`, `Pull`),

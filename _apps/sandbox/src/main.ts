@@ -56,7 +56,8 @@ import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/l
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
-import { startRepoWatch } from "./workspace/repo-watch.js";
+import { startRepoWatch, subscribeRepoChanges } from "./workspace/repo-watch.js";
+import { startRefWatch } from "./git/ref-watch.js";
 import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/workspace-watch.js";
 
 // The sandbox container's entrypoint. Config comes from env set at `docker run` — by connect.sh (your PC) or
@@ -611,6 +612,10 @@ const main = async (): Promise<void> => {
     // Repo-set change push riding the same watcher: a repo cloned/deleted anywhere under /work re-frames the
     // discovered repo list on /events (the watcher itself never sees .git paths).
     startRepoWatch(services.workspace.root, logger);
+    // Ref-move push, riding the repo set the line above maintains: a commit, checkout, branch, tag or rebase in
+    // ANY workspace repo re-frames the surfaces built on the commit graph. Neither watcher above can carry it —
+    // git dirs live off /work entirely (repo-git-dirs.ts) and the file watcher ignores .git besides.
+    startRefWatch(services.workspace.root, subscribeRepoChanges, logger);
 
     // Rotate Claude subscription tokens on a quiet timer rather than letting a burst of turn starts discover the
     // expiry together. Anthropic rotates refresh tokens and revokes the whole family on a replay, so the goal is

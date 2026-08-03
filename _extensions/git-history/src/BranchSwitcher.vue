@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { timeAgo } from "@intentic/ui";
-import Popover from "primevue/popover";
+import { Icon, Popover, timeAgo } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import { useBranches } from "../../composables/workspace/useBranches";
+import { useBranches } from "./useBranches.js";
 
 /* The graph header's branch control: the checked-out branch as a pill, and a popover to switch, create or
  * delete. Deliberately not a bare `<select>` — a branch row carries more than a name (its upstream, how far
@@ -13,7 +12,7 @@ import { useBranches } from "../../composables/workspace/useBranches";
 
 const { repo } = defineProps<{ repo: string }>();
 const repoRef = computed(() => repo);
-const { branches, current, busy, actionError, checkout, create, remove } = useBranches(repoRef);
+const { groups, current, busy, actionError, checkout, create, remove } = useBranches(repoRef);
 
 const popover = ref<InstanceType<typeof Popover>>();
 const filter = ref(``);
@@ -25,22 +24,17 @@ const armedDelete = ref<string | undefined>(undefined);
 // git itself has said no, never up front.
 const forceFor = ref<string | undefined>(undefined);
 
+/* The filter matches the group's shared name, so typing "main" keeps the row that is `main` locally and
+ * `origin/main` on two remotes — one row, not three. Already ordered (current first, then newest tip) by
+ * groupBranches, so nothing here re-sorts. */
 const shown = computed(() => {
     const needle = filter.value.trim().toLowerCase();
-    const list = needle === `` ? branches.value : branches.value.filter((branch) => branch.name.toLowerCase().includes(needle));
-    // Current first, then the list's own newest-commit-first order from the daemon. `toSorted` because
-    // `branches` is query-cache state — sorting it in place would mutate what every other reader sees.
-    return list.toSorted((a, b) => Number(b.current) - Number(a.current));
+    return needle === `` ? groups.value : groups.value.filter((group) => group.name.toLowerCase().includes(needle));
 });
 
-const toggle = (event: Event): void => {
-    filter.value = ``;
-    creating.value = false;
-    armedDelete.value = undefined;
-    forceFor.value = undefined;
-    popover.value?.toggle(event);
-};
-
+/* CHECKING OUT A REMOTE-ONLY BRANCH creates the local branch that tracks it, which is what `git checkout <name>`
+ * does on its own when exactly one remote has that name — so the same verb serves both rows and the reader does
+ * not have to know which case they are in. */
 const pick = async (name: string): Promise<void> => {
     if (name === current.value?.name) {
         popover.value?.hide();
@@ -50,6 +44,14 @@ const pick = async (name: string): Promise<void> => {
     if (actionError.value === undefined) {
         popover.value?.hide();
     }
+};
+
+const toggle = (event: Event): void => {
+    filter.value = ``;
+    creating.value = false;
+    armedDelete.value = undefined;
+    forceFor.value = undefined;
+    popover.value?.toggle(event);
 };
 
 const submitCreate = async (): Promise<void> => {
@@ -111,6 +113,9 @@ const confirmDelete = async (name: string): Promise<void> => {
                 <p v-if="actionError" class="truncate text-2xs text-danger" v-tooltip.bottom.overflow="actionError">{{ actionError }}</p>
 
                 <div class="scrollbar-thin flex max-h-64 flex-col overflow-auto">
+                    <!-- ONE ROW PER LINE OF WORK. `main` and `origin/main` are the same branch seen from two
+                         places, so they share a row: the name once, and the remotes it also lives on as small
+                         pills after it. A row with no local branch is one somebody else pushed. -->
                     <template v-for="branch in shown" :key="branch.name">
                         <div class="group/branch flex items-center gap-1 rounded transition-colors hover:bg-overlay">
                             <button
@@ -120,25 +125,39 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 @click="pick(branch.name)"
                             >
                                 <Icon
-                                    :name="branch.current ? 'check' : 'code'"
+                                    :name="branch.local?.current ? 'check' : branch.local ? 'code' : 'cloud'"
                                     class="shrink-0 text-[0.6rem]"
-                                    :class="branch.current ? 'text-success' : 'text-subtle'"
+                                    :class="branch.local?.current ? 'text-success' : 'text-subtle'"
                                 />
-                                <span class="min-w-0 flex-1 truncate text-xs" :class="branch.current ? 'text-content' : 'text-muted'">{{
+                                <span class="min-w-0 flex-1 truncate text-xs" :class="branch.local?.current ? 'text-content' : 'text-muted'">{{
                                     branch.name
                                 }}</span>
+                                <!-- Which remotes also have it. Named rather than counted, because "it is on
+                                     origin" and "it is on my fork" are different facts. -->
+                                <span
+                                    v-for="entry in branch.remotes"
+                                    :key="entry.name"
+                                    class="shrink-0 rounded bg-overlay px-1 text-[0.6rem] text-subtle"
+                                    v-tooltip.top="entry.name"
+                                    >{{ entry.remote }}</span
+                                >
                                 <!-- "gone" is not the same as "no upstream": the branch WAS tracking something
                                      that has since been deleted on the remote, which is the usual sign a PR
                                      merged and this local copy is safe to drop. -->
-                                <span v-if="branch.gone" class="shrink-0 text-2xs text-warning" v-tooltip.top="'Upstream branch was deleted'"
+                                <span
+                                    v-if="branch.local?.gone"
+                                    class="shrink-0 text-2xs text-warning"
+                                    v-tooltip.top="'Upstream branch was deleted'"
                                     >gone</span
                                 >
-                                <span v-if="branch.behind > 0" class="shrink-0 text-2xs text-subtle">↓{{ branch.behind }}</span>
-                                <span v-if="branch.ahead > 0" class="shrink-0 text-2xs text-subtle">↑{{ branch.ahead }}</span>
+                                <span v-if="(branch.local?.behind ?? 0) > 0" class="shrink-0 text-2xs text-subtle">↓{{ branch.local!.behind }}</span>
+                                <span v-if="(branch.local?.ahead ?? 0) > 0" class="shrink-0 text-2xs text-subtle">↑{{ branch.local!.ahead }}</span>
                                 <span class="shrink-0 text-2xs text-subtle">{{ timeAgo(branch.at) }}</span>
                             </button>
+                            <!-- Only a LOCAL branch can be deleted here: dropping a remote one is somebody
+                                 else's repository, and a different confirmation entirely. -->
                             <button
-                                v-if="!branch.current"
+                                v-if="branch.local && !branch.local.current"
                                 type="button"
                                 class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-danger focus-visible:opacity-100 group-hover/branch:opacity-100"
                                 :class="{ 'text-danger opacity-100': armedDelete === branch.name }"

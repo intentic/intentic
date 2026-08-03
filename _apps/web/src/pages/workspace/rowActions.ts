@@ -23,12 +23,11 @@ export interface RowAction {
 
 // The affordances the app itself puts on a row, plus whatever the open document providers offer for it.
 export interface RowActionSources {
-    // Directory paths that are git repos — each carries its own health report and commit graph.
+    // Directory paths that are git repos — each carries its own health report.
     readonly repoDirs: ReadonlySet<string>;
     // Directory paths a directory-surface extension serves (Apps, the repo's own UI, the dev-server preview).
     readonly manageableDirs: ReadonlySet<string>;
     readonly openHealth: (repo: string) => void;
-    readonly openGraph: (repo: string) => void;
     readonly openDirectory: (dir: string) => void;
     readonly openDocument: (extension: string, provider: string, path: string, title: string, icon: string) => void;
 }
@@ -51,10 +50,7 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
         run: (): void => sources.openDocument(provider.owner, provider.id, dir, offer.title, offer.icon),
     }));
     if (sources.repoDirs.has(dir)) {
-        actions.push(
-            { id: `health`, icon: `wave-pulse`, tooltip: `Open codebase health`, run: (): void => sources.openHealth(dir) },
-            { id: `graph`, icon: `sitemap`, tooltip: `Open git history`, run: (): void => sources.openGraph(dir) },
-        );
+        actions.push({ id: `health`, icon: `wave-pulse`, tooltip: `Open codebase health`, run: (): void => sources.openHealth(dir) });
     }
     if (sources.manageableDirs.has(dir)) {
         actions.push({ id: `directory`, icon: `cog`, tooltip: `Open management panel`, run: (): void => sources.openDirectory(dir) });

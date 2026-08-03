@@ -154,9 +154,9 @@ test("the git-history graph resolves the 'root' scope to /work — reads, and a 
                 }),
                 git: {
                     ...services().git,
-                    commitLog: async (dir, limit) => {
-                        calls.push(`log ${dir} ${limit}`);
-                        return { branch: "main", commits: [] };
+                    commitLog: async (dir, limit, skip) => {
+                        calls.push(`log ${dir} ${limit} ${skip}`);
+                        return { branch: "main", commits: [], hasMore: false };
                     },
                     commitChanges: async (dir, sha) => {
                         calls.push(`commit-diff ${dir} ${sha}`);
@@ -169,15 +169,15 @@ test("the git-history graph resolves the 'root' scope to /work — reads, and a 
             }),
         ),
     );
-    expect(await client.git.log({ repo: "root" })).toEqual({ repo: "root", branch: "main", commits: [] });
+    expect(await client.git.log({ repo: "root" })).toEqual({ repo: "root", branch: "main", commits: [], hasMore: false });
     expect(await client.git.commitDiff({ repo: "root", sha: "abcdef1" })).toEqual({ files: [] });
     expect(await client.git.checkout({ repo: "root", ref: "abcdef1" })).toEqual({ ok: true });
-    expect(await client.git.log({ repo: "intent" })).toEqual({ repo: "intent", branch: "main", commits: [] });
+    expect(await client.git.log({ repo: "intent" })).toEqual({ repo: "intent", branch: "main", commits: [], hasMore: false });
     expect(calls).toEqual([
-        `log ${workspace.root} 300`,
+        `log ${workspace.root} 300 0`,
         `commit-diff ${workspace.root} abcdef1`,
         `checkout ${workspace.root} abcdef1`,
-        `log ${join(workspace.root, "intent")} 300`,
+        `log ${join(workspace.root, "intent")} 300 0`,
     ]);
     // A HEAD-mover checkpoints BEFORE it runs for root too, so a checkout off the workspace repo stays
     // reversible from the Checkpoints timeline.
@@ -305,4 +305,105 @@ test("git.fileDiff routes each side to its own diff and BAD_REQUESTs a path esca
     expect(await client.git.fileDiff({ repo: "root", path: "notes.md", side: "staged" })).toEqual({ before: "one\n", after: "two\n" });
     expect(await client.git.fileDiff({ repo: "root", path: "notes.md", side: "unstaged" })).toEqual({ before: "two\n", after: "three\n" });
     expect(await errorCode(client.git.fileDiff({ repo: "root", path: "../escape", side: "staged" }))).toBe("BAD_REQUEST");
+});
+
+/* THE WAY OUT OF A HALTED REPO. Nothing this daemon starts can leave one — every sequence verb aborts itself on
+ * failure — so both of these exist for what a terminal left behind, and both are worth pinning: the read must
+ * not queue behind the repo lock (a stuck repo would become a stuck panel), and the abort must checkpoint before
+ * it throws the conflict resolution away. */
+test("git.operation reports a halted repo, and git.abort ends it after checkpointing", async () => {
+    const workspace = tempWorkspace([{ name: "app" }]);
+    const calls: string[] = [];
+    const snapshots: string[] = [];
+    let halted: "merge" | "rebase" | "cherry-pick" | "revert" | undefined = "rebase";
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                history: fakeHistory({
+                    snapshot: async (trigger, label) => {
+                        snapshots.push(`${trigger} ${label}`);
+                        return undefined;
+                    },
+                }),
+                git: {
+                    ...services().git,
+                    operationInProgress: async (dir) => {
+                        calls.push(`peek ${dir}`);
+                        return halted;
+                    },
+                    abortOperation: async (dir, operation) => {
+                        calls.push(`abort ${dir} ${operation}`);
+                        halted = undefined;
+                    },
+                },
+            }),
+        ),
+    );
+
+    expect(await client.git.operation({ repo: "app" })).toEqual({ repo: "app", operation: "rebase" });
+    expect(await client.git.abort({ repo: "app" })).toEqual({ ok: true });
+    // The checkpoint lands BEFORE the abort, because the conflict resolution being discarded is real work.
+    expect(snapshots).toEqual(["user before aborting rebase in app"]);
+    expect(calls).toEqual([`peek ${join(workspace.root, "app")}`, `peek ${join(workspace.root, "app")}`, `abort ${join(workspace.root, "app")} rebase`]);
+
+    // Now that it has ended, the repo reports clean and a second Abort is a value rather than a throw — two
+    // people on the same repo is ordinary, and the loser of that race should not see a stack trace.
+    expect(await client.git.operation({ repo: "app" })).toEqual({ repo: "app" });
+    expect(await client.git.abort({ repo: "app" })).toEqual({ ok: false, reason: "nothing in progress" });
+    expect(snapshots).toHaveLength(1);
+});
+
+/* The undo pair. The read must not queue behind the repo lock (a toolbar renders it), and the write must
+ * checkpoint before it moves the branch — a hard undo throws the worktree away, and even a soft one moves a ref
+ * the user may have to get back to. */
+test("git.undoable reports the last action, and git.undo checkpoints before walking the branch back", async () => {
+    const workspace = tempWorkspace([{ name: "app" }]);
+    const calls: string[] = [];
+    const snapshots: string[] = [];
+    const action = {
+        kind: "rebase" as const,
+        description: "rebase (finish): returning to refs/heads/main",
+        branch: "main",
+        sha: "aaaaaaa",
+        previousSha: "bbbbbbb",
+        changesWorkingTree: true,
+    };
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                history: fakeHistory({
+                    snapshot: async (trigger, label) => {
+                        snapshots.push(`${trigger} ${label}`);
+                        return undefined;
+                    },
+                }),
+                git: {
+                    ...services().git,
+                    undoableAction: async (dir) => {
+                        calls.push(`peek ${dir}`);
+                        return action;
+                    },
+                    undoLastAction: async (dir, expected, discard) => {
+                        calls.push(`undo ${dir} ${expected} ${discard}`);
+                        return expected === action.previousSha ? { ok: true as const, action } : { ok: false as const, reason: "stale" };
+                    },
+                },
+            }),
+        ),
+    );
+
+    expect(await client.git.undoable({ repo: "app" })).toEqual({ repo: "app", action });
+    expect(await client.git.undo({ repo: "app", previousSha: "bbbbbbb", discardChanges: true })).toEqual({ ok: true });
+    expect(snapshots).toEqual(["user before undo in app"]);
+
+    // An undo prepared against a position the repo has moved past comes back as a value, not a throw — the user
+    // is told their view was stale rather than shown a fault.
+    expect(await client.git.undo({ repo: "app", previousSha: "ccccccc" })).toEqual({ ok: false, reason: "stale" });
+    expect(calls).toEqual([
+        `peek ${join(workspace.root, "app")}`,
+        `undo ${join(workspace.root, "app")} bbbbbbb true`,
+        `undo ${join(workspace.root, "app")} ccccccc false`,
+    ]);
 });

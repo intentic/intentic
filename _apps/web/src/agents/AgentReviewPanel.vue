@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import type { FileDiffResponse } from "@intentic-app/api-contract";
-import { cmp, explorerColorClass, iconForEntry, Segmented, useDevice, useExplorerStyle } from "@intentic/ui";
+import { ChangeStatusMark, cmp, DiffStat, explorerColorClass, iconForEntry, Segmented, useDevice, useExplorerStyle } from "@intentic/ui";
 import { isTestPath } from "@intentic/sandbox-contract";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import DiffStat from "../components/DiffStat.vue";
 import { stopAgent } from "../composables/agents/agentActions";
 import { type Blocker, REASON_COPY } from "../composables/agents/conflictResolution";
 import { type AgentReviewFile, useAgentChanges } from "../composables/agents/useAgentChanges";
@@ -22,7 +21,6 @@ import AgentConflictReport from "./AgentConflictReport.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "../composables/agents/reviewGroupPass";
 import { basename, parentDir } from "@intentic/ui/path";
-import ChangeStatusMark from "../components/ChangeStatusMark.vue";
 
 /* One agent's work, as a REVIEW: the file list on the left, that file's diff on the right, in this view — the
  * shape every code review has (GitHub, VSCode's SCM, `git add -p`), because the job is scanning a body of

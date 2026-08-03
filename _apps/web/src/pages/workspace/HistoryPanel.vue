@@ -3,9 +3,8 @@ import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intent
 import { ref } from "vue";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { useHistory } from "../../composables/workspace/useHistory";
-import { cmp, type IconName, timeAgo } from "@intentic/ui";
-import { type DiffTabPayload } from "./workspaceTabs";
-import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
+import { ChangeStatusMark, cmp, type IconName, timeAgo } from "@intentic/ui";
+import type { DiffPayload } from "@intentic/extension-api";
 
 /* The checkpoint timeline — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the
  * resize handle, and the Files|Changes|Checkpoints mode switch): the daemon's checkpoints of /work, NOT git
@@ -17,7 +16,7 @@ import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
  * restorable. */
 
 const { snapshots, error, isLoading, refetch, diff, fileDiff, restore, busy, actionError } = useHistory();
-const emit = defineEmits<{ "open-diff": [payload: DiffTabPayload] }>();
+const emit = defineEmits<{ "open-diff": [payload: DiffPayload] }>();
 
 const selectedId = ref<string | undefined>(undefined);
 const changes = ref<readonly SnapshotChange[]>([]);

@@ -18,6 +18,13 @@ export {
     BarChart,
     BottomSheet,
     Card,
+    /* The two halves of a changed-file row ship together because they are always drawn together, and they ship
+     * at all for the reason <SplitView> did: the git-history extension is the seventh surface to draw one, and
+     * the six that had solved it all sat in the web app where no extension could import them. <ChangeStatusMark>
+     * carries the fixed-width cell that keeps a column of paths aligned whatever letter lands in it — the detail
+     * a hand-rolled copy gets subtly wrong. */
+    ChangeStatusMark,
+    type ChangeStatus,
     cmp,
     Code,
     ConfirmDialog,
@@ -29,6 +36,7 @@ export {
     DagGraph,
     type DagEdge,
     type DagNode,
+    DiffStat,
     FilterBar,
     Icon,
     type IconName,

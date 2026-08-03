@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import DiffStat from "../components/DiffStat.vue";
+import { DiffStat } from "@intentic/ui";
 import { type DiffRow, diffRows, diffStat } from "./chatToolDiff";
 
 /* Inline unified diff for one structured diff content entry of a tool card. The header path is clickable

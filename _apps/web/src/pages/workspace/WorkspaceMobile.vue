@@ -21,7 +21,7 @@ import BinaryDiffView from "./viewers/BinaryDiffView.vue";
 import DiffToolbar from "./viewers/DiffToolbar.vue";
 import DiffView from "./viewers/DiffView.vue";
 import { rendersAsBytes } from "./fileType";
-import type { DiffTabPayload } from "./workspaceTabs";
+import type { DiffPayload } from "@intentic/extension-api";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { filesToEntries } from "./dropEntries";
 import { iconForEntry } from "@intentic/ui";
@@ -79,7 +79,7 @@ const openDir = (path: string): void => {
     // Browsing a folder leaves any open file — clear the path segment along with the query.
     void router.push({ name: `workspace`, params: { path: [] }, query: path === `` ? {} : { dir: path } });
 };
-const openDiffNav = (payload: DiffTabPayload): void => {
+const openDiffNav = (payload: DiffPayload): void => {
     openDiff(payload);
     void router.push({ name: `workspace`, params: { path: [] }, query: { ...route.query, diff: activeId.value ?? undefined } });
 };

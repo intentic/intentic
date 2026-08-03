@@ -2,10 +2,9 @@
 import { type IconName, useExplorerStyle } from "@intentic/ui";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
-import { explorerColorClass, iconForEntry } from "@intentic/ui";
+import { ChangeStatusMark, explorerColorClass, iconForEntry } from "@intentic/ui";
 import { type WorkspaceTab } from "./workspaceTabs";
 import { basename } from "@intentic/ui/path";
-import ChangeStatusMark from "../../components/ChangeStatusMark.vue";
 
 /* The open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or plan preview.
  * Presentational — selection/close are emitted up to Workspace.vue by tab id, which drives the tab list +
@@ -36,9 +35,7 @@ const tabLabel = (tab: WorkspaceTab): string => {
     if (tab.kind === `document`) {
         return basename(tab.path);
     }
-    // The two per-repo documents are named for their repo, so the icon is what tells them apart in the strip —
-    // and both can be open for the same repo at once.
-    return tab.kind === `graph` || tab.kind === `health` ? basename(tab.repo) : basename(tab.path);
+    return tab.kind === `health` ? basename(tab.repo) : basename(tab.path);
 };
 const tabHint = (tab: WorkspaceTab): string => {
     if (tab.kind === `plan`) {
@@ -46,9 +43,6 @@ const tabHint = (tab: WorkspaceTab): string => {
     }
     if (tab.kind === `directory`) {
         return `${tab.dir} (management)`;
-    }
-    if (tab.kind === `graph`) {
-        return `${tab.repo} · git history`;
     }
     if (tab.kind === `health`) {
         return `${tab.repo} · codebase health`;
@@ -166,7 +160,6 @@ watch(
                 />
                 <Icon name="list-check" v-else-if="tab.kind === 'plan'" class="text-2xs text-link" />
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
-                <Icon name="sitemap" v-else-if="tab.kind === 'graph'" class="text-2xs text-link" />
                 <Icon name="wave-pulse" v-else-if="tab.kind === 'health'" class="text-2xs text-link" />
                 <!-- The provider's own glyph, an open string like every extension-supplied icon (a bundle may name
                      one this app has never heard of) — an unknown name renders the set's fallback, never an error. -->

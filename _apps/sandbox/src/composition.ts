@@ -7,9 +7,11 @@ import type {
     GitBranch,
     GitChange,
     GitCommit,
+    GitRemoteBranch,
     GitRemoteState,
     IntenticLine,
     RestoredMessage,
+    StashEntry,
     WorkspaceChildren,
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
@@ -81,9 +83,11 @@ import {
     commitLog,
     createBranchAt,
     createTagAt,
+    deleteTag,
     discardPaths,
     dropCommit,
     mergeCommit,
+    pushTag,
     rebaseOnto,
     resetTo,
     revertCommit,
@@ -96,7 +100,10 @@ import {
     workingFileDiff,
 } from "./git/changes.js";
 import { collectRepoDiff, type CommitScope, type RepoDiff } from "./git/commit-message.js";
-import { createBranch, deleteBranch, listBranches } from "./git/branches.js";
+import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./git/branches.js";
+import { abortOperation, type GitOperation, operationInProgress } from "./git/operation.js";
+import { type UndoableAction, undoableAction, undoLastAction } from "./git/undo.js";
+import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./git/stash.js";
 import { fetchRemote, pullRemote, pushBranch, remoteState } from "./git/remote.js";
 import { type EndpointCatalog, createEndpointCatalog } from "./endpoints/endpoint-catalog.js";
 import { type GeminiCatalog, createGeminiCatalog } from "./gemini/gemini-catalog.js";
@@ -367,6 +374,9 @@ export interface Services {
         // Branches (git/branches.ts) and the remote (git/remote.ts). The remote verbs return an ActionResult
         // because "no remote"/"no upstream"/"won't fast-forward" are ordinary outcomes, not exceptions.
         readonly listBranches: (dir: string) => Promise<GitBranch[]>;
+        // Remote-tracking branches, so the switcher can pair `main` with `origin/main` instead of listing them
+        // as unrelated peers.
+        readonly listRemoteBranches: (dir: string) => Promise<GitRemoteBranch[]>;
         readonly createBranch: (dir: string, name: string, start: string | undefined, checkout: boolean) => Promise<void>;
         readonly deleteBranch: (dir: string, name: string, force: boolean) => Promise<void>;
         readonly remoteState: (dir: string) => Promise<GitRemoteState>;
@@ -384,18 +394,42 @@ export interface Services {
         readonly refFileDiff: (dir: string, path: string, base: string, tip: string) => Promise<FileDiff>;
         // The git-history graph (read-only): one repo's commit log across all refs, and lazy per-commit detail
         // (changed files, then a file's before/after AT the commit).
-        readonly commitLog: (dir: string, limit: number) => Promise<{ branch?: string; commits: GitCommit[] }>;
+        readonly commitLog: (dir: string, limit: number, skip?: number) => Promise<{ branch?: string; commits: GitCommit[]; hasMore: boolean }>;
         // What one repo contributes to an AI-drafted commit message: its recent subjects (the house style), the
         // file list, and the diff of whichever side the commit will record — a commit that stages first reads
         // the worktree (`all`, or just the `paths` it will stage), a bare one reads the index.
         readonly collectRepoDiff: (repo: string, dir: string, scope: CommitScope) => Promise<RepoDiff>;
         readonly commitChanges: (dir: string, sha: string) => Promise<GitChange[]>;
         readonly commitFileDiff: (dir: string, sha: string, path: string) => Promise<FileDiff>;
+        // The halted-operation pair. Never something this daemon's own verbs leave behind (they abort
+        // themselves) — this is for what a terminal left: an agent's `git rebase` that stopped on a conflict.
+        readonly operationInProgress: (dir: string) => Promise<GitOperation | undefined>;
+        readonly abortOperation: (dir: string, operation: GitOperation) => Promise<void>;
+        /* The stash — the one part of a repository's real state nothing here used to read, so a `git stash` in a
+         * terminal made the work invisible. An entry is a commit, which is why it reads like one. */
+        readonly stashList: (dir: string) => Promise<StashEntry[]>;
+        readonly stashChanges: (dir: string, ref: string) => Promise<GitChange[]>;
+        readonly stashPush: (
+            dir: string,
+            options: { message?: string; includeUntracked?: boolean },
+        ) => Promise<{ ok: true } | { ok: false; reason: string }>;
+        readonly stashApply: (dir: string, ref: string, pop: boolean) => Promise<{ ok: true } | { ok: false; reason: string }>;
+        readonly stashDrop: (dir: string, ref: string) => Promise<void>;
+        // Walking the current branch back off its own reflog — the ref-level complement to a checkpoint restore.
+        readonly undoableAction: (dir: string) => Promise<UndoableAction | undefined>;
+        readonly undoLastAction: (
+            dir: string,
+            expectedPreviousSha: string,
+            discardChanges: boolean,
+        ) => Promise<{ ok: true; action: UndoableAction } | { ok: false; reason: string }>;
         // Graph write actions (VSCode "Git Graph" parity). Non-destructive refs (branch/tag) and the
         // HEAD-movers (checkout/reset) return void + propagate git errors; the sequence ops return an
         // ActionResult so a conflict is a value. The route auto-checkpoints every destructive one.
         readonly createBranchAt: (dir: string, name: string, sha: string) => Promise<void>;
         readonly createTagAt: (dir: string, name: string, sha: string) => Promise<void>;
+        // The other two things one does with a tag, so a tag pill is not a create-only affordance.
+        readonly deleteTag: (dir: string, name: string, remote: string | undefined) => Promise<void>;
+        readonly pushTag: (dir: string, name: string, remote: string) => Promise<ActionResult>;
         readonly checkoutRef: (dir: string, ref: string) => Promise<void>;
         readonly resetTo: (dir: string, sha: string, mode: "soft" | "mixed" | "hard") => Promise<void>;
         readonly revertCommit: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
@@ -684,6 +718,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             commitIndex,
             discardPaths,
             listBranches,
+            listRemoteBranches,
             createBranch,
             deleteBranch,
             remoteState,
@@ -696,11 +731,22 @@ export const createServices = (config: Config, logger: Logger): Services => {
             fileDiff: workingFileDiff,
             refFileDiff,
             commitLog,
+            operationInProgress,
+            abortOperation,
+            undoableAction,
+            undoLastAction,
+            stashList,
+            stashChanges,
+            stashPush,
+            stashApply,
+            stashDrop,
             collectRepoDiff,
             commitChanges,
             commitFileDiff,
             createBranchAt,
             createTagAt,
+            deleteTag,
+            pushTag,
             checkoutRef,
             resetTo,
             revertCommit,

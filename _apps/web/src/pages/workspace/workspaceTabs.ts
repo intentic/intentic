@@ -1,19 +1,14 @@
-import type { GitChange, SnapshotChange } from "@intentic-app/api-contract";
+import type { DiffPayload } from "@intentic/extension-api";
 
 /* Open items in the Workspace editor area. A tab is a filesystem file (the path is its identity), a diff
  * (a synthetic id per diff source + file), or a chat plan preview (a synthetic id per conversation).
  * useWorkspaceTabs owns the list + active id; FileTabs.vue renders it; the Changes and History panels emit
  * diff payloads that Workspace.vue turns into diff tabs; the chat pushes plan previews in via
  * useWorkspaceTabs.openPlan. A `directory` tab is a repository's management surface (DirectoryOperator); a
- * `graph` tab is one repo's git-history graph (GitGraph.vue) — a wide document, so it lives here in the main
- * area (not the narrow sidebar), the same division VSCode makes between its SCM list and the Git Graph tab.
- * A `health` tab is the third per-repo document: its codebase-health report (CodebaseHealth.vue). A `document`
- * tab is the open-ended one: whatever an extension's document provider has to say about a DIRECTORY (its
- * architecture page, today), rendered by that provider beside the code it explains rather than in a routed area
- * away from it — see core-views/documentRegistry.ts. */
-
-// A snapshot's parent-vs-snapshot statuses plus the working tree's (which adds "renamed").
-export type ChangeStatus = SnapshotChange["status"] | GitChange["status"];
+ * `health` tab is one repo's codebase-health report (CodebaseHealth.vue). A `document` tab is the open-ended
+ * one: whatever an extension's document provider has to say about a DIRECTORY — its architecture page, its git
+ * history — rendered by that provider beside the code it explains rather than in a routed area away from it;
+ * see core-views/documentRegistry.ts. */
 
 // A jump to a line in the open file (a content-search match). `seq` makes every jump a fresh identity, so
 // re-clicking the SAME hit after scrolling away still re-reveals — a bare line number couldn't re-fire.
@@ -22,34 +17,14 @@ export interface LineJump {
     readonly seq: number;
 }
 
-// A binary diff ships no text, so its two sides ride the tab as the daemon URLs their BYTES are fetched from
-// (see diffRaw.ts) — the panel that opened the tab is the one that knows which diff source the row came from.
-// An absent url means that side does not exist (an added file has no before).
-export interface DiffRawSides {
-    readonly beforeRaw?: string;
-    readonly afterRaw?: string;
-}
-
 export type WorkspaceTab =
     | { readonly kind: "file"; readonly id: string; readonly path: string }
-    | {
-          readonly kind: "diff";
-          readonly id: string;
-          readonly label: string;
-          readonly status: ChangeStatus;
-          readonly path: string;
-          readonly before?: string;
-          readonly after?: string;
-          readonly binary?: boolean;
-          readonly truncated?: boolean;
-          readonly beforeRaw?: string;
-          readonly afterRaw?: string;
-          readonly additions?: number;
-          readonly deletions?: number;
-      }
+    // Everything a diff payload carries except the two fields that only exist to BUILD the identity — `id` is
+    // what `key` + `scope` + `path` resolve to (see diffTabId), so keeping them beside it would be two spellings
+    // of the same fact.
+    | ({ readonly kind: "diff"; readonly id: string } & Omit<DiffPayload, "key" | "scope">)
     | { readonly kind: "plan"; readonly id: string; readonly title: string; readonly text: string }
     | { readonly kind: "directory"; readonly id: string; readonly dir: string }
-    | { readonly kind: "graph"; readonly id: string; readonly repo: string }
     | { readonly kind: "health"; readonly id: string; readonly repo: string }
     | {
           readonly kind: "document";
@@ -65,25 +40,6 @@ export type WorkspaceTab =
           readonly icon: string;
       };
 
-// What the Changes/History panels hand up when a changed file is clicked; Workspace derives the diff tab's id
-// from it. `key` is the diff source's identity: a snapshot id, or `working:<repo>` for an uncommitted change.
-export interface DiffTabPayload extends DiffRawSides {
-    readonly key: string;
-    readonly scope: string;
-    readonly label: string;
-    readonly status: ChangeStatus;
-    readonly path: string;
-    readonly before?: string;
-    readonly after?: string;
-    readonly binary?: boolean;
-    readonly truncated?: boolean;
-    // What the row that opened this diff already knew about its size, carried onto the tab's toolbar. Absent
-    // where the source has no numstat to give (a checkpoint's change list, a binary file) — DiffStat then
-    // renders nothing rather than a zero.
-    readonly additions?: number;
-    readonly deletions?: number;
-}
-
 export const diffTabId = (key: string, scope: string, path: string): string => `diff:${key}:${scope}/${path}`;
 
 // Close a set of tabs (single ×, "Close Others", "Close to the Right", "Close All"). Drops the closed tabs, reports
@@ -98,23 +54,4 @@ export const closeTabs = (
     const forgetPaths = tabs.flatMap((tab) => (close.has(tab.id) && tab.kind === `file` ? [tab.path] : []));
     const nextActiveId = activeId !== null && close.has(activeId) ? (nextTabs.at(-1)?.id ?? null) : activeId;
     return { nextTabs, nextActiveId, forgetPaths };
-};
-
-// `!` for a conflict, git's own porcelain letter being `U` — but `U` next to `M`/`A`/`D` reads as one more
-// flavour of change, and a conflict is a stop sign. Danger-coloured for the same reason.
-export const STATUS_LETTER: Record<ChangeStatus, string> = {
-    added: `A`,
-    modified: `M`,
-    deleted: `D`,
-    renamed: `R`,
-    "type-changed": `T`,
-    conflicted: `!`,
-};
-export const STATUS_CLASS: Record<ChangeStatus, string> = {
-    added: `text-success`,
-    modified: `text-warning`,
-    deleted: `text-danger`,
-    renamed: `text-muted`,
-    "type-changed": `text-muted`,
-    conflicted: `text-danger`,
 };

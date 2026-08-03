@@ -1,11 +1,13 @@
 import { staleQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { contributedFileBindings } from "../../extension-host/fileBindings";
+import { emitRefsChanged } from "../../extension-host/refEvents";
+import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { desyncAgents, setAgents } from "../agents/useAgents";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { throttleTrailing } from "../throttleTrailing";
 import { setPresenceUsers } from "../usePresence";
-import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
+import { markWorkspaceChanged, worktreeMovedRecently } from "../workspace/useWorkspaceLive";
 import { daemonRebuilt, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 import { setDaemonBoot } from "./useDaemonBoot";
 import { setDaemonRoutes } from "./useDaemonRoutes";
@@ -83,6 +85,26 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // workspaceChanged batch could carry this — the daemon diffs its own discovery instead.
             void queryClient.invalidateQueries({ queryKey: [`panels`] });
             return;
+        case `refsChanged`: {
+            /* A commit, checkout, branch, tag or rebase landed — usually the AGENT's, out-of-band, with no HTTP
+             * mutation in this tab to hang an invalidation on. Three things go stale, and the third is the one
+             * that is easy to miss:
+             *   • the Changes review, because ahead/behind and what is staged both move with the refs;
+             *   • the Checkpoints timeline, because every destructive git verb snapshots before it runs;
+             *   • the open editor BUFFERS, when the worktree was swapped under them (a checkout, a reset, a
+             *     rebase). Saving is baseline-guarded daemon-side so a stale buffer cannot overwrite the new
+             *     branch's file, but every open file would otherwise sit behind a "changed on disk" notice.
+             * The buffers are dropped only when the worktree actually moved, which `workspaceChanged` has
+             * already told us: a plain commit leaves the tree identical and must not cost the user an edit. */
+            refreshChanges();
+            void queryClient.invalidateQueries({ queryKey: [`history`, `snapshots`] });
+            if (worktreeMovedRecently()) {
+                resetEditBuffers();
+            }
+            // Extensions own their own caches; the host only says a ref moved (see extension-host/refEvents).
+            emitRefsChanged(event.repos);
+            return;
+        }
         case `workspaceChanged`: {
             markWorkspaceChanged(event.paths);
             // Core's table unioned with what the ACTIVATED extensions declared — one push, both halves. An

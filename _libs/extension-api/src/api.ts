@@ -1,4 +1,5 @@
 import type { Component } from "vue";
+import type { DiffPayload } from "./diff.js";
 import type { CapabilityFacts, RepoFacts } from "./facts.js";
 
 /* The host API an extension programs against. There is no ambient global: the implementation arrives as the
@@ -166,6 +167,17 @@ export interface IntenticApi {
     // renders one; the host draws the tree's affordance and owns the tab. See DocumentProviderRegistration.
     readonly documents: {
         register(provider: DocumentProviderRegistration): Disposable;
+        /* Open one of THIS extension's documents for a directory, as if its row icon had been clicked.
+         *
+         * The row is the ordinary way in, so this is for the directories that have no row: the workspace root,
+         * which the tree renders the contents of rather than a line for. Without it a command contributed
+         * alongside a document provider — "Show Git History" in the palette — has nothing it can actually open.
+         *
+         * `id` must be one of this extension's registered providers, and the provider must have an offer for
+         * `path` (the same `detect()` the tree asks); a provider that has nothing to say about the directory
+         * opens nothing rather than an empty tab. The title and glyph come from that offer, so the tab reads
+         * exactly as it would have from the row. */
+        open(id: string, path: string): void;
     };
     readonly commands: {
         // `command` must match a `contributes.commands` entry in the approved manifest.
@@ -199,6 +211,26 @@ export interface IntenticApi {
         repos(): readonly RepoFacts[];
         capabilities(): readonly CapabilityFacts[];
         onDidChange(listener: () => void): Disposable;
+        /* A REF MOVED IN ONE OF THESE REPOS — a commit, a branch, a checkout, a rebase, an aborted merge.
+         *
+         * Separate from `contributes.files` because no file contribution could ever carry it: the daemon's
+         * watcher descent-ignores `.git`, so a changed ref produces no `workspaceChanged` path to match a prefix
+         * against. The daemon diffs the git dirs itself and pushes the repos that moved, exactly as it does for
+         * the repo SET (which the same watcher cannot see either, and for the same reason).
+         *
+         * This matters most for work the user did not do: an agent commits, rebases or lands out-of-band, with no
+         * HTTP mutation in this browser to hang an invalidate on. Without this a git surface is only ever as fresh
+         * as the last thing the user clicked. `repos` are root-relative ids ("root" is the workspace repo itself).
+         */
+        onDidChangeRefs(listener: (repos: readonly string[]) => void): Disposable;
+        /* OPEN A DIFF IN THE EDITOR AREA — the host's tab strip, beside the files the diff is about.
+         *
+         * The shell owns the strip, the viewer, the close orchestration and the edit-buffer bookkeeping; the
+         * extension owns only the question of what changed. Re-opening the same `key`+`scope`+`path` focuses the
+         * tab that is already open rather than stacking a second copy — see DiffPayload for how that identity is
+         * built. On mobile, where there is no strip, the host navigates to the diff instead.
+         */
+        openDiff(payload: DiffPayload): void;
         /* READING AND WRITING WORKSPACE FILES — the daemon's file routes, without the encoding.
          *
          * Extensions keep their durable state in the workspace rather than in settings: an acceptance run's

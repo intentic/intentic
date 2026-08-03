@@ -95,21 +95,19 @@ describe(`the editor's open tabs`, () => {
     it(`restores every kind that can be reopened from what it names`, () => {
         session.set(
             TABS_KEY,
-            strip(`graph:root`, [
+            strip(`health:web`, [
                 { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
                 { kind: `directory`, id: `dir:`, dir: `` },
-                { kind: `graph`, id: `graph:root`, repo: `root` },
                 { kind: `health`, id: `health:web`, repo: `web` },
                 { kind: `plan`, id: `plan:c1`, title: `Ship it`, text: `# Ship it` },
             ]),
         );
 
         const restored = readTabStrip(`sb1`);
-        expect(restored?.active).toBe(`graph:root`);
+        expect(restored?.active).toBe(`health:web`);
         expect(restored?.tabs).toEqual([
             { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
             { kind: `directory`, id: `dir:`, dir: `` },
-            { kind: `graph`, id: `graph:root`, repo: `root` },
             { kind: `health`, id: `health:web`, repo: `web` },
             { kind: `plan`, id: `plan:c1`, title: `Ship it`, text: `# Ship it` },
         ]);
@@ -145,7 +143,7 @@ describe(`the editor's open tabs`, () => {
             TABS_KEY,
             strip(`src/main.ts`, [
                 { kind: `file`, id: `no-path` },
-                { kind: `graph`, id: `graph:` },
+                { kind: `health`, id: `health:` },
                 { kind: `nonsense`, id: `x` },
                 { id: `kindless` },
                 { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
