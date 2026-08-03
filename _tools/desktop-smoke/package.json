@@ -1,0 +1,6 @@
+{
+    "name": "@intentic/desktop-smoke",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Bare-Debian image that installs a built desktop artifact, launches it under Xvfb and fires a real intentic:// deep link at it"
+}

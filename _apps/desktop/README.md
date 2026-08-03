@@ -115,6 +115,33 @@ Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in
 `pnpm --filter @intentic/desktop-app exec tauri signer generate`; the pubkey is committed in
 `tauri.conf.json`). Without it the build still produces plain installers and skips `latest.json`.
 
+## How it is tested
+
+Four tiers, ordered by cost. Each proves something the one before it cannot, and the split is driven by one
+fact: **this app is cross-built on Linux and its Windows conventions first execute on a user's machine.**
+
+| Tier | Runs | Proves |
+| --- | --- | --- |
+| `cargo test` | per MR (`desktop:check`) | the argv/env each flow assembles — for **both** hosts, since `Host` is a value rather than a `cfg!` read, so the `.ps1` named-parameter conventions are covered on a Linux runner |
+| `_tools/scripts/verify-desktop-bundle.sh` | every build (called by `build-desktop.sh`) | the bundled scripts are present and byte-identical, and the `.desktop` entry registers `intentic://`. Reads the deb, rpm, AppImage **and the NSIS installer** — the only automated look inside the Windows artifact |
+| `_tools/scripts/verify-desktop-install.sh` | main + nightly (`desktop:verify`) | the artifacts install on a **bare** Debian, launch under Xvfb, and answer a real `xdg-open intentic://` — see [`_tools/desktop-smoke`](../../_tools/desktop-smoke/README.md) |
+| `_tools/scripts/verify-desktop-setup.sh` | nightly | the `connect.sh` **extracted from the installer** brings a sandbox up on a clean Docker host, hermetically (no Cloudflare, no Google, no platform) |
+
+Run the last two locally against your own build:
+
+```sh
+pnpm --filter @intentic/desktop-app stage:downloads
+bash _tools/scripts/verify-desktop-bundle.sh _apps/site/public/desktop
+bash _tools/scripts/verify-desktop-install.sh _apps/site/public/desktop   # needs Docker
+```
+
+**Not covered:** running `Intentic-setup.exe` (needs Windows — a runner job belongs beside `desktop:verify`),
+and the setup-code claim round trip, which needs a Cloudflare pool and so belongs with the gated nightly
+suites. Whether every extension view renders is the browser tier's job
+([`_tools/e2e/specs/extension-views.spec.ts`](../../_tools/e2e/specs/extension-views.spec.ts)) — the workspace
+window is an unmodified webview onto the hosted SPA with no IPC, so that is a browser property, not a
+desktop one.
+
 ## Developing it
 
 ```sh

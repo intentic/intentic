@@ -53,10 +53,44 @@ pub enum RunEvent {
 
 pub const RUN_EVENT: &str = "desktop://run";
 
+/// Which script family a run targets, and therefore which argument convention and which interpreter. Every
+/// flow has a `.sh` and a `.ps1` sibling in `_apps/site/public/scripts/`, and this is the only platform branch
+/// in this app.
+///
+/// It is a VALUE rather than three separate `cfg!(windows)` reads because the three decisions it drives —
+/// which file, how its arguments bind, what runs it — must agree, and because a compile-time branch is only
+/// ever exercised on the host that compiled it. The Windows installer is cross-built on a Linux runner and the
+/// `.ps1` conventions are never executed before a release; naming the platform is what lets one `cargo test`
+/// cover both halves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Host {
+    Unix,
+    Windows,
+}
+
+impl Host {
+    /// The host this build runs on — the only producer outside tests.
+    pub const fn current() -> Host {
+        if cfg!(windows) {
+            Host::Windows
+        } else {
+            Host::Unix
+        }
+    }
+
+    /// Pick a flow's sibling script for this host.
+    pub const fn script(self, unix: &'static str, windows: &'static str) -> &'static str {
+        match self {
+            Host::Unix => unix,
+            Host::Windows => windows,
+        }
+    }
+}
+
 /// One script invocation. `env` carries what the scripts read from the environment (SETUP_CODE, CF_TOKEN,
 /// SYNC_DIR, WEB_ORIGIN, PLATFORM_URL, SANDBOX_IMAGE); `args` carries what they read positionally.
 pub struct ScriptRun {
-    /// Basename in the bundled scripts directory, e.g. `connect.sh` — pick it with [`platform_script`].
+    /// Basename in the bundled scripts directory, e.g. `connect.sh` — pick it with [`Host::script`].
     pub file: &'static str,
     pub args: Vec<String>,
     pub env: Vec<(String, String)>,
@@ -65,16 +99,8 @@ pub struct ScriptRun {
     /// deal from the other side, and the setup screen's "I already have Docker" checkbox is the browser's
     /// version of this decision.
     pub elevate: bool,
-}
-
-/// The script for this OS. Every flow has a `.sh` and a `.ps1` sibling in `_apps/site/public/scripts/`, and
-/// which one runs is the only platform branch in this app.
-pub const fn platform_script(unix: &'static str, windows: &'static str) -> &'static str {
-    if cfg!(windows) {
-        windows
-    } else {
-        unix
-    }
+    /// The host whose conventions `file` and `args` were built for.
+    pub host: Host,
 }
 
 fn resource(app: &AppHandle, file: &str) -> Result<PathBuf, String> {
@@ -99,7 +125,7 @@ fn command_for(app: &AppHandle, run: &ScriptRun) -> Result<Command, String> {
     let path = resource(app, run.file)?;
     let path = path.to_string_lossy().to_string();
 
-    if cfg!(windows) {
+    if run.host == Host::Windows {
         // -File (not -Command) so the script's own parameters bind normally; the policy bypass is scoped to
         // this process, exactly like the psDownloadCommand one-liner the browser hands out.
         let mut command = quiet(Command::new("powershell.exe"));
@@ -256,14 +282,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn platform_script_picks_one_sibling() {
-        let chosen = platform_script("connect.sh", "connect.ps1");
+    fn each_host_picks_its_own_sibling() {
+        assert_eq!(Host::Unix.script("connect.sh", "connect.ps1"), "connect.sh");
         assert_eq!(
-            chosen,
+            Host::Windows.script("connect.sh", "connect.ps1"),
+            "connect.ps1"
+        );
+    }
+
+    #[test]
+    fn current_host_matches_the_build_target() {
+        assert_eq!(
+            Host::current(),
             if cfg!(windows) {
-                "connect.ps1"
+                Host::Windows
             } else {
-                "connect.sh"
+                Host::Unix
             }
         );
     }

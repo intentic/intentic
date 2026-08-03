@@ -8,6 +8,7 @@
         "e2e": "playwright test"
     },
     "devDependencies": {
+        "@intentic-app/api-contract": "workspace:*",
         "@intentic-app/prisma": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@playwright/test": "catalog:",

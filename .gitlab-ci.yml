@@ -214,6 +214,50 @@ desktop:check:
     - cargo clippy --manifest-path _apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
     - cargo test --manifest-path _apps/desktop/src-tauri/Cargo.toml
 
+# The desktop ARTIFACTS: build the Linux bundles exactly the way the release builds them, then verify what came
+# out. Three tiers in one job, ordered by cost, each proving something the one before it cannot:
+#
+#   1. build-desktop.sh ends by running verify-desktop-bundle.sh over its own output — the bundled scripts are
+#      present and byte-identical, and the .desktop entry registers intentic://. Seconds, no Docker.
+#   2. verify-desktop-install.sh installs the .deb and the AppImage on a BARE Debian (no GUI libraries), starts
+#      the app under Xvfb and fires a real xdg-open intentic:// at it. This is what catches an incomplete
+#      Depends field — a package that installs cleanly everywhere except a user's machine.
+#   3. (schedule only) verify-desktop-setup.sh runs the connect.sh EXTRACTED FROM THE INSTALLER on a clean
+#      Docker host and waits for the sandbox daemon to answer /health. Pulls the sandbox image, so it is
+#      nightly rather than per-push.
+#
+# NOT on merge requests: this is a release-profile Tauri build (minutes even with the warm cargo store that
+# desktop:check fills), and desktop:check's debug build + clippy + tests is the fast MR gate. The argument
+# assembly this job cannot reach — the .ps1 named-parameter conventions that only ever run on Windows — is
+# covered by unit tests in commands.rs instead, which is why those tests take a Host rather than reading cfg!.
+#
+# WINDOWS: no runner here can execute Intentic-setup.exe, so the NSIS installer is verified only as an archive
+# (tier 1 reads it with 7z). When a Windows runner exists, its job belongs beside this one: same artifacts, and
+# the assertions smoke.sh makes through xdg-mime/xdotool have direct equivalents in the registry and the window
+# list.
+desktop:verify:
+  extends: .dind
+  stage: test
+  interruptible: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes: *desktop-changes
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  variables:
+    CARGO_HOME: /ci-cache/cargo
+    CARGO_TARGET_DIR: /ci-cache/desktop-target
+    # Prebuilt where available; both scripts fall back to building their context locally.
+    INTENTIC_HOST_IMAGE: "$CI_REGISTRY_IMAGE/dind-host:latest"
+    SANDBOX_E2E_IMAGE: "$CI_REGISTRY_IMAGE/sandbox:latest"
+  timeout: 90m
+  before_script:
+    - !reference [.pnpm-setup, script]
+  script:
+    # A fixed 0.0.0: nothing here is published, and the version only names the bundle files.
+    - bash _tools/scripts/build-desktop.sh 0.0.0 --linux-only
+    - bash _tools/scripts/verify-desktop-install.sh
+    - if [ "$CI_PIPELINE_SOURCE" = "schedule" ]; then bash _tools/scripts/verify-desktop-setup.sh; fi
+
 # Hermetic infra e2e on merge requests — NON-BLOCKING sidecar (allow_failure). Boots a Docker-in-Docker host
 # via testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
 # external services or secrets. turbo scopes e2e:hermetic to @intentic/cli.
