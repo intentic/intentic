@@ -324,7 +324,7 @@ describe(`what does not apply here`, () => {
     test(`a repository with no documents is not asked to re-read its documentation`, () => {
         const verdict = verdictFor(withShape({ docs: [] }), `documentation-drift`);
         expect(verdict.state).toBe(`not-applicable`);
-        expect(verdict.headline).toBe(`this repository has no architecture documents to re-read`);
+        expect(verdict.headline).toBe(`no architecture documents`);
         expect(verdict.prompt).toBeUndefined();
     });
 
@@ -356,7 +356,7 @@ describe(`what does not apply here`, () => {
         const tiny = report({ repos: [{ repo: `app`, probes: [], signals: signals({ totals: { files: 4, symbols: 10, complexity: 5, hotspots: 0 } }) }] });
         const verdict = verdictFor(tiny, `standardize-patterns`);
         expect(verdict.state).toBe(`not-applicable`);
-        expect(verdict.headline).toContain(`4 indexed files`);
+        expect(verdict.headline).toBe(`only 4 indexed files`);
     });
 
     test(`applicability is decided before measurement, so a missing probe never masks it`, () => {
@@ -373,6 +373,24 @@ describe(`what does not apply here`, () => {
 
     test(`a fully-equipped repository rules nothing out`, () => {
         expect(assessReport(withShape({}), NOW).filter((verdict) => verdict.state === `not-applicable`)).toEqual([]);
+    });
+
+    /* THE CAUSES HAVE TO GROUP, and that is a fact about the STRINGS rather than about the gates. The scope strip
+     * prints one line per distinct cause with the chores it costs listed beside it, so two gates that both mean
+     * "there is no package.json here" and say it in different words print two lines — and a workspace root, where
+     * a dozen chores are ruled out by three facts, is back to the paragraph-per-chore wall this phrasing replaced.
+     * Bounded rather than enumerated: a new gate may invent a new cause, it may not invent a new sentence. */
+    test(`applicability reasons are bare causes, so the ones that mean the same thing group`, () => {
+        const bare = withShape({ packageManifest: false, lockfile: false, docs: [], ci: [], dockerfiles: [], deps: [] });
+        const causes = assessReport(bare, NOW)
+            .filter((verdict) => verdict.state === `not-applicable`)
+            .map((verdict) => verdict.headline);
+        for (const cause of causes) {
+            expect(cause, cause).toMatch(/^[a-z]/);
+            expect(cause.split(` `).length, cause).toBeLessThanOrEqual(4);
+        }
+        // Four chores are ruled out by ONE absent file, and the strip says so once rather than four times.
+        expect(causes.filter((cause) => cause === `no package.json`)).toHaveLength(4);
     });
 });
 
@@ -523,7 +541,7 @@ describe(`hard-coded styles`, () => {
     test(`a repository without Tailwind is not asked the question at all`, () => {
         const verdict = verdictFor(withProbes([uiProbe({ bypasses: [{ path: `src/Nav.vue`, count: 2 }] })], { deps: [`vue`] }), `tailwind-arbitrary-values`);
         expect(verdict.state).toBe(`not-applicable`);
-        expect(verdict.headline).toContain(`does not use Tailwind`);
+        expect(verdict.headline).toBe(`no Tailwind`);
     });
 
     // And the framework gate the other four share, from the other side: deps come from shape, not from packages,

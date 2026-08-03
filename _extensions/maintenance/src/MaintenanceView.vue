@@ -91,8 +91,8 @@ const scoped = computed(() => (repo.value === undefined ? byRepo.value : byRepo.
 
 /* A chore that does not APPLY here is not a row under any filter — there is no Dockerfile to slim, no pipeline to
  * tighten, no documentation to re-read, and listing it as "clear" would claim we checked something that does not
- * exist. It is not hidden either: <RepoScope> names every one of them and why, so "why is there no Docker chore in
- * this repository?" has an answer that is one glance away rather than a support question. */
+ * exist. It is not hidden either: <RepoScope> counts them in one line and opens to every one of them and why, so
+ * "why is there no Docker chore in this repository?" has an answer one click away rather than a support question. */
 const shown = (verdict: ChoreVerdict): boolean =>
     verdict.state !== `not-applicable` && (filter.value === `all` || verdict.state === `due` || verdict.state === `snoozed`);
 

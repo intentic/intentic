@@ -149,13 +149,15 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
             </template>
         </Row>
 
-        <!-- The tier above it: a real session, started for you. Named by the surfaces it answers for rather
-             than in the abstract — "agent runs" means nothing until you can see that the Fix button you press
-             on a red pipeline is one of them. -->
+        <!-- The tier above it: a real session, started for you. The surfaces it answers for are named — "agent
+             runs" means nothing until you can see that the Fix button you press on a red pipeline is one of
+             them — but BELOW rather than in the description, because the description column is 14rem wide and
+             a five-item list read there as six lines of prose beside a one-line dropdown. The same names on
+             the full-width row underneath are one line, and read as the list they are. -->
         <Row
             icon="bolt"
             title="Agent runs"
-            description="What a run someone else started opens on: Fix with agent, Maintenance chores, Documentation and Acceptance runs, and the fix a failed pre-push check proposes. Each is a full session in its own worktree, so pick a tier that can finish the job."
+            description="What a run someone else started opens on — a full session in its own worktree, so pick a tier that can finish the job."
         >
             <template #control>
                 <Picker
@@ -183,10 +185,14 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                         @update:model-value="(agentRunEffort: string) => patch({ agentRunEffort })"
                     />
                 </div>
-                <!-- The row names its own exception. A setting that silently does not reach one of the surfaces
-                     it lists is worse than one that never claimed to: Acceptance keeps a per-run picker because
-                     a run costs one session PER STORY, and that is a spend decision worth making each time. -->
-                <p class="text-2xs text-muted">Acceptance starts here too, and lets you change it per run — one run spends one session per story.</p>
+                <!-- Who starts one, and the row's own exception on the same line. A setting that silently does
+                     not reach one of the surfaces it lists is worse than one that never claimed to: Acceptance
+                     keeps a per-run picker because a run costs one session PER STORY, and that is a spend
+                     decision worth making each time. -->
+                <p class="text-2xs text-muted">
+                    Started by Fix with agent, Maintenance, Documentation, Acceptance and pre-push fixes. Acceptance overrides it per run — one
+                    session per story.
+                </p>
             </template>
         </Row>
     </RowGroup>

@@ -93,14 +93,21 @@ export interface Chore {
      * cannot check English. The rule for writing one: say the THRESHOLD, not the subject. "Duplication is high"
      * is a topic; "more than 5% of the tree is duplicated" is a criterion. */
     readonly criterion: string;
-    /* WHETHER THIS IS A QUESTION WORTH ASKING OF THIS REPOSITORY AT ALL — returns undefined when it is, and a
-     * plain-language reason when it is not ("this repository ships no Dockerfile").
+    /* WHETHER THIS IS A QUESTION WORTH ASKING OF THIS REPOSITORY AT ALL — returns undefined when it is, and what
+     * is MISSING when it is not.
      *
      * Distinct from `assess`, and the distinction is the whole point: `assess` asks whether the answer is yes,
      * this asks whether the question makes sense. "Re-read the documentation against the code" in a repository
      * with no documentation is not a chore that is currently clear — it is one that will never apply here, and
      * showing it as clear says we checked something we cannot check. A chore that does not apply is dropped from
-     * the panel entirely; only a footer records that it was considered.
+     * the panel entirely; a line in the scope strip records that it was considered.
+     *
+     * A BARE CAUSE — "no Dockerfile", never "this repository ships no Dockerfile, so there is no image to slim".
+     * Same spelling as `ProbeSpec.unavailable`, and for the same reason both surfaces need: one absent
+     * package.json rules out five chores, and five sentences saying so at length is the wall of text this phrasing
+     * exists to prevent. The panel groups by this string, so the CONSEQUENCE — which chores it costs — is the list
+     * beside it rather than a clause repeated inside every entry. Identical causes must be spelled identically or
+     * they group apart.
      *
      * Reads `signals` rather than probes on purpose: applicability is about what the repository IS, which is a
      * fact the daemon holds without measuring anything. If a gate needed a probe it would be describing the
@@ -200,7 +207,7 @@ const security: Chore = {
     description: `Published advisories against this dependency tree, and the ones whose fix is a version bump.`,
     kind: `carrying`,
     criterion: `pnpm audit reports an advisory of high or critical severity against the resolved tree.`,
-    applies: (signals) => (signals.shape.lockfile ? undefined : `there is no lockfile here, so nothing resolves to a tree that could be audited`),
+    applies: (signals) => (signals.shape.lockfile ? undefined : `no lockfile`),
     stance: `act`,
     needs: [`audit`],
     cadenceMs: 0,
@@ -264,7 +271,7 @@ const dependencies: Chore = {
     description: `How far behind the registry this tree has drifted, and which majors are waiting.`,
     kind: `accruing`,
     criterion: `A dependency is a major version behind, or more than 20 are behind by any amount.`,
-    applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository has no package.json, so there is no npm dependency tree to be behind`),
+    applies: (signals) => (signals.shape.packageManifest ? undefined : `no package.json`),
     stance: `act`,
     needs: [`outdated`],
     cadenceMs: 30 * DAY_MS,
@@ -314,7 +321,7 @@ const deadCode: Chore = {
     description: `Files, exports and dependencies nothing in this repository references any more.`,
     kind: `accruing`,
     criterion: `knip reports at least one unreferenced file, export or dependency.`,
-    applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository is not a Node project, and knip only reads those`),
+    applies: (signals) => (signals.shape.packageManifest ? undefined : `no package.json`),
     stance: `act`,
     needs: [`knip`],
     cadenceMs: 14 * DAY_MS,
@@ -431,7 +438,7 @@ const documentation: Chore = {
     description: `Packages in this repository with no architecture document — new ones first.`,
     kind: `drifting`,
     criterion: `A workspace package has no docs/architecture document.`,
-    applies: (signals) => (signals.packages.length > 0 ? undefined : `this repository is not a workspace, so it has no packages to document one by one`),
+    applies: (signals) => (signals.packages.length > 0 ? undefined : `not a workspace`),
     stance: `act`,
     needs: [],
     cadenceMs: 90 * DAY_MS,
@@ -548,7 +555,7 @@ const runtime: Chore = {
     description: `Whether the Node this sandbox runs still receives security patches.`,
     kind: `carrying`,
     criterion: `The Node release this sandbox runs is past its end-of-life date, or within 90 days of it.`,
-    applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository is not a Node project, so the sandbox's runtime is not its concern`),
+    applies: (signals) => (signals.shape.packageManifest ? undefined : `no package.json`),
     stance: `act`,
     needs: [],
     cadenceMs: 0,
@@ -611,7 +618,7 @@ const libraries: Chore = {
     description: `Two dependencies solving the same problem — both shipped, both maintained, one picked at random.`,
     kind: `drifting`,
     criterion: `Two or more installed dependencies do the same job.`,
-    applies: (signals) => (signals.packages.length > 0 ? undefined : `this repository is not a workspace, so there are no package manifests to compare`),
+    applies: (signals) => (signals.packages.length > 0 ? undefined : `not a workspace`),
     stance: `report`,
     needs: [],
     cadenceMs: 90 * DAY_MS,
@@ -665,10 +672,10 @@ const DETAIL_LIMIT = 8;
 
 const FRAMEWORK_LABELS = UI_FRAMEWORKS.map((framework) => framework.label).join(`, `);
 
-// One gate, one sentence, four chores. Built from the table so that a framework added to stack.ts cannot leave a
-// stale list of names behind in an error message nobody re-reads.
+// One gate, one cause, four chores. Built from the table so that a framework added to stack.ts cannot leave a
+// stale list of names behind in a reason nobody re-reads.
 const needsFramework = (signals: ChoreSignals): string | undefined =>
-    frameworksOf(signals.shape.deps).length > 0 ? undefined : `this repository declares no ${FRAMEWORK_LABELS} dependency, so it has no components`;
+    frameworksOf(signals.shape.deps).length > 0 ? undefined : `no ${FRAMEWORK_LABELS}`;
 
 const bytesLabel = (bytes: number): string => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(bytes / 1024)} kB`);
 
@@ -922,7 +929,7 @@ const tailwindBypass: Chore = {
     description: `Colours and sizes written inline in the markup, around the theme that already defines them.`,
     kind: `drifting`,
     criterion: `A Tailwind class hard-codes a colour or a pixel size instead of using the theme's scale.`,
-    applies: (signals) => (usesTailwind(signals.shape.deps) ? undefined : `this repository does not use Tailwind, so there is no theme scale to bypass`),
+    applies: (signals) => (usesTailwind(signals.shape.deps) ? undefined : `no Tailwind`),
     stance: `act`,
     needs: [`ui`],
     cadenceMs: 30 * DAY_MS,
@@ -1040,10 +1047,9 @@ const patterns = survey({
         `estimate the size of the conversion. Do not convert anything.`,
     done: `Done when each concern has a named convention, a reference file, and a count of the sites that diverge from it.`,
     cadenceDays: 90,
-    applies: (signals) =>
-        signals.totals.files >= PATTERNS_FLOOR
-            ? undefined
-            : `this repository has ${signals.totals.files} indexed files — too few for cross-cutting patterns to have diverged`,
+    // The one cause that is a measurement rather than an absence, and it still groups: every chore gated on size
+    // is gated on the SAME size, so the string is the same string.
+    applies: (signals) => (signals.totals.files >= PATTERNS_FLOOR ? undefined : `only ${signals.totals.files} indexed files`),
 });
 
 const deprecated = survey({
@@ -1059,7 +1065,7 @@ const deprecated = survey({
         `replacement for each. Change nothing.`,
     done: `Done when every deprecation has call sites cited, a replacement named, and the release it is expected to break in.`,
     cadenceDays: 90,
-    applies: (signals) => (signals.shape.packageManifest ? undefined : `this repository declares no dependencies whose deprecations could be read`),
+    applies: (signals) => (signals.shape.packageManifest ? undefined : `no package.json`),
 });
 
 /* THE CHORE THAT NAMED THE PROBLEM. Gated on documents actually EXISTING, which is the whole reason `applies`
@@ -1081,7 +1087,7 @@ const documentationDrift = survey({
         `what, which file to change — over prose that has merely aged. Do not rewrite the documents; produce the list of what is wrong.`,
     done: `Done when every architecture document has been read and every false claim is listed with both sides cited.`,
     cadenceDays: 90,
-    applies: (signals) => (signals.shape.docs.length > 0 ? undefined : `this repository has no architecture documents to re-read`),
+    applies: (signals) => (signals.shape.docs.length > 0 ? undefined : `no architecture documents`),
 });
 
 /* THE TWO CHORES THAT ONLY EXIST WHERE THEIR SUBJECT DOES. Both are surveys — nothing here can measure whether a
@@ -1103,7 +1109,7 @@ const pipelines = survey({
         `because it genuinely has to be, say so — a pipeline that is honestly expensive is not a finding.`,
     done: `Done when every finding names a file, a step, and a concrete change, and anything deliberately slow is called out as such.`,
     cadenceDays: 90,
-    applies: (signals) => (signals.shape.ci.length > 0 ? undefined : `this repository defines no CI pipeline`),
+    applies: (signals) => (signals.shape.ci.length > 0 ? undefined : `no CI pipeline`),
 });
 
 const images = survey({
@@ -1119,7 +1125,7 @@ const images = survey({
         `Dockerfiles — an image that fails to build is a much worse problem than one that is larger than ideal.`,
     done: `Done when every finding cites a Dockerfile line and names the change, with the ones that would need a base-image swap called out separately.`,
     cadenceDays: 90,
-    applies: (signals) => (signals.shape.dockerfiles.length > 0 ? undefined : `this repository ships no Dockerfile`),
+    applies: (signals) => (signals.shape.dockerfiles.length > 0 ? undefined : `no Dockerfile`),
 });
 
 /* THE BOOK'S ORDER, which is the panel's reading order and therefore a product decision rather than whatever

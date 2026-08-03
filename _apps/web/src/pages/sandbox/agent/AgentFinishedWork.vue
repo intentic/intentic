@@ -33,7 +33,7 @@ const RETENTION_OPTIONS = [
         <Row
             icon="download"
             title="Land finished work automatically"
-            description="When an agent finishes cleanly, apply its work to your workspace as uncommitted changes right away. Off, finished work waits on each agent's branch — the card reads “Ready to land” and you land it from the board or the review."
+            description="When an agent finishes cleanly, apply its work to your workspace as uncommitted changes right away. Off, it waits on the agent's branch until you land it."
         >
             <template #control>
                 <ToggleSwitch

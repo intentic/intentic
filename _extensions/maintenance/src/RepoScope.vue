@@ -2,7 +2,7 @@
 import { type ChoreVerdict, probeSpec } from "@intentic/sandbox-contract/chores";
 import { Icon, timeAgo } from "@intentic/extension-ui";
 import type { ProbeResult } from "@intentic/sandbox-contract";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
 /* WHAT THIS REPOSITORY CAN BE ASKED, AND WHAT WE ACTUALLY ASKED IT. One strip above the chores rather than three
  * details spread through them, because all three answer the question a reader has before they trust any row: is
@@ -11,26 +11,32 @@ import { computed } from "vue";
  *   measured           the probes that ran, and how long ago. Probes refresh on a daily-to-weekly TTL, so "clean"
  *                      from last Tuesday is a genuinely different claim from "clean" as of an hour ago, and a
  *                      panel that showed only the verdict would quietly pass off the one as the other.
- *   not measurable     no package.json, no lockfile, knip not installed. Grouped by what is MISSING rather than
- *                      by probe, because one absent package.json is one fact about the repository, not four
- *                      separate apologies — and it carries no refresh button, because `available` is re-checked
- *                      hourly by the runner anyway (chores-store's RETRY_MS).
+ *   not measured       no package.json, no lockfile, knip not installed — the probes this repository cannot run.
+ *                      No refresh button, because `available` is re-checked hourly by the runner anyway
+ *                      (chores-store's RETRY_MS).
  *   not applicable     the chores whose SUBJECT does not exist here — no Dockerfile to slim, no pipeline to
  *                      tighten. Those rows are dropped from the list entirely (verdict.ts), and this is the
  *                      record that they were considered, so "why is there no Docker chore in this repo?" has an
  *                      answer one glance away rather than a support question.
  *
- * They were three separate things — two of them inside a per-repo probe strip, one a footer under the rows, shown
- * only under the "Everything" filter. Same weight, same dim type, same kind of statement: something this surface
- * considered and cannot speak to. Saying them in one place is what makes the strip a STATEMENT OF SCOPE rather
- * than a row of measurements with two apologies stapled to it, and it is why the "not applicable" half no longer
- * hides behind a filter: the reader deciding whether to trust this list needs it in both.
+ * A COUNT, THEN THE REASONS ON REQUEST. Both of the "no" halves used to be printed in full, every time: thirteen
+ * chores each carrying a sentence explaining itself, wrapping to eight lines of grey text above a list of two
+ * rows. It was accurate and nobody read it — and text nobody reads is worse than absent, because it buys the
+ * silence of the reader rather than their agreement. What the reader actually needs standing is the SIZE of what
+ * is missing; the reasons are what they want once, when something surprises them.
+ *
+ * So the strip states the scope in one line and opens to the reasons. What made the opened form short enough to
+ * be worth opening is grouping BY CAUSE rather than by chore (chores.ts phrases each gate as a bare cause for
+ * exactly this): a workspace root has thirteen chores ruled out by three facts about itself, and saying those
+ * three facts once each, with the names they cost beside them, is the same information at a fifth of the words.
  *
  * Repo-scoped, so it only renders when the rail has a repository selected. There is no honest way to say "we
  * measured this 3 hours ago" about four repositories at once. */
 
 const { probes, inapplicable } = defineProps<{ probes: readonly ProbeResult[]; inapplicable: readonly ChoreVerdict[]; busy: boolean }>();
 const emit = defineEmits<{ refresh: [id: string] }>();
+
+const open = ref(false);
 
 const measured = computed(() =>
     probes
@@ -53,33 +59,49 @@ const measured = computed(() =>
         }),
 );
 
-// The probes this repository cannot run, as "<what is missing> (<the probes it costs>)". Reason first because the
-// reason is the part that can change and the part worth acting on; the probe names are the consequence.
-const unmeasurable = computed(() => {
-    const byReason = new Map<string, string[]>();
-    for (const probe of probes) {
-        if (probe.state !== `unavailable`) {
-            continue;
-        }
-        const reason = probe.reason ?? `not available in this repository`;
-        byReason.set(reason, [...(byReason.get(reason) ?? []), probeSpec(probe.id).title.toLowerCase()]);
+// One line per distinct cause, carrying everything that cause costs. Insertion-ordered, so the reasons come out
+// in the order the book put the probes and chores in rather than alphabetically by whatever is missing.
+const byCause = (entries: readonly { cause: string; name: string }[]): { cause: string; names: string[] }[] => {
+    const groups = new Map<string, string[]>();
+    for (const { cause, name } of entries) {
+        groups.set(cause, [...(groups.get(cause) ?? []), name]);
     }
-    return [...byReason].map(([reason, titles]) => `${reason} (${titles.join(`, `)})`);
-});
+    return [...groups].map(([cause, names]) => ({ cause, names }));
+};
 
-// A not-applicable verdict carries its reason as the headline (verdict.ts), which is the only place it is ever
-// read.
-const ruledOut = computed(() => inapplicable.map((verdict) => `${verdict.chore.title.toLowerCase()} (${verdict.headline})`));
+const unmeasured = computed(() =>
+    byCause(
+        probes.flatMap((probe) =>
+            probe.state === `unavailable`
+                ? [{ cause: probe.reason ?? `not available in this repository`, name: probeSpec(probe.id).title.toLowerCase() }]
+                : [],
+        ),
+    ),
+);
+
+// A not-applicable verdict carries its cause as the headline (verdict.ts), which is the only place it is ever
+// read — and the reason that headline is a bare clause rather than a sentence is this grouping.
+const ruledOut = computed(() => byCause(inapplicable.map((verdict) => ({ cause: verdict.headline, name: verdict.chore.title.toLowerCase() }))));
+
+// The one line that is always visible, and the only part of the two "no" halves most readers ever need. Counts
+// the CHORES and the MEASUREMENTS, not the causes: "3 measurements unavailable" is a fact about how much of the
+// panel is missing, where "2 causes" would be a fact about this component.
+const summary = computed(() => {
+    const missing = unmeasured.value.reduce((total, group) => total + group.names.length, 0);
+    return [
+        inapplicable.length === 0 ? undefined : `${inapplicable.length} ${inapplicable.length === 1 ? `chore does` : `chores do`} not apply here`,
+        missing === 0 ? undefined : `${missing} ${missing === 1 ? `measurement` : `measurements`} unavailable`,
+    ]
+        .filter((clause) => clause !== undefined)
+        .join(` · `);
+});
 </script>
 
 <template>
     <!-- A WASH, not an outlined box. It sits between the page title and a column of bordered row groups, and an
          outline at that position reads as a third panel competing with both — the same call Documentation's
          strips make, for the same reason. -->
-    <div
-        v-if="measured.length > 0 || unmeasurable.length > 0 || ruledOut.length > 0"
-        class="flex flex-col gap-1.5 rounded-lg bg-content/[0.04] px-3 py-2"
-    >
+    <div v-if="measured.length > 0 || summary !== ``" class="flex flex-col gap-1.5 rounded-lg bg-content/[0.04] px-3 py-2">
         <div v-if="measured.length > 0" class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
             <span class="text-2xs text-subtle">measured</span>
             <div v-for="entry in measured" :key="entry.probe.id" class="flex items-center gap-1.5">
@@ -102,12 +124,33 @@ const ruledOut = computed(() => inapplicable.map((verdict) => `${verdict.chore.t
             </div>
         </div>
 
-        <p v-if="unmeasurable.length > 0" class="text-2xs text-subtle">
-            <span class="text-content">Not measurable here —</span> {{ unmeasurable.join(`; `) }}.
-        </p>
+        <template v-if="summary !== ``">
+            <button
+                type="button"
+                class="flex cursor-pointer items-center gap-1.5 self-start text-2xs text-subtle hover:text-content"
+                :aria-expanded="open"
+                @click="open = !open"
+            >
+                <Icon :name="open ? `chevron-down` : `chevron-right`" class="text-2xs" />
+                <span>{{ summary }}</span>
+            </button>
 
-        <p v-if="ruledOut.length > 0" class="text-2xs text-subtle">
-            <span class="text-content">Not applicable here —</span> {{ ruledOut.join(`; `) }}.
-        </p>
+            <!-- Cause on the left, what it costs on the right. Two blocks rather than one, because "we cannot ask
+                 this question here" and "we have not measured it" are the distinction verdict.ts exists to keep,
+                 and a reader scanning for the chore they expected needs to know which of the two answers it. -->
+            <div v-if="open" class="flex flex-col gap-2 pt-0.5 pl-4">
+                <div v-for="block in [{ label: `Not applicable`, groups: ruledOut }, { label: `Not measured`, groups: unmeasured }]" :key="block.label">
+                    <template v-if="block.groups.length > 0">
+                        <p class="text-2xs text-content">{{ block.label }}</p>
+                        <dl class="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-[max-content_1fr]">
+                            <template v-for="group in block.groups" :key="group.cause">
+                                <dt class="text-2xs text-subtle">{{ group.cause }}</dt>
+                                <dd class="text-2xs text-subtle/70">{{ group.names.join(` · `) }}</dd>
+                            </template>
+                        </dl>
+                    </template>
+                </div>
+            </div>
+        </template>
     </div>
 </template>

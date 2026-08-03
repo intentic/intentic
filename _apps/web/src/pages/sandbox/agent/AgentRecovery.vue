@@ -31,7 +31,7 @@ const setAutomationFailureLimit = (event: Event): void => {
         <Row
             icon="refresh"
             title="Auto-resume after provider outages"
-            description="When the model provider fails a turn (500, 529 at capacity, a dropped connection), retry it automatically — waiting longer between each attempt, and only one attempt at a time across all your agents, so an outage isn't hammered."
+            description="Retry a turn the provider failed (500, at capacity, a dropped connection), backing off between attempts and trying one agent at a time."
         >
             <template #control>
                 <ToggleSwitch

@@ -114,7 +114,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 as="label"
                 icon="eye"
                 title="Show ignored files"
-                description="List node_modules, build output and .gitignore'd paths in the explorer, grayed — the whole filesystem the agent sees. Off by default, so the tree is the project alone."
+                description="List node_modules, build output and .gitignore'd paths in the explorer, grayed — the whole filesystem the agent sees."
             >
                 <template #control>
                     <ToggleSwitch :model-value="showIgnored" @update:model-value="toggleShowIgnored()" />
@@ -130,7 +130,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 as="label"
                 icon="box"
                 title="Group by module"
-                description="Head each run of changed files with the package it lives in, and let the row be the file — instead of a repo-relative path per row. On by default; a repo with no package manifests keeps its paths. Applies to the workspace Changes panel and an agent's review."
+                description="Head each run of changed files with the package it lives in, and let the row be the file rather than a repo-relative path. Applies to agent reviews too."
             >
                 <template #control><ToggleSwitch v-model="groupByModule" /></template>
             </Row>

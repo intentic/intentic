@@ -353,8 +353,8 @@ const roster = computed(() => {
              elsewhere — which is the entire distance between "1%" here and 98% in a terminal on the same
              account. -->
         <p class="px-4 py-2.5 text-2xs text-subtle">
-            Read from your plan — Claude's when a turn finishes, ChatGPT's, Google's and Kimi's pulled in the background — so a number here can only
-            ever be a floor: usage never falls inside a window, and other clients on the account spend the same pools without telling this sandbox.
+            A floor, not a reading: other clients spend the same pools without telling this sandbox, and Claude's figure is only as fresh as your
+            last turn.
         </p>
     </RowGroup>
 
