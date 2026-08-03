@@ -21,9 +21,7 @@ export const demoWorkflow = (): Workflow => ({
     id: `ship-a-reviewed-change`,
     name: `Ship a reviewed change`,
     description: `Plan it and build it on one branch, then have two reviewers who did none of the work read it independently.`,
-    isolated: true,
     maxParallel: 2,
-    maxSpendUsd: 12,
     steps: [
         {
             id: `plan`,
@@ -41,8 +39,6 @@ export const demoWorkflow = (): Workflow => ({
             },
             checks: [],
             context: `continue`,
-            maxIterations: 4,
-            stallLimit: 2,
         },
         {
             id: `build`,
@@ -54,8 +50,6 @@ export const demoWorkflow = (): Workflow => ({
             output: { kind: `claim` },
             checks: [{ kind: `command`, command: `pnpm test` }],
             context: `continue`,
-            maxIterations: 8,
-            stallLimit: 3,
         },
         {
             id: `review-perf`,
@@ -77,8 +71,6 @@ export const demoWorkflow = (): Workflow => ({
             },
             checks: [],
             context: `fresh`,
-            maxIterations: 6,
-            stallLimit: 2,
         },
         {
             id: `review-security`,
@@ -100,8 +92,6 @@ export const demoWorkflow = (): Workflow => ({
             },
             checks: [],
             context: `fresh`,
-            maxIterations: 6,
-            stallLimit: 2,
         },
     ],
 });

@@ -74,7 +74,7 @@ const appFor = (services: Services, wake: TurnFn): Hono => new Hono().post("/wor
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "gate-"));
 
-const post = (app: Hono, id: string, query = `token=${TOKEN}`, body = ""): Promise<Response> =>
+const post = async (app: Hono, id: string, query = `token=${TOKEN}`, body = ""): Promise<Response> =>
     app.request(`/workflows/${id}/gate?${query}`, { method: "POST", body });
 
 test("a passing judgment ships, and the run is the one the gate started", async () => {

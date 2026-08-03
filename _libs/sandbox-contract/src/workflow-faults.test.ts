@@ -18,8 +18,6 @@ const judge = (over: Partial<WorkflowStep> = {}): WorkflowStep => ({
     output: { kind: "json", fields: [{ name: "release", type: "string", description: "pass | fail", required: true }] },
     checks: [],
     context: "fresh",
-    maxIterations: 3,
-    stallLimit: 5,
     ...over,
 });
 
@@ -27,7 +25,6 @@ const gated = (over: Partial<Workflow> = {}): Workflow => ({
     id: "release-gate",
     name: "release gate",
     steps: [judge()],
-    isolated: true,
     maxParallel: 1,
     gate: { step: "judge", field: "release", pass: ["pass"] },
     ...over,
