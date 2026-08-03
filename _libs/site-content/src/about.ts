@@ -63,33 +63,33 @@ export const creatorLinks: AboutLink[] = [
 export const creatorRole = "Full-stack engineer, DevOps, and 15+ years of shipping production systems.";
 
 export const creatorBio =
-    "I built intentic because I wanted a real workspace for my own agents — not a chat window, and not somebody else's cloud holding my source. It runs on my hardware, and now on yours.";
+    "I built intentic because I wanted a real workspace for my own agents. Not a chat window, and not somebody else's cloud holding my source. It runs on my hardware, and now on yours.";
 
 /* Four cards, and the fourth is the one that makes the other three believable. A trust section with no
  * admission in it reads as marketing; this product is genuinely new, and saying so is the position. */
 export const trustCards: TrustCard[] = [
     {
         title: "Why trust intentic?",
-        body: "Built by a verifiable person, not an anonymous team or a VC-backed startup — and built so that trusting the person is optional. The platform holds your identity and a URL; it has no path to your code, your keys, or your sandbox.",
+        body: "Built by a verifiable person, and built so that trusting the person is optional. The platform holds your identity and a URL, with no path to your code, your keys, or your sandbox.",
         href: productHref("sandbox"),
         linkLabel: "What the platform actually holds",
     },
     {
         title: "Open source first",
-        body: "The sandbox and CLI — the parts that run on your machine and touch your credentials — are MIT on GitLab. No hidden binaries, no telemetry. Read exactly what executes on your hardware before you run it.",
+        body: "The sandbox and CLI, the parts that touch your credentials, are MIT on GitLab. No hidden binaries, no telemetry. Read what executes on your hardware before you run it.",
         href: gitlabUrl,
         linkLabel: "Read the source",
     },
     {
         title: "It builds itself",
-        body: "Agents running in this product wrote most of it, in public, one reviewable commit at a time. The fleet on this page is not a demo of something we hope works — it is what shipped the page.",
+        body: "Agents running in this product wrote most of it, in public, one reviewable commit at a time. The fleet on this page is what shipped the page.",
         stat: "commits",
         href: `${gitlabUrl}/-/commits/main`,
         linkLabel: "Read the commit log",
     },
     {
         title: "Honest about its age",
-        body: "No case studies, no testimonials, no logo wall — the project is young and the free plan is a real, full sandbox rather than a trial. Point it at something you care about only once you have read what it does.",
+        body: "No case studies, no testimonials, no logo wall. The project is young, and the free plan is a real sandbox rather than a trial. Read what it does before pointing it at something you care about.",
     },
 ];
 
@@ -100,24 +100,24 @@ export const background: BackgroundItem[] = [
         body: "the first company to receive an EU e-money licence using its own distributed ledger technology. Later ran a software house of ~15 people for five years.",
     },
     { lead: "CS degree", body: "from the Polish-Japanese Academy of Information Technology (PJATK), Warsaw." },
-    { lead: "CTO and team lead", body: "— shipped the systems, and led the people and habits around them." },
+    { lead: "CTO and team lead", body: "shipped the systems, and led the people and habits around them." },
     { lead: "Specialties", body: "TypeScript, NestJS, P2P protocols, CI/CD, and clean architecture." },
 ];
 
 export const openSource: OpenSourceProject[] = [
     { name: "ts-import", body: "Import TypeScript files into plain Node.js at runtime, with no compile step.", href: "https://github.com/radarsu/ts-import" },
     { name: "rpc-websocket-client", body: "A small, typed JSON-RPC 2.0 client over WebSockets with async/await.", href: "https://github.com/radarsu/rpc-websocket-client" },
-    { name: "validate-polish", body: "Validators for Polish identifiers — PESEL, NIP, REGON — that actually pass the checksum tests.", href: "https://github.com/radarsu/validate-polish" },
+    { name: "validate-polish", body: "Validators for Polish identifiers (PESEL, NIP, REGON) that actually pass the checksum tests.", href: "https://github.com/radarsu/validate-polish" },
     { name: "options-defaults", body: "Deep-merge options objects with their defaults, predictably.", href: "https://github.com/radarsu/options-defaults" },
 ];
 
 export const whyIntentic = [
-    "Agents got good enough to do real work, and the tools around them did not. Everywhere you look, the only layer you are allowed to change is the prompt — the environment the agent works in is somebody else's, and so is the machine.",
+    "Agents got good enough to do real work, and the tools around them did not. The only layer you are allowed to change is the prompt; the environment the agent works in is somebody else's, and so is the machine.",
     "That trade is fine until the agent needs your database password to do the job. Then \"whose computer is this?\" stops being a philosophical question. intentic is the other answer: the workspace is yours, the hardware is yours, and the vendor is architecturally unable to reach either.",
 ];
 
 export const aboutMeta = {
-    title: `About — ${CREATOR_NAME}, the creator of intentic`,
+    title: `About · ${CREATOR_NAME}, the creator of intentic`,
     description:
         "Who builds intentic: Artur Kurowski, a full-stack engineer with 15+ years in production systems. Verifiable background, MIT source on GitLab, and a commit log the agents wrote.",
     datePublished: "2026-08-02",

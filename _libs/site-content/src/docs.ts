@@ -29,9 +29,9 @@ export const docsSections: DocsSection[] = [
                 title: "Overview",
                 blurb: "What intentic is and where to start",
                 meta: {
-                    title: "intentic docs — Overview",
+                    title: "intentic docs · Overview",
                     description:
-                        "How intentic gives each coding agent its own sandbox — a specialized workspace on hardware you own — and where to start in the docs.",
+                        "How intentic gives each coding agent its own sandbox, a specialized workspace on hardware you own, and where to start in the docs.",
                     datePublished: "2026-07-23",
                 },
             },
@@ -40,7 +40,7 @@ export const docsSections: DocsSection[] = [
                 title: "Quickstart",
                 blurb: "Sign in, name a sandbox, paste one command",
                 meta: {
-                    title: "Quickstart — intentic docs",
+                    title: "Quickstart · intentic docs",
                     description:
                         "Sign in, name a sandbox, and paste one curl command to bring a live agent workspace up on your own machine. No inbound ports.",
                     datePublished: "2026-07-23",
@@ -51,7 +51,7 @@ export const docsSections: DocsSection[] = [
                 title: "Docker setup",
                 blurb: "The container, the engine inside it, and updates",
                 meta: {
-                    title: "Docker setup — intentic docs",
+                    title: "Docker setup · intentic docs",
                     description:
                         "What the sandbox container is, how Docker gets installed, the isolated in-sandbox engine, environment overlays, and the update helpers.",
                     datePublished: "2026-07-23",
@@ -67,9 +67,9 @@ export const docsSections: DocsSection[] = [
                 title: "Architecture",
                 blurb: "The thin platform, your sandbox, the tunnel between",
                 meta: {
-                    title: "Architecture — intentic docs",
+                    title: "Architecture · intentic docs",
                     description:
-                        "How intentic fits together — the thin platform, the per-agent sandbox on your hardware, the ownership and trust model, and the tunnel fabric.",
+                        "How intentic fits together: the thin platform, the per-agent sandbox on your hardware, the ownership model, and the tunnel fabric.",
                     datePublished: "2026-07-23",
                 },
             },
@@ -83,7 +83,7 @@ export const docsSections: DocsSection[] = [
                 title: "Extensions",
                 blurb: "A lean core plus a git repo with a manifest",
                 meta: {
-                    title: "Extensions — intentic docs",
+                    title: "Extensions · intentic docs",
                     description:
                         "intentic is a lean core plus an extension system. An extension is a git repo with a manifest, and it extends the agent as well as the UI.",
                     datePublished: "2026-07-31",
@@ -94,7 +94,7 @@ export const docsSections: DocsSection[] = [
                 title: "Build an extension",
                 blurb: "Author one end to end, from manifest to install",
                 meta: {
-                    title: "Build an extension — intentic docs",
+                    title: "Build an extension · intentic docs",
                     description:
                         "Author an intentic extension end to end: the manifest, activate(), a rail view that reads from the daemon, and a sha-pinned install.",
                     datePublished: "2026-07-31",
@@ -105,9 +105,9 @@ export const docsSections: DocsSection[] = [
                 title: "Manifest reference",
                 blurb: "Every field of intentic-extension.json",
                 meta: {
-                    title: "Extension manifest reference — intentic docs",
+                    title: "Extension manifest reference · intentic docs",
                     description:
-                        "Every field of intentic-extension.json — views, commands, settings, connectors, processes, listeners, agent plugins, and the route allowlist.",
+                        "Every field of intentic-extension.json: views, commands, settings, connectors, processes, listeners, agent plugins, and the route allowlist.",
                     datePublished: "2026-07-31",
                 },
             },
@@ -116,7 +116,7 @@ export const docsSections: DocsSection[] = [
                 title: "Publish & marketplace",
                 blurb: "Registries, updates and the trust model",
                 meta: {
-                    title: "Publish an extension & the marketplace — intentic docs",
+                    title: "Publish an extension & the marketplace · intentic docs",
                     description:
                         "Your extension stays in your repo; a registry is a git repo of sha-pinned pointers. How listing, updates, and the trust model work.",
                     datePublished: "2026-07-31",
@@ -132,7 +132,7 @@ export const docsSections: DocsSection[] = [
                 title: "Doorbell",
                 blurb: "Put a chat on your website, answered by your agent",
                 meta: {
-                    title: "Doorbell — put your agent on your website — intentic docs",
+                    title: "Doorbell · put your agent on your website · intentic docs",
                     description:
                         "Embed a chat widget on your site with one script tag. Visitors talk to your sandbox agent; you watch and take over from the fleet board.",
                     datePublished: "2026-08-01",
@@ -143,9 +143,9 @@ export const docsSections: DocsSection[] = [
                 title: "Autonomous employees",
                 blurb: "Specialize a sandbox until it does a job alone",
                 meta: {
-                    title: "Turn sandboxes into autonomous employees — intentic docs",
+                    title: "Turn sandboxes into autonomous employees · intentic docs",
                     description:
-                        "Specialize a sandbox into an agent — its tools, systems, and context — give it work, make it event-driven, then scale to a team of them.",
+                        "Specialize a sandbox into an agent: its tools, systems and context. Give it work, make it event-driven, then scale to a team.",
                     datePublished: "2026-07-23",
                 },
             },
@@ -154,9 +154,9 @@ export const docsSections: DocsSection[] = [
                 title: "Reference architecture",
                 blurb: "A whole company assembled from sandboxes",
                 meta: {
-                    title: "Reference architecture — intentic docs",
+                    title: "Reference architecture · intentic docs",
                     description:
-                        "An entire company assembled from intentic sandboxes — one co-piloted agent per role and team, connected to the services they share.",
+                        "An entire company assembled from intentic sandboxes: one agent per role and team, connected to the services they share.",
                     datePublished: "2026-07-24",
                 },
             },

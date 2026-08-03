@@ -29,13 +29,13 @@ const scannedNote =
     scannedAt === undefined
         ? undefined
         : `Star counts last read ${new Date(scannedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}${
-              stale ? " — from a vendored snapshot, because the registry was unreachable at build time" : ""
+              stale ? ", from a vendored snapshot, because the registry was unreachable at build time" : ""
           }.`;
 ---
 
 <BaseLayout
-    title="Extensions — intentic"
-    description="Every published intentic extension: what it adds, who wrote it, and the exact commit you'd install. A registry of pointers to other people's repositories — intentic hosts none of the code."
+    title="Extensions · intentic"
+    description="Every published intentic extension: what it adds, who wrote it, and the exact commit you'd install. A registry of pointers to other people's repositories; intentic hosts none of the code."
 >
     <Nav />
     <main class="flex-1">
@@ -48,7 +48,7 @@ const scannedNote =
                 </h1>
                 <p class="mt-4 max-w-2xl text-base leading-relaxed text-muted">
                     An extension is a git repo with a manifest. This page is a registry of <strong class="text-content">pointers</strong> to those
-                    repos at a commit — intentic hosts none of the code, builds none of it, and takes no cut. Installing follows the pointer from
+                    repos at a commit. intentic hosts none of the code, builds none of it, and takes no cut. Installing follows the pointer from
                     your own sandbox straight to the author's git host.
                 </p>
                 <div class="mt-7 flex flex-wrap gap-3">
@@ -64,7 +64,7 @@ const scannedNote =
                     <section class="card px-6 py-12 text-center">
                         <h2 class="text-lg font-semibold tracking-tight text-content">Nothing listed yet.</h2>
                         <p class="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted">
-                            The registry is open and empty — which makes this a good moment to be the first. Add the{" "}
+                            The registry is open and empty, which makes this a good moment to be the first. Add the{" "}
                             <code class="text-content">{REGISTRY_TOPIC}</code> topic to your repository and a nightly job opens your pull request
                             for you.
                         </p>
@@ -105,7 +105,7 @@ const scannedNote =
                                         )}
                                     </div>
                                     {/* The sha is the product. It is what you approve, what runs, and what a
-                                        force-push upstream cannot change — so it is on the card rather than a
+                                        force-push upstream cannot change, so it is on the card rather than a
                                         click away, ready to paste into the install form. */}
                                     {entry.install?.ref && (
                                         <code class="overflow-x-auto rounded-md border border-line bg-canvas px-2.5 py-1.5 font-mono text-2xs whitespace-nowrap text-subtle">
@@ -126,7 +126,7 @@ const scannedNote =
                         <h3 class="font-medium text-content">The order is not a ranking of quality</h3>
                         <p class="mt-2">
                             Verified goes first because it is the one thing a person actually asserted. Stars rank within a tier and are shown
-                            because they're useful to weigh — they are also the most purchasable number on GitHub, so they don't get to be the
+                            because they're useful to weigh. They are also the most purchasable number on GitHub, so they don't get to be the
                             whole sort. Ties break on the most recent push.
                         </p>
                     </div>
@@ -143,14 +143,14 @@ const scannedNote =
                         <h3 class="font-medium text-content">Installing</h3>
                         <p class="mt-2">
                             In the app, <strong class="text-content">Capabilities → Add → Extension</strong> browses this registry and fills the
-                            form in a click. Or paste a card's repo URL and commit sha by hand — same thing.
+                            form in a click. Or paste a card's repo URL and commit sha by hand; same thing.
                         </p>
                     </div>
                     <div>
                         <h3 class="font-medium text-content">Publishing, and your own registry</h3>
                         <p class="mt-2">
                             Add the <code class="text-content">{REGISTRY_TOPIC}</code> topic to your repo and a nightly job opens the pull request
-                            for you. Registries are also plural — point a sandbox at an internal repo and you have a private catalogue that never
+                            for you. Registries are also plural: point a sandbox at an internal repo and you have a private catalogue that never
                             touches this one. <a class="text-link hover:underline" href="/docs/extensions/publish/">The publish guide</a> has both.
                         </p>
                     </div>

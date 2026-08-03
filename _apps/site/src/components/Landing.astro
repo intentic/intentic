@@ -25,13 +25,21 @@ const faq = faqGroups.flatMap((group) => group.items).map((item) => ({ question:
 const icon = (paths: string) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">${paths}</svg>`;
 
-// Per-index glyphs; content stays pure copy.
-const factIcons = [
-    icon('<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V21h13V9.5"/>'),
-    icon('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>'),
-    icon('<path d="M12 2.5 20 6v5.5c0 4.8-3.4 8.2-8 9.5-4.6-1.3-8-4.7-8-9.5V6z"/>'),
-];
 const checkIcon = icon('<path d="M20 6 9 17l-5-5"/>');
+// Marks the platform's deliberate absences in the ownership ledger.
+const crossIcon = icon('<path d="M18 6 6 18M6 6l12 12"/>');
+// The FAQ disclosure marker. Both strokes are drawn; CSS rotates the vertical one away when open.
+const plusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="16" height="16" aria-hidden="true"><path d="M5 12h14"/><path class="faq-marker-bar" d="M12 5v14"/></svg>`;
+
+// Per-index glyphs for the extend bento, in tile order; content stays pure copy.
+const extendIcons = [
+    icon('<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/>'),
+    icon('<path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/>'),
+    icon('<path d="M4 10.5 12 4l8 6.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-4h4v4"/>'),
+    icon('<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M2.5 20v-1a5 5 0 0 1 5-5H10"/><path d="M16 8.5a3 3 0 1 1 2 5.3"/><path d="M15 20v-1a4 4 0 0 1 4-4h2.5"/>'),
+    icon('<rect x="3.5" y="4" width="17" height="7" rx="2"/><rect x="3.5" y="13" width="17" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>'),
+    icon('<rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M7.5 8V4.5h9V8"/><path d="M9.5 21v-4h5v4"/>'),
+];
 
 /* The hero is the LCP and it is a CROP: the frame shows 262% of its own width on a phone and 168% from sm up,
  * so what the browser paints is that multiple of the column, not the column. Spelling the three cases out is
@@ -126,7 +134,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                              262% ≈ rail + the Attention lane (phones), 168% ≈ through the Active lane (from sm up).
                              Each aspect ratio is the matching slice of the source, so the image fills the box.
 
-                             The play button over it opens the real app in the overlay below — not in this box,
+                             The play button over it opens the real app in the overlay below, not in this box,
                              which is half a hero column wide: an IDE needs a viewport, and the whole claim of
                              the page is that this is an IDE. The image stays the LCP, undimmed until hover;
                              nothing about the demo loads until it is asked for. -->
@@ -161,10 +169,10 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 2 · The loop — assign several, each isolated, nothing lands unread.
+        <!-- 2 · The loop: assign several, each isolated, nothing lands unread.
              This is the section that earns the headline's second half: the window is the board you watch,
              the agent you answer, and the diff you read. Beat 02 carries the sandbox FIGURE rather than a
-             screenshot because a container is not a surface — there is no honest screen of "its tools are
+             screenshot because a container is not a surface: there is no honest screen of "its tools are
              really installed", and a mockup of one would be the first lie on the page. -->
         <section class="border-t border-line" id="loop">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
@@ -308,51 +316,73 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 3 · Ownership — diagram + definition rows -->
+        <!-- 3 · Ownership: the ledger.
+             What used to be here was a three-box flow with three paragraphs under it, and it asked the
+             reader to assemble the claim themselves: the boxes implied a pipeline the platform is not on,
+             and the prose then explained that it is not on it. The claim is a COMPARISON, so this is one.
+             Two columns, nouns only, and the asymmetry between the lists carries the whole argument: one
+             side holds everything that matters, the other holds an email address and a URL. -->
         <section class="border-t border-line" id="ownership">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.ownership.eyebrow}</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.ownership.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.ownership.sub}</p>
-                <a href="/product/sandbox/" class="mt-4 inline-block text-sm font-medium text-link hover:underline">How ownership works in the product →</a>
 
-                <div class="mt-12 flex flex-col items-stretch gap-4 md:flex-row md:items-center">
-                    <div class="card flex-1 p-5 text-center">
-                        <div class="eyebrow">Your browser</div>
-                        <p class="mt-2 text-sm text-muted">Chat, files, editor, terminal</p>
+                <!-- `items-start`, not stretch: each card ends where its own list ends, and the platform's
+                     card being visibly the shorter of the two is the argument made in silhouette. -->
+                <div class="mt-12 grid items-start gap-5 lg:grid-cols-2">
+                    <!-- The heavy side: solid card, brand-tinted, a filled dot per line. -->
+                    <div class="card border-primary-600/30 bg-primary-600/[0.03] p-6 sm:p-7">
+                        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <h3 class="text-base font-semibold tracking-tight text-content">{content.ownership.ledger.yours.label}</h3>
+                            <span class="text-xs text-subtle">{content.ownership.ledger.yours.note}</span>
+                        </div>
+                        <ul class="mt-5 space-y-3">
+                            {
+                                content.ownership.ledger.yours.items.map((item) => (
+                                    <li class="flex items-start gap-3 text-sm leading-relaxed text-content">
+                                        <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />
+                                        {item}
+                                    </li>
+                                ))
+                            }
+                        </ul>
                     </div>
-                    <div class="text-center text-xs font-medium whitespace-nowrap text-link md:px-2">
-                        private tunnel, direct <span aria-hidden="true">→</span>
-                    </div>
-                    <div class="card flex-1 border-primary-600/30 p-5 text-center">
-                        <div class="eyebrow text-link">Your agents · your machine</div>
-                        <p class="mt-2 text-sm text-muted">Sandboxes, repos, credentials, capabilities</p>
-                    </div>
-                    <div class="flex-1 rounded-2xl border border-dashed border-line p-5 text-center">
-                        <div class="eyebrow">intentic platform</div>
-                        <p class="mt-2 text-sm text-subtle">Identity + sandbox URL only. Off the command path.</p>
+
+                    <!-- The light side: dashed, unfilled, and shorter than its neighbour, so the two read
+                         as different weights before a single word of either is read. -->
+                    <div class="rounded-2xl border border-dashed border-line-strong p-6 sm:p-7">
+                        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <h3 class="text-base font-semibold tracking-tight text-muted">{content.ownership.ledger.platform.label}</h3>
+                            <span class="text-xs text-subtle">{content.ownership.ledger.platform.note}</span>
+                        </div>
+                        <ul class="mt-5 space-y-3">
+                            {
+                                content.ownership.ledger.platform.holds.map((item) => (
+                                    <li class="flex items-start gap-3 text-sm leading-relaxed text-muted">
+                                        <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full border border-line-strong" />
+                                        {item}
+                                    </li>
+                                ))
+                            }
+                        </ul>
+                        <p class="mt-5 flex items-start gap-3 border-t border-line pt-5 text-sm leading-relaxed text-subtle">
+                            <span class="mt-0.5 shrink-0 text-subtle/70">
+                                <Fragment set:html={crossIcon} />
+                            </span>
+                            {content.ownership.ledger.platform.never}
+                        </p>
                     </div>
                 </div>
 
-                <ul class="mt-10 divide-y divide-line border-y border-line">
-                    {
-                        content.ownership.facts.map((fact, i) => (
-                            <li class="flex flex-col gap-2 py-5 sm:flex-row sm:items-baseline sm:gap-8">
-                                <div class="flex items-center gap-3 sm:w-80 sm:shrink-0">
-                                    <span class="text-link">
-                                        <Fragment set:html={factIcons[i] ?? ""} />
-                                    </span>
-                                    <h3 class="text-sm font-medium text-content">{fact.title}</h3>
-                                </div>
-                                <p class="text-sm leading-relaxed text-muted">{fact.body}</p>
-                            </li>
-                        ))
-                    }
-                </ul>
+                <div class="mt-6 flex flex-wrap items-baseline justify-between gap-x-8 gap-y-3">
+                    <p class="max-w-xl text-xs leading-relaxed text-subtle">{content.ownership.ledger.footnote}</p>
+                    <a href="/product/sandbox/" class="text-sm font-medium text-link hover:underline">How ownership works in the product →</a>
+                </div>
             </div>
         </section>
 
-        <!-- 4 · Economics — your subscriptions, your hardware, a flat fee -->
+        <!-- 4 · Economics: your subscriptions, your hardware, a flat fee -->
         <section class="border-t border-line" id="economics">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.economics.eyebrow}</div>
@@ -399,35 +429,65 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 5 · Extend it — the flexibility, stated once instead of demonstrated nine times.
-             This band is deliberately the quietest thing on the page: no screenshots, no figures, no
-             argument. Everything here used to be a section of its own, and together they were what made
-             a visitor lose track of what the product is. Each row is one line and a link to the page
-             that owns it — discoverable, indexable, and not competing with the claim above. -->
+        <!-- 5 · Extend it: a bento of the six superpowers.
+             Everything here used to be a section of its own, and together they were what made a visitor
+             lose track of what the product is. As a bento they read as one shelf of options rather than
+             six more arguments: a glance takes the whole band, and each tile hands the reader to the
+             page that owns it. -->
         <section class="border-t border-line" id="extend">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.extend.eyebrow}</div>
                 <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.extend.heading}</h2>
                 <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.extend.sub}</p>
 
-                <!-- Each row places its three cells explicitly rather than auto-flowing them: name · line · arrow
-                     from sm up, and name · arrow over the line below it on a phone, where a fixed name column left
-                     the sentence 134px — about three words to a line. -->
-                <div class="mt-10 grid border-b border-line md:grid-cols-2 md:gap-x-14">
+                <!-- The bento: tile 0 takes a 2×2 cell, so the auto-flow fills the remaining column with
+                     tiles 1–2 and the bottom row with 3–5: six tiles, nine cells, no holes. On md the
+                     lead tile spans the full width and the last one closes the odd row; below that it is
+                     an ordinary stack, because a bento at 375px is just a column with extra rules. -->
+                <div class="mt-10 grid gap-4 md:grid-cols-2 lg:auto-rows-fr lg:grid-cols-3">
                     {
-                        content.extend.rows.map((row) => (
+                        content.extend.tiles.map((tile, i) => (
                             <a
-                                href={row.href}
-                                class="group grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-line py-4 sm:grid-cols-[10rem_1fr_auto] sm:items-baseline sm:gap-x-4"
+                                href={tile.href}
+                                class:list={[
+                                    "card group flex flex-col p-6 transition-colors hover:border-line-strong hover:bg-overlay/30",
+                                    i === 0 && "md:col-span-2 lg:row-span-2 lg:bg-primary-600/[0.03]",
+                                    i === 5 && "md:col-span-2 lg:col-span-1",
+                                ]}
                             >
-                                <span class="col-start-1 row-start-1 text-sm font-medium text-content group-hover:text-link">{row.name}</span>
-                                <span class="col-start-1 row-start-2 text-sm leading-relaxed text-muted sm:col-start-2 sm:row-start-1">{row.body}</span>
-                                <span
-                                    class="col-start-2 row-start-1 text-subtle transition-colors group-hover:text-link sm:col-start-3"
-                                    aria-hidden="true"
-                                >
-                                    →
+                                <span class:list={["text-subtle transition-colors group-hover:text-link", i === 0 && "text-link"]}>
+                                    <Fragment set:html={extendIcons[i] ?? ""} />
                                 </span>
+                                <h3
+                                    class:list={[
+                                        "mt-4 flex items-center gap-2 font-semibold tracking-tight text-content",
+                                        i === 0 ? "text-lg" : "text-[0.9375rem]",
+                                    ]}
+                                >
+                                    {tile.name}
+                                    <span class="text-subtle opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true">
+                                        →
+                                    </span>
+                                </h3>
+                                <p class="mt-2 text-sm leading-relaxed text-muted">{tile.body}</p>
+                                {/* Only the lead tile carries these: a 2×2 cell has to earn its size with
+                                    something real, and the trigger list is the thing that reads at a glance.
+                                    Two columns of three rather than one wrapped row of chips — the taller
+                                    block is what fills the cell, and it borrows the dotted list from the
+                                    ownership ledger so the page has one way of writing a list of nouns. */}
+                                {tile.triggers && (
+                                    <div class="mt-auto pt-8">
+                                        <div class="eyebrow">{tile.triggers.label}</div>
+                                        <ul class="mt-3 grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
+                                            {tile.triggers.items.map((trigger) => (
+                                                <li class="flex items-center gap-2.5 text-sm text-muted">
+                                                    <span class="h-1 w-1 shrink-0 rounded-full bg-primary-500" />
+                                                    {trigger}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
                             </a>
                         ))
                     }
@@ -440,11 +500,11 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 6 · About the creator — the last objection before the command.
+        <!-- 6 · About the creator: the last objection before the command.
              The page has just asked a visitor to run a container on their own machine and hand it a
              GitHub token and a database password. `#ownership` answers the architectural half of "can I
              trust this"; this answers the human half, which until now existed only in the page's JSON-LD
-             — told to Google and never to the reader.
+             told to Google and never to the reader.
              Verifiability, not popularity: no logos, no testimonials, no counter that could render a
              zero. The name, bio and cards come from about.ts so this band and /about/ cannot drift. -->
         <section class="border-t border-line" id="trust">
@@ -464,7 +524,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 7 · Get connected — ghost-numeral steps, no boxes -->
+        <!-- 7 · Get connected: ghost-numeral steps, no boxes -->
         <section class="border-t border-line" id="connect">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.connect.eyebrow}</div>
@@ -495,56 +555,52 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 8 · FAQ — every answer open, in topic bands with a jump nav.
-             Nothing here is a disclosure widget: thirteen collapsed rows made a visitor click to find out
-             whether the answer was even the one they wanted, and hid the answers from in-page search. The
-             grouping is what keeps a fully open FAQ scannable — bands are short, and the nav jumps to one. -->
+        <!-- 8 · FAQ: collapsed disclosures in topic bands.
+             Open, thirteen answers were the longest thing on the page by a wide margin and a visitor had
+             to scroll past twelve of them to reach their own question. Collapsed, the whole FAQ is a list
+             of headlines you skim in one screen.
+
+             Native <details>, so this costs no JavaScript and keeps keyboard and screen-reader behaviour
+             for free. `name` groups each band into an exclusive accordion: opening one closes its
+             sibling, so the section never grows back into the wall it replaced. The answers are still in
+             the HTML, so the FAQPage schema above and in-page find both still see them. -->
         <section class="border-t border-line" id="faq">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">FAQ</div>
                 <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">Questions, answered plainly.</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">
-                    Including the honest ones — what's free, what's stored where, and what's not ready yet.
-                </p>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">Including the honest ones: what's free, what's stored where, what isn't ready yet.</p>
 
-                <nav class="mt-8 flex flex-wrap gap-2" aria-label="FAQ topics">
-                    {
-                        faqGroups.map((group) => (
-                            <a
-                                href={`#${group.id}`}
-                                class="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3.5 py-1.5 text-xs font-medium text-muted transition-colors hover:border-line-strong hover:text-content"
-                            >
-                                {group.label}
-                                <span class="text-2xs text-subtle">{group.items.length}</span>
-                            </a>
-                        ))
-                    }
-                </nav>
-
-                <div class="mt-12 space-y-12">
+                <div class="mt-10 max-w-3xl space-y-10">
                     {
                         faqGroups.map((group) => (
                             <div id={group.id} class="scroll-mt-24">
                                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                                    <h3 class="text-lg font-semibold tracking-tight text-content">{group.label}</h3>
+                                    <h3 class="text-sm font-semibold tracking-tight text-content">{group.label}</h3>
                                     <p class="text-xs text-subtle">{group.blurb}</p>
                                 </div>
 
-                                {/* Rules ride on the items, not the container: in two columns a row's top borders
-                                    align, and an odd last row leaves the band closed by the wrapper's bottom rule. */}
-                                <div class="mt-5 grid border-b border-line md:grid-cols-2 md:gap-x-14">
+                                <div class="mt-3 border-b border-line">
                                     {group.items.map((item) => (
-                                        <article id={item.id} class="scroll-mt-24 border-t border-line py-6">
-                                            <h4 class="text-[0.9375rem] leading-snug font-semibold text-content">{item.question}</h4>
-                                            {item.answer.map((paragraph) => (
-                                                <p class="mt-2.5 max-w-prose text-sm leading-relaxed text-muted">{paragraph}</p>
-                                            ))}
-                                            {item.more && (
-                                                <a href={item.more.href} class="mt-3 inline-block text-sm font-medium text-link hover:underline">
-                                                    {item.more.label} →
-                                                </a>
-                                            )}
-                                        </article>
+                                        <details id={item.id} name={group.id} class="faq-item scroll-mt-24 border-t border-line">
+                                            <summary class="flex cursor-pointer list-none items-start gap-4 py-4 text-[0.9375rem] leading-snug font-medium text-content transition-colors hover:text-link">
+                                                {item.question}
+                                                {/* Rotates to a minus when open; drawn rather than a marker so it
+                                                    matches the 1.5-stroke motif the rest of the page uses. */}
+                                                <span class="faq-marker mt-0.5 ml-auto shrink-0 text-subtle transition-transform duration-200">
+                                                    <Fragment set:html={plusIcon} />
+                                                </span>
+                                            </summary>
+                                            <div class="pb-5">
+                                                {item.answer.map((paragraph) => (
+                                                    <p class="mt-0 mb-2.5 text-sm leading-relaxed text-muted last:mb-0">{paragraph}</p>
+                                                ))}
+                                                {item.more && (
+                                                    <a href={item.more.href} class="mt-3 inline-block text-sm font-medium text-link hover:underline">
+                                                        {item.more.label} →
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </details>
                                     ))}
                                 </div>
                             </div>
@@ -552,8 +608,8 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                     }
                 </div>
 
-                <div class="mt-12 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-card/40 px-5 py-4">
-                    <p class="text-sm text-muted">Still unanswered? Ask in the open — issues are public and get a real reply.</p>
+                <div class="mt-10 flex max-w-3xl flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-card/40 px-5 py-4">
+                    <p class="text-sm text-muted">Still unanswered? Issues are public and get a real reply.</p>
                     <a href={gitlabIssuesUrl} target="_blank" rel="noopener" class="text-sm font-medium text-link hover:underline">Open an issue →</a>
                 </div>
             </div>
@@ -576,11 +632,11 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
 
     <!-- The demo, given a viewport. Empty until the hero's play button fills it: the iframe's src is set in
          script, so this page loads no part of the app unless a visitor asks for it. `display` is inline rather
-         than a `hidden` class because the container is also a flex centerer — two display utilities on one
+         than a `hidden` class because the container is also a flex centerer, and two display utilities on one
          element decide by stylesheet order, which is not a thing to depend on.
 
          ABOVE THE NAV (z-200 over its z-100), which is what makes this read as a window rather than as another
-         section of the page: the nav is `fixed`, so at z-50 it and its bottom border sat ON TOP of the app — a
+         section of the page: the nav is `fixed`, so at z-50 it and its bottom border sat ON TOP of the app, a
          marketing header stapled over an IDE, with the site's own line cutting across it. -->
     <div
         id="hero-demo-modal"

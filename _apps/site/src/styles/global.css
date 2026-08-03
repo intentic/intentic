@@ -315,6 +315,28 @@
         white-space: nowrap;
     }
 
+    /* ── FAQ disclosure ──────────────────────────────────
+     * The whole widget is native <details>; the only thing CSS adds is the plus/minus. Safari still
+     * paints its own triangle for a summary that is display:flex, so the marker is killed both ways. */
+    .faq-item summary::-webkit-details-marker {
+        display: none;
+    }
+    .faq-item summary::marker {
+        content: "";
+    }
+    /* Collapse the vertical bar into the horizontal one: plus becomes minus, and the whole glyph turns
+     * with it so the change reads as one motion rather than a stroke blinking out. */
+    .faq-item[open] .faq-marker {
+        transform: rotate(180deg);
+    }
+    .faq-marker-bar {
+        transform-origin: center;
+        transition: opacity 0.2s ease;
+    }
+    .faq-item[open] .faq-marker-bar {
+        opacity: 0;
+    }
+
     /* Opt component blocks (cards, diagrams, steppers) out of prose spacing/typography. */
     .docs-embed :is(h1, h2, h3, h4, p, ul, ol, li) {
         margin: 0;

@@ -195,7 +195,7 @@ export function buildSoftwareAppSchema() {
             price: "0",
             priceCurrency: "USD",
             availability: "https://schema.org/InStock",
-            description: "Free plan: one full sandbox — every capability, the agent, and automations included.",
+            description: "Free plan: one full sandbox, with every capability, the agent and automations included.",
         },
         // Ordered the way the landing page argues: run many in parallel, on your hardware, nothing
         // landing unread — then the reasons those agents are any good.
@@ -204,7 +204,7 @@ export function buildSoftwareAppSchema() {
             "One Docker sandbox per agent, on hardware you own",
             "Diff review before anything lands in your working tree",
             "Bring your own agent: Claude Code, Codex, Grok, Kimi Code, or Gemini",
-            "Environment overlays — the job's dev-tools really installed",
+            "Environment overlays: the job's dev-tools really installed",
             "Capabilities: repos, databases, and services wired in as credentials the agent operates",
             "Extensions: automations, Discord and Slack, a website Doorbell, memory, pipelines",
         ],

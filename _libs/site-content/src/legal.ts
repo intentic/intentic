@@ -31,36 +31,36 @@ export const privacyDoc: LegalDoc = {
         },
         {
             heading: "What we collect",
-            paragraphs: ["The platform is deliberately minimal — it stores your identity and where your sandboxes are, nothing more:"],
+            paragraphs: ["The platform is deliberately minimal. It stores your identity and where your sandboxes are, nothing more:"],
             list: [
-                "Account data — your name, email address, and avatar, received from Google when you sign in.",
-                "Session data — a session token plus the IP address and browser user agent of each sign-in, kept for security. Expired sessions are purged automatically.",
-                "Billing data — a Stripe customer is created for your account and subscription status is stored. Card details go directly to Stripe and never touch our servers.",
-                "Sandbox records — sandbox names, their public URLs, and the connection tokens used to reach them.",
-                "Teammate emails — email addresses you enter when sharing a sandbox, stored so the invitee's account can find it. Unaccepted invitations are purged after 90 days.",
+                "Account data: your name, email address, and avatar, received from Google when you sign in.",
+                "Session data: a session token plus the IP address and browser user agent of each sign-in, kept for security. Expired sessions are purged automatically.",
+                "Billing data: a Stripe customer is created for your account and subscription status is stored. Card details go directly to Stripe and never touch our servers.",
+                "Sandbox records: sandbox names, their public URLs, and the connection tokens used to reach them.",
+                "Teammate emails: addresses you enter when sharing a sandbox, stored so the invitee's account can find it. Unaccepted invitations are purged after 90 days.",
             ],
         },
         {
             heading: "What we do not collect",
             paragraphs: [
                 "We run no analytics, no advertising, and no tracking. The only cookie is the strictly necessary session cookie that keeps you signed in.",
-                "Your code, infrastructure, credentials for connected services (Cloudflare, GitHub, Forgejo, Anthropic), and everything your agent produces live in your sandbox on your own infrastructure — the platform never stores or reads them.",
+                "Your code, infrastructure, credentials for connected services (Cloudflare, GitHub, Forgejo, Anthropic), and everything your agent produces live in your sandbox on your own infrastructure. The platform never stores or reads them.",
             ],
         },
         {
             heading: "Your code and AI",
             paragraphs: [
-                "The sandbox runs an AI coding agent powered by Anthropic Claude using your own Anthropic subscription or API key. When you use it, your prompts, workspace files, and command output are sent from your sandbox to Anthropic under your agreement with Anthropic — this traffic does not pass through the platform. Review Anthropic's terms and avoid keeping secrets in the workspace you would not want processed there.",
+                "The sandbox runs an AI coding agent powered by Anthropic Claude using your own Anthropic subscription or API key. When you use it, your prompts, workspace files, and command output are sent from your sandbox to Anthropic under your agreement with Anthropic. This traffic does not pass through the platform. Review Anthropic's terms and avoid keeping secrets in the workspace you would not want processed there.",
             ],
         },
         {
             heading: "Who we share data with",
             paragraphs: ["We share personal data only with the processors needed to run the service:"],
             list: [
-                "Google — sign-in (Google Identity Services); the app also loads Google Fonts, which discloses your IP address to Google.",
-                "Stripe — subscription billing and invoicing.",
-                "Cloudflare — website hosting, DNS, and the tunnels that expose your sandbox.",
-                "Anthropic — only via your own sandbox and credentials, as described above.",
+                "Google: sign-in (Google Identity Services); the app also loads Google Fonts, which discloses your IP address to Google.",
+                "Stripe: subscription billing and invoicing.",
+                "Cloudflare: website hosting, DNS, and the tunnels that expose your sandbox.",
+                "Anthropic: only via your own sandbox and credentials, as described above.",
             ],
         },
         {
@@ -117,13 +117,13 @@ export const termsDoc: LegalDoc = {
         {
             heading: "AI features",
             paragraphs: [
-                "The sandbox agent uses Anthropic Claude under your own Anthropic subscription or API key. AI output can be wrong, insecure, or destructive — review changes before applying them to systems you care about. We are not responsible for the agent's output or for actions you let it take.",
+                "The sandbox agent uses Anthropic Claude under your own Anthropic subscription or API key. AI output can be wrong, insecure, or destructive. Review changes before applying them to systems you care about. We are not responsible for the agent's output or for actions you let it take.",
             ],
         },
         {
             heading: "Plans and billing",
             paragraphs: [
-                "The free plan is limited; the Pro plan is a recurring subscription billed through Stripe at the price shown at checkout. Subscriptions renew automatically until cancelled; cancellation takes effect at the end of the paid period. We may change prices with advance notice — changes apply from your next renewal.",
+                "The free plan is limited; the Pro plan is a recurring subscription billed through Stripe at the price shown at checkout. Subscriptions renew automatically until cancelled; cancellation takes effect at the end of the paid period. We may change prices with advance notice; changes apply from your next renewal.",
             ],
         },
         {
@@ -138,7 +138,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "Disclaimers and liability",
             paragraphs: [
-                'The platform is provided "as is" and "as available", without warranties of any kind, and is under active development — features may change or break. To the maximum extent permitted by law, our total liability is limited to the fees you paid us in the twelve months before the claim, and we are not liable for indirect damages, lost data on your own infrastructure, or costs incurred in your third-party accounts. Nothing in these terms limits liability that cannot be limited by law, including your statutory rights as an EU consumer.',
+                'The platform is provided "as is" and "as available", without warranties of any kind, and is under active development, so features may change or break. To the maximum extent permitted by law, our total liability is limited to the fees you paid us in the twelve months before the claim, and we are not liable for indirect damages, lost data on your own infrastructure, or costs incurred in your third-party accounts. Nothing in these terms limits liability that cannot be limited by law, including your statutory rights as an EU consumer.',
             ],
         },
         {
@@ -150,7 +150,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "Changes and governing law",
             paragraphs: [
-                "We may update these terms; material changes will be announced in the app and apply from the stated effective date — continued use after that date means acceptance. These terms are governed by Polish law. EU consumers may also use the European Commission's online dispute resolution platform (ec.europa.eu/consumers/odr).",
+                "We may update these terms; material changes will be announced in the app and apply from the stated effective date; continued use after that date means acceptance. These terms are governed by Polish law. EU consumers may also use the European Commission's online dispute resolution platform (ec.europa.eu/consumers/odr).",
                 `Contact: ${LEGAL_CONTACT_EMAIL}.`,
             ],
         },

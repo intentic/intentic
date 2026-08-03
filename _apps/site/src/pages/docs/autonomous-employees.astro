@@ -5,7 +5,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 <DocsLayout
     pageId="autonomous-employees"
     heading="Turn sandboxes into autonomous employees"
-    lead="A specialized agent is a purpose-built sandbox. Give one a workspace, tools, system access, and curated context; hand it real work; make it event-driven; then run a team of them — one per role."
+    lead="A specialized agent is a purpose-built sandbox. Give one a workspace, tools, system access, and curated context; hand it real work; make it event-driven; then run a team of them, one per role."
 >
     <h2>The recipe</h2>
     <p>
@@ -13,24 +13,24 @@ import DocsLayout from "../../components/DocsLayout.astro";
         environment, not just a prompt. Building one is five ingredients and two multipliers:
     </p>
     <ul>
-        <li><strong>A workspace</strong> — its own sandbox.</li>
-        <li><strong>Tools</strong> — the libraries and CLIs of its trade, really installed.</li>
-        <li><strong>System access</strong> — the services it operates, wired in as capabilities.</li>
-        <li><strong>Curated context</strong> — the skills, runbooks, and house style of the job.</li>
-        <li><strong>Work + supervision</strong> — real tasks, reviewed as diffs.</li>
+        <li><strong>A workspace</strong>: its own sandbox.</li>
+        <li><strong>Tools</strong>: the libraries and CLIs of its trade, really installed.</li>
+        <li><strong>System access</strong>: the services it operates, wired in as capabilities.</li>
+        <li><strong>Curated context</strong>: the skills, runbooks, and house style of the job.</li>
+        <li><strong>Work + supervision</strong>: real tasks, reviewed as diffs.</li>
         <li><em>then</em> <strong>autonomy</strong> (events wake it) and <strong>scale</strong> (a team of them).</li>
     </ul>
 
     <h2>1 · Give it a workspace</h2>
     <p>
-        Start a sandbox and name it for the role — <code>release-captain</code>, <code>support-triager</code>, <code>migrations</code>. That
+        Start a sandbox and name it for the role: <code>release-captain</code>, <code>support-triager</code>, <code>migrations</code>. That
         dedicated sandbox <em>is</em> the agent: everything you add below scopes to it. The free plan includes one sandbox; Pro runs as many
         as you have roles, so a team never shares an environment. See <a href="/docs/quickstart/">Quickstart</a> to bring one up.
     </p>
 
     <h2>2 · Install its tools</h2>
     <p>
-        Tell the agent what the job runs on and let it propose an environment layer — a database client, a headless browser, a language
+        Tell the agent what the job runs on and let it propose an environment layer: a database client, a headless browser, a language
         toolchain, whatever the work needs. You approve the layer and it's baked into the image and genuinely installed, not described in a
         prompt. The mechanics are in <a href="/docs/docker/">Docker setup</a>; the rule is that an agent can never change its own environment
         without your sign-off.
@@ -38,8 +38,8 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <h2>3 · Connect its systems</h2>
     <p>
-        Add the services the role touches as <strong>capabilities</strong> — GitHub, a database, Sentry, Stripe, an SSH host, an MCP server,
-        or your own internal tools — in a click each. The credential is stored inside the sandbox and never shown back to you or written into
+        Add the services the role touches as <strong>capabilities</strong>: GitHub, a database, Sentry, Stripe, an SSH host, an MCP server,
+        or your own internal tools, in a click each. The credential is stored inside the sandbox and never shown back to you or written into
         the workspace files; the agent operates the service from chat. A capability that ships a skill also teaches the agent how to use it
         the same turn.
     </p>
@@ -47,16 +47,16 @@ import DocsLayout from "../../components/DocsLayout.astro";
     <h2>4 · Curate its context</h2>
     <p>Specialization lives here. Load only what this one job needs, and load it every turn:</p>
     <ul>
-        <li><strong>Skills</strong> — short procedures the agent loads on demand (<code>.claude/skills</code>).</li>
-        <li><strong>House style + project rules</strong> — a <code>CLAUDE.md</code> the agent reads each turn.</li>
-        <li><strong>Repos, docs, and runbooks</strong> — the material the role actually works from, in the workspace.</li>
-        <li><strong>Agent plugins</strong> — a packaged bundle of skills, subagents, and hooks for a whole discipline.</li>
+        <li><strong>Skills</strong>: short procedures the agent loads on demand (<code>.claude/skills</code>).</li>
+        <li><strong>House style + project rules</strong>: a <code>CLAUDE.md</code> the agent reads each turn.</li>
+        <li><strong>Repos, docs, and runbooks</strong>: the material the role actually works from, in the workspace.</li>
+        <li><strong>Agent plugins</strong>: a packaged bundle of skills, subagents, and hooks for a whole discipline.</li>
     </ul>
-    <p>Curated context is what makes the output yours instead of the model's average — the single biggest lever on quality.</p>
+    <p>Curated context is what makes the output yours instead of the model's average, and the single biggest lever on quality.</p>
 
     <h2>5 · Give it work, keep the wheel</h2>
     <p>
-        Hand it a real task. In interactive chat the agent starts in <strong>plan mode</strong> — it proposes, you approve — and every change
+        Hand it a real task. In interactive chat the agent starts in <strong>plan mode</strong>: it proposes, you approve, and every change
         it makes is a diff you commit or discard. Loosen or tighten that per conversation. Environment rebuilds always wait for your explicit
         approval. This is how you trust an agent with real access without losing the ability to say no.
     </p>
@@ -64,9 +64,9 @@ import DocsLayout from "../../components/DocsLayout.astro";
     <h2>6 · Make it autonomous</h2>
     <p>An employee doesn't wait to be told to start. Automations wake the agent on the events that matter:</p>
     <ul>
-        <li><strong>Schedules</strong> — a nightly cleanup, a morning report, a weekly release.</li>
-        <li><strong>Webhooks</strong> — a push, a Sentry alert, a Stripe payment.</li>
-        <li><strong>Listeners</strong> — a new email or a Discord message.</li>
+        <li><strong>Schedules</strong>: a nightly cleanup, a morning report, a weekly release.</li>
+        <li><strong>Webhooks</strong>: a push, a Sentry alert, a Stripe payment.</li>
+        <li><strong>Listeners</strong>: a new email or a Discord message.</li>
     </ul>
     <p>
         Each wake is a fresh, specialized run that leaves a transcript, and you can gate it behind a guard command so it only proceeds when a
@@ -75,16 +75,16 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <h2>7 · Grow a team</h2>
     <p>
-        Once one role is specialized, the next is cheap: give it its own sandbox and repeat. Roles can hand work down the line, too — an
+        Once one role is specialized, the next is cheap: give it its own sandbox and repeat. Roles can hand work down the line, too. An
         agent's run can fire the webhook that wakes another, so triage passes to a fixer and a fixer passes to a reviewer.
     </p>
 
     <aside class="docs-embed my-6 rounded-2xl border border-line bg-card p-5">
         <div class="eyebrow text-link">Honest about the seams</div>
         <ul class="mt-2 space-y-1.5 text-sm leading-relaxed text-muted">
-            <li>A <strong>team</strong> means many sandboxes — that's Pro (free is one sandbox).</li>
+            <li>A <strong>team</strong> means many sandboxes, so that's Pro (free is one sandbox).</li>
             <li>
-                <strong>Chaining</strong> is composition of real primitives — one automation firing another's webhook — not a drag-and-drop
+                <strong>Chaining</strong> is composition of real primitives (one automation firing another's webhook), not a drag-and-drop
                 graph builder. It's powerful and scriptable; it isn't a visual canvas.
             </li>
             <li>Every agent's <strong>credentials stay in its sandbox</strong>. Nothing you connect is relayed through the platform.</li>
@@ -93,6 +93,6 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <p>
         That's the whole arc: a sandbox becomes a specialized agent, a specialized agent becomes an autonomous employee, and a handful of
-        them become a team — all on hardware you own, driven from any browser.
+        them become a team, all on hardware you own, driven from any browser.
     </p>
 </DocsLayout>

@@ -44,11 +44,11 @@ const processes = `"processes": [
             <tr><th>Field</th><th>Required</th><th>Meaning</th></tr>
         </thead>
         <tbody>
-            <tr><td><code>publisher</code></td><td>yes</td><td>Lowercase slug. With <code>name</code> it derives the extension id — <code>acme.incidents</code>.</td></tr>
+            <tr><td><code>publisher</code></td><td>yes</td><td>Lowercase slug. With <code>name</code> it derives the extension id, <code>acme.incidents</code>.</td></tr>
             <tr><td><code>name</code></td><td>yes</td><td>Lowercase slug, unique within the publisher.</td></tr>
             <tr><td><code>version</code></td><td>yes</td><td>Your semver, for display. The <em>code</em> identity is always the installed commit sha.</td></tr>
             <tr><td><code>engines.intentic</code></td><td>yes</td><td>Semver range over the host's extension-API version, checked before activation. Current API: <strong>0.4.0</strong>.</td></tr>
-            <tr><td><code>category</code></td><td>no</td><td>The section your extension sits under in the sandbox's Extensions tab — <code>work</code>, <code>workspace</code>, <code>connections</code>, <code>knowledge</code> or <code>sandbox</code>. Anything else (or nothing) lists it under <em>Other</em>; it installs and runs either way.</td></tr>
+            <tr><td><code>category</code></td><td>no</td><td>The section your extension sits under in the sandbox's Extensions tab: <code>work</code>, <code>workspace</code>, <code>connections</code>, <code>knowledge</code> or <code>sandbox</code>. Anything else (or nothing) lists it under <em>Other</em>; it installs and runs either way.</td></tr>
             <tr><td><code>entry</code></td><td>no</td><td>Repo-relative path to a prebuilt single-file ESM bundle. Omit for an extension with no UI.</td></tr>
             <tr><td><code>permissions.sandbox</code></td><td>no</td><td>The daemon routes you may call. Omit if you call none.</td></tr>
             <tr><td><code>contributes</code></td><td>no</td><td>Everything below.</td></tr>
@@ -58,7 +58,7 @@ const processes = `"processes": [
     <h2>permissions.sandbox</h2>
     <p>
         Each entry is <code>"&lt;METHOD&gt; &lt;path-glob&gt;"</code>, where <code>*</code> matches exactly one path segment. A call through
-        <code>api.sandbox.request</code> or <code>api.sandbox.json</code> to anything not covered throws — an extension has no ambient client
+        <code>api.sandbox.request</code> or <code>api.sandbox.json</code> to anything not covered throws. An extension has no ambient client
         to your daemon.
     </p>
     <DocsCodeBlock code={permissions} lang="json" title="A route allowlist" />
@@ -75,7 +75,7 @@ const processes = `"processes": [
         </tbody>
     </table>
     <p>
-        Pick the surface by what the view is <em>about</em>. The rail is a place people act from and its slots are permanent — earn one.
+        Pick the surface by what the view is <em>about</em>. The rail is a place people act from and its slots are permanent, so earn one.
         A view about the box itself (its logs, its consumption) belongs on the Sandbox hub, where things are inspected occasionally rather
         than worked in.
     </p>
@@ -88,8 +88,8 @@ const processes = `"processes": [
     <table>
         <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
         <tbody>
-            <tr><td><code>path</code></td><td>Workspace-root-relative, forward-slash, matched by <strong>prefix</strong> — not a glob. Keep a trailing slash on directories so <code>.intentic/drafts/</code> can't match a sibling file.</td></tr>
-            <tr><td><code>invalidates</code></td><td>The query keys those contents feed — the first parts of your own <code>api.sandbox.key(...)</code> keys. At least one.</td></tr>
+            <tr><td><code>path</code></td><td>Workspace-root-relative, forward-slash, matched by <strong>prefix</strong>, not a glob. Keep a trailing slash on directories so <code>.intentic/drafts/</code> can't match a sibling file.</td></tr>
+            <tr><td><code>invalidates</code></td><td>The query keys those contents feed: the first parts of your own <code>api.sandbox.key(...)</code> keys. At least one.</td></tr>
         </tbody>
     </table>
     <p>
@@ -103,13 +103,13 @@ const processes = `"processes": [
         <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
         <tbody>
             <tr><td><code>id</code></td><td>Kebab-case slug, matched to your runtime registration.</td></tr>
-            <tr><td><code>extensions</code></td><td>Bare file extensions, no dot — <code>["docx", "xlsx"]</code>.</td></tr>
+            <tr><td><code>extensions</code></td><td>Bare file extensions, no dot: <code>["docx", "xlsx"]</code>.</td></tr>
             <tr>
                 <td><code>fetch</code></td>
                 <td>
-                    How the host hands you the file. <code>"text"</code> — decoded utf8, as a <code>text</code> prop.
-                    <code>"blob"</code> — the whole file's bytes, as <code>blob</code>; for a format that must be parsed end to end.
-                    <code>"url"</code> — a streaming URL to point an element at, as <code>src</code>; for audio and video, which
+                    How the host hands you the file. <code>"text"</code> is decoded utf8, as a <code>text</code> prop.
+                    <code>"blob"</code> is the whole file's bytes, as <code>blob</code>, for a format that must be parsed end to end.
+                    <code>"url"</code> is a streaming URL to point an element at, as <code>src</code>, for audio and video, which
                     range-read gigabytes and should never be held in memory. The host mints the credential on that URL, so your
                     component never sees one.
                 </td>
@@ -121,10 +121,10 @@ const processes = `"processes": [
     <table>
         <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
         <tbody>
-            <tr><td><code>command</code></td><td>Dotted slug with at least two segments — <code>incidents.acknowledge</code>.</td></tr>
+            <tr><td><code>command</code></td><td>Dotted slug with at least two segments, as in <code>incidents.acknowledge</code>.</td></tr>
             <tr><td><code>title</code></td><td>What the command palette shows.</td></tr>
             <tr><td><code>icon</code></td><td>Optional glyph from the host's icon set.</td></tr>
-            <tr><td><code>keybinding</code></td><td>Optional global shortcut in chord notation — <code>"Mod+Shift+K"</code>, where <code>Mod</code> is ⌘ on Apple and Ctrl elsewhere.</td></tr>
+            <tr><td><code>keybinding</code></td><td>Optional global shortcut in chord notation, as in <code>"Mod+Shift+K"</code>, where <code>Mod</code> is ⌘ on Apple and Ctrl elsewhere.</td></tr>
         </tbody>
     </table>
     <p>A global shortcut is consequential, so like the title it's declared here and the host binds only what was approved.</p>
@@ -138,7 +138,7 @@ const processes = `"processes": [
             <tr><td><code>type</code></td><td><code>boolean</code>, <code>string</code>, <code>number</code>, or <code>enum</code>.</td></tr>
             <tr><td><code>title</code>, <code>description</code></td><td>Label and help text.</td></tr>
             <tr><td><code>default</code>, <code>enum</code></td><td>Initial value; the choices, for <code>enum</code>.</td></tr>
-            <tr><td><code>secret</code></td><td>Masks the value and strips it from reads — a set secret round-trips as "still set", never as itself.</td></tr>
+            <tr><td><code>secret</code></td><td>Masks the value and strips it from reads, so a set secret round-trips as "still set", never as itself.</td></tr>
             <tr><td><code>env</code></td><td>Injects the stored value into the <strong>agent's</strong> shell under this name, every turn. How a credential reaches the agent's CLI tools.</td></tr>
         </tbody>
     </table>
@@ -146,7 +146,7 @@ const processes = `"processes": [
 
     <h2>contributes.connectors</h2>
     <p>
-        A whole third-party integration expressed as data — no code. It produces a real capability card in the app: a "+" tile, a config
+        A whole third-party integration expressed as data, with no code. It produces a real capability card in the app: a "+" tile, a config
         form, credentials stored as secrets, environment variables in the agent's shell, and a <code>SKILL.md</code> cheatsheet that teaches
         the agent to use the tool.
     </p>
@@ -155,9 +155,9 @@ const processes = `"processes": [
         <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
         <tbody>
             <tr><td><code>provider</code></td><td>Slug the capability is keyed by.</td></tr>
-            <tr><td><code>kind</code></td><td><code>"cli"</code> — a command-line tool the agent drives.</td></tr>
+            <tr><td><code>kind</code></td><td><code>"cli"</code> is a command-line tool the agent drives.</td></tr>
             <tr><td><code>catalog</code></td><td>The card: <code>name</code>, <code>description</code>, <code>category</code>, an optional brand <code>logo</code> or fallback <code>icon</code>, and a <code>guide</code> walking the user through creating the credential.</td></tr>
-            <tr><td><code>fields</code></td><td>The config form — <code>key</code>, <code>label</code>, and flags for <code>secret</code>, <code>optional</code>, <code>multiline</code>, <code>options</code>, and a <code>when</code> gate.</td></tr>
+            <tr><td><code>fields</code></td><td>The config form: <code>key</code>, <code>label</code>, and flags for <code>secret</code>, <code>optional</code>, <code>multiline</code>, <code>options</code>, and a <code>when</code> gate.</td></tr>
             <tr><td><code>env</code></td><td>Environment variables for the agent, templated over the fields: <code>{"${field}"}</code> substitutes, <code>{"${field:uri}"}</code> percent-encodes.</td></tr>
             <tr><td><code>skill</code></td><td>Path to the <code>SKILL.md</code> that teaches the agent the tool.</td></tr>
             <tr><td><code>fragment</code></td><td>Optional image fragment installing the client binary.</td></tr>
@@ -168,7 +168,7 @@ const processes = `"processes": [
     <h2>contributes.processes and contributes.listener</h2>
     <p>
         A process is a long-lived background program the daemon supervises. Pair it with a listener and you have a realtime event source that
-        can wake the agent — exactly how the Discord and IMAP integrations work.
+        can wake the agent, exactly how the Discord and IMAP integrations work.
     </p>
     <DocsCodeBlock code={processes} lang="json" title="A gateway process with a listener" />
     <table>
@@ -184,7 +184,7 @@ const processes = `"processes": [
         </tbody>
     </table>
     <p>
-        The daemon holds no connection to your provider — your process does. It gets a provider-scoped control surface to reconcile state,
+        The daemon holds no connection to your provider; your process does. It gets a provider-scoped control surface to reconcile state,
         dispatch a wake, and report status or failure.
     </p>
 
@@ -192,18 +192,18 @@ const processes = `"processes": [
     <table>
         <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
         <tbody>
-            <tr><td><code>agent.path</code></td><td>A checkout-relative directory that is a Claude Code plugin — skills, subagents, hooks, commands, <code>.mcp.json</code>. Handed to the agent's plugin loader every turn. Omit <code>path</code> to use the checkout root.</td></tr>
+            <tr><td><code>agent.path</code></td><td>A checkout-relative directory that is a Claude Code plugin: skills, subagents, hooks, commands, <code>.mcp.json</code>. Handed to the agent's plugin loader every turn. Omit <code>path</code> to use the checkout root.</td></tr>
             <tr><td><code>bin</code></td><td>A checkout-relative directory of executables prepended to the <strong>agent's</strong> PATH each turn. How you ship it a command-line tool.</td></tr>
         </tbody>
     </table>
     <p>
         These two are how an extension changes what the agent can <em>do</em> rather than what the owner can see. Both are composed per turn,
-        so they take effect from the next one — no reload.
+        so they take effect from the next one, with no reload.
     </p>
 
     <h2>contributes.environment</h2>
     <p>
-        A Dockerfile fragment baked into the sandbox image overlay, for when your tool has to actually be installed — a database client, a
+        A Dockerfile fragment baked into the sandbox image overlay, for when your tool has to actually be installed: a database client, a
         media encoder, a language runtime.
     </p>
     <table>
@@ -213,7 +213,7 @@ const processes = `"processes": [
         </tbody>
     </table>
     <p>
-        <code>FROM</code> and privileged directives are rejected — an extension can install tools but can't claim container privileges or
+        <code>FROM</code> and privileged directives are rejected. An extension can install tools but can't claim container privileges or
         swap the base image. The owner approves the composed overlay and rebuilds out of band, so this is the one contribution that applies
         on the next image rebuild rather than immediately.
     </p>

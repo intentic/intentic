@@ -17,18 +17,18 @@ const manifest = `{
 // The contribution points, split by which half of the sandbox they extend — the distinction the page is built on.
 const uiPoints = [
     { name: "views", what: "A tile in the left rail, a per-repo panel in the Workspace tree, or a tab on the Sandbox hub." },
-    { name: "viewers", what: "A renderer for a file type — the host fetches the bytes, your component draws them." },
+    { name: "viewers", what: "A renderer for a file type: the host fetches the bytes, your component draws them." },
     { name: "commands", what: "An entry in the command palette, optionally with a global keyboard shortcut." },
-    { name: "settings", what: "Typed settings the host renders and stores for you — including secrets, and env vars for the agent." },
+    { name: "settings", what: "Typed settings the host renders and stores for you, including secrets and env vars for the agent." },
     { name: "files", what: "Which workspace files back your view, so the daemon pushes you a refresh instead of you polling." },
 ];
 
 const agentPoints = [
     { name: "agent", what: "A directory of skills, subagents, hooks and MCP servers, loaded into the agent every turn." },
-    { name: "bin", what: "Executables prepended to the agent's PATH — how you ship it a command-line tool." },
+    { name: "bin", what: "Executables prepended to the agent's PATH, which is how you ship it a command-line tool." },
     { name: "connectors", what: "A whole third-party integration as data: a card, a config form, env vars, and a cheatsheet." },
     { name: "processes", what: "A long-lived background process the daemon supervises, optionally on a tunneled preview URL." },
-    { name: "listener", what: "A realtime event source that can wake the agent — the way Discord and IMAP do." },
+    { name: "listener", what: "A realtime event source that can wake the agent, the way Discord and IMAP do." },
     { name: "environment", what: "Dockerfile layers baked into the sandbox image, so your tools are actually installed." },
 ];
 ---
@@ -36,7 +36,7 @@ const agentPoints = [
 <DocsLayout
     pageId="extensions"
     heading="Extensions"
-    lead="intentic is a lean core plus an extension system. An extension is a git repo with a manifest — and unlike an editor plugin, it can extend the agent as well as the UI."
+    lead="intentic is a lean core plus an extension system. An extension is a git repo with a manifest, and unlike an editor plugin it can extend the agent as well as the UI."
 >
     <h2>What an extension is</h2>
     <p>
@@ -46,7 +46,7 @@ const agentPoints = [
     </p>
     <DocsCodeBlock code={manifest} lang="json" title="intentic-extension.json" />
     <p>
-        Identity is <strong>derived, never declared</strong> — this extension is <code>acme.incidents</code> everywhere in the product,
+        Identity is <strong>derived, never declared</strong>: this extension is <code>acme.incidents</code> everywhere in the product,
         because that's what <code>publisher</code> and <code>name</code> say. There is no id field to contradict the one the install dialog
         showed you.
     </p>
@@ -54,7 +54,7 @@ const agentPoints = [
     <h2>It extends the agent, not just the editor</h2>
     <p>
         This is the part that has no equivalent in a normal editor's plugin model, and it's the reason to build one. A sandbox is a whole
-        machine — an agent, its tools, its credentials, its image. An extension can reach all of it.
+        machine: an agent, its tools, its credentials, its image. An extension can reach all of it.
     </p>
 
     <h3>The UI half</h3>
@@ -89,7 +89,7 @@ const agentPoints = [
     <ul>
         <li>
             <strong>The code is pinned to a commit.</strong> Installing takes a full 40-character commit sha, not a branch. The code you
-            approved is the code that runs, and an update is an explicit, visible act — never something that happens under you.
+            approved is the code that runs, and an update is an explicit, visible act, never something that happens under you.
         </li>
         <li>
             <strong>The manifest is the approval surface.</strong> The install dialog shows exactly the declared contributions. Afterwards
@@ -98,7 +98,7 @@ const agentPoints = [
         </li>
         <li>
             <strong>Backend reach is an allowlist.</strong> An extension has no ambient client to your daemon. It declares the routes it
-            calls as <code>"GET /logs"</code>-style entries and the host refuses everything else — so "what can this thing actually touch"
+            calls as <code>"GET /logs"</code>-style entries and the host refuses everything else, so "what can this thing actually touch"
             is a list you can read in the diff.
         </li>
     </ul>
@@ -109,7 +109,7 @@ const agentPoints = [
 
     <h2>Everything first-party is an extension too</h2>
     <p>
-        Thirteen of the features you already use are extensions — Activity, Automations, Logs, Memory, Pipelines, Preview, Acceptance, the
+        Thirteen of the features you already use are extensions: Activity, Automations, Logs, Memory, Pipelines, Preview, Acceptance, the
         file viewers, the Discord and IMAP gateways, the connector catalog. They ship through the same
         <code>@intentic/extension-api</code> a third-party bundle compiles against, and a lint rule fails the build if one of them reaches
         into app internals instead.
@@ -121,18 +121,18 @@ const agentPoints = [
 
     <h2>How extensions reach a sandbox</h2>
     <ul>
-        <li><strong>Baked into the image</strong> — first-party ones are present in every sandbox and can be switched off, not removed.</li>
-        <li><strong>Git-installed</strong> — everything else: a sha-pinned clone into <code>.intentic/extensions/</code>, added from a repo URL or picked from a registry.</li>
+        <li><strong>Baked into the image</strong>: first-party ones are present in every sandbox and can be switched off, not removed.</li>
+        <li><strong>Git-installed</strong>: everything else, as a sha-pinned clone into <code>.intentic/extensions/</code>, added from a repo URL or picked from a registry.</li>
     </ul>
     <p>
         Both land in one list on <strong>Sandbox → Extensions</strong>, with one on/off switch each. Switching one off unwires it
-        everywhere — no view, no command, no PATH entry, no connector card, no env var, no background process.
+        everywhere: no view, no command, no PATH entry, no connector card, no env var, no background process.
     </p>
 
     <h2>Where to go next</h2>
     <ul>
-        <li><a href="/docs/extensions/build/">Build an extension</a> — a working rail view, from empty directory to installed.</li>
-        <li><a href="/docs/extensions/manifest/">Manifest reference</a> — every contribution point and every field.</li>
-        <li><a href="/docs/extensions/publish/">Publish &amp; the marketplace</a> — get yours listed, and how updates and trust work.</li>
+        <li><a href="/docs/extensions/build/">Build an extension</a>: a working rail view, from empty directory to installed.</li>
+        <li><a href="/docs/extensions/manifest/">Manifest reference</a>: every contribution point and every field.</li>
+        <li><a href="/docs/extensions/publish/">Publish &amp; the marketplace</a>: get yours listed, and how updates and trust work.</li>
     </ul>
 </DocsLayout>

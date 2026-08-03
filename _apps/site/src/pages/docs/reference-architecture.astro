@@ -37,14 +37,14 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
 <DocsLayout
     pageId="reference-architecture"
     heading="Reference architecture: a company on intentic"
-    lead="Zoom out from a single specialized agent and the same shape repeats at every level — a co-piloted sandbox per role and per team, each connecting to a small set of shared services. Every block below maps to a shipping primitive; it's a topology you assemble, not a template you click."
+    lead="Zoom out and the same shape repeats at every level: a co-piloted sandbox per role and per team, each connecting to a small set of shared services. It's a topology you assemble, not a template you click."
 >
     <h2>The pattern</h2>
     <p>
         One specialized agent is a sandbox with tools, system access, and curated context (the
         <a href="/docs/autonomous-employees/">autonomous-employee recipe</a>). A whole company is that recipe applied org-wide: give
         <strong>every role and every team its own co-piloted sandbox</strong>, and connect them all to a <strong>small set of shared
-        services</strong> — code, chat, docs, secrets. Nothing here is a new feature — it's the primitives you already have, wired together.
+        services</strong>: code, chat, docs, secrets. Nothing here is a new feature; it's the primitives you already have, wired together.
     </p>
 
     <figure class="docs-embed my-8 space-y-5 rounded-2xl border border-line bg-canvas/40 p-5 sm:p-7">
@@ -55,13 +55,13 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
             </div>
         </div>
 
-        <div class="eyebrow text-center">Human in the loop — how you supervise the fleet</div>
+        <div class="eyebrow text-center">Human in the loop · how you supervise the fleet</div>
         <div class="grid gap-3" set:html={oversight.map(sandboxCard).join("")}></div>
 
-        <div class="eyebrow text-center">Role sandboxes — one per function</div>
+        <div class="eyebrow text-center">Role sandboxes · one per function</div>
         <div class="grid gap-3 sm:grid-cols-3" set:html={business.map(sandboxCard).join("")}></div>
 
-        <div class="eyebrow text-center">Team sandboxes — one per team, per product, per customer</div>
+        <div class="eyebrow text-center">Team sandboxes · one per team, per product, per customer</div>
         <div class="grid gap-3 sm:grid-cols-3" set:html={delivery.map(sandboxCard).join("")}></div>
 
         <div class="flex items-center justify-center gap-2 text-center text-2xs text-subtle">
@@ -90,7 +90,7 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
     <h2>How it maps to shipping features</h2>
     <ul>
         <li>
-            <strong>Role &amp; team sandboxes.</strong> One sandbox per function or team — Operations, Governance, Customer &amp; Market, each
+            <strong>Role &amp; team sandboxes.</strong> One sandbox per function or team: Operations, Governance, Customer &amp; Market, each
             product team, each customer. Automations (cron, webhooks, listeners) wake them, and one agent's run can fire the webhook that wakes
             the next, so work moves through specialized hands.
         </li>
@@ -100,7 +100,7 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
             who can reach which box. Supervision is a sandbox pointed at the rest, not a privileged control plane.
         </li>
         <li>
-            <strong>Shared services.</strong> A small set of services the whole fleet leans on — GitHub for code, Discord for collaboration,
+            <strong>Shared services.</strong> A small set of services the whole fleet leans on: GitHub for code, Discord for collaboration,
             Outline for docs, Infisical for secrets. They're plain services the agents connect to, not a control plane the fleet provisions.
             Each sandbox reaches them over its <strong>own</strong> Cloudflare tunnel, credentials staying per-box.
         </li>
@@ -113,25 +113,25 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
     <aside class="docs-embed my-6 rounded-2xl border border-line bg-card p-5">
         <div class="eyebrow text-link">Honest about the seams</div>
         <ul class="mt-2 space-y-1.5 text-sm leading-relaxed text-muted">
-            <li>A company-sized fleet means <strong>many sandboxes — that's Pro</strong> (free is one sandbox).</li>
+            <li>A company-sized fleet means <strong>many sandboxes, so that's Pro</strong> (free is one sandbox).</li>
             <li>
                 <strong>No ambient cross-sandbox access.</strong> A sandbox reaches shared services and each other only through capabilities
-                and members — each over its own tunnel, credentials staying per-box. The "shared services" band is a handful of connected
+                and members, each over its own tunnel, credentials staying per-box. The "shared services" band is a handful of connected
                 services, not a shared filesystem or an ambient bus.
             </li>
             <li>
                 <strong>Oversight and governance are patterns you build</strong>, not built-in roles. And an agent "evaluating humans" is
-                framing we deliberately avoid — these sandboxes <em>assist</em> HR, Legal, and Finance; a person stays accountable.
+                framing we deliberately avoid: these sandboxes <em>assist</em> HR, Legal, and Finance; a person stays accountable.
             </li>
             <li>
-                <strong>Chaining</strong> is composition of real primitives — one automation firing another's webhook — not a drag-and-drop
+                <strong>Chaining</strong> is composition of real primitives (one automation firing another's webhook), not a drag-and-drop
                 graph builder.
             </li>
         </ul>
     </aside>
 
     <p>
-        Start with one sandbox and one role. The org chart above isn't a switch you flip — it's what a company looks like once you've
+        Start with one sandbox and one role. The org chart above isn't a switch you flip; it's what a company looks like once you've
         specialized enough agents and connected them to shared services, one primitive at a time. See <a href="/docs/quickstart/">Quickstart</a>
         to bring the first one up.
     </p>

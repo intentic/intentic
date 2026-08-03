@@ -58,11 +58,30 @@ export interface LoopBeat {
     figure?: "sandbox";
 }
 
-/** One row of the extend band: a superpower, one line about it, and the page that owns it. */
-export interface ExtendRow {
+/**
+ * One tile of the extend bento: a superpower, one line about it, and the page that owns it. The first
+ * tile is the grid's big cell and is the only one given `triggers` — that list is what fills a 2×2 cell
+ * honestly, instead of padding the other five out to match it.
+ */
+export interface ExtendTile {
     name: string;
     body: string;
     href: string;
+    triggers?: { label: string; items: string[] };
+}
+
+/**
+ * The ownership ledger: what sits on your hardware, against everything the platform holds. Two columns
+ * of nouns rather than three paragraphs of argument — the claim is a comparison, so the shape that makes
+ * it is a comparison.
+ *
+ * `platform.never` is one sentence rather than a list on purpose. As three more rows it made the
+ * platform's card the taller of the two, which is the exact opposite of the point the band is making.
+ */
+export interface OwnershipLedger {
+    yours: { label: string; note: string; items: string[] };
+    platform: { label: string; note: string; holds: string[]; never: string };
+    footnote: string;
 }
 
 export interface LandingContent {
@@ -82,13 +101,13 @@ export interface LandingContent {
         sandbox: { boundary: string; agent: { name: string; role: string }; layers: AgentSpecRow[] };
         cta: string;
     };
-    ownership: LandingSectionIntro & { facts: LandingFact[] };
+    ownership: LandingSectionIntro & { ledger: OwnershipLedger };
     economics: LandingSectionIntro & { accounts: { name: string; detail: string }[]; points: string[] };
-    /* Everything the product can also be, in one screen of one-liners that link out. It is here so the
+    /* Everything the product can also be, in one screen of tiles that link out. It is here so the
      * flexibility is stated rather than demonstrated: nine sections of "and also" is what made a visitor
      * lose the thread, and the honest framing is the one in _extensions/README.md — a lean core plus
-     * extensions. Nothing in this band argues; each row hands the reader to the page that owns it. */
-    extend: LandingSectionIntro & { rows: ExtendRow[]; note: string; cta: string };
+     * extensions. Nothing in this band argues; each tile hands the reader to the page that owns it. */
+    extend: LandingSectionIntro & { tiles: ExtendTile[]; note: string; cta: string };
     /* Who is behind the promises the page just made. It sits here, last before `#connect`, because the
      * conversion order is claim → proof → objection → action: `#ownership` answers the architectural
      * half of "can I trust this", and the human half is the objection still standing when `#connect`
@@ -110,54 +129,53 @@ export const landingContent: LandingContent = {
     meta: {
         // Under 160 characters: a search result truncates past that, and this one has to survive
         // the cut with the claim and the price still in it.
-        title: "intentic — An IDE for your agents. A window for you.",
+        title: "intentic · An IDE for your agents. A window for you.",
         description:
-            "An IDE for your agents. Each gets its own sandbox and git worktree on hardware you own — run ten in parallel, read every diff before it lands. Free.",
+            "An IDE for your agents. Each gets its own sandbox and git worktree on hardware you own. Run ten in parallel, read every diff before it lands. Free.",
     },
     hero: {
         headlineLines: ["An IDE for your agents.", "A window for you."],
         // Short on purpose: the hero states the claim, and #loop is where each half of it gets proved.
         // "Worktree", not "branch" — a branch is a name, and what keeps ten agents off each other is that
         // each has a checkout of its own (`_apps/sandbox/src/agents/worktrees.ts`).
-        subhead:
-            "Each agent works in its own sandbox and its own git worktree, on hardware you own. Run ten at once; nothing lands in your tree until you have read the diff.",
+        subhead: "Every agent gets its own sandbox and git worktree, on hardware you own. Run ten at once. Nothing lands until you have read the diff.",
         chips: ["Free plan", "Bring your own agent", "Runs on your hardware"],
         shot: {
             name: "fleet-board",
-            alt: "The intentic fleet board: an agent waiting on approval for a Stripe billing change and another with a question for you, beside three agents actively drafting a changelog and migrating queries — each card showing its model, branch, cost and diff stats.",
+            alt: "The intentic fleet board: an agent waiting on approval for a Stripe billing change and another with a question for you, beside three agents actively drafting a changelog and migrating queries. Each card shows its model, branch, cost and diff stats.",
             frameLabel: "acme-shop · /agents",
         },
         demo: {
             playLabel: "Try the live workspace",
-            note: "The real app, on a recorded workspace. Approve a plan, answer an agent, read a diff — nothing to install.",
+            note: "The real app on a recorded workspace. Approve a plan, answer an agent, read a diff. Nothing to install.",
             newTabLabel: "Open the live workspace",
         },
     },
     loop: {
         eyebrow: "The loop",
         heading: "Run several at once. Land them one at a time.",
-        sub: "Autonomy still needs a human in it. So the parallel half is safe by construction — one sandbox and one git worktree each — and the deciding half stays yours. Works with Claude Code, Codex, Grok, Kimi Code and Gemini.",
+        sub: "The parallel half is safe by construction: one sandbox and one worktree each. The deciding half stays yours. Works with Claude Code, Codex, Grok, Kimi Code and Gemini.",
         beats: [
             {
                 step: "01",
                 title: "Give the work to as many agents as it needs",
-                body: "Each starts in plan mode on its own git worktree, cut from your base commit. The board sorts them by what needs you — a question, a plan waiting for approval, a land conflict — and everything else keeps running while you answer.",
+                body: "Each starts in plan mode on a git worktree cut from your base commit. The board sorts them by who needs you; the rest keep running while you answer.",
                 shot: {
                     name: "fleet-board",
-                    alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane offering Land now — every card showing model, branch, tokens, cost and diff stats.",
+                    alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane offering Land now. Every card shows model, branch, tokens, cost and diff stats.",
                     frameLabel: "acme-shop · /agents",
                 },
             },
             {
                 step: "02",
                 title: "Each works in a sandbox of its own",
-                body: "Not a chat window — a container on your machine with the job's toolchain genuinely installed and its context loaded on every single turn. They never step on each other's files, and none of them touch your working tree.",
+                body: "Not a chat window: a container on your machine, with the job's toolchain really installed and its context loaded every turn. It never touches your working tree.",
                 figure: "sandbox",
             },
             {
                 step: "03",
                 title: "Nothing lands until you have read the diff",
-                body: "Finished work arrives as a branch: every changed file, every hunk, the tests it ran. Land it into your tree as ordinary git changes you can still amend or revert — or discard it, and the worktree goes with it.",
+                body: "Finished work arrives as a branch: every changed file, every hunk, the tests it ran. Land it as ordinary git changes, or discard it and the worktree goes too.",
                 shot: {
                     name: "agent-review",
                     alt: "The isolated review panel: four changed files with per-file line counts, a split diff of a database schema adding a deletedAt column, and a Land now button beside the agent's branch name.",
@@ -175,79 +193,87 @@ export const landingContent: LandingContent = {
         },
         cta: "Every surface, with the screenshots",
     },
+    // The old version of this band argued the point in three paragraphs standing under a three-box
+    // diagram, and a reader had to assemble the claim themselves. The claim is a COMPARISON — your
+    // hardware holds everything, the platform holds two fields — so it is made as one: two columns of
+    // nouns, side by side, where the asymmetry is the argument and needs no prose to carry it.
     ownership: {
         eyebrow: "Ownership",
-        heading: "Real access is only safe if you own where it runs.",
-        sub: "An agent holding your keys and working your repos is worth having only if it runs somewhere you control. Each sandbox is a container on your own hardware, reached by your browser over a private tunnel. The platform stores your identity and a URL, and can't reach in.",
-        facts: [
-            {
-                title: "The workspace never leaves your machine",
-                body: "Repos, credentials, and history live where the sandbox runs — a laptop, a workstation, a server. The platform never relays or stores your code.",
+        heading: "Your code never leaves your machine.",
+        sub: "An agent with your keys is only safe if you own where it runs. Here is exactly what sits on each side.",
+        ledger: {
+            yours: {
+                label: "Your machine",
+                note: "Where the sandbox runs.",
+                items: [
+                    "Your repositories and working tree",
+                    "API keys, .env files, database passwords",
+                    "The agents, their sandboxes, their history",
+                    "Every file an agent reads or writes",
+                ],
             },
-            {
-                title: "Keys stay in the sandbox",
-                body: "Every capability's tokens are stored sandbox-side and denylisted from the file relay, so the agent uses them without them ever being shown or shipped out.",
+            platform: {
+                label: "The intentic platform",
+                note: "Everything it stores, in full.",
+                holds: ["Your email address", "Your sandbox's URL"],
+                never: "No code, no keys, and no way to command your agents.",
             },
-            {
-                title: "The platform can't drive your agents",
-                body: "Your browser holds the token that commands the sandbox — the platform never does. A breach reads a URL and reaches nothing. The sandbox is MIT on GitLab; verify it.",
-            },
-        ],
+            footnote: "Your browser holds the token that drives the sandbox; the platform never does. The sandbox is MIT on GitLab, so you can check.",
+        },
     },
     economics: {
         eyebrow: "Economics",
         heading: "A whole fleet, on the subscriptions you already pay for.",
-        sub: "Ten agents sounds expensive. It isn't. Each one runs on your own Claude, ChatGPT, SuperGrok, Kimi or Google account — connected once with a sign-in code — on hardware you already own. intentic is a flat subscription, never a meter on your model usage.",
+        sub: "Ten agents sounds expensive. It isn't. Each runs on a subscription you already pay for, on hardware you already own.",
         accounts: [
-            { name: "Claude", detail: "Opus, Sonnet, Haiku — on your Claude plan" },
+            { name: "Claude", detail: "Opus, Sonnet and Haiku, on your Claude plan" },
             { name: "Codex", detail: "on your ChatGPT plan" },
             { name: "Grok", detail: "on your SuperGrok plan" },
             { name: "Kimi Code", detail: "on your Kimi Membership" },
             { name: "Gemini", detail: "on your Google account" },
         ],
-        points: [
-            "No per-token metering, and no markup on your model usage.",
-            "No rented cloud compute — agents run where you run them.",
-            "Free for one sandbox; Pro unlocks the fleet and sharing.",
-        ],
+        points: ["No per-token metering. No markup on your model usage.", "No rented cloud compute. Agents run where you run them.", "Free for one sandbox; Pro unlocks the fleet and sharing."],
     },
     extend: {
         eyebrow: "Extend it",
         heading: "A small core. Everything else is an extension.",
-        sub: "The workspace ships lean on purpose — the fleet, the sandbox, the editor, the review. Everything past that is an extension: a git repo with a manifest, allowed to do only what it declares. A few of the first-party ones, and where each is written up.",
-        rows: [
+        sub: "The workspace ships lean: the fleet, the sandbox, the editor, the review. Everything past that is an extension, allowed to do only what its manifest declares.",
+        // Order is the grid's, not a ranking: the first tile is the big cell, so it goes to the one with
+        // a list worth showing. The rest are equal-weight and read left to right.
+        tiles: [
             {
                 name: "Automations",
-                body: "Wake an agent on a push, an alert, a payment, an inbound email, a chat message, or plain cron.",
+                body: "Agents that start themselves, so nobody has to be at a keyboard. Each run is a fresh session with its own transcript, gated by a guard command you write, and one agent's run can wake the next.",
+                triggers: { label: "Wakes on", items: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "plain cron"] },
                 href: docsHref("autonomous-employees"),
             },
             {
                 name: "Discord & Slack",
-                body: "Assign work with an @mention; it replies in the thread like a colleague, with the receipts.",
+                body: "Assign work with an @mention. It replies in the thread, with receipts.",
                 href: productHref("capabilities"),
             },
             {
                 name: "Doorbell",
-                body: "Put the agent on your own website behind one script tag, with a read-only toolbox.",
+                body: "Put an agent on your own website behind one script tag.",
                 href: productHref("doorbell"),
             },
             {
                 name: "Team sharing",
-                body: "Invite teammates into the same sandbox, each reaching it over their own private tunnel.",
+                body: "Invite teammates into one sandbox, each over their own tunnel.",
                 href: productHref("sandbox"),
             },
             {
-                name: "Memory, pipelines, previews",
-                body: "Notes that persist between runs, CI runs it can fix, a dev-server panel per repo.",
+                name: "Memory & pipelines",
+                body: "Notes that outlive a run, CI it can fix, a preview per repo.",
                 href: "/extensions/",
             },
             {
                 name: "A whole company",
-                body: "One co-piloted agent per role and per team, sharing the handful of services they all use.",
+                body: "One agent per role and per team, sharing the services they all use.",
                 href: docsHref("reference-architecture"),
             },
         ],
-        note: "An extension extends the agent as well as the UI — new tools, new skills, new layers in the image. Yours stays in your repo; a registry is just a list of sha-pinned pointers.",
+        note: "An extension adds tools, skills and image layers, not just UI. Yours stays in your own repo.",
         cta: "Browse every extension",
     },
     // The name, bio, links and cards all live in about.ts — shared with /about/, so the two surfaces
@@ -259,22 +285,22 @@ export const landingContent: LandingContent = {
     connect: {
         eyebrow: "Get connected",
         heading: "One command, and an agent has a home.",
-        sub: "Sign in, name the sandbox, paste one command on the machine that should host it. The workspace opens the moment the sandbox reports in — then you put your agents to work.",
+        sub: "Sign in, name the sandbox, paste one command on the machine that should host it. The workspace opens the moment it reports in.",
         steps: [
             {
                 title: "Sign in with Google",
-                body: "No forms, no card. The platform stores your identity and the sandbox's URL — nothing else.",
+                body: "No forms, no card. It stores your identity and the sandbox's URL, nothing else.",
             },
             {
                 title: "Name the sandbox",
-                body: "intentic prepares a private tunnel under its own domain — no Cloudflare account required. Bring your own zone if you'd rather.",
+                body: "You get a private tunnel under intentic's own domain. No Cloudflare account needed.",
             },
             {
                 title: "Paste one command",
-                body: "A personalized one-liner starts the sandbox on your machine. Docker is installed if missing — you're asked first.",
+                body: "A one-liner starts the sandbox on your machine. Docker installs if missing, with your say-so.",
             },
         ],
-        commandNote: "Nothing deployed, nothing exposed — just a workspace your agents can call home.",
+        commandNote: "Nothing deployed, nothing exposed. Just a workspace your agents can call home.",
     },
     finalCta: {
         heading: "Put ten agents to work. Read every diff.",

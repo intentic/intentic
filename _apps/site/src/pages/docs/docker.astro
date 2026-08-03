@@ -2,11 +2,11 @@
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 
-const helpers = `# Remove a sandbox — lists yours, asks before deleting its /work + /history
+const helpers = `# Remove a sandbox. Lists yours, asks before deleting its /work + /history
 curl -fsSL https://intentic.dev/cleanup | sh
 
 # Update (pull latest :stable, recreate in place) and rebuild (apply an approved
-# overlay) take your sandbox's slug — the platform hands you the exact command:
+# overlay) take your sandbox's slug. The platform hands you the exact command:
 curl -fsSL https://intentic.dev/update  | sh -s -- <SLUG>
 curl -fsSL https://intentic.dev/rebuild | sh -s -- <SLUG> <SHA256>`;
 ---
@@ -19,12 +19,12 @@ curl -fsSL https://intentic.dev/rebuild | sh -s -- <SLUG> <SHA256>`;
     <h2>Requirements</h2>
     <ul>
         <li><strong>Docker Engine</strong> on Linux, WSL2, or macOS. That's the only dependency.</li>
-        <li>Enough headroom for your workload — agent turns, dev servers, and builds run on your hardware, so a sandbox uses what your work uses. There are no imposed CPU or memory caps.</li>
+        <li>Enough headroom for your workload: agent turns, dev servers, and builds run on your hardware, so a sandbox uses what your work uses. There are no imposed CPU or memory caps.</li>
     </ul>
 
     <h2>Installing Docker</h2>
     <p>
-        The connect one-liner installs Docker for you if it's missing — but it asks first. In an unattended setup, set
+        The connect one-liner installs Docker for you if it's missing, but it asks first. In an unattended setup, set
         <code>INSTALL_DOCKER=1</code> to skip the prompt, or install Docker yourself beforehand and the script will just use it.
     </p>
 
@@ -32,24 +32,24 @@ curl -fsSL https://intentic.dev/rebuild | sh -s -- <SLUG> <SHA256>`;
     <p>Connecting starts two containers and opens no inbound ports:</p>
     <ul>
         <li>
-            <strong>The sandbox</strong> — the published image (<code>registry.gitlab.com/radarsu/intentic/sandbox</code>), running
+            <strong>The sandbox</strong>: the published image (<code>registry.gitlab.com/radarsu/intentic/sandbox</code>), running
             <strong>unprivileged by default</strong>. Your workspace lives at <code>/work</code>; snapshots live on a separate
             <code>/history</code> volume mounted outside <code>/work</code>, so an agent <code>rm -rf</code> can't reach your history.
         </li>
-        <li><strong>cloudflared</strong> — a sidecar that dials out to serve the sandbox over its private tunnel.</li>
+        <li><strong>cloudflared</strong>: a sidecar that dials out to serve the sandbox over its private tunnel.</li>
     </ul>
 
     <h2>The isolated Docker engine</h2>
     <p>
-        Some work needs Docker <em>inside</em> the sandbox — <code>pnpm db:up</code>, <code>docker compose</code>, a local database. The
+        Some work needs Docker <em>inside</em> the sandbox: <code>pnpm db:up</code>, <code>docker compose</code>, a local database. The
         image bakes its own Docker Engine, dormant until you add the <strong>docker capability</strong>, which flips a single privileged
-        directive and wakes it. The agent's containers then live entirely inside the sandbox's own engine — the <strong>host's Docker
+        directive and wakes it. The agent's containers then live entirely inside the sandbox's own engine, and the <strong>host's Docker
         socket is never mounted</strong>, so nothing the agent runs can touch the machine outside the sandbox.
     </p>
 
     <h2>Environment overlays</h2>
     <p>
-        A sandbox's tools aren't described in a prompt — they're installed in the image. When a job needs a library or CLI, the agent
+        A sandbox's tools aren't described in a prompt; they're installed in the image. When a job needs a library or CLI, the agent
         <strong>proposes</strong> a Dockerfile layer (RUN/ENV only, on a pinned base); nothing changes until <strong>you approve it</strong>,
         and the rebuild runs <em>outside</em> the container against the approved hash. So an agent can never rebuild its own environment
         without your sign-off. Typical additions: a database client like <code>psql</code>, a headless browser, or your language toolchain.

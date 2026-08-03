@@ -18,12 +18,12 @@ export interface PageMeta {
 export const pageMeta: Record<string, PageMeta> = {
     "/": { ...landingContent.meta, datePublished: "2026-07-06" },
     "/privacy/": {
-        title: "Privacy Policy — intentic",
+        title: "Privacy Policy · intentic",
         description: "What personal data the intentic platform processes, why, who it is shared with, and your rights under the GDPR.",
         datePublished: "2026-07-03",
     },
     "/terms/": {
-        title: "Terms of Service — intentic",
+        title: "Terms of Service · intentic",
         description: "The terms governing use of the intentic platform: accounts, billing, acceptable use, and liability.",
         datePublished: "2026-07-03",
     },
@@ -33,14 +33,14 @@ export const pageMeta: Record<string, PageMeta> = {
     "/download/": {
         title: "Download Intentic for Windows and Linux",
         description:
-            "The Intentic desktop app runs your agent sandbox on your own computer without a terminal — it installs Docker if you need it, starts the sandbox, keeps it updated, and opens your workspace.",
+            "The Intentic desktop app runs your agent sandbox on your own computer without a terminal. It installs Docker if you need it, starts the sandbox, keeps it updated, and opens your workspace.",
         datePublished: "2026-08-02",
     },
     // The gallery's ROWS come from the registry repo at build time; only its framing is authored here.
     "/extensions/": {
-        title: "Extensions — intentic",
+        title: "Extensions · intentic",
         description:
-            "Every published intentic extension: what it adds, who wrote it, and the exact commit you'd install. A registry of pointers to other people's repositories — intentic hosts none of the code.",
+            "Every published intentic extension: what it adds, who wrote it, and the exact commit you'd install. A registry of pointers to other people's repositories; intentic hosts none of the code.",
         datePublished: "2026-08-01",
     },
     [compareHref("")]: compareIndex.meta,

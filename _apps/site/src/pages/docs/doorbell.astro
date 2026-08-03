@@ -4,14 +4,14 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
 <DocsLayout
     pageId="doorbell"
-    heading="Doorbell — put your agent on your website"
+    heading="Doorbell · put your agent on your website"
     lead="One script tag on your site gives visitors a chat bubble. Each conversation opens on your fleet board, where you can watch it live and take over mid-sentence."
 >
     <h2>What it is</h2>
     <p>
         A <strong>Doorbell</strong> is an automation with a chat widget in front of it. A visitor to your site types a question; your sandbox
         agent answers, streaming as it writes. Unlike a support bot bolted onto a help centre, the thing answering is the same agent that has
-        your repository, your docs and your connected tools — so it can answer from what is actually true today.
+        your repository, your docs and your connected tools, so it can answer from what is actually true today.
     </p>
     <p>
         Every visitor's thread becomes <strong>one conversation on your fleet board</strong>: a card you can open, read, and type into. If a
@@ -20,7 +20,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <h2>1 · Create it</h2>
     <p>
-        Open <strong>Automations</strong> and pick <strong>Website concierge</strong> under "Reach this agent from elsewhere" — or press
+        Open <strong>Automations</strong> and pick <strong>Website concierge</strong> under "Reach this agent from elsewhere", or press
         <strong>New automation</strong>, choose <strong>Listen (live)</strong>, then <strong>Doorbell</strong>. The prompt comes prefilled
         with instructions that tell the agent to answer visitors' questions and refuse anything that asks it to change files or run commands.
         Edit it to say what your site is about.
@@ -28,7 +28,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <h2>2 · List the sites that may use it</h2>
     <p>
-        Under <strong>Allowed sites</strong>, one origin per line. An origin is scheme and host only — no path, no trailing slash:
+        Under <strong>Allowed sites</strong>, one origin per line. An origin is scheme and host only: no path, no trailing slash:
     </p>
     <pre><code>https://example.com
 https://www.example.com</code></pre>
@@ -42,7 +42,7 @@ https://www.example.com</code></pre>
     <p>Press <strong>Install</strong> on the row and copy the line it gives you. It goes on any page you listed, just before <code>&lt;/body&gt;</code>:</p>
     <pre><code>&lt;script src="https://sandbox-&lt;id&gt;.&lt;zone&gt;/webchat/widget.js" data-automation="website-concierge" defer&gt;&lt;/script&gt;</code></pre>
     <p>
-        The script carries one piece of information — which automation to talk to. The sandbox it calls is the origin the script itself came
+        The script carries one piece of information: which automation to talk to. The sandbox it calls is the origin the script itself came
         from, so there is no second address to keep in sync and no key to leak. The widget is about 6 kB gzipped, renders in a shadow root so
         your site's CSS cannot reshape it and its CSS cannot leak into your page, and it loads no framework.
     </p>
@@ -50,37 +50,37 @@ https://www.example.com</code></pre>
     <h2>4 · Check that it landed</h2>
     <p>
         Reload your site, then look at the <strong>Install</strong> panel again. It lists every origin that has asked for this Doorbell and
-        whether it was let in — so "installed, nobody has written yet" is visibly different from "the snippet never ran". A refused origin
+        whether it was let in, so "installed, nobody has written yet" is visibly different from "the snippet never ran". A refused origin
         appears with an <strong>Allow</strong> button beside it.
     </p>
 
     <h2>Who can chat</h2>
     <ul>
         <li>
-            <strong>Anyone</strong> — the default. Visitors are anonymous; the widget keeps a thread id in their browser so a follow-up
+            <strong>Anyone</strong>: the default. Visitors are anonymous; the widget keeps a thread id in their browser so a follow-up
             continues the same conversation.
         </li>
         <li>
-            <strong>Google sign-in</strong> — a visitor must sign in before they can write. This uses <em>your own</em> Google OAuth client,
+            <strong>Google sign-in</strong>: a visitor must sign in before they can write. This uses <em>your own</em> Google OAuth client,
             not ours: Google only issues a token to an origin authorized on the client, and ours cannot list every customer's domain. Create
             a web client, add each allowed site as an authorized JavaScript origin, and paste the client id.
         </li>
     </ul>
     <p>
         Either way, <strong>the visitor never holds a credential for your sandbox.</strong> The only routes they can reach are the widget's
-        own. A signed-in visitor's verified email travels to the agent as a fact about who is asking — never as permission to do more.
+        own. A signed-in visitor's verified email travels to the agent as a fact about who is asking, never as permission to do more.
     </p>
 
     <h2>Keeping bots out</h2>
     <ul>
-        <li><strong>Built-in check</strong> — the visitor's browser solves a small puzzle once per conversation. Costs them about a second, costs a bot the same for every conversation it wants. No accounts, no keys.</li>
-        <li><strong>Cloudflare Turnstile</strong> — invisible for most visitors. Needs a Turnstile widget on your Cloudflare account; the secret key stays in your sandbox and only the site key is ever sent to a browser.</li>
-        <li><strong>Off</strong> — the allowed-sites list and the rate limit are then the whole boundary. Reasonable for an internal or unlisted page.</li>
+        <li><strong>Built-in check</strong>: the visitor's browser solves a small puzzle once per conversation. Costs them about a second, costs a bot the same for every conversation it wants. No accounts, no keys.</li>
+        <li><strong>Cloudflare Turnstile</strong>: invisible for most visitors. Needs a Turnstile widget on your Cloudflare account; the secret key stays in your sandbox and only the site key is ever sent to a browser.</li>
+        <li><strong>Off</strong>: the allowed-sites list and the rate limit are then the whole boundary. Reasonable for an internal or unlisted page.</li>
     </ul>
 
     <h2>What the agent may do behind it</h2>
     <p>
-        A Doorbell is driven by strangers, so it runs with a <strong>read-only toolbox</strong> by default — it can read files, search the
+        A Doorbell is driven by strangers, so it runs with a <strong>read-only toolbox</strong> by default: it can read files, search the
         workspace and fetch a page, and it cannot run commands or write anything. This is enforced as a list of allowed tools on the
         automation, not as a request in the prompt: an instruction smuggled into a support question has nothing to reach.
     </p>

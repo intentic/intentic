@@ -9,7 +9,7 @@ const registry = `{
             "name": "acme.incidents",
             "kind": "extension",
             "trust": "listed",
-            "description": "Incident triage in the rail — open alerts, acknowledge, jump to the failing run.",
+            "description": "Incident triage in the rail: open alerts, acknowledge, jump to the failing run.",
             "version": "1.0.0",
             "source": { "source": "github", "repo": "acme/incidents", "sha": "9f2c1ab…" }
         },
@@ -17,7 +17,7 @@ const registry = `{
             "name": "acme.linear",
             "kind": "extension",
             "trust": "listed",
-            "description": "Linear connector — the agent reads and files issues from its shell.",
+            "description": "Linear connector: the agent reads and files issues from its shell.",
             "version": "0.3.0",
             "source": { "source": "github", "repo": "acme/linear-connector", "sha": "4d81e07…" }
         }
@@ -30,14 +30,14 @@ const sources = `// A repo of its own
 // Any git host
 { "source": "url", "url": "https://gitlab.com/acme/incidents.git", "sha": "9f2c1ab…" }
 
-// A subdirectory — one repo, several extensions
+// A subdirectory: one repo, several extensions
 { "source": "git-subdir", "url": "https://github.com/acme/tools.git", "path": "ext/incidents", "sha": "9f2c1ab…" }`;
 ---
 
 <DocsLayout
     pageId="extensions/publish"
     heading="Publish & the marketplace"
-    lead="Your extension stays in your repo. A registry is a git repo of pointers to other repos — so listing costs a pull request, and nobody has to trust a build service."
+    lead="Your extension stays in your repo. A registry is a git repo of pointers to other repos, so listing costs a pull request and nobody has to trust a build service."
 >
     <h2>The shape of it</h2>
     <p>
@@ -67,7 +67,7 @@ const sources = `// A repo of its own
     <DocsCodeBlock code={registry} lang="json" title=".claude-plugin/marketplace.json" />
     <p>
         The file format is Claude Code's plugin-marketplace format, deliberately. <code>kind</code> and <code>trust</code> are intentic's own
-        markers and Claude Code ignores fields it doesn't know — so <strong>one registry repo can serve both</strong>, and a team that already
+        markers and Claude Code ignores fields it doesn't know, so <strong>one registry repo can serve both</strong>, and a team that already
         publishes agent plugins lists its intentic extensions in the same file rather than standing up a second thing.
     </p>
     <p>
@@ -77,7 +77,7 @@ const sources = `// A repo of its own
     </p>
     <p>
         A second file sits beside it. <code>registry.generated.json</code> is written by the registry's nightly job and holds only facts read
-        back off the source host — stars, and the last push date. It is separate so a nightly refresh never conflicts with an open pull
+        back off the source host: stars, and the last push date. It is separate so a nightly refresh never conflicts with an open pull
         request, and so a review diff shows the decision being made rather than a churn of star counts. It deliberately carries no "latest
         upstream commit": the approved sha is the one that runs, and advertising a newer one would invite a click that skips the review.
     </p>
@@ -87,12 +87,12 @@ const sources = `// A repo of its own
     <DocsCodeBlock code={sources} lang="typescript" title="What source can be" />
     <p>
         Give a <code>sha</code>. A branch name is accepted for plugins, but an extension install requires a full 40-character commit sha, so a
-        registry entry without one can't be installed in a click — it makes the user go and find the sha themselves.
+        registry entry without one can't be installed in a click; it makes the user go and find the sha themselves.
     </p>
 
     <h2>Getting listed</h2>
     <p>
-        Two ways in, and they end at the same place — a pull request against the
+        Two ways in, and they end at the same place: a pull request against the
         <a href="/extensions/">official registry</a>. There is nowhere to sign up.
     </p>
     <ol>
@@ -102,7 +102,7 @@ const sources = `// A repo of its own
             and <strong>opens the pull request for you</strong>. That is the whole submission process.
         </li>
         <li>
-            <strong>Or open it yourself.</strong> Required if your extension lives in a subdirectory or isn't on GitHub — there is nowhere for
+            <strong>Or open it yourself.</strong> Required if your extension lives in a subdirectory or isn't on GitHub, because there is nowhere for
             the scan to look.
         </li>
         <li>
@@ -120,7 +120,7 @@ const sources = `// A repo of its own
     <h2>What the person installing sees</h2>
     <p>
         The manifest is rendered as plain English, not as JSON. An install dialog says <em>this extension adds a tile to your rail</em>,
-        <em>reads your workspace logs</em>, <em>runs a background process</em>, <em>puts a tool on your agent's PATH</em> — one line per
+        <em>reads your workspace logs</em>, <em>runs a background process</em>, <em>puts a tool on your agent's PATH</em>: one line per
         declared contribution, with the route allowlist spelled out underneath. The user approves that specific list at that specific commit.
     </p>
     <p>Nothing about the install is ambient or implied:</p>
@@ -136,8 +136,8 @@ const sources = `// A repo of its own
         for you. The rule that matters is what happens next:
     </p>
     <ul>
-        <li><strong>Same contributions, new sha</strong> — one click. The daemon re-clones into staging, validates the manifest and the entry bundle, and swaps only if it's sound. A broken release cannot replace a working install.</li>
-        <li><strong>The manifest grew</strong> — a new route, a new process, a new PATH entry, a badge it didn't have — the update <strong>re-asks</strong>, showing the diff. Approval never transfers to powers you didn't approve.</li>
+        <li><strong>Same contributions, new sha</strong>: one click. The daemon re-clones into staging, validates the manifest and the entry bundle, and swaps only if it's sound. A broken release cannot replace a working install.</li>
+        <li><strong>The manifest grew</strong>, with a new route, a new process, a new PATH entry or a badge it didn't have: the update <strong>re-asks</strong>, showing the diff. Approval never transfers to powers you didn't approve.</li>
     </ul>
     <p>
         Your settings survive all of it. They're stored on the daemon under <code>publisher.name</code>, not in the checkout, so an update,
@@ -174,12 +174,12 @@ const sources = `// A repo of its own
         Each listing states which of these it has had, in a <code>trust</code> field: <strong>listed</strong> means the pointer resolves and
         nobody read the code, which is the honest default; <strong>verified</strong> means somebody read the source at that commit;
         <strong>blocked</strong> means known-malicious or known-broken, with the reason alongside. A blocked entry <em>stays in the file</em>
-        rather than being deleted — removing the row would hide it from people browsing and tell the people who already installed it nothing,
+        rather than being deleted. Removing the row would hide it from people browsing and tell the people who already installed it nothing,
         which is backwards.
     </p>
     <p>
         The honest summary: installing an extension is trusting its author, the same way installing an editor plugin is. What intentic
-        contributes is that the trust is <em>bounded and legible</em> — you can read what it may touch before you say yes, and it can't grow
+        contributes is that the trust is <em>bounded and legible</em>: you can read what it may touch before you say yes, and it can't grow
         past that without asking you again.
     </p>
 
@@ -193,7 +193,7 @@ const sources = `// A repo of its own
     <h2>Available today, and next</h2>
     <p>
         Everything in <a href="/docs/extensions/build/">Build an extension</a> works now: authoring, sha-pinned install from any git repo
-        public or private, the manifest gate, per-extension settings, and the on/off switch. So does the registry — the
+        public or private, the manifest gate, per-extension settings, and the on/off switch. So does the registry: the
         <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browsing plus one-click install straight from
         <strong>Capabilities → Add → Extension</strong>, against the official registry or any repo you point the field at.
     </p>
@@ -203,7 +203,7 @@ const sources = `// A repo of its own
         authors get the shell's components with full types.
     </p>
     <p>
-        Building something and want it listed? The <a href="/docs/extensions/build/">build guide</a> is the whole prerequisite — add the topic
+        Building something and want it listed? The <a href="/docs/extensions/build/">build guide</a> is the whole prerequisite. Add the topic
         when your first sha is pushed and the pull request writes itself.
     </p>
 </DocsLayout>

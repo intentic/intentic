@@ -101,7 +101,7 @@ export default defineConfig({
             name: ORG_NAME,
             summary: landingContent.meta.description,
             details:
-                "intentic runs each coding agent in its own Docker sandbox on hardware you own — the dev-tools its job needs really installed, the systems it operates wired in as capabilities, and its context curated for one job. The platform stores only your identity and the sandbox's URL; your code and credentials never leave your machine. Every page below is also served as Markdown at the same URL with a .md suffix.",
+                "intentic runs each coding agent in its own Docker sandbox on hardware you own, with the dev-tools its job needs really installed, the systems it operates wired in as capabilities, and its context curated for one job. The platform stores only your identity and the sandbox's URL; your code and credentials never leave your machine. Every page below is also served as Markdown at the same URL with a .md suffix.",
             sections: [
                 // /about/ sits under Overview rather than Optional: "who is behind this" is the question an
                 // answer engine most often has to resolve about a young domain, and the page is the answer.

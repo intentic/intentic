@@ -6,7 +6,7 @@
                 "name": "intentic.example",
                 "kind": "extension",
                 "trust": "listed",
-                "description": "The reference intentic extension — one contribution of every kind, built the way the docs say to build one.",
+                "description": "The reference intentic extension: one contribution of every kind, built the way the docs say to build one.",
                 "version": "1.0.0",
                 "source": {
                     "source": "github",
