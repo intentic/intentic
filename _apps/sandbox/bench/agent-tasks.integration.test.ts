@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -9,6 +9,11 @@ import { countWord, stripComments, taskFor } from "./agent-tasks.js";
  * spawns an agent or touches the network — the ARC task is served from its on-disk cache. */
 
 const workspace = async (): Promise<string> => mkdtemp(join(tmpdir(), "agent-bench-test-"));
+
+// What the tasks count as a source file, counted independently of the helper the task itself uses — a check
+// that borrows the implementation's own walk proves the walk agrees with itself and nothing more.
+const sourceFiles = async (dir: string): Promise<string[]> =>
+    (await readdir(dir, { recursive: true })).filter((file) => file.endsWith(`.ts`) && !file.endsWith(`.test.ts`));
 
 test("the comment scanner keeps strings and drops comments — the distinction the sweep task is built on", () => {
     expect(stripComments(`const a = 1; // sessionId here\n`)).toBe(`const a = 1; \n`);
@@ -61,7 +66,6 @@ test("sweep's fixture is a copy that carries no test files and no answer", async
     const dir = await workspace();
     try {
         await taskFor(`sweep`).prepare(dir);
-        const { readdir } = await import("node:fs/promises");
         const entries = await readdir(join(dir, `daemon`));
         expect(entries).toEqual(expect.arrayContaining([`src`, `contract`]));
         // The agent must not be able to read the answer off disk, and tests would skew the count it is asked for.
@@ -141,10 +145,17 @@ test("defects plants every anchor it grades against, and padding the answer is p
         const prepared = await taskFor(`defects`).prepare(dir);
         const planted = Number(/(\d+) planted/.exec((await prepared.grade()).detail)?.[1]);
         expect(planted).toBe(4);
-        // Scoped to one subsystem on purpose. Unscoped, a run read all 235 files of the tree and still had no
-        // answer when the clock ran out — a haystack nobody finishes searching yields timeouts, not a result.
+        /* Scoped to one subsystem on purpose. Unscoped, a run read all 235 files of the tree and still had no
+         * answer when the clock ran out — a haystack nobody finishes searching yields timeouts, not a result.
+         *
+         * Both halves are stated against the tree the prompt was built from rather than as literals: the count
+         * must be TRUE (a prompt that misstates the size of its own haystack is a lie the agent plans against),
+         * and the scope must stay a small fraction of the tree. A hardcoded band said the same thing until
+         * src/agent/ grew past it, and then failed the run for the subsystem having gained a file. */
         expect(prepared.prompt).toContain(`daemon/src/agent/`);
-        expect(prepared.prompt).toMatch(/(?:1[5-9]|[23][0-9]) source files/);
+        const scoped = Number(/— (\d+) source files —/.exec(prepared.prompt)?.[1]);
+        expect(scoped).toBe((await sourceFiles(join(dir, `daemon`, `src`, `agent`))).length);
+        expect(scoped).toBeLessThan((await sourceFiles(join(dir, `daemon`))).length / 4);
         // The mutations really are in the copy the agent reads.
         expect(await readFile(join(dir, `daemon`, `src`, `agent`, `agent-terminals.ts`), `utf8`)).toContain(`slice(0, 0)`);
 

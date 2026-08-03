@@ -43,6 +43,8 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
                 name: "intentic-sandbox-demo",
                 image,
                 baseImage,
+                channel: "",
+                previousImage: "",
             },
             extensionsDir: EXTENSIONS_DIR,
         }),

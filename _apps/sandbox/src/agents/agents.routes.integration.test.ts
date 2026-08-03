@@ -258,6 +258,9 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
                 open: async () => {},
                 append: async () => {},
                 prompts: async (agent) => userPromptsOf(codexSearchTranscript(agent.id)),
+                // Derived from the same record `read` answers from, so the fake cannot contradict itself.
+                count: async (agent) => codexSearchTranscript(agent.id).length,
+                truncate: async (agent, keep) => Math.max(0, codexSearchTranscript(agent.id).length - keep),
             },
             sessions: {
                 list: async () => [],

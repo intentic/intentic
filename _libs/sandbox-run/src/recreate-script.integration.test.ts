@@ -105,11 +105,11 @@ test("a swap that does not move the base leaves the rollback target alone", () =
     // A rebuild (same base, new overlay) must not overwrite `previous` with the image we are already on —
     // that would quietly turn the rollback button into a no-op.
     const rebuilt = runRecord("rebuild", "stable", "img:2", "img:2", "channel=stable\ncurrent=img:2\nprevious=img:1\n");
-    expect(rebuilt.previous).toBe("img:1");
+    expect(rebuilt["previous"]).toBe("img:1");
 });
 
 test("a first-ever swap records no rollback target rather than inventing one", () => {
     const fresh = runRecord("update", "stable", "img:1", "");
-    expect(fresh.previous).toBeUndefined();
+    expect(fresh["previous"]).toBeUndefined();
     expect(fresh).toMatchObject({ channel: "stable", current: "img:1" });
 });

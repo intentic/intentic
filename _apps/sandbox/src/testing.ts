@@ -47,7 +47,7 @@ export const testConfig: Config = {
     openaiApiKey: "",
     cloudflareApiToken: "",
     translator: { url: "", token: "" },
-    sandbox: { port: 8787, host: "0.0.0.0", publicUrl: "", name: "", image: "", baseImage: "", environmentHash: "" },
+    sandbox: { port: 8787, host: "0.0.0.0", publicUrl: "", name: "", image: "", baseImage: "", environmentHash: "", channel: "", previousImage: "" },
     preview: { port: 5173 },
     google: { clientId: "" },
     acmeDirectoryUrl: "",
