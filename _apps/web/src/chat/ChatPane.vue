@@ -301,16 +301,6 @@ const contextRing = computed(() => {
     };
 });
 
-// The pickers are anchored to the composer pills, which live behind `v-if="connected"`. Switching to a
-// disconnected provider unmounts those anchors while a picker is still open — an open panel with nothing to
-// hang off. Close them with the composer that owns them.
-watch(connected, (isConnected) => {
-    if (!isConnected) {
-        modelOpen.value = false;
-        modeOpen.value = false;
-    }
-});
-
 // True for the assistant turn currently being streamed: the last assistant bubble while streaming. Not
 // simply the last message — a steered user message (and trailing notices) land below the bubble the turn
 // is still writing into.
@@ -661,6 +651,20 @@ const snapshotAttachments = (): ChatAttachment[] =>
 const { start: startWorkflow, designs: workflowDesigns } = useWorkflowRuns();
 const workflowFailure = ref<string>();
 const pickedWorkflow = computed(() => workflowDesigns.value.find((workflow) => workflow.id === props.conversation.workflowId.value));
+
+/* Close the model and mode panels whenever the pill they hang off stops being usable, which happens two ways.
+ * The pills live behind `v-if="connected"`, so switching to a disconnected provider unmounts the anchor out
+ * from under an open panel; and a picked workflow greys them, which a panel already open would happily go on
+ * ignoring — a tab switch is enough to land in that state, since the open flags belong to the pane and the
+ * badge belongs to the conversation. Either way the answer is the same: the composer that owns them closes
+ * them.
+ */
+watch([connected, pickedWorkflow], ([isConnected, workflow]) => {
+    if (!isConnected || workflow !== undefined) {
+        modelOpen.value = false;
+        modeOpen.value = false;
+    }
+});
 
 const pickWorkflow = (workflow: Workflow | undefined): void => {
     workflowOpen.value = false;
@@ -1323,10 +1327,25 @@ watch(
                                 ></textarea>
 
                                 <div class="flex items-center gap-1 px-2.5 pb-2.5">
+                                    <!-- MODEL, EFFORT, MODE, LOOP GO INERT UNDER A WORKFLOW BADGE, and that is not a
+                                         caveat about the feature — it is what the badge means. Every one of them
+                                         describes a turn on THIS conversation, and a workflow send makes none: the
+                                         message becomes a run's request, and each step opens its own unattended
+                                         session on the provider, harness and model the step declares, looping the way
+                                         the step says to loop. Left live they were four controls that changed nothing
+                                         about the press beneath them — pick Opus · Max · Plan, watch the run come back
+                                         on something else, and you would be right to call it a bug.
+
+                                         Dimmed rather than hidden: they still say what an ordinary send would use, the
+                                         line under the box says whose they are instead, and the badge is one press
+                                         from handing them back — a control that vanished would take that offer with
+                                         it. -->
                                     <button
                                         ref="modelPill"
                                         type="button"
                                         class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        :class="{ 'composer-steered': pickedWorkflow !== undefined }"
+                                        :disabled="pickedWorkflow !== undefined"
                                         @click="mobile ? (modelSheetOpen = true) : (modelOpen = !modelOpen)"
                                         v-tooltip.top="modelHint"
                                         :aria-expanded="modelOpen"
@@ -1340,6 +1359,7 @@ watch(
                                     <div
                                         v-if="efforts.length > 0"
                                         class="flex shrink-0 items-center gap-1.5"
+                                        :class="{ 'composer-steered': pickedWorkflow !== undefined }"
                                         role="group"
                                         aria-label="Reasoning effort"
                                     >
@@ -1350,6 +1370,7 @@ watch(
                                                 type="button"
                                                 class="composer-effort-seg"
                                                 :style="i <= effortIndex ? { backgroundColor: effortFill(i) } : undefined"
+                                                :disabled="pickedWorkflow !== undefined"
                                                 @click="effort = e.value"
                                                 :aria-label="e.label"
                                                 :aria-pressed="effort === e.value"
@@ -1362,6 +1383,8 @@ watch(
                                         ref="modePill"
                                         type="button"
                                         class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        :class="{ 'composer-steered': pickedWorkflow !== undefined }"
+                                        :disabled="pickedWorkflow !== undefined"
                                         @click="mobile ? (modeSheetOpen = true) : (modeOpen = !modeOpen)"
                                         v-tooltip.top="modeDescription"
                                         :aria-expanded="modeOpen"
@@ -1376,11 +1399,17 @@ watch(
                                          with Send, because that is what it changes: the next message is run over
                                          and over instead of once. It reads as a toggle because it is one — while a
                                          loop runs, the same pill ends it, and the count is the only progress
-                                         readout the composer has room for. -->
+                                         readout the composer has room for.
+
+                                         Which is why a RUNNING loop keeps this pill under a workflow badge, where
+                                         the three controls before it lose theirs: stopping something already going
+                                         is not a thing the next message decides, and a badge that took the stop
+                                         away would leave the loop no way out but the fleet board. -->
                                     <button
                                         type="button"
                                         class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                        :class="{ 'composer-active': looping }"
+                                        :class="{ 'composer-active': looping, 'composer-steered': pickedWorkflow !== undefined && !looping }"
+                                        :disabled="pickedWorkflow !== undefined && !looping"
                                         @click="looping ? endLoop() : (loopDialogOpen = true)"
                                         v-tooltip.top="loopHint"
                                         :aria-pressed="looping"
@@ -1466,10 +1495,12 @@ watch(
                             <p v-if="speechErrorMessage" class="px-1 text-2xs text-danger">{{ speechErrorMessage }}</p>
                             <p v-if="workflowFailure" class="px-1 text-2xs text-danger">{{ workflowFailure }}</p>
                             <!-- What the badge changes about the press, said under the box that is about to do
-                                 it: the message is going to a design, not to this chat. -->
+                                 it: the message is going to a design, not to this chat. The second sentence is
+                                 what the greyed pills above would otherwise only say on hover — and a control
+                                 that refuses has to name itself somewhere a touch device can read it. -->
                             <p v-else-if="pickedWorkflow" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
                                 <Icon name="sitemap" class="shrink-0 text-2xs text-link" />Send starts “{{ pickedWorkflow.name }}” — this message is
-                                what every step is asked to do.
+                                what every step is asked to do. Model, effort, mode and looping are each step's own.
                             </p>
                         </template>
                     </template>

@@ -413,6 +413,13 @@
     background: color-mix(in srgb, var(--color-content) 8%, transparent);
     color: var(--color-content);
 }
+/* A composer control the picked workflow decides instead of this chat — see the footer row in ChatPane.
+   Dimmed and inert rather than hidden, so the row keeps its shape and the badge that took the control
+   away stays one press from giving it back. */
+.composer-steered {
+    opacity: 0.4;
+    pointer-events: none;
+}
 .composer-active {
     background: color-mix(in srgb, var(--color-primary-500) 16%, transparent);
     color: var(--color-primary-500);
