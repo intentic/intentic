@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-  intentic cleanup (Windows) — remove intentic sandboxes' Docker footprint on THIS PC, INCLUDING the named volumes.
+  intentic cleanup (Windows) - remove intentic sandboxes' Docker footprint on THIS PC, INCLUDING the named volumes.
 
 .DESCRIPTION
   A sandbox's /work is a NAMED Docker volume (intentic-workspace-<slug>). Removing a container "with volumes" only
-  prunes ANONYMOUS volumes — a named volume survives, so a stale /work persists across re-runs and the daemon's boot
+  prunes ANONYMOUS volumes - a named volume survives, so a stale /work persists across re-runs and the daemon's boot
   gate then skips re-scaffolding. This removes the containers (incl. the Docker-in-Docker deploy target) AND the
   named volumes AND the networks. It leaves the platform's own resources (intentic-app-*) untouched.
 
   A PC can host several sandboxes at once (each suffixed by its <slug>). By DEFAULT this lists them and lets you PICK
-  which to remove — it never wipes everything unless you ask. Removing a sandbox DELETES its data (/work + /history),
+  which to remove - it never wipes everything unless you ask. Removing a sandbox DELETES its data (/work + /history),
   so every removal is confirmed unless you pass -Yes. Non-interactive runs (no console) never auto-remove.
 
 .PARAMETER Slug
@@ -40,7 +40,7 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
 if ($Help) {
-    Write-Host 'intentic cleanup — remove sandbox(es) on this PC (containers + named /work volumes + networks).'
+    Write-Host 'intentic cleanup - remove sandbox(es) on this PC (containers + named /work volumes + networks).'
     Write-Host 'Usage: cleanup.ps1 [-Slug <slug>...] [-All] [-Yes]'
     Write-Host '  (no arg)   pick which sandbox(es) to remove (interactive); non-interactive runs list and stop'
     Write-Host '  -Slug      remove the named sandbox(es)'
@@ -50,17 +50,17 @@ if ($Help) {
 }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    Write-Error 'docker is not installed — nothing to clean up.'
+    Write-Error 'docker is not installed - nothing to clean up.'
     exit 1
 }
 
-# ── shared helpers (duplicated in connect.ps1 — this script runs standalone via `irm | iex`, so it can't dot-source
-# a shared file; keep the two in lockstep) ──────────────────────────────────────────────────────────────────────
+# -- shared helpers (duplicated in connect.ps1 - this script runs standalone via `irm | iex`, so it can't dot-source
+# a shared file; keep the two in lockstep) ----------------------------------------------------------------------
 
 # True when a console is available to prompt on (false under a non-interactive host / CI).
 function Test-Interactive { [Environment]::UserInteractive -and -not [Console]::IsInputRedirected }
 
-# Distinct sandbox slugs on this PC — the primary containers only (the -tunnel- sidecar shares the prefix).
+# Distinct sandbox slugs on this PC - the primary containers only (the -tunnel- sidecar shares the prefix).
 function Get-Sandboxes {
     @(docker ps -a --filter 'name=intentic-sandbox-' --format '{{.Names}}' 2>$null) |
         Where-Object { $_ -and $_ -notlike 'intentic-sandbox-tunnel-*' } |
@@ -92,14 +92,14 @@ function Remove-All {
     foreach ($n in @(docker network ls -q --filter 'name=intentic-workspace-')) { if ($n) { docker network rm $n *> $null } }
 }
 
-# ── resolve which slugs to remove ─────────────────────────────────────────────────────────────────────────────
+# -- resolve which slugs to remove -----------------------------------------------------------------------------
 if ($All) {
     $all = @(Get-Sandboxes)
-    if ($all.Count -eq 0) { Write-Host 'intentic: no sandboxes found on this PC — nothing to clean up.'; exit 0 }
+    if ($all.Count -eq 0) { Write-Host 'intentic: no sandboxes found on this PC - nothing to clean up.'; exit 0 }
     Write-Host 'intentic: about to PERMANENTLY DELETE ALL sandboxes on this PC and their data (/work + /history):'
     $all | ForEach-Object { Write-Host "    $_" }
     Write-Host 'This cannot be undone.'
-    if (-not (Confirm-Action 'Remove all of them?')) { Write-Host 'intentic: cancelled — nothing removed.'; exit 0 }
+    if (-not (Confirm-Action 'Remove all of them?')) { Write-Host 'intentic: cancelled - nothing removed.'; exit 0 }
     Remove-All
     Write-Host 'intentic: all sandboxes removed. Re-run connect to start fresh.'
     exit 0
@@ -109,7 +109,7 @@ $targets = @($Slug | Where-Object { $_ })
 if ($targets.Count -eq 0) {
     # No -Slug and not -All: pick interactively, or (no console) list and stop without touching anything.
     $slugs = @(Get-Sandboxes)
-    if ($slugs.Count -eq 0) { Write-Host 'intentic: no sandboxes found on this PC — nothing to clean up.'; exit 0 }
+    if ($slugs.Count -eq 0) { Write-Host 'intentic: no sandboxes found on this PC - nothing to clean up.'; exit 0 }
 
     Write-Host 'intentic: sandboxes on this PC:'
     for ($i = 0; $i -lt $slugs.Count; $i++) {
@@ -119,13 +119,13 @@ if ($targets.Count -eq 0) {
     }
 
     if (-not (Test-Interactive)) {
-        Write-Warning 'no console for interactive selection — nothing removed.'
+        Write-Warning 'no console for interactive selection - nothing removed.'
         Write-Host 'Re-run with -Slug <slug>, or -All to remove every sandbox (add -Yes to skip prompts).'
         exit 1
     }
 
-    $sel = Read-Host 'Select sandbox(es) to remove — numbers (e.g. "1 3"), "a" = all, "q" = cancel'
-    if ([string]::IsNullOrWhiteSpace($sel) -or $sel -match '^[qQ]$') { Write-Host 'intentic: cancelled — nothing removed.'; exit 0 }
+    $sel = Read-Host 'Select sandbox(es) to remove - numbers (e.g. "1 3"), "a" = all, "q" = cancel'
+    if ([string]::IsNullOrWhiteSpace($sel) -or $sel -match '^[qQ]$') { Write-Host 'intentic: cancelled - nothing removed.'; exit 0 }
     if ($sel -match '^[aA]$') {
         $targets = $slugs
     } else {
@@ -139,12 +139,12 @@ if ($targets.Count -eq 0) {
 }
 
 $targets = @($targets | Where-Object { $_ })
-if ($targets.Count -eq 0) { Write-Host 'intentic: nothing selected — nothing removed.'; exit 0 }
+if ($targets.Count -eq 0) { Write-Host 'intentic: nothing selected - nothing removed.'; exit 0 }
 
 Write-Host 'intentic: about to PERMANENTLY DELETE these sandbox(es) and their data (/work + /history):'
 $targets | ForEach-Object { Write-Host "    $_" }
 Write-Host 'This cannot be undone.'
-if (-not (Confirm-Action 'Proceed?')) { Write-Host 'intentic: cancelled — nothing removed.'; exit 0 }
+if (-not (Confirm-Action 'Proceed?')) { Write-Host 'intentic: cancelled - nothing removed.'; exit 0 }
 
 foreach ($s in $targets) { Remove-Slug $s }
 Write-Host "intentic: done. Remaining sandboxes: $((Get-Sandboxes) -join ' ')"

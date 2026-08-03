@@ -1,19 +1,19 @@
 <#
 .SYNOPSIS
-  intentic recreate (Windows) — swap THIS machine's sandbox container onto a different image, preserving
+  intentic recreate (Windows) - swap THIS machine's sandbox container onto a different image, preserving
   /work, /history, the tunnel, and every setting the container carries.
 
 .DESCRIPTION
   The PowerShell twin of recreate.sh, and the same two modes the platform hands out:
 
-    rebuild — the agent proposed .intentic/environment.Dockerfile, the owner approved it in the browser, and
+    rebuild - the agent proposed .intentic/environment.Dockerfile, the owner approved it in the browser, and
       the Environment card handed over this one-liner. The SHA256 is the trust anchor: the overlay lives on
       the workspace volume the agent can write, so only content that still hashes to what the owner reviewed
       is ever built.
-    update — pulls the moving :stable tag and re-applies the approved overlay (if any) onto it, so the
+    update - pulls the moving :stable tag and re-applies the approved overlay (if any) onto it, so the
       extended environment carries forward.
 
-  The sandbox holds no HOST Docker socket (its own engine is nested — it cannot recreate its own container),
+  The sandbox holds no HOST Docker socket (its own engine is nested - it cannot recreate its own container),
   which is why both modes run HERE, on the machine that runs the container.
 
   HOW THE CONTAINER IS RUN is deliberately not written in this file. The docker-run shape (volumes, network,
@@ -23,13 +23,13 @@
   script keeps working, unchanged, as the contract evolves.
 
   There is no -Dev mode here. That one drives the in-repo dogfood loop (dev-sandbox.sh, POSIX sh only), so a
-  PowerShell port of it would be an untested path with no callers — run the repo's dev loop under WSL.
+  PowerShell port of it would be an untested path with no callers - run the repo's dev loop under WSL.
 
   There is no -Rollback or -Channel here yet either, for the same reason and with a real consequence worth
   stating: a Windows host updates onto :stable as it always has, and cannot walk that back with one command.
   recreate.sh grew both (it records the base it replaced beside its logs, and swaps the pair on each rollback
   so pressing it twice returns you), and the daemon reports channel/previousImage on /info regardless of which
-  script created the container — so the Update card's rollback offer is simply absent on a Windows-created
+  script created the container - so the Update card's rollback offer is simply absent on a Windows-created
   sandbox rather than broken. Porting the pair here is the follow-up; until then the way back on Windows is
   the connect one-liner, which is what it was before.
 
@@ -41,7 +41,7 @@
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Slug,
-    # Present ⇒ rebuild (the approved overlay, pinned to this digest); absent ⇒ update (the fresh :stable base).
+    # Present => rebuild (the approved overlay, pinned to this digest); absent => update (the fresh :stable base).
     [string]$Hash
 )
 $ErrorActionPreference = 'Stop'
@@ -64,7 +64,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Every recreate leaves a log on this machine (build/pull output, the replaced container's tail, launch
-# failures) — the `docker rm` below destroys the old container's `docker logs`, so its tail is captured first.
+# failures) - the `docker rm` below destroys the old container's `docker logs`, so its tail is captured first.
 $LogDir = if ($env:INTENTIC_LOG_DIR) { $env:INTENTIC_LOG_DIR } else { Join-Path $env:USERPROFILE '.intentic\logs' }
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 Get-ChildItem -Path $LogDir -Filter 'recreate-*.log' -ErrorAction SilentlyContinue |
@@ -73,7 +73,7 @@ $Log = Join-Path $LogDir "recreate-$Mode-$(Get-Date -Format 'yyyyMMdd-HHmmss').l
 
 # Everything read off the OLD container is read WITHOUT `docker exec`, so a crashed sandbox is still
 # recreatable: `docker cp` and `docker inspect` both work on a stopped container. The env comes from
-# .Config.Env — the values `docker run` was given plus the image's own ENV, which is what the contract replays.
+# .Config.Env - the values `docker run` was given plus the image's own ENV, which is what the contract replays.
 function Get-ContainerEnv {
     $json = docker inspect --format '{{json .Config.Env}}' $Container
     if ($LASTEXITCODE -ne 0 -or -not $json) { return @() }
@@ -87,7 +87,7 @@ function Get-ContainerEnvValue([string]$Name) {
 }
 
 # A stale/expired `docker login registry.gitlab.com` (Docker Desktop's credential store) makes docker present
-# that token and the registry reject the PUBLIC pull — clear it and retry anonymously.
+# that token and the registry reject the PUBLIC pull - clear it and retry anonymously.
 function Invoke-Pull([string]$Image) {
     docker pull $Image 2>&1 | Tee-Object -FilePath $Log -Append
     if ($LASTEXITCODE -eq 0) { return $true }
@@ -102,12 +102,12 @@ function Invoke-Pull([string]$Image) {
     return ($LASTEXITCODE -eq 0)
 }
 
-# ——— The mode pre-step: produce $TargetImage / $BaseImage / $EnvHash and the overlay file (may be empty). ———
+# --- The mode pre-step: produce $TargetImage / $BaseImage / $EnvHash and the overlay file (may be empty). ---
 $Overlay = New-TemporaryFile
 $EnvHash = ''
 try {
     if ($Mode -eq 'rebuild') {
-        # Copy the approved overlay out ONCE and hash/build that same copy — byte-exact, with no window
+        # Copy the approved overlay out ONCE and hash/build that same copy - byte-exact, with no window
         # between the check and the build.
         docker cp "${Container}:${ApprovedFile}" $Overlay.FullName *> $null
         if ($LASTEXITCODE -ne 0) {
@@ -122,7 +122,7 @@ try {
         $EnvHash = $have
     }
     else {
-        # Pull the latest base up front — a moved :stable tag is exactly what makes an update available, and
+        # Pull the latest base up front - a moved :stable tag is exactly what makes an update available, and
         # `docker run` reuses a cached tag without re-pulling. A no-op pull is reported honestly.
         Write-Host "intentic: pulling $RegistryImage..."
         "== docker pull $RegistryImage ==" | Add-Content -Path $Log
@@ -144,7 +144,7 @@ try {
 
     # The base the overlay extends, checked belt-and-braces (the daemon already enforced it at approval): any
     # OFFICIAL sandbox image, or the exact base this container was created from (SANDBOX_BASE_IMAGE, set at
-    # `docker run` by whichever runner made it — not a value the agent can write).
+    # `docker run` by whichever runner made it - not a value the agent can write).
     $BaseImage = ''
     if ($HasOverlay) {
         foreach ($line in ($OverlayText -split "`r?`n")) {
@@ -165,7 +165,7 @@ try {
     }
 
     # Build the overlay (when there is one) BEFORE touching the container, so a failed build leaves the
-    # sandbox running untouched. Stdin build — an overlay is FROM + RUN/ENV only, no build context.
+    # sandbox running untouched. Stdin build - an overlay is FROM + RUN/ENV only, no build context.
     if ($Mode -eq 'rebuild') {
         $TargetImage = "intentic-sandbox-env-${Slug}:$($EnvHash.Substring(0, 12))"
         Write-Host "intentic: building $TargetImage from the approved overlay..."
@@ -177,7 +177,7 @@ try {
         if (-not $BaseImage) { $BaseImage = $RegistryImage }
         if ($HasOverlay) {
             # The full digest pins SANDBOX_ENVIRONMENT_HASH (so the daemon reports the overlay as Applied);
-            # its first 12 chars tag the built image — the same derivation the rebuild mode uses.
+            # its first 12 chars tag the built image - the same derivation the rebuild mode uses.
             $EnvHash = (Get-FileHash -Algorithm SHA256 -Path $Overlay.FullName).Hash.ToLowerInvariant()
             $TargetImage = "intentic-sandbox-env-${Slug}:$($EnvHash.Substring(0, 12))"
             Write-Host 'intentic: rebuilding your environment overlay on the new base...'
@@ -191,12 +191,12 @@ try {
         exit 1
     }
 
-    # ——— Ask the TARGET IMAGE for its own run command (see the header): env in, argv out. ———
+    # --- Ask the TARGET IMAGE for its own run command (see the header): env in, argv out. ---
     # The /agent-auth mount is a mount+env pair: replaying AGENT_AUTH_DIR without its volume would point the
     # daemon at an empty container-local dir, stranding the shared credentials.
     $EnvPairs = @(Get-ContainerEnv)
     # A container's env is fixed for its life, so REPLAYING it means every allowlisted value is immutable
-    # until the owner re-runs the whole connect wizard. INTENTIC_SET_ENV is the escape hatch — NAME=VALUE per
+    # until the owner re-runs the whole connect wizard. INTENTIC_SET_ENV is the escape hatch - NAME=VALUE per
     # line, PREPENDED, because the contract resolves each name to its FIRST occurrence.
     if ($env:INTENTIC_SET_ENV) {
         $EnvPairs = @($env:INTENTIC_SET_ENV -split "`r?`n" | Where-Object { $_ }) + $EnvPairs
@@ -268,7 +268,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# The running step's label, echoed as it changes — the same chain the browser's warm-up screen shows. A daemon
+# The running step's label, echoed as it changes - the same chain the browser's warm-up screen shows. A daemon
 # too old to report a boot answers neither field, which reads as "no step running, ready".
 $lastStep = ''
 for ($waited = 0; $waited -lt 120; $waited++) {

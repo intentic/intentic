@@ -1,4 +1,4 @@
-# intentic desktop sync (Windows) — install the sync agent on THIS machine, two-way sync a local folder with
+# intentic desktop sync (Windows) - install the sync agent on THIS machine, two-way sync a local folder with
 # your sandbox's /work (block-delta, near-real-time), and mirror the sandbox's dev-server ports onto this
 # machine's localhost (both powered by Mutagen). Runs as YOU (no admin): installs into %USERPROFILE%\.intentic\sync
 # and registers per-user logon tasks (the Mutagen daemon + the port-mirror watcher) so both resume after a
@@ -30,10 +30,10 @@ $bin = $env:AGENT_BIN
 if (-not $bin) {
     $dest = Join-Path $HOME '.intentic\sync\bin\intentic-sync.exe'
     New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-    Write-Host 'Downloading the intentic-sync agent…'
+    Write-Host 'Downloading the intentic-sync agent...'
     try {
         # Download beside the target, then swap: the mirror watcher runs FROM $dest, and Windows refuses to
-        # overwrite or delete a running executable — but it does allow RENAMING one out of the way, which leaves
+        # overwrite or delete a running executable - but it does allow RENAMING one out of the way, which leaves
         # the live watcher running from the renamed file while the new binary takes its place. The leftover is
         # cleared on the next run, once nothing is executing it. A half-download never becomes $dest either.
         Invoke-WebRequest -UseBasicParsing -Uri "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-sync/latest/intentic-sync-windows-$arch.exe" -OutFile "$dest.tmp"
@@ -44,7 +44,7 @@ if (-not $bin) {
     } catch {
         Remove-Item -Force -ErrorAction SilentlyContinue "$dest.tmp"
         $installed = (Get-Command intentic-sync -ErrorAction SilentlyContinue).Source
-        if ($installed) { Write-Warning "Could not download the latest agent — continuing with the installed $installed."; $bin = $installed }
+        if ($installed) { Write-Warning "Could not download the latest agent - continuing with the installed $installed."; $bin = $installed }
         elseif (Get-Command npx -ErrorAction SilentlyContinue) { $bin = 'npx' }
         else { Write-Error 'Could not download the agent and no npx fallback (install Node.js, or see the docs).'; exit 1 }
     }

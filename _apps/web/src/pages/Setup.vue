@@ -17,7 +17,7 @@ import { useCloudflareZones } from "../composables/extensions/useCloudflareZones
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { DESKTOP_DOWNLOADS, desktopSetupLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { environment } from "../environments/environment";
-import { bashCommand, bashDownloadCommand, psCommand, psDownloadCommand, scriptUrl, type SplitCommand } from "../environments/scriptCommand";
+import { bashCommand, psCommand } from "../environments/scriptCommand";
 import SetupCompose from "./SetupCompose.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
 import type { ComposeArgs } from "./setupCompose";
@@ -41,9 +41,9 @@ import { type AttachOutcome, daemonUrlProblem, nameFromDaemonUrl, normalizeDaemo
  *
  * Step 3 is also where the flow is most often abandoned — not because a pasted command does more than an .msi
  * would, but because it shows up without any of an installer's affordances. So the card states what will be
- * created, what it writes outside Docker and how to remove all of it, and offers the two switches that reshape
+ * created, what it writes outside Docker and how to remove all of it, and offers the one switch that reshapes
  * the command instead of leaving the reader to abandon it: `hasDocker` (drop the `sudo`, which is only ever there
- * to install Docker) and `review` (download and read the script, then run the file).
+ * to install Docker).
  *
  * That is the PROVISION lane. There is a second, one-step ATTACH lane for a user whose sandbox is already running
  * behind a domain of their own: they paste the address, the browser probes it (setupAttach.ts), and sandbox.attach
@@ -189,20 +189,21 @@ const runTabOptions = computed(() => [
     },
 ]);
 
-/* The two controls over the SHAPE of the pasted command. Both exist because a copy-paste install is the point
+/* The one control over the SHAPE of the pasted command. It exists because a copy-paste install is the point
  * people balk at — not because it does more than an .exe would, but because it arrives with none of an
- * installer's affordances: no publisher, no preview, no file list, no uninstaller. These give the command back
- * the two that are ours to give.
+ * installer's affordances: no publisher, no preview, no file list, no uninstaller.
  *
  * `hasDocker` drops the `sudo`. It is in there for exactly one job — installing Docker when the machine has
  * none (connect.sh's require_root_to_install_docker states the same deal from the other side) — and for a
  * developer who already runs Docker it is the single most alarming token in the line. Not persisted: it is a
  * claim about the machine the user is about to paste into, which is not necessarily the one they are reading on.
  *
- * `review` splits the one-liner into download-and-read, then run. Deploy-only: local dev already runs the
- * checkout's own script by path, so there is nothing to fetch and the developer can read it in their editor. */
+ * It used to have a peer — a `review` switch that split the one-liner into download-it, read it, then run the
+ * file. It was removed because it read as a WARNING rather than an offer: a checkbox telling you to read
+ * something before running it is an admission that running it is unsafe, on the one step where hesitation is
+ * what loses people. The reference panel already says what the command creates and how to undo it, and the
+ * desktop app is the real answer for anyone who wants an installer instead of a pipe. */
 const hasDocker = ref(false);
-const review = ref(false);
 
 /* THE THIRD WAY TO RUN STEP 3 — the desktop app (_apps/desktop), when this page is being read INSIDE it.
  *
@@ -217,8 +218,6 @@ const desktop = computed(() => desktopVersion() !== undefined);
 // sandbox, and the app cannot run it there.
 const showServerCommand = ref(false);
 
-// The filename the review path downloads to — named after what it is, in the folder the user is standing in.
-const SCRIPT_FILE = { unix: `intentic-connect.sh`, windows: `intentic-connect.ps1` } as const;
 /* The command's options are checkboxes, and now they look like checkboxes: the design system's own control
  * (animated in primeng.css, so this row ticks the same way every other box in the app does) with its name
  * beside it. They were chips — a bordered pill that filled in when pressed — which is a toggle BUTTON, and it
@@ -359,7 +358,7 @@ const slowBuild = computed(
 // most informative funnel milestone between "was shown a command" and "ran one".
 const onCopied = (): void => {
     copied.value = true;
-    track(`sandbox_command_copied`, { tab: runTab.value, review: review.value, sync: syncEnabled.value });
+    track(`sandbox_command_copied`, { tab: runTab.value, sync: syncEnabled.value });
 };
 
 // LOCAL DEV ONLY: connect.{sh,ps1} redeems the setup code against PLATFORM_URL (host-side; the container never
@@ -645,24 +644,10 @@ const selectedCommand = computed(() => {
     }
     return cmdOs.value === `windows` ? psCommand(`ps1`, windowsEnv(code)) : bashCommand(`sh`, linuxPrefix(), code);
 });
-// The same install as download-then-run, for the reader who wants the script on disk before it executes.
-// Undefined outside `review` (and outside production, where there is nothing to download) so the template
-// switches on one value instead of restating the condition.
-const splitCommand = computed<SplitCommand | undefined>(() => {
-    const code = setup.value?.code;
-    if (code === undefined || !review.value || !environment.production) {
-        return undefined;
-    }
-    return cmdOs.value === `windows`
-        ? psDownloadCommand(`ps1`, windowsEnv(code), SCRIPT_FILE.windows)
-        : bashDownloadCommand(`sh`, linuxPrefix(), code, SCRIPT_FILE.unix);
-});
 const selectedCommandLang = computed(() => commandLang(cmdOs.value));
 // The uninstaller, offered beside the installer: it removes every container, volume and network the command
 // creates. Knowing the undo exists before you commit is most of what an .exe's Add/Remove entry is worth.
 const cleanupCommand = computed(() => (cmdOs.value === `windows` ? psCommand(`cleanupPs1`, ``) : bashCommand(`cleanup`, ``, ``)));
-// The script this step hands out, readable in a browser tab without running anything.
-const sourceUrl = computed(() => scriptUrl(cmdOs.value === `windows` ? `ps1` : `sh`));
 
 const composeArgs = computed<ComposeArgs | undefined>(() => {
     if (setup.value === null) {
@@ -1282,13 +1267,11 @@ watch(commandReady, (ready) => {
                             <div v-if="!desktop || showServerCommand" class="flex flex-col gap-2">
                                 <!-- On a phone the picker and the copy button each take a full row: three pill tabs
                              sharing a 340px line wrapped every label to two lines, and the copy chip that
-                             trailed them is the one control this step exists for. The single Copy belongs to
-                             the single command — the review path's two blocks each carry their own, because
-                             the point of splitting them is that they are run one at a time. -->
+                             trailed them is the one control this step exists for. -->
                                 <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
                                     <Segmented v-model="runTab" :options="runTabOptions" :stretch="mobile" />
                                     <CopyButton
-                                        v-if="runTab !== `compose` && splitCommand === undefined"
+                                        v-if="runTab !== `compose`"
                                         :text="selectedCommand"
                                         :label="mobile ? `Copy command` : `Copy`"
                                         :stretch="mobile"
@@ -1296,18 +1279,6 @@ watch(commandReady, (ready) => {
                                     />
                                 </div>
                                 <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
-                                <template v-else-if="splitCommand">
-                                    <!-- The RUN half is the copy that means the handoff has started; copying the fetch
-                                 half is halfway through reading the script, not halfway to a sandbox. -->
-                                    <Code :code="splitCommand.fetch" :lang="selectedCommandLang" :wrap="true" label="1. Download it, and read it" />
-                                    <Code
-                                        :code="splitCommand.run"
-                                        :lang="selectedCommandLang"
-                                        :wrap="true"
-                                        label="2. Run the file you just read"
-                                        @copied="onCopied"
-                                    />
-                                </template>
                                 <template v-else>
                                     <!-- Clamped on a phone: the command is a thing to COPY, and wrapped in full it is
                                  nine lines of env vars between the button that copies it and the step that
@@ -1354,10 +1325,9 @@ watch(commandReady, (ready) => {
                                  to is the caption rather than a sentence of its own.
                                  Script tabs only — compose carries no SYNC_DIR and declares its own shape. -->
                             <!-- The <label> stops at the option's NAME rather than wrapping the whole row: a
-                                 label toggles on any click inside it, and these captions carry a folder path,
-                                 a `sudo` mention and a link out to the script — text people select and read.
-                                 Clicking a row's name still hits a 200px target; selecting its caption no
-                                 longer rewrites the command. -->
+                                 label toggles on any click inside it, and these captions carry a folder path
+                                 and a `sudo` mention — text people select and read. Clicking a row's name still
+                                 hits a 200px target; selecting its caption no longer rewrites the command. -->
                             <div v-if="runTab !== `compose`" class="flex flex-col gap-1.5 text-2xs text-muted">
                                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                                     <label class="flex cursor-pointer items-center gap-2">
@@ -1384,22 +1354,6 @@ watch(commandReady, (ready) => {
                                     <span class="min-w-0">
                                         <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
                                         <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
-                                    </span>
-                                </div>
-                                <div v-if="environment.production" class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <label class="flex cursor-pointer items-center gap-2">
-                                        <Checkbox v-model="review" :binary="true" size="small" />
-                                        <span :class="optionLabel">Download and read it first</span>
-                                    </label>
-                                    <span class="min-w-0">
-                                        <a
-                                            :href="sourceUrl"
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            class="inline-flex items-center gap-1 text-link hover:underline"
-                                        >
-                                            Or read it here <Icon name="external-link" />
-                                        </a>
                                     </span>
                                 </div>
                             </div>
@@ -1490,7 +1444,7 @@ watch(commandReady, (ready) => {
                                      that suits a copy-beside-content read as the dimmest thing in the loudest
                                      box on the card. self-start, or the column flex stretches it edge to edge. -->
                                 <CopyButton
-                                    v-if="runTab !== `compose` && splitCommand === undefined"
+                                    v-if="runTab !== `compose`"
                                     class="ml-6 self-start"
                                     :text="selectedCommand"
                                     label="Copy again"

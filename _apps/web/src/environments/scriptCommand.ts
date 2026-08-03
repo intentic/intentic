@@ -69,34 +69,3 @@ export const psCommand = (key: ScriptKey, env: string, args = ``): string => {
     }
     return args ? `${env}& ([scriptblock]::Create((irm ${SCRIPT_URLS[key]}))) ${args}` : `${env}irm ${SCRIPT_URLS[key]} | iex`;
 };
-
-/* The same install as a pipe-free pair, so there is a moment in the middle to READ what is about to run:
- * `fetch` downloads the script and opens it in a pager, `run` executes that file with the identical prefix and
- * args the one-liner above would have carried. Two blocks rather than one three-line block because the whole
- * point is that they are run separately — and because a pager pasted in the middle of a multi-line paste eats
- * the line after it. This is what an .exe download already does, in the order people trust it in.
- *
- * DEPLOY ONLY. In local dev the one-liner already runs the checkout's own script by path, so there is nothing
- * to fetch and nothing the developer cannot read in their editor — callers gate on environment.production for
- * the same reason the URLs above only exist there. */
-export interface SplitCommand {
-    readonly fetch: string;
-    readonly run: string;
-}
-
-export const bashDownloadCommand = (key: ScriptKey, prefix: string, args: string, file: string): SplitCommand => ({
-    fetch: `curl -fsSL ${SCRIPT_URLS[key]} -o ${file}\nless ${file}`,
-    run: `${prefix}sh ${file}${args ? ` ${args}` : ``}`,
-});
-
-// The PowerShell shape of the same two steps. A .ps1 run BY PATH is what ExecutionPolicy blocks (the piped
-// `irm | iex` form never touches it), so the run line clears the policy for that one process — scoped to the
-// process, so it expires with the window rather than loosening the machine to buy one script a run.
-export const psDownloadCommand = (key: ScriptKey, env: string, file: string): SplitCommand => ({
-    fetch: `irm ${SCRIPT_URLS[key]} -OutFile ${file}\nnotepad ${file}`,
-    run: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; ${env}& ./${file}`,
-});
-
-// Where a browser can read a script without running anything: the site worker serves these as text/plain, so
-// the vanity URL IS the source view (the monorepo has no public mirror to link instead).
-export const scriptUrl = (key: ScriptKey): string => SCRIPT_URLS[key];

@@ -64,8 +64,6 @@ pub fn run() {
             app.manage(auth::PendingAuth::default());
             create_tray(app.handle())?;
 
-            windows::show_workspace(app.handle());
-
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
@@ -82,14 +80,25 @@ pub fn run() {
                 // during ITS OWN setup, which is over before the listener above exists, so the event it emits
                 // there is announced to an empty room. Nothing replays it — `on_open_url` is a plain listener —
                 // and the link a first-time user clicked would be silently dropped. What the plugin kept is the
-                // url itself, so ask for it. AFTER show_workspace: an auth handoff navigates that window, and a
-                // setup link should leave the launcher — not the workspace — in front.
+                // url itself, so ask for it.
                 if let Ok(Some(urls)) = app.deep_link().get_current() {
                     for url in urls {
                         handle_intentic_link(app.handle(), url.as_str());
                     }
                 }
                 spawn_update_check(app.handle().clone());
+            }
+
+            /* BEFORE the link, nothing opens. A first-time user's very first act is clicking "Set up on this
+             * computer" in their browser, which starts this process WITH that link — and opening the workspace
+             * first would load app.intentic.dev only for the setup face to take the frame a moment later. What
+             * they would see is the app opening something and immediately throwing it away.
+             *
+             * So the link chooses the face, and this is the fallback for every start that had no link (or had
+             * one that only opened a browser, like sign-in): whatever happened above, if it left nothing on
+             * screen, the app opens on the thing it is for. */
+            if app.webview_windows().is_empty() {
+                windows::show_workspace(app.handle());
             }
             Ok(())
         })
@@ -109,7 +118,7 @@ pub fn run() {
 
 fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItemBuilder::with_id("open", "Open Intentic").build(app)?;
-    let manager = MenuItemBuilder::with_id("manager", "Sandbox Manager").build(app)?;
+    let manager = MenuItemBuilder::with_id("manager", "Sandboxes on this computer").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&open)

@@ -1,9 +1,46 @@
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 use crate::setup_link::{parse_link, Link};
 
+/* ONE WINDOW ON SCREEN, EVER — these two labels are two FACES of it, not two windows.
+ *
+ * There have to be two webviews. The workspace face is remote content (the hosted SPA) and gets no IPC at all;
+ * the launcher face is local content holding this app's entire command surface. Tauri scopes capabilities by
+ * window LABEL, so merging them into one label would hand app.intentic.dev the launcher's permissions — the one
+ * thing this app's design exists to refuse.
+ *
+ * What the user is owed is not one webview but one WINDOW, and that is what `swap_in` enforces: whichever face
+ * is being shown first takes the other's frame — same position, same size — and the other steps aside. Only
+ * the title changes, because it is the label on a taskbar entry and ought to say which screen is up. So "Set
+ * up on this computer" reads as the window moving on rather than as a second app arriving on top of the first.
+ * Before this, a first-time install ended with an unasked-for window called "Sandbox Manager" in front of the
+ * one the user was reading, which is where they stopped. */
 pub const WORKSPACE: &str = "workspace";
 pub const LAUNCHER: &str = "launcher";
+
+/// The frame both faces share when neither has one to inherit — a cold start, on either face.
+const DEFAULT_SIZE: (f64, f64) = (1440.0, 900.0);
+const MIN_SIZE: (f64, f64) = (900.0, 600.0);
+
+/// Bring `window` up in `other`'s place. Placed and sized BEFORE it is shown and `other` hidden only after, so
+/// nothing between the two frames is ever on screen. Physical units throughout: outer position with inner size
+/// is the same rectangle for two windows wearing the same decorations.
+fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>) {
+    if let Some(other) = other.filter(|other| other.is_visible().unwrap_or(false)) {
+        if let Ok(position) = other.outer_position() {
+            let _ = window.set_position(position);
+        }
+        if let Ok(size) = other.inner_size() {
+            let _ = window.set_size(size);
+        }
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = other.hide();
+        return;
+    }
+    let _ = window.show();
+    let _ = window.set_focus();
+}
 
 /// Marks the page as running inside the desktop app. DETECTION ONLY — the handoff is the `intentic://`
 /// navigation this window intercepts, so no IPC is ever exposed to remote content.
@@ -29,8 +66,7 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         None => base,
     };
     if let Some(window) = app.get_webview_window(WORKSPACE) {
-        let _ = window.show();
-        let _ = window.set_focus();
+        swap_in(&window, app.get_webview_window(LAUNCHER));
         if path.is_some() {
             match target.parse() {
                 Ok(url) => {
@@ -50,8 +86,11 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
     let link_handler = app.clone();
     let builder = WebviewWindowBuilder::new(app, WORKSPACE, WebviewUrl::External(url))
         .title("Intentic")
-        .inner_size(1440.0, 900.0)
-        .min_inner_size(900.0, 600.0)
+        .inner_size(DEFAULT_SIZE.0, DEFAULT_SIZE.1)
+        .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
+        // Built hidden so `swap_in` can place it on the frame it is taking over before it is ever on screen —
+        // a finished setup hands the window back, and the workspace must appear where the setup was standing.
+        .visible(false)
         .initialization_script(workspace_init_script())
         .on_navigation(move |url| {
             if url.scheme() == "intentic" {
@@ -66,8 +105,9 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
             }
             true
         });
-    if let Err(error) = builder.build() {
-        eprintln!("workspace window failed to open: {error}");
+    match builder.build() {
+        Ok(window) => swap_in(&window, app.get_webview_window(LAUNCHER)),
+        Err(error) => eprintln!("workspace window failed to open: {error}"),
     }
 }
 
@@ -75,25 +115,39 @@ pub fn show_workspace(app: &AppHandle) {
     show_workspace_at(app, None);
 }
 
+/// The app's own face — the setup it was handed, and the sandboxes on this machine afterwards. The title here
+/// is only what it wears until its UI boots: this face has two screens and App.vue names whichever is up.
 pub fn show_launcher(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(LAUNCHER) {
-        let _ = window.show();
-        let _ = window.set_focus();
+        swap_in(&window, app.get_webview_window(WORKSPACE));
         return;
     }
     let result = WebviewWindowBuilder::new(app, LAUNCHER, WebviewUrl::App("index.html".into()))
-        .title("Intentic — Sandbox Manager")
-        .inner_size(640.0, 760.0)
-        .min_inner_size(520.0, 600.0)
+        .title("Intentic")
+        .inner_size(DEFAULT_SIZE.0, DEFAULT_SIZE.1)
+        .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
+        .visible(false)
         .build();
-    if let Err(error) = result {
-        eprintln!("launcher window failed to open: {error}");
+    match result {
+        Ok(window) => {
+            // Closing this face means "I am done here", not "quit" — so the workspace comes back rather than
+            // leaving a user who dismissed a failed setup with a tray icon and nothing on screen.
+            let handle = app.clone();
+            window.on_window_event(move |event| {
+                if matches!(event, WindowEvent::CloseRequested { .. }) {
+                    show_workspace(&handle);
+                }
+            });
+            swap_in(&window, app.get_webview_window(WORKSPACE));
+        }
+        Err(error) => eprintln!("launcher window failed to open: {error}"),
     }
 }
 
 /// Links land here from three directions: the workspace webview's intercepted navigation, the second-instance
-/// argv, and the OS handler. A setup parks its request for the launcher to pick up; an auth handoff goes
-/// straight back into the workspace window, which is the only place it means anything.
+/// argv, and the OS handler. A setup parks its request for the launcher face to pick up and run — which it
+/// does in the frame the workspace was just occupying; an auth handoff goes straight back into the workspace
+/// face, which is the only place it means anything.
 pub fn handle_link(app: &AppHandle, link: &str) {
     match parse_link(link) {
         Some(Link::Setup(args)) => {

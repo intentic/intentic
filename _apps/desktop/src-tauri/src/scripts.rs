@@ -24,9 +24,9 @@ use tauri::{AppHandle, Emitter, Manager};
  * version to reason about instead of "which script did it fetch". The bundle globs the whole scripts directory
  * (tauri.conf.json), so a script added to the site is bundled by construction and there is no list to drift. */
 
-/// Where a line came from. The launcher renders stderr as the failure detail when a run exits non-zero — the
-/// scripts write their progress to stdout and their diagnostics to stderr, and conflating them loses the only
-/// thing worth showing when something goes wrong.
+/// Where a line came from. The app's own screen renders stderr as the failure detail when a run exits
+/// non-zero — the scripts write their progress to stdout and their diagnostics to stderr, and conflating them
+/// loses the only thing worth showing when something goes wrong.
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Stream {
@@ -34,7 +34,7 @@ pub enum Stream {
     Stderr,
 }
 
-/// What the launcher window subscribes to. `run` is the caller's own id (`setup`, `update:<slug>`, …) so one
+/// What the app's own screen subscribes to. `run` is the caller's own id (`setup`, `update:<slug>`, …) so one
 /// window can render several concurrent runs without the events being routed per-listener.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -127,7 +127,8 @@ fn command_for(app: &AppHandle, run: &ScriptRun) -> Result<Command, String> {
 
     if run.host == Host::Windows {
         // -File (not -Command) so the script's own parameters bind normally; the policy bypass is scoped to
-        // this process, exactly like the psDownloadCommand one-liner the browser hands out.
+        // this process, exactly like the `irm | iex` one-liner the browser hands out. Reading the file rather
+        // than a string is also why every .ps1 here has to be ASCII — see the test at the bottom.
         let mut command = quiet(Command::new("powershell.exe"));
         command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", &path]);
         command.args(&run.args);
@@ -158,7 +159,7 @@ fn command_for(app: &AppHandle, run: &ScriptRun) -> Result<Command, String> {
     Ok(command)
 }
 
-/// Run a script to completion, streaming every line to the launcher as it arrives. BLOCKING — call it from
+/// Run a script to completion, streaming every line to the window as it arrives. BLOCKING — call it from
 /// `spawn_blocking`; the scripts pull multi-gigabyte images and a setup legitimately takes minutes.
 ///
 /// stdin is closed. These scripts prompt when they have a terminal (cleanup's "which sandbox?", connect's
@@ -300,5 +301,49 @@ mod tests {
                 Host::Unix
             }
         );
+    }
+
+    /* THE ONE THING A .ps1 IN THIS REPO MAY NOT CONTAIN — a byte above 0x7F.
+     *
+     * The terminal path hands PowerShell a STRING (`irm <url> | iex`), decoded from the `charset=utf-8` the
+     * site worker sends, so UTF-8 prose survives it. This app hands PowerShell a FILE (`-File <path>`), and
+     * Windows PowerShell 5.1 — still the default `powershell.exe` on every Windows 10/11 — reads a file with
+     * no BOM in the machine's ANSI code page, not UTF-8.
+     *
+     * That is not a cosmetic difference. Through cp1252 an em dash (E2 80 94) decodes to `â€"`, whose last
+     * character is U+201D RIGHT DOUBLE QUOTATION MARK — and PowerShell honours typographic quotes as real
+     * string delimiters. So every em dash in a comment opened a string, the rest of the script was swallowed
+     * into it, and connect.ps1 died on a screenful of `Missing closing '}' in statement block` before it ran a
+     * line. `─`, `→` and `⇒` decode to smart quotes the same way.
+     *
+     * A BOM would fix the file path and put a U+FEFF in front of the string the terminal path pipes to `iex`.
+     * ASCII fixes both, because there is no decoder anywhere that reads an ASCII byte as anything else. */
+    #[test]
+    fn every_bundled_powershell_script_is_ascii() {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../site/public/scripts");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&dir).expect("the bundled scripts directory is readable") {
+            let path = entry.expect("readable directory entry").path();
+            if path.extension().is_none_or(|ext| ext != "ps1") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("script is readable");
+            let offenders: Vec<char> = {
+                let mut found: Vec<char> = text.chars().filter(|c| !c.is_ascii()).collect();
+                found.sort_unstable();
+                found.dedup();
+                found
+            };
+            assert!(
+                offenders.is_empty(),
+                "{} must be ASCII — Windows PowerShell 5.1 reads a BOM-less .ps1 in the ANSI code page, where \
+                 {offenders:?} decode to smart quotes it treats as string delimiters and the script stops \
+                 parsing. Write `-`, `->`, `=>`, `...` instead.",
+                path.display(),
+            );
+            checked += 1;
+        }
+        assert!(checked > 0, "no .ps1 scripts found in {}", dir.display());
     }
 }

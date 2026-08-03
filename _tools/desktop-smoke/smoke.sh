@@ -14,7 +14,7 @@
 #   3. THE DEEP LINK. `intentic://` is the whole channel from the SPA into the app. The chain has four links —
 #      the .desktop MIME entry, the OS handler lookup, the second instance's argv, and the single-instance
 #      plugin's forward — and every one of them is invisible to a unit test. Firing a real `xdg-open` at a real
-#      installed app and watching the launcher window appear exercises all four.
+#      installed app and watching the setup screen appear exercises all four.
 #      Twice, because a link finds the app in one of TWO states and they share almost no mechanism. Running: the
 #      OS starts a second copy, whose argv the single-instance plugin forwards over DBus to the first. NOT
 #      running: the OS starts the app WITH the link in argv, and the app has to notice it at startup. The second
@@ -25,12 +25,18 @@
 # Assertions are made against WINDOW TITLES via xdotool rather than against anything the app was modified to
 # emit: there is no test hook in this app, and there should not be one — the window appearing IS the behaviour
 # a user is promised.
+#
+# The app shows ONE window and swaps two screens through it (windows.rs), so the title is what says which
+# screen is up — and it is load-bearing here for a reason a count could not carry. The failure this tier exists
+# to catch is a link that is WON and then dropped: the OS starts the app, the app sees no url, and it opens on
+# the workspace. A window would appear either way. Only its title says whether the link arrived.
 set -euo pipefail
 
 KIND="${1:?usage: smoke.sh deb|appimage}"
 DISPLAY_NUM=99
 export DISPLAY=":${DISPLAY_NUM}"
-# A UTF-8 locale, because the assertions read WINDOW TITLES and one of them is "Intentic — Sandbox Manager".
+# A UTF-8 locale, because the assertions read WINDOW TITLES and they carry an em dash ("Intentic — Setting up
+# your sandbox").
 # X11 window names are transcoded into the client's locale charset, so under the container's default C locale
 # xdotool reads that title as "(failure in conversion from UTF8_STRING to ANSI_X3.4-1968)" — the window is
 # there, correct and mapped, and every search for it misses. C.UTF-8 is built into glibc; no locales package.
@@ -84,10 +90,16 @@ until_true() {
 }
 
 window_titled() { xdotool search --name "$1"; }
+# Mapped windows only — `hide()` unmaps, which is how the two screens take turns in one frame. Without
+# `--onlyvisible` xdotool finds the one that stepped aside and "there is only ever one window" never fails.
+mapped_windows() { xdotool search --onlyvisible --name "^Intentic"; }
 
 # The link every tier fires. A setup link, because it is the one a first-time user meets and the only one whose
-# arrival is VISIBLE without a test hook: it parks a pending setup and raises the launcher.
+# arrival is VISIBLE without a test hook: it parks a pending setup and raises the setup screen.
 LINK="intentic://setup?code=smoke-test-code&name=Smoke"
+# What that screen calls itself. Matched on the distinctive half rather than the whole title, so the assertion
+# survives the copy being reworded around it.
+SETUP_TITLE="Setting up"
 
 # A deep link fired at a machine where the app is NOT running — a different mechanism from the one a running
 # instance gets, and the one a first-time user meets. The OS has to start the app AND hand it the url in argv;
@@ -95,15 +107,15 @@ LINK="intentic://setup?code=smoke-test-code&name=Smoke"
 # existed. Neither half is exercised by firing a link at an app that is already up.
 cold_link() {
     xdg-open "$LINK" >/tmp/xdg-open-cold.log 2>&1 || true
-    until_true 60 "$1" window_titled "Sandbox Manager" || {
+    until_true 60 "$1" window_titled "$SETUP_TITLE" || {
         echo "--- xdg-open output ---" >&2
         cat /tmp/xdg-open-cold.log >&2 || true
     }
 }
 
 # Leave no window behind — and ASSERT it, because this is the precondition the cold tiers rest on. Every
-# assertion here reads the X tree by title: a launcher left over from the phase before satisfies the next search
-# instantly, and a cold-start tier that never actually started anything cold reports a pass. Matched on the
+# assertion here reads the X tree by title: a setup screen left over from the phase before satisfies the next
+# search instantly, and a cold-start tier that never actually started anything cold reports a pass. Matched on the
 # binary name rather than "$BINARY", which for an AppImage is the bundle path and not what the extracted process
 # is running under.
 quit_app() {
@@ -244,7 +256,7 @@ until_true 15 "stub workspace origin is serving" \
 # that registers the scheme and then drops every link it wins can sit in a release: correct in the archive,
 # correct once the app has run, dead for exactly the user who just installed it and clicked "set up".
 if [ "$KIND" = "deb" ]; then
-    cold_link "the setup link started the app and opened the Sandbox Manager"
+    cold_link "the setup link started the app straight onto the setup screen"
     quit_app
 fi
 
@@ -252,7 +264,7 @@ fi
 setsid "${LAUNCH[@]}" >"$LOG" 2>&1 &
 APP_PID=$!
 
-if until_true 60 "the workspace window opened" window_titled "Intentic"; then
+if until_true 60 "the workspace window opened" window_titled "^Intentic$"; then
     :
 else
     echo "--- app output ---" >&2
@@ -280,11 +292,21 @@ fi
 # the MIME entry and the handler lookup along with the app's own forwarding.
 xdg-open "$LINK" >/tmp/xdg-open.log 2>&1 || true
 
-until_true 45 "the setup link opened the Sandbox Manager" window_titled "Sandbox Manager" || {
+until_true 45 "the setup link opened the setup screen" window_titled "$SETUP_TITLE" || {
     echo "--- xdg-open output ---" >&2
     cat /tmp/xdg-open.log >&2 || true
     echo "--- app output ---" >&2
     cat "$LOG" >&2 || true
+}
+
+# ...IN the workspace's frame, not beside it. This is the whole window model as one assertion, and the reason
+# it is worth an assertion is that the failure it guards is invisible to every other one here: a setup screen
+# that opens as a SECOND window still satisfies the search above, and what the user gets is an unasked-for
+# window in front of the one they were reading. The count is taken after the search, so the swap has landed.
+until_true 15 "the workspace stepped aside — one window, not two" \
+    bash -c '[ "$(xdotool search --onlyvisible --name "^Intentic" | wc -l)" -eq 1 ]' || {
+    echo "--- mapped windows ---" >&2
+    mapped_windows | while read -r id; do echo "$id $(xdotool getwindowname "$id" 2>/dev/null)" >&2; done
 }
 
 # Single instance: the link must be handled by the app that was already running, not by a second copy of it.
@@ -301,7 +323,7 @@ fi
 # again and still arrive.
 if [ "$KIND" = "appimage" ]; then
     quit_app
-    cold_link "the setup link restarted the app and opened the Sandbox Manager"
+    cold_link "the setup link restarted the app straight onto the setup screen"
 fi
 
 kill "$APP_PID" 2>/dev/null || true

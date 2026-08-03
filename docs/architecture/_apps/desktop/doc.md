@@ -5,7 +5,7 @@ the things a web page cannot.
 
 ```stats
 { "items": [
-    {"label": "TypeScript + Vue", "value": "572", "note": "the launcher window"},
+    {"label": "TypeScript + Vue", "value": "572", "note": "the app's own screens"},
     {"label": "Rust", "value": "~1.1k", "note": "windows, links, script runner"},
     {"label": "Machine logic", "value": "none", "note": "it runs the shipped scripts"},
     {"label": "Platforms", "value": "Windows · Linux"}
@@ -26,34 +26,41 @@ so those become buttons.
 
 ## How it works
 
-Two windows, and only one of them is native.
+One window with two screens, and only one of those screens is native.
 
 ```dag
-{ "title": "The two windows", "direction": "LR",
+{ "title": "One window, two screens", "direction": "LR",
   "nodes": [
-    {"id": "workspace", "label": "Workspace window", "note": "the hosted web app", "accent": "1"},
-    {"id": "shell", "label": "Rust shell", "note": "windows · tray · links", "accent": "1"},
-    {"id": "launcher", "label": "Launcher window", "note": "setup + manager", "accent": "1"},
+    {"id": "workspace", "label": "Workspace screen", "note": "the hosted web app", "accent": "1"},
+    {"id": "shell", "label": "Rust shell", "note": "the frame · tray · links", "accent": "1"},
+    {"id": "native", "label": "The app's own screen", "note": "setup, then manager", "accent": "1"},
     {"id": "scripts", "label": "The install scripts", "note": "connect · recreate · cleanup", "accent": "neutral"},
     {"id": "docker", "label": "Docker", "note": "on this machine", "accent": "2"}
   ],
   "edges": [
     {"from": "workspace", "to": "shell"},
-    {"from": "shell", "to": "launcher"},
-    {"from": "launcher", "to": "shell"},
+    {"from": "shell", "to": "native"},
+    {"from": "native", "to": "shell"},
     {"from": "shell", "to": "scripts"},
     {"from": "scripts", "to": "docker"}
   ] }
 ```
 
-The workspace window is the ordinary web app, loaded from the internet. It is the same screen a browser shows,
+The workspace screen is the ordinary web app, loaded from the internet. It is the same screen a browser shows,
 because it *is* that screen — no copy of the interface lives here.
 
-Notice what the arrow from the workspace window is not: it carries no function calls. Remote content gets no
+Notice what the arrow from the workspace screen is not: it carries no function calls. Remote content gets no
 way to run code in this app. Its only channel is a link starting `intentic://`, which the window recognises
 and cancels before it goes anywhere. The same link works from a normal browser too, where the operating system
 routes it to the installed app — so a button on a web page can drive this app whether or not the page happens
 to be inside it.
+
+That refusal is also why the two screens are separate pieces underneath: permission to run code in the app is
+granted per window, so the hosted page and the native screen cannot share one. What the *user* gets is still a
+single window. The shell keeps exactly one screen on display and hands the frame over — same place on the
+desk, same size — so clicking **Set up on this computer** looks like the window moving on, not like a second
+program opening in front of the one being read. It used to be the second thing, and that is where first-time
+users stopped.
 
 ## The surprising part: it does not know how to install anything
 
@@ -63,9 +70,10 @@ second copy of what the install scripts already do. Copies like that drift, this
 was abandoned.
 
 This version runs the scripts. When you click **Set up on this computer**, it starts the very same
-`connect.sh` that the copy-paste command runs, reads what the script prints, and shows those lines in the
-window. The desktop path and the terminal path are the same file, so they cannot disagree, and a fix to the
-script reaches app users with the app's next release rather than with someone remembering to port it.
+`connect.sh` that the copy-paste command runs — straight away, since you already said so on the page you
+clicked it from — reads what the script prints, and shows those lines where the page was. The desktop path and
+the terminal path are the same file, so they cannot disagree, and a fix to the script reaches app users with
+the app's next release rather than with someone remembering to port it.
 
 The scripts travel inside the app rather than being downloaded, so a given version of the app always contains
 the scripts it was built with.

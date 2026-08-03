@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Card, cmp } from "@intentic/ui";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import Button from "primevue/button";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watchEffect } from "vue";
 import RunLog from "./components/RunLog.vue";
 import SandboxCard from "./components/SandboxCard.vue";
 import {
@@ -25,14 +26,19 @@ import {
     type SetupArgs,
 } from "./desktop";
 
-/* THE LAUNCHER — the app's only native screen, and deliberately not a wizard.
+/* THE APP'S OWN FACE — the other half of the one window, and deliberately not a wizard.
  *
- * The workspace window shows the real product (the hosted SPA), so everything about naming a sandbox, picking
+ * The workspace face shows the real product (the hosted SPA), so everything about naming a sandbox, picking
  * reachability and minting a setup code stays there, where it already works and where a change ships without
- * an app release. What is left for this window is the two things a web page on another origin cannot do:
+ * an app release. What is left for this one is the two things a web page on another origin cannot do:
  *
  *   • run the setup the SPA just handed over (an `intentic://setup` link), showing what the script says
  *   • manage the containers on THIS machine afterwards — start/stop, update, remove, read the logs
+ *
+ * They are two SCREENS rather than two sections, and a setup is the whole window while it is happening
+ * (`setupMode`). It arrives in the frame the SPA was filling a moment ago (windows.rs), and the manager's
+ * furniture beside it — a container list, a version, an "Open workspace" button — would be a set of decisions
+ * to make about a machine whose sandbox is still being built.
  *
  * The archived version had three personas here (a wizard, an environment checklist, a manager) in 527 lines.
  * The checklist is gone because the scripts do the reconciling and narrate it as they go; the wizard is gone
@@ -52,6 +58,17 @@ const activeRun = ref<string | undefined>(undefined);
 
 const eventsOf = (run: string): RunEvent[] => runs.value[run] ?? [];
 const running = computed(() => activeRun.value !== undefined);
+// A handed-over setup owns the window from the moment it arrives until it hands the window back — which
+// includes having failed, because a failure is the one state the user most needs undivided.
+const setupMode = computed(() => pending.value !== undefined || activeRun.value === `setup`);
+
+/* The OS title follows the screen. Both faces of the app live in ONE frame (windows.rs swaps them into each
+ * other's place), so the title is not decoration: it is the taskbar entry, the alt-tab label, and the only
+ * thing outside this process that can say which screen is up — which is what the desktop smoke tier asserts
+ * against, having deliberately no test hook to read instead. */
+watchEffect(() => {
+    void getCurrentWindow().setTitle(setupMode.value ? `Intentic — Setting up your sandbox` : `Intentic — Sandboxes on this computer`);
+});
 
 const refresh = async (): Promise<void> => {
     try {
@@ -63,10 +80,6 @@ const refresh = async (): Promise<void> => {
         sandboxes.value = [];
         listError.value = String(error);
     }
-};
-
-const loadPending = async (): Promise<void> => {
-    pending.value = (await pendingSetup()) ?? undefined;
 };
 
 /* Every operation is one script run and they all report the same way, so there is one place that starts a
@@ -95,9 +108,18 @@ const runSetup = async (): Promise<void> => {
     if (setupError.value === undefined) {
         pending.value = undefined;
         // The daemon announced itself to the platform on boot, which is exactly what the SPA's setup screen
-        // has been polling for — so the workspace window is one poll away from opening the workspace.
+        // has been polling for — so handing the window back is one poll away from showing the workspace.
         await workspaceOpen();
     }
+};
+
+/* A parked setup RUNS on arrival rather than waiting to be asked. The SPA's "Set up on this computer" button
+ * is the consent — it says what this does, in the sentence directly above it — and repeating the question on
+ * a screen the user did not open is what made the handoff read as a second, unrelated installer. The guard in
+ * `runSetup` is what keeps the two ways in here (the event, and the read below on mount) to one run. */
+const loadPending = async (): Promise<void> => {
+    pending.value = (await pendingSetup()) ?? undefined;
+    await runSetup();
 };
 
 const power = async (slug: string, startIt: boolean): Promise<void> => {
@@ -114,7 +136,7 @@ const update = async (slug: string, hash?: string): Promise<void> => {
 
 /* The SPA's two "paste this on the machine that runs your sandbox" cards, arriving as a click instead: the
  * Update card sends a slug, the Environment card sends a slug and the approved overlay's digest. Taken rather
- * than read, so reopening this window later does not re-run an update that already ran. */
+ * than read, so coming back to this screen later does not re-run an update that already ran. */
 const drainRecreate = async (): Promise<void> => {
     const requested = await takePendingRecreate();
     if (requested === null || running.value) {
@@ -148,7 +170,9 @@ const busyFor = (slug: string): string | null => (busy.value?.slug === slug ? bu
 let stop: Array<() => void> = [];
 onMounted(async () => {
     info.value = await desktopInfo();
-    await Promise.all([refresh(), loadPending()]);
+    /* Listeners BEFORE the parked work, not after: `loadPending` starts the handed-over setup the moment it
+     * finds one, and a script reaches this screen only as events — so a run begun before `onRun` is listening
+     * would show an empty log through its first, most informative seconds. */
     stop = await Promise.all([
         onRun((event) => {
             runs.value = { ...runs.value, [event.run]: [...eventsOf(event.run), event] };
@@ -157,97 +181,110 @@ onMounted(async () => {
         onPendingRecreate(() => void drainRecreate()),
         onUpdateAvailable((version) => (updateVersion.value = version)),
     ]);
-    // After the listeners, so a link that arrives while this window is opening is picked up exactly once —
-    // either by the event or by this call, whichever finds the request still parked.
-    await drainRecreate();
+    // A link that arrived while this screen was opening was PARKED rather than delivered, so it is picked up
+    // exactly once — by the event above or by these, whichever finds the request still there.
+    await Promise.all([refresh(), loadPending(), drainRecreate()]);
 });
 onUnmounted(() => stop.forEach((unlisten) => unlisten()));
 </script>
 
 <template>
-    <div class="flex h-dvh flex-col gap-4 overflow-auto bg-surface p-5 text-content">
-        <header class="flex items-center gap-3">
-            <h1 class="flex-1 text-base font-semibold">Sandbox Manager</h1>
-            <span v-if="info" class="font-mono text-2xs text-subtle">v{{ info.version }}</span>
-        </header>
-
-        <!-- The app updates itself; this is the notice, not a gate. -->
-        <div v-if="updateVersion" :class="cmp.alertInfo('flex items-center gap-2 text-xs')">
-            <Icon name="arrow-circle-up" />
-            <span class="flex-1">Intentic {{ updateVersion }} is available — it installs the next time you quit.</span>
-        </div>
-
-        <!-- The handoff from the SPA. Everything shown here was decided over there; this card asks for the one
-             thing the browser could not ask for, which is permission to start touching this machine. -->
-        <Card v-if="pending" class="flex flex-col gap-3">
-            <div class="flex items-start gap-2.5">
-                <Icon name="bolt" class="mt-0.5 text-primary-400" />
-                <div class="min-w-0 flex-1">
-                    <h2 class="font-semibold leading-tight">Set up {{ pending.name ?? `your sandbox` }} on this computer</h2>
-                    <p class="text-2xs text-subtle">
-                        Runs exactly what the install command runs: starts your sandbox in Docker, connects its tunnel, and opens your workspace once
-                        it answers.
+    <div class="h-dvh overflow-auto bg-surface text-content">
+        <!-- A column, not a stretched form: this face inherits the workspace's frame (windows.rs), which is a
+             wide window, and everything on either screen is a short list of short things. Setup is ONE card in
+             that frame, so it sits in the middle of it — pinned to the top it reads as a page that failed to
+             load the rest of itself. -->
+        <div :class="['mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 p-5', setupMode && 'justify-center']">
+            <!-- SETUP — the whole window while it runs. Everything shown here was decided in the SPA; this
+                 screen is where the part that touches the machine happens, and says so as it goes. -->
+            <template v-if="setupMode">
+                <Card class="flex flex-col gap-3">
+                    <div class="flex items-start gap-2.5">
+                        <Icon name="bolt" class="mt-0.5 text-primary-400" />
+                        <div class="min-w-0 flex-1">
+                            <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this computer</h1>
+                            <p class="text-2xs text-subtle">
+                                Running exactly what the install command runs: starts your sandbox in Docker, connects its tunnel, and opens your
+                                workspace once it answers.
+                            </p>
+                        </div>
+                    </div>
+                    <p v-if="info && !info.dockerReady" class="flex items-start gap-2 text-2xs text-warning">
+                        <Icon name="box" class="mt-0.5 shrink-0" />
+                        <span v-if="info.os === `windows`"
+                            >Docker isn't running yet — setup installs Docker Desktop first, which is a large download.</span
+                        >
+                        <span v-else>Docker isn't running yet — setup installs it first, so your system will ask for your password once.</span>
                     </p>
+                    <RunLog
+                        v-if="activeRun === `setup` || eventsOf(`setup`).length > 0"
+                        :events="eventsOf(`setup`)"
+                        :running="activeRun === `setup`"
+                    />
+                    <div v-if="setupError" :class="cmp.alertDanger('text-2xs')">{{ setupError }}</div>
+                    <!-- Only on failure, and paired with a way out. A setup that stopped is the one place this
+                         app can strand someone, and "try again" as the only control is a dead end wearing a
+                         button. -->
+                    <div v-if="setupError" class="flex flex-wrap items-center gap-2">
+                        <Button label="Try again" :disabled="running" @click="runSetup">
+                            <template #icon><Icon name="bolt" /></template>
+                        </Button>
+                        <Button severity="secondary" :text="true" label="Back to your workspace" @click="workspaceOpen">
+                            <template #icon><Icon name="arrow-up-right" /></template>
+                        </Button>
+                    </div>
+                </Card>
+            </template>
+
+            <!-- THE MANAGER — what this machine is running, once nothing is being handed over. -->
+            <template v-else>
+                <header class="flex items-center gap-3">
+                    <h1 class="flex-1 text-base font-semibold">Sandboxes on this computer</h1>
+                    <span v-if="info" class="font-mono text-2xs text-subtle">v{{ info.version }}</span>
+                    <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
+                        <template #icon><Icon name="refresh" /></template>
+                    </Button>
+                </header>
+
+                <!-- The app updates itself; this is the notice, not a gate. -->
+                <div v-if="updateVersion" :class="cmp.alertInfo('flex items-center gap-2 text-xs')">
+                    <Icon name="arrow-circle-up" />
+                    <span class="flex-1">Intentic {{ updateVersion }} is available — it installs the next time you quit.</span>
                 </div>
-            </div>
-            <p v-if="info && !info.dockerReady" class="flex items-start gap-2 text-2xs text-warning">
-                <Icon name="box" class="mt-0.5 shrink-0" />
-                <span v-if="info.os === `windows`">Docker isn't running yet — setup installs Docker Desktop first, which is a large download.</span>
-                <span v-else>Docker isn't running yet — setup installs it first, so your system will ask for your password once.</span>
-            </p>
-            <RunLog v-if="eventsOf(`setup`).length > 0" :events="eventsOf(`setup`)" :running="activeRun === `setup`" />
-            <div v-if="setupError" :class="cmp.alertDanger('text-2xs')">{{ setupError }}</div>
-            <Button
-                class="self-start"
-                :label="setupError ? `Try again` : `Set up on this computer`"
-                :loading="activeRun === `setup`"
-                :disabled="running"
-                @click="runSetup"
-            >
-                <template #icon><Icon name="bolt" /></template>
-            </Button>
-        </Card>
 
-        <section class="flex min-h-0 flex-col gap-3">
-            <div class="flex items-center gap-2">
-                <h2 class="flex-1 text-sm font-semibold">On this computer</h2>
-                <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
-                    <template #icon><Icon name="refresh" /></template>
-                </Button>
-            </div>
+                <p v-if="listError" class="flex items-start gap-2 text-2xs text-muted">
+                    <Icon name="box" class="mt-0.5 shrink-0" />
+                    <span>Docker isn't reachable, so there is nothing to show yet. Start Docker, or set a sandbox up from your workspace.</span>
+                </p>
+                <p v-else-if="sandboxes.length === 0" class="text-2xs text-muted">
+                    No sandboxes here yet. Set one up from your workspace — this screen is where you manage it afterwards.
+                </p>
 
-            <p v-if="listError" class="flex items-start gap-2 text-2xs text-muted">
-                <Icon name="box" class="mt-0.5 shrink-0" />
-                <span>Docker isn't reachable, so there is nothing to show yet. Start Docker, or set up a sandbox from the workspace window.</span>
-            </p>
-            <p v-else-if="sandboxes.length === 0" class="text-2xs text-muted">
-                No sandboxes here yet. Open the workspace window and set one up — this window is where you manage it afterwards.
-            </p>
+                <SandboxCard
+                    v-for="sandbox in sandboxes"
+                    :key="sandbox.slug"
+                    :sandbox="sandbox"
+                    :busy="busyFor(sandbox.slug)"
+                    @power="power"
+                    @update="update"
+                    @remove="remove"
+                />
 
-            <SandboxCard
-                v-for="sandbox in sandboxes"
-                :key="sandbox.slug"
-                :sandbox="sandbox"
-                :busy="busyFor(sandbox.slug)"
-                @power="power"
-                @update="update"
-                @remove="remove"
-            />
+                <!-- One run at a time, so one log: whichever operation is in flight owns this. -->
+                <RunLog
+                    v-if="activeRun !== undefined"
+                    :events="eventsOf(activeRun)"
+                    :running="true"
+                    class="rounded-xl border border-line bg-canvas p-4"
+                />
 
-            <!-- One run at a time, so one log: whichever operation is in flight owns this. -->
-            <RunLog
-                v-if="activeRun !== undefined && activeRun !== `setup`"
-                :events="eventsOf(activeRun)"
-                :running="true"
-                class="rounded-xl border border-line bg-canvas p-4"
-            />
-        </section>
-
-        <footer class="mt-auto flex items-center gap-2 pt-2">
-            <Button size="small" severity="secondary" label="Open workspace" @click="workspaceOpen">
-                <template #icon><Icon name="arrow-up-right" /></template>
-            </Button>
-            <span v-if="info" class="truncate font-mono text-2xs text-subtle">{{ info.appUrl }}</span>
-        </footer>
+                <footer class="mt-auto flex items-center gap-2 pt-2">
+                    <Button size="small" severity="secondary" label="Open workspace" @click="workspaceOpen">
+                        <template #icon><Icon name="arrow-up-right" /></template>
+                    </Button>
+                    <span v-if="info" class="truncate font-mono text-2xs text-subtle">{{ info.appUrl }}</span>
+                </footer>
+            </template>
+        </div>
     </div>
 </template>

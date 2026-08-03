@@ -4,13 +4,14 @@ The Windows/Linux desktop app — the no-terminal way to run an intentic sandbox
 thing that updates it afterwards. Install it, sign in, click **Run on this computer**.
 
 ```
-┌─ Intentic (workspace window) ─────────┐   ┌─ Sandbox Manager (launcher) ──┐
-│  app.intentic.dev — the hosted SPA    │   │  ▸ Set up on this computer    │
-│  no IPC · intentic:// links only      │   │    pulling the sandbox image… │
-│                                       │   │  ● work    ▶ ■  update  logs  │
-└───────────────────────────────────────┘   └───────────────────────────────┘
-                    │                                      │
-                    └──────────── Rust shell ──────────────┘
+        ONE WINDOW, TWO SCREENS — whichever is up takes the other's frame
+
+┌─ Intentic ────────────────────────────┐   ┌─ Intentic — Setting up your sandbox ──┐
+│  app.intentic.dev — the hosted SPA    │ ⇄ │  ⚡ pulling the sandbox image…        │
+│  no IPC · intentic:// links only      │   │  ● work    ▶ ■  update  logs         │
+└───────────────────────────────────────┘   └──────────────────────────────────────┘
+                    │                                       │
+                    └──────────── Rust shell ───────────────┘
                          windows · tray · deep link · updater
                                        │
                         sh connect.sh / recreate.sh / cleanup.sh
@@ -23,13 +24,29 @@ The app **preserves the product model**: a sandbox is still a Docker container, 
 `@intentic-app/web` talking to the daemon directly, and the browser path keeps working on the same sandbox
 from any device. The app adds no third plane. It is three thin native things around the existing product:
 
-1. **A shell for the hosted SPA.** The workspace window loads `https://app.intentic.dev`
+1. **A shell for the hosted SPA.** The workspace screen loads `https://app.intentic.dev`
    (override: `INTENTIC_APP_URL`, or settings). It gets **no IPC at all** — its capability list is empty, and
    its only channel into the app is an `intentic://` navigation the window intercepts in Rust.
 2. **A script runner.** Every machine operation is one of the scripts the copy-paste one-liners already run,
-   spawned as a child process with its output streamed into the launcher.
-3. **A lifecycle manager.** The launcher window: setup progress, then status, logs, start/stop, update,
-   rebuild, remove.
+   spawned as a child process with its output streamed into the app's own screen.
+3. **A lifecycle manager.** Setup progress, then status, logs, start/stop, update, rebuild, remove.
+
+## Two webviews, one window
+
+There have to be two webviews: Tauri scopes capabilities by window **label**, so giving the hosted SPA the
+same label as the local UI would hand `app.intentic.dev` that UI's permissions. What the user is owed, though,
+is not one webview but one **window** — and the first version of this app did not deliver it. Clicking *Set up
+on this computer* in the SPA opened a second, differently-titled window ("Sandbox Manager") on top of the one
+being read, which is where first-time users stopped.
+
+So `windows.rs` keeps exactly one of them on screen: whichever screen is being shown first takes the other's
+position and size, then the other hides. The title follows the content (`App.vue` sets it), the frame does
+not, and clicking a handoff reads as the window changing screens. Two consequences worth knowing:
+
+- **A cold start with a link opens no workspace first.** `intentic://setup` in argv means the setup screen is
+  what appears — otherwise the app would load the SPA only to cover it a frame later.
+- **A parked setup runs on arrival.** The SPA's button is the consent; asking again on a screen the user did
+  not open is what made the handoff feel like a second, unrelated installer.
 
 ## Why it runs the scripts instead of reimplementing them
 
@@ -44,9 +61,9 @@ fix to `connect.sh` reaches desktop users on the app's next release without anyo
 Rust is the three things a script cannot do for itself — find itself, get the elevation it needs, and say what
 it is doing to a window instead of a terminal ([`src-tauri/src/scripts.rs`](src-tauri/src/scripts.rs)).
 
-| Launcher action | What it spawns |
+| Action | What it spawns |
 | --- | --- |
-| Set up on this computer | `connect.sh` (through `pkexec` only when Docker is missing) / `connect.ps1` |
+| A handed-over setup (runs on arrival) | `connect.sh` (through `pkexec` only when Docker is missing) / `connect.ps1` |
 | Update · Rebuild | `recreate.sh <slug> [<sha256>]` / `recreate.ps1 -Slug … [-Hash …]` |
 | Remove | `cleanup.sh <slug> -y` / `cleanup.ps1 -Slug … -Yes` |
 | Start · Stop · Logs | `docker` directly — there is no script that lists or tails |
@@ -112,10 +129,11 @@ too.
 
 ## Layout
 
-- `src/` — the launcher UI (Vue + `@intentic/ui`): setup progress and the sandbox manager. Two components
-  and one bridge module; the archived three-persona wizard is not here.
-- `src-tauri/src/` — the Tauri 2 shell. `windows.rs` (two windows + link interception), `scripts.rs` (the
-  script runner), `commands.rs` (the launcher's backend), `auth.rs` (the sign-in handoff), `state.rs`,
+- `src/` — the app's own UI (Vue + `@intentic/ui`): the setup screen and the sandbox manager, switched on
+  whether a setup is in hand. Two components and one bridge module; the archived three-persona wizard is not
+  here.
+- `src-tauri/src/` — the Tauri 2 shell. `windows.rs` (the one-window swap + link interception), `scripts.rs`
+  (the script runner), `commands.rs` (the UI's backend), `auth.rs` (the sign-in handoff), `state.rs`,
   `setup_link.rs`.
 - `scripts/stage-local-downloads.sh` — build installers from this checkout into `_apps/site/public/desktop/`
   (gitignored), so the local site serves them and the web app's dev download links get your own build.
@@ -156,13 +174,13 @@ bash _tools/scripts/verify-desktop-install.sh _apps/site/public/desktop   # need
 and the setup-code claim round trip, which needs a Cloudflare pool and so belongs with the gated nightly
 suites. Whether every extension view renders is the browser tier's job
 ([`_tools/e2e/specs/extension-views.spec.ts`](../../_tools/e2e/specs/extension-views.spec.ts)) — the workspace
-window is an unmodified webview onto the hosted SPA with no IPC, so that is a browser property, not a
+screen is an unmodified webview onto the hosted SPA with no IPC, so that is a browser property, not a
 desktop one.
 
 ## Developing it
 
 ```sh
-pnpm --filter @intentic/desktop-app dev         # the launcher UI alone, in a browser
+pnpm --filter @intentic/desktop-app dev         # the app's own UI alone, in a browser
 pnpm --filter @intentic/desktop-app tauri:dev   # the full app
 INTENTIC_APP_URL=https://localhost:47145 pnpm --filter @intentic/desktop-app tauri:dev   # against a local web
 ```
