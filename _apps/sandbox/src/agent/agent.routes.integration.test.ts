@@ -14,11 +14,6 @@ test("agent.run rejects an empty prompt", async () => {
     expect(await errorCode(client.agent.run({ prompt: "" }))).toBe("BAD_REQUEST");
 });
 
-test("agent.run rejects a turn carrying both history and a sessionId — a resumed session has its context", async () => {
-    const client = clientFor(createApp(services()));
-    expect(await errorCode(client.agent.run({ prompt: "hi", sessionId: "s1", history: [{ role: "user", text: "x" }] }))).toBe("BAD_REQUEST");
-});
-
 test("a second concurrent turn for the same conversation is refused with CONFLICT until the run settles", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => (release = resolve));

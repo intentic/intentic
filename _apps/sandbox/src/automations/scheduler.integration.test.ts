@@ -185,9 +185,11 @@ test("a streamed wake pipes text deltas to the sink, ends it, and tells the agen
     const prompts: string[] = [];
     const wake = fakeWake(prompts, [{ kind: "delta", text: "Hel" }, { kind: "delta", text: "lo" }, { kind: "done" }]);
     const chunks: string[] = [];
+    const failures: string[] = [];
     let ended = false;
     const stream = {
         delta: (text: string) => chunks.push(text),
+        failed: (reason: string) => failures.push(reason),
         end: () => {
             ended = true;
         },
@@ -196,9 +198,29 @@ test("a streamed wake pipes text deltas to the sink, ends it, and tells the agen
     await fireAutomation(services, record, wake, { stream });
     expect(chunks).toEqual(["Hel", "lo"]);
     expect(ended).toBe(true);
+    // A turn that answered says nothing on the failure frame — the sink's audience is told once, either way.
+    expect(failures).toEqual([]);
     // The streamed prompt carries the "don't send it yourself" note ahead of the automation's own prompt.
     expect(prompts[0]).toContain("delivered to the user live");
     expect(prompts[0]).toContain("wake:chat");
+});
+
+test("a wake that dies tells the sink why before closing it — an empty close reads as nothing to say", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("dead-air"));
+    const wake = fakeWake([], [{ kind: "error", message: "no credits" }, { kind: "done" }]);
+    const frames: string[] = [];
+    const record = (await services.automations.get("dead-air")) as AutomationRecord;
+    await fireAutomation(services, record, wake, {
+        stream: {
+            delta: (text) => frames.push(`delta:${text}`),
+            failed: (reason) => frames.push(`failed:${reason}`),
+            end: () => frames.push("end"),
+        },
+    });
+    // The RAW reason, and ahead of the close: each sink decides what its own audience is told, but a stream
+    // that only ever said `end` left whoever was waiting with the agent's silence instead of its error.
+    expect(frames).toEqual(["failed:no credits", "end"]);
 });
 
 test("disabled automations and not-yet-due crons never fire; agent errors land as error runs", async () => {
@@ -278,7 +300,7 @@ test("the journal entry carries no stream note, so a re-fire sends its own reply
         entryPayload = entry?.kind === "automation" ? entry.payload : undefined;
         yield { kind: "done" };
     };
-    await fireAutomation(services, record, peeking, { stream: { delta: () => {}, end: () => {} } });
+    await fireAutomation(services, record, peeking, { stream: { delta: () => {}, failed: () => {}, end: () => {} } });
     expect(entryPayload).toBeUndefined();
 });
 

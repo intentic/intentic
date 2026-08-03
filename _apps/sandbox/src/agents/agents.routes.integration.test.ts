@@ -256,6 +256,7 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
             transcripts: {
                 read: async (agent) => codexSearchTranscript(agent.id),
                 open: async () => {},
+                fork: async () => {},
                 append: async () => {},
                 prompts: async (agent) => userPromptsOf(codexSearchTranscript(agent.id)),
                 // Derived from the same record `read` answers from, so the fake cannot contradict itself.

@@ -261,8 +261,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             mint: async (label, scope) => ({ id: "ct-1", token: `ict_minted-${scope}-${label}` }),
             scopeOf: async (presented) =>
                 ({ ict_valid: "editor", "ict_read-token": "read", "ict_drive-token": "drive", "ict_land-token": "land" })[presented] as
-                    | ControlScope
-                    | undefined,
+                    ControlScope | undefined,
             list: async () => [{ id: "ct-1", label: "test", scope: "editor", createdAt: 0 }],
             revoke: async () => true,
         },
@@ -475,6 +474,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             // "Internal server error", and nothing catches that from the types: tsconfig excludes *.test.ts, so
             // the fake rots in silence.
             open: async () => {},
+            // Inert for the same reason as `open`, and present for the same one: a branch's first turn opens
+            // through THIS door instead (openTurnTranscript), so a fake without it fails every branchOf turn
+            // with a bare "Internal server error". There is no record behind the fake to copy a prefix out of.
+            fork: async () => {},
             append: async () => {},
             // The same extraction production's cached reader applies over agentTranscript, minus the cache —
             // a test double re-reading per call is exactly the behavior the cache exists to avoid paying for.

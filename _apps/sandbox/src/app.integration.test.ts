@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
+import type { AgentEvent, Capability, RestoredMessage } from "@intentic/sandbox-contract";
 
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
@@ -749,6 +749,12 @@ test("agent.run pre-flights a dead resume target with a coded error instead of s
 
 test("agent.run folds a switched conversation's history into the prompt as a role-attributed preamble", async () => {
     let seen: { prompt?: string } | undefined;
+    // The daemon's OWN record of the conversation — the seed for a turn that resumes no session, which is what
+    // a provider/account/harness switch leaves behind. The client never sends a transcript up the wire.
+    const recorded: RestoredMessage[] = [
+        { role: "user", text: "what is 2+2?" },
+        { role: "assistant", text: "4" },
+    ];
     const client = clientFor(
         createApp(
             services({
@@ -756,16 +762,20 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
                     seen = request;
                     yield { kind: "done" };
                 },
+                transcripts: {
+                    read: async () => recorded,
+                    open: async () => {},
+                    fork: async () => {},
+                    append: async () => {},
+                    prompts: async () => [],
+                    count: async () => recorded.length,
+                    truncate: async () => 0,
+                },
             }),
         ),
     );
-    await runAgentTurn(client, {
-        prompt: "and now?",
-        history: [
-            { role: "user", text: "what is 2+2?" },
-            { role: "assistant", text: "4" },
-        ],
-    });
+    // No sessionId: the retired session is exactly the case the preamble exists for.
+    await runAgentTurn(client, { prompt: "and now?", conversationId: "conv-switched" });
     expect(seen?.prompt).toContain("continues from another AI runtime");
     expect(seen?.prompt).toContain("User: what is 2+2?");
     expect(seen?.prompt).toContain("Assistant: 4");
