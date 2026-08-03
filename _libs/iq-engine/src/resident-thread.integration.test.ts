@@ -15,7 +15,13 @@ import { makeFixtureWorkspace } from "./testing.js";
  * regression test and not a benchmark: nothing here is tuned to a threshold that a loaded CI box can breach. */
 
 const FILES = 900;
-const BLOCK_MS = 750;
+/* How long the host stays blocked waiting for the worker to show something. A hang bound, not a measurement:
+ * the property is that files appear while this thread never yields, and WHEN they appear is the runner's
+ * business — a worker sharing a core with thirty other vitest processes starts late. The fixed 750ms window
+ * this replaces read the count once and asserted on whatever the worker had managed by then, which is a
+ * throughput claim wearing a regression test's clothes; it came back 0 three times on main. */
+const PROGRESS_TIMEOUT_MS = 30_000;
+const POLL_MS = 50;
 /* warm() waits out a whole index pass over FILES files — sweep, hash, parse, chunk, one transaction per file. That
  * is seconds of real work by design, and on a loaded CI box it breached vitest's 5s default. The wait is not an
  * assertion about speed (nothing here is timed), so the ceiling is set well clear of the work rather than near it. */
@@ -48,29 +54,38 @@ afterAll(async () => {
 test("the index builds while the host thread is blocked solid", () => {
     // Construction schedules the first pass; nothing on this thread will get another turn until the spin ends.
     engine = createResidentEngine({ root });
-    const until = Date.now() + BLOCK_MS;
-    while (Date.now() < until) {
-        /* hold the thread */
+    const deadline = Date.now() + PROGRESS_TIMEOUT_MS;
+    let indexed = 0;
+    while (indexed === 0 && Date.now() < deadline) {
+        const until = Date.now() + POLL_MS;
+        while (Date.now() < until) {
+            /* hold the thread */
+        }
+        /* A second handle on the index the worker is writing — WAL is what makes that a plain read rather than a
+         * wait, and it is the same arrangement the engine itself runs on (host reads, worker writes). Reading it
+         * is synchronous like the spin around it, so the block is unbroken across the whole loop: no timer, no
+         * microtask, no I/O callback of this thread's has run between construction and the count below. */
+        const db = openIndex(join(root, ".intentic/iq"), "write");
+        indexed = Number(db.get("SELECT COUNT(*) AS n FROM files")?.["n"] ?? 0);
+        db.close();
     }
-
-    // A second handle on the index the worker is writing — WAL is what makes that a plain read rather than a
-    // wait, and it is the same arrangement the engine itself runs on (host reads, worker writes).
-    const db = openIndex(join(root, ".intentic/iq"), "write");
-    const indexed = Number(db.get("SELECT COUNT(*) AS n FROM files")?.["n"] ?? 0);
-    db.close();
     expect(indexed).toBeGreaterThan(0);
 });
 
-test("warm() reports the finished index, and the sweep the host serves queries against is populated", async () => {
-    const status = await engine.warm();
-    expect(status.files).toBeGreaterThan(FILES);
-    const outcome = await engine.run({
-        verb: "files",
-        query: "module42",
-        scope: {},
-        render: { budget: 1500 },
-        options: {},
-        echo: `files "module42"`,
-    });
-    expect(outcome.result.groups[0]?.path).toBe("bulk/module42.ts");
-}, WARM_TIMEOUT_MS);
+test(
+    "warm() reports the finished index, and the sweep the host serves queries against is populated",
+    async () => {
+        const status = await engine.warm();
+        expect(status.files).toBeGreaterThan(FILES);
+        const outcome = await engine.run({
+            verb: "files",
+            query: "module42",
+            scope: {},
+            render: { budget: 1500 },
+            options: {},
+            echo: `files "module42"`,
+        });
+        expect(outcome.result.groups[0]?.path).toBe("bulk/module42.ts");
+    },
+    WARM_TIMEOUT_MS,
+);

@@ -13,16 +13,24 @@
 
 ## Before you finish a turn
 
-Run **`pnpm typecheck`**. It is the whole of what CI decides main's health on, it runs inside an agent
-worktree, and it takes seconds. Then run the affected packages' own suites (`pnpm -C <pkg> test`) — `pnpm test`
-at the root does not work here, because turbo's `test` depends on `^build` and a pnpm `build` dies EXDEV under
-worktree isolation.
+Run **`pnpm verify`** — `pnpm typecheck` and then every package's suite. Both halves run inside an agent
+worktree and together they take well under a minute — 45 packages, cold — and they are the whole of what CI
+decides main's health on.
+
+Neither half goes through `pnpm build`, which dies EXDEV under worktree isolation: a prepass emits every
+package's dist with `tsgo -b` (`_tools/scripts/prepass.mjs`) and the tests then run with `--only`, off turbo's
+`^build` edge. Nothing about that is a shortcut — the dist each suite imports was compiled from the tree you
+are looking at, seconds ago.
 
 What this catches is almost never an error in the code you changed. It is another package's fixture naming a
-shape the interface just stopped having: change `_libs/iq-engine`, break `_apps/sandbox` and `_tools/iq-bench`,
-and the tests you ran next to your edit say nothing about it. A branch cut from current main and verified only
-in its own package is exactly how main spent 1h48m red across ten landed commits, then went green for four
-minutes before the next one.
+shape the interface just stopped having, or a golden anchor pinned to a line you moved: change
+`_libs/iq-engine`, break `_apps/sandbox` and `_tools/iq-bench`, and the suite you ran next to your edit says
+nothing about it. Verifying only the package you touched is exactly how main spent 1h48m red across ten landed
+commits, then went green for four minutes before the next one — and how, across three days, 67 of 100 main
+pipelines failed with the `test` job.
+
+The fleet lands in parallel, so this is also the only moment the check means anything: main moves under you
+while you work, and a red main is a red main for whoever lands next, whatever they changed.
 
 ## Tests
 
@@ -56,8 +64,9 @@ rules are about what a test stands the code up with, not about how it asserts.
   test resets (`vi.resetModules`).
 - A suite that reaches for the machine says so in its NAME – `*.integration.test.ts` (temp trees,
   subprocesses, real git, docker) runs under the integration budget, everything else under a 5s hang detector;
-  both come from `@intentic/testing/vitest`, and `pnpm typecheck` fails a machine-touching suite that is
-  misnamed. Nothing to tune per file: the ceiling follows the kind of suite.
+  both come from `@intentic/testing/vitest`, and the prepass both gates run fails a machine-touching suite that
+  is misnamed — including one that reaches the machine only through a fixture module it imports. Nothing to
+  tune per file: the ceiling follows the kind of suite.
 - A timeout is a hang bound, never a latency measurement – if a suite needs more than its budget, set it far
   above the slow case and say so in a comment. A budget tuned close to observed timings fails on contention
   instead of on regressions, and a timed-out test keeps running: its in-flight work lands on the next test's

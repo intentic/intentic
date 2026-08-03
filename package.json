@@ -9,9 +9,10 @@
     },
     "scripts": {
         "build": "turbo run build",
-        "test": "turbo run test",
-        "typecheck": "pnpm typecheck:declarations && turbo run typecheck --continue=dependencies-successful",
-        "typecheck:declarations": "node _tools/scripts/typecheck.mjs",
+        "verify": "pnpm typecheck && pnpm test",
+        "test": "pnpm prepass && turbo run test --only",
+        "typecheck": "pnpm prepass && turbo run typecheck --continue=dependencies-successful",
+        "prepass": "node _tools/scripts/prepass.mjs",
         "check:bytes": "node _tools/scripts/control-chars.mjs",
         "lint": "oxlint --deny-warnings",
         "lint:fix": "oxlint --fix",

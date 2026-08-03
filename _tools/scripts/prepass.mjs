@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-/* The type check, made runnable everywhere the code is written.
+/* Both gates, made runnable everywhere the code is written.
  *
- * `pnpm typecheck` runs this and then `turbo run typecheck`. Two invariants live here, and both exist because
- * the check that catches fixture drift used to run in exactly one place — CI, on main, after the merge.
+ * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
+ * --only`. Two invariants live here, and both exist because the checks that catch fixture drift used to run in
+ * exactly one place — CI, on main, after the merge.
  *
  * 1. COVERAGE — every test file sits inside some type-check program.
  *
@@ -14,16 +15,19 @@
  * the compiler every key might be supplied. Nothing said a word until some unrelated route reached one of them
  * and a hundred tests failed at once with "Internal server error".
  *
- * 2. DECLARATIONS — every package a type check reads has current `.d.ts` before the check runs.
+ * 2. DIST — every package a check reads, or a test imports, is compiled before either runs.
  *
- * turbo modelled this as `typecheck: dependsOn ["^build"]`, which is correct and unrunnable outside CI: `build`
- * goes through pnpm, pnpm's `syncInjectedDepsAfterScripts` hardlinks into `node_modules` after it, and in an
- * agent worktree `node_modules` is a different filesystem — so the compile succeeds and the run dies EXDEV
- * (exit 238). EVERY agent runs in a worktree. The gate therefore ran nowhere that anyone could act on it
- * before landing, and main spent 1h48m red across ten landed commits with nobody able to see it locally.
+ * turbo models this as `dependsOn ["^build"]`, which is correct and unrunnable outside CI: `build` goes through
+ * pnpm, pnpm's `syncInjectedDepsAfterScripts` hardlinks into `node_modules` after it, and in an agent worktree
+ * `node_modules` is a different filesystem — so the compile succeeds and the run dies EXDEV (exit 238). EVERY
+ * agent runs in a worktree. Both gates therefore ran nowhere that anyone could act on them before landing, and
+ * main spent 1h48m red across ten landed commits with nobody able to see it locally.
  *
- * `tsgo -b` writes the same declarations without pnpm in the path, so it works in a worktree and in CI alike.
- * That is the whole fix: same command, same result, both places.
+ * `tsgo -b` writes the same output without pnpm in the path, so it works in a worktree and in CI alike. That is
+ * the whole fix: same command, same result, both places. It is what lets `pnpm test` skip the `^build` edge
+ * (`turbo run test --only`) and still have every suite import a CURRENT dependency rather than whatever the
+ * main checkout last compiled — 45 packages, ~40s, which is the difference between a suite the fleet runs
+ * before landing and one only CI ever sees.
  *
  * Skipping the prepass is worse than not checking at all. Run against the dist a worktree inherits — built
  * from whatever the main checkout last compiled — `_apps/sandbox` reported 19 errors, of which 16 were stale
@@ -36,7 +40,7 @@
  * one it happens to omit — `@intentic/constants` — was on its own worth 3 phantom errors in the daemon.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
@@ -82,14 +86,81 @@ const configFor = (script) => /-p\s+(\S+)/.exec(script)?.[1] ?? "tsconfig.json";
  * went red on a loaded CI runner and each was repaired by hand with its own constant, after main was already
  * broken. Recognized by shape rather than by a list, like every other invariant here. `vi.mock` lines are cut
  * first — naming a module in order to REPLACE it is the opposite of reaching for it. */
-/* The last two are shared harness helpers rather than APIs: `tempWorkspace` builds a repo tree under tmpdir and
- * `runAgentTurn` drives the real turn path (worktree compose, land pass, subprocesses). A suite reaches the
- * machine THROUGH them without naming anything below, which is the one way a file could sit under the unit
- * budget while doing seconds of real work. Named here rather than followed through imports: this check reads
- * text, and a helper that opens temp trees is worth naming where the rule is written. */
-const REACHES_THE_MACHINE = /mkdtemp|node:child_process|simple-git|dockerode|testcontainers|tempWorkspace|runAgentTurn/;
+/* A suite can also reach the machine THROUGH a fixture module — `makeFixtureWorkspace` writes 900 files under
+ * tmpdir, `tempWorkspace` builds a repo tree, `runAgentTurn` drives the real turn path — naming none of the
+ * primitives itself. Naming those helpers here instead was the enumeration this file warns against, and it
+ * missed: `resident-thread.test.ts` builds and indexes a 900-file tree through one of them and sat under the 5s
+ * detector until a loaded runner failed it three times on main.
+ *
+ * So the helpers a suite IMPORTS are read as part of the suite, found by the convention for where fixtures live
+ * (AGENTS.md: a package's `testing.ts`) rather than by a list of names, which a new helper obeys for free. Per
+ * HELPER and not per module, because one fixture module holds both kinds: four route suites import `routesClient`
+ * out of the same file as `tempWorkspace`, compose objects in memory, and would be renamed to say they reach for
+ * a machine they never touch. Production modules are not followed at all — they reach the machine by definition,
+ * and one import of the daemon would mark every suite in it. */
+const MACHINE_PRIMITIVES = /mkdtemp|node:child_process|simple-git|dockerode|testcontainers/;
+const FIXTURE_MODULE = /(^|[.-])testing\.[cm]?tsx?$/;
 const INTEGRATION_NAME = /\.(integration|e2e)\.(test|spec)\.[cm]?[jt]sx?$/;
 const mocked = (source) => source.replace(/vi\.mock\([^)]*\)/g, "");
+
+// The named bindings of each relative import, as `{ names, file }`. The repo writes ESM (`./testing.js` for
+// `testing.ts`), so the extension in the specifier is the one the compiler emits, not the one on disk.
+const IMPORTS = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["'](\.[^"']*)["']/g;
+const importsOf = (file, source) =>
+    [...source.matchAll(IMPORTS)].flatMap(([, clause, specifier]) => {
+        const path = join(dirname(file), specifier);
+        const target = [path.replace(/\.[cm]?js$/, ".ts"), path.replace(/\.[cm]?js$/, ".tsx"), `${path}.ts`].find((candidate) =>
+            existsSync(candidate),
+        );
+        return target === undefined
+            ? []
+            : [
+                  {
+                      names: clause.split(",").map((name) =>
+                          name
+                              .trim()
+                              .split(/\s+as\s+/)
+                              .at(-1),
+                      ),
+                      file: target,
+                  },
+              ];
+    });
+
+// Every top-level declaration of a module, as `name -> the text under it`.
+const declarationsOf = (source) => {
+    const heads = [...source.matchAll(/^(?:export\s+)?(?:async\s+)?(?:const|let|function|class)\s+([A-Za-z0-9_$]+)/gm)];
+    return new Map(heads.map((head, index) => [head[1], source.slice(head.index, heads[index + 1]?.index)]));
+};
+
+// What reading those helpers means: their own bodies plus every declaration in the module they reach, so a
+// helper that delegates the real work to a private function still counts as doing it.
+const closureOf = (declarations, names, seen) =>
+    names.flatMap((name) => {
+        const body = declarations.get(name);
+        if (body === undefined || seen.has(name)) {
+            return [];
+        }
+        seen.add(name);
+        const referenced = [...declarations.keys()].filter((other) => new RegExp(String.raw`\b${other}\b`).test(body));
+        return [body, closureOf(declarations, referenced, seen)];
+    });
+
+/* Whether a suite does real work. `wanted` is which helpers of the file to read — every one, for the suite
+ * itself; the imported ones, for a fixture module it pulls them from. */
+const reachesTheMachine = (file, wanted, seen = new Set()) => {
+    const source = mocked(readFileSync(file, "utf8"));
+    const text = wanted === undefined ? source : closureOf(declarationsOf(source), wanted, seen).flat(Infinity).join("\n");
+    if (MACHINE_PRIMITIVES.test(text)) {
+        return true;
+    }
+    return importsOf(file, source).some(
+        ({ names, file: imported }) =>
+            FIXTURE_MODULE.test(basename(imported)) &&
+            names.some((name) => new RegExp(String.raw`\b${name}\b`).test(text)) &&
+            reachesTheMachine(imported, names, seen),
+    );
+};
 
 const problems = [];
 for (const { name, dir, pkg } of packages) {
@@ -98,7 +169,7 @@ for (const { name, dir, pkg } of packages) {
     // definition — holding them to this name would say nothing.
     const runsVitest = /vitest/.test(pkg.scripts?.test ?? "");
     for (const file of runsVitest ? walk(dir) : []) {
-        if (INTEGRATION_NAME.test(file) || !REACHES_THE_MACHINE.test(mocked(readFileSync(file, "utf8")))) {
+        if (INTEGRATION_NAME.test(file) || !reachesTheMachine(file, undefined)) {
             continue;
         }
         const relative = file.slice(root.length + 1);

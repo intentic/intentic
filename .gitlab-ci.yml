@@ -144,7 +144,10 @@ test:
   # unrelated suite.
   #
   # It runs FIRST, and as its own `pnpm typecheck` rather than folded into the graph below, for one reason: that
-  # is the exact command an agent runs on its branch before landing (AGENTS.md). It used to sit in the graph
+  # is half of the exact command an agent runs on its branch before landing (`pnpm verify`, AGENTS.md); the
+  # other half is `pnpm test`, which is this job's second line minus the `build` half of the graph — a worktree
+  # cannot run `build` at all (EXDEV), so the fleet's gate proves the tests against a `tsgo -b` dist and CI
+  # proves the same tests against the real build outputs on top. It used to sit in the graph
   # depending on `^build` — and a pnpm `build` dies EXDEV in an agent worktree, so the check that decided
   # whether main was green was the one check nobody in the fleet could run. It now emits its own declarations
   # (the `tsgo -b` prepass the script runs before turbo), needs nothing from the graph, and fails in seconds
