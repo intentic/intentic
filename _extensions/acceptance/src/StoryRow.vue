@@ -347,8 +347,8 @@ onBeforeUnmount(() => void flush());
                     </Button>
                     <!-- Delete asks once, in place: a story is a file in the repo, and the ask costs less than
                          a restore from git for someone who clicked the wrong row. -->
-                    <button v-if="!confirmRemove" type="button" :class="cmp.buttonDanger()" @click="confirmRemove = true">Delete</button>
-                    <button v-else type="button" :class="cmp.buttonDanger()" @click="discard">Delete {{ story.path.split(`/`).pop() }}?</button>
+                    <Button v-if="!confirmRemove" size="small" severity="danger" label="Delete" @click="confirmRemove = true" />
+                    <Button v-else size="small" severity="danger" :label="`Delete ${story.path.split(`/`).pop()}?`" @click="discard" />
                 </div>
             </div>
         </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
+import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
 import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef } from "vue";
 import WorkflowDesigner from "./WorkflowDesigner.vue";
@@ -148,9 +148,7 @@ const shapeOf = (workflow: Workflow): string => {
                 </InfoHint>
             </template>
             <template #actions>
-                <Button label="New workflow" size="small" @click="blank()">
-                    <template #icon><Icon name="plus" /></template>
-                </Button>
+                <PageAction icon="plus" label="New workflow" primary @click="blank()" />
             </template>
         </PageHeader>
 

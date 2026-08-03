@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import Button from "primevue/button";
 import type { Disposable } from "@intentic/extension-api";
-import { cmp, useDevice } from "@intentic/ui";
+import { useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -560,9 +561,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <!-- The tally, so an empty board under a query reads as "nothing matched" rather than as a board
                      that broke. Only while filtering: the lane headers already carry the unfiltered counts. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted">{{ matchTally }}</span>
-                <button type="button" :class="cmp.buttonPrimary('shrink-0 gap-1 px-2.5 py-1 text-2xs')" @click="startAgent()">
+                <Button size="small" class="shrink-0 gap-1 px-2.5 py-1 text-2xs" @click="startAgent()">
                     <Icon name="plus" class="text-2xs" />New agent
-                </button>
+                </Button>
             </div>
         </div>
         <!-- Failures only. This strip costs a layout shift and a dismissal, which is the right price for
@@ -586,7 +587,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 No agents yet. Start a conversation here or in the workspace; both appear on this board, and isolated work remains reviewable on its
                 own branch.
             </p>
-            <button type="button" :class="cmp.buttonPrimary()" @click="startAgent()">Start an agent</button>
+            <Button size="small" label="Start an agent" @click="startAgent()" />
             <!-- Clearing the last lane lands the user here, so the empty state carries the pulse too — it is
                  the only archive affordance left on screen once the board is bare. -->
             <button
@@ -888,7 +889,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <p class="mt-2 text-xs text-muted">Nothing is written to your workspace unless it succeeds. You can stop the turn at any point.</p>
             <template #footer>
                 <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="cancelResolve">Cancel</button>
-                <button type="button" :class="cmp.buttonPrimary('rounded px-3 py-1')" @click="confirmResolve">Ask the agent</button>
+                <Button size="small" label="Ask the agent" class="px-3 py-1" @click="confirmResolve" />
             </template>
         </Dialog>
         <!-- The one dialog on this board that guards something unrecoverable. It says what GOES in the terms the
@@ -915,9 +916,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             </p>
             <template #footer>
                 <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingPurge = false">Cancel</button>
-                <button type="button" :class="cmp.buttonDanger('rounded px-3 py-1')" @click="confirmPurge">
+                <Button size="small" severity="danger" class="px-3 py-1" @click="confirmPurge">
                     Delete {{ archived.length }} agent{{ archived.length === 1 ? "" : "s" }}
-                </button>
+                </Button>
             </template>
         </Dialog>
         <!-- The ghost is a real card so the drag reads as the card itself; pointer-events-none keeps the hit

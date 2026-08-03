@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AutomationSummary } from "@intentic/sandbox-contract";
-import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageHeader, RowGroup, Segmented } from "@intentic/extension-ui";
+import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, Segmented } from "@intentic/extension-ui";
 import { computed, reactive, ref } from "vue";
 import AutomationRow from "./AutomationRow.vue";
 import CreateAutomationDialog from "./CreateAutomationDialog.vue";
@@ -238,9 +238,7 @@ const toggleDetail = (id: string): void => {
                 </InfoHint>
             </template>
             <template #actions>
-                <Button label="New automation" size="small" @click="createOpen = true">
-                    <template #icon><Icon name="plus" /></template>
-                </Button>
+                <PageAction icon="plus" label="New automation" primary @click="createOpen = true" />
             </template>
         </PageHeader>
 

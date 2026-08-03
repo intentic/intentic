@@ -39,6 +39,10 @@ export {
     type NavGroup,
     NavRail,
     Page,
+    /* <PageAction> ships beside <PageHeader> for the same reason <Row> ships beside <RowGroup>: handing out the
+     * container without the thing that goes in it is what made every view invent one. Five extensions filled
+     * `#actions` with a raw PrimeVue <Button> and picked a different cell of its variant matrix each time. */
+    PageAction,
     PageHeader,
     Panel,
     Picker,

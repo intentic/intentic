@@ -47,36 +47,61 @@
 /* Reusable presentational classes. @layer components sits below utilities so per-element
  * utility overrides still take precedence. */
 @layer components {
-    /* Primary-severity Button — tinted fill + brand text, matching cmp.buttonPrimary and the app's
-     * established color-mix visual language. Lives in @layer components (not primeng) so it beats
-     * PrimeVue's generated solid-fill styles in the cascade. :where() zeros the negation list's
-     * specificity so a single utility class can still override any property. */
+    /* EVERY SOLID SEVERITY, IN THE APP'S OWN LANGUAGE — a low-opacity tint of the tone, the tone as the text
+     * colour, a slightly stronger tint as the border. Lives in @layer components (not primeng) so it beats
+     * PrimeVue's generated solid-fill styles; :where() zeros the negation list's specificity so a single utility
+     * class can still override any property.
+     *
+     * IT USED TO COVER ONLY THE DEFAULT, and that one omission is what forked the repo's buttons in two. With
+     * success/warn/danger left as Aura's solid fills — which say nothing this app's visual language says —
+     * there was no way to write a tinted destructive button with <Button>, so cmp.buttonDanger/Success/Warning
+     * were written as bare-<button> class recipes instead, cmp.buttonPrimary came along beside them for
+     * symmetry, and the app then had two action buttons that looked alike, sized differently, and were picked
+     * between arbitrarily. Tinting all four here is what lets there be one.
+     *
+     * The tone is a variable rather than four copies of the rule, so a new severity is one line and the
+     * hover/active mixes can never drift from the resting one. Note `warn`: PrimeVue 4 emits `p-button-warn`,
+     * and the old negation list still spelled PrimeVue 3's `p-button-warning` — so the app's one warning button
+     * fell through the exclusion and was painted in the BRAND colour. Excluded severities keep Aura's own
+     * treatment: `secondary` is the neutral outline this app uses for nearly every non-primary action, and
+     * text/outlined/link are variants rather than tones. */
     .p-button:where(:not(
-        .p-button-secondary, .p-button-danger, .p-button-success,
-        .p-button-warning, .p-button-info, .p-button-contrast,
-        .p-button-text, .p-button-outlined
+        .p-button-secondary, .p-button-info, .p-button-contrast,
+        .p-button-text, .p-button-outlined, .p-button-link
     )) {
-        background: color-mix(in srgb, var(--color-primary-fill) 10%, transparent);
-        color: var(--color-primary-fill);
-        border-color: color-mix(in srgb, var(--color-primary-fill) 20%, transparent);
+        --ui-button-tone: var(--color-primary-fill);
+        background: color-mix(in srgb, var(--ui-button-tone) 10%, transparent);
+        color: var(--ui-button-tone);
+        border-color: color-mix(in srgb, var(--ui-button-tone) 20%, transparent);
+    }
+
+    /* After the rule above, which sets the default: both are one class deep, so source order decides. */
+    .p-button-success {
+        --ui-button-tone: var(--color-success-fill);
+    }
+
+    .p-button-warn {
+        --ui-button-tone: var(--color-warning-fill);
+    }
+
+    .p-button-danger {
+        --ui-button-tone: var(--color-danger-fill);
     }
 
     .p-button:where(:not(
-        .p-button-secondary, .p-button-danger, .p-button-success,
-        .p-button-warning, .p-button-info, .p-button-contrast,
-        .p-button-text, .p-button-outlined
+        .p-button-secondary, .p-button-info, .p-button-contrast,
+        .p-button-text, .p-button-outlined, .p-button-link
     )):enabled:hover {
-        background: color-mix(in srgb, var(--color-primary-fill) 18%, transparent);
-        color: var(--color-primary-fill);
-        border-color: color-mix(in srgb, var(--color-primary-fill) 35%, transparent);
+        background: color-mix(in srgb, var(--ui-button-tone) 18%, transparent);
+        color: var(--ui-button-tone);
+        border-color: color-mix(in srgb, var(--ui-button-tone) 35%, transparent);
     }
 
     .p-button:where(:not(
-        .p-button-secondary, .p-button-danger, .p-button-success,
-        .p-button-warning, .p-button-info, .p-button-contrast,
-        .p-button-text, .p-button-outlined
+        .p-button-secondary, .p-button-info, .p-button-contrast,
+        .p-button-text, .p-button-outlined, .p-button-link
     )):enabled:active {
-        background: color-mix(in srgb, var(--color-primary-fill) 22%, transparent);
+        background: color-mix(in srgb, var(--ui-button-tone) 22%, transparent);
     }
 
     /* CHECKING A BOX SHOULD FEEL LIKE PRESSING SOMETHING. Aura transitions the box's colours and leaves the

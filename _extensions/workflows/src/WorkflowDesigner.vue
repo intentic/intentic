@@ -226,9 +226,12 @@ const commit = async (): Promise<void> => {
 
         <template #footer>
             <button type="button" :class="cmp.linkButton()" @click="open = false">Cancel</button>
-            <button type="button" :class="cmp.buttonPrimary()" :disabled="!ready || save.isPending.value" @click="commit()">
-                {{ save.isPending.value ? `Saving…` : `Save workflow` }}
-            </button>
+            <Button
+                size="small"
+                :label="save.isPending.value ? `Saving…` : `Save workflow`"
+                :disabled="!ready || save.isPending.value"
+                @click="commit()"
+            />
         </template>
     </Dialog>
 </template>

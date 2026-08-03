@@ -44,7 +44,9 @@ const shown = computed(() => {
             key: group.label ?? `group-${groupIndex}`,
             label: group.label,
             rows: group.options
-                .filter((option) => needle === `` || `${group.label ?? ``} ${option.label} ${option.description ?? ``}`.toLowerCase().includes(needle))
+                .filter(
+                    (option) => needle === `` || `${group.label ?? ``} ${option.label} ${option.description ?? ``}`.toLowerCase().includes(needle),
+                )
                 .map((option) => ({ option, index: index++ })),
         }))
         .filter((group) => group.rows.length > 0);
@@ -126,7 +128,11 @@ onMounted(() => {
             class="scrollbar-thin max-h-72 min-w-0 overflow-y-auto py-1 focus:outline-none"
         >
             <template v-for="group in shown" :key="group.key">
-                <p v-if="group.label !== undefined" class="px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle" role="presentation">
+                <p
+                    v-if="group.label !== undefined"
+                    class="px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle"
+                    role="presentation"
+                >
                     {{ group.label }}
                 </p>
                 <button

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
-import { cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
+import { cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageAction, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markPipelinesSeen } from "./ciAttention";
 import { openFailures, supersededBy } from "./ciStreaks";
@@ -150,17 +150,7 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                     </InfoHint>
                 </template>
                 <template #actions>
-                    <a
-                        v-for="host in hosts"
-                        :key="host.url"
-                        :href="host.url"
-                        target="_blank"
-                        rel="noopener"
-                        class="flex items-center gap-1 text-xs text-subtle hover:text-link"
-                    >
-                        Open {{ host.label }}
-                        <Icon name="arrow-up-right" class="text-2xs" />
-                    </a>
+                    <PageAction v-for="host in hosts" :key="host.url" icon="arrow-up-right" :label="`Open ${host.label}`" :href="host.url" />
                 </template>
             </PageHeader>
 

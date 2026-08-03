@@ -146,10 +146,23 @@ const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
                     </a>
                     <!-- A forwarded port is public — offer the one-click shareable link right where it's exposed. -->
                     <SharePreview v-if="entry.previewUrl" :url="entry.previewUrl" />
-                    <Button v-if="entry.forwarded" label="Stop" size="small" severity="secondary" :disabled="busy !== undefined" @click="stop(entry.port)">
+                    <Button
+                        v-if="entry.forwarded"
+                        label="Stop"
+                        size="small"
+                        severity="secondary"
+                        :disabled="busy !== undefined"
+                        @click="stop(entry.port)"
+                    >
                         <template #icon><Icon name="stop" /></template>
                     </Button>
-                    <Button v-else-if="entry.forwardable" label="Preview" size="small" :disabled="busy !== undefined" @click="openPreview(entry.port)">
+                    <Button
+                        v-else-if="entry.forwardable"
+                        label="Preview"
+                        size="small"
+                        :disabled="busy !== undefined"
+                        @click="openPreview(entry.port)"
+                    >
                         <template #icon><Icon name="play" /></template>
                     </Button>
                     <span v-else class="shrink-0 text-2xs text-subtle" v-tooltip.bottom="'Bound to a loopback alias the preview proxy cannot reach.'">
@@ -185,7 +198,14 @@ const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
                     >
                         <Icon name="external-link" />
                     </a>
-                    <Button v-if="entry.forwarded" label="Stop" size="small" severity="secondary" :disabled="busy !== undefined" @click="stop(entry.port)">
+                    <Button
+                        v-if="entry.forwarded"
+                        label="Stop"
+                        size="small"
+                        severity="secondary"
+                        :disabled="busy !== undefined"
+                        @click="stop(entry.port)"
+                    >
                         <template #icon><Icon name="stop" /></template>
                     </Button>
                     <Button

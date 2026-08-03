@@ -76,12 +76,14 @@ const states = new WeakMap<HTMLElement, TooltipState>();
 
 const read = (binding: DirectiveBinding<string | undefined, Modifier>): Pick<TooltipState, "label" | "placement" | "overflowOnly"> => ({
     label: typeof binding.value === `string` && binding.value.trim() !== `` ? binding.value : undefined,
-    placement: binding.modifiers.bottom === true ? `bottom` : binding.modifiers.left === true ? `left` : binding.modifiers.right === true ? `right` : `top`,
+    placement:
+        binding.modifiers.bottom === true ? `bottom` : binding.modifiers.left === true ? `left` : binding.modifiers.right === true ? `right` : `top`,
     overflowOnly: binding.modifiers.overflow === true,
 });
 
 // Rounding hides sub-pixel differences that would otherwise read as "clipped" on every zoom level.
-const isClipped = (el: HTMLElement): boolean => Math.round(el.scrollWidth) > Math.round(el.clientWidth) || Math.round(el.scrollHeight) > Math.round(el.clientHeight);
+const isClipped = (el: HTMLElement): boolean =>
+    Math.round(el.scrollWidth) > Math.round(el.clientWidth) || Math.round(el.scrollHeight) > Math.round(el.clientHeight);
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), Math.max(min, max));
 

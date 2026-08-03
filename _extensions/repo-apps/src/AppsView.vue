@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, type IconName, Page, PageHeader, StatusBadge } from "@intentic/extension-ui";
+import { Button, cmp, Icon, type IconName, Page, PageAction, PageHeader, StatusBadge } from "@intentic/extension-ui";
 import { computed, onMounted, onUnmounted, ref, toRef } from "vue";
 import AddAppDialog from "./AddAppDialog.vue";
 import { groupTests } from "./appTests";
@@ -198,26 +198,11 @@ onUnmounted(() => {
                 <PageHeader :title="headerTitle" :description="headerDescription">
                     <template #actions>
                         <template v-if="monorepo">
-                            <Button v-if="stopped.length > 0" label="Start all" size="small" :disabled="busy" @click="startAll">
-                                <template #icon><Icon name="play" /></template>
-                            </Button>
-                            <Button v-if="running.length > 0" label="Stop all" size="small" severity="secondary" :disabled="busy" @click="stopAll">
-                                <template #icon><Icon name="stop" /></template>
-                            </Button>
-                            <Button
-                                v-if="templates.length > 0"
-                                label="Add app"
-                                size="small"
-                                severity="secondary"
-                                :disabled="busy || adding"
-                                @click="addOpen = true"
-                            >
-                                <template #icon><Icon name="plus" /></template>
-                            </Button>
+                            <PageAction v-if="stopped.length > 0" icon="play" label="Start all" primary :disabled="busy" @click="startAll" />
+                            <PageAction v-if="running.length > 0" icon="stop" label="Stop all" :disabled="busy" @click="stopAll" />
+                            <PageAction v-if="templates.length > 0" icon="plus" label="Add app" :disabled="busy || adding" @click="addOpen = true" />
                         </template>
-                        <Button v-else-if="projects.length > 1" label="Run all" size="small" @click="runTests('all-tests', projects)">
-                            <template #icon><Icon name="play" /></template>
-                        </Button>
+                        <PageAction v-else-if="projects.length > 1" icon="play" label="Run all" primary @click="runTests('all-tests', projects)" />
                     </template>
                 </PageHeader>
 

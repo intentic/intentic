@@ -86,7 +86,7 @@ const openArea = (): void =>
             <div :class="cmp.emptyState()">
                 <p class="text-sm">{{ label }} has no documentation yet.</p>
                 <p class="mt-1 text-xs text-muted">An agent can read this directory and write a plain-language page about it, for you to review.</p>
-                <button type="button" :class="cmp.buttonPrimary(`mt-3`)" @click="openArea">Open Documentation</button>
+                <Button size="small" label="Open Documentation" class="mt-3" @click="openArea" />
             </div>
         </div>
 

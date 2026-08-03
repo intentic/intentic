@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from "primevue/button";
 import type { GitChange, GitDiffSide, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
 import { cmp, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
@@ -1070,9 +1071,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     >
                     <template v-else>nothing staged</template>
                 </span>
-                <button
-                    type="button"
-                    :class="cmp.buttonSuccess('shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs')"
+                <Button
+                    size="small"
+                    severity="success"
+                    class="shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs"
                     :disabled="!commitReady"
                     @click="doCommit"
                     v-tooltip.right="
@@ -1086,7 +1088,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     "
                 >
                     <Icon name="check" class="mr-1 text-2xs" />{{ commitLabel }}
-                </button>
+                </Button>
             </div>
             <!-- An agent is writing, in a repo this commit would stage from the worktree. A WARNING, not a
                  gate: the commit is the user's to make and `reset --soft` walks it back, so the button above
@@ -1155,15 +1157,15 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              action and a one-line readout of what it will do. -->
         <div v-else-if="syncMeta !== undefined" class="flex shrink-0 items-center gap-1 border-b border-line p-2">
             <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{ syncSummary }}</span>
-            <button
-                type="button"
-                :class="cmp.buttonPrimary('shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs')"
+            <Button
+                size="small"
+                class="shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs"
                 :disabled="changes.actionBusy.value"
                 @click="doSync"
                 v-tooltip.right="syncMeta!.hint"
             >
                 <Icon :name="syncMeta!.icon" class="mr-1 text-2xs" />{{ syncMeta!.label }}
-            </button>
+            </Button>
         </div>
 
         <!-- WHOSE WORK IS IN MY TREE — one line, only when an agent actually landed something. Each entry is a
@@ -1570,9 +1572,14 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingDiscard = undefined">
                     Cancel
                 </button>
-                <button type="button" :class="cmp.buttonDanger('rounded px-3 py-1')" :disabled="changes.actionBusy.value" @click="confirmDiscard">
-                    Discard
-                </button>
+                <Button
+                    size="small"
+                    severity="danger"
+                    label="Discard"
+                    class="px-3 py-1"
+                    :disabled="changes.actionBusy.value"
+                    @click="confirmDiscard"
+                />
             </template>
         </Dialog>
 
@@ -1631,9 +1638,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     Stop checks
                 </button>
                 <button v-else type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="closePush">Cancel</button>
-                <button type="button" :class="cmp.buttonWarning('rounded px-3 py-1')" :disabled="changes.actionBusy.value" @click="confirmSync">
+                <Button size="small" severity="warn" class="px-3 py-1" :disabled="changes.actionBusy.value" @click="confirmSync">
                     {{ pendingSync?.verb ?? "Push" }} anyway
-                </button>
+                </Button>
             </template>
         </Dialog>
 

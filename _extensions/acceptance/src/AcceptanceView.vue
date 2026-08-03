@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import type { PickedModel } from "@intentic/extension-api";
-import { Button, Checkbox, cmp, Icon, InfoHint, Page, PageHeader, RowGroup, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
+import {
+    Checkbox,
+    cmp,
+    Icon,
+    InfoHint,
+    Page,
+    PageAction,
+    PageHeader,
+    RowGroup,
+    StatusBadge,
+    type StatusVariant,
+    timeAgo,
+} from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markAcceptanceSeen } from "./attention";
 import DevServerChip from "./DevServerChip.vue";
@@ -371,17 +383,15 @@ const run = async (model: PickedModel): Promise<void> =>
                 <!-- One Refresh for the whole page. The dev-server states are as re-readable as the stories
                      are, and a panel started from Preview while this was open is exactly the staleness someone
                      presses this to clear. -->
-                <Button
+                <PageAction
+                    icon="refresh"
                     label="Refresh"
-                    size="small"
-                    severity="secondary"
+                    hint="Re-read the stories and the dev-server states"
                     @click="
                         refreshStories();
                         targets.refresh();
                     "
-                >
-                    <template #icon><Icon name="refresh" /></template>
-                </Button>
+                />
             </template>
         </PageHeader>
 

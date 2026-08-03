@@ -227,7 +227,7 @@ const pushToCi = async (): Promise<void> => {
 
                 <RowGroup v-if="groupVisible(capabilitiesF)" label="Capability credentials" :count="countSummary(capabilitiesF)">
                     <template #actions>
-                        <RouterLink to="/capabilities"><Button label="Manage capabilities" size="small" severity="secondary" /></RouterLink>
+                        <Button label="Manage capabilities" size="small" severity="secondary" @click="router.push('/capabilities')" />
                     </template>
                     <p v-if="capabilitiesF.length === 0" class="px-4 py-2.5 text-xs text-subtle">No credentialed capabilities connected.</p>
                     <div v-else class="divide-y divide-line">

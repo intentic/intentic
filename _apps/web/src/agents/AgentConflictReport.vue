@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import Button from "primevue/button";
 import type { LandConflict } from "@intentic/sandbox-contract";
-import { cmp, useDevice } from "@intentic/ui";
+import { useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { agentBlockers, type Blocker, blockerLabel, blockersOf, REASON_COPY, userBlockers } from "../composables/agents/conflictResolution";
 
@@ -75,7 +76,8 @@ const mergeable = computed(() => blockedCount.value > 0 && theirs.value.length =
 // armed in the gap between the send returning and the turn's first frame.
 const working = computed(() => props.asked && (props.streaming || props.busy));
 
-const QUIET_BUTTON = `inline-flex items-center whitespace-nowrap rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40`;
+// The geometry this block's inline actions share — small, quiet, and narrow enough to sit beside a sentence.
+const INLINE = `whitespace-nowrap px-2 py-0.5 text-2xs`;
 const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
 </script>
 
@@ -137,7 +139,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             >
                 Watch
             </button>
-            <button v-if="streaming" type="button" :class="QUIET_BUTTON" @click="emit('stop')">Stop</button>
+            <Button v-if="streaming" size="small" severity="secondary" label="Stop" :class="INLINE" @click="emit('stop')" />
             <span v-if="streaming" class="text-2xs text-subtle">The conflict stays exactly as it is.</span>
         </div>
 
@@ -146,15 +148,15 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                  worktree. `mine` is empty only when every blocker is the user's own uncommitted work, which no
                  rebase can reach — then the primary slot belongs to them instead. -->
             <div v-if="mine.length > 0" :class="ROW">
-                <button
-                    type="button"
-                    :class="cmp.buttonPrimary('gap-0 whitespace-nowrap px-2.5 py-1 text-2xs')"
+                <Button
+                    size="small"
+                    :class="INLINE"
                     :disabled="busy || streaming"
                     @click="emit('resolve')"
                     v-tooltip.bottom="streaming ? 'Wait for the agent turn to finish' : undefined"
                 >
                     <Icon name="sparkles" class="mr-1 text-2xs" />Have the agent resolve it
-                </button>
+                </Button>
                 <span class="text-2xs text-subtle">
                     It merges in its own worktree — nothing is written to your workspace until it succeeds.<template v-if="theirs.length > 0">
                         The {{ theirs.length === 1 ? "file" : `${theirs.length} files` }} with your own edits still
@@ -166,13 +168,9 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             <!-- The user's own half, which nothing else here can do for them. Primary when it is the ONLY
                  thing standing in the way, so the block always ends on somebody's next move. -->
             <div v-if="theirs.length > 0" :class="ROW">
-                <button
-                    type="button"
-                    :class="mine.length === 0 ? cmp.buttonPrimary('gap-0 whitespace-nowrap px-2.5 py-1 text-2xs') : QUIET_BUTTON"
-                    @click="emit('commit')"
-                >
+                <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" @click="emit('commit')">
                     <Icon name="file-edit" class="mr-1 text-2xs" />Commit or stash yours
-                </button>
+                </Button>
                 <!-- "Opens the Changes panel" was a tooltip on a button that already had this sentence beside
                      it — two hints for one press, one of them reachable only by pointer. -->
                 <span class="text-2xs text-subtle">Opens the Changes panel. Then land again — git cannot merge through unstaged work.</span>
@@ -180,15 +178,16 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
 
             <!-- Last, and quiet: the only option in this block that writes to the user's tree on failure. -->
             <div v-if="mergeable" :class="ROW">
-                <button
-                    type="button"
-                    :class="QUIET_BUTTON"
+                <Button
+                    size="small"
+                    severity="secondary"
+                    :class="INLINE"
                     :disabled="busy || streaming"
                     @click="emit('merge')"
                     v-tooltip.bottom="streaming ? 'Wait for the agent turn to finish' : undefined"
                 >
                     <Icon name="check" class="mr-1 text-2xs" />Land with conflict markers
-                </button>
+                </Button>
                 <span class="text-2xs text-subtle">You finish the merge yourself, in your workspace.</span>
             </div>
         </template>

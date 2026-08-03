@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type ChoreVerdict, repoLabel } from "@intentic/sandbox-contract/chores";
-import { Button, Icon, Page, PageHeader, RowGroup, Segmented } from "@intentic/extension-ui";
+import { Button, Page, PageAction, PageHeader, RowGroup, Segmented } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledge } from "./attention";
 import ChoreRow from "./ChoreRow.vue";
@@ -128,9 +128,7 @@ const onStart = (verdict: ChoreVerdict): void => {
                         { label: `Everything`, value: `all`, title: `Every chore in the book, including the clear and the unmeasured` },
                     ]"
                 />
-                <Button size="small" severity="secondary" text :disabled="busy" title="Re-read the evidence" @click="void refresh()">
-                    <template #icon><Icon name="refresh" /></template>
-                </Button>
+                <PageAction icon="refresh" label="Refresh" hint="Re-read the evidence" :disabled="busy" @click="void refresh()" />
             </template>
         </PageHeader>
 

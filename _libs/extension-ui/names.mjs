@@ -24,6 +24,7 @@ export const extensionUiNames = [
     "MarkdownFigure",
     "NavRail",
     "Page",
+    "PageAction",
     "PageHeader",
     "Panel",
     "Picker",

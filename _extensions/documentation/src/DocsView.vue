@@ -5,7 +5,7 @@
      staleness counts, publishing — to a strip and a sidebar. Everything shown here is a file that exists; there is
      no documentation service and no server-side state to be out of step with. -->
 <script setup lang="ts">
-import { Button, cmp, Icon, Segmented, Select, SplitView } from "@intentic/extension-ui";
+import { Button, cmp, Icon, PageAction, Segmented, Select, SplitView } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
 import DocsNav from "./DocsNav.vue";
@@ -143,7 +143,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 @update:model-value="chooseRepo"
             />
             <Segmented v-if="hasStaged" v-model="source" :options="SOURCES" />
-            <button type="button" :class="cmp.buttonPrimary()" @click="generateOpen = true">Generate</button>
+            <PageAction icon="sparkles" label="Generate" primary @click="generateOpen = true" />
         </template>
 
         <template #strips>
@@ -179,7 +179,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 <span class="text-content">This is a draft. Nothing is in the repository until you publish it.</span>
                 <div class="ml-auto flex items-center gap-2">
                     <Button size="small" severity="secondary" text label="Discard" @click="discard(repo).then(() => (source = `published`))" />
-                    <button type="button" :class="cmp.buttonPrimary()" @click="openPublish">Publish to {{ label }}</button>
+                    <Button size="small" :label="`Publish to ${label}`" @click="openPublish" />
                 </div>
             </div>
         </template>
@@ -204,7 +204,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                         One agent will map the repository — its components, its vocabulary, what to read first — and then a further agent documents
                         each package. You review the result before anything is committed.
                     </p>
-                    <button type="button" :class="cmp.buttonPrimary(`mt-3`)" @click="generateOpen = true">Generate documentation</button>
+                    <Button size="small" label="Generate documentation" class="mt-3" @click="generateOpen = true" />
                 </div>
             </div>
 
@@ -259,9 +259,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 </p>
                 <div class="flex justify-end gap-2">
                     <Button size="small" severity="secondary" text label="Cancel" :disabled="publishing" @click="publishState = undefined" />
-                    <button type="button" :class="cmp.buttonPrimary()" :disabled="publishing" @click="confirmPublish">
-                        {{ publishing ? `Publishing…` : `Publish` }}
-                    </button>
+                    <Button size="small" :label="publishing ? `Publishing…` : `Publish`" :disabled="publishing" @click="confirmPublish" />
                 </div>
             </div>
         </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DeployAction, DeployResource, DeployServer } from "@intentic/sandbox-contract";
-import { Button, cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
+import { Button, cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
 import { computed, onMounted, ref, toRef } from "vue";
 import { markDeploymentsSeen } from "./attention";
 import DeploymentsSkeleton from "./DeploymentsSkeleton.vue";
@@ -240,16 +240,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                     </InfoHint>
                 </template>
                 <template #actions>
-                    <a
-                        v-if="board?.komodoUrl"
-                        :href="board.komodoUrl"
-                        target="_blank"
-                        rel="noopener"
-                        class="flex items-center gap-1 text-xs text-subtle hover:text-link"
-                    >
-                        Open Komodo
-                        <Icon name="arrow-up-right" class="text-2xs" />
-                    </a>
+                    <PageAction v-if="board?.komodoUrl" icon="arrow-up-right" label="Open Komodo" :href="board.komodoUrl" />
                 </template>
             </PageHeader>
 

@@ -49,14 +49,16 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                 v-tooltip.top="stageTooltip(stage, index)"
                 @click="toggleStage(index, $event)"
             >
-                <Icon
-                    :name="STATUS_TONE[stage.status].icon"
-                    class="text-2xs"
-                    :class="STATUS_TONE[stage.status].spin ? `animate-spin` : ``"
-                />
+                <Icon :name="STATUS_TONE[stage.status].icon" class="text-2xs" :class="STATUS_TONE[stage.status].spin ? `animate-spin` : ``" />
             </button>
 
-            <Popover :ref="(el: any) => { popovers[index] = el; }">
+            <Popover
+                :ref="
+                    (el: any) => {
+                        popovers[index] = el;
+                    }
+                "
+            >
                 <div class="flex w-64 flex-col gap-2 p-1">
                     <div class="flex items-center gap-2">
                         <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content">{{ stageLabel(stage, index) }}</span>

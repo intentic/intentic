@@ -36,6 +36,9 @@ export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
 export { default as NavRail } from "./components/NavRail.vue";
 export { type NavGroup } from "./components/navRail.js";
 export { default as Page } from "./components/Page.vue";
+// The button that goes in <PageHeader #actions>, and the only thing that should — the named recipe that keeps
+// PrimeVue Button's variant matrix out of the one slot every view fills.
+export { default as PageAction } from "./components/PageAction.vue";
 export { default as PageHeader } from "./components/PageHeader.vue";
 // A bordered surface: its own header, its own interrupting strips, one scrolling body. Header and frame are one
 // component because every caller of the header wrapped it in the frame — and the min-h-0/overflow-hidden scroll

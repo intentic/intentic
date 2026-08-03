@@ -7,9 +7,9 @@
      whole row — and setup's stuck-wait banner, where copying the command again IS the way out, ended up
      wearing the quiet chip meant for a copy-as-convenience beside content. -->
 <script setup lang="ts">
+import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { clipboardOf } from "../clipboard.js";
-import { cmp } from "../cmp.js";
 
 const {
     text,
@@ -39,25 +39,22 @@ const {
 const emit = defineEmits<{ copied: [] }>();
 
 const copied = ref(false);
-// The pressed button, which is also the window the write must go through — see clipboardOf.
-const root = ref<HTMLButtonElement>();
+/* The pressed button, which is also the window the write must go through — see clipboardOf. The emphasised
+ * spellings are a <Button>, so what this ref holds is the component; `$el` is the element the clipboard call
+ * needs, and it is optional here only because the quiet spelling is a plain <button> and this ref serves both. */
+const root = ref<HTMLButtonElement | { $el: HTMLElement }>();
+const rootEl = (): HTMLElement | undefined => (root.value === undefined ? undefined : `$el` in root.value ? root.value.$el : root.value);
 
-const chrome = computed(() => {
-    if (stretch) {
-        return cmp.buttonPrimary(`min-h-10 w-full gap-1.5 px-3 text-sm`);
-    }
-    if (cta) {
-        return cmp.buttonPrimary();
-    }
-    return `inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content`;
-});
+// Weight, not geometry: the emphasised spellings are the app's one action button, so the only thing said here
+// is how much room it takes. Quiet stays a bare chip — a copy-as-convenience beside content is not an action.
+const chrome = computed(() => (stretch ? `min-h-10 w-full gap-1.5 px-3 text-sm` : `gap-1.5`));
 
 const copy = async (): Promise<void> => {
     try {
         // ponytail: awaiting a resolver before writeText works in Chromium/Firefox; Safari's
         // user-gesture rule may reject it — if so, upgrade to
         // clipboard.write([new ClipboardItem({ 'text/plain': promise })]).
-        await clipboardOf(root.value).writeText(typeof text === `function` ? await text() : text);
+        await clipboardOf(rootEl()).writeText(typeof text === `function` ? await text() : text);
         copied.value = true;
         emit(`copied`);
         setTimeout(() => (copied.value = false), 1500);
@@ -68,8 +65,18 @@ const copy = async (): Promise<void> => {
 </script>
 
 <template>
-    <button v-if="label" ref="root" type="button" :class="chrome" @click="copy">
+    <Button v-if="label && (cta || stretch)" ref="root" size="small" :class="chrome" @click="copy">
         <Icon :name="copied ? 'check' : 'copy'" :class="[stretch ? `` : `text-2xs`, copied ? `text-success` : ``]" />
+        {{ copied ? `Copied` : label }}
+    </Button>
+    <button
+        v-else-if="label"
+        ref="root"
+        type="button"
+        class="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
+        @click="copy"
+    >
+        <Icon :name="copied ? 'check' : 'copy'" :class="[`text-2xs`, copied ? `text-success` : ``]" />
         {{ copied ? `Copied` : label }}
     </button>
     <button

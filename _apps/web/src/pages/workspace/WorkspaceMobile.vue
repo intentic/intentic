@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { BottomSheet, cmp, ConfirmDialog, PullToRefresh, Segmented } from "@intentic/ui";
+import { BottomSheet, ConfirmDialog, PullToRefresh, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -501,15 +501,15 @@ const onPick = (event: Event): void => {
                      so it is gone while a search is showing, which has no open directory to land in and whose
                      rows it would otherwise sit on top of. -->
                 <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
-                <button
+                <Button
                     v-if="!contentMode"
-                    type="button"
-                    :class="cmp.buttonPrimary('absolute bottom-4 right-4 z-10 h-13 w-13 rounded-full px-0 py-0 shadow-lg')"
+                    rounded
+                    class="absolute bottom-4 right-4 z-10 h-13 w-13 px-0 py-0 shadow-lg"
                     aria-label="Upload files here"
                     @click="fileInput?.click()"
                 >
                     <Icon name="upload" class="text-xl" />
-                </button>
+                </Button>
             </template>
 
             <UploadProgress v-if="uploadScanning || uploadFiles.length > 0 || uploadSkipped !== undefined" />

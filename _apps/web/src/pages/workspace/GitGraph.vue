@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import Button from "primevue/button";
 import type { GitActionResult, GitChange, GitCommit } from "@intentic-app/api-contract";
-import { cmp, ContextMenu, Picker, Segmented, timeAgo } from "@intentic/ui";
+import { ContextMenu, Picker, Segmented, timeAgo } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, watch } from "vue";
@@ -480,15 +481,15 @@ const runPending = async (): Promise<void> => {
             </template>
             <template #footer>
                 <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="cancelAction">Cancel</button>
-                <button
+                <Button
                     v-if="pending"
-                    type="button"
-                    :class="ACTIONS[pending.kind].danger ? cmp.buttonWarning('rounded px-3 py-1') : cmp.buttonSuccess('rounded px-3 py-1')"
+                    size="small"
+                    :severity="ACTIONS[pending.kind].danger ? `warn` : `success`"
+                    :label="ACTIONS[pending.kind].confirm"
+                    class="px-3 py-1"
                     :disabled="acting || (ACTIONS[pending.kind].needsName && nameInput.trim() === '')"
                     @click="runPending"
-                >
-                    {{ ACTIONS[pending.kind].confirm }}
-                </button>
+                />
             </template>
         </Dialog>
     </div>

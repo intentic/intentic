@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from "primevue/button";
 import { extensionIdOf } from "@intentic/extension-api";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { cmp, FilterBar, RowGroup, Segmented, StatusBadge } from "@intentic/ui";
@@ -177,9 +178,7 @@ const reload = async (): Promise<void> => {
         <div v-if="isLoading" :class="cmp.emptyState(`py-6`)">Reading this sandbox's extensions…</div>
         <div v-else-if="emptyNote !== undefined" :class="cmp.emptyState(`flex flex-col items-center gap-2 py-6`)">
             <span>{{ emptyNote }}</span>
-            <button v-if="matches.length === 0 && entries.length > 0" type="button" :class="cmp.buttonPrimary()" @click="clearFilters">
-                Clear filter
-            </button>
+            <Button v-if="matches.length === 0 && entries.length > 0" size="small" label="Clear filter" @click="clearFilters" />
         </div>
 
         <!-- Running in this app build, absent from the daemon's list: no row to sit in, no switch to offer. -->

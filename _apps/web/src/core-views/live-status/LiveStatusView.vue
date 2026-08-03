@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ResourceGroupSchema, type Deployment } from "@intentic-app/api-contract";
-import { Card, cmp, CopyButton, InfoHint, Page, PageHeader, StatusBadge } from "@intentic/ui";
+import { Card, cmp, CopyButton, InfoHint, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";
 import PlanStepRow from "../../components/PlanStepRow.vue";
@@ -114,9 +114,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     <StatusBadge v-if="convergence" :variant="convergence.variant" :label="convergence.label" dot />
                 </template>
                 <template #actions>
-                    <Button label="Refresh" size="small" severity="secondary" :disabled="loading" @click="refresh">
-                        <template #icon><Icon name="refresh" /></template>
-                    </Button>
+                    <PageAction icon="refresh" label="Refresh" hint="Re-read the live cluster state" :disabled="loading" @click="refresh" />
                 </template>
             </PageHeader>
 

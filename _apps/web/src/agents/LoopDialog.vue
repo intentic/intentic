@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from "primevue/button";
 import { cmp, Segmented } from "@intentic/ui";
 import type { Loop, LoopContext } from "@intentic/sandbox-contract";
 import Dialog from "primevue/dialog";
@@ -191,9 +192,7 @@ const start = async (): Promise<void> => {
 
         <template #footer>
             <button type="button" :class="cmp.linkButton()" @click="open = false">Cancel</button>
-            <button type="button" :class="cmp.buttonPrimary()" :disabled="!ready || busy" @click="start()">
-                {{ busy ? `Starting…` : `Start looping` }}
-            </button>
+            <Button size="small" :label="busy ? `Starting…` : `Start looping`" :disabled="!ready || busy" @click="start()" />
         </template>
     </Dialog>
 </template>

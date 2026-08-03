@@ -23,7 +23,9 @@ const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession
 // Google accounts). Since platform login is Google-only, the intentic email is the account to sign in with.
 const wrongGoogleAccount = computed(
     () =>
-        user.value?.email !== undefined && presentedEmail.value !== undefined && user.value.email.toLowerCase() !== presentedEmail.value.toLowerCase(),
+        user.value?.email !== undefined &&
+        presentedEmail.value !== undefined &&
+        user.value.email.toLowerCase() !== presentedEmail.value.toLowerCase(),
 );
 
 // Drop both credentials — the daemon session the 403 was minted for AND the Google credential behind it — and

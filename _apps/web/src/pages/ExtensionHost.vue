@@ -22,8 +22,7 @@ const { extensions } = useExtensions();
 
 const disabledOwner = computed(() =>
     extensions.value.find(
-        (extension) =>
-            !extension.enabled && (extension.manifest.contributes?.views ?? []).some((view) => view.id === String(route.params[`ext`])),
+        (extension) => !extension.enabled && (extension.manifest.contributes?.views ?? []).some((view) => view.id === String(route.params[`ext`])),
     ),
 );
 

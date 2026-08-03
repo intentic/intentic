@@ -5,7 +5,7 @@
      that changed. So the presets are "what has no document" and "what the tool says is stale", with everything as
      an explicit choice rather than the path of least resistance. -->
 <script setup lang="ts">
-import { Button, Checkbox, cmp, Dialog, Icon } from "@intentic/extension-ui";
+import { Button, Checkbox, Dialog, Icon } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import type { DocIndex } from "./docModel.js";
 
@@ -84,7 +84,7 @@ const start = (): void => {
 
             <div class="flex justify-end gap-2">
                 <Button size="small" severity="secondary" text label="Cancel" @click="open = false" />
-                <button type="button" :class="cmp.buttonPrimary()" :disabled="chosen.length === 0" @click="start">Generate</button>
+                <Button size="small" label="Generate" :disabled="chosen.length === 0" @click="start" />
             </div>
         </div>
     </Dialog>

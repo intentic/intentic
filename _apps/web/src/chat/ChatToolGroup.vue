@@ -45,12 +45,7 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
                 @click="toggle"
             >
                 <Icon :name="expanded ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
-                <Icon
-                    v-if="running && live"
-                    name="spinner"
-                    :spin="true"
-                    class="text-2xs text-link"
-                />
+                <Icon v-if="running && live" name="spinner" :spin="true" class="text-2xs text-link" />
                 <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ group.name }}</span>
             </button>
@@ -70,7 +65,7 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
             </span>
         </div>
         <div v-if="expanded" class="ml-4 flex flex-col gap-1 border-l border-line pl-2">
-            <ChatToolCard v-for="tool in group.tools" :key="tool.id" :tool="(tool as ChatTool)" :live="live" />
+            <ChatToolCard v-for="tool in group.tools" :key="tool.id" :tool="tool as ChatTool" :live="live" />
         </div>
     </div>
 </template>

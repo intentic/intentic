@@ -32,8 +32,7 @@ import SuggestedSessionBox from "./SuggestedSessionBox.vue";
             <pre
                 v-if="pendingSuggestion.suggestion.evidence"
                 class="scrollbar-thin mb-3 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-line bg-overlay px-2.5 py-2 font-mono text-2xs leading-relaxed text-muted"
-                >{{ pendingSuggestion.suggestion.evidence }}</pre
-            >
+                >{{ pendingSuggestion.suggestion.evidence }}</pre>
 
             <SuggestedSessionBox
                 :conversation="pendingSuggestion.draft"

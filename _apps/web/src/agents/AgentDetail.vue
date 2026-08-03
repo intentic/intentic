@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from "primevue/button";
 import { BottomSheet, cmp, Segmented, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import Popover from "primevue/popover";
@@ -210,10 +211,11 @@ const confirmDiscard = (): void => {
                 <!-- The page's one primary action, beside the status chip that says whether it is even needed.
                      It appears only when there is something to apply, so the button's presence IS the "not
                      landed" signal the toolbar below used to spend a pill on. -->
-                <button
+                <Button
                     v-if="!mobile && changes.pending.value.length > 0"
-                    type="button"
-                    :class="cmp.buttonSuccess('shrink-0 gap-0 whitespace-nowrap px-2.5 py-1 text-2xs')"
+                    size="small"
+                    severity="success"
+                    class="shrink-0 gap-0 whitespace-nowrap px-2.5 py-1 text-2xs"
                     :disabled="!canLand"
                     @click="changes.land()"
                     v-tooltip.bottom="
@@ -221,7 +223,7 @@ const confirmDiscard = (): void => {
                     "
                 >
                     <Icon name="check" class="mr-1 text-2xs" />Land now
-                </button>
+                </Button>
                 <button
                     type="button"
                     class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
@@ -290,9 +292,14 @@ const confirmDiscard = (): void => {
             </p>
             <template #footer>
                 <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingDiscard = false">Cancel</button>
-                <button type="button" :class="cmp.buttonDanger('rounded px-3 py-1')" :disabled="changes.actionBusy.value" @click="confirmDiscard">
-                    Discard
-                </button>
+                <Button
+                    size="small"
+                    severity="danger"
+                    label="Discard"
+                    class="px-3 py-1"
+                    :disabled="changes.actionBusy.value"
+                    @click="confirmDiscard"
+                />
             </template>
         </Dialog>
     </div>

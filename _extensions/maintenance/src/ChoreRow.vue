@@ -51,7 +51,7 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
             @click="emit(`toggle`)"
         >
             <Icon :name="expanded ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
-            <Icon :name="(verdict.chore.icon as IconName)" class="shrink-0 text-subtle" />
+            <Icon :name="verdict.chore.icon as IconName" class="shrink-0 text-subtle" />
             <span class="min-w-0 shrink-0 text-sm text-content">{{ verdict.chore.title }}</span>
             <!-- The headline is the row's whole point, so it takes the flexible column and the title does not:
                  truncating "4 majors waiting, 61 behind in total" to fit a chore name nobody needed re-reading

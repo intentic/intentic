@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { cmp, formatTokens, ProgressRing, useDevice } from "@intentic/ui";
+import Button from "primevue/button";
+import { formatTokens, ProgressRing, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import OriginMark from "../components/OriginMark.vue";
@@ -396,15 +397,11 @@ const grab = (event: PointerEvent): void => {
                  hover reaches no touch device, and a paragraph in a box that closes on the first click is not
                  disclosure, it is a formality. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-0.5">
-                <button
-                    type="button"
-                    :class="cmp.buttonPrimary('gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs')"
-                    @click.stop="emit('resolve')"
-                >
+                <Button size="small" class="gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs" @click.stop="emit('resolve')">
                     <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" class="mr-1 text-2xs" />{{
                         handingOver ? "Handing it over…" : "Have the agent resolve it"
                     }}
-                </button>
+                </Button>
                 <span class="text-2xs leading-snug text-subtle"
                     >It merges in its own worktree — nothing reaches your workspace unless it succeeds.</span
                 >
@@ -415,13 +412,9 @@ const grab = (event: PointerEvent): void => {
                  the two are the same action on the same work, and must read as such. What landing DOES follows
                  it in prose rather than on hover, like the resolve button above. -->
             <div v-if="landable" class="flex min-w-0 flex-col gap-0.5">
-                <button
-                    type="button"
-                    :class="cmp.buttonSuccess('gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs')"
-                    @click.stop="emit('land')"
-                >
+                <Button size="small" severity="success" class="gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs" @click.stop="emit('land')">
                     <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" class="mr-1 text-2xs" />{{ landing ? "Landing…" : "Land now" }}
-                </button>
+                </Button>
                 <span class="text-2xs leading-snug text-subtle">Arrives as uncommitted changes — your own commit stays the review step.</span>
             </div>
 
