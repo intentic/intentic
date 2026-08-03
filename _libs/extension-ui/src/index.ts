@@ -51,6 +51,12 @@ export {
     type PickerOption,
     type PickerOptions,
     ProgressRing,
+    /* The writing field and the drag seam ship for the same reason <SplitView> did: an extension view that
+     * wants prose typeset as a document, or a pane the reader can size, would otherwise hand-roll one — and
+     * both recipes have a failure mode (a replica that disagrees with its field; a drag bound to the window)
+     * that is invisible until it is in front of somebody. */
+    ProseField,
+    ResizeSeam,
     Row,
     RowGroup,
     SearchBar,

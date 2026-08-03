@@ -31,6 +31,8 @@ export const extensionUiNames = [
     "Picker",
     "Popover",
     "ProgressRing",
+    "ProseField",
+    "ResizeSeam",
     "Row",
     "RowGroup",
     "SearchBar",

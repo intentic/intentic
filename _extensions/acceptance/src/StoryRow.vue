@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Checkbox, cmp, Icon, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { Button, Checkbox, cmp, Icon, ProseField, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { criteriaOf, narrativeOf, type Story, storyMarkdown } from "./stories";
 
@@ -25,11 +25,12 @@ import { criteriaOf, narrativeOf, type Story, storyMarkdown } from "./stories";
  * ran past 150 characters a line, well past where the eye loses the start of the next one).
  *
  * So everything read in sentences is sans, at the floor, at 1.7, inside a 68ch column, in full content colour;
- * mono survives only where it is an identifier (the path, the criterion numbers). And the fields are BORDERLESS:
- * three stacked bordered boxes on a `bg-canvas` panel is a form, and it was drawing those borders around the same
- * colour as the surface behind them — chrome with no figure/ground to show for it. What is left is the text
- * itself, tinted where the caret is. The mirror of the artifact, in the artifact's own order: heading, prose,
- * `## Acceptance criteria`, the list.
+ * mono survives only where it is an identifier (the path, the criterion numbers). And the fields are BORDERLESS
+ * and as tall as what has been typed into them — <ProseField>, which is the recipe this panel worked out and
+ * which now lives in the kit, because the workflow designer's step prompt is the same job and would otherwise
+ * have been a second copy of a thing whose failure mode (a size replica that disagrees with its field) is
+ * invisible until it clips somebody's last paragraph. The mirror of the artifact, in the artifact's own order:
+ * heading, prose, `## Acceptance criteria`, the list.
  *
  * CRITERIA ARE EDITED AS A LIST, not as a form: Enter opens the next one, Backspace on an empty one removes it,
  * the arrows walk them from the ends. That is what the content actually is — a checklist someone adds to as they
@@ -61,35 +62,9 @@ const emit = defineEmits<{ toggle: []; select: [boolean]; run: [] }>();
 // never a race with the timer.
 const SAVE_AFTER_MS = 700;
 
-/* The editable-text recipe, shared by all three fields so the document has ONE voice. No border and no fill until
- * the caret is in it: an editor shows you your text, and shows chrome only for the line you are on.
- *
- * EVERY FIELD IS A TEXTAREA, including the one-liners: an <input> scrolls a long criterion sideways inside its
- * box, hiding the end of a promise behind an edge and defeating the measure entirely. Wrapping is what makes the
- * list readable, so nothing here is an input.
- *
- * They size to their content WITHOUT JAVASCRIPT. Each one shares a grid cell with an invisible replica of its own
- * text, and the cell is as tall as the taller of the two — so the box tracks the words through anything that
- * reflows them. That is not a stylistic preference over the app composer's measure-and-set `grow()`: this panel
- * loads Inter over the network, and measuring on `nextTick` measured the FALLBACK font, then let the swap reflow
- * the prose 166px taller inside a box already fixed at the old height. The last two paragraphs of every story
- * were simply clipped (verified in a browser, which is the only way that class of bug is ever seen). A container
- * resize would have done the same. There is nothing to keep up to date if the browser does the sizing.
- *
- * The replica must therefore agree with its textarea to the pixel — same font, size, leading, padding, wrapping —
- * which is why those live in the *_BOX strings below, applied to BOTH, rather than being written twice. And it
- * mirrors whatever the field is DISPLAYING, which for an empty one is its placeholder: mirroring only the value
- * sized a fresh story's prose box to nothing and cut its own instructions off mid-sentence. Hence the hints being
- * constants rather than literals in the template — one string, read by the replica and the placeholder both. */
-const FIELD = `resize-none overflow-hidden rounded-md bg-transparent text-content placeholder:text-subtle focus:bg-overlay focus:outline-none`;
-// The invisible half. `visibility: hidden` still occupies its cell, which is the whole point.
-const GHOST = `pointer-events-none invisible`;
-// A trailing zero-width space so a value ending in a newline still reserves the line the caret is actually on.
-const TAIL = `​`;
-
-const TITLE_BOX = `[grid-area:1/1] px-2 py-0.5 text-lg leading-snug font-semibold tracking-tight break-words whitespace-pre-wrap`;
-const PROSE_BOX = `[grid-area:1/1] px-2 py-1 text-sm leading-[1.7] break-words whitespace-pre-wrap`;
-
+/* The hints are constants rather than literals in the template because <ProseField> mirrors whatever the field
+ * is DISPLAYING to work out its height, and for an empty field that is its placeholder — one string, read by
+ * the size replica and by the placeholder both. */
 const TITLE_HINT = `Sign in with an email address`;
 const NARRATIVE_HINT =
     `As a returning visitor, I want to sign in with my email and password so that I reach my own workspace.\n\n` +
@@ -101,7 +76,7 @@ const NEXT_HINT = `and then…`;
 const title = ref(``);
 const narrative = ref(``);
 const criteria = ref<string[]>([]);
-const inputs = ref<Record<number, HTMLTextAreaElement | undefined>>({});
+const inputs = ref<Record<number, InstanceType<typeof ProseField> | undefined>>({});
 const state = ref<`clean` | `dirty` | `saving` | `saved`>(`clean`);
 const failure = ref<string | undefined>(undefined);
 const confirmRemove = ref(false);
@@ -118,7 +93,7 @@ const authored = computed<number>(() => (expanded ? criteria.value.filter((text)
 const focusAt = (index: number): void => {
     const at = Math.min(Math.max(index, 0), criteria.value.length - 1);
     void nextTick(() => {
-        const input = inputs.value[at];
+        const input = inputs.value[at]?.field;
         input?.focus();
         input?.setSelectionRange(input.value.length, input.value.length);
     });
@@ -261,24 +236,18 @@ onBeforeUnmount(() => void flush());
             <div class="flex max-w-[68ch] flex-col px-2 text-sm">
                 <!-- The `# Heading` this writes, at the size a heading is. It was `text-sm font-medium` — the same
                      size as the collapsed row it replaces, so opening a story changed nothing about how it read. -->
-                <div class="-mx-2 grid">
-                    <div :class="[TITLE_BOX, GHOST]">{{ title || TITLE_HINT }}{{ TAIL }}</div>
-                    <textarea
-                        v-model="title"
-                        rows="1"
-                        :placeholder="TITLE_HINT"
-                        :class="[FIELD, TITLE_BOX, `placeholder:font-normal`]"
-                        @keydown.enter.prevent="focusAt(0)"
-                        @keydown.esc="emit(`toggle`)"
-                    />
-                </div>
+                <ProseField
+                    v-model="title"
+                    variant="heading"
+                    :placeholder="TITLE_HINT"
+                    class="-mx-2"
+                    @keydown.enter.prevent="focusAt(0)"
+                    @keydown.esc="emit(`toggle`)"
+                />
 
                 <!-- The story's prose, directly under its heading and unlabelled — in the file it is simply the
                      body, and a form label over it would be describing what the words already are. -->
-                <div class="-mx-2 mt-3 grid min-h-24">
-                    <div :class="[PROSE_BOX, GHOST]">{{ narrative || NARRATIVE_HINT }}{{ TAIL }}</div>
-                    <textarea v-model="narrative" rows="1" :class="[FIELD, PROSE_BOX]" :placeholder="NARRATIVE_HINT" @keydown.esc="emit(`toggle`)" />
-                </div>
+                <ProseField v-model="narrative" :placeholder="NARRATIVE_HINT" class="-mx-2 mt-3 min-h-24" @keydown.esc="emit(`toggle`)" />
 
                 <!-- `## Acceptance criteria`, set as the subheading it becomes rather than as a form's field
                      label: the panel is a picture of the file, and this line exists in the file. -->
@@ -287,26 +256,25 @@ onBeforeUnmount(() => void flush());
                     <span class="text-2xs text-subtle">one verdict each, in this order</span>
                 </div>
                 <div class="mt-2 flex flex-col">
-                    <div v-for="(_, index) in criteria" :key="index" class="group flex items-start gap-1">
+                    <div v-for="(text, index) in criteria" :key="index" class="group flex items-start gap-1">
                         <!-- The same line box as the text it numbers — same size, same leading, same padding — so
                              the digit sits ON the first baseline. Smaller, it rendered as a superscript. It
                              recedes by colour instead, which costs no alignment. -->
                         <span class="w-5 shrink-0 py-1 text-right text-sm leading-[1.7] tabular-nums text-subtle">{{ index + 1 }}</span>
-                        <div class="grid min-w-0 flex-1">
-                            <div :class="[PROSE_BOX, GHOST]">{{ criteria[index] || (index === 0 ? CRITERION_HINT : NEXT_HINT) }}{{ TAIL }}</div>
-                            <textarea
-                                :ref="(el) => (inputs[index] = el as HTMLTextAreaElement)"
-                                v-model="criteria[index]"
-                                rows="1"
-                                :placeholder="index === 0 ? CRITERION_HINT : NEXT_HINT"
-                                :class="[FIELD, PROSE_BOX]"
-                                @keydown.enter.prevent="insertAfter(index)"
-                                @keydown.backspace="shrink(index, $event)"
-                                @keydown.up="walk(index, $event, -1)"
-                                @keydown.down="walk(index, $event, 1)"
-                                @keydown.esc="emit(`toggle`)"
-                            />
-                        </div>
+                        <!-- Bound through the loop's own value rather than as `v-model="criteria[index]"`: an
+                             indexed read is `string | undefined`, and the field's model is a string. -->
+                        <ProseField
+                            :ref="(el) => (inputs[index] = el as InstanceType<typeof ProseField>)"
+                            :model-value="text"
+                            @update:model-value="criteria[index] = $event"
+                            :placeholder="index === 0 ? CRITERION_HINT : NEXT_HINT"
+                            class="min-w-0 flex-1"
+                            @keydown.enter.prevent="insertAfter(index)"
+                            @keydown.backspace="shrink(index, $event)"
+                            @keydown.up="walk(index, $event, -1)"
+                            @keydown.down="walk(index, $event, 1)"
+                            @keydown.esc="emit(`toggle`)"
+                        />
                         <!-- Quiet until the row is under the pointer or holds the caret. Fifteen ×'s down the
                              margin is fifteen invitations to delete a promise, printed beside every one of them. -->
                         <button

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, Popover, ToggleSwitch } from "@intentic/extension-ui";
+import { Button, cmp, Icon, Popover, ResizeSeam, ToggleSwitch } from "@intentic/extension-ui";
 import { type Workflow, workflowFaults } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import StepInspector from "./StepInspector.vue";
@@ -26,6 +26,11 @@ import { useWorkflows } from "./useWorkflows";
  *  · a step's prose → the inspector, which asks two questions and folds the other nine away.
  *  · run settings  → a popover off the header. They belong to the whole run, not to any step, and putting them
  *                    beside a step's fields is what made the old panel read as one undifferentiated wall.
+ *
+ * THE SPLIT IS THE READER'S TO SET. Canvas and inspector want opposite things and both are right: reading the
+ * shape of a nine-step graph wants the width, writing a step's prompt wants the column. A fixed 20rem answered
+ * neither — the prompt, which is the one real paragraph in this extension, was being written three words to a
+ * line. So the seam is draggable, double-click puts it back, and the width is remembered.
  */
 
 const { initial } = defineProps<{ initial: Workflow }>();
@@ -97,6 +102,31 @@ const flipHandoff = (): void => {
 const ready = computed(
     () => faults.value.length === 0 && draft.value.name.trim() !== `` && draft.value.steps.every((step) => step.prompt.trim() !== ``),
 );
+
+/* THE INSPECTOR'S WIDTH. Remembered per browser rather than per workflow: it is a property of the desk you are
+ * working at (how wide the window is, whether you are writing or reading), not of the graph in front of you.
+ * The floor is a readable column, the ceiling leaves the canvas more than half of a laptop screen. */
+const WIDTH_KEY = `ext-workflows-inspector-width`;
+const DEFAULT_WIDTH = 360;
+const readWidth = (): number => {
+    try {
+        const stored = Number(localStorage.getItem(WIDTH_KEY));
+        if (Number.isFinite(stored) && stored > 0) {
+            return stored;
+        }
+    } catch {
+        // Storage may be unavailable (private mode); fall back to the default.
+    }
+    return DEFAULT_WIDTH;
+};
+const inspectorWidth = ref(readWidth());
+watch(inspectorWidth, (px) => {
+    try {
+        localStorage.setItem(WIDTH_KEY, String(px));
+    } catch {
+        // Storage may be unavailable (private mode); the in-memory ref still holds.
+    }
+});
 
 const commit = async (): Promise<void> => {
     failure.value = undefined;
@@ -200,14 +230,17 @@ const commit = async (): Promise<void> => {
                 </div>
             </div>
 
-            <aside v-if="selected" class="flex w-80 shrink-0 flex-col border-l border-line">
-                <StepInspector
-                    :key="selected.id"
-                    :model-value="selected"
-                    @update:model-value="draft = updateStep(draft, selected.id, $event)"
-                    @remove="onRemove(selected.id)"
-                />
-            </aside>
+            <template v-if="selected">
+                <ResizeSeam v-model="inspectorWidth" pane="after" :min="288" :max="720" :reset="DEFAULT_WIDTH" />
+                <aside class="flex shrink-0 flex-col border-l border-line" :style="{ width: `${inspectorWidth}px` }">
+                    <StepInspector
+                        :key="selected.id"
+                        :model-value="selected"
+                        @update:model-value="draft = updateStep(draft, selected.id, $event)"
+                        @remove="onRemove(selected.id)"
+                    />
+                </aside>
+            </template>
         </div>
 
         <!-- Run settings: properties of the WHOLE run, so they are one click off the header rather than mixed

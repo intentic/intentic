@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Checkbox, cmp, Icon, Segmented, Select } from "@intentic/extension-ui";
+import { Button, Checkbox, cmp, Icon, ProseField, Segmented, Select } from "@intentic/extension-ui";
 import type { OutputField, WorkflowStep } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 
@@ -20,7 +20,21 @@ import { computed, ref } from "vue";
  *  · the dependency picker — you draw dependencies on the canvas now, which is what a canvas is for.
  *  · the handoff — it belongs to the EDGE, and the canvas draws it (solid = same session, dashed = new one).
  *    A property of the line between two steps was never a field on one of them.
- */
+ *
+ * AND THE TWO QUESTIONS ARE SET AS A DOCUMENT, NOT AS A FORM — the same decision, for the same reason, as the
+ * acceptance extension's story panel (see StoryRow, which has the long version). A step's prompt is the only
+ * real PROSE in this extension: it is the paragraph handed to an agent verbatim, it is written and rewritten,
+ * and it was being typed into a 5-row bordered box that showed a third of it and scrolled the rest. Three
+ * stacked boxes of that kind on one panel is a form, and it drew its borders in the same colour as the surface
+ * behind them — chrome with no figure/ground to show for it.
+ *
+ * So the top of this panel is a heading and two passages: no borders, no fixed heights, each field as tall as
+ * what has been typed into it (<ProseField> — it grows without JavaScript, and the note there says why that
+ * matters more than it sounds). The panel is a resizable pane precisely so those passages can be given room.
+ *
+ * THE FOLD BELOW IS STILL A FORM, and deliberately still looks like one. An output field's name and type, a
+ * shell command, three numeric ceilings — those are values, not sentences, and dressing them as prose would be
+ * the same mistake in the other direction. The line between the tiers IS the rule under "Advanced". */
 
 const step = defineModel<WorkflowStep>({ required: true });
 const emit = defineEmits<{ remove: [] }>();
@@ -30,6 +44,17 @@ const advanced = ref(false);
 const patch = (over: Partial<WorkflowStep>): void => {
     step.value = { ...step.value, ...over };
 };
+
+const TITLE_HINT = `Fix the failing tests`;
+const PROMPT_HINT = `Run the tests, take the top failure, understand it, fix the code.`;
+const GOAL_HINT = `The whole test suite passes.`;
+const RUBRIC_HINT = `A rubric for a reviewer that did none of this work.`;
+
+// The document's three passages, as writable views onto the step. `patch` is what keeps every edit a whole
+// new step object, which is what the designer's undo-free draft model depends on.
+const title = computed({ get: () => step.value.title, set: (value: string) => patch({ title: value }) });
+const prompt = computed({ get: () => step.value.prompt, set: (value: string) => patch({ prompt: value }) });
+const goal = computed({ get: () => step.value.goal, set: (value: string) => patch({ goal: value }) });
 
 const OUTPUT_OPTIONS = [
     { value: `none` as const, label: `Nothing` },
@@ -110,63 +135,51 @@ const advancedSummary = computed(() => {
 </script>
 
 <template>
-    <div class="flex h-full flex-col gap-3 overflow-y-auto p-3">
-        <div class="flex items-center gap-2">
-            <input
-                :value="step.title"
-                :class="[cmp.input(), `flex-1 font-medium`]"
-                placeholder="What this step is called"
-                @input="patch({ title: ($event.target as HTMLInputElement).value })"
-            />
+    <!-- `cursor-text` over the whole document: the page under the words is what says "write here", now that no
+         field draws a box to say it. The measure is capped because the pane is draggable — an unbounded prompt
+         at 700px runs past where the eye finds the start of the next line. -->
+    <div class="h-full cursor-text overflow-y-auto px-4 py-5">
+        <div class="flex max-w-[68ch] flex-col text-sm">
+            <!-- The step's name, at the size a heading is. Delete sits beside it rather than in a toolbar: it
+                 is the one action that belongs to this step and to nothing else on the page. -->
+            <div class="-mx-2 flex items-start gap-1">
+                <ProseField v-model="title" variant="heading" :placeholder="TITLE_HINT" class="min-w-0 flex-1" />
+                <button
+                    type="button"
+                    v-tooltip.top="`Delete this step`"
+                    :class="cmp.iconButton(`mt-1 text-danger`)"
+                    aria-label="Delete step"
+                    @click="emit(`remove`)"
+                >
+                    <Icon name="trash" />
+                </button>
+            </div>
+
+            <!-- The instructions, directly under the heading and unlabelled — this IS the step, and a form
+                 label over it would be describing what the words already are. Handed to the agent verbatim. -->
+            <ProseField v-model="prompt" :placeholder="PROMPT_HINT" class="-mx-2 mt-3 min-h-24" />
+
+            <div class="mt-5 flex items-baseline justify-between border-t border-line/60 pt-4">
+                <h3 class="text-sm font-semibold text-content">Done when</h3>
+                <span class="text-2xs text-subtle">restated every round</span>
+            </div>
+            <ProseField v-model="goal" :placeholder="GOAL_HINT" class="-mx-2 mt-1 min-h-12" />
+            <p class="px-0.5 text-2xs text-subtle">It repeats until this is true.</p>
+
+            <!-- Everything else. Shut by default, and it says what it is holding so shutting it is safe. The
+                 rule above it is the seam between the two tiers: prose above, values below. -->
             <button
                 type="button"
-                v-tooltip.top="`Delete this step`"
-                :class="cmp.iconButton(`text-danger`)"
-                aria-label="Delete step"
-                @click="emit(`remove`)"
-            >
-                <Icon name="trash" />
-            </button>
-        </div>
-
-        <!-- Tier one: the two sentences. Nothing else is required to have a step that runs. -->
-        <label class="flex flex-col gap-1">
-            <span :class="cmp.sectionLabel()">What it does</span>
-            <textarea
-                :value="step.prompt"
-                :class="cmp.input()"
-                rows="5"
-                placeholder="Run the tests, take the top failure, understand it, fix the code."
-                @input="patch({ prompt: ($event.target as HTMLTextAreaElement).value })"
-            ></textarea>
-        </label>
-
-        <label class="flex flex-col gap-1">
-            <span :class="cmp.sectionLabel()">Done when</span>
-            <textarea
-                :value="step.goal"
-                :class="cmp.input()"
-                rows="3"
-                placeholder="The whole test suite passes."
-                @input="patch({ goal: ($event.target as HTMLTextAreaElement).value })"
-            ></textarea>
-            <span class="text-2xs text-subtle">Restated to the agent every round — it repeats until this is true.</span>
-        </label>
-
-        <!-- Everything else. Shut by default, and it says what it is holding so shutting it is safe. -->
-        <div class="rounded-lg border border-line">
-            <button
-                type="button"
-                class="flex w-full cursor-pointer items-center gap-2 px-2.5 py-2 text-left"
+                class="mt-5 flex cursor-pointer items-center gap-2 border-t border-line/60 pt-4 text-left"
                 :aria-expanded="advanced"
                 @click="advanced = !advanced"
             >
                 <Icon :name="advanced ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs text-subtle" />
-                <span :class="cmp.sectionLabel()">Advanced</span>
-                <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ advancedSummary }}</span>
+                <span class="shrink-0 text-sm font-semibold text-content">Advanced</span>
+                <span class="min-w-0 flex-1 truncate text-right text-2xs text-subtle">{{ advancedSummary }}</span>
             </button>
 
-            <div v-if="advanced" class="flex flex-col gap-3 border-t border-line p-2.5">
+            <div v-if="advanced" class="mt-3 flex flex-col gap-4">
                 <div class="flex flex-col gap-1.5">
                     <span :class="cmp.sectionLabel()">What it hands on</span>
                     <Segmented v-model="outputKind" :options="OUTPUT_OPTIONS" />
@@ -221,13 +234,13 @@ const advancedSummary = computed(() => {
 
                 <div class="flex flex-col gap-1.5">
                     <span :class="cmp.sectionLabel()">And only done when</span>
+                    <!-- A shell command is a VALUE, so it keeps its box; the rubric beside it is a paragraph
+                         somebody writes, so it does not. That is the whole rule this panel is typeset on. -->
                     <input v-model="command" :class="[cmp.input(), `font-mono`]" placeholder="pnpm test" />
-                    <textarea
-                        v-model="rubric"
-                        :class="cmp.input()"
-                        rows="2"
-                        placeholder="A rubric for a reviewer that did none of this work."
-                    ></textarea>
+                    <!-- Not bled out to the section's edge the way the passages above are: down here it has
+                         boxed siblings, and a field hanging 8px to their left reads as a caption on the one
+                         above it rather than as a field of its own. -->
+                    <ProseField v-model="rubric" :placeholder="RUBRIC_HINT" class="min-h-12" />
                 </div>
 
                 <div class="flex flex-col gap-1.5">

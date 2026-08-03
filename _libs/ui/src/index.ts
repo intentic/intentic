@@ -48,7 +48,13 @@ export { default as Panel } from "./components/Panel.vue";
 export { default as Picker } from "./components/Picker.vue";
 export { type PickerGroup, type PickerOption, type PickerOptions } from "./components/picker.js";
 export { default as ProgressRing } from "./components/ProgressRing.vue";
+// The writing field — `cmp.input()`'s counterpart for text read in sentences. Borderless, and as tall as what
+// has been typed into it.
+export { default as ProseField } from "./components/ProseField.vue";
 export { default as PullToRefresh } from "./components/PullToRefresh.vue";
+// The drag strip between two panes. Four screens had written it by hand before this existed, and the fifth
+// caller was an extension, which could not have reached any of the four.
+export { default as ResizeSeam } from "./components/ResizeSeam.vue";
 export { default as Row } from "./components/Row.vue";
 export { default as RowGroup } from "./components/RowGroup.vue";
 export { default as SearchBar } from "./components/SearchBar.vue";

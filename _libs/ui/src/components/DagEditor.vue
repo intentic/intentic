@@ -206,14 +206,27 @@ const fit = (): void => void flow.value?.fitView(FIT);
                 <Handle type="target" :position="targetPosition" class="dag-editor-handle" />
                 <Handle type="source" :position="sourcePosition" class="dag-editor-handle" />
                 <!-- The one-click chain. It sits ON the trailing handle because that is where the same action's
-                     drag gesture starts: one affordance, two ways to use it, and the cheap way is the default. -->
+                     drag gesture starts: one affordance, two ways to use it, and the cheap way is the default.
+
+                     IT IS PAINTED IN THE ACTION COLOUR, and that is a contrast fix rather than a decoration.
+                     It used to be `border-line` on `bg-canvas` — a ring at 1.42:1 in dark and 1.20:1 in light
+                     against the surface behind it, where WCAG's floor for the boundary of a control is 3:1, and
+                     a fill IDENTICAL to that surface, so the chip had no figure/ground at all. People reported
+                     hovering a node and not finding it, which is exactly what those numbers predict. No neutral
+                     in this palette can carry the job: `line-strong`, the darkest line token, still only reaches
+                     2.10:1/1.40:1. The accent does (8.42:1/4.29:1) — and a button that chains a step IS the
+                     canvas's primary action, so it is the honest colour as well as the legible one.
+
+                     24px rather than 20 for the same reason on the other axis: SC 2.5.8's minimum target. And it
+                     answers focus, not only hover — revealed by `group-hover` alone, it was a control a keyboard
+                     could reach and never see. -->
                 <button
                     v-if="addLabel !== undefined"
                     type="button"
                     v-tooltip.top="addLabel"
                     :aria-label="addLabel"
-                    class="absolute z-10 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-line bg-canvas text-2xs text-subtle opacity-0 transition-opacity hover:border-link hover:text-link group-hover/node:opacity-100"
-                    :class="direction === `LR` ? `-right-2.5 top-1/2 -translate-y-1/2` : `-bottom-2.5 left-1/2 -translate-x-1/2`"
+                    class="absolute z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-link bg-card text-2xs text-link opacity-0 shadow-sm transition hover:bg-link hover:text-fill-content focus-visible:opacity-100 group-hover/node:opacity-100"
+                    :class="direction === `LR` ? `-right-3 top-1/2 -translate-y-1/2` : `-bottom-3 left-1/2 -translate-x-1/2`"
                     @click.stop="emit(`add`, data.id)"
                 >
                     <Icon name="plus" />
@@ -255,20 +268,34 @@ const fit = (): void => void flow.value?.fitView(FIT);
     stroke-width: 2;
 }
 /* Unlike DagGraph's inert anchors these are grab targets, so they are visible and hit-testable — but only
-   once the pointer is on the card. A canvas that shows every handle at rest reads as a circuit diagram. */
+   once the pointer is on the card. A canvas that shows every handle at rest reads as a circuit diagram.
+
+   A SOLID DOT, NOT A HOLLOW RING. Hollow, it was a 1px `line-strong` outline on a `canvas` fill: 2.10:1 in
+   dark and 1.40:1 in light against the surface it sits on, well under the 3:1 a control's boundary owes the
+   reader, and the fill was the surface — so a "visible" handle was a dot you had to already know was there.
+   Filled in `subtle` it clears the floor in both schemes (4.52:1 / 4.05:1) with the same 8px footprint, and
+   the canvas-coloured halo keeps it legible whether it lands on the card's edge or on the dotted pane. */
 .dag-editor .vue-flow__handle {
     height: 8px;
     width: 8px;
     min-height: 0;
     min-width: 0;
-    border: 1px solid var(--color-line-strong);
-    background: var(--color-canvas);
+    border: none;
+    background: var(--color-subtle);
+    box-shadow: 0 0 0 2px var(--color-canvas);
     opacity: 0;
-    transition: opacity 120ms;
+    transition:
+        opacity 120ms,
+        background-color 120ms;
 }
 .dag-editor .group\/node:hover .vue-flow__handle,
 .dag-editor .vue-flow__handle.connectionindicator:hover {
     opacity: 1;
+}
+/* Under the pointer it becomes the thing an edge will be drawn in, which is the only preview of the gesture
+   there is before the drag starts. */
+.dag-editor .vue-flow__handle.connectionindicator:hover {
+    background: var(--color-link);
 }
 .dag-editor .vue-flow__connectionline path {
     stroke: var(--color-link);
