@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Loop, LoopDocument, Workflow, WorkflowRun, WorkflowRunState, WorkflowStep, WorkflowStepRun } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+// The turn registry's own abort — agent-steering is a leaf (a Map of live turns), so this is not the cycle
+// through agent.routes that loop-runner's header warns about.
+import { stopTurn } from "../agent/agent-steering.js";
 import { runLoop, stopLoop, type TurnFn } from "../loops/loop-runner.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
 import { workflowProjection } from "./workflow-state.js";
@@ -42,9 +45,19 @@ const running = new Map<string, { readonly abort: AbortController }>();
 
 export const workflowRunning = (runId: string): boolean => running.has(runId);
 
-/* Ask a run to stop. No step that has not started will start, and the steps in flight stop after their current
- * ITERATION rather than being killed — same split as stopping a loop, and the same reason: a step on iteration
- * 6 doing good work should be allowed to be its own last one. Returns false when nothing was running.
+/* Stop a run: nothing that has not started will start, and the steps in flight are CUT OFF where they are.
+ * Returns false when nothing was running.
+ *
+ * IT ABORTS THE TURNS, and that is a deliberate departure from how a loop's own Stop behaves. A loop asks its
+ * iteration to be the last one, on the argument that a step doing good work should get to finish the round it
+ * is on — which is right for a loop, whose Stop is pressed by someone watching that one agent. It is wrong
+ * here. A workflow's round is an entire agent turn: minutes, sometimes many. Pressing Stop on a run and
+ * watching it keep working, keep spending and keep asking questions for the next ten minutes is not a graceful
+ * stop, it is a button that appears not to work — which is exactly how it was reported.
+ *
+ * The turn's own abort is what the user's /agent/stop does, so a stopped step lands the same way as one the
+ * user stopped by hand: whatever it had written stays on its branch, and the loop's next iteration never
+ * begins because the run's signal has already told it not to.
  */
 export const stopWorkflowRun = (runId: string): boolean => {
     const live = running.get(runId);
@@ -175,8 +188,21 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
         /* Stopping the RUN has to reach a loop that is already turning, and the loop pump's own signal is
          * private to it — `stopLoop` is the door. The listener covers a stop that arrives during the step; the
          * check right after covers one that landed in the instant between the guard above and here, which is
-         * safe to do because runLoop registers the conversation synchronously before its first await. */
-        const relay = (): void => void stopLoop(conversationId);
+         * safe to do because runLoop registers the conversation synchronously before its first await.
+         *
+         * BOTH DOORS, and the second is the one that makes Stop mean anything. `stopLoop` ends the LOOP — no
+         * further iteration — while the iteration already in flight runs to completion, and an iteration here
+         * is a whole agent turn. So a run stopped at minute one went on thinking, spending and (this is what
+         * gave it away) asking the user questions until its turn happened to end. `stopTurn` is the abort
+         * behind /agent/stop: the turn is cut off where it stands and the step settles as stopped, which is
+         * what a person means when they press Stop on a run. `stopping` publishes it to the fleet card
+         * immediately, ahead of the unwind, so the board stops claiming the step is working. */
+        const relay = (): void => {
+            void stopLoop(conversationId);
+            if (stopTurn(conversationId)) {
+                services.agents.stopping(conversationId);
+            }
+        };
         abort.signal.addEventListener("abort", relay, { once: true });
         const settling = runLoop(services, record, fn);
         if (abort.signal.aborted) {

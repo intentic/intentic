@@ -3,7 +3,8 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
-import type { FleetLane } from "./agentStatus";
+import { blocked, type FleetLane } from "./agentStatus";
+import type { FleetAgent } from "./useAgents";
 
 /* WORKFLOW RUNS, FOR THE SURFACES THAT ARE NOT THE WORKFLOWS PAGE — the fleet board and the chat composer.
  *
@@ -33,12 +34,23 @@ const designsKey = [`workflows`] as const;
  * `state === "running" ? active : finished`: `overspent` and `error` are the two outcomes a person has to do
  * something about, and filing them under Finished is how a $30 ceiling hit at 2am is discovered on Thursday.
  */
-export const laneOfRun = (run: WorkflowRun): FleetLane => {
-    if (run.state === `failed` || run.state === `overspent` || run.state === `error`) {
+export const laneOfRun = (run: WorkflowRun, needsYou = false): FleetLane => {
+    // A step waiting on a question, a permission or a conflict puts the RUN in Attention, because the step's
+    // own card is not on the board any more — it is inside this one (see boardLanes). A container that hides
+    // its contents inherits their claim on the user; without this a run could sit in Active, saying it was
+    // working, while the thing it was actually doing was waiting for an answer nobody could see.
+    if (needsYou || run.state === `failed` || run.state === `overspent` || run.state === `error`) {
         return `attention`;
     }
     return run.state === `running` ? `active` : `finished`;
 };
+
+/* Which runs have a step waiting on the user, by run id — the input to the rule above, and the reason it is
+ * computed from the FLEET rather than from the run record: "blocked" is a live fact about a conversation
+ * (a question on screen, a permission prompt), and the ledger only knows what the scheduler wrote.
+ */
+export const runsNeedingYou = (fleet: readonly FleetAgent[]): Set<string> =>
+    new Set(fleet.flatMap((agent) => (blocked(agent) && agent.workflow !== undefined ? [agent.workflow.runId] : [])));
 
 /* The runs a lane holds, for the two surfaces that draw lanes — the fleet board and the chat rail, which are
  * the same list at two widths and must not disagree about where a run belongs.
@@ -46,8 +58,8 @@ export const laneOfRun = (run: WorkflowRun): FleetLane => {
  * Finished is capped for the reason the agents' own Finished lane is: that lane confirms what just completed,
  * and the run HISTORY is the workflows page, which keeps the last fifty and draws each as the graph it was.
  */
-export const runsInLane = (runs: readonly WorkflowRun[], lane: FleetLane, window: number): WorkflowRun[] => {
-    const inLane = runs.filter((run) => laneOfRun(run) === lane);
+export const runsInLane = (runs: readonly WorkflowRun[], lane: FleetLane, window: number, needing: ReadonlySet<string>): WorkflowRun[] => {
+    const inLane = runs.filter((run) => laneOfRun(run, needing.has(run.runId)) === lane);
     return lane === `finished` ? inLane.slice(0, window) : inLane;
 };
 

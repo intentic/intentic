@@ -30,7 +30,7 @@ import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { chatRun } from "../composables/chat/chatRun";
 import { openRunInChat } from "../composables/chat/openRun";
-import { runsInLane, runningTitles, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
+import { runsInLane, runningTitles, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { commandShortcut } from "../composables/commands/useCommands";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
@@ -135,7 +135,10 @@ const {
  * attention, the rest finished), for as long as the ledger holds them. `chatRun` decides only which row reads
  * as SELECTED, which is the same job the active conversation does for the rows below. */
 const { runs: workflowRuns } = useWorkflowRuns();
-const runsIn = (lane: FleetLane): WorkflowRun[] => (filtering.value ? [] : runsInLane(workflowRuns.value, lane, FINISHED_WINDOW));
+// The same lane rule the board uses, including a step's question putting its RUN in Attention — two lists
+// that disagreed about where a run belongs would be the resemblance breaking exactly where it matters.
+const runsIn = (lane: FleetLane): WorkflowRun[] =>
+    filtering.value ? [] : runsInLane(workflowRuns.value, lane, FINISHED_WINDOW, runsNeedingYou(fleet.value));
 // A run's row reads as selected only while its DIAGRAM is the thing on screen. In the run's sessions the
 // focused chat's own row wears that, and two rows claiming it would be the list contradicting itself.
 const runOnScreen = (run: WorkflowRun): boolean => chatRun.value?.runId === run.runId && chatRun.value.mode === `graph`;

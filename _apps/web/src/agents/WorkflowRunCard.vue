@@ -21,7 +21,7 @@ import { liveSessions } from "../composables/chat/chatRun";
  * this board is where the panes are.
  */
 
-const { run } = defineProps<{ run: WorkflowRun; selected?: boolean; stopping?: boolean }>();
+const { run } = defineProps<{ run: WorkflowRun; selected?: boolean; needsYou?: boolean; stopping?: boolean }>();
 const emit = defineEmits<{ open: []; stop: []; graph: [] }>();
 
 const lane = computed(() => laneOfRun(run));
@@ -49,10 +49,12 @@ const TONE: Record<WorkflowRun["state"], string> = {
         :aria-label="`Open the sessions of ${run.workflow.name}`"
         class="group flex w-full cursor-pointer select-none flex-col gap-1.5 rounded-lg border border-dashed p-3 text-left outline-none transition-colors hover:bg-overlay focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
-            // Dashed, and that is the whole visual claim: this is a container of the solid cards around it
-            // rather than one of them. The lane bar is the agent card's, unchanged — attention means the same
-            // thing whatever kind of row is carrying it.
-            lane === 'attention' ? 'border-l-[3px] border-l-warning' : '',
+            /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it
+               rather than one of them. The attention bar is the agent card's, unchanged in colour and
+               width — but SOLID, because a 3px dashed left edge is not one bar, it is a column of ticks
+               beside a dashed outline, and the two dashed rhythms at different weights read as a rendering
+               fault. `border-style` is per-side in CSS; Tailwind has no per-side utility for it. */
+            lane === 'attention' ? 'border-l-[3px] border-l-warning [border-left-style:solid]' : '',
             // The agent card's selection, on the agent card's channel: the chat panel is showing THIS run, and
             // a board that says so about a session but not about a run makes the run look like a thing you
             // cannot point the chat at.
@@ -70,6 +72,15 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 <Icon name="sitemap" class="text-2xs text-link" />
             </span>
             <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ run.workflow.name }}</span>
+            <!-- A step inside this card is waiting on an answer. It wears the agent card's own attention chip,
+                 because that step no longer has a card of its own to wear it on — hiding the sessions inside
+                 the run means the run answers for them. -->
+            <span
+                v-if="needsYou"
+                v-tooltip.top="`A step is waiting on you — open the run to answer it`"
+                class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning"
+                >needs you</span
+            >
             <button
                 type="button"
                 aria-label="Open the run's graph"

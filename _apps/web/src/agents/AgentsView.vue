@@ -12,7 +12,7 @@ import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import type { FleetLane } from "../composables/agents/agentStatus";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
-import { laneOfRun, runsInLane, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
+import { laneOfRun, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
 import { chatRun } from "../composables/chat/chatRun";
 import { openRunInChat } from "../composables/chat/openRun";
@@ -71,6 +71,7 @@ const route = useRoute();
 const { mobile } = useDevice();
 const {
     lanes,
+    fleet,
     blocking,
     unread,
     refresh,
@@ -145,6 +146,45 @@ const filterField = ref<InstanceType<typeof FilterField> | undefined>(undefined)
 // is being looked at, and a second surface opening the fleet should not inherit a scroll-position-like choice.
 const showAllFinished = ref(false);
 const archiveOpen = ref(false);
+
+const { runs: workflowRuns, stop: stopWorkflowRun } = useWorkflowRuns();
+// Which runs have a step waiting on the user. Read from the fleet, because "blocked" is a live fact about a
+// conversation and the run ledger only knows what the scheduler wrote.
+const needingYou = computed(() => runsNeedingYou(fleet.value));
+const runsFor = (lane: FleetLane): WorkflowRun[] => {
+    // The archive is a different list wearing the Finished lane's shape, and a live run has no place in it.
+    // Filtering is the same argument the drag makes: a lane under a query is a result set, and a row the query
+    // never looked at would be the board answering a question it was not asked.
+    if ((lane === `finished` && archiveOpen.value) || filtering.value) {
+        return [];
+    }
+    return runsInLane(workflowRuns.value, lane, FINISHED_WINDOW, needingYou.value);
+};
+
+/* THE STEPS OF A DRAWN RUN ARE NOT ALSO CARDS — they are inside the run's card, which is the whole claim that
+ * card makes. A five-step workflow was arriving as a run card AND five agent cards for the same work, so the
+ * board reported one job six times and the run's own row was the least informative of them.
+ *
+ * Gated on the run actually being DRAWN: while filtering, or once a run has rolled off the ledger, no card
+ * stands for those sessions and they go back to being ordinary agents — hiding work that nothing else is
+ * showing is the one outcome worse than showing it twice.
+ */
+const BOARD_LANES = [`attention`, `active`, `finished`] as const;
+const drawnRunIds = computed(() => new Set(BOARD_LANES.flatMap((lane) => runsFor(lane)).map((run) => run.runId)));
+const boardLanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
+    if (drawnRunIds.value.size === 0) {
+        return lanes.value;
+    }
+    const outside = (agent: FleetAgent): boolean => agent.workflow === undefined || !drawnRunIds.value.has(agent.workflow.runId);
+    return {
+        attention: lanes.value.attention.filter(outside),
+        active: lanes.value.active.filter(outside),
+        finished: lanes.value.finished.filter(outside),
+    };
+});
+
+// The run's DESIGN, on the workflows page — a different question from "what is it doing", and the only one
+// this board cannot answer: editing the graph belongs where the graph is authored.
 // The results that are OFF the board — expanded by the footer row below the lanes. Collapsed by default so a
 // query answers with the board first and its outskirts second; reset whenever the query changes, since "show
 // me the rest" was said about a set that no longer exists.
@@ -167,7 +207,7 @@ const highlightId = computed(() => flashId.value ?? (mobile.value || chatRun.val
 // The Finished window is only in force while the lane is BROWSING its own recent tail. The archive is a
 // different list entirely, and both a filter and an explicit expand lift the cap outright — see cardsFor.
 const windowed = computed(() => !archiveOpen.value && !filtering.value && !showAllFinished.value);
-const finishedWindow = computed(() => windowFinished(lanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id));
+const finishedWindow = computed(() => windowFinished(boardLanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id));
 // The lane's visible cards. Finished shows its window (or the archive, when open); the other two lanes are
 // self-emptying and show everything.
 //
@@ -177,19 +217,19 @@ const finishedWindow = computed(() => windowFinished(lanes.value.finished, windo
 const cardsFor = (lane: FleetLane): FleetAgent[] => {
     const source =
         lane !== `finished`
-            ? lanes.value[lane]
+            ? boardLanes.value[lane]
             : archiveOpen.value
               ? archived.value
               : windowed.value
                 ? finishedWindow.value.shown
-                : lanes.value.finished;
+                : boardLanes.value.finished;
     return filtering.value ? source.filter(matches) : source;
 };
 // How many of the lane's agents the filter kept, against how many it holds — the `3 of 12` on its header. The
 // denominator is the lane, not the window: while filtering the window is lifted anyway, and a count that
 // disagreed with the cards under it would be worse than none.
 const laneCount = (lane: FleetLane): string => {
-    const total = archiveOpen.value && lane === `finished` ? archived.value.length : lanes.value[lane].length;
+    const total = archiveOpen.value && lane === `finished` ? archived.value.length : boardLanes.value[lane].length;
     return filtering.value ? `${cardsFor(lane).length} of ${total}` : `${total}`;
 };
 // What the tail row collapses — the window's own count, so a card pinned into the lane is counted out of it
@@ -484,7 +524,8 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
     { key: `active`, label: `Active`, dot: `bg-success`, empty: `No agents working. Start one and delegate.` },
     { key: `finished`, label: `Finished`, dot: `bg-line-strong`, empty: `Finished agents land their work in your workspace.` },
 ];
-const total = computed(() => LANES.reduce((sum, lane) => sum + lanes.value[lane.key].length, 0));
+// The board's own total, so it counts what is on screen: a run's steps are inside its card, not beside it.
+const total = computed(() => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0));
 // The header's tally. Summed over the same cardsFor the lanes render, so it can never disagree with the
 // `n of m` counts under it.
 const kept = computed(() => LANES.reduce((sum, lane) => sum + cardsFor(lane.key).length, 0));
@@ -579,19 +620,6 @@ const reviewAgent = (agent: FleetAgent): void => {
  * That lane's job is to confirm what just completed; the run HISTORY is the workflows page, which keeps the
  * last fifty and draws each one as the graph it was.
  */
-const { runs: workflowRuns, stop: stopWorkflowRun } = useWorkflowRuns();
-const runsFor = (lane: FleetLane): WorkflowRun[] => {
-    // The archive is a different list wearing the Finished lane's shape, and a live run has no place in it.
-    // Filtering is the same argument the drag makes: a lane under a query is a result set, and a row the query
-    // never looked at would be the board answering a question it was not asked.
-    if ((lane === `finished` && archiveOpen.value) || filtering.value) {
-        return [];
-    }
-    return runsInLane(workflowRuns.value, lane, FINISHED_WINDOW);
-};
-
-// The run's DESIGN, on the workflows page — a different question from "what is it doing", and the only one
-// this board cannot answer: editing the graph belongs where the graph is authored.
 const openRunGraph = (run: WorkflowRun): void => {
     void router.push({ name: `extension`, params: { ext: `workflows` }, query: { run: run.runId } });
 };
@@ -839,6 +867,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :key="run.runId"
                             :run="run"
                             :selected="chatRun?.runId === run.runId"
+                            :needs-you="needingYou.has(run.runId)"
                             :stopping="stoppingRuns.has(run.runId)"
                             @open="openRun(run)"
                             @graph="openRunGraph(run)"

@@ -43,10 +43,14 @@ export const workflowsContract = {
     // Every run across every workflow, newest first — the history the run view opens onto, and the only place a
     // deleted workflow's runs are still reachable.
     runs: oc.route({ method: "GET", path: "/workflows/runs" }).output(WorkflowRunsListSchema),
-    /* Stop a run: no step that has not started will start, and the steps in flight stop after their current
-     * ITERATION rather than being killed. Same split as stopping a loop, for the same reason — a step on
-     * iteration 6 doing good work should be able to be its own last one. Killing the work outright is
-     * /agent/stop on that step's conversation, which the run view links to per node.
+    /* Stop a run: nothing that has not started will start, and the steps in flight are CUT OFF where they
+     * are — their turns aborted exactly as /agent/stop aborts one, so whatever they had written stays on
+     * their branches and the step settles as stopped.
+     *
+     * Not the graceful "finish the iteration you are on" a LOOP's stop performs, and the difference is the
+     * unit: a loop's iteration is a round somebody is watching, a workflow step's is an entire agent turn.
+     * Waiting for one meant a stopped run kept working, kept spending and kept asking questions for minutes
+     * after the press, which is indistinguishable from a button that does nothing.
      */
     stopRun: oc.route({ method: "POST", path: "/workflows/runs/{runId}/stop" }).input(WorkflowRunIdParamSchema).output(OkSchema),
 };

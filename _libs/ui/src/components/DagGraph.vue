@@ -113,6 +113,14 @@ const toggle = (id: string): void => {
 </script>
 
 <template>
+    <!-- `elements-selectable` is TRUE even though this component keeps its own selection and wants none of Vue
+         Flow's, and that is not a preference — it is what makes the nodes touchable at all. A node wrapper
+         takes pointer events only when something could want them (NodeWrapper's `hasPointerEvents`:
+         `isSelectable || isDraggable || any node listener`), and with all of those off Vue Flow writes
+         `pointer-events: none` onto every node. Which made the card below inert: the click-to-select this
+         component advertises never fired, its own hover border never lit, its tooltip never opened, and
+         nothing a caller drew in the #node slot could be hovered either. It rendered as a picture. DagEditor
+         has always passed true, which is why the designer's canvas worked and this never did. -->
     <VueFlow
         :id="flowId"
         class="dag-graph h-full w-full text-subtle"
@@ -122,7 +130,7 @@ const toggle = (id: string): void => {
         :max-zoom="2"
         :nodes-draggable="false"
         :nodes-connectable="false"
-        :elements-selectable="false"
+        :elements-selectable="true"
         :zoom-on-double-click="false"
         @pane-ready="onReady"
     >

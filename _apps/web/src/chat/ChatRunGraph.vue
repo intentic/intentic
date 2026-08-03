@@ -31,12 +31,14 @@ const columns = computed(() => runColumns(run));
  * press does — and it is drawn INSIDE the node slot because DagGraph owns the card's own chrome, so a caller
  * that wants to say something about a group has the interior to say it in.
  *
- * A band with nothing behind it does not light and does not take a pointer: a skipped step never ran, so there
- * is no session to open, and the cursor is the cheapest place to say so before the click rather than after. */
+ * EVERY COLUMN LIGHTS, INCLUDING THE ONES THAT CANNOT BE OPENED, in two different tints. Lighting only the
+ * openable ones was the wrong call: on a run that has just started, four of five bands are still `pending` and
+ * the diagram answered a hover with nothing at all — which reads as a diagram with no hover effect rather than
+ * as "that band has no session yet". So the grouping is always shown, and whether it can be OPENED is said by
+ * the strength of the tint and by the cursor, before the click rather than after it. */
 const hovered = ref<string | undefined>();
 const openable = (stepId: string): boolean => (columns.value.get(stepId)?.sessions.length ?? 0) > 0;
-const lit = (stepId: string): boolean =>
-    hovered.value !== undefined && openable(stepId) && columns.value.get(hovered.value)?.stepIds.includes(stepId) === true;
+const lit = (stepId: string): boolean => hovered.value !== undefined && columns.value.get(hovered.value)?.stepIds.includes(stepId) === true;
 
 // DagGraph's selection is a v-model it toggles itself; this component treats a selection as a PRESS and hands
 // the column up, so the id is cleared straight after — a node left ringed would suggest the graph is holding a
@@ -85,7 +87,7 @@ const anyOpenable = computed(() => [...columns.value.values()].some((column) => 
                         class="block h-full w-full transition-colors"
                         :class="[
                             openable(node.data.step.id) ? `cursor-pointer` : `cursor-default`,
-                            lit(node.data.step.id) ? `bg-primary-600/15` : ``,
+                            lit(node.data.step.id) ? (openable(node.data.step.id) ? `bg-primary-600/15` : `bg-content/5`) : ``,
                         ]"
                         @mouseenter="hovered = node.data.step.id"
                         @mouseleave="hovered = undefined"
