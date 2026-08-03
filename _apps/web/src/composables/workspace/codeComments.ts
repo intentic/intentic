@@ -14,17 +14,24 @@ import { useHighlighter } from "@intentic/ui";
 
 type ShikiCore = NonNullable<Awaited<ReturnType<ReturnType<typeof useHighlighter>[`ensureLang`]>>>;
 type Grammar = ReturnType<ShikiCore[`getLanguage`]>;
-type Token = ReturnType<Grammar[`tokenizeLine`]>[`tokens`][number];
+type Tokenized = ReturnType<Grammar[`tokenizeLine`]>;
+type Token = Tokenized[`tokens`][number];
 // The tokenizer's carry between lines — null starts a file, and a block comment's open stays on it until its close.
 type RuleStack = Parameters<Grammar[`tokenizeLine`]>[1];
 
 // One side of a diff: the text to show, and the 1-based source line each of its lines came from.
 export type CodeSide = { text: string; lines: number[] };
 
-// The guards @shikijs/monaco puts on the same grammars, for the same reason: a minified bundle opened as a diff
-// must not cost the frame. Past either, the line is kept exactly as it is.
+// The guard @shikijs/monaco puts on the same grammars, for the same reason: a minified bundle opened as a diff
+// must not cost the frame. Past it, the line is kept exactly as it is.
 const MAX_TOKENIZED_LINE = 20_000;
-const TOKENIZE_TIME_LIMIT = 500;
+
+// The hang guard, spent across the WHOLE file rather than per line. A per-line limit charges the first line for
+// compiling the grammar's regexes — on a loaded machine that alone outruns any frame-sized budget, and the line it
+// lands on is emitted verbatim, so the file comes back part-stripped with no sign anything went wrong. Stripping
+// is awaited before the diff renders rather than run inside a frame, so the budget is generous: it exists to stop
+// a pathological grammar, and blowing it abandons the file (undefined — shown verbatim) instead of half-doing it.
+const STRIP_TIME_BUDGET = 5_000;
 
 // A token stack is a comment when any scope in it is `comment` or below. The deepest scope of a `//` run names the
 // punctuation or the content, but its parent is always `comment.line…` / `comment.block…`. Leading indentation is
@@ -69,23 +76,34 @@ export const stripComments = async (text: string, lang: string | undefined): Pro
     const lines: number[] = [];
     let stack: RuleStack = null;
     let dropped = false;
-    text.split(`\n`).forEach((line, index) => {
-        const result = line.length < MAX_TOKENIZED_LINE ? grammar.tokenizeLine(line, stack, TOKENIZE_TIME_LIMIT) : undefined;
+    const deadline = performance.now() + STRIP_TIME_BUDGET;
+    for (const [index, line] of text.split(`\n`).entries()) {
+        const left = deadline - performance.now();
+        if (left <= 0) {
+            return undefined; // out of budget — a part-stripped file is worse than the file itself
+        }
+        // The rest of the budget is also this line's limit, so one pathological line cannot outrun it.
+        // Annotated because `stack` is written from this result a few lines down, and a loop-carried inference
+        // between the two is a cycle the checker refuses.
+        const result: Tokenized | undefined = line.length < MAX_TOKENIZED_LINE ? grammar.tokenizeLine(line, stack, left) : undefined;
+        if (result?.stoppedEarly === true) {
+            return undefined;
+        }
         if (result !== undefined) {
             stack = result.ruleStack;
         }
         // An untokenized line has no comment we can see, so it stays whole — and `stack` stays where it was, which
         // is what keeps an open block comment open across it.
-        const code = result === undefined || result.stoppedEarly ? line : stripLine(line, result.tokens);
+        const code = result === undefined ? line : stripLine(line, result.tokens);
         // A comment block almost always sits between two blank lines; removing it would leave both behind, so a
         // blank that now follows a removal and a blank collapses into the one already there.
         if (code === undefined || (dropped && isBlank(code) && isBlank(kept.at(-1) ?? ``))) {
             dropped = true;
-            return;
+            continue;
         }
         dropped = false;
         kept.push(code);
         lines.push(index + 1);
-    });
+    }
     return { text: kept.join(`\n`), lines };
 };
