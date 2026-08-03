@@ -17,7 +17,7 @@ import {
 import { sessionCategory } from "../composables/sessionCategory";
 import IdentityTile from "../components/IdentityTile.vue";
 import { markSegments, useAgentFilter } from "../composables/agents/useAgentFilter";
-import { type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
+import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import FilterField from "../components/FilterField.vue";
 import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
@@ -28,12 +28,13 @@ import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
-import { chatRun, showRun } from "../composables/chat/chatRun";
-import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
+import { chatRun } from "../composables/chat/chatRun";
+import { openRunInChat } from "../composables/chat/openRun";
+import { runsInLane, runningTitles, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { commandShortcut } from "../composables/commands/useCommands";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
-import { providerLabel } from "@intentic/sandbox-contract";
+import { providerLabel, type WorkflowRun } from "@intentic/sandbox-contract";
 
 /* THE OPEN CHATS, as the fleet board's three lanes in miniature — the switcher for every conversation this
  * window holds. It has two hosts and is the same list in both: the sheet the docked panel's header drops
@@ -89,18 +90,6 @@ const { agentById, fleet, loadArchived } = useAgents();
 
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
 
-/* The workflow run the panel is showing, if it is showing one — the row at the head of the list. Looked up
- * rather than held, so the step counter on it keeps up with the run while the reader watches.
- *
- * Popped out only, and for the same reason the run itself is: the diagram takes the pane area, and a docked
- * panel has no pane area to give it. A row offering to open something this frame cannot draw would be a dead
- * control, which is worse than no row at all. */
-const { runs: workflowRuns } = useWorkflowRuns();
-const shownRun = computed(() => (poppedOut.value ? workflowRuns.value.find((run) => run.runId === chatRun.value?.runId) : undefined));
-// Its row reads as SELECTED only while the diagram is the thing on screen. In the run's sessions the focused
-// chat's own row wears that, and two rows claiming it would be the list contradicting itself.
-const runOnScreen = computed(() => shownRun.value !== undefined && chatRun.value?.mode === `graph`);
-
 interface OpenChat {
     readonly conversation: Conversation;
     readonly agent: FleetAgent | undefined;
@@ -132,6 +121,24 @@ const {
     sessionMatches,
     searching,
 } = useAgentFilter();
+
+/* THE WORKFLOW RUNS, IN THE LANES, exactly as the board draws them — which is this list's founding rule and
+ * not a convenience: /agents and this rail are read minutes apart by the same eye, so a thing that appears on
+ * one and not the other reads as two different products.
+ *
+ * IT USED TO BE ONE ROW FOR THE RUN THE PANEL HAPPENED TO BE SHOWING, which made a workflow the only entry
+ * here that was a property of the current view rather than of the workspace: it appeared when you opened it
+ * and vanished the moment you clicked any other chat. Nothing else in this list behaves that way, and it left
+ * a run you had stepped away from with no way back into it short of the board.
+ *
+ * So they are listed by the run's own lane (laneOfRun — running is active, a failed or overspent one is
+ * attention, the rest finished), for as long as the ledger holds them. `chatRun` decides only which row reads
+ * as SELECTED, which is the same job the active conversation does for the rows below. */
+const { runs: workflowRuns } = useWorkflowRuns();
+const runsIn = (lane: FleetLane): WorkflowRun[] => (filtering.value ? [] : runsInLane(workflowRuns.value, lane, FINISHED_WINDOW));
+// A run's row reads as selected only while its DIAGRAM is the thing on screen. In the run's sessions the
+// focused chat's own row wears that, and two rows claiming it would be the list contradicting itself.
+const runOnScreen = (run: WorkflowRun): boolean => chatRun.value?.runId === run.runId && chatRun.value.mode === `graph`;
 
 // A chat with no fleet entry (a plain conversation, or the roster briefly down) has no transcript the daemon
 // can search under an agent id, so it is matched on what this browser holds: its title and its own messages.
@@ -185,7 +192,9 @@ const LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
  * the rail sat there looking empty while the panel beside it had the conversation open — the "the popped-out
  * chat stopped reacting to what I select" report. For the same reason a lane section must not grow a
  * directive, a `ref` or a dynamic prop: it would be stale out there in exactly the same way. */
-const occupiedLanes = computed(() => LANES.filter((lane) => lanes.value[lane.key].length > 0));
+// A lane holding only a workflow run is not empty. Without the second half, a run in a lane with no chats in
+// it was listed into a section that is never drawn.
+const occupiedLanes = computed(() => LANES.filter((lane) => lanes.value[lane.key].length > 0 || runsIn(lane.key).length > 0));
 
 /* --- The Finished window ------------------------------------------------------------------------
  * THE BOARD'S CAP, ON THE BOARD'S OWN LANE — windowFinished, the same function /agents runs (see the note on
@@ -582,30 +591,6 @@ const closeTab = (event: Event, id: string): void => {
             class="shrink-0"
         />
         <div ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
-            <!-- THE RUN THIS PANEL IS SHOWING, at the head of the list and in the list's own card language.
-                 It is here because it is one of the things this window is displaying, and the list is the
-                 window's answer to "what am I in": a run that took the whole pane area and appeared nowhere
-                 in the rail left the reader with no way back to its diagram except the bar's arrow, and no
-                 sign that the panel was in a run at all once they had clicked into one of its sessions.
-                 Above the lanes rather than in one — a run is not a chat, and the lanes sort chats. -->
-            <button
-                v-if="shownRun"
-                type="button"
-                class="chat-tab rail-card group flex w-full min-w-0 shrink-0 flex-col gap-1 rounded-lg border-dashed p-2.5 text-left text-2xs"
-                :class="{ 'chat-tab-on': runOnScreen }"
-                :aria-label="`Back to the diagram of ${shownRun.workflow.name}`"
-                @click="showRun(shownRun.runId, `graph`)"
-            >
-                <span class="flex min-w-0 items-center gap-1.5">
-                    <Icon name="sitemap" class="shrink-0 text-2xs text-link" />
-                    <span class="min-w-0 flex-1 truncate font-semibold text-content">{{ shownRun.workflow.name }}</span>
-                </span>
-                <span class="text-2xs text-subtle">
-                    {{ shownRun.steps.filter((step) => step.state === `done`).length }}/{{ shownRun.steps.length }} steps ·
-                    {{ runOnScreen ? `the diagram` : `back to the diagram` }}
-                </span>
-            </button>
-
             <!-- A lane with nothing in it is not drawn at all (occupiedLanes — and see the note there before
                  reaching for `v-show` here); a lane the FILTER emptied keeps its header and says so, so the
                  list doesn't reshuffle under the cursor mid-keystroke. -->
@@ -643,8 +628,35 @@ const closeTab = (event: Event, id: string): void => {
                         Clear
                     </button>
                 </header>
-                <p v-if="cardsIn(lane.key).length === 0" class="px-2.5 pb-1.5 text-2xs text-subtle">No matches</p>
-                <div v-else class="flex min-w-0 flex-col gap-1.5">
+                <!-- THE LANE'S WORKFLOW RUNS, above its chats and dashed like their card on the board: a run
+                     is the container of several of the rows beneath it, not one of them. Clicking one is the
+                     board card's own press (openRunInChat) — its live sessions into the panes, or its diagram
+                     when nothing is live — so the two doors into a run cannot behave differently. -->
+                <div v-if="runsIn(lane.key).length > 0" class="mb-1.5 flex min-w-0 flex-col gap-1.5">
+                    <button
+                        v-for="run in runsIn(lane.key)"
+                        :key="run.runId"
+                        type="button"
+                        class="chat-tab rail-card group flex w-full min-w-0 shrink-0 flex-col gap-1 rounded-lg border-dashed p-2.5 text-left text-2xs"
+                        :class="{ 'chat-tab-on': runOnScreen(run) }"
+                        :aria-label="`Open the workflow run ${run.workflow.name}`"
+                        @click="openRunInChat(run)"
+                    >
+                        <span class="flex min-w-0 items-center gap-1.5">
+                            <Icon name="sitemap" class="shrink-0 text-2xs text-link" />
+                            <span class="min-w-0 flex-1 truncate font-semibold text-content">{{ run.workflow.name }}</span>
+                        </span>
+                        <span class="truncate text-2xs text-subtle">
+                            {{ run.steps.filter((step) => step.state === `done`).length }}/{{ run.steps.length }} steps<template
+                                v-if="runningTitles(run).length > 0"
+                            >
+                                · {{ runningTitles(run).join(` · `) }}</template
+                            >
+                        </span>
+                    </button>
+                </div>
+                <p v-if="cardsIn(lane.key).length === 0 && runsIn(lane.key).length === 0" class="px-2.5 pb-1.5 text-2xs text-subtle">No matches</p>
+                <div v-else-if="cardsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-1.5">
                     <template v-for="{ conversation: c, agent } in cardsIn(lane.key)" :key="c.conversationId">
                         <!-- Renaming REPLACES the card rather than nesting a field inside it: an input in a
                              button is neither valid markup nor a usable caret. Enter commits, Esc cancels, blur

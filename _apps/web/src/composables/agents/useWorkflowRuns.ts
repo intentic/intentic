@@ -40,11 +40,16 @@ export const laneOfRun = (run: WorkflowRun): FleetLane => {
     return run.state === `running` ? `active` : `finished`;
 };
 
-// The conversations this run has ALIVE right now — what "open the workflow" puts on screen. Steps that share a
-// conversation (a `continue` handoff) collapse to one, which is the same thing the graph draws as one card.
-export const liveConversations = (run: WorkflowRun): string[] => [
-    ...new Set(run.steps.filter((step) => step.state === `running`).map((step) => step.conversationId)),
-];
+/* The runs a lane holds, for the two surfaces that draw lanes — the fleet board and the chat rail, which are
+ * the same list at two widths and must not disagree about where a run belongs.
+ *
+ * Finished is capped for the reason the agents' own Finished lane is: that lane confirms what just completed,
+ * and the run HISTORY is the workflows page, which keeps the last fifty and draws each as the graph it was.
+ */
+export const runsInLane = (runs: readonly WorkflowRun[], lane: FleetLane, window: number): WorkflowRun[] => {
+    const inLane = runs.filter((run) => laneOfRun(run) === lane);
+    return lane === `finished` ? inLane.slice(0, window) : inLane;
+};
 
 /* What the run's card says it is doing: the titles of the steps in flight. Not the step COUNT — "2 of 5" is
  * already on the card and answers a different question — because the useful line on a live run is which part

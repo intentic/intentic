@@ -12,9 +12,10 @@ import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import type { FleetLane } from "../composables/agents/agentStatus";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
-import { laneOfRun, liveConversations, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
+import { laneOfRun, runsInLane, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
-import { chatRun, showRun } from "../composables/chat/chatRun";
+import { chatRun } from "../composables/chat/chatRun";
+import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -586,8 +587,7 @@ const runsFor = (lane: FleetLane): WorkflowRun[] => {
     if ((lane === `finished` && archiveOpen.value) || filtering.value) {
         return [];
     }
-    const inLane = workflowRuns.value.filter((run) => laneOfRun(run) === lane);
-    return lane === `finished` ? inLane.slice(0, FINISHED_WINDOW) : inLane;
+    return runsInLane(workflowRuns.value, lane, FINISHED_WINDOW);
 };
 
 // The run's DESIGN, on the workflows page — a different question from "what is it doing", and the only one
@@ -596,35 +596,15 @@ const openRunGraph = (run: WorkflowRun): void => {
     void router.push({ name: `extension`, params: { ext: `workflows` }, query: { run: run.runId } });
 };
 
-/* OPENING A RUN PUTS ITS SESSIONS IN THE CHAT PANEL, one column each, and pops the panel out to hold them.
+/* OPENING A RUN PUTS ITS SESSIONS IN THE CHAT PANEL, one column each — openRunInChat, shared with the rail's
+ * row so the two doors into a run cannot drift.
  *
  * IT DOES NOT NAVIGATE, and that is the correction: sending the main view to the workflows extension answered
  * a question nobody asked. What a person wants from a run in flight is the transcripts — several at once,
  * which is precisely what the popped-out panel is for — and a page showing a picture of them is a detour on
  * the way there. The picture is still one press away, as the panel's own back arrow (chatRun's two modes).
- *
- * A run with nothing live — finished, failed, or in the seconds between one step ending and the next
- * registering its conversation — opens on the DIAGRAM instead, which is the map you pick a session from. Same
- * panel, same run, other mode: the click always lands somewhere that can answer.
  */
-const openRun = (run: WorkflowRun): void => {
-    const known = liveConversations(run)
-        .map((id) => agentById(id))
-        .filter((agent): agent is FleetAgent => agent !== undefined);
-    // Popped out first: the panes only exist in the window, so a run opened into a docked column would set a
-    // split nobody can see. Idempotent, and a no-op when the window is already up.
-    popOutChat();
-    showRun(run.runId, known.length === 0 ? `graph` : `sessions`);
-    for (const agent of known) {
-        // Claimed before opening, for the reason the card gestures do it: the opening would otherwise take the
-        // focused pane's column on its way in.
-        openBeside(agent.id);
-        open(agent);
-    }
-    if (known.length > 0) {
-        setPanes(known.map((agent) => agent.id));
-    }
-};
+const openRun = (run: WorkflowRun): void => openRunInChat(run);
 
 // Which runs have been asked to stop and have not settled yet. The daemon's stop is graceful — steps in
 // flight finish their current round — so without this the card looks untouched for as long as a round takes,

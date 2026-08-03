@@ -5,9 +5,9 @@ import { chatRun, closeRun, type RunSession, runOnFocus, showRun } from "../comp
 import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { transcriptView } from "../composables/chat/transcriptClock";
-import { openAgentConversation, useChat } from "../composables/chat/useChat";
+import { openRunSessions } from "../composables/chat/openRun";
+import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
-import { useAgents } from "../composables/agents/useAgents";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { useLayout } from "../composables/useLayout";
 import ChatPane from "./ChatPane.vue";
@@ -80,14 +80,9 @@ watch([() => activeId.value, paneIds], () => {
  * at keeps up with the run under it instead of freezing at the moment they clicked.
  */
 const { runs } = useWorkflowRuns();
-const { agentById, open: openAgent } = useAgents();
 const shownRun = computed(() => (poppedOut.value && !mobile.value ? runs.value.find((run) => run.runId === chatRun.value?.runId) : undefined));
 const showingGraph = computed(() => shownRun.value !== undefined && chatRun.value?.mode === `graph`);
 
-/* A column of the diagram, onto the columns of the panel — the one gesture the graph offers, and the reason
- * the two words are the same word. Conversations the fleet does not know are dropped rather than opened as
- * empty tabs; when that leaves nothing, the graph stays up, because a back arrow that lands on an empty pane
- * set would read as the press having broken something. */
 /* THE WAY OUT of the diagram, and the reason it is a watch here rather than a rule inside `setActive`:
  * `useChat` owns tabs and panes, and which workflow a conversation came out of is not its business. The rule
  * itself is runOnFocus, which says at length why a focus change is an exit at all.
@@ -98,34 +93,14 @@ watch(activeId, (id) => {
     }
 });
 
+/* A column of the diagram, onto the columns of the panel — the one gesture the graph offers, and the reason
+ * the two words are the same word. When nothing in the column opens, the diagram stays up: a back arrow that
+ * landed on an empty split would read as the press having broken something. */
 const openRunColumn = (sessions: readonly RunSession[]): void => {
     const runId = chatRun.value?.runId;
-    if (runId === undefined || sessions.length === 0) {
-        return;
+    if (runId !== undefined && openRunSessions(sessions)) {
+        showRun(runId, `sessions`);
     }
-    for (const session of sessions) {
-        // Claimed before opening, for the reason the board's card gestures do it: the opening would otherwise
-        // take the focused pane's column on its way in.
-        openBeside(session.conversationId);
-        const carded = agentById(session.conversationId);
-        if (carded !== undefined) {
-            openAgent(carded);
-            continue;
-        }
-        /* NOT ON THE FLEET, WHICH IS NOT THE SAME AS NOT EXISTING. A step that ran days ago has been swept off
-         * the roster and still has its branch, its transcript and its record — so the chat opens from the id
-         * alone and hydrates from the daemon. The provider is a SEED for the composer's opening pick (the
-         * step's own pin, or failing that whatever this reader is already working in); nothing about the
-         * transcript depends on getting it right, and a run whose sessions could not be reopened after a week
-         * would make the diagram a picture of things you are no longer allowed to read. */
-        openAgentConversation({
-            id: session.conversationId,
-            provider: session.agent ?? active.value.provider.value,
-            harness: session.harness ?? active.value.harness.value,
-        });
-    }
-    setPanes(sessions.map((session) => session.conversationId));
-    showRun(runId, `sessions`);
 };
 
 // A pane the window has no room for is a pane the user cannot see, so adding one asks the window to widen

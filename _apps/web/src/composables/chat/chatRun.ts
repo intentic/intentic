@@ -99,6 +99,27 @@ export interface RunColumn {
  */
 const ran = (state: WorkflowStepRun["state"]): boolean => state !== `pending` && state !== `skipped`;
 
+// One step run, as a session to open. Shared by every caller that turns part of a run into panes.
+const sessionOf = (run: WorkflowRun, stepId: string, conversationId: string): RunSession => {
+    const design = run.workflow.steps.find((step) => step.id === stepId);
+    return { conversationId, agent: design?.agent, harness: design?.harness };
+};
+
+/* The sessions a run has ALIVE — where "open this run" lands before anyone has picked a column, and the count
+ * its card reads "2 live" from. Deduped, because a `continue` step runs on its predecessor's conversation and
+ * a run with two steps on one chat is showing one thing, not two.
+ */
+export const liveSessions = (run: WorkflowRun): RunSession[] => {
+    const seen = new Set<string>();
+    return run.steps.flatMap((step) => {
+        if (step.state !== `running` || seen.has(step.conversationId)) {
+            return [];
+        }
+        seen.add(step.conversationId);
+        return [sessionOf(run, step.stepId, step.conversationId)];
+    });
+};
+
 /* The run's steps grouped into the columns the diagram DRAWS, keyed by step id.
  *
  * Grouped on the laid-out x rather than on dependency depth, and the difference is not academic: dagre ranks
@@ -119,7 +140,6 @@ export const runColumns = (run: WorkflowRun): Map<string, RunColumn> => {
         const x = positions.get(node.id)?.x ?? 0;
         byX.set(x, [...(byX.get(x) ?? []), node.id]);
     }
-    const design = new Map(run.workflow.steps.map((step) => [step.id, step]));
     const live = new Map(run.steps.filter((step) => ran(step.state)).map((step) => [step.stepId, step.conversationId]));
     const columns = new Map<string, RunColumn>();
     for (const stepIds of byX.values()) {
@@ -132,7 +152,7 @@ export const runColumns = (run: WorkflowRun): Map<string, RunColumn> => {
                 return [];
             }
             seen.add(conversationId);
-            return [{ conversationId, agent: design.get(id)?.agent, harness: design.get(id)?.harness }];
+            return [sessionOf(run, id, conversationId)];
         });
         const column: RunColumn = { stepIds, sessions };
         for (const id of stepIds) {

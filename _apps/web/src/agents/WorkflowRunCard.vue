@@ -2,7 +2,8 @@
 import { Icon, timeAgo } from "@intentic/ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { laneOfRun, liveConversations, runningTitles, spentOn } from "../composables/agents/useWorkflowRuns";
+import { laneOfRun, runningTitles, spentOn } from "../composables/agents/useWorkflowRuns";
+import { liveSessions } from "../composables/chat/chatRun";
 
 /* A WORKFLOW RUN, ON THE BOARD — the row that was missing while a five-step run arrived as five unrelated
  * agents that happened to start together.
@@ -24,7 +25,7 @@ const { run } = defineProps<{ run: WorkflowRun; selected?: boolean; stopping?: b
 const emit = defineEmits<{ open: []; stop: []; graph: [] }>();
 
 const lane = computed(() => laneOfRun(run));
-const live = computed(() => liveConversations(run));
+const live = computed(() => liveSessions(run));
 const doing = computed(() => runningTitles(run));
 const spent = computed(() => spentOn(run));
 const done = computed(() => run.steps.filter((step) => step.state === `done`).length);
