@@ -34,12 +34,16 @@ const iconButton = (...twClasses: string[]) =>
 /* Inline text button that reads as a link — a lane switch, an escape hatch, "use my own X instead". Sized
  * so a thumb can hit it (36px) while the negative margin keeps that height from showing up as a gap in the
  * card it sits in, so the same recipe is right on a phone and on a desktop. Callers restyle the text
- * (`cmp.linkButton('text-muted underline hover:text-content')` for the quieter, secondary ones). */
+ * (`cmp.linkButton('text-muted underline hover:text-content')` for the quieter, secondary ones).
+ *
+ * `w-fit` AND NOT `self-start`, which is what it used to be. Both stop the link stretching across the COLUMN
+ * it usually sits in — that is the only job either of them had — but `self-start` does it by overriding the
+ * parent's cross-axis alignment, which in a ROW is not stretching that it prevents, it is centring. Every
+ * toolbar and dialog footer that puts a Cancel beside a real Button was drawing it a few pixels high (36px of
+ * tap target, aligned to the top of a shorter row), and no call site could see why: the cause was a class none
+ * of them wrote. A definite width shrink-wraps the box in either direction and leaves `items-center` alone. */
 const linkButton = (...twClasses: string[]) =>
-    twMerge(
-        `-my-1.5 flex min-h-9 cursor-pointer items-center self-start text-left text-xs text-link transition-colors hover:underline`,
-        ...twClasses,
-    );
+    twMerge(`-my-1.5 flex min-h-9 w-fit cursor-pointer items-center text-left text-xs text-link transition-colors hover:underline`, ...twClasses);
 
 /** Standard form input (text, password, number, datetime-local, textarea). */
 const input = (...twClasses: string[]) =>

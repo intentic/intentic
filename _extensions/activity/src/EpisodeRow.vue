@@ -97,7 +97,7 @@ const cost = computed(() => (episode.costUsd === undefined ? undefined : episode
                     <button
                         v-if="episode.sessionId"
                         type="button"
-                        :class="cmp.linkButton('w-fit text-2xs')"
+                        :class="cmp.linkButton('text-2xs')"
                         @click="api.chat.openSession(episode.sessionId)"
                     >
                         <Icon name="external-link" /> Open transcript
