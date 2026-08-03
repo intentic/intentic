@@ -2540,6 +2540,9 @@ importers:
 
   _tools/e2e:
     devDependencies:
+      '@intentic-app/api-contract':
+        specifier: workspace:*
+        version: link:../../_libs/api-contract
       '@intentic-app/prisma':
         specifier: workspace:*
         version: link:../../_libs/prisma
