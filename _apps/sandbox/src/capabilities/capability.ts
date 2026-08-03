@@ -9,7 +9,7 @@ import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold
 import type { EndpointCatalog } from "../endpoints/endpoint-catalog.js";
 import type { HostHub } from "../hosts/host-hub.js";
 import type { HostsStore } from "../hosts/hosts-store.js";
-import type { ResolvedConnector } from "./cli/connector-registry.js";
+import type { ResolvedContribution } from "./contributions.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
 // The narrow slice of the daemon a capability handler may touch — deliberately no agent/auth/sessions surface.
@@ -74,11 +74,11 @@ export interface CapabilityHandler {
      *
      * Here rather than in a central switch because it is a fact ABOUT ONE KIND, and the switch was the third
      * place a new kind had to be remembered — the two before it (apply, status) are right here. */
-    readonly secret?: (config: unknown, connectors: Map<string, ResolvedConnector>) => string | undefined;
+    readonly secret?: (config: unknown, connectors: Map<string, ResolvedContribution>) => string | undefined;
     // The non-secret echo of a config for the list summary (an mcp token becomes hasToken). Required, not
     // optional: "what of this may the browser see" is a question every kind has to answer out loud, and a
     // forgotten default is how a credential reaches a browser by omission.
-    readonly echo: (config: unknown, connectors: Map<string, ResolvedConnector>) => Record<string, string | number | boolean>;
+    readonly echo: (config: unknown, connectors: Map<string, ResolvedContribution>) => Record<string, string | number | boolean>;
 }
 
 // Build the handler context from the full Services, wrapping the existing scaffolders as session-scoped closures.

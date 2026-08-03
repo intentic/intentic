@@ -172,10 +172,10 @@ export const EnvironmentContributionSchema = z.object({
 });
 export type EnvironmentContribution = z.infer<typeof EnvironmentContributionSchema>;
 
-// A field the "+" install dialog renders for a connector's config form (a slug key, a label, secret/optional
+// A field the "+" install dialog renders for a capability's config form (a slug key, a label, secret/optional
 // flags, an optional select, a `when` gate). Mirrors the platform catalog's field shape so the web can render
-// connector cards from installed extensions exactly like core capability cards.
-export const ConnectorFieldSchema = z.object({
+// contributed cards from installed extensions exactly like core capability cards.
+export const CapabilityFieldSchema = z.object({
     key: z.string().regex(/^[a-zA-Z][a-zA-Z0-9]*$/),
     label: z.string().min(1),
     placeholder: z.string().optional(),
@@ -185,43 +185,90 @@ export const ConnectorFieldSchema = z.object({
     default: z.string().optional(),
     options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
     when: z.object({ key: z.string(), value: z.string() }).optional(),
+    // A fixed value baked into the config rather than asked for — how a card pins a discriminator
+    // (platform="reddit", provider="stripe"). Rendered as nothing; sent as itself.
+    value: z.string().optional(),
 });
-export type ConnectorField = z.infer<typeof ConnectorFieldSchema>;
+export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
 
-// A CLI-tool connector as DATA: the "+" card, the config fields, the env vars the agent's shell gets (value
-// templates over the fields — `${field}` substitutes, `${field:uri}` percent-encodes), the SKILL.md cheatsheet
-// path, and an optional image fragment path (a psql/whisper client). The daemon's cli handler resolves a
-// provider to its spec through the connector registry instead of a hardcoded table, so a connector is one
-// manifest entry + two files, no daemon change.
-export const ConnectorContributionSchema = z.object({
-    provider: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-    kind: z.literal("cli"),
-    catalog: z.object({
-        name: z.string().min(1),
-        logo: z.string().optional(),
-        // An @intentic/ui IconName fallback glyph, rendered when no simple-icons `logo` fits the brand.
-        icon: z.string().optional(),
-        description: z.string().min(1),
-        category: z.string().min(1),
-        hint: z.string().optional(),
-        // The credential-creation walkthrough the install dialog renders (the platform catalog's guide shape).
-        guide: z
-            .object({
-                url: z.string().optional(),
-                urlFromField: z.string().optional(),
-                path: z.string().optional(),
-                linkLabel: z.string().optional(),
-                scopes: z.string().optional(),
-                steps: z.array(z.string()).optional(),
-            })
-            .optional(),
-    }),
-    fields: z.array(ConnectorFieldSchema).min(1),
-    env: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string()),
-    skill: z.string().min(1),
-    fragment: z.string().min(1).optional(),
+// The "+" card an entry renders: how it looks in the grid and how the user gets the credential it asks for.
+// Shared by every arm below, because none of that varies with the kind.
+const CatalogSchema = z.object({
+    name: z.string().min(1),
+    logo: z.string().optional(),
+    // An @intentic/ui IconName fallback glyph, rendered when no simple-icons `logo` fits the brand.
+    icon: z.string().optional(),
+    description: z.string().min(1),
+    category: z.string().min(1),
+    hint: z.string().optional(),
+    // The credential-creation walkthrough the install dialog renders (the platform catalog's guide shape).
+    guide: z
+        .object({
+            url: z.string().optional(),
+            urlFromField: z.string().optional(),
+            path: z.string().optional(),
+            linkLabel: z.string().optional(),
+            scopes: z.string().optional(),
+            steps: z.array(z.string()).optional(),
+        })
+        .optional(),
 });
-export type ConnectorContribution = z.infer<typeof ConnectorContributionSchema>;
+
+// Every arm carries these: the slug that becomes the card's /capabilities/<id> route AND the discriminator
+// value the daemon's handler resolves (a cli `provider`, a browser/host `platform`), plus the card and its form.
+const contributionBase = { id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/), catalog: CatalogSchema, fields: z.array(CapabilityFieldSchema) };
+
+/* A CAPABILITY CARD AS DATA. The catalog is the extensible layer; the HANDLERS are core — so an entry names one
+ * of the kinds whose daemon-side machinery is fully generic over its data, and the machinery stays put. The
+ * kinds NOT listed here are the ones whose card is one-to-one with a handler that owns real privilege (`docker`
+ * bakes --privileged, `vpn` bakes NET_ADMIN, `extension` installs extensions, `devops` scaffolds repos): their
+ * cards live in the platform catalog because separating card from handler would split one concept in two, and
+ * because a manifest that could name them would be a manifest that grants itself privilege. That restriction is
+ * this discriminated union, not a comment — a manifest naming any other kind fails to parse.
+ *
+ * `${id}` in a skill file is substituted with the instance name at apply time (so a host pack's tool names read
+ * `mcp__my-laptop__run_command`), and, for `cli`, each `$ENVVAR` becomes its per-instance suffixed name. */
+export const CapabilityContributionSchema = z.discriminatedUnion("kind", [
+    // A CLI tool the AGENT gets, authenticated: the env vars its shell receives (value templates over the
+    // fields — `${field}` substitutes, `${field:uri}` percent-encodes), a SKILL.md cheatsheet, and an optional
+    // image fragment holding the client binary (psql, mysql, whisper).
+    z.object({
+        ...contributionBase,
+        kind: z.literal("cli"),
+        fields: z.array(CapabilityFieldSchema).min(1),
+        env: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string()),
+        skill: z.string().min(1),
+        fragment: z.string().min(1).optional(),
+    }),
+    // A site the agent acts on AS THE OWNER, through the shared logged-in Chromium. `loginUrl` is what the
+    // guided-login window opens; the profile it persists is the credential. No `env` and no `fragment`: the
+    // browser itself is core (one Chromium install serves every platform), only the identity is per-entry.
+    z.object({ ...contributionBase, kind: z.literal("browser"), loginUrl: z.url(), skill: z.string().min(1) }),
+    // An operating system a connected computer can run — the skill pack that teaches the agent THAT machine's
+    // shell. The enrollment, the socket and the scope enforcement are core; only the pack varies.
+    z.object({ ...contributionBase, kind: z.literal("host"), skill: z.string().min(1) }),
+    /* A PRESET over a core kind: no payload at all, just a named card whose `fields` carry the defaults. What an
+     * ACP agent needs is a command, so "OpenCode" is entirely a name, a logo and a filled-in form — which is
+     * exactly what a catalog row is. */
+    z.object({ ...contributionBase, kind: z.literal("agent") }),
+]);
+export type CapabilityContribution = z.infer<typeof CapabilityContributionSchema>;
+// The arms carrying a per-instance SKILL.md — the daemon templates and installs these identically.
+export type SkillContribution = Extract<CapabilityContribution, { skill: string }>;
+
+/* The config key a kind's cards PIN to their own id, so a stored capability can be traced back to the card that
+ * made it — the daemon resolves the entry's handler data through it, and the web tells one card's instances from
+ * another's. `agent` has none on purpose: its cards are presets over one config shape, differing only in their
+ * defaults, so every agent instance belongs to every agent card equally.
+ *
+ * Here, beside the schema, because it is a fact about the contribution shape — the daemon, the catalog and the
+ * web all need it, and three copies of it is three chances for a card's instances to go missing. `satisfies`
+ * rather than a lookup table so a new arm above is a compile error until this answers for it. */
+const DISCRIMINATOR = { cli: "provider", browser: "platform", host: "platform", agent: undefined } satisfies Record<
+    CapabilityContribution["kind"],
+    string | undefined
+>;
+export const contributionDiscriminator = (kind: string): string | undefined => DISCRIMINATOR[kind as keyof typeof DISCRIMINATOR];
 
 export const ExtensionManifestSchema = z.object({
     publisher: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
@@ -262,7 +309,7 @@ export const ExtensionManifestSchema = z.object({
             processes: z.array(ProcessContributionSchema).optional(),
             agent: AgentContributionSchema.optional(),
             environment: EnvironmentContributionSchema.optional(),
-            connectors: z.array(ConnectorContributionSchema).optional(),
+            capabilities: z.array(CapabilityContributionSchema).optional(),
             listener: ListenerContributionSchema.optional(),
             // A checkout-relative directory of executables the daemon prepends to the AGENT's PATH each turn —
             // how an extension ships a command-line tool for the agent (the CLI-tools path). The files ARE the

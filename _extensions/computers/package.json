@@ -1,0 +1,8 @@
+{
+    "name": "@intentic/ext-computers",
+    "version": "1.0.0",
+    "description": "The operating systems a connected computer can run (windows/linux) as a pure-data intentic extension",
+    "license": "MIT",
+    "private": true,
+    "type": "module"
+}

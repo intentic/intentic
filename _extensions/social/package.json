@@ -1,0 +1,8 @@
+{
+    "name": "@intentic/ext-social",
+    "version": "1.0.0",
+    "description": "The social platforms the agent acts on as the owner (reddit/x/youtube) as a pure-data intentic extension",
+    "license": "MIT",
+    "private": true,
+    "type": "module"
+}

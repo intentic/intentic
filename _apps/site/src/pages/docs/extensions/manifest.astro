@@ -6,9 +6,9 @@ const permissions = `"permissions": {
     "sandbox": ["GET /panels", "POST /panels/*/start", "GET /memory/file"]
 }`;
 
-const connector = `"connectors": [
+const connector = `"capabilities": [
     {
-        "provider": "linear",
+        "id": "linear",
         "kind": "cli",
         "catalog": {
             "name": "Linear",
@@ -144,23 +144,29 @@ const processes = `"processes": [
     </table>
     <p>Settings live on the daemon keyed by <code>publisher.name</code>, so they outlive a re-clone, an update, or a remove and re-add.</p>
 
-    <h2>contributes.connectors</h2>
+    <h2>contributes.capabilities</h2>
     <p>
         A whole third-party integration expressed as data, with no code. It produces a real capability card in the app: a "+" tile, a config
         form, credentials stored as secrets, environment variables in the agent's shell, and a <code>SKILL.md</code> cheatsheet that teaches
         the agent to use the tool.
     </p>
+    <p>
+        You contribute a <strong>card</strong>, never a handler. The machinery that acts on a capability lives in the daemon, because some of
+        it grants real privilege — putting the sandbox on a private network, running it privileged, changing what an agent may do on somebody's
+        personal computer. So the four kinds below are the ones whose daemon-side behaviour is entirely generic over your data; a manifest
+        naming any other kind is rejected at install.
+    </p>
     <DocsCodeBlock code={connector} lang="json" title="A CLI connector" />
     <table>
         <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
         <tbody>
-            <tr><td><code>provider</code></td><td>Slug the capability is keyed by.</td></tr>
-            <tr><td><code>kind</code></td><td><code>"cli"</code> is a command-line tool the agent drives.</td></tr>
+            <tr><td><code>id</code></td><td>Slug the card is keyed by, unique within its <code>kind</code>. It becomes the card's URL and the hidden field tying each connection back to it.</td></tr>
+            <tr><td><code>kind</code></td><td><code>"cli"</code> a command-line tool the agent drives; <code>"browser"</code> a site the agent acts on as the user (add a <code>loginUrl</code>); <code>"host"</code> an operating-system guide for a connected computer; <code>"agent"</code> a preset for an outside chat agent (fields only).</td></tr>
             <tr><td><code>catalog</code></td><td>The card: <code>name</code>, <code>description</code>, <code>category</code>, an optional brand <code>logo</code> or fallback <code>icon</code>, and a <code>guide</code> walking the user through creating the credential.</td></tr>
             <tr><td><code>fields</code></td><td>The config form: <code>key</code>, <code>label</code>, and flags for <code>secret</code>, <code>optional</code>, <code>multiline</code>, <code>options</code>, and a <code>when</code> gate.</td></tr>
             <tr><td><code>env</code></td><td>Environment variables for the agent, templated over the fields: <code>{"${field}"}</code> substitutes, <code>{"${field:uri}"}</code> percent-encodes.</td></tr>
-            <tr><td><code>skill</code></td><td>Path to the <code>SKILL.md</code> that teaches the agent the tool.</td></tr>
-            <tr><td><code>fragment</code></td><td>Optional image fragment installing the client binary.</td></tr>
+            <tr><td><code>skill</code></td><td>Path to the <code>SKILL.md</code> that teaches the agent the tool. Two placeholders are substituted when a user adds it: <code>{"${id}"}</code> becomes the name they chose, and <code>{"${tools}"}</code> becomes the built-in note for that kind (how to drive the shared browser, what a connected computer's tools are).</td></tr>
+            <tr><td><code>fragment</code></td><td>Optional image fragment installing the client binary. <code>cli</code> only.</td></tr>
         </tbody>
     </table>
     <p>This is the highest-leverage contribution point in the manifest: one entry plus two files adds an integration to the product.</p>
@@ -222,7 +228,7 @@ const processes = `"processes": [
     <table>
         <thead><tr><th>Contribution</th><th>Applies</th></tr></thead>
         <tbody>
-            <tr><td><code>views</code>, <code>viewers</code>, <code>commands</code>, <code>files</code>, <code>settings</code>, <code>processes</code>, <code>connectors</code>, <code>listener</code></td><td>Immediately</td></tr>
+            <tr><td><code>views</code>, <code>viewers</code>, <code>commands</code>, <code>files</code>, <code>settings</code>, <code>processes</code>, <code>capabilities</code>, <code>listener</code></td><td>Immediately</td></tr>
             <tr><td><code>agent</code>, <code>bin</code></td><td>Next agent turn</td></tr>
             <tr><td><code>environment</code></td><td>Next image rebuild</td></tr>
         </tbody>

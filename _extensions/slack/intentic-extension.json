@@ -3,11 +3,27 @@
     "name": "slack",
     "version": "1.0.0",
     "category": "connections",
-    "engines": { "intentic": "^0.4.0" },
+    "engines": {
+        "intentic": "^0.4.0"
+    },
     "contributes": {
-        "connectors": [
+        "listener": {
+            "provider": "slack",
+            "eventTypes": [
+                "message",
+                "reaction_added"
+            ]
+        },
+        "processes": [
             {
-                "provider": "slack",
+                "name": "gateway",
+                "command": "node dist/gateway.js",
+                "autoStart": true
+            }
+        ],
+        "capabilities": [
+            {
+                "id": "slack",
                 "kind": "cli",
                 "catalog": {
                     "name": "Slack",
@@ -29,14 +45,22 @@
                     }
                 },
                 "fields": [
-                    { "key": "botToken", "label": "Bot token (xoxb-)", "secret": true },
-                    { "key": "appToken", "label": "App-level token (xapp-)", "secret": true }
+                    {
+                        "key": "botToken",
+                        "label": "Bot token (xoxb-)",
+                        "secret": true
+                    },
+                    {
+                        "key": "appToken",
+                        "label": "App-level token (xapp-)",
+                        "secret": true
+                    }
                 ],
-                "env": { "SLACK_BOT_TOKEN": "${botToken}" },
+                "env": {
+                    "SLACK_BOT_TOKEN": "${botToken}"
+                },
                 "skill": "skills/slack/SKILL.md"
             }
-        ],
-        "listener": { "provider": "slack", "eventTypes": ["message", "reaction_added"] },
-        "processes": [{ "name": "gateway", "command": "node dist/gateway.js", "autoStart": true }]
+        ]
     }
 }

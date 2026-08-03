@@ -338,10 +338,17 @@ RUN codex_bin="$(find /opt/sandbox/node_modules/.pnpm -maxdepth 6 -path '*@opena
     && codex --version
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
-# entry. connectors is data-only (manifest + connector skills + client image fragments) so it copies straight
-# from context; discord, imap and slack ship their deployed gateway trees from the trees context (node_modules
-# included).
+# entry. connectors, social, computers and acp-agents are data-only (manifest + skill packs + client image
+# fragments) so they copy straight from context; discord, imap and slack ship their deployed gateway trees from
+# the trees context (node_modules included).
+#
+# The four data-only packs are what makes the /capabilities grid: every card that is a ROW over a generic core
+# handler (a cli connector, a social platform, an OS pack, an ACP preset) is one of these manifest entries, so
+# switching a pack off removes exactly its cards. Miss a COPY and those cards silently vanish from the grid.
 COPY _extensions/connectors /opt/extensions/connectors
+COPY _extensions/social /opt/extensions/social
+COPY _extensions/computers /opt/extensions/computers
+COPY _extensions/acp-agents /opt/extensions/acp-agents
 COPY --from=trees extensions/discord /opt/extensions/discord
 # Same glibc rationale as the sandbox rebuild above — the discord gateway's voice stack compiles opus from source.
 RUN cd /opt/extensions/discord/node_modules/.pnpm/@discordjs+opus@*/node_modules/@discordjs/opus \

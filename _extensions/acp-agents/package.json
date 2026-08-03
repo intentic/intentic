@@ -1,0 +1,8 @@
+{
+    "name": "@intentic/ext-acp-agents",
+    "version": "1.0.0",
+    "description": "The ACP agents offered as chat providers (opencode/gemini/custom) as a pure-data intentic extension",
+    "license": "MIT",
+    "private": true,
+    "type": "module"
+}

@@ -461,9 +461,11 @@ reviewable rather than ambient. The narrow `facts.ts` surface
 runtime via an import map so every extension shares the shell's one Vue/PrimeVue instance).
 
 What an extension **bundles** is exactly its declared contributions: a prebuilt ESM `entry` (UI) with
-`views` / `viewers` / `commands` / `settings`; `connectors` — a cli capability as pure data (catalog card +
-config fields + env templates + a SKILL.md cheatsheet + an optional client-image fragment), rendered by the
-web as a *derived* capability card (see [Capabilities](#capabilities)); `processes` (daemon-run,
+`views` / `viewers` / `commands` / `settings`; `capabilities` — a capability CARD as pure data (catalog card +
+config fields, plus per-kind payload: a cli connector's env templates + SKILL.md + optional client-image
+fragment, a browser platform's login URL + SKILL.md, a host OS pack's SKILL.md), rendered by the web as a
+*derived* capability card and resolved by the daemon's generic handler for that kind — never a handler of its
+own (see [Capabilities](#capabilities)); `processes` (daemon-run,
 tmux-managed background processes); `agent` (a directory that is a Claude Code plugin —
 skills/agents/hooks/.mcp.json, handed to the Agent SDK's plugin loader each turn); `environment` (a
 RUN/ENV-only Dockerfile fragment baked into the sandbox image overlay); `bin` (executables prepended to the
@@ -482,9 +484,12 @@ First-party extensions live in `_extensions/` and reach the product by one of **
   the daemon lists them and the loader's only question per extension is where its code comes from. The two
   ways image and bundle can disagree are surfaced as states, not silence: `missing` (manifest, no module) and
   `unlisted` (module, no manifest — activated anyway, so the rail survives an older image).
-- **Baked into the sandbox image** — the daemon-side ones (`connectors`, `discord`, `imap`) ship their whole
-  checkout at `/opt/extensions` (Dockerfile bake, `EXTENSIONS_DIR`) and are served as `builtin: true` —
-  present in every sandbox, not removable, no capability entry.
+- **Baked into the sandbox image** — the daemon-side ones ship their whole checkout at `/opt/extensions`
+  (Dockerfile bake, `EXTENSIONS_DIR`) and are served as `builtin: true` — present in every sandbox, not
+  removable, no capability entry. Four are pure data and exist to hold the `/capabilities` grid's derived
+  cards (`connectors`, `social`, `computers`, `acp-agents`); three ship a gateway process as well (`discord`,
+  `slack`, `imap`). This is how those cards exist out of the box, and why switching one of those packs off
+  removes exactly its cards.
 - **Git-installed** — the `extension` capability: an owner-only, full-sha-pinned clone into
   `.intentic/extensions/<id>`, validated before swap. Third-party extensions arrive this way; of the
   first-party ones only `rtk` does, because its environment fragment composes per capability entry.
@@ -506,7 +511,7 @@ gap to close now.
 Everything a user adds to a sandbox is a **capability**: one `{ id, kind, config }` entry in a single
 discriminated union (`CapabilitySchema` in [schemas.ts](_libs/sandbox-contract/src/schemas.ts)) over the
 kinds — `devops`, `monorepo`, `mcp`, `service`, `integration`, `cli`, `plugin`, `extension`, `ssh`, `vpn`,
-`browser`, `agent`. There is deliberately **no top-level taxonomy** of "skills vs connectors vs
+`docker`, `browser`, `host`, `agent`, `endpoint`. There is deliberately **no top-level taxonomy** of "skills vs connectors vs
 environments vs secrets": those are overlapping *ingredients*, not disjoint categories (a connector is a
 skill + a secret + env injection + maybe an image fragment; an extension is a repo + skills + processes +
 views + a fragment), so the model unifies the noun and differentiates behaviour per kind — the same bet
@@ -526,12 +531,48 @@ machinery is uniform:
   [capability.ts](_apps/sandbox/src/capabilities/capability.ts)) — a new kind is a compile error
   until it is handled everywhere, including the effects deriver and the secret/echo switches.
 
-**Cards are derived, not duplicated.** The web's `/capabilities` grid
-([Capabilities.vue](_apps/web/src/pages/Capabilities.vue)) merges the static core cards
-(`CAPABILITY_CATALOG`) with cli cards **derived** from the installed extensions' `contributes.connectors`
-(`connectorCard()`, both in [capability-catalog](_libs/capability-catalog/src/index.ts)): a cli card exists **iff** its capability
-is actually addable, third-party connectors surface automatically, and the connector manifest is the single
-source of a card's name/logo/fields/credential guide — nothing to drift.
+**The catalog is extensible; the handlers are core.** This is the line the whole `/capabilities` grid is
+drawn on, and it is the honest version of the VSCode bet for this system. VSCode's core owns the privileged
+primitives and extensions *compose* them; here the handlers **are** the privileged primitives — `docker`
+bakes `--privileged`, `vpn` bakes `NET_ADMIN`, `host` pushes the enforcement boundary onto somebody's
+personal laptop, `extension` installs extensions. A manifest that could contribute one of those is a
+manifest that grants itself privilege, so **no handler is contributable, ever**. What an extension supplies
+instead is a **card**: the data that varies between two cards served by the *same* handler.
+
+Four kinds are card-driven, and the restriction is the `CapabilityContributionSchema` discriminated union
+([manifest.ts](_libs/extension-api/src/manifest.ts)) rather than prose — a manifest naming any other kind
+fails to parse:
+
+| Contributable kind | What the card carries | Who ships the first-party ones |
+| --- | --- | --- |
+| `cli` | fields + env templates + a SKILL.md + an optional client-image fragment | `connectors`, `discord`, `slack`, `imap` |
+| `browser` | a login URL + a SKILL.md (one Chromium serves every platform — that stays core) | `social` |
+| `host` | an OS skill pack (enrollment, socket and scope enforcement stay core) | `computers` |
+| `agent` | field defaults only — a preset over one config shape | `acp-agents` |
+
+Everything else keeps a static card in `CAPABILITY_CATALOG`
+([capability-catalog](_libs/capability-catalog/src/index.ts)), and every one of those is one-to-one with a
+handler it cannot be separated from. `integration` is the instructive case: its card *looks* like pure data,
+but it becomes an `i.have.<provider>` entry that only the desired-state resolver's closed
+`InventoryProviderSchema` vocabulary understands — so the vocabulary belongs to the deploy engine, not to a
+manifest, and Stripe stays static.
+
+The web's grid ([Capabilities.vue](_apps/web/src/pages/Capabilities.vue)) merges the static cards with cards
+**derived** from the **enabled** extensions' `contributes.capabilities` (`contributionCard()`). Enabled, not
+merely installed: a switched-off extension stays listed so its switch stays reachable, but the daemon wires
+none of its contributions up, so a card from one would advertise an add that fails. So a derived card exists
+**iff** its capability is actually addable, third-party cards surface automatically, and the manifest is the
+single source of a card's name/logo/fields/credential guide — nothing to drift.
+
+Two things the core injects into a derived card rather than letting the manifest declare them, both because
+a card that could restate them is a card that could get them wrong: the kind's **discriminator**
+(`contributionDiscriminator()` — the `provider`/`platform` key pinned to the card's own id, which is what
+traces a stored capability back to the card that made it), and the connected-computer **scope switches**
+(the grant does not vary by OS, so two platform packs cannot drift on it and neither can a third-party one).
+Contributed SKILL.md files get two substitutions on apply (`renderSkill()` in
+[contributions.ts](_apps/sandbox/src/capabilities/contributions.ts)): `${id}` → the instance name, so a
+host pack's examples read `mcp__my-laptop__run_command`; and `${tools}` → the kind's core tool-surface note,
+which is core precisely because the same note duplicated across N packs is a note that drifts.
 
 **Effects — what adding actually does, as data.** Kinds differ wildly in consequence (an extension runs
 code with your session; a vpn bakes an image fragment with runtime directives; a cli connector just writes a
@@ -591,13 +632,16 @@ Per-kind mechanics ([handlers/](_apps/sandbox/src/capabilities/handlers/)):
 | `mcp` | Pure registration — no side effect beyond the manifest entry; `status` probes the URL. |
 | `service` | Upserts an `i.want.service` entry into `deploy.config.ts`'s managed region and runs the infra-apply job, relaying its events. |
 | `integration` | Upserts an `i.have.<provider>` backend entry; the secret (e.g. `STRIPE_API_KEY`) is read from sandbox env at provision time. |
-| `cli` | Connector-driven (data from `contributes.connectors`): templates the connector's SKILL.md into `.claude/skills/<id>`, injects the credential into the agent's env each turn, optionally bakes a client-image fragment (psql, mysql, whisper). github/gitlab additionally run the core git-access hook (keypair registered to the account + an https credential, restored on every boot); `status` reports `pending` when that credential is missing, so the card can't read active while `git pull` fails. |
+| `cli` | Card-driven (data from `contributes.capabilities`): templates the connector's SKILL.md into `.claude/skills/<id>`, injects the credential into the agent's env each turn, optionally bakes a client-image fragment (psql, mysql, whisper). github/gitlab additionally run the core git-access hook (keypair registered to the account + an https credential, restored on every boot); `status` reports `pending` when that credential is missing, so the card can't read active while `git pull` fails. |
 | `plugin` | Clones a Claude Code plugin repo into `.intentic/plugins/<id>`; the Agent SDK's loader reads its skills/agents/hooks/`.mcp.json` each turn. A marketplace repo (`.claude-plugin/marketplace.json`) can pre-fill the form. |
 | `extension` | Owner-only, sha-pinned clone into `.intentic/extensions/<id>`, validated before swap (manifest parses, prebuilt entry exists, fragment RUN/ENV-only); starts declared `autoStart` processes. |
 | `ssh` | Writes a per-machine Host block + `0600` key/password under `~/.ssh/intentic-hosts` (the /history-backed dir above) + the shared ssh skill; the instance id is the alias the agent uses (`ssh <id>`). |
 | `vpn` | Stores ONE connection, discriminated by `provider` — `wireguard` (pasted `.conf`, `wg-quick`), `fortinet` (FortiGate SSL-VPN via `openconnect --protocol=fortinet`), `ipsec` (IKEv1/IKEv2 PSK + XAuth via strongSwan) — plus the shared vpn skill. Connecting is NOT part of the config: see [VPN](#vpn) below. |
 | `docker` | The engine is baked into the base image, dormant; the fragment is a lone `--privileged` runtime directive (a cache-hit rebuild, not an install). Once privileged, runs `dockerd` in a persistent tmux session, restored on boot — so `pnpm db:up` works like a local dev machine. Not removable. |
-| `browser` | Per-instance platform skill; connecting is a guided live login (screencast over WebSocket) that persists the profile the agent's `@playwright/mcp` drives, headed on Xvfb with the stealth patch. This capability buys *identity*, not the browser itself: Chromium is baked into the base image and every turn already gets a credential-free `mcp__web__browser_*` server (`--isolated`, headless, no profile on disk), because reading a page is ordinary coding work. |
+| `browser` | Per-instance platform skill (rendered from the contributed pack); connecting is a guided live login (screencast over WebSocket) that persists the profile the agent's `@playwright/mcp` drives, headed on Xvfb with the stealth patch. This capability buys *identity*, not the browser itself: Chromium is baked into the base image and every turn already gets a credential-free `mcp__web__browser_*` server (`--isolated`, headless, no profile on disk), because reading a page is ordinary coding work. |
+| `host` | A computer of the user's OWN, one capability per machine. Writes the contributed OS skill pack, then pushes the scope switches to the machine if it is up — an edit is a decision about what may happen on somebody's computer *now*, so it travels immediately rather than at the next reconnect. The machine connects itself out-of-band (the card's one-liner enrolls over `/system/hosts/enroll` and dials back); enforcement is on the machine, never here. |
+| `agent` | An ACP agent as a chat provider. `apply`/`status` are a spawn + initialize probe, so a command that doesn't actually speak ACP is caught (with its stderr) before the first chat turn depends on it; the warm turn-serving connection lives in the acp pool. |
+| `endpoint` | A model API the user pointed us at. `apply` and `status` are the SAME probe and neither is fatal: adding an endpoint whose server isn't up yet is the ordinary case, so the entry is stored either way and the card carries the truth ("3 models" vs "no models" — the usual way an Ollama install disappoints its owner). |
 
 ### VPN
 

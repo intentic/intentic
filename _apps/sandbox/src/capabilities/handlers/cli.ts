@@ -1,41 +1,33 @@
 import { join } from "node:path";
 import type { CliConfig } from "@intentic/sandbox-contract";
 import { listenerStatus } from "../../extensions/listener-status.js";
-import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import { terminalExec } from "../../terminal/terminal-run.js";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
-import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
+import type { CapabilityHandler } from "../capability.js";
 import { envSuffix } from "../cli-env.js";
 import {
-    connectorRegistry,
-    connectorSecretField,
-    connectorSecretFields,
-    connectorSkillPath,
-    validateConnectorConfig,
-} from "../cli/connector-registry.js";
+    contributedSkill,
+    contributionKey,
+    contributionRegistry,
+    contributionSecretField,
+    contributionSecretFields,
+    hostOf,
+    validateContributionConfig,
+} from "../contributions.js";
 import { CORE_CONNECTOR_HOOKS, gitAccessWired, gitHostOf } from "../cli/git-access.js";
-import { extensionRead } from "../extension-dirs.js";
 
 // A CLI-tool integration: give the AGENT an authenticated command-line tool. The provider's card/fields/env/
-// skill/fragment are DATA in an installed extension's `contributes.connectors` (see connector-registry) — this
+// skill/fragment are DATA in an installed extension's `contributes.capabilities` (see contributions.ts) — this
 // handler is the generic plumbing over that data. `apply` reads the connector's SKILL.md, templates it for this
 // instance ($VAR → $VAR_<ID>), drops it into .claude/skills/<id> (auto-loaded by the agent), and runs the
 // connector's optional core hook (git-over-ssh for github/gitlab). The credential is injected into the agent's
 // env each turn (cliEnvOf), never written to a file; the image fragment (psql/whisper) rides fragment-sources.
 const skillPath = (root: string, id: string): string => join(root, ".claude", "skills", id, "SKILL.md");
 
-// The narrow ctx as the extension enumerator's host — same fields, extensionsDir threaded through the ctx.
-const hostOf = (ctx: CapabilityCtx): ExtensionHost => ({
-    workspace: ctx.workspace,
-    files: ctx.files,
-    capabilities: ctx.capabilities,
-    config: { extensionsDir: ctx.extensionsDir },
-});
-
 export const cliHandler: CapabilityHandler = {
     secret: (config, connectors) => {
-        const spec = connectors.get((config as CliConfig).provider)?.spec;
-        return spec === undefined ? undefined : connectorSecretField(spec);
+        const spec = connectors.get(contributionKey("cli", (config as CliConfig).provider))?.spec;
+        return spec === undefined ? undefined : contributionSecretField(spec);
     },
     /* Echo the non-secret fields (url etc.) for display; the rotatable secret becomes hasSecret. EVERY declared
      * secret is withheld, not just that one — a two-token connector (Slack: an app-level token to open the socket,
@@ -43,9 +35,9 @@ export const cliHandler: CapabilityHandler = {
      * /secrets happens to rotate. The web renders the card's label/logo from the connector manifest, not this. */
     echo: (config, connectors) => {
         const cli = config as CliConfig;
-        const spec = connectors.get(cli.provider)?.spec;
-        const secretKeys = spec === undefined ? new Set<string>() : connectorSecretFields(spec);
-        const rotatable = spec === undefined ? undefined : connectorSecretField(spec);
+        const spec = connectors.get(contributionKey("cli", cli.provider))?.spec;
+        const secretKeys = spec === undefined ? new Set<string>() : contributionSecretFields(spec);
+        const rotatable = spec === undefined ? undefined : contributionSecretField(spec);
         const echo: Record<string, string | number | boolean> = {};
         for (const [key, value] of Object.entries(cli)) {
             if (!secretKeys.has(key)) {
@@ -57,11 +49,11 @@ export const cliHandler: CapabilityHandler = {
     apply: async function* (ctx, id, config) {
         const cliConfig = config as CliConfig;
         const { provider } = cliConfig;
-        const connector = (await connectorRegistry(hostOf(ctx))).get(provider);
+        const connector = (await contributionRegistry(hostOf(ctx))).get(contributionKey("cli", provider));
         if (connector === undefined) {
             throw new Error(`no connector for provider "${provider}" — install the extension that declares it`);
         }
-        const invalid = validateConnectorConfig(connector.spec, cliConfig);
+        const invalid = validateContributionConfig(connector.spec, cliConfig);
         if (invalid !== undefined) {
             throw new Error(invalid);
         }
@@ -69,8 +61,13 @@ export const cliHandler: CapabilityHandler = {
         // one provider don't register the same skill name, and each $VAR → its per-instance suffixed name so the
         // agent reads this instance's credentials. Longest keys first to avoid one key corrupting another's prefix.
         const suffix = envSuffix(id);
-        const keys = Object.keys(connector.spec.env).toSorted((a, b) => b.length - a.length);
-        let skill = ((await extensionRead(connectorSkillPath(connector))) ?? "").replace(/^name: .*$/m, `name: ${id}`);
+        const keys = connector.spec.kind === "cli" ? Object.keys(connector.spec.env).toSorted((a, b) => b.length - a.length) : [];
+        // No `${tools}` slot for cli: a connector's cheatsheet is about ITS tool, and there is no shared surface
+        // behind it the way a browser or a connected computer has one.
+        let skill = await contributedSkill(connector, id, "");
+        if (skill === undefined) {
+            throw new Error(`the extension declaring "${provider}" has no readable skill file — reinstall it`);
+        }
         for (const key of keys) {
             skill = skill.replaceAll(`$${key}`, `$${key}_${suffix}`);
         }

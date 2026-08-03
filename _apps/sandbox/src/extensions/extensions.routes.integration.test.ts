@@ -53,8 +53,10 @@ test("the extension list carries every first-party extension, compiled-in UI one
     const ids = (await client.extensions.list()).extensions.map((extension) => extension.id).toSorted();
     expect(ids).toEqual([
         "intentic.acceptance",
+        "intentic.acp-agents",
         "intentic.activity",
         "intentic.automations",
+        "intentic.computers",
         "intentic.connectors",
         "intentic.deployments",
         "intentic.discord",
@@ -68,6 +70,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.preview",
         "intentic.repo-apps",
         "intentic.slack",
+        "intentic.social",
         "intentic.viewers",
         "intentic.workflows",
     ]);

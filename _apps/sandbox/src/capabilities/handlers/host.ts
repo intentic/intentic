@@ -1,12 +1,16 @@
 import { join } from "node:path";
 import type { HostConfig } from "@intentic/sandbox-contract";
-import { hostSkill } from "../../hosts/host-skills.js";
+import { HOST_TOOLS_NOTE } from "../../hosts/host-skills.js";
 import type { CapabilityHandler } from "../capability.js";
+import { contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
 // A computer of the user's OWN — one capability per machine, the id being its name. `apply` writes the platform's
 // skill pack and pushes the scopes to the machine if it is up; the machine itself is connected out-of-band, by
 // running the card's one-liner on it (which enrolls over /system/hosts/enroll and dials back in). Distinct from
 // `ssh`, where the sandbox does the dialling and there is nothing to install on the far end.
+//
+// The OS pack is data in an installed extension's `contributes.capabilities`; the tool surface it wraps, the
+// enrollment and the scope enforcement are core (host-skills.ts, hosts/).
 const skillDir = (root: string, id: string): string => join(root, ".claude", "skills", id);
 const skillPath = (root: string, id: string): string => join(skillDir(root, id), "SKILL.md");
 
@@ -27,7 +31,15 @@ export const hostHandler: CapabilityHandler = {
     },
     apply: async function* (ctx, id, config) {
         const host = config as HostConfig;
-        await ctx.files.write(skillPath(ctx.workspace.root, id), hostSkill(id, host.platform));
+        const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey("host", host.platform));
+        if (contribution === undefined) {
+            throw new Error(`no host platform "${host.platform}" — install the extension that declares it`);
+        }
+        const skill = await contributedSkill(contribution, id, HOST_TOOLS_NOTE);
+        if (skill === undefined) {
+            throw new Error(`the extension declaring "${host.platform}" has no readable skill pack — reinstall it`);
+        }
+        await ctx.files.write(skillPath(ctx.workspace.root, id), skill);
         if (!(await ctx.hosts.enrolled(id))) {
             yield {
                 kind: "log",

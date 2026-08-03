@@ -3,11 +3,13 @@
     "name": "connectors",
     "version": "1.0.0",
     "category": "connections",
-    "engines": { "intentic": "^0.4.0" },
+    "engines": {
+        "intentic": "^0.4.0"
+    },
     "contributes": {
-        "connectors": [
+        "capabilities": [
             {
-                "provider": "github",
+                "id": "github",
                 "kind": "cli",
                 "catalog": {
                     "name": "GitHub",
@@ -27,22 +29,34 @@
                     }
                 },
                 "fields": [
-                    { "key": "token", "label": "Personal access token", "secret": true },
+                    {
+                        "key": "token",
+                        "label": "Personal access token",
+                        "secret": true
+                    },
                     {
                         "key": "git",
                         "label": "Git access",
                         "default": "on",
                         "options": [
-                            { "value": "on", "label": "On" },
-                            { "value": "off", "label": "Off" }
+                            {
+                                "value": "on",
+                                "label": "On"
+                            },
+                            {
+                                "value": "off",
+                                "label": "Off"
+                            }
                         ]
                     }
                 ],
-                "env": { "GITHUB_TOKEN": "${token}" },
+                "env": {
+                    "GITHUB_TOKEN": "${token}"
+                },
                 "skill": "skills/github/SKILL.md"
             },
             {
-                "provider": "gitlab",
+                "id": "gitlab",
                 "kind": "cli",
                 "catalog": {
                     "name": "GitLab",
@@ -64,23 +78,41 @@
                     }
                 },
                 "fields": [
-                    { "key": "url", "label": "Instance URL", "placeholder": "https://gitlab.com", "default": "https://gitlab.com" },
-                    { "key": "token", "label": "Access token", "secret": true },
+                    {
+                        "key": "url",
+                        "label": "Instance URL",
+                        "placeholder": "https://gitlab.com",
+                        "default": "https://gitlab.com"
+                    },
+                    {
+                        "key": "token",
+                        "label": "Access token",
+                        "secret": true
+                    },
                     {
                         "key": "git",
                         "label": "Git access",
                         "default": "on",
                         "options": [
-                            { "value": "on", "label": "On" },
-                            { "value": "off", "label": "Off" }
+                            {
+                                "value": "on",
+                                "label": "On"
+                            },
+                            {
+                                "value": "off",
+                                "label": "Off"
+                            }
                         ]
                     }
                 ],
-                "env": { "GITLAB_TOKEN": "${token}", "GITLAB_URL": "${url}" },
+                "env": {
+                    "GITLAB_TOKEN": "${token}",
+                    "GITLAB_URL": "${url}"
+                },
                 "skill": "skills/gitlab/SKILL.md"
             },
             {
-                "provider": "sentry",
+                "id": "sentry",
                 "kind": "cli",
                 "catalog": {
                     "name": "Sentry",
@@ -100,15 +132,32 @@
                     }
                 },
                 "fields": [
-                    { "key": "url", "label": "Sentry URL", "placeholder": "https://sentry.io", "default": "https://sentry.io" },
-                    { "key": "org", "label": "Org slug", "optional": true },
-                    { "key": "token", "label": "Auth token", "secret": true }
+                    {
+                        "key": "url",
+                        "label": "Sentry URL",
+                        "placeholder": "https://sentry.io",
+                        "default": "https://sentry.io"
+                    },
+                    {
+                        "key": "org",
+                        "label": "Org slug",
+                        "optional": true
+                    },
+                    {
+                        "key": "token",
+                        "label": "Auth token",
+                        "secret": true
+                    }
                 ],
-                "env": { "SENTRY_TOKEN": "${token}", "SENTRY_URL": "${url}", "SENTRY_ORG": "${org}" },
+                "env": {
+                    "SENTRY_TOKEN": "${token}",
+                    "SENTRY_URL": "${url}",
+                    "SENTRY_ORG": "${org}"
+                },
                 "skill": "skills/sentry/SKILL.md"
             },
             {
-                "provider": "redmine",
+                "id": "redmine",
                 "kind": "cli",
                 "catalog": {
                     "name": "Redmine",
@@ -130,14 +179,25 @@
                     }
                 },
                 "fields": [
-                    { "key": "url", "label": "Instance URL", "placeholder": "https://redmine.example.com" },
-                    { "key": "apiKey", "label": "API key", "secret": true }
+                    {
+                        "key": "url",
+                        "label": "Instance URL",
+                        "placeholder": "https://redmine.example.com"
+                    },
+                    {
+                        "key": "apiKey",
+                        "label": "API key",
+                        "secret": true
+                    }
                 ],
-                "env": { "REDMINE_URL": "${url}", "REDMINE_API_KEY": "${apiKey}" },
+                "env": {
+                    "REDMINE_URL": "${url}",
+                    "REDMINE_API_KEY": "${apiKey}"
+                },
                 "skill": "skills/redmine/SKILL.md"
             },
             {
-                "provider": "outline",
+                "id": "outline",
                 "kind": "cli",
                 "catalog": {
                     "name": "Outline",
@@ -158,14 +218,25 @@
                     }
                 },
                 "fields": [
-                    { "key": "url", "label": "Instance URL", "placeholder": "https://outline.example.com" },
-                    { "key": "apiKey", "label": "API token", "secret": true }
+                    {
+                        "key": "url",
+                        "label": "Instance URL",
+                        "placeholder": "https://outline.example.com"
+                    },
+                    {
+                        "key": "apiKey",
+                        "label": "API token",
+                        "secret": true
+                    }
                 ],
-                "env": { "OUTLINE_URL": "${url}", "OUTLINE_API_KEY": "${apiKey}" },
+                "env": {
+                    "OUTLINE_URL": "${url}",
+                    "OUTLINE_API_KEY": "${apiKey}"
+                },
                 "skill": "skills/outline/SKILL.md"
             },
             {
-                "provider": "signoz",
+                "id": "signoz",
                 "kind": "cli",
                 "catalog": {
                     "name": "SigNoz",
@@ -185,14 +256,25 @@
                     }
                 },
                 "fields": [
-                    { "key": "url", "label": "SigNoz URL", "placeholder": "https://signoz.example.com" },
-                    { "key": "apiKey", "label": "API key", "secret": true }
+                    {
+                        "key": "url",
+                        "label": "SigNoz URL",
+                        "placeholder": "https://signoz.example.com"
+                    },
+                    {
+                        "key": "apiKey",
+                        "label": "API key",
+                        "secret": true
+                    }
                 ],
-                "env": { "SIGNOZ_URL": "${url}", "SIGNOZ_API_KEY": "${apiKey}" },
+                "env": {
+                    "SIGNOZ_URL": "${url}",
+                    "SIGNOZ_API_KEY": "${apiKey}"
+                },
                 "skill": "skills/signoz/SKILL.md"
             },
             {
-                "provider": "komodo",
+                "id": "komodo",
                 "kind": "cli",
                 "catalog": {
                     "name": "Komodo",
@@ -214,15 +296,30 @@
                     }
                 },
                 "fields": [
-                    { "key": "url", "label": "Komodo URL", "placeholder": "https://komodo.example.com" },
-                    { "key": "apiKey", "label": "API key" },
-                    { "key": "apiSecret", "label": "API secret", "secret": true }
+                    {
+                        "key": "url",
+                        "label": "Komodo URL",
+                        "placeholder": "https://komodo.example.com"
+                    },
+                    {
+                        "key": "apiKey",
+                        "label": "API key"
+                    },
+                    {
+                        "key": "apiSecret",
+                        "label": "API secret",
+                        "secret": true
+                    }
                 ],
-                "env": { "KOMODO_ADDRESS": "${url}", "KOMODO_API_KEY": "${apiKey}", "KOMODO_API_SECRET": "${apiSecret}" },
+                "env": {
+                    "KOMODO_ADDRESS": "${url}",
+                    "KOMODO_API_KEY": "${apiKey}",
+                    "KOMODO_API_SECRET": "${apiSecret}"
+                },
                 "skill": "skills/komodo/SKILL.md"
             },
             {
-                "provider": "postgres",
+                "id": "postgres",
                 "kind": "cli",
                 "catalog": {
                     "name": "PostgreSQL",
@@ -240,18 +337,40 @@
                     }
                 },
                 "fields": [
-                    { "key": "host", "label": "Host", "placeholder": "db.example.com" },
-                    { "key": "port", "label": "Port", "default": "5432" },
-                    { "key": "user", "label": "User", "placeholder": "postgres" },
-                    { "key": "password", "label": "Password", "secret": true },
-                    { "key": "database", "label": "Database", "placeholder": "app" }
+                    {
+                        "key": "host",
+                        "label": "Host",
+                        "placeholder": "db.example.com"
+                    },
+                    {
+                        "key": "port",
+                        "label": "Port",
+                        "default": "5432"
+                    },
+                    {
+                        "key": "user",
+                        "label": "User",
+                        "placeholder": "postgres"
+                    },
+                    {
+                        "key": "password",
+                        "label": "Password",
+                        "secret": true
+                    },
+                    {
+                        "key": "database",
+                        "label": "Database",
+                        "placeholder": "app"
+                    }
                 ],
-                "env": { "POSTGRES_URL": "postgresql://${user:uri}:${password:uri}@${host}:${port}/${database:uri}" },
+                "env": {
+                    "POSTGRES_URL": "postgresql://${user:uri}:${password:uri}@${host}:${port}/${database:uri}"
+                },
                 "skill": "skills/postgres/SKILL.md",
                 "fragment": "env/postgres.Dockerfile"
             },
             {
-                "provider": "mysql",
+                "id": "mysql",
                 "kind": "cli",
                 "catalog": {
                     "name": "MySQL",
@@ -269,11 +388,31 @@
                     }
                 },
                 "fields": [
-                    { "key": "host", "label": "Host", "placeholder": "db.example.com" },
-                    { "key": "port", "label": "Port", "default": "3306" },
-                    { "key": "user", "label": "User", "placeholder": "root" },
-                    { "key": "password", "label": "Password", "secret": true },
-                    { "key": "database", "label": "Database", "placeholder": "app" }
+                    {
+                        "key": "host",
+                        "label": "Host",
+                        "placeholder": "db.example.com"
+                    },
+                    {
+                        "key": "port",
+                        "label": "Port",
+                        "default": "3306"
+                    },
+                    {
+                        "key": "user",
+                        "label": "User",
+                        "placeholder": "root"
+                    },
+                    {
+                        "key": "password",
+                        "label": "Password",
+                        "secret": true
+                    },
+                    {
+                        "key": "database",
+                        "label": "Database",
+                        "placeholder": "app"
+                    }
                 ],
                 "env": {
                     "MYSQL_HOST": "${host}",

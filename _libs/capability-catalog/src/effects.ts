@@ -1,10 +1,10 @@
-import type { ConnectorContribution, ExtensionManifest } from "@intentic/extension-api";
+import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-api";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 
 /* What adding a capability DOES to the sandbox, as data — the structured counterpart of the handlers' side
  * effects (the sandbox's capabilities/handlers/*), rendered by the web as the "This will add to your sandbox"
  * panel before an add and as per-instance effect strips after. Derived, not declared per card: config-dependent
- * effects (a plugin's clone URL, the SQL card's engine-dependent client image) and connector/extension-declared
+ * effects (a plugin's clone URL, the SQL card's engine-dependent client image) and contribution/extension-declared
  * ones (secret fields, image fragments, processes) are computed from the same contribution data the handlers
  * consume, so there is no per-card effects list to drift. The streamed apply log stays the post-apply record;
  * this is the pre-add disclosure.
@@ -61,8 +61,8 @@ export interface CapabilityEffectInput {
     readonly id?: string | undefined;
     // Live form values, or a CapabilitySummary's secret-stripped config echo (hasToken/hasSecret booleans).
     readonly config: Record<string, string | number | boolean | undefined>;
-    // The cli provider's connector spec — the source of truth for its secret/fragment declarations.
-    readonly connector?: ConnectorContribution | undefined;
+    // The card's contribution — the source of truth for its secret/fragment declarations (cli/browser/host).
+    readonly contribution?: CapabilityContribution | undefined;
     // An installed extension's manifest — resolves its process/image contributions (unknowable before install).
     readonly manifest?: ExtensionManifest | undefined;
 }
@@ -85,17 +85,17 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
     service: () => [{ kind: "deploy", provisions: true }],
     integration: () => [{ kind: "deploy", provisions: false }],
     cli: (input) => {
-        // Without the connector spec (extensions query pending / sandbox unreachable) fall back to the echoed
+        // Without the contribution (extensions query pending / sandbox unreachable) fall back to the echoed
         // hasSecret — which the web also synthesizes from the card's own secret-marked fields, so the secret row
         // never waits on /extensions. The image row does wait: a connector's fragment (postgres/mysql clients,
         // discord's whisper) is spec data with no static counterpart on the card.
         const effects: CapabilityEffect[] = [{ kind: "skill", name: input.id }];
         const secret =
-            input.connector === undefined ? input.config["hasSecret"] === true : input.connector.fields.some((field) => field.secret === true);
+            input.contribution === undefined ? input.config["hasSecret"] === true : input.contribution.fields.some((field) => field.secret === true);
         if (secret) {
             effects.push({ kind: "secret", exposure: "agent-env" });
         }
-        if (input.connector?.fragment !== undefined) {
+        if (input.contribution?.kind === "cli" && input.contribution.fragment !== undefined) {
             effects.push({ kind: "image" });
         }
         return effects;

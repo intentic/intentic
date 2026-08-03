@@ -1,4 +1,5 @@
-import type { ConnectorContribution } from "@intentic/extension-api";
+import type { CapabilityContribution } from "@intentic/extension-api";
+import type { CapabilityKind } from "@intentic/sandbox-contract";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -17,6 +18,11 @@ export function useExtensions() {
         queryFn: async () => ExtensionsListSchema.parse(await sandboxJson(`/extensions`)).extensions,
     });
     const extensions = computed<ExtensionSummary[]>(() => query.data.value ?? []);
+    // What actually contributes right now. A disabled extension stays LISTED (that is what keeps its switch
+    // reachable) but the daemon wires none of its contributions up, so anything derived from a contribution —
+    // the /capabilities cards above all — must read this list, not `extensions`. Reading the wrong one is how a
+    // card for a switched-off extension stayed on the grid and failed at the daemon with an unknown provider.
+    const enabledExtensions = computed<ExtensionSummary[]>(() => extensions.value.filter((extension) => extension.enabled));
     // Flip one extension's switch and re-read the list. The daemon converges its own half (declared processes
     // stop/start, connectors and listener providers drop out of every subsequent read); the shell's half is the
     // caller's reloadExtensions(), which activates or retires the extension without a page reload.
@@ -28,16 +34,18 @@ export function useExtensions() {
         });
         await query.refetch();
     };
-    // A cli provider's connector spec from the installed extensions' contributes.connectors — the data
-    // capabilityEffects derives a cli card's secret/image effects from. Undefined until /extensions loads.
-    const connectorOf = (provider: string): ConnectorContribution | undefined =>
-        extensions.value
-            .flatMap((extension) => extension.manifest.contributes?.connectors ?? [])
-            .find((connector) => connector.provider === provider);
+    // One card's contribution from the enabled extensions' contributes.capabilities — the data capabilityEffects
+    // derives a card's secret/image effects from. Keyed by kind + id because an id is only unique within a kind.
+    // Undefined until /extensions loads.
+    const contributionOf = (kind: CapabilityKind, id: string): CapabilityContribution | undefined =>
+        enabledExtensions.value
+            .flatMap((extension) => extension.manifest.contributes?.capabilities ?? [])
+            .find((contribution) => contribution.kind === kind && contribution.id === id);
     return {
         extensions,
+        enabled: enabledExtensions,
         setEnabled,
-        connectorOf,
+        contributionOf,
         // The list has actually arrived (or definitively failed) — gates decisions that must not fire against
         // the empty pre-fetch state, like bouncing an unknown /capabilities/<card> slug back to the grid.
         settled: computed(() => query.isFetched.value || query.isError.value),

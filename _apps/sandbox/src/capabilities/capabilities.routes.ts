@@ -13,7 +13,7 @@ import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensio
 import { enabledExtensions } from "../extensions/installed-extensions.js";
 import { capabilityCtx } from "./capability.js";
 import { echoConfig, secretField } from "./summary.js";
-import { connectorRegistry } from "./cli/connector-registry.js";
+import { contributionRegistry } from "./contributions.js";
 import { browseMarketplace } from "./marketplace.js";
 import { capabilityRecommendations } from "./recommend.js";
 import { registry } from "./registry.js";
@@ -29,7 +29,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
     const adding = new Set<string>();
     return {
         list: i.list.handler(async () => {
-            const [capabilities, connectors] = await Promise.all([services.capabilities.list(), connectorRegistry(services)]);
+            const [capabilities, connectors] = await Promise.all([services.capabilities.list(), contributionRegistry(services)]);
             const [rows, recommendations] = await Promise.all([
                 Promise.all(
                     capabilities.map(async (capability) => ({
@@ -114,7 +114,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
             }
-            const field = secretField(capability, await connectorRegistry(services));
+            const field = secretField(capability, await contributionRegistry(services));
             if (field === undefined) {
                 throw new ORPCError("CONFLICT", { message: `the ${capability.kind} capability holds no secret` });
             }

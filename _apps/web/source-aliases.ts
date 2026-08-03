@@ -54,7 +54,7 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
     // The "+" grid's card and category data. It was the ONE first-party lib missing from this map, and the
     // cost was a silent wrong answer rather than a build error: the app resolved its `dist` instead, so a new
-    // CAPABILITY_CATEGORIES entry did not exist as far as `connectorCard` was concerned and every connector
+    // CAPABILITY_CATEGORIES entry did not exist as far as `contributionCard` was concerned and every card
     // declaring it fell through to the "extend" catch-all — a card in the wrong section, with nothing failing.
     "@intentic-app/capability-catalog": here("../../_libs/capability-catalog/src/index.ts"),
     // Same reason as the markdown subpath above, and the same ordering requirement: the session-name derivation

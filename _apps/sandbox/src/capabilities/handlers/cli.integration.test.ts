@@ -13,7 +13,7 @@ import type { CapabilitiesStore } from "../capabilities-store.js";
 import type { CapabilityCtx } from "../capability.js";
 import { echoConfig } from "../summary.js";
 import { cliEnvOf } from "../cli-env.js";
-import { connectorRegistry } from "../cli/connector-registry.js";
+import { contributionRegistry } from "../contributions.js";
 import {
     type GitAccessDeps,
     gitAccessWired,
@@ -158,7 +158,7 @@ test("cliEnvOf expands each connector's env template; two instances of one provi
 });
 
 test("echoConfig never leaks the secret — the token becomes hasSecret", async () => {
-    const connectors = await connectorRegistry(hostFor([]));
+    const connectors = await contributionRegistry(hostFor([]));
     expect(echoConfig(discord, connectors)).toEqual({ provider: "discord", hasSecret: true });
     const gitlab: Capability = { id: "gitlab", kind: "cli", config: { provider: "gitlab", token: "gl", url: "https://gitlab.com" } };
     // Non-secret fields (provider, url) echo; the secret token becomes hasSecret and never its value.

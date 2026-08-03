@@ -1,6 +1,6 @@
 // Platform UI/product catalogs: the add-form descriptors + card data the web renders. NOT wire contract —
 // moved out of @intentic-app/api-contract so the contract holds only schemas. Daemon enums are imported.
-import type { ConnectorContribution } from "@intentic/extension-api";
+import { type CapabilityContribution, type CapabilityField, contributionDiscriminator } from "@intentic/extension-api";
 import type { CapabilityKind, ServiceKind } from "@intentic/sandbox-contract";
 
 // Catalog the web uses to render the add forms. Only the user-provided, non-secret fields appear here.
@@ -76,27 +76,11 @@ export interface AddCapabilityInput {
     readonly config: Record<string, string>;
 }
 
-// One field the "+" dialog renders for a capability's config form. Optional members carry `| undefined` so a
-// zod-inferred ConnectorField (exactOptionalPropertyTypes) is assignable — connectorCard passes them through.
-export interface CapabilityField {
-    readonly key: string;
-    readonly label: string;
-    readonly placeholder?: string | undefined;
-    readonly secret?: boolean | undefined;
-    readonly optional?: boolean | undefined;
-    // Render a multi-line <textarea> instead of a single-line <input> — a single-line input strips the newlines
-    // when a multi-line value (e.g. a PEM private key) is pasted, corrupting it.
-    readonly multiline?: boolean | undefined;
-    // A fixed value baked into config, not shown as an input — e.g. platform="reddit", provider="stripe".
-    readonly value?: string | undefined;
-    // A pre-filled default the user can edit (e.g. the "self"/"cf" bindings DevOps registers).
-    readonly default?: string | undefined;
-    // A user-chosen value from a fixed set — rendered as a Segmented selector instead of a text input.
-    readonly options?: readonly { readonly value: string; readonly label: string }[] | undefined;
-    // Show/require/send this field only when another field currently equals a value (e.g. the SSH credential
-    // that matches the chosen auth mode). Omitted → always shown.
-    readonly when?: { readonly key: string; readonly value: string } | undefined;
-}
+/* The form field shape is `CapabilityField` from @intentic/extension-api — ONE definition for the fields a
+ * static card authors here and the fields an extension declares in its manifest, because the dialog renders
+ * them with the same code and a second copy is a second thing to keep in step. `secret` withholds the value
+ * from every echo, `value` pins a field the user never sees (a discriminator), `when` gates one field on
+ * another, and `multiline` matters: a single-line input strips the newlines out of a pasted PEM key. */
 
 // The logical section a card sits under in the "+" grid — a display grouping (by what it's for), not the
 // technical `kind`. `platform` cards unlock a new workspace area; the rest are connectors to existing tools.
@@ -248,49 +232,6 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         description: "Run containers inside your sandbox — its own isolated Docker Engine + Compose for dev databases, stacks and builds.",
         fields: [],
         hint: "One-time rebuild required — the sandbox restarts privileged with its own isolated Docker Engine (your machine's Docker is never shared).",
-    },
-    /* The user's own computers. One card per OS rather than one card with a picker, because the OS is not a
-     * setting — it decides which skill pack the agent gets, and a Windows machine and a Linux one are different
-     * enough that a shared card would teach the agent both and confuse it about which it is on.
-     *
-     * The three switches are the grant, and their defaults are the honest ones: reading and running are what
-     * "connect my computer" means, WRITING is not — a user who has not thought about it should not discover the
-     * agent has been editing their files. `roots` is the blast radius for both reads and writes. */
-    {
-        id: "windows",
-        name: "Windows PC",
-        kind: "host",
-        category: "machines",
-        logo: "windows",
-        description: "Let the agent work on your Windows computer — PowerShell, your files, your apps, its screen.",
-        fields: [{ key: "platform", label: "", value: "windows" }, ...HOST_SCOPE_FIELDS],
-        hint: 'The name is how you and the agent refer to this computer ("check the logs on my-laptop"). After adding it, click Connect and run the one-liner on that machine.',
-        guide: {
-            steps: [
-                "Add the computer here, then click Connect on its card to get a one-time command.",
-                "Run that command in PowerShell on the computer you want to connect — it installs a small agent that dials this sandbox.",
-                "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
-                "You can revoke it any time from this card; `intentic-host uninstall` removes the agent from the machine.",
-            ],
-        },
-    },
-    {
-        id: "linux",
-        name: "Linux PC",
-        kind: "host",
-        category: "machines",
-        logo: "linux/f5f5f5",
-        description: "Let the agent work on your Linux computer — your shell, your files, your desktop session.",
-        fields: [{ key: "platform", label: "", value: "linux" }, ...HOST_SCOPE_FIELDS],
-        hint: 'The name is how you and the agent refer to this computer ("run the tests on my-desktop"). After adding it, click Connect and run the one-liner on that machine.',
-        guide: {
-            steps: [
-                "Add the computer here, then click Connect on its card to get a one-time command.",
-                "Run that command in a terminal on the computer you want to connect — it installs a small agent that dials this sandbox.",
-                "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
-                "You can revoke it any time from this card; `intentic-host uninstall` removes the agent from the machine.",
-            ],
-        },
     },
     {
         id: "ssh",
@@ -455,36 +396,6 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         },
     },
     {
-        id: "reddit",
-        name: "Reddit",
-        kind: "browser",
-        category: "communication",
-        logo: "reddit",
-        description: "Read, comment, post, vote and join subreddits — the agent acts as you in a real logged-in browser.",
-        fields: [{ key: "platform", label: "", value: "reddit" }],
-        hint: "Use Log in to sign in once — the agent then acts as you on Reddit. Automating an account may be against Reddit's terms — use your own.",
-    },
-    {
-        id: "x",
-        name: "X (Twitter)",
-        kind: "browser",
-        category: "communication",
-        logo: "x/f5f5f5",
-        description: "Read, reply, post, like, follow and join Communities — the agent acts as you in a real logged-in browser.",
-        fields: [{ key: "platform", label: "", value: "x" }],
-        hint: "Use Log in to sign in once — the agent then acts as you on X. Automating an account may be against X's terms — use your own.",
-    },
-    {
-        id: "youtube",
-        name: "YouTube",
-        kind: "browser",
-        category: "communication",
-        logo: "youtube",
-        description: "Watch, comment, reply, like and subscribe (join channels) — the agent acts as you in a real logged-in browser.",
-        fields: [{ key: "platform", label: "", value: "youtube" }],
-        hint: "Use Log in to sign in once — the agent then acts as you on YouTube. Google is strict about automated logins — completing sign-in yourself in the window is what gets past that.",
-    },
-    {
         id: "custom",
         name: "Custom MCP server",
         kind: "mcp",
@@ -549,63 +460,6 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             ],
         },
     },
-    // ACP agents (Agent Client Protocol): any agent speaking ACP over stdio becomes a chat provider. Curated
-    // presets pre-fill the command; the custom card takes any command from the ACP registry.
-    {
-        id: "opencode-acp",
-        name: "OpenCode",
-        kind: "agent",
-        category: "extend",
-        logo: "opencode",
-        description: "Run OpenCode as a chat provider over ACP — its own models, tools and config, driven from this chat.",
-        fields: [
-            { key: "command", label: "Command", default: "opencode acp" },
-            { key: "name", label: "Display name", default: "OpenCode", optional: true },
-            { key: "env", label: "Environment (KEY=VALUE per line)", secret: true, optional: true, multiline: true },
-            { key: "loginCommand", label: "Login command", default: "opencode auth login", optional: true },
-        ],
-        hint: "Sign in by running the login command in a Terminal once — the agent keeps its own credentials in the sandbox.",
-    },
-    {
-        id: "gemini-acp",
-        name: "Gemini CLI",
-        kind: "agent",
-        category: "extend",
-        logo: "googlegemini",
-        description: "Run Google's Gemini CLI as a chat provider over ACP.",
-        fields: [
-            { key: "command", label: "Command", default: "gemini --experimental-acp" },
-            { key: "name", label: "Display name", default: "Gemini", optional: true },
-            { key: "env", label: "Environment (KEY=VALUE per line)", placeholder: "GEMINI_API_KEY=…", secret: true, optional: true, multiline: true },
-            { key: "loginCommand", label: "Login command", optional: true },
-        ],
-        hint: "Provide GEMINI_API_KEY in the environment, or run the CLI's login in a Terminal once.",
-    },
-    {
-        id: "acp-agent",
-        name: "Custom ACP agent",
-        kind: "agent",
-        category: "extend",
-        description:
-            "Run any agent speaking the Agent Client Protocol (stdio) as a chat provider — Goose, Qwen Code, anything from the ACP registry.",
-        fields: [
-            { key: "command", label: "Command", placeholder: "npx -y my-acp-agent" },
-            { key: "name", label: "Display name", optional: true },
-            { key: "env", label: "Environment (KEY=VALUE per line)", secret: true, optional: true, multiline: true },
-            { key: "loginCommand", label: "Login command", optional: true },
-        ],
-        hint: "The command must be on the sandbox PATH and speak ACP over stdio (split on whitespace — no shell quoting). Credentials go in the environment block, or run the login command in a Terminal once.",
-        guide: {
-            url: "https://agentclientprotocol.com",
-            linkLabel: "Browse ACP agents",
-            steps: [
-                "Pick an agent from the ACP registry (agentclientprotocol.com) and note its run command.",
-                "If it needs an API key, add it as a KEY=VALUE line in the environment block.",
-                "For device-code sign-ins, add the agent's login command and run it in a Terminal after adding.",
-                "The agent then appears as a provider in the chat's model picker.",
-            ],
-        },
-    },
     /* ONE CARD FOR EVERY MODEL API, wherever it runs. An Ollama on this machine, a vLLM on the GPU box, a
      * LiteLLM gateway and OpenRouter are the same thing — a URL that serves models — and the only axis that
      * actually changes anything is which wire the server speaks. Splitting it into "local" and "remote" cards
@@ -646,24 +500,37 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
 
 const isCapabilityCategory = (category: string): category is CapabilityCategory => CAPABILITY_CATEGORIES.some((entry) => entry.id === category);
 
-// A cli connector contribution rendered as a catalog card — the "+" grid derives one card per connector from
-// the INSTALLED extensions (GET /extensions), so a card exists iff its capability is actually addable, and the
-// connector manifest is the single source of the card's name/logo/fields/guide (no static duplicate to drift).
-// The provider becomes both the card id (the /capabilities/<id> slug) and the fixed `provider` config field the
-// daemon's cli handler resolves. A third-party connector declaring a category outside CAPABILITY_CATEGORIES
-// lands under "extend" (the catch-all section).
-export const connectorCard = (connector: ConnectorContribution): CapabilityCatalogEntry => ({
-    id: connector.provider,
-    name: connector.catalog.name,
-    kind: "cli",
-    category: isCapabilityCategory(connector.catalog.category) ? connector.catalog.category : "extend",
-    logo: connector.catalog.logo,
-    icon: connector.catalog.icon,
-    description: connector.catalog.description,
-    fields: [{ key: "provider", label: "", value: connector.provider }, ...connector.fields],
-    hint: connector.catalog.hint,
-    guide: connector.catalog.guide,
-});
+/* Fields the CORE contributes to a kind's form rather than the card declaring them. The connected-computer
+ * switches are the whole example, and they are here rather than in the manifest on purpose: the grant is about
+ * what the agent may DO, which does not vary by OS, so a card that could restate them is a card that could
+ * quietly weaken them. Two platform packs therefore cannot drift, and neither can a third-party one. */
+const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS };
+
+/* A contributed capability rendered as a catalog card — the "+" grid derives one card per entry from the
+ * ENABLED installed extensions (GET /extensions), so a card exists iff its capability is actually addable, and
+ * the manifest is the single source of the card's name/logo/fields/guide (no static duplicate to drift). The
+ * contribution's id becomes both the card id (the /capabilities/<id> slug) and the pinned discriminator the
+ * daemon's handler resolves. A third-party entry declaring a category outside CAPABILITY_CATEGORIES lands under
+ * "extend" (the catch-all section). */
+export const contributionCard = (contribution: CapabilityContribution): CapabilityCatalogEntry => {
+    const discriminator = contributionDiscriminator(contribution.kind);
+    return {
+        id: contribution.id,
+        name: contribution.catalog.name,
+        kind: contribution.kind,
+        category: isCapabilityCategory(contribution.catalog.category) ? contribution.catalog.category : "extend",
+        logo: contribution.catalog.logo,
+        icon: contribution.catalog.icon,
+        description: contribution.catalog.description,
+        fields: [
+            ...(discriminator === undefined ? [] : [{ key: discriminator, label: "", value: contribution.id }]),
+            ...contribution.fields,
+            ...(CORE_FIELDS[contribution.kind] ?? []),
+        ],
+        hint: contribution.catalog.hint,
+        guide: contribution.catalog.guide,
+    };
+};
 
 // Automation "start from" recipes moved to the automations extension (@intentic/ext-automations): they are
 // automation-UI prefill data, so they live with that extension rather than the platform product catalog.

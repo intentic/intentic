@@ -39,7 +39,7 @@ export function useExtensionList() {
             .map((extension) => {
                 const status = statuses.get(extension.id);
                 const facets = facetsOf(extension.manifest);
-                const providers = new Set((extension.manifest.contributes?.connectors ?? []).map((connector) => connector.provider));
+                const providers = new Set((extension.manifest.contributes?.capabilities ?? []).map((contribution) => contribution.id));
                 return {
                     extension,
                     facets,

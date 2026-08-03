@@ -44,7 +44,7 @@ const shown = computed(() => places.value.slice(0, PLACES_SHOWN).join(` · `));
 const hidden = computed(() => places.value.slice(PLACES_SHOWN));
 const breakdown = computed(() => entry.facets.filter((facet) => facet.kind !== `settings`));
 
-/* What switching this extension off does NOT reach right away. Views, viewers, commands, processes, connectors,
+/* What switching this extension off does NOT reach right away. Views, viewers, commands, processes, capability cards,
  * listeners and settings all converge before the toggle returns; these three can't, so the row says so rather
  * than leaving the owner to discover it. It lives under the fold with the switch's other consequence — stated
  * before the flip for anyone who opens the row, instead of shouted on a row nobody is about to flip. */

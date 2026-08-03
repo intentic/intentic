@@ -1,14 +1,16 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserConfig } from "@intentic/sandbox-contract";
-import { BROWSER_FRAGMENT, browserProviders } from "../../browser/providers.js";
+import { BROWSER_FRAGMENT, BROWSER_TOOLS_NOTE } from "../../browser/browser-skill.js";
 import { clearSession, hasSession } from "../../browser/session-store.js";
 import type { CapabilityHandler } from "../capability.js";
+import { contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
-// A browser-automation connector: give the AGENT a real, logged-in browser for one social platform (Reddit / X /
-// YouTube) whose API can't cover "all the actions". `apply` drops the platform's SKILL.md into
-// .claude/skills/<id> (auto-loaded by the agent's settingSources) and its `fragment` bakes Chromium into the
-// environment overlay (owner rebuild). The login itself happens out-of-band over the /system/browser-login
+// A browser-automation connector: give the AGENT a real, logged-in browser for one platform whose API can't
+// cover "all the actions". The PLATFORM is data in an installed extension's `contributes.capabilities` (its card,
+// its login URL, its cheatsheet); this handler is the generic plumbing over it. `apply` renders the platform's
+// SKILL.md into .claude/skills/<id> (auto-loaded by the agent's settingSources) and its `fragment` bakes Chromium
+// into the environment overlay (owner rebuild). The login itself happens out-of-band over the /system/browser-login
 // WebSocket, which persists a Chromium profile under .intentic/browser/<platform>; the agent's @playwright/mcp
 // (wired in agent.routes) reads that profile so it's already signed in. Distinct from `cli` (env credential +
 // curl) — here the credential is a browser session, not an env var.
@@ -32,8 +34,14 @@ export const browserHandler: CapabilityHandler = {
     fragment: () => BROWSER_FRAGMENT,
     apply: async function* (ctx, id, config) {
         const { platform } = config as BrowserConfig;
-        // Template the frontmatter name → the (unique) id so two instances never register the same skill name.
-        const skill = browserProviders[platform].skill.replace(/^name: .*$/m, `name: ${id}`);
+        const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey("browser", platform));
+        if (contribution === undefined) {
+            throw new Error(`no browser platform "${platform}" — install the extension that declares it`);
+        }
+        const skill = await contributedSkill(contribution, id, BROWSER_TOOLS_NOTE);
+        if (skill === undefined) {
+            throw new Error(`the extension declaring "${platform}" has no readable skill file — reinstall it`);
+        }
         await ctx.files.write(skillPath(ctx.workspace.root, id), skill);
         yield {
             kind: "log",

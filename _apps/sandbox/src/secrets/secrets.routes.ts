@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { parseEnv } from "node:util";
 import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { secretField } from "../capabilities/summary.js";
-import { connectorRegistry } from "../capabilities/cli/connector-registry.js";
+import { contributionRegistry } from "../capabilities/contributions.js";
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { bearerFrom, ForbiddenError } from "../auth/auth.js";
@@ -116,7 +116,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
             const [repoEntries, capabilities, connectors, claudeAccounts, translatorAccounts, grokConnected] = await Promise.all([
                 existsSync(desiredState()) ? collectSecretInventory(desiredState()) : [],
                 services.capabilities.list(),
-                connectorRegistry(services),
+                contributionRegistry(services),
                 services.claudeStore.list(),
                 services.cliProxy.accounts(),
                 services.openCode.connected("xai"),
@@ -147,7 +147,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
             // Capability credentials first (key = capability id) — they exist pre-scaffold, before ensureActive.
             const capability = await services.capabilities.get(input.key);
             if (capability !== undefined) {
-                const field = secretField(capability, await connectorRegistry(services));
+                const field = secretField(capability, await contributionRegistry(services));
                 const value = field === undefined ? undefined : (capability.config as Record<string, string>)[field];
                 if (value !== undefined) {
                     return { value };

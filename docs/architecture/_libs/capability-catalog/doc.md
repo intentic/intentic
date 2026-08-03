@@ -15,6 +15,25 @@ The list of things you can connect, as data.
 
 The 'add a connection' screen needs to know what exists, what each one needs, and how to explain it.
 
+Half of that list does not live here. The screen shows two kinds of card side by side: **static** ones written
+in this package, and **derived** ones read out of whatever extensions are installed and switched on. The rule
+deciding which is which is the important thing to know about this package, and it is not about tidiness — it is
+about privilege. Adding a capability runs a handler in the sandbox daemon, and some of those handlers do things
+no third party should be able to ask for: grant the container full privilege, put it on a private network, push
+new permissions onto somebody's personal laptop. So a handler is never something an extension supplies. A
+**card** is: the name, logo, form fields and cheatsheet that differ between two things the *same* handler
+already knows how to do.
+
+Four kinds are card-shaped that way — command-line connectors, social platforms the agent signs in to, the
+operating systems a connected computer can run, and presets for outside chat agents — and their cards come from
+extensions. Everything still written out in `index.ts` is a card that is one-to-one with a handler it cannot be
+separated from, so putting it in a manifest would split one idea across two places for nothing.
+
+One case is worth the sentence because it looks like an exception and is not: Stripe. Its card is nothing but a
+name and a logo, so it reads like pure data — but adding it writes an entry the deployment engine has to
+recognise, and that engine knows a fixed list of providers. The vocabulary belongs to the engine, so the card
+stays here.
+
 ```dag
 { "title": "Its neighbours",
   "direction": "LR",
@@ -50,4 +69,8 @@ Dashed arrows are development-only — needed to build or test, not to run.
 
 ## Where it is used
 
-Rendered by the editor's capability screens.
+Rendered by the editor's capability screens. `contributionCard()` is the one function that turns an extension's
+manifest entry into a card, and it adds two things the manifest is deliberately not allowed to say: the hidden
+field that ties an instance back to the card that created it, and — for a connected computer — the permission
+switches, which are identical on every operating system and would be worth nothing if a card could quietly
+change them.

@@ -20,7 +20,7 @@ type Contributes = NonNullable<ExtensionManifest["contributes"]>;
 export interface ExtensionFacet {
     /** The `contributes` key it came from — the row's stable v-for key, and what a filter matches on. */
     readonly kind: string;
-    /** The one-line strip's noun, counted: "2 rail tiles", "9 connectors", "agent CLI". */
+    /** The one-line strip's noun, counted: "2 rail tiles", "9 capability cards", "agent CLI". */
     readonly label: string;
     /** The real names behind the noun, for the expanded breakdown — view labels, providers, file extensions. */
     readonly names: readonly string[];
@@ -86,11 +86,11 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
     take(`commands`, (commands) => [
         { kind: `commands`, label: counted(commands.length, `command`), names: commands.map((command) => command.title), surface: true },
     ]);
-    take(`connectors`, (connectors) => [
+    take(`capabilities`, (capabilities) => [
         {
-            kind: `connectors`,
-            label: counted(connectors.length, `connector`),
-            names: connectors.map((connector) => connector.catalog.name),
+            kind: `capabilities`,
+            label: counted(capabilities.length, `capability card`),
+            names: capabilities.map((contribution) => contribution.catalog.name),
             surface: true,
         },
     ]);

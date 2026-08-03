@@ -7,10 +7,10 @@
     }
   ],
   "name": "@intentic/ext-connectors",
-  "oneLiner": "A pile of ready-made tool connections — GitHub, Postgres, Sentry and friends.",
+  "oneLiner": "A pile of ready-made tool connections \u2014 GitHub, Postgres, Sentry and friends.",
   "provenance": {
-    "generatedAt": 1785535377531,
+    "generatedAt": 1785768995531,
     "model": "claude-opus-4-6",
-    "sourceRev": "a344e0d284d4542efef83b45b8de15ae1dfa9d67"
+    "sourceRev": "ba7a90542009eecce74cfed958791cea0096e096"
   }
 }

@@ -3,11 +3,29 @@
     "name": "discord",
     "version": "1.0.0",
     "category": "connections",
-    "engines": { "intentic": "^0.4.0" },
+    "engines": {
+        "intentic": "^0.4.0"
+    },
     "contributes": {
-        "connectors": [
+        "listener": {
+            "provider": "discord",
+            "eventTypes": [
+                "message",
+                "voice_utterance",
+                "voice_transcript"
+            ]
+        },
+        "processes": [
             {
-                "provider": "discord",
+                "name": "gateway",
+                "command": "node dist/gateway.js",
+                "autoStart": true
+            }
+        ],
+        "bin": "bin",
+        "capabilities": [
+            {
+                "id": "discord",
                 "kind": "cli",
                 "catalog": {
                     "name": "Discord",
@@ -28,28 +46,51 @@
                     }
                 },
                 "fields": [
-                    { "key": "botToken", "label": "Bot token", "secret": true },
+                    {
+                        "key": "botToken",
+                        "label": "Bot token",
+                        "secret": true
+                    },
                     {
                         "key": "voiceModel",
                         "label": "Voice model",
                         "default": "medium",
                         "options": [
-                            { "value": "tiny", "label": "Tiny" },
-                            { "value": "base", "label": "Base" },
-                            { "value": "small", "label": "Small" },
-                            { "value": "medium", "label": "Medium" },
-                            { "value": "large-v3-turbo", "label": "Large" }
+                            {
+                                "value": "tiny",
+                                "label": "Tiny"
+                            },
+                            {
+                                "value": "base",
+                                "label": "Base"
+                            },
+                            {
+                                "value": "small",
+                                "label": "Small"
+                            },
+                            {
+                                "value": "medium",
+                                "label": "Medium"
+                            },
+                            {
+                                "value": "large-v3-turbo",
+                                "label": "Large"
+                            }
                         ]
                     },
-                    { "key": "voiceLanguage", "label": "Voice language", "placeholder": "auto", "optional": true }
+                    {
+                        "key": "voiceLanguage",
+                        "label": "Voice language",
+                        "placeholder": "auto",
+                        "optional": true
+                    }
                 ],
-                "env": { "DISCORD_BOT_TOKEN": "${botToken}" },
+                "env": {
+                    "DISCORD_BOT_TOKEN": "${botToken}"
+                },
                 "skill": "skills/discord/SKILL.md",
                 "fragment": "env/whisper.Dockerfile"
             }
-        ],
-        "listener": { "provider": "discord", "eventTypes": ["message", "voice_utterance", "voice_transcript"] },
-        "processes": [{ "name": "gateway", "command": "node dist/gateway.js", "autoStart": true }],
-        "bin": "bin"
+        ]
     }
 }

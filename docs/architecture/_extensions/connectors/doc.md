@@ -15,6 +15,8 @@ A pile of ready-made tool connections — GitHub, Postgres, Sentry and friends.
 
 Connecting an agent to an outside service is nearly always the same shape: some credentials, some environment variables, a cheat-sheet. Writing that as data means no new code per service.
 
+This is one of four packs that work this way, and they are siblings rather than one big list on purpose. `social` holds the sites the agent signs in to as the owner, `computers` the operating-system guides a connected machine installs, `acp-agents` the outside chat agents. Splitting them means the on/off switch in the Extensions tab is worth using: turning off the social pack removes three cards and leaves your database connections alone. All four are copied into the sandbox image, so their cards are simply there on a fresh sandbox.
+
 ```bars
 { "title": "Size within Extensions (10 of 15)",
   "items": [
@@ -33,4 +35,6 @@ Connecting an agent to an outside service is nearly always the same shape: some 
 
 ## Where it is used
 
-No code at all — pure manifest data. It is why connector cards exist out of the box.
+No code at all — pure manifest data. The sandbox reads it to find out what a provider needs and what to tell
+the agent about it; the browser app reads it to draw the card. Adding a service is a manifest entry and a
+markdown cheat-sheet, with no release of anything else.

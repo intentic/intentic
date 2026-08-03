@@ -1,15 +1,12 @@
 import { upgradeWebSocket } from "@hono/node-server";
-import type { BrowserPlatform } from "@intentic/sandbox-contract";
 import type { BrowserContext } from "playwright";
 import { ensureXvfb } from "./display.js";
-import { browserProviders } from "./providers.js";
 import { dispatchInput, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type Screencast, type ScreencastClientMessage } from "./screencast.js";
 import { acquireLoginLock, markConnected, releaseLoginLock, sessionDir } from "./session-store.js";
 import { STEALTH_INIT } from "./stealth.js";
 import type { Services } from "../composition.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
-
-const isBrowserPlatform = (value: string): value is BrowserPlatform => value === "reddit" || value === "x" || value === "youtube";
+import { contributionKey, contributionRegistry } from "../capabilities/contributions.js";
 
 // The /system/browser-login route: a guided, live browser sign-in. Like /system/terminal it's a WebSocket the
 // header-less browser drives, so it authorizes token+connect from the query string (app.ts exempts it from the
@@ -19,7 +16,7 @@ const isBrowserPlatform = (value: string): value is BrowserPlatform => value ===
 // reuses it. One login per platform at a time (a persistent profile can't be opened twice).
 export const createBrowserLoginRoute = (services: Services) =>
     upgradeWebSocket((c) => {
-        let platform: BrowserPlatform | undefined;
+        let platform: string | undefined;
         let context: BrowserContext | undefined;
         let screencast: Screencast | undefined;
         let closed = false;
@@ -51,11 +48,15 @@ export const createBrowserLoginRoute = (services: Services) =>
                     ws.close(1008, "unauthorized");
                     return;
                 }
+                // A platform is real iff an enabled extension declares it — the same registry the browser handler
+                // resolves against, so a card that can be added is a card that can be logged into.
                 const requested = url.searchParams.get("platform") ?? "";
-                if (!isBrowserPlatform(requested)) {
+                const contribution = (await contributionRegistry(services)).get(contributionKey("browser", requested));
+                if (contribution === undefined || contribution.spec.kind !== "browser") {
                     ws.close(1008, "invalid platform");
                     return;
                 }
+                const { loginUrl } = contribution.spec;
                 if (!acquireLoginLock(requested)) {
                     ws.close(1008, "a login for this platform is already in progress");
                     return;
@@ -94,7 +95,7 @@ export const createBrowserLoginRoute = (services: Services) =>
                     const page = ctx.pages()[0] ?? (await ctx.newPage());
                     screencast = await startScreencast(ctx, (frame) => ws.send(JSON.stringify({ type: "frame", ...frame })));
                     // Don't hard-fail on a slow login page; the user can still interact once it paints.
-                    await page.goto(browserProviders[platform].loginUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {
+                    await page.goto(loginUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {
                         services.logger.warn({ err }, "browser-login initial nav");
                     });
                     ws.send(JSON.stringify({ type: "ready", width: VIEW_WIDTH, height: VIEW_HEIGHT }));

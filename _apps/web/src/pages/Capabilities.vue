@@ -6,13 +6,13 @@ import {
     type CapabilityCatalogEntry,
     type CapabilityEffect,
     capabilityEffects,
-    type CapabilityField,
-    connectorCard,
+    contributionCard,
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace } from "@intentic-app/api-contract";
 import { cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic/ui";
+import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-api";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
-import { type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
+import { type CapabilityKind, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -33,29 +33,33 @@ import { importForticlient, useVpn } from "../composables/sandbox/useVpn";
 /* The rail's "+" → the /capabilities page. Capabilities give the agent tools (GitHub, MCP servers, SSH hosts,
  * Stripe…), plus a few that scaffold managed repos (DevOps → intent + desired-state, each its own operator
  * panel). Cards are grouped into sections by CAPABILITY_CATEGORIES. Core cards are static catalog data; cli
- * cards DERIVE from the installed extensions' contributes.connectors (connectorCard), so a cli card exists iff
- * its capability is actually addable. Pick a card → fill its config → apply STREAMS its progress live. The
+ * cards DERIVE from the ENABLED extensions' contributes.capabilities (contributionCard), so such a card exists
+ * iff its capability is actually addable. What survives as a static card is what is one-to-one with a core
+ * handler it can't be separated from. Pick a card → fill its config → apply STREAMS its progress live. The
  * manifest is the source of truth; nothing is stored on the platform. */
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const URL_RE = /^https?:\/\/.+/i;
 
 const { hasCapability, recommendationFor, capabilities, error: listError, add, remove, refetch } = useCapabilities();
-const { connectorOf, extensions, settled: extensionsSettled } = useExtensions();
+const { contributionOf, enabled: enabledExtensions, extensions, settled: extensionsSettled } = useExtensions();
 // VPN instances get live link state and connect/disconnect here too — the same daemon routes the Sandbox ▸
 // Status card drives, so a tunnel dialled from either place reads identically in both.
 const { links: vpnLinks } = useVpn();
 
-// The full card list: connector cards derived from the installed extensions' contributions (one card per
-// provider, first declaration wins — the daemon connectorRegistry's precedent) + the static core cards.
+// The full card list: cards derived from the ENABLED extensions' contributions (first declaration of a
+// kind+id wins — the daemon contributionRegistry's precedent) + the static core cards. Enabled, not installed:
+// a switched-off extension stays listed so its switch is reachable, but the daemon wires none of its
+// contributions up, so a card from one would fail the add it advertises.
 const allCards = computed<CapabilityCatalogEntry[]>(() => {
     const seen = new Set<string>();
     const derived: CapabilityCatalogEntry[] = [];
-    for (const extension of extensions.value) {
-        for (const connector of extension.manifest.contributes?.connectors ?? []) {
-            if (!seen.has(connector.provider)) {
-                seen.add(connector.provider);
-                derived.push(connectorCard(connector));
+    for (const extension of enabledExtensions.value) {
+        for (const contribution of extension.manifest.contributes?.capabilities ?? []) {
+            const key = `${contribution.kind}:${contribution.id}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                derived.push(contributionCard(contribution));
             }
         }
     }
@@ -106,8 +110,10 @@ const { rows: processRows, busy: processBusy, start: startProcess, stop: stopPro
 const ownerExtensionId = (instance: CapabilitySummary): string | undefined =>
     instance.kind === `extension`
         ? instance.id
-        : extensions.value.find((extension) =>
-              (extension.manifest.contributes?.connectors ?? []).some((connector) => connector.provider === String(instance.config[`provider`])),
+        : enabledExtensions.value.find((extension) =>
+              (extension.manifest.contributes?.capabilities ?? []).some(
+                  (contribution) => contribution.kind === instance.kind && contribution.id === String(instance.config[contributionDiscriminator(instance.kind) ?? ``]),
+              ),
           )?.id;
 
 // Empty until something is actually connected: a declared-but-idle gateway on a card you never configured is
@@ -268,22 +274,28 @@ const effectConfig = (entry: CapabilityCatalogEntry, source: (field: CapabilityF
     }
     return config;
 };
-// Live over the form state, so the plugin clone URL tracks as the user types. A selected cli card exists only
-// because its connector is installed (allCards derives it), so connectorOf always resolves here — the effects
-// panel is complete by construction.
+// The contribution behind a config, via its kind's pinned discriminator — what capabilityEffects reads a card's
+// secret/image declarations from. Undefined for a kind whose cards carry none (agent) or a core-only kind.
+const contributionFor = (kind: CapabilityKind, config: Record<string, string | number | boolean | undefined>) => {
+    const key = contributionDiscriminator(kind);
+    return key === undefined ? undefined : contributionOf(kind, String(config[key] ?? ``));
+};
+// Live over the form state, so the plugin clone URL tracks as the user types. A selected contributed card
+// exists only because its extension is enabled (allCards derives it), so contributionOf always resolves here —
+// the effects panel is complete by construction.
 const liveEffects = computed<readonly CapabilityEffect[]>(() => {
     const entry = selected.value;
     if (entry === undefined) {
         return [];
     }
     const config = effectConfig(entry, (field) => (values[field.key] ?? ``).trim());
-    return capabilityEffects({ kind: entry.kind, id: name.value.trim() || undefined, config, connector: connectorOf(config[`provider`] ?? ``) });
+    return capabilityEffects({ kind: entry.kind, id: name.value.trim() || undefined, config, contribution: contributionFor(entry.kind, config) });
 });
 // The consequential effects a card statically implies, badged on its grid tile — image/runtime/trusted-code
 // only (the full list is one click away). Defaults decide config-dependent ones (the SQL card's default engine).
 const badgeEffects = (entry: CapabilityCatalogEntry): readonly CapabilityEffect[] => {
     const config = effectConfig(entry, (field) => field.default);
-    return capabilityEffects({ kind: entry.kind, config, connector: connectorOf(config[`provider`] ?? ``) }).filter(
+    return capabilityEffects({ kind: entry.kind, config, contribution: contributionFor(entry.kind, config) }).filter(
         (effect) => effect.kind === `image` || effect.kind === `runtime` || effect.kind === `trusted-code`,
     );
 };
@@ -294,7 +306,7 @@ const instanceEffects = (instance: CapabilitySummary): readonly CapabilityEffect
         kind: instance.kind,
         id: instance.id,
         config: instance.config,
-        connector: connectorOf(String(instance.config[`provider`] ?? ``)),
+        contribution: contributionFor(instance.kind, instance.config),
         manifest: instance.kind === `extension` ? extensions.value.find((extension) => extension.id === instance.id)?.manifest : undefined,
     });
 
@@ -670,7 +682,7 @@ const submitLabel = computed(() =>
             </div>
 
             <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
-                <!-- The connectors already added for this card — each instance removable here (the only place a
+                <!-- The connections already added for this card — each instance removable here (the only place a
                      custom-named instance can be torn down). -->
                 <RowGroup v-if="selectedInstances.length > 0" label="Connected">
                     <div v-for="instance in selectedInstances" :key="instance.id" class="flex flex-col gap-1 px-4 py-3">

@@ -1,0 +1,53 @@
+{
+    "publisher": "intentic",
+    "name": "computers",
+    "version": "1.0.0",
+    "category": "connections",
+    "engines": { "intentic": "^0.4.0" },
+    "contributes": {
+        "capabilities": [
+            {
+                "id": "windows",
+                "kind": "host",
+                "catalog": {
+                    "name": "Windows PC",
+                    "logo": "windows",
+                    "description": "Let the agent work on your Windows computer — PowerShell, your files, your apps, its screen.",
+                    "category": "machines",
+                    "hint": "The name is how you and the agent refer to this computer (\"check the logs on my-laptop\"). After adding it, click Connect and run the one-liner on that machine.",
+                    "guide": {
+                        "steps": [
+                            "Add the computer here, then click Connect on its card to get a one-time command.",
+                            "Run that command in PowerShell on the computer you want to connect — it installs a small agent that dials this sandbox.",
+                            "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
+                            "You can revoke it any time from this card; `intentic-host uninstall` removes the agent from the machine."
+                        ]
+                    }
+                },
+                "fields": [],
+                "skill": "skills/windows/SKILL.md"
+            },
+            {
+                "id": "linux",
+                "kind": "host",
+                "catalog": {
+                    "name": "Linux PC",
+                    "logo": "linux/f5f5f5",
+                    "description": "Let the agent work on your Linux computer — your shell, your files, your desktop session.",
+                    "category": "machines",
+                    "hint": "The name is how you and the agent refer to this computer (\"run the tests on my-desktop\"). After adding it, click Connect and run the one-liner on that machine.",
+                    "guide": {
+                        "steps": [
+                            "Add the computer here, then click Connect on its card to get a one-time command.",
+                            "Run that command in a terminal on the computer you want to connect — it installs a small agent that dials this sandbox.",
+                            "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
+                            "You can revoke it any time from this card; `intentic-host uninstall` removes the agent from the machine."
+                        ]
+                    }
+                },
+                "fields": [],
+                "skill": "skills/linux/SKILL.md"
+            }
+        ]
+    }
+}

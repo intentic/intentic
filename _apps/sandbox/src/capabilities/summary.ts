@@ -1,5 +1,5 @@
 import type { Capability } from "@intentic/sandbox-contract";
-import type { ResolvedConnector } from "./cli/connector-registry.js";
+import type { ResolvedContribution } from "./contributions.js";
 import { registry } from "./registry.js";
 
 /* The two questions asked of an INSTALLED capability, both answered by the kind's own handler.
@@ -16,9 +16,9 @@ import { registry } from "./registry.js";
 // The config key holding this capability's secret, or undefined when it carries none — an unset optional token, a
 // kind with no credential at all, or one whose credential is not in the manifest (a connected computer's
 // enrollment token lives on /history). Drives the /secrets inventory, reveal, and setSecret.
-export const secretField = (capability: Capability, connectors: Map<string, ResolvedConnector>): string | undefined =>
+export const secretField = (capability: Capability, connectors: Map<string, ResolvedContribution>): string | undefined =>
     registry[capability.kind].secret?.(capability.config, connectors);
 
 // The non-secret echo of a capability's config for the list summary (an mcp token becomes hasToken).
-export const echoConfig = (capability: Capability, connectors: Map<string, ResolvedConnector>): Record<string, string | number | boolean> =>
+export const echoConfig = (capability: Capability, connectors: Map<string, ResolvedContribution>): Record<string, string | number | boolean> =>
     registry[capability.kind].echo(capability.config, connectors);

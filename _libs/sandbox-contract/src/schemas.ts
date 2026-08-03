@@ -2205,13 +2205,16 @@ export const ServiceConfigSchema = z.object({
 });
 // External-app credential injected into DEPLOYED apps (i.have.stripe → STRIPE_API_KEY from env). Agent-facing
 // connectors are `cli` capabilities instead (see below), not integrations.
+// Closed, unlike a `cli` provider: this becomes an `i.have.<provider>` entry in deploy.config.ts, and the
+// desired-state resolver only knows the providers in InventoryProviderSchema. So an integration card is NOT
+// extension-contributable — the vocabulary belongs to the deploy engine, not to a manifest.
 export const IntegrationConfigSchema = z.object({ provider: z.literal("stripe") });
 // A `cli` capability gives the AGENT an authenticated command-line tool (not a deployed-app credential like
 // `integration`): the credential + any non-secret URL are stored here and injected into the agent's env each
 // turn (see cliEnvOf), and a .claude/skills/<id> cheatsheet teaches the agent to use it via curl. The provider
-// data (fields, env, skill, image fragment) is DATA in an installed extension's `contributes.connectors`, not a
-// per-provider schema arm — so the config is `provider` + arbitrary string fields, validated against the
-// connector's declared fields at add-time (see the sandbox's connector-registry) rather than by this schema.
+// data (fields, env, skill, image fragment) is DATA in an installed extension's `contributes.capabilities`, not
+// a per-provider schema arm — so the config is `provider` + arbitrary string fields, validated against the
+// card's declared fields at add-time (see the sandbox's capabilities/contributions.ts) rather than by this schema.
 export const CliConfigSchema = z.object({ provider: z.string().min(1) }).catchall(z.string());
 // A Claude Code plugin from a git repo. The daemon only owns the checkout; the Agent SDK's plugin loader reads
 // its internals (skills/agents/hooks/commands/.mcp.json). `path` = subdirectory for plugins that live inside a
@@ -2347,8 +2350,11 @@ export const VpnConfigSchema = z.discriminatedUnion("provider", [WireguardVpnCon
 // secret in the manifest: the session lives in a persisted Chromium profile under .intentic/browser/<platform>,
 // established once through the guided-login WebSocket (/system/browser-login). Chromium itself rides this kind's
 // Dockerfile fragment, applied on an owner rebuild. One capability = one platform (the id doubles as the profile).
-export const BrowserPlatformSchema = z.enum(["reddit", "x", "youtube"]);
-export const BrowserConfigSchema = z.object({ platform: BrowserPlatformSchema });
+//
+// `platform` is an OPEN slug, not an enum, for the reason `cli`'s `provider` is: a platform is a card, a login URL
+// and a skill in an installed extension's `contributes.capabilities`, so the set of them is not a fact this
+// contract can know. The add route validates it against the contributed entry instead (see contributions.ts).
+export const BrowserConfigSchema = z.object({ platform: z.string().min(1) });
 /* A connected COMPUTER of the user's own — the inverse of `ssh`, which reaches a server the sandbox can dial.
  * A machine behind NAT can't be dialled, so it dials US: the @intentic/host agent (installed by a one-liner,
  * enrolled with a single-use pairing token) holds one outbound WebSocket to this daemon and serves an MCP tool
@@ -2362,9 +2368,10 @@ export const BrowserConfigSchema = z.object({ platform: BrowserPlatformSchema })
  * SCOPES ARE THE GRANT, and they are enforced ON THE MACHINE, never here: the daemon pushes them down on every
  * connect, and the agent refuses out-of-scope calls itself. So a sandbox that is compromised — or an agent talked
  * into it by something it read on the internet — still cannot exceed what the owner ticked. `roots` bounds file
- * reads AND writes to a set of directories (empty ⇒ the user's home). */
-export const HostPlatformSchema = z.enum(["windows", "linux"]);
-export type HostPlatform = z.infer<typeof HostPlatformSchema>;
+ * reads AND writes to a set of directories (empty ⇒ the user's home).
+ *
+ * Like a browser `platform`, this is an OPEN slug: an OS is a card plus a skill pack in an installed extension's
+ * `contributes.capabilities`, and teaching the agent a new one should not need a daemon release. */
 // on/off rather than a boolean: capability configs arrive from the add form as strings (the vpn autoConnect
 // precedent), and a select is what the form renders for an enum.
 const hostScope = z.enum(["on", "off"]);
@@ -2385,7 +2392,7 @@ export const HostScopesSchema = z.object({
     roots: z.string().optional(),
 });
 export type HostScopes = z.infer<typeof HostScopesSchema>;
-export const HostConfigSchema = HostScopesSchema.extend({ platform: HostPlatformSchema });
+export const HostConfigSchema = HostScopesSchema.extend({ platform: z.string().min(1) });
 // An ACP (Agent Client Protocol) agent served as a chat provider: the daemon spawns `command` as a long-lived
 // subprocess speaking JSON-RPC over stdio, and the capability id becomes the provider id in the chat picker
 // (see AgentProviderSchema). `command` is split on whitespace — no shell quoting. `env` is a pasted KEY=VALUE
@@ -2440,7 +2447,6 @@ export type WireguardVpnConfig = z.infer<typeof WireguardVpnConfigSchema>;
 export type FortinetVpnConfig = z.infer<typeof FortinetVpnConfigSchema>;
 export type IpsecVpnConfig = z.infer<typeof IpsecVpnConfigSchema>;
 export type VpnConfig = z.infer<typeof VpnConfigSchema>;
-export type BrowserPlatform = z.infer<typeof BrowserPlatformSchema>;
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
 export type HostConfig = z.infer<typeof HostConfigSchema>;
 export type AcpAgentConfig = z.infer<typeof AcpAgentConfigSchema>;
@@ -2531,7 +2537,7 @@ export type HostFacts = z.infer<typeof HostFactsSchema>;
 export const HostSummarySchema = z.object({
     // The capability id — the machine's name, and the prefix of its tools (mcp__<id>__run_command).
     id: z.string(),
-    platform: HostPlatformSchema,
+    platform: z.string().min(1),
     online: z.boolean(),
     // The agent binary's version, so a machine running an old build is visible rather than mysteriously lacking
     // a tool. Absent until the machine has connected once.

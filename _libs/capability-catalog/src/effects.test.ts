@@ -1,10 +1,10 @@
-import type { ConnectorContribution, ExtensionManifest } from "@intentic/extension-api";
+import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-api";
 import { describe, expect, it } from "vitest";
 import { capabilityEffects } from "./effects.js";
 import { CapabilityKindSchema } from "@intentic/sandbox-contract";
 
-const connector = (overrides?: Partial<ConnectorContribution>): ConnectorContribution => ({
-    provider: "github",
+const connector = (overrides?: Partial<CapabilityContribution>): CapabilityContribution => ({
+    id: "github",
     kind: "cli",
     catalog: { name: "GitHub", description: "Issues and PRs.", category: "code" },
     fields: [{ key: "token", label: "Token", secret: true }],
@@ -64,7 +64,7 @@ describe("capabilityEffects", () => {
     });
 
     it("derives cli secret and image from the connector spec", () => {
-        const github = capabilityEffects({ kind: "cli", id: "github", config: { provider: "github" }, connector: connector() });
+        const github = capabilityEffects({ kind: "cli", id: "github", config: { provider: "github" }, contribution: connector() });
         expect(github).toEqual([
             { kind: "skill", name: "github" },
             { kind: "secret", exposure: "agent-env" },
@@ -73,7 +73,7 @@ describe("capabilityEffects", () => {
             kind: "cli",
             id: "db",
             config: { provider: "postgres" },
-            connector: connector({ provider: "postgres", fragment: "env/postgres.Dockerfile" }),
+            contribution: connector({ id: "postgres", fragment: "env/postgres.Dockerfile" }),
         });
         expect(postgres).toContainEqual({ kind: "image" });
         // Discord's whisper fragment is connector spec data like any other — the image effect derives from it.
@@ -81,7 +81,7 @@ describe("capabilityEffects", () => {
             kind: "cli",
             id: "discord",
             config: { provider: "discord" },
-            connector: connector({ provider: "discord", fragment: "env/whisper.Dockerfile" }),
+            contribution: connector({ id: "discord", fragment: "env/whisper.Dockerfile" }),
         });
         expect(discord).toContainEqual({ kind: "image" });
     });

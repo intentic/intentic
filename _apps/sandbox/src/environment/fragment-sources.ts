@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
-import { connectorFragmentPath, connectorRegistry } from "../capabilities/cli/connector-registry.js";
+import { contributionFor, contributionFragmentPath, contributionRegistry } from "../capabilities/contributions.js";
 import { registry } from "../capabilities/registry.js";
 import { extensionDir, extensionRead, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
@@ -63,8 +63,8 @@ export const capabilityFragments = async (services: Services, capability: Capabi
     // A cli connector's image fragment (psql/mysql/whisper client) lives in the extension that declares the
     // connector — resolve it the same allowlisted way.
     if (capability.kind === "cli") {
-        const connector = (await connectorRegistry(services)).get(capability.config.provider);
-        const fragmentPath = connector === undefined ? undefined : connectorFragmentPath(connector);
+        const connector = contributionFor(await contributionRegistry(services), "cli", capability.config);
+        const fragmentPath = connector === undefined ? undefined : contributionFragmentPath(connector);
         if (fragmentPath !== undefined) {
             fragments.push(...(await readFragment(services, capability.id, fragmentPath)));
         }

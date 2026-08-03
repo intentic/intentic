@@ -1,0 +1,53 @@
+{
+    "publisher": "intentic",
+    "name": "social",
+    "version": "1.0.0",
+    "category": "connections",
+    "engines": { "intentic": "^0.4.0" },
+    "contributes": {
+        "capabilities": [
+            {
+                "id": "reddit",
+                "kind": "browser",
+                "catalog": {
+                    "name": "Reddit",
+                    "logo": "reddit",
+                    "description": "Read, comment, post, vote and join subreddits — the agent acts as you in a real logged-in browser.",
+                    "category": "communication",
+                    "hint": "Use Log in to sign in once — the agent then acts as you on Reddit. Automating an account may be against Reddit's terms — use your own."
+                },
+                "fields": [],
+                "loginUrl": "https://www.reddit.com/login/",
+                "skill": "skills/reddit/SKILL.md"
+            },
+            {
+                "id": "x",
+                "kind": "browser",
+                "catalog": {
+                    "name": "X (Twitter)",
+                    "logo": "x/f5f5f5",
+                    "description": "Read, reply, post, like, follow and join Communities — the agent acts as you in a real logged-in browser.",
+                    "category": "communication",
+                    "hint": "Use Log in to sign in once — the agent then acts as you on X. Automating an account may be against X's terms — use your own."
+                },
+                "fields": [],
+                "loginUrl": "https://x.com/i/flow/login",
+                "skill": "skills/x/SKILL.md"
+            },
+            {
+                "id": "youtube",
+                "kind": "browser",
+                "catalog": {
+                    "name": "YouTube",
+                    "logo": "youtube",
+                    "description": "Watch, comment, reply, like and subscribe (join channels) — the agent acts as you in a real logged-in browser.",
+                    "category": "communication",
+                    "hint": "Use Log in to sign in once — the agent then acts as you on YouTube. Google is strict about automated logins — completing sign-in yourself in the window is what gets past that."
+                },
+                "fields": [],
+                "loginUrl": "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fwww.youtube.com%2F",
+                "skill": "skills/youtube/SKILL.md"
+            }
+        ]
+    }
+}

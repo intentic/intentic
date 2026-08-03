@@ -57,11 +57,11 @@ describe(`facetsOf`, () => {
 describe(`searchTextOf`, () => {
     // The filter has to find an extension by what it GIVES you, not only by the id it was published under —
     // nobody looking for the GitHub connector remembers it lives in `intentic.connectors`.
-    it(`matches on a connector's catalog name, not just the extension id`, () => {
+    it(`matches on a contributed card's catalog name, not just the extension id`, () => {
         const connectors = manifest({
-            connectors: [
+            capabilities: [
                 {
-                    provider: `github`,
+                    id: `github`,
                     kind: `cli`,
                     catalog: { name: `GitHub`, description: `Issues and PRs`, category: `code` },
                     fields: [{ key: `token`, label: `Token`, secret: true }],

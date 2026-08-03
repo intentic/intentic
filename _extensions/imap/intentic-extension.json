@@ -3,11 +3,28 @@
     "name": "imap",
     "version": "1.0.0",
     "category": "connections",
-    "engines": { "intentic": "^0.4.0" },
+    "engines": {
+        "intentic": "^0.4.0"
+    },
     "contributes": {
-        "connectors": [
+        "listener": {
+            "provider": "imap",
+            "eventTypes": [
+                "message",
+                "flags",
+                "expunge"
+            ]
+        },
+        "processes": [
             {
-                "provider": "imap",
+                "name": "gateway",
+                "command": "node dist/gateway.js",
+                "autoStart": true
+            }
+        ],
+        "capabilities": [
+            {
+                "id": "imap",
                 "kind": "cli",
                 "catalog": {
                     "name": "IMAP",
@@ -26,17 +43,40 @@
                     }
                 },
                 "fields": [
-                    { "key": "host", "label": "IMAP host", "placeholder": "imap.gmail.com" },
-                    { "key": "port", "label": "Port", "default": "993" },
-                    { "key": "username", "label": "Username", "placeholder": "you@example.com" },
-                    { "key": "password", "label": "Password", "secret": true },
-                    { "key": "mailbox", "label": "Watched mailbox", "default": "INBOX" }
+                    {
+                        "key": "host",
+                        "label": "IMAP host",
+                        "placeholder": "imap.gmail.com"
+                    },
+                    {
+                        "key": "port",
+                        "label": "Port",
+                        "default": "993"
+                    },
+                    {
+                        "key": "username",
+                        "label": "Username",
+                        "placeholder": "you@example.com"
+                    },
+                    {
+                        "key": "password",
+                        "label": "Password",
+                        "secret": true
+                    },
+                    {
+                        "key": "mailbox",
+                        "label": "Watched mailbox",
+                        "default": "INBOX"
+                    }
                 ],
-                "env": { "IMAP_HOST": "${host}", "IMAP_PORT": "${port}", "IMAP_USERNAME": "${username}", "IMAP_PASSWORD": "${password}" },
+                "env": {
+                    "IMAP_HOST": "${host}",
+                    "IMAP_PORT": "${port}",
+                    "IMAP_USERNAME": "${username}",
+                    "IMAP_PASSWORD": "${password}"
+                },
                 "skill": "skills/imap/SKILL.md"
             }
-        ],
-        "listener": { "provider": "imap", "eventTypes": ["message", "flags", "expunge"] },
-        "processes": [{ "name": "gateway", "command": "node dist/gateway.js", "autoStart": true }]
+        ]
     }
 }

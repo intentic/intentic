@@ -9,7 +9,7 @@ in [ARCHITECTURE.md](../ARCHITECTURE.md) for how the host loads and gates them.
 
 A package with an `intentic-extension.json` manifest at its root and (for UI extensions) an `activate(api,
 context)` that registers contributions — `views`, `viewers`, `commands`, `settings` on the UI side;
-`processes`, `agent`, `environment`, `connectors`, `listener`, `bin` on the daemon/agent side. The manifest
+`processes`, `agent`, `environment`, `capabilities`, `listener`, `bin` on the daemon/agent side. The manifest
 is the approval + gating surface: the host refuses any registration the approved manifest never declared, and
 the extension may reach only the daemon routes its `permissions.sandbox` allowlist declares.
 
@@ -34,6 +34,9 @@ Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/*
 | `preview` | UI view | Per-repo dev-server preview panels. |
 | `viewers` | UI viewers | **Every file format the app can show that isn't source code** — images, SVG (picture + source), PDF, audio/video (a streaming player over `/workspace/media`), docx, xlsx — via `contributes.viewers`. The core resolves a path to text or to opaque bytes and stops there; switch this off and those files fall back to a download. |
 | `connectors` | data-only | CLI-tool connectors as manifest data — no code. |
+| `social` | data-only | The platforms the agent acts on **as the owner** through the shared logged-in Chromium (Reddit, X, YouTube): a card, a login URL and a cheatsheet each. The browser itself is core — this pack buys identity, not tooling. |
+| `computers` | data-only | The OS skill packs a connected computer installs (Windows PowerShell, Linux shell + Wayland/X11). The tool surface, the enrollment and the scope enforcement are core; only the pack varies. |
+| `acp-agents` | data-only | The ACP agents offered as chat providers (OpenCode, Gemini CLI, any custom command) — presets over one config shape. |
 | `discord` | daemon gateway | A `process` + `listener` bridging Discord to the daemon, plus the discord connector. |
 | `slack` | daemon gateway | A `process` + `listener` bridging Slack to the daemon over Socket Mode (outbound WebSocket — no public URL, no request signing), plus the slack connector. Mention replies are painted into the thread live. |
 | `imap` | daemon gateway | A `process` + `listener` watching an IMAP mailbox (new-mail / flags / expunge wakes), plus the imap connector. |
@@ -55,10 +58,12 @@ renders and what the on/off switch acts on. The paths differ only in where the *
   miss the middle one and it shows as `missing`. (Note the three *core* view contributions in
   `_apps/web/src/core-views/coreViews.ts` are **not** extensions — they're privileged in-app views coupled to
   platform internals; see that file and ARCHITECTURE.md.)
-- **Baked into the sandbox image** (`connectors`, `discord`, `slack`, `imap`): the whole checkout copied to
-  `/opt/extensions` by the sandbox [Dockerfile](../_apps/sandbox/Dockerfile) and read via `EXTENSIONS_DIR` —
-  present in every sandbox, `builtin: true` on `GET /extensions`, not removable, no capability entry. This is
-  how connector capability cards exist out of the box.
+- **Baked into the sandbox image** (`connectors`, `social`, `computers`, `acp-agents`, `discord`, `slack`,
+  `imap`): the whole checkout copied to `/opt/extensions` by the sandbox
+  [Dockerfile](../_apps/sandbox/Dockerfile) and read via `EXTENSIONS_DIR` — present in every sandbox,
+  `builtin: true` on `GET /extensions`, not removable, no capability entry. This is how the `/capabilities`
+  grid's derived cards exist out of the box — and why switching one of these packs off removes exactly its
+  cards and nothing else.
 - **Git-installed** (the `extension` capability): an owner-only, full-sha-pinned clone into
   `.intentic/extensions/<id>` — the path for third-party extensions and for opt-in first-party ones like
   `rtk` (its environment fragment composes per capability entry, so baking it would be inert).
@@ -73,7 +78,7 @@ var, no autoStart process. In the browser the loader retires its activation, so 
 and file bindings unwind without a reload.
 
 Not everything converges at the same moment, and the tab says which per extension: `views`, `viewers`,
-`commands`, `files`, `processes`, `connectors`, `listener` and `settings` are immediate; `agent` and `bin` are
+`commands`, `files`, `processes`, `capabilities`, `listener` and `settings` are immediate; `agent` and `bin` are
 composed per agent turn, so they apply from the next one; an `environment` fragment only changes on the next
 image rebuild.
 

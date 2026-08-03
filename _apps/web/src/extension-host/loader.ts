@@ -25,7 +25,7 @@ export interface ExtensionHostStatus {
     readonly id: string;
     readonly extensionId: string;
     /* active     — running.
-     * agent-only — contributes nothing to the UI (connectors, listeners, processes); nothing to activate.
+     * agent-only — contributes nothing to the UI (capability cards, listeners, processes); nothing to activate.
      * disabled   — switched off by the owner. The one state the tab's toggle acts on.
      * incompatible / error — its engines don't match this app, or its activate() threw.
      * missing / unlisted   — the image and this app build disagree: a manifest with no module for it here, or
