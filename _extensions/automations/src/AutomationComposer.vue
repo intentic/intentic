@@ -44,10 +44,17 @@ const template = computed(() =>
     picked.value !== undefined && triggerKey(picked.value.trigger) === state.triggerKey.value ? picked.value : undefined,
 );
 /* SHUT until asked for, which the dialog had right for a reason that outlived it: ten cards is a wall, and a
- * panel that opens on one has buried the form it exists to show — measured, the Name field landed 900px down.
- * Collapsed it is one line naming what is behind it, which is all an offer needs to be. What CHANGED with the
- * width is the thing it opens: a grid of cards with room for each template's description, where the dialog
- * could only afford a scroll-capped list of truncated single lines. */
+ * panel that opens on one has buried the form it exists to show. Collapsed it is one line naming what is behind
+ * it, which is all an offer needs to be. What CHANGED with the width is the thing it opens: a grid of cards with
+ * room for each template's description, where the dialog could only afford a scroll-capped list of truncated
+ * single lines.
+ *
+ * IT OPENS OVER THE FORM, NOT ABOVE IT. Inline, the collapsed bar was a full-width slab sitting between the
+ * panel's title and the Name field — the loudest thing in the panel, in the position that belongs to the first
+ * question — and opening it pushed Name 470px down the page, which is the same displacement that got the
+ * gallery folded away in the dialog. Both go away by giving it the geometry it always wanted: a control in the
+ * panel's own header, and a popover that covers the form for as long as it is being read. Nothing under it
+ * moves, so the answer to "what was I filling in?" is still exactly where it was. */
 const recipesOpen = ref(false);
 const recipeFilter = ref(``);
 const recipeFilterInput = ref<HTMLInputElement>();
@@ -153,6 +160,101 @@ const finish = (id: string): void => {
         <div class="flex items-center gap-2">
             <Icon name="plus" class="shrink-0 text-2xs text-subtle" />
             <h2 class="flex-1 text-xs font-semibold text-content">New automation</h2>
+
+            <!-- The offer, at the size of an offer: one control in the panel's chrome, beside the close button,
+                 where a starting point belongs. Once something is picked it becomes the pick's name, so the
+                 header states what the fields below were prefilled from without spending a row on saying it. -->
+            <div v-if="recipes.length > 0" class="relative flex shrink-0 items-center">
+                <!-- Clearing the template lives INSIDE the chip, on its tint, because outside it was a bare ✕
+                     eight pixels from the panel's own bare ✕ — two identical glyphs side by side, one of which
+                     throws away everything typed so far. On the tint it reads as part of the thing it clears. -->
+                <div class="flex items-center rounded-md transition-colors" :class="template ? CARD_SELECTED : CARD_IDLE">
+                    <button
+                        type="button"
+                        class="flex max-w-64 cursor-pointer items-center gap-1.5 px-2 py-1 text-2xs"
+                        :aria-expanded="recipesOpen"
+                        @click="toggleRecipes"
+                    >
+                        <img v-if="template?.logo" :src="`https://cdn.simpleicons.org/${template.logo}`" class="h-3.5 w-3.5 shrink-0" alt="" />
+                        <Icon v-else :name="template?.icon ?? 'bolt'" class="shrink-0" />
+                        <span class="min-w-0 truncate">{{ template?.title ?? `Start from a template` }}</span>
+                        <span v-if="!template" class="shrink-0 text-subtle">{{ recipes.length }}</span>
+                        <Icon name="chevron-down" class="shrink-0" />
+                    </button>
+                    <button
+                        v-if="template"
+                        type="button"
+                        class="shrink-0 cursor-pointer py-1 pr-2 pl-0.5 text-2xs opacity-70 transition-opacity hover:opacity-100"
+                        aria-label="Clear template"
+                        @click="picked = undefined"
+                    >
+                        <Icon name="times" />
+                    </button>
+                </div>
+
+                <!-- Clicking anywhere else puts it away. A popover with no way out but its own trigger is the
+                     one thing worse than the inline bar it replaced. -->
+                <div v-if="recipesOpen" class="fixed inset-0 z-10" @click="recipesOpen = false"></div>
+                <!-- A WELL, not another card: the panel it floats over is `bg-card`, so a `bg-card` popover read
+                     as the panel having grown rather than as a layer above it, and the cards inside it
+                     (`bg-overlay`) had nothing to sit against. Canvas is the one surface darker than both, which
+                     is what the inline gallery used for the same reason. -->
+                <div
+                    v-if="recipesOpen"
+                    class="absolute right-0 top-full z-20 mt-1.5 flex w-[min(46rem,calc(100vw-6rem))] flex-col gap-2 rounded-lg border border-line-strong bg-canvas p-2 shadow-2xl"
+                    @keydown.escape.stop.prevent="recipesOpen = false"
+                >
+                    <input
+                        ref="recipeFilterInput"
+                        v-model="recipeFilter"
+                        placeholder="Filter templates…"
+                        :class="cmp.input('px-2 py-1 text-xs')"
+                        @keydown.enter.prevent="pickFirstMatch"
+                    />
+                    <div class="scrollbar-thin flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
+                        <template v-for="group in recipeGroups" :key="group.label">
+                            <span :class="cmp.sectionLabel('px-0.5 pt-1 text-2xs first:pt-0')">{{ group.label }}</span>
+                            <div class="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                                <button
+                                    v-for="recipe in group.items"
+                                    :key="recipe.id"
+                                    type="button"
+                                    class="flex cursor-pointer items-start gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors"
+                                    :class="template === recipe ? CARD_SELECTED : CARD_IDLE"
+                                    :aria-pressed="template === recipe"
+                                    @click="pickRecipe(recipe)"
+                                >
+                                    <img
+                                        v-if="recipe.logo"
+                                        :src="`https://cdn.simpleicons.org/${recipe.logo}`"
+                                        class="mt-0.5 h-4 w-4 shrink-0"
+                                        alt=""
+                                    />
+                                    <Icon v-else :name="recipe.icon ?? 'bolt'" class="mt-0.5 shrink-0 text-2xs" />
+                                    <!-- STACKED, not a row. The note beside the title is what the dialog's one-line
+                                         rows did, and at a third of this popover's width it took so much of the
+                                         card that the title truncated to "Patch security ad…" and the description
+                                         wrapped a word per line. Title, then what it does, then when it runs —
+                                         each on its own line, each with the whole card to use. -->
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block truncate font-medium">{{ recipe.title }}</span>
+                                        <!-- Chores carry a description and now have room to show it — in the
+                                             dialog's one-line rows it lived in a tooltip. An integration has none
+                                             by design (see AutomationRecipe.description): title and note say
+                                             enough. -->
+                                        <span v-if="recipe.description" class="mt-0.5 line-clamp-2 block text-2xs text-subtle">
+                                            {{ recipe.description }}
+                                        </span>
+                                        <span v-if="recipe.note" class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note }}</span>
+                                    </span>
+                                </button>
+                            </div>
+                        </template>
+                        <p v-if="recipeGroups.length === 0" class="px-1.5 py-2 text-2xs text-subtle">No template matches.</p>
+                    </div>
+                </div>
+            </div>
+
             <button
                 type="button"
                 class="shrink-0 cursor-pointer text-2xs text-subtle transition-colors hover:text-content"
@@ -165,86 +267,6 @@ const finish = (id: string): void => {
 
         <form v-if="savedId === undefined" class="flex flex-col gap-3" @submit.prevent="submit">
             <div v-if="submitError" :class="cmp.alertDanger()">{{ submitError }}</div>
-
-            <!-- One row until asked for: collapsed it is the invitation, open it is a filterable GALLERY, and
-                 once something is picked it is that pick's summary. Cards in a grid rather than the dialog's
-                 scrolling list — at this width the whole catalogue is on screen at once, which is the point of
-                 offering templates at all. -->
-            <div v-if="recipes.length > 0" class="ui-field">
-                <div class="flex items-center rounded-md transition-colors" :class="template ? CARD_SELECTED : CARD_IDLE">
-                    <button
-                        type="button"
-                        class="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-xs"
-                        :aria-expanded="recipesOpen"
-                        @click="toggleRecipes"
-                    >
-                        <img v-if="template?.logo" :src="`https://cdn.simpleicons.org/${template.logo}`" class="h-4 w-4 shrink-0" alt="" />
-                        <Icon v-else :name="template?.icon ?? 'bolt'" class="shrink-0 text-2xs" />
-                        <span class="min-w-0 flex-1 truncate">
-                            <template v-if="template">
-                                {{ template.title }}
-                                <span v-if="template.note" class="text-2xs text-subtle">· {{ template.note }}</span>
-                            </template>
-                            <template v-else>Start from a template</template>
-                        </span>
-                        <span v-if="!template" class="shrink-0 text-2xs text-subtle">{{ recipes.length }} available</span>
-                        <Icon :name="recipesOpen ? 'chevron-down' : 'chevron-right'" class="shrink-0 text-2xs" />
-                    </button>
-                    <button
-                        v-if="template"
-                        type="button"
-                        class="shrink-0 px-2.5 py-2 text-2xs text-muted transition-colors hover:text-content"
-                        aria-label="Clear template"
-                        @click="picked = undefined"
-                    >
-                        <Icon name="times" />
-                    </button>
-                </div>
-                <p v-if="template" class="text-2xs text-subtle">Prefilled below — edit anything, or clear it to start from scratch.</p>
-                <div v-if="recipesOpen" class="flex flex-col gap-2 rounded-md border border-line bg-canvas p-2">
-                    <input
-                        ref="recipeFilterInput"
-                        v-model="recipeFilter"
-                        placeholder="Filter templates…"
-                        :class="cmp.input('px-2 py-1 text-xs')"
-                        @keydown.enter.prevent="pickFirstMatch"
-                        @keydown.escape.stop.prevent="recipesOpen = false"
-                    />
-                    <template v-for="group in recipeGroups" :key="group.label">
-                        <span :class="cmp.sectionLabel('px-0.5 pt-1 text-2xs first:pt-0')">{{ group.label }}</span>
-                        <div class="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                            <button
-                                v-for="recipe in group.items"
-                                :key="recipe.id"
-                                type="button"
-                                class="flex items-start gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors"
-                                :class="template === recipe ? CARD_SELECTED : CARD_IDLE"
-                                :aria-pressed="template === recipe"
-                                @click="pickRecipe(recipe)"
-                            >
-                                <img v-if="recipe.logo" :src="`https://cdn.simpleicons.org/${recipe.logo}`" class="mt-0.5 h-4 w-4 shrink-0" alt="" />
-                                <Icon v-else :name="recipe.icon ?? 'bolt'" class="mt-0.5 shrink-0 text-2xs" />
-                                <!-- STACKED, not a row. The note beside the title is what the dialog's one-line
-                                     rows did, and at a third of this panel's width it took so much of the card
-                                     that the title truncated to "Patch security ad…" and the description wrapped
-                                     a word per line. Title, then what it does, then when it runs — each on its
-                                     own line, each with the whole card to use. -->
-                                <span class="min-w-0 flex-1">
-                                    <span class="block truncate font-medium">{{ recipe.title }}</span>
-                                    <!-- Chores carry a description and now have room to show it — in the dialog's
-                                         one-line rows it lived in a tooltip. An integration has none by design
-                                         (see AutomationRecipe.description): its title and its note say enough. -->
-                                    <span v-if="recipe.description" class="mt-0.5 line-clamp-2 block text-2xs text-subtle">
-                                        {{ recipe.description }}
-                                    </span>
-                                    <span v-if="recipe.note" class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note }}</span>
-                                </span>
-                            </button>
-                        </div>
-                    </template>
-                    <p v-if="recipeGroups.length === 0" class="px-1.5 py-2 text-2xs text-subtle">No template matches.</p>
-                </div>
-            </div>
 
             <AutomationFields ref="fields" :state="state" :recipe-note="template?.title" />
 
