@@ -20,11 +20,17 @@ import type { Log } from "./home.js";
  *             in the same runs where the schtasks one died.
  *   macOS   — a launchd LaunchAgent. Optional: an agent that has not been exercised there declares no
  *             `launchAgent` and gets a note instead of a file, rather than an XDG entry macOS never reads.
- *   Linux   — an XDG autostart entry, started by the desktop session at graphical login. A headless box has no
- *             desktop session and therefore no autostart, so registration says so and names `systemd-run --user`
- *             as the answer there.
+ *   Linux   — a systemd USER UNIT where there is a user manager to run it, and an XDG autostart entry only where
+ *             there isn't. The XDG entry alone was wrong for the machines that need autostart MOST: it is started
+ *             by the desktop session at graphical login, so on a headless box — a server, a container, every WSL
+ *             distro — it can never fire at all. Registration used to write it anyway and print a note naming
+ *             `systemd-run --user` as the answer, which put the one machine class that cannot autostart in charge
+ *             of fixing it by hand, with a command that is TRANSIENT: it runs the agent in the current session and
+ *             is gone at the next boot, which is the whole thing autostart is for. A user unit is the same
+ *             no-elevation, no-machine-wide-change bargain as the other two, and it is what systemd's own
+ *             `enable --now` was built for.
  *
- * Everything below is a pure function of the spec plus the launcher, except the four that spawn an OS tool. */
+ * Everything below is a pure function of the spec plus the launcher, except the ones that spawn an OS tool. */
 
 export interface LaunchAgentSpec {
     // Reverse-DNS, launchd's convention — the id `launchctl bootout` and `bootstrap` address it by.
@@ -66,6 +72,9 @@ const WINDOWS_RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run
 const linuxDesktopPath = (spec: AutostartSpec): string => join(homedir(), ".config", "autostart", `${spec.id}.desktop`);
 const macPlistPath = (agent: LaunchAgentSpec): string => join(homedir(), "Library", "LaunchAgents", `${agent.label}.plist`);
 
+const systemdUnitName = (spec: AutostartSpec): string => `${spec.id}.service`;
+const systemdUnitPath = (spec: AutostartSpec): string => join(homedir(), ".config", "systemd", "user", systemdUnitName(spec));
+
 // reg.exe by absolute path: PATH is not ours to trust for a program that edits the registry, and a spawn that
 // can't find its command fails indistinguishably from one that ran and refused.
 const regExe = (): string => join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "reg.exe");
@@ -102,6 +111,66 @@ export const windowsRunAddArgs = (spec: AutostartSpec, launcher: CliLauncher): s
 ];
 
 export const windowsRunDeleteArgs = (spec: AutostartSpec): string[] => ["delete", WINDOWS_RUN_KEY, "/v", spec.windowsRunValue, "/f"];
+
+/* The states `systemctl --user is-system-running` reports when there IS a user manager to talk to. "degraded"
+ * counts — it means some unrelated unit of the user's failed, not that ours can't run — and so does a startup
+ * still in progress. Anything else (no systemctl at all, no D-Bus session, `offline`) means there is nothing to
+ * register with, and the XDG entry is the only mechanism left.
+ *
+ * Asked rather than assumed from `process.platform`: musl containers, WSL distros with `systemd=false` and
+ * non-systemd distributions all run Linux and have no user manager. */
+const SYSTEMD_LIVE_STATES = new Set(["running", "degraded", "starting", "maintenance", "stopping", "initializing"]);
+
+export const systemdUserAvailable = (): boolean => {
+    const result = spawnSync("systemctl", ["--user", "is-system-running"], { encoding: "utf8" });
+    if (result.error !== undefined) {
+        return false; // no systemctl on PATH
+    }
+    // Non-zero exit is normal for "degraded", so the STATE it printed decides, not the status.
+    return SYSTEMD_LIVE_STATES.has(result.stdout.trim());
+};
+
+/* The user unit. ExecStart takes the FOREGROUND args because systemd supervises what it starts, exactly like
+ * launchd and the desktop session.
+ *
+ * `Restart=on-failure` and not `always`: a deliberate `systemctl --user stop` must stay stopped, which is the same
+ * call the macOS LaunchAgent makes by omitting KeepAlive. And PATH is set explicitly because a user unit does NOT
+ * inherit a login shell's environment — it starts from a minimal PATH, while these agents shell out to `git` and
+ * `ssh` on every tick (the git bridge) and to Mutagen's own ssh transport. */
+export const systemdUserUnit = (spec: AutostartSpec, launcher: CliLauncher): string =>
+    `[Unit]
+Description=${spec.desktopName} — ${spec.desktopComment}
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=${quotedCommandLine([...launcher, ...spec.foregroundArgs])}
+Restart=on-failure
+RestartSec=5
+Environment=PATH=${join(homedir(), ".local", "bin")}:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target
+`;
+
+/* Register (and start) the unit. `enable --now` is one call for both halves — resume at boot, plus running right
+ * now — which is why this branch can report that the current session is covered.
+ *
+ * Lingering is the piece a hand-rolled `systemd-run --user` misses. Without it a user manager exists only while
+ * the user has a session, so on a headless box the unit stops the moment the last shell exits and never returns
+ * at boot: `enable` would have been a promise the machine could not keep. Best-effort — polkit grants
+ * set-self-linger by default, and where it doesn't the unit still covers every session the user opens. */
+const registerSystemdUser = async (spec: AutostartSpec, launcher: CliLauncher, log: Log): Promise<boolean> => {
+    const unit = systemdUnitPath(spec);
+    await mkdir(dirname(unit), { recursive: true });
+    await writeFile(unit, systemdUserUnit(spec, launcher), { mode: 0o644 });
+    spawnSync("loginctl", ["enable-linger"], { stdio: "ignore" });
+    // daemon-reload so a rewritten unit is the one that gets started, not the copy systemd already parsed.
+    spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
+    register("systemctl", ["--user", "enable", "--now", systemdUnitName(spec)]);
+    log(`registered ${systemdUnitName(spec)} to run now and at boot. Follow it with: journalctl --user -u ${spec.id} -f`);
+    return true;
+};
 
 // Exec args are quoted per the desktop-entry grammar.
 export const linuxDesktopEntry = (spec: AutostartSpec, launcher: CliLauncher): string =>
@@ -148,22 +217,30 @@ const registerMac = async (spec: AutostartSpec, agent: LaunchAgentSpec, launcher
     return true;
 };
 
-const registerLinux = async (spec: AutostartSpec, launcher: CliLauncher, log: Log): Promise<void> => {
+/* A user unit where one can run, an XDG entry only where one can't. Exactly ONE of the two is ever written: both
+ * would start the agent twice on a desktop machine — once by systemd at boot, once by the session at login — and
+ * two copies of a resident agent is precisely what the pidfile dance downstream exists to avoid. */
+const registerLinux = async (spec: AutostartSpec, launcher: CliLauncher, log: Log): Promise<boolean> => {
+    if (systemdUserAvailable()) {
+        await rm(linuxDesktopPath(spec), { force: true });
+        return await registerSystemdUser(spec, launcher, log);
+    }
     const file = linuxDesktopPath(spec);
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, linuxDesktopEntry(spec, launcher), { mode: 0o644 });
     if (process.env["XDG_CURRENT_DESKTOP"] === undefined) {
         log(
-            `note: this machine has no desktop session, so the autostart entry won't fire. To keep it running: systemd-run --user --unit=${spec.id} ${quotedCommandLine([...launcher, ...spec.foregroundArgs])}`,
+            `note: this machine has neither a systemd user manager nor a desktop session, so nothing will start ${spec.id} at boot. It runs until this machine restarts.`,
         );
     }
+    return false;
 };
 
 /* Register the agent to start at login.
  *
- * Returns true only when the OS mechanism ALSO launched it for the CURRENT session (macOS bootstrap does), so
- * the caller can skip its own spawn and avoid running two. Windows and Linux autostart fire at the next login
- * only, so they answer false and the caller covers this session.
+ * Returns true only when the OS mechanism ALSO launched it for the CURRENT session, so the caller can skip its own
+ * spawn and avoid running two: macOS `bootstrap` does, and so does systemd `enable --now`. Windows' Run key and an
+ * XDG entry fire at the next login only, so they answer false and the caller covers this session.
  */
 export const registerAutostart = async (spec: AutostartSpec, launcher: CliLauncher, log: Log): Promise<boolean> => {
     try {
@@ -181,8 +258,7 @@ export const registerAutostart = async (spec: AutostartSpec, launcher: CliLaunch
             return false;
         }
         if (process.platform === "linux") {
-            await registerLinux(spec, launcher, log);
-            return false;
+            return await registerLinux(spec, launcher, log);
         }
         log(`note: ${spec.id} has no login autostart on ${process.platform}; it runs until this machine restarts.`);
     } catch (error) {
@@ -211,6 +287,13 @@ export const unregisterAutostart = async (spec: AutostartSpec, log: Log): Promis
             spawnSync(regExe(), windowsRunDeleteArgs(spec), { stdio: "ignore" });
             return;
         }
+        /* Both Linux mechanisms, unconditionally. Which one is registered depends on what the machine could run at
+         * the time, and an uninstall must not leave the other behind — a `disable` skipped because systemd looks
+         * unavailable right now would resurrect the agent at the next boot, which is the one thing uninstall has to
+         * prevent. `disable --now` stops it as well, so nothing is left resident. */
+        spawnSync("systemctl", ["--user", "disable", "--now", systemdUnitName(spec)], { stdio: "ignore" });
+        await rm(systemdUnitPath(spec), { force: true });
+        spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
         await rm(linuxDesktopPath(spec), { force: true });
     } catch (error) {
         log(`note: couldn't remove the login-autostart entry for ${spec.id} (${reason(error)}).`);

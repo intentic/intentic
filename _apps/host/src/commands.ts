@@ -104,8 +104,8 @@ const setup = buildCommand<SetupFlags>({
         // Stop whatever the previous pairing left resident before the new config replaces it — otherwise a
         // process started from an older binary quietly adopts this pairing and every fix since stays inert.
         await stopDetached(() => {});
-        // registerAutostart answers true when the OS mechanism also started this session (macOS launchd does);
-        // host declares no LaunchAgent yet, so it always covers the session itself.
+        // registerAutostart answers true when the OS mechanism also started this session — a systemd user unit
+        // does (`enable --now`). Where it doesn't, or where there is no mechanism at all, we cover the session.
         if (!(await registerAutostart(HOST_AUTOSTART, cliLauncher("intentic-host"), out))) {
             await startDetached(out);
         }

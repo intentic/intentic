@@ -1,7 +1,9 @@
+import { homedir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
     linuxDesktopEntry,
     macLaunchAgentXml,
+    systemdUserUnit,
     windowsRunAddArgs,
     windowsRunDeleteArgs,
     type AutostartSpec,
@@ -47,6 +49,41 @@ describe("macLaunchAgentXml", () => {
         expect(plist).not.toContain("cli.js");
         // The command must be the FIRST argument after the executable, or stricli reads the wrong token.
         expect(plist.indexOf("<string>mirror</string>")).toBeGreaterThan(plist.indexOf("intentic-sync</string>"));
+    });
+});
+
+/* The mechanism that actually works on the machines that need autostart most. An XDG entry is started by the
+ * desktop session at graphical login, so on a headless box — a server, a container, every WSL distro — it can
+ * never fire; a user unit is what systemd is for. */
+describe("systemdUserUnit", () => {
+    it("runs the launcher with the FOREGROUND args, since systemd supervises what it starts", () => {
+        const unit = systemdUserUnit(SPEC, NODE);
+        expect(unit).toContain('ExecStart="/usr/bin/node" "/opt/intentic/sync/dist/cli.js" "mirror" "--watch"');
+        expect(unit).toContain("Type=simple");
+    });
+
+    it("execs a compiled binary with the command directly", () => {
+        expect(systemdUserUnit(SPEC, BINARY)).toContain('ExecStart="/home/dev/.intentic/sync/bin/intentic-sync" "mirror" "--watch"');
+    });
+
+    it("is wanted by default.target, or `enable` has nothing to hook it to at boot", () => {
+        expect(systemdUserUnit(SPEC, BINARY)).toContain("WantedBy=default.target");
+    });
+
+    // A deliberate `systemctl --user stop` must stay stopped — the same call the macOS LaunchAgent makes by
+    // omitting KeepAlive. `always` would fight the user.
+    it("restarts on failure but not on a clean stop", () => {
+        const unit = systemdUserUnit(SPEC, BINARY);
+        expect(unit).toContain("Restart=on-failure");
+        expect(unit).not.toContain("Restart=always");
+    });
+
+    /* A user unit does NOT inherit a login shell's environment. Both agents shell out to `git` and `ssh` on every
+     * tick (the git bridge) and Mutagen's transport needs ssh too, so a unit that starts from systemd's minimal
+     * PATH is one whose bridge silently fails every pass. */
+    it("sets a PATH that includes the shells-out targets", () => {
+        const unit = systemdUserUnit(SPEC, BINARY);
+        expect(unit).toContain(`Environment=PATH=${homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin`);
     });
 });
 
