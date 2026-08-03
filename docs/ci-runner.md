@@ -9,7 +9,11 @@ the config that makes it warm, and the evidence for why it is shaped this way.
 In the runner's `config.toml`, add the mount to `[runners.docker] volumes`:
 
 ```toml
-concurrent = 4
+# Six, not four. The images jobs declare `needs: ["test"]` rather than inheriting the stage barrier, so on a
+# main push that touches the desktop tree seven jobs are live in one pipeline and four of them can be eligible
+# at once: desktop:verify still holds a slot for up to 90 minutes while images, images:platform and release all
+# come free the moment `test` goes green. At four, the DAG buys nothing — the jobs just queue instead.
+concurrent = 6
 
 [[runners]]
   name = "radarsu-worker"
@@ -126,9 +130,15 @@ would need the fetch made race-safe first.
 - **pnpm** — the store only grows when a dependency version is added, so it grows slowly. `pnpm store prune`
   is the supported cleanup, but it removes anything not referenced by a currently-installed project and is
   **not safe to run while jobs are installing**. Run it by hand in a quiet window, not from CI.
+- **cargo** — `/ci-cache/cargo` (the shared registry) grows like the pnpm store. The build directories do not:
+  `desktop-target` (desktop:verify + release) and `desktop-check-target` (desktop:check) are separate on
+  purpose, because cargo locks a target directory exclusively for a whole build and those jobs run at the same
+  time. Each is a few GB of rebuildable objects; `rm -rf` either one in a quiet window and the next job repays
+  it once.
 
-Concurrent access itself is fine: the pnpm store is built for many projects sharing one store, and turbo's
-entries are content-addressed files written via atomic rename.
+Concurrent access itself is fine: the pnpm store is built for many projects sharing one store, turbo's
+entries are content-addressed files written via atomic rename, and cargo's registry is designed for many
+builds sharing one `CARGO_HOME`.
 
 ## Verifying it worked
 

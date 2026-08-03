@@ -200,7 +200,14 @@ desktop:check:
       changes: *desktop-changes
   variables:
     CARGO_HOME: /ci-cache/cargo
-    CARGO_TARGET_DIR: /ci-cache/desktop-target
+    # A target dir of this job's OWN, not the /ci-cache/desktop-target that desktop:verify and release share:
+    # cargo holds an EXCLUSIVE file lock on a target directory for the length of a build, so jobs pointed at one
+    # directory serialize instead of running beside each other — and these three routinely overlap. Splitting
+    # costs nothing: clippy and test build the DEV profile while the other two build RELEASE, so they never
+    # shared an artifact, only the lock. CARGO_HOME stays shared — the registry is built for concurrent readers
+    # and is where the reuse actually is (jobs still queue briefly on its package-cache lock; pipeline
+    # 2726820001 logged one such wait in each desktop job).
+    CARGO_TARGET_DIR: /ci-cache/desktop-check-target
   before_script:
     - !reference [.pnpm-setup, script]
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends
@@ -229,8 +236,9 @@ desktop:check:
 #      Docker host and waits for the sandbox daemon to answer /health. Pulls the sandbox image, so it is
 #      nightly rather than per-push.
 #
-# NOT on merge requests: this is a release-profile Tauri build (minutes even with the warm cargo store that
-# desktop:check fills), and desktop:check's debug build + clippy + tests is the fast MR gate. The argument
+# NOT on merge requests: this is a release-profile Tauri build (minutes even with a warm cargo registry, and
+# its own target dir is cold until a desktop change is pushed twice), and desktop:check's debug build + clippy
+# + tests is the fast MR gate. The argument
 # assembly this job cannot reach — the .ps1 named-parameter conventions that only ever run on Windows — is
 # covered by unit tests in commands.rs instead, which is why those tests take a Host rather than reading cfg!.
 #
@@ -317,6 +325,15 @@ images:
   # JOB-side — with the warm pnpm store + turbo cache from the test job it's a cache replay, and the
   # Dockerfile is left with pure COPYs.
   interruptible: true
+  # `test` alone, not the whole stage. A plain stage barrier makes this job wait for the SLOWEST job in `test`
+  # and skips it outright if any of them FAILED — so a desktop clippy warning, or the linuxdeploy download
+  # desktop:verify fetches from GitHub at bundle time, stops the images and the platform deploy for a reason
+  # neither has anything to do with. Both happened: pipelines 2725556418 and 2725541206 skipped this job on a
+  # desktop:check failure, and in 2725612642 `release` (which already had needs) started 4s after test while
+  # images:platform waited 4m30s on desktop:check. mirror:verify is deliberately absent too — it proves the
+  # public export installs, which the release job needs and these images do not. The cache assumption above is
+  # unaffected: `test` is the job that fills the turbo cache and it still completes first.
+  needs: ["test"]
   cache:
     - !reference [.cache-defs, iq-models]
   before_script:
@@ -351,6 +368,9 @@ images:platform:
   extends: .dind
   stage: images
   interruptible: true
+  # Same reasoning as the images job above, and this is the one it was written for: nothing about api/web is
+  # proven by a Tauri build, so the desktop jobs must not sit between a green `test` and a platform deploy.
+  needs: ["test"]
   before_script:
     - !reference [.pnpm-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
@@ -382,7 +402,8 @@ release:
   # sha-/latest images are built unstamped (0.0.0 = dev mode), so they are NOT retaggable as a release. The
   # duplicated work is bounded by the inline layer cache both jobs read off the published sandbox:latest /
   # :stable (publish-images.sh), and running parallel to images keeps it off the critical path — provided the
-  # runner has slots free (gitlab-runner concurrent >= 4).
+  # runner has slots free (gitlab-runner concurrent >= 6, docs/ci-runner.md — the images jobs come free at the
+  # same moment this one does, and a desktop:verify may still be holding a slot).
   # mirror:verify is the second gate for one reason: this job publishes the public mirror unattended, and an
   # export that doesn't install is a broken public repo AND no npm release (the mirror's tag is what triggers
   # the npm publish). Proving it on the merge request is what keeps that safe.
