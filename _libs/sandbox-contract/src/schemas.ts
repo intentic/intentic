@@ -4049,6 +4049,24 @@ export const TerminalsListSchema = z.object({ sessions: z.array(TerminalSessionS
 export type TerminalsList = z.infer<typeof TerminalsListSchema>;
 export const TerminalNameParamSchema = z.object({ name: z.string() });
 
+// One session's PANE HISTORY as plain text. This route exists because the browser cannot reach it any other
+// way: a tmux client runs on the ALTERNATE screen, which has no scrollback of its own, so what the wheel moves
+// through lives in tmux on the far side of the socket and never enters the xterm buffer the page could select.
+// `lines` is how far back to ask for — tmux clamps it to the history it actually has, and `truncated` says the
+// answer stopped at the request rather than at the beginning.
+export const TerminalScrollbackQuerySchema = z.object({
+    name: z.string(),
+    lines: z.coerce.number().min(1).max(100_000).default(20_000),
+});
+export const TerminalScrollbackSchema = z.object({
+    name: z.string(),
+    // Oldest line first, wrapped lines rejoined so a copied URL or path comes back whole.
+    text: z.string(),
+    lines: z.number(),
+    truncated: z.boolean(),
+});
+export type TerminalScrollback = z.infer<typeof TerminalScrollbackSchema>;
+
 /* ---- browsers: the Chromium the agent drives through its @playwright/mcp tools ----
  *
  * A `browser-<sdk session>` Chromium (browser/browser-sessions.ts), watchable live over the

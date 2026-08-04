@@ -23,7 +23,7 @@ import { subscribeRepoChanges } from "../workspace/repo-watch.js";
 import { subscribeRefChanges } from "../git/ref-watch.js";
 import { subscribeWorkspaceChanges } from "../workspace/workspace-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
-import { isValidSessionName } from "../terminal/terminal-session.js";
+import { captureScrollback, isValidSessionName } from "../terminal/terminal-session.js";
 import { isNewer, latestVersion } from "../platform/version-check.js";
 import { runtimeHealth } from "../agent/adapter-health.js";
 import { buildId } from "../version.js";
@@ -419,6 +419,18 @@ export const createSystemRoutes = (services: Services) => {
             // `=` forces an exact target match — a bare `-t web-a` would prefix-match `web-ab` once `web-a` is gone.
             await execFileAsync("tmux", ["kill-session", "-t", `=${input.name}`]).catch(() => undefined);
             return { ok: true };
+        }),
+        // The pane's whole history as text (the panel's "Full scrollback"). Same name guard as the kill above,
+        // and for the same reason — it reaches a `capture-pane -t` argv.
+        terminalScrollback: i.terminalScrollback.handler(async ({ input }) => {
+            if (!isValidSessionName(input.name)) {
+                throw new ORPCError("BAD_REQUEST", { message: `invalid session name: ${input.name}` });
+            }
+            const captured = await captureScrollback(input.name, input.lines);
+            if (captured === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: `no such session: ${input.name}` });
+            }
+            return { name: input.name, ...captured };
         }),
     };
 };

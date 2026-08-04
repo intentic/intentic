@@ -82,6 +82,10 @@ export const disposeAllSessions = (): void => {
 // touched it last, so an exit always updates a LIVE surface's tab state.
 const cache = new Map<string, TerminalSession>();
 
+// The live session behind a tab name, for the surfaces that act on a terminal rather than on the tab set — the
+// grid's own context menu (copy / paste / scrollback). Undefined for a name nothing has mounted.
+export const terminalSessionOf = (name: string): TerminalSession | undefined => cache.get(name);
+
 // Bumped whenever the cache is wiped wholesale (sandbox switch) — mounted surfaces watch it.
 const epoch = ref(0);
 
@@ -241,6 +245,9 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             }
             const cell = document.createElement(`div`);
             cell.className = `term-cell`;
+            // Which session this pane is — how a right-click anywhere in the grid finds the terminal under the
+            // pointer rather than assuming the focused one (they differ in a split).
+            cell.dataset[`session`] = member;
             cell.addEventListener(`focusin`, () => {
                 activeName.value = member;
                 window.localStorage.setItem(activeKey, member);

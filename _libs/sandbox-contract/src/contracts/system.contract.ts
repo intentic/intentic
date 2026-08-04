@@ -13,6 +13,8 @@ import {
     SubagentIdParamSchema,
     SubagentsListSchema,
     TerminalNameParamSchema,
+    TerminalScrollbackQuerySchema,
+    TerminalScrollbackSchema,
     TerminalsListSchema,
     UsageSummarySchema,
 } from "../schemas.js";
@@ -42,6 +44,13 @@ export const systemContract = {
     // (browser fetch sends the header), unlike the header-less WS route which app.ts exempts.
     terminals: oc.route({ method: "GET", path: "/system/terminals" }).output(TerminalsListSchema),
     killTerminal: oc.route({ method: "DELETE", path: "/system/terminals/{name}" }).input(TerminalNameParamSchema).output(OkSchema),
+    // One session's pane history as selectable text — the answer to "scroll back and copy that" in a surface
+    // whose live view is a tmux client on the alternate screen, where the scrollback is on the far side of the
+    // socket and the page has nothing to select. See TerminalScrollbackSchema.
+    terminalScrollback: oc
+        .route({ method: "GET", path: "/system/terminals/{name}/scrollback" })
+        .input(TerminalScrollbackQuerySchema)
+        .output(TerminalScrollbackSchema),
     // The agent's live Chromiums and the pages each has open — the Browsers view's roster, polled while it is on
     // screen and by the rail so its tile can appear the moment a turn starts browsing. The frames are the
     // separate /system/browser-view WebSocket; this is the control plane, exactly as `terminals` is for tmux.

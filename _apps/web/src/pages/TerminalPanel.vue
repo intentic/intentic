@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { cmp, ConfirmDialog, ContextMenu, type IconName, useDevice } from "@intentic/ui";
+import { clipboardOf, cmp, ConfirmDialog, ContextMenu, type IconName, useDevice } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
+import type { TerminalScrollback } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
@@ -12,7 +13,9 @@ import { commandShortcut, registerCommand, type RegisteredCommand, withShortcut 
 import { showWorkTerminals } from "../composables/terminal/useWorkTerminals";
 import { KIND_ICONS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
 import { useTerminalsQuery } from "../composables/terminal/terminalsQuery";
-import { createTerminalTabs, type TerminalTab, type TerminalTabsSource } from "../composables/terminal/useTerminal";
+import { fetchScrollback } from "../composables/terminal/terminalScrollback";
+import { copySelection, pasteIntoTerminal } from "../composables/terminal/terminalSession";
+import { createTerminalTabs, type TerminalTab, type TerminalTabsSource, terminalSessionOf } from "../composables/terminal/useTerminal";
 import { consumeSpawnRequest, registerTerminalSpawn } from "../composables/terminal/useTerminalPanel";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 
@@ -350,6 +353,97 @@ const menuItems = computed<MenuItem[]>(() => {
         );
     }
     return [...items, ...stripItems.value];
+});
+
+// --- Full scrollback ---------------------------------------------------------------------------
+// The pane's history as plain text, which is the only form of it the browser can select. `pending` is its own
+// state rather than a spinner over stale text: a capture of tens of thousands of lines crosses the tunnel, and
+// showing the PREVIOUS terminal's scrollback while the next one loads would be the worst possible lie here.
+const scrollback = ref<TerminalScrollback | undefined>(undefined);
+const scrollbackName = ref<string | undefined>(undefined);
+const scrollbackFailed = ref(false);
+const scrollbackPending = computed(() => scrollbackName.value !== undefined && scrollback.value === undefined && !scrollbackFailed.value);
+const scrollbackText = ref<HTMLElement>();
+
+const openScrollback = async (name: string): Promise<void> => {
+    scrollbackName.value = name;
+    scrollback.value = undefined;
+    scrollbackFailed.value = false;
+    try {
+        const captured = await fetchScrollback(name);
+        // Superseded while in flight — the dialog was closed, or another terminal was asked for.
+        if (scrollbackName.value === name) {
+            scrollback.value = captured;
+        }
+    } catch {
+        // The session ended between the right-click and the read, or the daemon went away. The dialog says so
+        // rather than sitting on a spinner forever.
+        if (scrollbackName.value === name) {
+            scrollbackFailed.value = true;
+        }
+    }
+};
+
+const closeScrollback = (): void => {
+    scrollbackName.value = undefined;
+    scrollback.value = undefined;
+    scrollbackFailed.value = false;
+};
+
+// Through the dialog's own element, so a popped-out panel writes from the window the user is actually in.
+const copyScrollback = (): void => {
+    const text = scrollback.value?.text;
+    if (text !== undefined) {
+        void clipboardOf(scrollbackText.value).writeText(text);
+    }
+};
+
+// --- Context menu (right-click the GRID) -------------------------------------------------------
+// Right-click inside a terminal used to reach tmux, whose default binding drew its OWN pane menu over the
+// output — splits, swap, kill, respawn: a menu about tmux's panes, in an app whose panes are the strip above,
+// positioned at the pane's idea of the pointer. Those bindings are gone from the image's tmux.conf, so the
+// gesture lands here, on what a terminal actually owes a browser: the clipboard, and the scrollback the
+// alternate screen hides.
+//
+// It targets the session UNDER THE POINTER, not the focused one — in a split those differ, and a menu that
+// copied from the other pane would be a quiet wrong answer.
+const gridMenu = ref<{ show: (event: Event) => void } | undefined>();
+const gridTarget = ref<string | undefined>(undefined);
+// Sampled at open, not read live: `disabled` is evaluated as the menu renders, and xterm clears the selection
+// when the terminal loses focus to it.
+const gridHasSelection = ref(false);
+
+const onGridContextMenu = (event: MouseEvent): void => {
+    const cell = event.target instanceof Element ? event.target.closest<HTMLElement>(`.term-cell`) : null;
+    const name = cell?.dataset[`session`];
+    if (name === undefined || terminalSessionOf(name) === undefined) {
+        return;
+    }
+    event.preventDefault();
+    gridTarget.value = name;
+    gridHasSelection.value = terminalSessionOf(name)?.term.hasSelection() === true;
+    gridMenu.value?.show(event);
+};
+
+const gridItems = computed<MenuItem[]>(() => {
+    const name = gridTarget.value;
+    const session = name === undefined ? undefined : terminalSessionOf(name);
+    if (name === undefined || session === undefined) {
+        return [];
+    }
+    // Copy and Paste carry no shortcut hint: Ctrl+Shift+C/V are the browser's own (DevTools, paste-as-text) and
+    // this panel deliberately binds neither — plain Ctrl+V already pastes, because it arrives as the textarea
+    // paste event xterm listens for.
+    const items: MenuItem[] = [
+        { label: `Copy`, disabled: !gridHasSelection.value, command: () => copySelection(session) },
+        { label: `Paste`, command: () => pasteIntoTerminal(session) },
+        { separator: true },
+        { label: `Full scrollback…`, command: () => void openScrollback(name) },
+    ];
+    if (splitTab !== undefined) {
+        items.push({ separator: true }, { label: `Split terminal`, shortcut: commandShortcut(`terminal.split`), command: () => splitTab(name) });
+    }
+    return items;
 });
 
 // --- Panel geometry ----------------------------------------------------------------------------
@@ -883,8 +977,10 @@ const endResize = (event: PointerEvent): void => {
         <!-- The panes and the touch keys under them: always a column, whichever side the bar is on. -->
         <div class="flex min-h-0 min-w-0 flex-1 flex-col">
             <!-- xterm sizes to this container; the session's fit observer keeps each cell filling its share of
-                 the pane (useTerminal's mount builds one .term-cell per split). -->
-            <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2"></div>
+                 the pane (useTerminal's mount builds one .term-cell per split). The right-click is caught here
+                 rather than per cell because the cells are built imperatively — the handler reads which session
+                 it landed in off the cell's own dataset. -->
+            <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2" @contextmenu="onGridContextMenu"></div>
             <!-- Touch extra-keys row (coarse pointers only). pointerdown.prevent keeps the terminal focused so
                  the soft keyboard stays up while the key is injected. -->
             <div v-if="coarse" class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">
@@ -898,6 +994,41 @@ const endResize = (event: PointerEvent): void => {
         <!-- Right-click pill menu: split/join/unsplit/kill + the per-terminal cosmetic overrides. Rendered
              into the pop-out window while the panel floats there. -->
         <ContextMenu ref="menu" :model="menuItems" :append-to="popout.overlayTarget.value" :min-width="14" />
+
+        <!-- Right-click INSIDE a terminal: the clipboard verbs and the scrollback, in the place tmux used to
+             draw its own pane menu. -->
+        <ContextMenu ref="gridMenu" :model="gridItems" :append-to="popout.overlayTarget.value" :min-width="12" />
+
+        <!-- The pane's history as selectable text. The live grid can only ever offer the screenful in front of
+             you — a tmux client runs on the alternate screen, so its scrollback never reaches the browser — and
+             this is where "scroll back and copy that" is answered: real text, native selection, Ctrl+F. -->
+        <Dialog
+            :visible="scrollbackName !== undefined"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            :append-to="popout.overlayTarget.value"
+            :style="{ width: '80rem', maxWidth: '92vw' }"
+            :header="scrollbackName === undefined ? '' : `Scrollback — ${segmentLabel(scrollbackName)}`"
+            @update:visible="closeScrollback"
+        >
+            <div class="flex min-h-0 flex-col gap-2" style="height: 70vh">
+                <div class="flex shrink-0 items-center gap-2 text-xs text-muted">
+                    <template v-if="scrollback">
+                        <span>{{ scrollback.lines.toLocaleString() }} lines</span>
+                        <span v-if="scrollback.truncated">· older lines beyond this are still in tmux</span>
+                        <Button class="ml-auto" size="small" severity="secondary" label="Copy all" @click="copyScrollback" />
+                    </template>
+                    <span v-else-if="scrollbackFailed">Couldn't read this terminal's scrollback — the session may have ended.</span>
+                    <span v-else-if="scrollbackPending">Reading…</span>
+                </div>
+                <pre
+                    v-if="scrollback"
+                    ref="scrollbackText"
+                    class="scrollbar-thin min-h-0 flex-1 overflow-auto rounded-md bg-terminal p-3 font-mono text-xs whitespace-pre text-content select-text"
+                    >{{ scrollback.text }}</pre>
+            </div>
+        </Dialog>
 
         <!-- The confirm a bulk kill gets when it would end sessions that are still running — this panel's
              counterpart of the chat's "stop N running agents?" and the workspace's unsaved-edits dialog. -->

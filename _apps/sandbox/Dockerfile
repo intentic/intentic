@@ -107,6 +107,12 @@ RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh 
 # The cost is that mouse reporting is now always on, so a plain drag would belong to the pane rather than the
 # browser — the web client's own gate (terminalSession.ts) is written for exactly that mode and keeps a drag a
 # native selection while letting a click through.
+# The two mouse bindings BELOW the wheel are unbound for the same reason the status bar is off: in a browser
+# they are someone else's job. tmux's default right-click draws its own pane menu (splits, kill, respawn) INSIDE
+# the terminal, over the top of the browser context menu the panel puts there — and it is drawn at the pane's
+# idea of the pointer, on rows the user cannot click away from. Its default middle-click pastes tmux's OWN
+# buffer, which in a browser session is stale or empty and never the thing the user just copied. Both gestures
+# belong to the web client, which has the real clipboard and the real menu; the wheel stays tmux's.
 # The set-hook pipe-pane trio logs every pane (web tabs, panels, agent-run tmux, windows, splits) to
 # /history/logs/terminals — the crashed-session post-mortem the /logs routes serve (logs/log-files.ts keeps
 # the same hooks for re-arming a server that outlived a daemon restart). The stream is replayed through
@@ -119,6 +125,8 @@ RUN printf '%s\n' \
         'set -g status off' \
         'set -g history-limit 100000' \
         'set -g mouse on' \
+        'unbind -n MouseDown3Pane' \
+        'unbind -n MouseDown2Pane' \
         'setw -g aggressive-resize on' \
         'set -g default-terminal "tmux-256color"' \
         'set -g default-command zsh' \

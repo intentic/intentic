@@ -22,6 +22,9 @@ import "@xterm/xterm/css/xterm.css";
 const PING_MS = 30_000;
 const RETRY_MS = 1000;
 const MAX_RETRY_MS = 30_000;
+// A panel drag fires a fit per frame, and every grid change would otherwise cost tmux a full-pane redraw over
+// the socket. The local xterm still reflows live; the PTY learns the size once the drag settles.
+const RESIZE_SETTLE_MS = 120;
 // A connection that lived this long was healthy — its drop resets the backoff. Shorter lives (refused,
 // accept-then-crash) keep doubling, so a broken daemon is never hammered on a tight loop.
 const STABLE_MS = 5000;
@@ -46,6 +49,8 @@ export type TerminalSession = {
     readonly serialize: SerializeAddon;
     // Persistent xterm mount — moves in/out of containers as the surface shows/hides it.
     readonly host: HTMLElement;
+    // The GPU renderer, held only while the session is on screen (attachRenderer).
+    webgl?: WebglAddon;
     // Tears down the fit triggers (ResizeObserver + window resize listener) for the WINDOW the host last lived
     // in — rebuilt when a mount moves the host into another document (the pop-out window), since both are
     // per-window machinery that stops tracking an element adopted elsewhere.
@@ -60,6 +65,8 @@ export type TerminalSession = {
     onExit: (name: string) => void;
     socket?: WebSocket;
     reconnect?: number;
+    // Pending PTY resize frame — the drag-settle timer (scheduleResizeFrame).
+    resizeSettle?: number;
     retryDelay: number;
     // Set by dispose (and the exit frame) so the socket's close handler stops reconnecting.
     closing: boolean;
@@ -93,17 +100,36 @@ const send = (s: TerminalSession, message: TerminalClientMessage): void => {
     }
 };
 
+// Give the GPU context back. xterm reinstates its own DOM renderer as the addon disposes, so a detached
+// session keeps painting — that is what makes remounting one instant.
+const detachRenderer = (s: TerminalSession): void => {
+    s.webgl?.dispose();
+    s.webgl = undefined;
+};
+
 // Swap xterm's default DOM renderer for the GPU one — the DOM renderer repaints per cell and pegs the main
 // thread under the flooding output this terminal sees (docker pulls, pnpm install, turbo/vite). Must run AFTER
-// term.open() (the addon needs the canvas). A lost GL context (GPU sleep, backgrounded tab, or too many live
-// contexts across many opened tabs) would otherwise blank the terminal — dispose on loss so xterm falls back to
-// the DOM renderer rather than showing nothing. A missing WebGL2 (blocklisted driver) throws on load, same
-// fallback. Loaded once per session, from the first mount's open() guard.
-const loadWebglRenderer = (term: Terminal): void => {
+// term.open() (the addon needs the canvas).
+//
+// Held only WHILE A SESSION IS ON SCREEN, because the addon is one WebGL2 context and a page gets about
+// sixteen before the browser starts force-losing them — oldest first, which is the terminal the user has had
+// open longest, i.e. the one they are working in. That terminal then draws nothing at all for the three
+// seconds the addon spends waiting on a restore that is never coming for an evicted context, and every
+// relayout (a panel drag reallocates each live context's drawing buffer) is what tips the page over the line.
+// Scoped to the mount, the count follows what is VISIBLE — a split group, four at the very most — rather than
+// every session ever opened, so the cap is never approached and a resize can't blank the screen.
+//
+// A context lost anyway (GPU sleep, a blocklisted driver) drops back to the DOM renderer, as does a missing
+// WebGL2, which throws on load.
+const attachRenderer = (s: TerminalSession): void => {
+    if (s.webgl !== undefined) {
+        return;
+    }
     try {
         const webgl = new WebglAddon();
-        webgl.onContextLoss(() => webgl.dispose());
-        term.loadAddon(webgl);
+        webgl.onContextLoss(() => detachRenderer(s));
+        s.term.loadAddon(webgl);
+        s.webgl = webgl;
     } catch {
         // No WebGL2 available — xterm keeps its default DOM renderer.
     }
@@ -227,9 +253,12 @@ export const persistScrollback = (s: TerminalSession): void => {
     }
 };
 
-// The private render-service surface both fit and the redraw-forcing resize need. The same access
-// @xterm/addon-fit makes (its own TODO admits it) — xterm exposes no public cell-metrics API.
-type XtermCore = { _renderService: { clear: () => void; dimensions: { css: { cell: { width: number; height: number } } } } };
+// The private cell-metrics the fit needs, READ-ONLY — the same access @xterm/addon-fit makes (its own TODO
+// admits it), since xterm exposes no public cell-metrics API. Nothing here drives the renderer: a fit that
+// reached in to clear() before resizing was wiping the rendered screen a frame ahead of a repaint it did not
+// control, which is a blank terminal for as long as the repaint is deferred (and at an idle prompt, where no
+// output follows to force one, that is until the user types).
+type XtermCore = { _renderService: { dimensions: { css: { cell: { width: number; height: number } } } } };
 const coreOf = (term: Terminal): XtermCore => (term as unknown as { _core: XtermCore })._core;
 
 // xterm's viewport reserves this much for its native scrollbar (ViewportConstants.DEFAULT_SCROLL_BAR_WIDTH).
@@ -247,9 +276,19 @@ const fitSession = (s: TerminalSession): void => {
     const cols = Math.max(2, Math.floor((s.host.clientWidth - SCROLLBAR_PX) / cell.width));
     const rows = Math.max(1, Math.floor(s.host.clientHeight / cell.height));
     if (cols !== s.term.cols || rows !== s.term.rows) {
-        coreOf(s.term)._renderService.clear();
         s.term.resize(cols, rows);
     }
+};
+
+// Hand the settled grid to the PTY. Debounced because the fit runs per frame of a panel drag and each frame's
+// resize costs tmux a full-pane redraw down the socket — one drag used to be dozens of them. xterm reflows
+// locally on every step regardless, so the panel still tracks the pointer; only the PTY waits.
+const scheduleResizeFrame = (s: TerminalSession): void => {
+    window.clearTimeout(s.resizeSettle);
+    s.resizeSettle = window.setTimeout(() => {
+        s.resizeSettle = undefined;
+        send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
+    }, RESIZE_SETTLE_MS);
 };
 
 // (Re)build the session's fit triggers against the window its host currently lives in. A ResizeObserver — and
@@ -301,6 +340,27 @@ const replayMouse = (event: MouseEvent, forceShift: boolean): void => {
     event.target?.dispatchEvent(clone);
 };
 
+// The two clipboard verbs, both routed through the TERMINAL's own window (clipboardOf) for the same reason the
+// OSC 52 handler is: popped out, this realm's document is the unfocused one behind, and Chrome refuses a
+// clipboard call from it. A denied read (no permission, or a browser that only exposes the clipboard through a
+// real paste event) leaves the terminal untouched — Ctrl+V, which arrives as that event, always works.
+export const copySelection = (s: TerminalSession): void => {
+    const selection = s.term.getSelection();
+    if (selection === ``) {
+        return;
+    }
+    void clipboardOf(s.term.element)
+        .writeText(selection)
+        .catch(() => {});
+};
+
+export const pasteIntoTerminal = (s: TerminalSession): void => {
+    void clipboardOf(s.term.element)
+        .readText()
+        .then((text) => s.term.paste(text))
+        .catch(() => {});
+};
+
 // Build one session's xterm + host + socket. The host stays out of the DOM until mountTerminalSession.
 // `readOnly` makes it a log view (a background process's tab): stdin is disabled and keystrokes never reach
 // the PTY — resize/ping still flow, tmux needs the grid to redraw. `spawnWithin` is the surface the session
@@ -337,6 +397,11 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     // report press, arm its document-level release listener, report release). Replays are synthetic
     // (isTrusted false), which is what stops this gate from re-capturing them.
     let pending: MouseEvent | undefined;
+    // True only between the press that BECAME a drag and its release — the window in which a selection change
+    // is the user asking for one. The copy below is gated on it: xterm also fires onSelectionChange when
+    // arriving output clears and re-lays a selection, and copying those silently overwrote whatever the user
+    // had on their clipboard from somewhere else entirely.
+    let selecting = false;
     host.addEventListener(
         `mousedown`,
         (event) => {
@@ -371,11 +436,13 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
             // A held press whose release we never saw (it landed outside the host) — drop it on the next hover.
             if ((event.buttons & 1) === 0) {
                 pending = undefined;
+                selecting = false;
                 return;
             }
             if (Math.abs(event.clientX - pending.clientX) < DRAG_PX && Math.abs(event.clientY - pending.clientY) < DRAG_PX) {
                 return;
             }
+            selecting = true;
             replayMouse(pending, true);
             pending = undefined;
         },
@@ -384,7 +451,12 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     host.addEventListener(
         `mouseup`,
         (event) => {
-            if (!event.isTrusted || pending === undefined) {
+            if (!event.isTrusted) {
+                return;
+            }
+            if (pending === undefined) {
+                // The release that ends a drag-selection — its copy has already happened, mid-gesture.
+                selecting = false;
                 return;
             }
             event.stopImmediatePropagation();
@@ -432,20 +504,6 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         }
         return true;
     });
-    // Copy a native selection (from the forced-selection drag above) DURING the mouse gesture, so the clipboard
-    // write carries the transient user-activation browsers require — unlike the OSC 52 path, which arrives async
-    // over the socket and is silently blocked outside a focused, secure Chrome tab. Skip empty (selection cleared
-    // by output) and unchanged values to avoid redundant writes as the drag extends.
-    let lastCopied = ``;
-    term.onSelectionChange(() => {
-        const selection = term.getSelection();
-        if (selection !== `` && selection !== lastCopied) {
-            lastCopied = selection;
-            void clipboardOf(term.element)
-                .writeText(selection)
-                .catch(() => {});
-        }
-    });
     if (spawnWithin !== undefined && spawnWithin.clientWidth > 0 && spawnWithin.clientHeight > 0) {
         term.resize(
             Math.max(2, Math.floor((spawnWithin.clientWidth - SCROLLBAR_PX) / EST_CELL_W)),
@@ -471,7 +529,20 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     if (!readOnly) {
         term.onData((data) => send(s, { type: `input`, data }));
     }
-    term.onResize(({ cols, rows }) => send(s, { type: `resize`, cols, rows }));
+    term.onResize(() => scheduleResizeFrame(s));
+    // Copy a native selection (from the forced-selection drag above) DURING the mouse gesture, so the clipboard
+    // write carries the transient user-activation browsers require — unlike the OSC 52 path, which arrives async
+    // over the socket and is silently blocked outside a focused, secure Chrome tab. Skip unchanged values to
+    // avoid redundant writes as the drag extends; `selecting` is what keeps output-driven changes out.
+    let lastCopied = ``;
+    term.onSelectionChange(() => {
+        const selection = term.getSelection();
+        if (!selecting || selection === `` || selection === lastCopied) {
+            return;
+        }
+        lastCopied = selection;
+        copySelection(s);
+    });
     // Restore the pre-reload scrollback first (xterm buffers writes made before open()); tmux's attach redraw
     // then paints the live screen below it.
     const snapshot = window.sessionStorage.getItem(scrollbackKey(name));
@@ -493,16 +564,13 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
     const moved = s.mountedDocument !== container.ownerDocument;
     s.mountedDocument = container.ownerDocument;
     container.append(s.host);
-    if (!s.term.element) {
-        s.term.open(s.host);
-        loadWebglRenderer(s.term);
-    } else {
-        // Idempotent re-open — xterm 6's documented cross-window move: it short-circuits to re-pointing the
-        // core's window binding (char measurement, renderer scheduling, event realms) at the host's current
-        // window, a no-op when nothing changed. Not keyed on `moved`: parking re-homes the binding to the main
-        // realm between mounts, so even a same-document remount may need the re-point.
-        s.term.open(s.host);
-    }
+    // Idempotent: the first call builds xterm against the host, and every later one is xterm 6's documented
+    // cross-window move — it short-circuits to re-pointing the core's window binding (char measurement,
+    // renderer scheduling, event realms) at the host's current window, a no-op when nothing changed. Not keyed
+    // on `moved`: parking re-homes the binding to the main realm between mounts, so even a same-document
+    // remount may need the re-point. The GPU renderer is built AFTER it, against the window that just won.
+    s.term.open(s.host);
+    attachRenderer(s);
     fitSession(s);
     if (moved) {
         observeHost(s);
@@ -534,6 +602,10 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
 // window binding) keeps every hidden session anchored to the main realm. mountedDocument is deliberately NOT
 // updated: the next mount must still read as a move so it rebuilds the observer and forces the tmux redraw.
 export const parkTerminalSession = (s: TerminalSession): void => {
+    // The GPU context goes back to the browser the moment a session leaves the screen (see attachRenderer) —
+    // which also means the context above never survives to be carried into another document at all: the next
+    // mount builds a fresh one against whichever window won.
+    detachRenderer(s);
     s.host.remove();
     if (s.host.ownerDocument === document) {
         return;
@@ -550,8 +622,10 @@ export const parkTerminalSession = (s: TerminalSession): void => {
 export const disposeTerminalSession = (s: TerminalSession): void => {
     s.closing = true;
     window.clearTimeout(s.reconnect);
+    window.clearTimeout(s.resizeSettle);
     s.unobserve?.();
     s.socket?.close();
+    detachRenderer(s);
     s.term.dispose();
     s.host.remove();
 };
