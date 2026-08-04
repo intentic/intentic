@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
@@ -181,7 +182,7 @@ const attach = async (record: BrowserSessionRecord): Promise<BrowserContext | un
             return context;
         } catch {
             // Not listening yet — Chromium is still coming up under the tool call that triggered this.
-            await new Promise((resolve) => setTimeout(resolve, ATTACH_POLL_MS));
+            await sleep(ATTACH_POLL_MS);
         }
     }
     return undefined;

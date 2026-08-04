@@ -49,7 +49,11 @@ export interface JsonFileOptions<T> {
     readonly mode?: number;
 }
 
-export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOptions<T>): JsonFile<T> => {
+/* One whole JSON file, written where no reader can catch it half-done — the ATOMICITY half above, on its own
+ * because two callers need it without the rest. `jsonFile` is one; the other is a store that must own its read
+ * path (agents.json sets an unparseable roster aside rather than reading it as an empty fleet, which no
+ * `parse`/`fallback` pair can express) and would otherwise hand-roll this cycle beside it. */
+export const writeJsonFile = async (path: string, value: unknown, mode?: number): Promise<void> => {
     /* Sibling of the target so the rename never crosses a filesystem (rename is only atomic within one), and
      * pid-tagged so a second daemon on the same volume — a dev sandbox pointed at the same /history — can't
      * land in the middle of ours.
@@ -59,7 +63,12 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
      * read as a write to `.intentic/settings.json` itself and bill every browser an extra refetch for a file
      * that is still mid-swap. A leading dot cannot prefix-match the target, and hides the temp besides. */
     const tempPath = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(tempPath, `${JSON.stringify(value, undefined, 2)}\n`, mode === undefined ? undefined : { mode });
+    await rename(tempPath, path);
+};
 
+export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOptions<T>): JsonFile<T> => {
     const read = async (): Promise<T> => {
         let raw: unknown;
         try {
@@ -68,12 +77,6 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
             return fallback();
         }
         return parse(raw) ?? fallback();
-    };
-
-    const write = async (value: T): Promise<void> => {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(tempPath, `${JSON.stringify(value, undefined, 2)}\n`, mode === undefined ? undefined : { mode });
-        await rename(tempPath, path);
     };
 
     // Chained rather than a lock object: `update` is the only writer, so the tail of this promise IS the queue.
@@ -88,7 +91,7 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
                 const current = await read();
                 const updated = change(current);
                 if (updated !== current) {
-                    await write(updated);
+                    await writeJsonFile(path, updated, mode);
                 }
                 return updated;
             });

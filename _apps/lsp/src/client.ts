@@ -4,6 +4,7 @@ import { connect, type Socket } from "node:net";
 import os from "node:os";
 // Aliased: `resolve` is the promise-executor name throughout this file, and path's would shadow confusingly.
 import { dirname, join, resolve as resolvePath } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import type { Diagnostic } from "./diag.js";
 import type { Request, Response } from "./protocol.js";
@@ -24,8 +25,6 @@ const REQUEST_TIMEOUT_MS = 30_000;
 // A cold daemon has to build the program before it can answer the first request; later ones are ~instant.
 const SPAWN_RETRY_MS = 150;
 const SPAWN_ATTEMPTS = 40;
-
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 // The nearest ancestor containing `marker`, or undefined at the filesystem root.
 const findUp = (fromDir: string, marker: string): string | undefined => {
@@ -115,7 +114,7 @@ const connectOrSpawn = async (root: string): Promise<Socket | undefined> => {
     }
     spawnDaemon(root);
     for (let attempt = 0; attempt < SPAWN_ATTEMPTS; attempt += 1) {
-        await delay(SPAWN_RETRY_MS);
+        await sleep(SPAWN_RETRY_MS);
         const socket = await tryConnect(path);
         if (socket !== undefined) {
             return socket;

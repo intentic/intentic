@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { GATE_DAILY_MAX_DEFAULT, type GateVerdict, workflowFaults, workflowRunFaults } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { streamAgent } from "../agent/agent.routes.js";
@@ -59,8 +60,6 @@ const waitMsOf = (raw: string | undefined): number => {
     return Math.min(asked, WAIT_MAX_S) * 1_000;
 };
 
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
 export const createGateRoute =
     (services: Services, wake: TurnFn = streamAgent) =>
     async (c: Context<AppEnv, "/workflows/:id/gate">): Promise<Response> => {
@@ -117,7 +116,7 @@ export const createGateRoute =
             () => true,
             () => true,
         );
-        const settled = await Promise.race([finished, delay(waitMsOf(c.req.query("wait"))).then(() => false)]);
+        const settled = await Promise.race([finished, sleep(waitMsOf(c.req.query("wait"))).then(() => false)]);
         /* A caller that gave up leaves a fan-out of sessions running with nobody to read them, so the deadline
          * STOPS the run rather than merely abandoning it. The steps are cut off where they stand, which is what
          * makes the timeout cost one deadline's worth of spend instead of the whole graph's. */

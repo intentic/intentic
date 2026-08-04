@@ -1,7 +1,7 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile, rename } from "node:fs/promises";
 import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, LandConflictSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { writeJsonFile } from "../store/json-file.js";
 
 // The persisted half of the fleet registry (<historyRoot>/agents.json — on the /history volume so a
 // conversation's identity survives container rebuilds alongside any worktree it owns). One entry per
@@ -182,11 +182,9 @@ export const fileAgentsStore = (path: string): AgentsStore => ({
             return result.success ? [result.data] : [];
         });
     },
-    save: async (agents) => {
-        await mkdir(dirname(path), { recursive: true });
-        // Write-then-rename so the file is always one COMPLETE roster or the previous one — never a prefix.
-        const tmp = `${path}.tmp`;
-        await writeFile(tmp, `${JSON.stringify(agents, undefined, 2)}\n`);
-        await rename(tmp, path);
-    },
+    // Write-then-rename so the file is always one COMPLETE roster or the previous one — never a prefix. Through
+    // the shared writer because agents.json sits ON /history, the volume a second daemon (a dev sandbox pointed
+    // at the same one) shares: the temp has to be tagged with the writing daemon's pid, and the plain
+    // "<path>.tmp" this hand-rolled was the one temp name in the daemon that wasn't.
+    save: (agents) => writeJsonFile(path, agents),
 });
