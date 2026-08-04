@@ -357,9 +357,11 @@ test("one provider's outage never gates a conversation on another", async () => 
  * fire the daemon stopped existing under, so the whole condition is "there is an entry"; what the tests below
  * pin down is what it takes to be re-run, and that each entry is consumed exactly once whatever happens. */
 
-// The journal is a real one on a temp dir: what the pass leaves on disk is half of what these assert.
-const journalServices = (root: string): Services =>
-    unstubbed<Services>("services", {
+/* The journal is a real one on a temp dir: what the pass leaves on disk is half of what these assert. The
+ * setting is written explicitly, like the outage helper above, because the restart resume is opt-in — a fresh
+ * sandbox re-runs nothing, so every test that expects a re-run has to say it turned this on. */
+const journalServices = async (root: string, autoResumeOnRestart = true): Promise<Services> => {
+    const services = unstubbed<Services>("services", {
         ...fakeServices(root),
         turnJournal: fileTurnJournal(join(root, "turns")),
         automations: fileAutomationsStore(join(root, "automations.json")),
@@ -367,6 +369,10 @@ const journalServices = (root: string): Services =>
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
     });
+    const settings = await services.sandboxSettings.get();
+    await services.sandboxSettings.set({ ...settings, autoResumeOnRestart });
+    return services;
+};
 
 const journalled = (conversationId: string, extra: Partial<JournalledTurn> = {}): JournalledTurn => ({
     kind: "turn",
@@ -380,7 +386,7 @@ const journalled = (conversationId: string, extra: Partial<JournalledTurn> = {})
 const BOOT_AT = 10_000 + 60_000;
 
 test("an interrupted chat turn is re-run under the restart note, on the session holding its partial work", async () => {
-    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     await services.turnJournal.recordTurn(journalled("rs-1", { sessionId: "s-partial" }));
     const prompts: string[] = [];
     const inputs: AgentTurn[] = [];
@@ -407,7 +413,7 @@ test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kill
     // wake would be racing the resumed run's own (deliberately fire-and-forget) write of a fresh entry.
     const order: string[] = [];
     const services = unstubbed<Services>("services", {
-        ...journalServices(root),
+        ...(await journalServices(root)),
         turnJournal: {
             ...real,
             recordTurn: async (entry: JournalledTurn) => {
@@ -429,7 +435,7 @@ test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kill
 });
 
 test("an entry whose attempt is already spent is dropped WITHOUT running — no boot loop on a turn that kills the daemon", async () => {
-    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     await services.turnJournal.recordTurn(journalled("rs-spent", { attempts: 1 }));
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
@@ -438,7 +444,7 @@ test("an entry whose attempt is already spent is dropped WITHOUT running — no 
 });
 
 test("an entry older than the staleness cap is dropped — a sandbox off for the weekend must not wake mid-thought", async () => {
-    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     await services.turnJournal.recordTurn(journalled("rs-stale"));
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), 10_000 + 7 * 60 * 60_000);
@@ -447,11 +453,9 @@ test("an entry older than the staleness cap is dropped — a sandbox off for the
 });
 
 test("autoResumeOnRestart off records the interruption and re-runs nothing", async () => {
-    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
-    const settings = await services.sandboxSettings.get();
-    // ON by default — the assertion that matters is that the default is the resuming one.
-    expect(settings.autoResumeOnRestart).toBe(true);
-    await services.sandboxSettings.set({ ...settings, autoResumeOnRestart: false });
+    // Off is the shipped default (SandboxSettingsSchema), so this is what an owner who never opened the setting
+    // gets: the journal is drained and the interruption stands on the record, but nothing spends a turn.
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")), false);
 
     await services.turnJournal.recordTurn(journalled("rs-off"));
     await services.automations.upsert({ id: "nightly", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", enabled: true });
@@ -472,7 +476,7 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
 });
 
 test("an interrupted fire records `interrupted`, then re-fires with its snapshotted payload through the guard", async () => {
-    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     // The guard passes only because the payload reached it — proof the re-fire runs the real gate, not around it.
     await services.automations.upsert({
         id: "hook",
@@ -506,7 +510,7 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
 });
 
 test("a re-fire skips the approval gate — the wake was already past it when the daemon died", async () => {
-    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     await services.automations.upsert({
         id: "gated",
         trigger: { kind: "schedule", cron: "* * * * *" },
@@ -524,7 +528,7 @@ test("a re-fire skips the approval gate — the wake was already past it when th
 });
 
 test("an entry for an automation since deleted or disabled is consumed, not left to invent a run on every boot", async () => {
-    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     await services.automations.upsert({ id: "off", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", enabled: false });
     await services.turnJournal.recordFire({ kind: "automation", automationId: "off", conversationId: "a-off-1", startedAt: 10_000, attempts: 0 });
     await services.turnJournal.recordFire({
@@ -543,7 +547,7 @@ test("an entry for an automation since deleted or disabled is consumed, not left
 });
 
 test("an empty journal is a no-op — a clean shutdown reads the settings for nothing", async () => {
-    const services = journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     expect(prompts).toEqual([]);

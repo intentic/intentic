@@ -245,10 +245,10 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
 /* Does a clean turn's work land into the workspace by itself, for THIS agent? The one place the two-level
  * setting is folded into an answer, so every surface that states or flips the posture (the review panel's hold
  * toggle, the landed notice's offer) agrees on what it currently is: the agent's own override when it has one,
- * else the sandbox-wide setting, else the schema default (on). Takes the pieces rather than reaching for the
+ * else the sandbox-wide setting, else the schema default (off). Takes the pieces rather than reaching for the
  * stores — this module is a leaf (see the header). */
 export const effectiveAutoLand = (agent: { readonly autoLand?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
-    agent?.autoLand ?? sandboxDefault ?? true;
+    agent?.autoLand ?? sandboxDefault ?? false;
 
 // The sources an agent can be OPENED BY, when it wasn't opened by the user: the label and glyph the card's
 // provenance line wears. Keyed by AgentOrigin.provider, which is an open string (listener sources are

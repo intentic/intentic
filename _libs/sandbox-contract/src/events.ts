@@ -479,9 +479,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
          * that is down only spends tokens on refusals, so each attempt waits longer than the last
          * (provider-health.ts owns the schedule).
          *
-         * `attempt`/`maxAttempts` are on the wire so the notice can say the automation is BOUNDED. An
-         * on-by-default retry that gives no account of how long it will keep going is the kind users switch off
-         * defensively; one that says "attempt 2 of 6" is one they leave on. */
+         * `attempt`/`maxAttempts` are on the wire so the notice can say the automation is BOUNDED. A retry that
+         * gives no account of how long it will keep going is the kind users switch back off the week they turn
+         * it on; one that says "attempt 2 of 6" is one they leave on. */
         outage: z.object({ retryAt: z.number(), attempt: z.number(), maxAttempts: z.number() }).optional(),
     }),
     z.object({ kind: z.literal("done") }),

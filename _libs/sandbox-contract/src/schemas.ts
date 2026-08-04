@@ -1103,35 +1103,35 @@ export const SandboxSettingsSchema = z.object({
     // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
     // holds is a live worktree checkout, not just a row.
     agentRetentionDays: z.number().min(0).max(365).default(3),
-    /* Land a clean turn's delta into the main tree automatically at completion — the Claude Code review model,
-     * and the historical behaviour, so it defaults ON (flipping the default would silently change every
-     * existing sandbox). OFF holds finished work on the agent's branch instead: the card reads "Ready to
-     * land" and the user lands it deliberately, from the review panel or the card. Sandbox-wide because
-     * automation-opened agents (Discord, webhooks, email) finish turns with no browser in the room — a
-     * browser-held preference could not govern them. Per-agent override: AgentSummarySchema.autoLand. */
-    autoLand: z.boolean().default(true),
+    /* Land a clean turn's delta into the main tree automatically at completion — the Claude Code review model.
+     * OFF by default, because landing writes into the tree the user works in, and the two mistakes are not the
+     * same size: work held on its branch costs one press to release (the card reads "Ready to land" and the
+     * user lands it from the review panel or the card), while work that landed unread has to be noticed before
+     * it can be undone. Sandbox-wide because automation-opened agents (Discord, webhooks, email) finish turns
+     * with no browser in the room — a browser-held preference could not govern them. Per-agent override:
+     * AgentSummarySchema.autoLand. */
+    autoLand: z.boolean().default(false),
     /* When a turn dies because the MODEL PROVIDER was failing (500/502/503, a 529 at capacity, a dropped
      * socket), re-run it on an escalating backoff until it goes through or the attempts are spent.
      *
-     * Defaults ON, and a spent Claude allowance is the counter-example that explains why: that one is the
-     * user's own budget, and resuming into a freshly reset window spends something they may have been saving —
-     * so a usage limit stops the turn and says when it resets, and nothing re-runs it. An
-     * outage resume spends nothing the dead turn had not already committed, resolves in minutes rather than
-     * hours, and — the deciding argument — the turns hurt worst by it are the ones with nobody in the room
-     * (automation wakes, Discord, webhooks), which no browser-held preference could ever rescue. It is the same
-     * reasoning that leaves the auth resume ungated: this is the provider's failure, not the user's decision. */
-    resumeAfterOutage: z.boolean().default(true),
+     * OFF by default, on the same reasoning that keeps a spent usage limit out of this pair entirely: a resume
+     * re-runs a turn the user sent once, on their own allowance, and only they can say whether the turn was
+     * worth paying for twice. Starting off costs nothing, because the failed turn is remembered whatever the
+     * toggle says (recordOutageFailure) — the failure frame reports an "available" resume and the chat's offer
+     * arms that very turn the moment it is turned on. Worth turning on for a sandbox whose turns mostly have
+     * nobody in the room (automation wakes, Discord, webhooks), which is the case no browser could rescue. */
+    resumeAfterOutage: z.boolean().default(false),
     /* When the daemon dies under a running turn, re-run that turn once it is back (agent/turn-journal.ts records
-     * every in-flight turn; the boot pass in agent/turn-resume.ts re-runs what survived). ON by default, where
-     * a spent usage limit re-runs nothing, and the difference is who broke the turn: a spent allowance is the
-     * user's own budget, while a restart is usually intentic's OWN doing — the container is recreated on every update,
-     * every environment approval and every dev-sandbox.sh swap. Approving the Dockerfile change an agent asked
-     * for must not cost the run that asked for it, and a user who just clicked Approve is in the room expecting
-     * the work to continue, not a second button.
+     * every in-flight turn; the boot pass in agent/turn-resume.ts re-runs what survived). OFF by default, like
+     * the outage resume above and for the same reason: a boot that re-runs turns spends the user's allowance on
+     * work they are not watching, and edits the workspace while they are still waiting for the sandbox to come
+     * back. Worth turning on for the case it was built for — the container is recreated on every update, every
+     * environment approval and every dev-sandbox.sh swap, so approving the Dockerfile change an agent asked for
+     * otherwise costs the run that asked for it.
      *
      * OFF still records the interruption: the fleet card reads `interrupted` (see AgentStatusSchema) and an
      * automation's row shows an `interrupted` run — nothing is re-run, but nothing is silently lost either. */
-    autoResumeOnRestart: z.boolean().default(true),
+    autoResumeOnRestart: z.boolean().default(false),
     /* THE PRE-PUSH CHECK — the command run when the user pushes, before anything leaves the machine.
      * Empty ⇒ no check at all, which is the default: only the owner knows what verifies this workspace, and a
      * guessed command that fails on a fresh clone would read as the check finding a bug on its first run.

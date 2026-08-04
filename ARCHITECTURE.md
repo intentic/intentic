@@ -130,9 +130,10 @@ survive reconnects. Its subsystems:
   ([agent/turn-resume.ts](_apps/sandbox/src/agent/turn-resume.ts)) re-runs it on the session holding its
   partial work. That matters because intentic's own flows cause the deaths: every update, environment approval
   and `dev-sandbox.sh` swap recreates the container, so approving the Dockerfile change an agent asked for used
-  to cost the run that asked for it. On by default (`autoResumeOnRestart`), once per turn, and only for turns
-  under six hours old — a turn that OOM-kills the daemon must not resurrect it on every boot. Not resuming is
-  still recorded: the fleet card reads `interrupted` and an automation's row shows an `interrupted` run.
+  to cost the run that asked for it. Off by default (`autoResumeOnRestart`) because a re-run spends the owner's
+  allowance unwatched; once turned on it fires once per turn, and only for turns under six hours old — a turn
+  that OOM-kills the daemon must not resurrect it on every boot. Not resuming is still recorded: the fleet card
+  reads `interrupted` and an automation's row shows an `interrupted` run.
   The frame log itself stays in memory on purpose — the transcript's durable copy is the provider's session
   store, which every client replays from before it attaches.
 - **Terminals** — interactive PTYs over WebSocket ([terminal/terminal.ts](_apps/sandbox/src/terminal/terminal.ts)).

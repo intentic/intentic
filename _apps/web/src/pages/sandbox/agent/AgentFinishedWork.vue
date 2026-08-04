@@ -28,8 +28,8 @@ const RETENTION_OPTIONS = [
 
         <!-- Auto-land — the sandbox's standing answer to "does finished work reach my workspace by itself".
              Daemon-side rather than a browser preference, because automation-opened agents (Discord, webhooks,
-             email) finish turns with no browser in the room. Off turns every clean completion into a "Ready to
-             land" card; per-agent exceptions live on the review panel's hold toggle. -->
+             email) finish turns with no browser in the room. Off is the default and turns every clean completion
+             into a "Ready to land" card; per-agent exceptions live on the review panel's hold toggle. -->
         <Row
             icon="download"
             title="Land finished work automatically"
@@ -37,7 +37,7 @@ const RETENTION_OPTIONS = [
         >
             <template #control>
                 <ToggleSwitch
-                    :model-value="settings?.autoLand ?? true"
+                    :model-value="settings?.autoLand ?? false"
                     :disabled="settings === undefined"
                     @update:model-value="(value: boolean) => patch({ autoLand: value })"
                 />

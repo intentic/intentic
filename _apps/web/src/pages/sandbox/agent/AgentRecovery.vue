@@ -4,9 +4,9 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 
 /* WHO PICKS A TURN BACK UP WHEN IT DIES THROUGH NO FAULT OF ITS OWN — and, at the end, who stops one that is
- * only ever going to die again. The two resumes are on by default; a spent usage limit is the case deliberately
- * missing from the pair, because that allowance is the user's own budget, so it stops the turn, says when it
- * resets, and leaves the next send to them. */
+ * only ever going to die again. Both resumes are off until the owner asks for them: a re-run spends their
+ * allowance on a turn they sent once, which is the same reason a spent usage limit is missing from the pair
+ * entirely — it stops the turn, says when it resets, and leaves the next send to them. */
 
 const { settings, patch } = useSandboxSettings();
 
@@ -35,7 +35,7 @@ const setAutomationFailureLimit = (event: Event): void => {
         >
             <template #control>
                 <ToggleSwitch
-                    :model-value="settings?.resumeAfterOutage ?? true"
+                    :model-value="settings?.resumeAfterOutage ?? false"
                     :disabled="settings === undefined"
                     @update:model-value="(value: boolean) => patch({ resumeAfterOutage: value })"
                 />
@@ -52,7 +52,7 @@ const setAutomationFailureLimit = (event: Event): void => {
         >
             <template #control>
                 <ToggleSwitch
-                    :model-value="settings?.autoResumeOnRestart ?? true"
+                    :model-value="settings?.autoResumeOnRestart ?? false"
                     :disabled="settings === undefined"
                     @update:model-value="(value: boolean) => patch({ autoResumeOnRestart: value })"
                 />

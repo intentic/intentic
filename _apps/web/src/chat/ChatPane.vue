@@ -1217,8 +1217,8 @@ watch(
                         </button>
                         <!-- Provider-outage banner: the turn is coming back on an escalating backoff, and this
                          says when and how many tries are left. Naming the bound is the point — an automation
-                         that is on by default has to account for itself, or the reasonable response is to
-                         switch it off. -->
+                         spending the user's allowance while they watch has to account for itself, or the
+                         reasonable response is to switch it back off. -->
                         <div
                             v-if="outageResume"
                             class="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"

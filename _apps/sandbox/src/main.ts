@@ -589,7 +589,7 @@ const main = async (): Promise<void> => {
     // Restart auto-resume, the third condition in turn-resume.ts: the turn journal on /history holds every turn
     // and automation fire that was in flight, so whatever survived to here is what the daemon died under — a
     // rebuild, an environment approval, a dev-sandbox.sh swap, an OOM kill. Re-run once each, gated by
-    // autoResumeOnRestart (on by default) and bounded by an attempt count so a turn that kills the daemon cannot
+    // autoResumeOnRestart (off by default) and bounded by an attempt count so a turn that kills the daemon cannot
     // loop the boot. Detached: an interrupted turn is a whole agent turn and must not hold the daemon's start.
     void resumeInterruptedTurns(services, streamAgent).catch((error: unknown) =>
         logger.error({ err: error }, "interrupted turns could not be resumed — they stand on the record as interrupted"),

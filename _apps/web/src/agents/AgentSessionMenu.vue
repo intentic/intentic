@@ -43,7 +43,7 @@ const { settings: sandboxSettings } = useSandboxSettings();
 const autoLandOn = computed(() => effectiveAutoLand(agentById(agentId), sandboxSettings.value?.autoLand));
 const toggleAutoLand = (): void => {
     const next = !autoLandOn.value;
-    void changes.setAutoLand(next === (sandboxSettings.value?.autoLand ?? true) ? null : next);
+    void changes.setAutoLand(next === (sandboxSettings.value?.autoLand ?? false) ? null : next);
     emit(`selected`);
 };
 

@@ -8,10 +8,10 @@ import { InfoDialog, InfoTable } from "@intentic/ui";
  * Archiving gets a lifecycle strip rather than prose because it IS a lifecycle, and then the kept/released
  * split, which is the only fact that makes an automatic sweep acceptable at all.
  *
- * Defaults quoted here come from SandboxSettingsSchema — on / 3 days. */
+ * Defaults quoted here come from SandboxSettingsSchema — off / 3 days. */
 
 const AT_A_GLANCE = [
-    [`Land finished work automatically`, `Whether clean work reaches your workspace by itself`, `On`],
+    [`Land finished work automatically`, `Whether clean work reaches your workspace by itself`, `Off`],
     [`Archive finished agents`, `How long finished work stays on the board`, `3 days`],
 ];
 </script>
@@ -31,14 +31,14 @@ const AT_A_GLANCE = [
         </p>
         <div class="mt-2 grid gap-2 sm:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">On — the default</p>
+                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">On</p>
                 <p class="px-2.5 py-2 text-2xs text-muted">
                     A clean finish applies straight away. You come back to the work already in your workspace, and nothing is waiting on you to notice
                     it.
                 </p>
             </div>
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">Off</p>
+                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">Off — the default</p>
                 <p class="px-2.5 py-2 text-2xs text-muted">
                     Every clean finish becomes a <span class="font-medium text-content">Ready to land</span> card. Nothing touches your workspace
                     until you press it, from the board or the review.
