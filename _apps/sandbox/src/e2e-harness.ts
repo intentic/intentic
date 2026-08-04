@@ -38,8 +38,13 @@ export const startSandboxContainer = async (environment: Record<string, string>)
     // Unprivileged like every production runner's default: the image bakes a Docker Engine but it stays
     // dormant (dockerd starts only when a docker capability is enabled AND the container runs privileged —
     // the overlay-rebuild grant the suites don't exercise).
+    //
+    // SANDBOX_ALLOW_UNAUTHENTICATED is what lets the suites pass a CONNECT_TOKEN (the only source of a sync ssh
+    // hostname) to a daemon they then drive with no credential: main.ts's auth floor kills exactly that pair on
+    // sight, and this is the acknowledgement it accepts instead. Set HERE, once, rather than in each suite's
+    // environment map — a suite that forgot it would fail as an opaque 180s /health timeout.
     return new GenericContainer(image)
-        .withEnvironment(environment)
+        .withEnvironment({ SANDBOX_ALLOW_UNAUTHENTICATED: "1", ...environment })
         .withExposedPorts(8787, 22)
         .withWaitStrategy(Wait.forHttp("/health", 8787).forStatusCode(200))
         .withStartupTimeout(180_000)

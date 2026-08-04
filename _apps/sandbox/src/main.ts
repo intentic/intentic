@@ -102,9 +102,23 @@ const BOOT_STEPS = [
  *
  * A connect token or a public URL is the daemon saying it is reachable from outside, so the two together are
  * the contradiction: refuse to serve rather than serve everything. Dying here costs a misconfigured sandbox a
- * restart loop with the reason in its logs, which is the failure everyone wants over the silent one. */
+ * restart loop with the reason in its logs, which is the failure everyone wants over the silent one.
+ *
+ * SANDBOX_ALLOW_UNAUTHENTICATED is the single acknowledged exception, and it is loud rather than quiet: the e2e
+ * tiers need a connect token (nothing else derives a sync ssh hostname) on a daemon they drive with no
+ * credential, which no amount of inference can distinguish from the misconfiguration above — so the harness
+ * says it in the container env and the daemon repeats it in `docker logs` on every boot. env.config.ts carries
+ * the full note, including the caller list it must stay at. */
 const requireAuthWhenReachable = (config: Config): void => {
     if (config.google.clientId !== "" || (config.connectToken === "" && config.sandbox.publicUrl === "")) {
+        return;
+    }
+    if (config.sandbox.allowUnauthenticated) {
+        process.stderr.write(
+            "WARNING: SANDBOX_ALLOW_UNAUTHENTICATED is set — this daemon is reachable (CONNECT_TOKEN / SANDBOX_PUBLIC_URL)\n" +
+                "and authenticates NOBODY: terminals, secrets and the file API answer any caller that reaches this port.\n" +
+                "Only the e2e harnesses set this. If you are not one of them, unset it and set GOOGLE_CLIENT_ID instead.\n",
+        );
         return;
     }
     // Before the logger: this must be legible in `docker logs` even when log config is part of what went wrong.

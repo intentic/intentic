@@ -48,4 +48,6 @@ Dashed arrows are development-only — needed to build or test, not to run.
 
 ## Where it is used
 
-Runs in CI. Never ships.
+Run by hand on a dev machine — `pnpm e2e:browser`. Never ships, and never runs in CI: the whole stack it
+boots answers on `localhost`, while every CI job publishes its containers' ports on a docker-in-docker
+service instead.

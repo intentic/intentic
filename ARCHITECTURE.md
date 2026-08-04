@@ -787,11 +787,12 @@ tiny Dockerfile and authors an environment so `apply` wires CI/CD — the Forgej
 pushes the image and Komodo rolls it out live at `app.<zone>`. It asserts the platform containers are up,
 the public URLs respond, and the app serves its body, then purges the Cloudflare DNS + tunnel it created.
 
-It is gated behind `INTENTIC_E2E` and **excluded from `pnpm test` / CI** (it needs a privileged Docker
-daemon and live Cloudflare credentials). Run it from the repo root with `pnpm e2e` — turbo builds the libs
-(`^build`) and the CLI's e2e script sets `INTENTIC_E2E=1`; you supply only a Cloudflare token (and,
-optionally, the zone to deploy under). The host SSH key is generated per run, and the Forgejo/Komodo admin
-passwords are intentic-generated:
+It is gated behind `INTENTIC_E2E` **and `CLOUDFLARE_API_TOKEN`** — both, so the suite self-skips rather than
+fails wherever its live credentials are absent, which is what lets the nightly CI job (`e2e:nightly`) run
+`pnpm e2e` unconditionally and get whatever the pipeline's variables unlock. It is excluded from `pnpm test`
+either way. Run it from the repo root with `pnpm e2e` — turbo builds the libs (`^build`) and the CLI's e2e
+script sets `INTENTIC_E2E=1`; you supply only a Cloudflare token (and, optionally, the zone to deploy under).
+The host SSH key is generated per run, and the Forgejo/Komodo admin passwords are intentic-generated:
 
 ```sh
 CLOUDFLARE_API_TOKEN=...        # Account → Tunnel → Edit; Zone → DNS → Edit; Zone → Zone → Read

@@ -93,7 +93,13 @@ fi
 in_host apk add --no-cache curl >/dev/null 2>&1
 
 # ── run the setup the app would run ───────────────────────────────────────────────────────────────────────────
-docker cp "$SHIPPED" "$HOST_CONTAINER:/tmp/connect.sh"
+# NOT /tmp: the dind entrypoint mounts a tmpfs over /tmp from INSIDE the container's mount namespace, and the
+# daemon serving `docker cp` writes through the container's rootfs on the host, underneath that mount. The copy
+# reports success (and `docker cp` reads it straight back), while every process in the container sees an empty
+# /tmp — which is exactly how this failed: `sh: can't open '/tmp/connect.sh': No such file or directory`. Any
+# path the entrypoint does not mount over is fine; /root is the home of the user the setup runs as anyway.
+SCRIPT_IN_HOST=/root/connect.sh
+docker cp "$SHIPPED" "$HOST_CONTAINER:$SCRIPT_IN_HOST"
 echo "==> running the shipped connect.sh (image: $SANDBOX_IMAGE)"
 # The env the app's setup_script() assembles, minus the setup code: PLATFORM_URL is pointed at the unroutable
 # reserved TLD precisely because nothing on this path should call it — a claim attempt fails loudly instead of
@@ -105,7 +111,7 @@ if in_host env \
     SANDBOX_IMAGE="$SANDBOX_IMAGE" \
     PLATFORM_URL="https://platform.e2e.test" \
     WEB_ORIGIN="http://localhost:47145" \
-    sh /tmp/connect.sh -y; then
+    sh "$SCRIPT_IN_HOST" -y; then
     echo "  ✓ connect.sh completed — its own gate is a 30s wait on the daemon's /health"
 else
     echo "  ✗ connect.sh failed" >&2

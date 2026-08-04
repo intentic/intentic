@@ -72,7 +72,9 @@ export default async (): Promise<void> => {
 
     // The daemon under test: the published sandbox image in loopback (no GOOGLE_CLIENT_ID / PLATFORM_URL —
     // that IS the mode). CONNECT_TOKEN + ZONE make GET /system/sync report an sshHostname, which the desktop-
-    // sync card requires before it offers Enable.
+    // sync card requires before it offers Enable — and that same token is what the daemon's auth floor reads as
+    // "reachable from outside", so SANDBOX_ALLOW_UNAUTHENTICATED is the acknowledgement that lets this pair boot
+    // (env.config.ts carries the note; without it the daemon exits 78 and this waits out its 180s).
     if (!(await up(`${DAEMON_URL}/health`))) {
         await run(`docker`, [`rm`, `-f`, DAEMON_CONTAINER]).catch(() => undefined);
         await run(`docker`, [
@@ -87,6 +89,8 @@ export default async (): Promise<void> => {
             `CONNECT_TOKEN=${randomBytes(16).toString(`base64url`)}`,
             `-e`,
             `ZONE=e2e.invalid`,
+            `-e`,
+            `SANDBOX_ALLOW_UNAUTHENTICATED=1`,
             DAEMON_IMAGE,
         ]);
         state.daemonStarted = true;

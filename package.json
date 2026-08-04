@@ -23,6 +23,7 @@
         "dev": "pnpm db:up && turbo run dev --filter=@intentic-app/api --filter=@intentic-app/web --filter=@intentic-dev/site",
         "dev:light": "pnpm db:up && turbo run dev --filter=@intentic-app/api --filter=@intentic-app/web",
         "e2e": "turbo run e2e --ui=stream",
+        "e2e:browser": "turbo run e2e:browser --ui=stream",
         "e2e:hermetic": "turbo run e2e:hermetic --ui=stream",
         "db:up": "docker compose up -d --wait postgres && pnpm --filter @intentic-app/prisma migrate:deploy",
         "db:down": "docker compose down",

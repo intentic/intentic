@@ -16,13 +16,19 @@ image a user's browser meets, so a hand-mirrored `api-contract` schema that drif
 ## Run
 
 ```sh
-pnpm e2e            # from the repo root: builds libs, then runs this package's playwright suite
+pnpm e2e:browser    # from the repo root: builds libs, then runs this package's playwright suite
 ```
 
 Requirements: Docker (compose Postgres + the daemon image), Bun, and Playwright's Chromium
 (`pnpm --filter @intentic-app/e2e exec playwright install chromium`). Everything already running (dev machine)
 is reused; whatever the setup started is torn down, including the seeded rows. `SANDBOX_E2E_IMAGE` overrides
 the daemon image (e.g. a source build from the sibling `intentic` repo).
+
+**A dev-machine tier, not a CI one**, and that is what the separate task name records (turbo.json says it at
+length): every server above is addressed on `localhost`, and every CI job here drives a docker-in-docker
+*service* that publishes ports on its own namespace instead — `pnpm e2e` in the nightly used to include this
+suite and could only ever fail it on `P1001` against `localhost:5440`. The tiers CI does run are
+`pnpm e2e` (gated real-infra) and `pnpm e2e:hermetic` (no secrets, every MR).
 
 ## Not covered here (by design)
 

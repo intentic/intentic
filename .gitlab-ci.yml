@@ -381,6 +381,12 @@ e2e:hermetic:
 # Nightly gated e2e (scheduled): the sandbox-daemon tier always, plus whatever CI vars unlock (DISCORD_E2E_*,
 # CLOUDFLARE_API_TOKEN/CLOUDFLARE_ZONE). Each suite self-skips without its secrets. Runs the freshly published
 # :latest sandbox image (SANDBOX_E2E_IMAGE) rather than rebuilding from source.
+#
+# `pnpm e2e` is the WHOLE scope on purpose — the turbo task name is what decides which tiers a job runs, not a
+# filter list here that would drift the first time a suite is added. The browser tier (@intentic-app/e2e) is
+# `e2e:browser` for exactly that reason: it addresses its stack on localhost, which under the dind service this
+# job attaches is nobody's postgres (turbo.json states it in full). The tiers below reach the daemon through
+# DOCKER_HOST via testcontainers, so they are indifferent to where it lives.
 e2e:nightly:
   extends: .dind
   stage: test

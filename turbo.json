@@ -79,6 +79,10 @@
             "cache": false,
             "persistent": true
         },
+        // The gated real-infra tiers (@intentic/cli, @intentic/sandbox): a Docker daemon plus whatever
+        // credentials each suite names, and every one of them self-skips when its own env is absent — which is
+        // what lets the nightly CI job be nothing but `pnpm e2e`. A tier that CANNOT self-skip does not belong
+        // under this name; see e2e:browser.
         "e2e": {
             "dependsOn": ["^build"],
             "cache": false,
@@ -101,6 +105,19 @@
             "dependsOn": ["^build"],
             "cache": false,
             "passThroughEnv": ["INTENTIC_E2E_HERMETIC", "INTENTIC_HOST_IMAGE", "INTENTIC_LOG_DIR"]
+        },
+        // The browser tier (@intentic-app/e2e), named apart from `e2e` for the same reason e2e:hermetic is: it
+        // asks for a provisioning of its own. Its whole stack is addressed on LOCALHOST — compose postgres on
+        // :5440, the https API on :6480, vite on :47145, the daemon container on :18787 — and every job in
+        // .gitlab-ci.yml talks to a dind SERVICE, which publishes those ports on ITS network namespace, not the
+        // job's loopback (`docker compose up postgres` there leaves the server on `docker:5440`, and the migrate
+        // that follows dies P1001 against localhost). ci-base carries no Chromium either. Sharing the `e2e` name
+        // is what swept it into the nightly, where it can only fail; under its own it runs where its stack is
+        // real — a dev machine, `pnpm e2e:browser`.
+        "e2e:browser": {
+            "dependsOn": ["^build"],
+            "cache": false,
+            "passThroughEnv": ["SANDBOX_E2E_IMAGE"]
         },
         "bench:retrieval": {
             "dependsOn": ["^build", "build"],

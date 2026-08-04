@@ -127,6 +127,21 @@ const configSchema = z.object({
             host: z.string().default("0.0.0.0"),
             // This sandbox's public URL (set by connect.{sh,ps1} after the tunnel is created).
             publicUrl: z.string().default(""),
+            /* THE ONLY WAY PAST THE AUTH FLOOR (main.ts requireAuthWhenReachable), and it exists for exactly one
+             * caller: the gated e2e tiers. They must set a CONNECT_TOKEN — the desktop-sync surface derives its
+             * ssh hostname from one and answers 409 without it — and they drive every route with no credential
+             * at all, because a container on a testcontainers-mapped port is reachable by nobody but the test.
+             * That is the contradiction the floor refuses, so the harness states it out loud rather than leaving
+             * the floor to guess which reachable daemons are real.
+             *
+             * NOTHING THAT SHIPS SETS THIS: not connect.{sh,ps1}, not recreate.sh, not the workspace provider —
+             * the two e2e harnesses are the whole caller list, and a daemon that honours it says so on stderr at
+             * every boot. A real sandbox's answer to the floor is GOOGLE_CLIENT_ID, which is why the fatal
+             * message names that and not this. */
+            allowUnauthenticated: z
+                .string()
+                .default("")
+                .transform((value) => value === "true" || value === "1"),
             // Identity for the platform's Connections card; both must be set to surface anything.
             name: z.string().default(""),
             image: z.string().default(""),

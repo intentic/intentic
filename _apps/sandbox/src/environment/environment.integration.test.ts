@@ -39,6 +39,7 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
                 port: 8787,
                 host: "0.0.0.0",
                 publicUrl: "",
+                allowUnauthenticated: false,
                 environmentHash: environmentHashApplied,
                 name: "intentic-sandbox-demo",
                 image,
