@@ -342,6 +342,24 @@ if [ -n "${INTENTIC_DEV_MOUNTS:-}" ]; then
 }${INTENTIC_DEV_MOUNTS}"
 fi
 RUNTIME_LINES="$(grep '^# intentic:runtime ' "$overlay" || true)"
+# THE ONE DIRECTIVE THIS HOST MAY BE UNABLE TO HONOUR. `docker run --gpus` fails the whole launch when no
+# nvidia runtime is registered ("could not select device driver \"nvidia\" with capabilities: [[gpu]]") — and
+# unlike tun or --privileged, whose absence kills the capability that asked for them, a sandbox without GPUs is
+# an ordinary working sandbox. So ask this docker before betting the launch on it, and tell the image to leave
+# the flag off when the answer is no: the sandbox comes back either way, and SANDBOX_GPU records which happened
+# so the daemon can say "this host has no nvidia runtime" instead of "rebuild required" forever.
+NO_GPU=""
+case "$RUNTIME_LINES" in
+*--gpus=all*)
+    if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
+        echo "intentic: nvidia container runtime found — the sandbox gets --gpus=all."
+    else
+        NO_GPU=1
+        echo "intentic: this host's Docker has no nvidia runtime — starting the sandbox WITHOUT GPU access." >&2
+        echo "          Install nvidia-container-toolkit on this machine, then rebuild to turn it on." >&2
+    fi
+    ;;
+esac
 # The resolvers the container was created with (connect.sh's SANDBOX_DNS). The hand-written recreates silently
 # DROPPED these on every swap — a restricted-network sandbox lost its split-horizon config the first time its
 # owner rebuilt it; replaying them through the contract is what fixes that class.
@@ -356,6 +374,7 @@ set -- --slug "$SLUG" --image "$TARGET_IMAGE" --base-image "$BASE_IMAGE" --chann
 [ -n "$DNS_SERVERS" ] && set -- "$@" --dns "$DNS_SERVERS"
 [ -n "$ENV_HASH" ] && set -- "$@" --environment-hash "$ENV_HASH"
 [ -n "$RUNTIME_LINES" ] && set -- "$@" --runtime "$RUNTIME_LINES"
+[ -n "$NO_GPU" ] && set -- "$@" --no-gpu
 [ -n "$MOUNTS" ] && set -- "$@" --mounts "$MOUNTS"
 if ! docker run -i --rm --entrypoint intentic "$TARGET_IMAGE" sandbox run-command "$@" <"$envdump" >"$run_command" 2>>"$LOG" || ! [ -s "$run_command" ]; then
     tail -n 5 "$LOG" >&2
@@ -405,13 +424,16 @@ mkdir -p "$(dirname "$RECORD")"
 docker rm -f "$CONTAINER" >/dev/null
 echo "== run command ==" >>"$LOG"
 cat "$run_command" >>"$LOG"
-# The loopback shortcut (127.0.0.1:<port derived from the sandbox id>:8787, which lets a browser on this
-# machine skip the tunnel) is the one part of the run that may fail without the sandbox being broken: docker
-# refuses the whole launch when that port is already held. Retry once without it; any other failure fails both
-# attempts and reports below. The failed attempt leaves a created-but-stopped container holding the name.
+# The two parts of the run that may fail WITHOUT the sandbox being broken, dropped together on the retry:
+# the loopback shortcut (127.0.0.1:<port derived from the sandbox id>:8787, which lets a browser on this
+# machine skip the tunnel — docker refuses the whole launch when that port is already held) and the GPU flag
+# the preflight above cleared but the daemon can still refuse (a driver/toolkit version mismatch answers `docker
+# info` and then fails the run). Everything else fails both attempts and reports below. Dropping GPU here is the
+# same trade as the preflight, one layer later: a sandbox that comes back saying it has no GPU beats no sandbox.
+# The failed attempt leaves a created-but-stopped container holding the name.
 if ! sh "$run_command" >/dev/null 2>>"$LOG"; then
     docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
-    if ! docker run -i --rm --entrypoint intentic "$TARGET_IMAGE" sandbox run-command "$@" --no-local-publish <"$envdump" >"$run_command" 2>>"$LOG" ||
+    if ! docker run -i --rm --entrypoint intentic "$TARGET_IMAGE" sandbox run-command "$@" --no-local-publish --no-gpu <"$envdump" >"$run_command" 2>>"$LOG" ||
         ! [ -s "$run_command" ] || ! sh "$run_command" >/dev/null 2>>"$LOG"; then
         tail -n 5 "$LOG" >&2
         echo "error: starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?)." >&2

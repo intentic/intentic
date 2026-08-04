@@ -182,6 +182,17 @@ export const CapabilityFieldSchema = z.object({
     secret: z.boolean().optional(),
     optional: z.boolean().optional(),
     multiline: z.boolean().optional(),
+    // An OPT-IN EXTRA rather than a decision — rendered as a switch, carried as the "on"/"off" the config
+    // schemas already speak (the vpn's pfs/aggressive precedent). A two-option Segmented can express the same
+    // value, and reads wrong for this: it presents a choice the user must make to proceed, sized like the
+    // required fields around it. Something the capability works fine without wants the control that is quiet
+    // when it is off. A switch always holds one of its two values, so such a field never blocks a submit
+    // whatever `optional` says.
+    boolean: z.boolean().optional(),
+    // A line under the control, for what the user cannot see from the label alone (a host requirement, when a
+    // value takes effect). The card's `hint` speaks for the whole card; this one is bound to the field it
+    // qualifies, which is where a per-option caveat has to sit to be read at all.
+    hint: z.string().optional(),
     default: z.string().optional(),
     options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
     when: z.object({ key: z.string(), value: z.string() }).optional(),

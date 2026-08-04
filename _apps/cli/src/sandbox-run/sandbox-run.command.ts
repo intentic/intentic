@@ -1,13 +1,6 @@
 import { readFileSync } from "node:fs";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import {
-    parseNulEnv,
-    replayableEnv,
-    runtimeDirectivesOf,
-    sandboxNames,
-    sandboxRunArgv,
-    sandboxRunCommand,
-} from "@intentic/sandbox-run";
+import { parseNulEnv, replayableEnv, runtimeDirectivesOf, sandboxNames, sandboxRunArgv, sandboxRunCommand } from "@intentic/sandbox-run";
 import { buildCommand, type CommandContext } from "@stricli/core";
 
 /* THE RUN CONTRACT, SPOKEN BY THE IMAGE — `intentic sandbox run-command`.
@@ -37,6 +30,7 @@ export const sandboxRunCommandCli = buildCommand<{
     dns?: string;
     format?: string;
     noLocalPublish: boolean;
+    noGpu: boolean;
 }>({
     docs: { brief: "Print the canonical docker-run command for a sandbox container (used by connect.sh/recreate.sh)" },
     parameters: {
@@ -89,6 +83,10 @@ export const sandboxRunCommandCli = buildCommand<{
                 kind: "boolean",
                 brief: "Drop the loopback shortcut's -p — what a flow re-asks for when docker refused the derived port",
             },
+            noGpu: {
+                kind: "boolean",
+                brief: "The host's docker has no nvidia runtime — drop the overlay's --gpus and record why (SANDBOX_GPU)",
+            },
         },
     },
     func(this: CommandContext, flags) {
@@ -104,6 +102,7 @@ export const sandboxRunCommandCli = buildCommand<{
             baseImage: flags.baseImage,
             ...(sandboxId !== undefined ? { sandboxId } : {}),
             localPublish: flags.noLocalPublish !== true,
+            gpuSupported: flags.noGpu !== true,
             ...(flags.environmentHash !== undefined && flags.environmentHash !== "" ? { environmentHash: flags.environmentHash } : {}),
             ...(flags.channel !== undefined && flags.channel !== "" ? { channel: flags.channel } : {}),
             ...(flags.previousImage !== undefined && flags.previousImage !== "" ? { previousImage: flags.previousImage } : {}),

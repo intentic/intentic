@@ -32,6 +32,12 @@ export type CapabilityEffect =
     // The baked fragment carries a privileged runtime directive: "net-admin" (vpn NET_ADMIN + tun) or
     // "privileged" (docker — the full --privileged run its dockerd needs).
     | { readonly kind: "runtime"; readonly level: "net-admin" | "privileged" }
+    /* The host's GPUs, passed into the sandbox (docker's gpu option). Its own member rather than a third
+     * `runtime` level because what it costs is not a privilege inside the container but a resource OUTSIDE it:
+     * `--gpus=all` claims every GPU on that machine, and on the shared workstation or homelab box these
+     * sandboxes actually run on, that is somebody's inference job. A user reading "requires GPU access" would
+     * assume the polite thing was happening; this member exists so the panel can say the impolite one. */
+    | { readonly kind: "gpu" }
     // Runs long-lived background processes in the sandbox (an extension's declared processes).
     | { readonly kind: "process"; readonly names: readonly string[] }
     // Registers an mcp__<id>__ server the agent connects to next turn.
@@ -127,8 +133,14 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
     ],
     vpn: () => [{ kind: "secret", exposure: "disk" }, { kind: "skill", name: "vpn" }, { kind: "image" }, { kind: "runtime", level: "net-admin" }],
     // The engine is baked into the base image — the "image" effect here is the overlay rebuild that applies the
-    // fragment's --privileged directive, not new tooling.
-    docker: () => [{ kind: "image" }, { kind: "runtime", level: "privileged" }, { kind: "process", names: ["dockerd"] }],
+    // fragment's --privileged directive, not new tooling. The gpu option adds real tooling (the container
+    // toolkit) and the claim on the host's GPUs; it is the one part of this card the user chose.
+    docker: (input) => [
+        { kind: "image" },
+        { kind: "runtime", level: "privileged" },
+        ...(input.config["gpu"] === "on" || input.config["gpu"] === true ? [{ kind: "gpu" } as const] : []),
+        { kind: "process", names: ["dockerd"] },
+    ],
     browser: (input) => {
         const effects: CapabilityEffect[] = [{ kind: "skill", name: input.id }, { kind: "image" }];
         const platform = input.config["platform"];
@@ -147,11 +159,7 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
             ...(input.config["screen"] === "off" ? [] : ["capture the screen"]),
             ...(input.config["control"] === "on" ? ["use the mouse and keyboard"] : []),
         ];
-        return [
-            { kind: "machine", platform: String(input.config["platform"] ?? ""), grants },
-            { kind: "skill", name: input.id },
-            { kind: "mcp" },
-        ];
+        return [{ kind: "machine", platform: String(input.config["platform"] ?? ""), grants }, { kind: "skill", name: input.id }, { kind: "mcp" }];
     },
     endpoint: (input) => {
         // The destination is the effect; a key is the ordinary second one. Deliberately no `image` or `process`

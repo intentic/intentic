@@ -68,6 +68,15 @@ the rebuild, the new tools are not available — say so instead of retrying. A c
 image (VPN, Discord voice) composes its own fragment automatically — never propose an overlay for those,
 just point the owner at the same rebuild.
 
+## GPU
+
+`could not select device driver "nvidia" with capabilities: [[gpu]]` means this sandbox has no GPU access — a
+container here asked for one and the engine has none to give. Do NOT propose an overlay for it, and do NOT
+edit the user's compose file to make the error go away: deleting a `driver: nvidia` reservation "works", runs
+everything on CPU, and hides that it did. It is a switch on the **Docker capability** (`/capabilities` →
+Docker → GPU access) plus a rebuild, and it needs an NVIDIA GPU and nvidia-container-toolkit on the machine
+the sandbox runs on. Say that, and say which parts of the task stay CPU-bound meanwhile.
+
 For a SERVER-managed sandbox, also wire the approved overlay into the intent so `intentic deploy apply` builds it:
 in `intent/deploy.config.ts`, pass
 `dockerfile: readFileSync("/work/.intentic/environment.approved.Dockerfile", "utf8")` to the

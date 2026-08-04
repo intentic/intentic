@@ -53,9 +53,11 @@ flowchart TB
 - **Sandbox** — one per user, run **unprivileged by default**; container privileges come only from
   `# intentic:runtime` directives in the owner-approved overlay, applied by the allowlisted rebuild executors
   (the `docker` capability's `--privileged` wakes the image-baked, otherwise-dormant isolated Docker Engine so
-  `pnpm db:up` / `docker compose` work in the workspace; the HOST's Docker socket is never mounted, so the
-  agent's containers can only live inside the sandbox's own engine; its cloudflared runs as a separate sidecar
-  container). Runs the coding agents (Claude via the agent
+  `pnpm db:up` / `docker compose` work in the workspace, and its optional GPU switch adds `--gpus=all` plus the
+  container toolkit that nested engine needs — the one directive a host may be unable to honour, so the creation
+  flows preflight it and start the sandbox without it rather than failing the launch; the HOST's Docker socket is
+  never mounted, so the agent's containers can only live inside the sandbox's own engine; its cloudflared runs as
+  a separate sidecar container). Runs the coding agents (Claude via the agent
   SDK, Codex, Grok, Kimi Code, Gemini — spawned per turn, not resident) and the `intentic` CLI over the three repos
   (`intent` = `deploy.config.ts`, the IaC; `desired-state` = resolved artifact + status; `app` =
   the application code), and exposes its daemon over its **own Cloudflare tunnel**. SSH keys,

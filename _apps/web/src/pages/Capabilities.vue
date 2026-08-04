@@ -14,6 +14,7 @@ import { type CapabilityField, contributionDiscriminator } from "@intentic/exten
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import { type CapabilityKind, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
+import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BrowserLoginDialog from "../components/BrowserLoginDialog.vue";
@@ -129,7 +130,9 @@ const cardProcesses = computed<BackgroundProcessRow[]>(() => {
 // distinct connections instead of upserting the same id (the silent-overwrite trap).
 const suggestName = (entry: CapabilityCatalogEntry): string => {
     const taken = new Set(instancesOf(entry).map((instance) => instance.id));
-    if (!taken.has(entry.id)) {
+    // A one-per-sandbox card never bumps: the id IS the instance, so re-picking the card lands on the entry
+    // that exists and the submit reads "Update" instead of quietly minting a second one.
+    if (entry.singleton === true || !taken.has(entry.id)) {
         return entry.id;
     }
     let n = 2;
@@ -582,10 +585,21 @@ watch(
         // creates another connection by default instead of overwriting the first.
         name.value = suggestName(entry);
         // Seed every editable field (ignoring `when`) so toggling a mode reveals an already-initialized field.
+        // A switch seeds to "off" rather than empty: it always shows one of its two positions, so an unseeded
+        // one would both render as off and count as an unfilled required field, blocking a submit over a
+        // control the user can see is answered.
         for (const field of entry.fields) {
             if (field.value === undefined) {
-                values[field.key] = field.default ?? ``;
+                values[field.key] = field.default ?? (field.boolean === true ? `off` : ``);
             }
+        }
+        // A one-per-sandbox card opens as an EDIT of the live entry: its echoed config wins over the defaults,
+        // so a switch shows where the user left it rather than resetting to off every time the card is opened —
+        // which, on a form whose submit updates in place, would turn "come and look" into "turn it back off".
+        // Booleans arrive from the echo as booleans and from the form as "on"/"off"; the form speaks strings.
+        const live = entry.singleton === true ? instancesOf(entry)[0] : undefined;
+        for (const [key, value] of Object.entries(live?.config ?? {})) {
+            values[key] = typeof value === `boolean` ? (value ? `on` : `off`) : String(value);
         }
         // Dev autofill (inert in prod): prefill secret fields with the values the last successful add used.
         // A remembered value that the daemon would now reject is skipped — it was saved before the check
@@ -1037,7 +1051,9 @@ const submitLabel = computed(() =>
                     </div>
                 </RowGroup>
 
-                <label class="ui-field">
+                <!-- One per sandbox → nothing to name, and a name box would be the field that invites a second
+                     one. The id stays the card's (suggestName), so the submit updates what's there. -->
+                <label v-if="!selected.singleton" class="ui-field">
                     <span class="ui-field-label">Name</span>
                     <input
                         v-model="name"
@@ -1059,37 +1075,57 @@ const submitLabel = computed(() =>
                     </span>
                 </label>
                 <CredentialGuide :entry="selected" :values="values" />
-                <label v-for="field in visibleFields(selected)" :key="field.key" class="ui-field">
-                    <span class="ui-field-label">{{ field.label }}{{ field.optional ? " (optional)" : "" }}</span>
-                    <Segmented
-                        v-if="field.options"
-                        :model-value="values[field.key] ?? ''"
-                        :options="[...field.options]"
-                        @update:model-value="values[field.key] = $event"
-                    />
-                    <textarea
-                        v-else-if="field.multiline"
-                        v-model="values[field.key]"
-                        :placeholder="field.placeholder"
-                        rows="6"
-                        spellcheck="false"
-                        :class="[cmp.input('font-mono resize-y'), touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '']"
-                        @blur="markTouched(field.key)"
-                    />
-                    <input
-                        v-else
-                        v-model="values[field.key]"
-                        :type="field.secret ? 'password' : 'text'"
-                        :autocomplete="field.secret ? 'off' : undefined"
-                        :placeholder="field.placeholder"
-                        :class="[cmp.input(), touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '']"
-                        @blur="markTouched(field.key)"
-                    />
-                    <span v-if="touched.has(field.key) && fieldError(field)" class="ui-field-error">
-                        <Icon name="exclamation-triangle" class="text-2xs" />
-                        {{ fieldError(field) }}
-                    </span>
-                </label>
+                <template v-for="field in visibleFields(selected)" :key="field.key">
+                    <!-- An opt-in extra: the switch sits BESIDE its label, not under it. Stacked in the column
+                         of inputs it would read as one more thing to fill in; beside the label it reads as the
+                         thing it is — already answered, changeable. Its hint carries what the label can't say
+                         (a host requirement, when the value takes effect), which is exactly the caveat a lone
+                         switch invites people to skip. -->
+                    <label v-if="field.boolean" class="flex items-start justify-between gap-4">
+                        <span class="min-w-0">
+                            <span class="ui-field-label">{{ field.label }}</span>
+                            <span v-if="field.hint" class="mt-0.5 block text-2xs text-muted">{{ field.hint }}</span>
+                        </span>
+                        <ToggleSwitch
+                            class="ui-switch-sm mt-0.5 shrink-0"
+                            :model-value="values[field.key] === 'on'"
+                            :aria-label="field.label"
+                            @update:model-value="(value: boolean) => (values[field.key] = value ? 'on' : 'off')"
+                        />
+                    </label>
+                    <label v-else class="ui-field">
+                        <span class="ui-field-label">{{ field.label }}{{ field.optional ? " (optional)" : "" }}</span>
+                        <Segmented
+                            v-if="field.options"
+                            :model-value="values[field.key] ?? ''"
+                            :options="[...field.options]"
+                            @update:model-value="values[field.key] = $event"
+                        />
+                        <textarea
+                            v-else-if="field.multiline"
+                            v-model="values[field.key]"
+                            :placeholder="field.placeholder"
+                            rows="6"
+                            spellcheck="false"
+                            :class="[cmp.input('font-mono resize-y'), touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '']"
+                            @blur="markTouched(field.key)"
+                        />
+                        <input
+                            v-else
+                            v-model="values[field.key]"
+                            :type="field.secret ? 'password' : 'text'"
+                            :autocomplete="field.secret ? 'off' : undefined"
+                            :placeholder="field.placeholder"
+                            :class="[cmp.input(), touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '']"
+                            @blur="markTouched(field.key)"
+                        />
+                        <span v-if="touched.has(field.key) && fieldError(field)" class="ui-field-error">
+                            <Icon name="exclamation-triangle" class="text-2xs" />
+                            {{ fieldError(field) }}
+                        </span>
+                        <span v-else-if="field.hint" class="text-2xs text-muted">{{ field.hint }}</span>
+                    </label>
+                </template>
                 <CapabilityEffects :effects="liveEffects" />
                 <!-- Why the grid badged this one — named here too, so the rebuild the hint asks for has a reason attached. -->
                 <div v-if="recommendationFor(selected.kind)" :class="cmp.alertInfo()">

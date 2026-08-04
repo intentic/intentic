@@ -13,6 +13,32 @@ test("the fragment is exactly the privileged runtime directive (the engine itsel
     expect(fragment.split("\n").every((line) => line.trim() === "" || line.startsWith("#"))).toBe(true);
 });
 
+/* The gpu option's fragment has to satisfy BOTH layers or the option is a lie: the directive gets the devices
+ * as far as this container, and the toolkit registers the nvidia runtime with the dockerd running INSIDE it.
+ * With only the first, the agent's `docker compose up` still dies on `could not select device driver "nvidia"`
+ * in a container that can see the GPU — which is the exact failure this whole option exists to end. */
+test("the gpu option adds the passthrough directive AND the toolkit the nested engine needs", () => {
+    const fragment = registry.docker.fragment?.({ gpu: "on" }) ?? "";
+    expect(fragment).toContain("# intentic:runtime --privileged");
+    expect(fragment).toContain("# intentic:runtime --gpus=all");
+    expect(fragment).toContain("nvidia-container-toolkit");
+    expect(fragment).toContain("nvidia-ctk runtime configure");
+});
+
+// Off is the default and the absence is total: an overlay that never asked must not carry a directive a host
+// could refuse, so a sandbox on a GPU-less machine keeps starting exactly as it did.
+test("gpu off leaves no trace in the fragment", () => {
+    for (const config of [{}, { gpu: "off" }]) {
+        expect(registry.docker.fragment?.(config) ?? "").not.toContain("--gpus");
+    }
+});
+
+// The echo is what the browser may see of a config — and what re-opening the card pre-fills the switch from.
+test("the echo carries the gpu ask, so the card opens on what the user actually set", () => {
+    expect(registry.docker.echo({ gpu: "on" }, new Map())).toEqual({ gpu: true });
+    expect(registry.docker.echo({}, new Map())).toEqual({ gpu: false });
+});
+
 test("docker cannot be removed — de-privileging a sandbox with live engine state is not a silent toggle", () => {
     expect(registry.docker.remove).toBeUndefined();
 });

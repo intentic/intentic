@@ -2400,6 +2400,18 @@ export const IpsecVpnConfigSchema = z.object({
     autoConnect,
 });
 export const VpnConfigSchema = z.discriminatedUnion("provider", [WireguardVpnConfigSchema, FortinetVpnConfigSchema, IpsecVpnConfigSchema]);
+/* What is OPTIONAL about the in-sandbox Docker Engine. The engine itself takes no configuring — the capability
+ * either runs dockerd or it doesn't — so this holds only the things a user chooses, and the bar for landing
+ * here is that the sandbox works without it.
+ *
+ * `gpu` passes the host's NVIDIA GPUs into the nested engine (the toolkit in the fragment, `--gpus=all` on the
+ * run). Off by default and never inferred: `--gpus=all` claims EVERY GPU on that machine, which is somebody's
+ * running inference on a shared box, and a host without the nvidia container runtime cannot honour it at all —
+ * a fact no code inside this container can check, so it stays the user's assertion rather than our guess.
+ *
+ * "on"/"off" rather than a boolean, matching the vpn's pfs/aggressive: the capability form carries strings, and
+ * one spelling of a two-state config across the manifest beats a second one for the same shape. */
+export const DockerConfigSchema = z.object({ gpu: z.enum(["on", "off"]).default("off") });
 // A logged-in browser session the AGENT drives via Playwright MCP tools — for social platforms whose APIs can't
 // cover "all the actions" (X reads are paywalled; X community-join and YouTube community-posts have no API). No
 // secret in the manifest: the session lives in a persisted Chromium profile under .intentic/browser/<platform>,
@@ -2502,6 +2514,7 @@ export type WireguardVpnConfig = z.infer<typeof WireguardVpnConfigSchema>;
 export type FortinetVpnConfig = z.infer<typeof FortinetVpnConfigSchema>;
 export type IpsecVpnConfig = z.infer<typeof IpsecVpnConfigSchema>;
 export type VpnConfig = z.infer<typeof VpnConfigSchema>;
+export type DockerConfig = z.infer<typeof DockerConfigSchema>;
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
 export type HostConfig = z.infer<typeof HostConfigSchema>;
 export type AcpAgentConfig = z.infer<typeof AcpAgentConfigSchema>;
@@ -2522,10 +2535,12 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     // No IFNAMSIZ cap on the id: the tunnel's interface name is DERIVED (see the daemon's vpn/vpn-paths.ts
     // interfaceName) rather than being the id itself, so a descriptive name is free.
     z.object({ id: entryId, kind: z.literal("vpn"), config: VpnConfigSchema }),
-    // The in-sandbox Docker Engine (baked into the base image, dormant by default). No config: the capability's
-    // whole effect is its fragment's `--privileged` runtime directive + running dockerd. No remove — the engine's
-    // state (/var/lib/docker) and whatever runs on it make a silent de-privilege more destructive than useful.
-    z.object({ id: entryId, kind: z.literal("docker"), config: z.object({}) }),
+    // The in-sandbox Docker Engine (baked into the base image, dormant by default). Its `--privileged` runtime
+    // directive is not in the config and never will be: dockerd does not work without it (see the handler's
+    // isPrivileged), so a switch there would offer a broken sandbox as a choice. What IS optional lives in
+    // DockerConfigSchema. No remove — the engine's state (/var/lib/docker) and whatever runs on it make a
+    // silent de-privilege more destructive than useful.
+    z.object({ id: entryId, kind: z.literal("docker"), config: DockerConfigSchema }),
     z.object({ id: entryId, kind: z.literal("browser"), config: BrowserConfigSchema }),
     z.object({ id: entryId, kind: z.literal("host"), config: HostConfigSchema }),
     z.object({ id: entryId, kind: z.literal("agent"), config: AcpAgentConfigSchema }),

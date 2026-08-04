@@ -78,6 +78,23 @@ test("--no-local-publish drops only the shortcut, so a port docker refused can't
     expect(stdout).toContain("-v intentic-workspace-s5:/work");
 }, 30_000);
 
+/* The GPU ask is the ONE directive a flow is allowed to answer "no" to, and this is the protocol it does it
+ * over: recreate.sh asks the host's docker, passes --no-gpu when the answer is no, and the emitted command
+ * comes back without the flag but WITH the reason. Anything less and the daemon inside would have to guess
+ * whether a missing GPU means "not rebuilt yet" or "this machine cannot", which are opposite instructions. */
+test("--no-gpu drops the gpu flag and records why, leaving the rest of the run intact", async () => {
+    const args = ["--slug", "s6", "--image", "i", "--base-image", "i", "--runtime", "# intentic:runtime --privileged --gpus=all"];
+    const honoured = await runVerb(args, "");
+    expect(honoured.stdout).toContain("--gpus=all");
+    expect(honoured.stdout).toContain("SANDBOX_GPU=all");
+
+    const { stdout } = await runVerb([...args, "--no-gpu"], "");
+    expect(stdout).not.toContain("--gpus");
+    expect(stdout).toContain("SANDBOX_GPU=unsupported");
+    // The privilege the nested engine actually needs is not collateral damage — only the GPU comes off.
+    expect(stdout).toContain("--privileged");
+}, 30_000);
+
 test("an unallowlisted runtime directive fails the whole verb — never a command minus a privilege", async () => {
     const { code, stdout, stderr } = await runVerb(
         ["--slug", "s3", "--image", "i", "--base-image", "i", "--runtime", "# intentic:runtime --cap-add=SYS_PTRACE"],

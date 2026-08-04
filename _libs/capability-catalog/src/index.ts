@@ -143,6 +143,15 @@ export interface CapabilityCatalogEntry {
     readonly fields: readonly CapabilityField[];
     readonly hint?: string | undefined;
     readonly guide?: CapabilityGuide | undefined;
+    /* ONE PER SANDBOX — there is nothing to name and nothing to have two of (the Docker Engine is the machine's
+     * engine; a second entry would just be a second opinion about the same dockerd). Such a card drops the name
+     * field, keeps the entry id, and opens PRE-FILLED FROM THE LIVE INSTANCE, so picking it again is editing
+     * what is there rather than adding beside it.
+     *
+     * Without this the default "add another connection" behaviour — right for two Discord bots, two databases —
+     * turns the obvious way to change an option into minting `docker-2`: two entries, two fragments, both baked
+     * into one overlay, and a GPU switch that reads off on the card the user just set to on. */
+    readonly singleton?: boolean | undefined;
 }
 
 // The permission switches every connected-computer card carries, identical across platforms — the grant is about
@@ -230,7 +239,19 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         category: "platform",
         logo: "docker",
         description: "Run containers inside your sandbox — its own isolated Docker Engine + Compose for dev databases, stacks and builds.",
-        fields: [],
+        singleton: true,
+        // The engine takes no configuring; what is here is the one thing about it a user chooses. `--privileged`
+        // is deliberately NOT a field: dockerd does not run without it, so a switch would offer a broken
+        // sandbox as an option. It stays disclosed by the effects panel and the hint below instead.
+        fields: [
+            {
+                key: "gpu",
+                label: "GPU access",
+                boolean: true,
+                default: "off",
+                hint: "Passes the host's NVIDIA GPUs into the engine, for CUDA images and GPU compose stacks. The host needs an NVIDIA GPU and nvidia-container-toolkit — checked when the sandbox is rebuilt, and the sandbox still starts (without GPUs) if it can't.",
+            },
+        ],
         hint: "One-time rebuild required — the sandbox restarts privileged with its own isolated Docker Engine (your machine's Docker is never shared).",
     },
     {

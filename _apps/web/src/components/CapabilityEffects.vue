@@ -36,6 +36,8 @@ const describe = (effect: CapabilityEffect): EffectRow => {
             return effect.level === `privileged`
                 ? { icon: `shield`, label: `Runs the sandbox container privileged — what its own isolated Docker Engine needs`, warn: true }
                 : { icon: `shield`, label: `Requires network-admin container access` };
+        case "gpu":
+            return { icon: `bolt`, label: `Claims every NVIDIA GPU on the host machine — needs its container toolkit installed`, warn: true };
         case "process":
             return { icon: `play`, label: `Runs background process${effect.names.length === 1 ? `` : `es`}: ${effect.names.join(`, `)}` };
         case "mcp":

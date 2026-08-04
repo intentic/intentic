@@ -66,9 +66,19 @@ export const SANDBOX_CAPABILITIES = ["SYS_ADMIN", "SYS_PTRACE"] as const;
 
 // Extra privileges ride in ONLY through "# intentic:runtime" directive lines in the owner-approved overlay
 // (the vpn's WireGuard needs tun + NET_ADMIN; the docker capability's isolated nested engine needs
-// --privileged), allowlisted hard so an overlay can't smuggle arbitrary docker flags.
+// --privileged, and its optional GPU passthrough needs --gpus), allowlisted hard so an overlay can't smuggle
+// arbitrary docker flags.
+//
+// `--gpus=all` in the `=` spelling, not the `--gpus all` docker also accepts: directive lines are split on
+// whitespace, so the spaced form would arrive as two tokens, and `all` on its own is indistinguishable from a
+// stray word — the allowlist would have to permit a bare `all` for every flag on the list.
 export const RUNTIME_DIRECTIVE_PREFIX = "# intentic:runtime ";
-export const RUNTIME_DIRECTIVES = ["--device=/dev/net/tun", "--cap-add=NET_ADMIN", "--privileged"] as const;
+export const RUNTIME_DIRECTIVES = ["--device=/dev/net/tun", "--cap-add=NET_ADMIN", "--privileged", "--gpus=all"] as const;
+// The one directive a host may be unable to honour, and the only one whose absence leaves a WORKING sandbox:
+// missing tun or --privileged means the capability that asked for it is dead, but a GPU-less sandbox is an
+// ordinary sandbox. So the creation paths preflight it and drop it rather than failing the launch — see
+// recreate.sh's NO_GPU and the workspace provider's gpuSupported.
+export const GPU_DIRECTIVE = "--gpus=all";
 
 // The allowlisted runtime tokens of an overlay, or a throw naming the first token that is not — an unknown
 // directive is either a typo'd capability fragment or an escape attempt, and both must stop the recreate
@@ -212,6 +222,16 @@ export interface SandboxRun {
     // Publish the loopback shortcut. Default true wherever a `sandboxId` is known; set false to retry a launch
     // that docker refused because the derived port was already allocated (see localDaemonPort).
     readonly localPublish?: boolean;
+    /* Whether the HOST's docker can honour the GPU directive, when the overlay carries one — the creation
+     * flows' preflight answer, since they are the only code that can ask that docker anything. False drops the
+     * flag and starts the sandbox anyway (GPU_DIRECTIVE explains why that is the right trade).
+     *
+     * Either way the ASKED-FOR state is stamped as SANDBOX_GPU, which is what makes the daemon's story honest:
+     * from inside the container, "the overlay hasn't been built yet" and "this host has no nvidia runtime"
+     * are the same absent device, and only the runner can tell them apart. Not in REPLAY_ENV for the reason
+     * SANDBOX_IMAGE isn't — the runner decides it per run, and replaying it would pin a sandbox to the answer
+     * its first host gave. */
+    readonly gpuSupported?: boolean;
     // The hosted provider runs without a /history volume, --init, or the network alias (no tunnel sidecar
     // shares its network); every local flow has all three. Defaults are the local shape.
     readonly history?: boolean;
@@ -222,47 +242,55 @@ export interface SandboxRun {
 // The `docker …` argv for a sandbox container, ordered the way connect.sh always wrote it. One builder for
 // every dialect: sh consumers quote it (sandboxRunCommand), PowerShell splats it as an array, the provider
 // joins it into its SSH line.
-export const sandboxRunArgv = (run: SandboxRun): string[] => [
-    "run",
-    "-d",
-    ...(run.init === false ? [] : ["--init"]),
-    "--restart",
-    "unless-stopped",
-    "--name",
-    run.names.container,
-    ...(run.labels ?? []).flatMap((label) => ["--label", label]),
-    "--network",
-    run.names.network,
-    ...(run.alias === false ? [] : ["--network-alias", ORIGIN_HOST]),
-    "--add-host",
-    "host.docker.internal:host-gateway",
-    ...(run.dns ?? []).flatMap((server) => ["--dns", server]),
-    "--log-opt",
-    "max-size=10m",
-    "--log-opt",
-    "max-file=3",
-    ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
-    ...(run.runtime ?? []),
-    ...(run.ports ?? []).flatMap((port) => ["-p", port]),
-    ...(run.sandboxId !== undefined && run.localPublish !== false ? ["-p", `127.0.0.1:${localDaemonPort(run.sandboxId)}:${LOCAL_PORT}`] : []),
-    "-v",
-    `${run.names.workspaceVolume}:/work`,
-    ...(run.history === false ? [] : ["-v", `${run.names.historyVolume}:/history`]),
-    "-v",
-    `${run.names.dockerVolume}:/var/lib/docker`,
-    ...(run.mounts ?? []).flatMap((mount) => ["-v", mount]),
-    "-e",
-    `SANDBOX_NAME=${run.names.container}`,
-    "-e",
-    `SANDBOX_IMAGE=${run.image}`,
-    "-e",
-    `SANDBOX_BASE_IMAGE=${run.baseImage}`,
-    ...(run.environmentHash === undefined ? [] : ["-e", `SANDBOX_ENVIRONMENT_HASH=${run.environmentHash}`]),
-    ...(run.channel === undefined ? [] : ["-e", `SANDBOX_CHANNEL=${run.channel}`]),
-    ...(run.previousImage === undefined ? [] : ["-e", `SANDBOX_PREVIOUS_IMAGE=${run.previousImage}`]),
-    ...(run.env ?? []).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
-    run.image,
-];
+export const sandboxRunArgv = (run: SandboxRun): string[] => {
+    // The GPU ask and its fate, resolved once: a caller passes the directives it read and the answer its
+    // preflight got, and never has to filter the token or stamp the env itself. Doing it here is the same
+    // choice the rest of this module makes — a shape every flow must get identical belongs in one place.
+    const askedForGpu = (run.runtime ?? []).includes(GPU_DIRECTIVE);
+    const gpuDropped = askedForGpu && run.gpuSupported === false;
+    return [
+        "run",
+        "-d",
+        ...(run.init === false ? [] : ["--init"]),
+        "--restart",
+        "unless-stopped",
+        "--name",
+        run.names.container,
+        ...(run.labels ?? []).flatMap((label) => ["--label", label]),
+        "--network",
+        run.names.network,
+        ...(run.alias === false ? [] : ["--network-alias", ORIGIN_HOST]),
+        "--add-host",
+        "host.docker.internal:host-gateway",
+        ...(run.dns ?? []).flatMap((server) => ["--dns", server]),
+        "--log-opt",
+        "max-size=10m",
+        "--log-opt",
+        "max-file=3",
+        ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
+        ...(run.runtime ?? []).filter((token) => !(gpuDropped && token === GPU_DIRECTIVE)),
+        ...(run.ports ?? []).flatMap((port) => ["-p", port]),
+        ...(run.sandboxId !== undefined && run.localPublish !== false ? ["-p", `127.0.0.1:${localDaemonPort(run.sandboxId)}:${LOCAL_PORT}`] : []),
+        "-v",
+        `${run.names.workspaceVolume}:/work`,
+        ...(run.history === false ? [] : ["-v", `${run.names.historyVolume}:/history`]),
+        "-v",
+        `${run.names.dockerVolume}:/var/lib/docker`,
+        ...(run.mounts ?? []).flatMap((mount) => ["-v", mount]),
+        "-e",
+        `SANDBOX_NAME=${run.names.container}`,
+        "-e",
+        `SANDBOX_IMAGE=${run.image}`,
+        "-e",
+        `SANDBOX_BASE_IMAGE=${run.baseImage}`,
+        ...(run.environmentHash === undefined ? [] : ["-e", `SANDBOX_ENVIRONMENT_HASH=${run.environmentHash}`]),
+        ...(run.channel === undefined ? [] : ["-e", `SANDBOX_CHANNEL=${run.channel}`]),
+        ...(run.previousImage === undefined ? [] : ["-e", `SANDBOX_PREVIOUS_IMAGE=${run.previousImage}`]),
+        ...(askedForGpu ? ["-e", `SANDBOX_GPU=${gpuDropped ? "unsupported" : "all"}`] : []),
+        ...(run.env ?? []).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
+        run.image,
+    ];
+};
 
 // Every character that never needs quoting in a POSIX shell word — flags, names, image tags, and NAME=value
 // pairs of plain values all match, so the emitted command stays byte-identical to what the scripts always

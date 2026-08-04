@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import {
+    GPU_DIRECTIVE,
     HEALTH,
     localDaemonPort,
     localDaemonUrl,
@@ -119,6 +120,39 @@ test("runtime directives: allowlisted tokens pass, anything else stops the recre
     expect(runtimeDirectivesOf("FROM base\nRUN true")).toEqual([]);
 });
 
+// The `=` spelling is load-bearing, not style: directive lines are split on whitespace, so `--gpus all` would
+// arrive as two tokens and the allowlist would have to accept a bare `all` — next to every other flag on it.
+test("the gpu directive is allowlisted only in the single-token spelling", () => {
+    expect(runtimeDirectivesOf(`# intentic:runtime ${GPU_DIRECTIVE}`)).toEqual([GPU_DIRECTIVE]);
+    expect(() => runtimeDirectivesOf("# intentic:runtime --gpus all")).toThrowError(/--gpus/);
+});
+
+/* The GPU ask is the one an overlay can make that the HOST may refuse, and the trade this pins is that the
+ * refusal costs the GPU rather than the sandbox: the flag comes off, the container still starts, and
+ * SANDBOX_GPU carries the reason inward. Without that stamp the daemon cannot tell "not rebuilt yet" from
+ * "this machine has no nvidia runtime" — the same missing device from inside — and would offer a rebuild that
+ * can never work. */
+test("a host that cannot honour the gpu directive loses the flag, not the sandbox", () => {
+    const supported = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: [GPU_DIRECTIVE] });
+    expect(supported).toContain(GPU_DIRECTIVE);
+    expect(supported.join(" ")).toContain("SANDBOX_GPU=all");
+
+    const dropped = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: ["--privileged", GPU_DIRECTIVE], gpuSupported: false });
+    expect(dropped).not.toContain(GPU_DIRECTIVE);
+    // The rest of the posture is untouched — only the optional directive comes off.
+    expect(dropped).toContain("--privileged");
+    expect(dropped.join(" ")).toContain("SANDBOX_GPU=unsupported");
+
+    // Nothing asked ⇒ nothing stamped: a sandbox that never wanted a GPU must not read as one denied a GPU.
+    expect(sandboxRunArgv({ names, image: "i", baseImage: "i", gpuSupported: false }).join(" ")).not.toContain("SANDBOX_GPU");
+});
+
+// Replaying it from the old container would pin a sandbox to the answer its FIRST host gave — a machine that
+// grows a GPU (or moves to one) could never report otherwise.
+test("SANDBOX_GPU is runner-set, never replayed", () => {
+    expect(replayableEnv([["SANDBOX_GPU", "all"]]).map(([name]) => name)).not.toContain("SANDBOX_GPU");
+});
+
 test("the health gate is one definition: daemon port, bounded patience", () => {
     expect(HEALTH.url).toBe("http://localhost:8787/health");
     expect(HEALTH.attempts * HEALTH.intervalSeconds).toBe(30);
@@ -157,7 +191,14 @@ test("the publish is the one part of the run that may be dropped: no id, or a po
     const retry = sandboxRunArgv({ names, image: "i", baseImage: "i", sandboxId: "0f310c3c4db4", localPublish: false });
     expect(retry.join(" ")).not.toContain("-p ");
     // Hosted-provider ports are unaffected by the retry — they are the sandbox's real ingress, not a shortcut.
-    const hosted = sandboxRunArgv({ names, image: "i", baseImage: "i", ports: ["10.0.0.2:5173:5173"], sandboxId: "abc123def456", localPublish: false });
+    const hosted = sandboxRunArgv({
+        names,
+        image: "i",
+        baseImage: "i",
+        ports: ["10.0.0.2:5173:5173"],
+        sandboxId: "abc123def456",
+        localPublish: false,
+    });
     expect(hosted.join(" ")).toContain("-p 10.0.0.2:5173:5173");
 });
 

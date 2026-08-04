@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { runtimeDirectivesOf, sandboxNames, sandboxRunCommand } from "@intentic/sandbox-run";
+import { GPU_DIRECTIVE, runtimeDirectivesOf, sandboxNames, sandboxRunCommand } from "@intentic/sandbox-run";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -151,6 +151,16 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 }
             }
             await session.exec(`docker network inspect ${parsed.network} >/dev/null 2>&1 || docker network create ${parsed.network}`);
+            // Ask this host's docker whether it can honour a GPU directive before betting the launch on it —
+            // the SSH-side twin of recreate.sh's preflight, and the same trade: --gpus is the one allowlisted
+            // directive whose absence leaves a working sandbox, so a server without the nvidia runtime gets a
+            // GPU-less sandbox rather than a failed `intentic deploy apply`. Only asked when something asked
+            // for it; every other overlay skips the round-trip.
+            const gpuSupported =
+                !runtime.includes(GPU_DIRECTIVE) || (await session.exec(`docker info --format '{{json .Runtimes}}'`)).stdout.includes(`"nvidia"`);
+            if (!gpuSupported) {
+                ctx.log(`workspace "${ctx.id}": host Docker has no nvidia runtime — starting without GPU access (install nvidia-container-toolkit)`);
+            }
             const digest = toolsDigest(parsed.tools);
             /* The run command comes from the shared contract (@intentic/sandbox-run) — this provider adds only
              * what is genuinely the hosted flavor's own: the graph's network, the internal-ip port binds
@@ -172,6 +182,7 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 baseImage: parsed.image,
                 ...(parsed.dockerfile !== undefined ? { environmentHash: environmentDigest(parsed.dockerfile) } : {}),
                 runtime,
+                gpuSupported,
                 init: false,
                 alias: false,
                 history: false,
